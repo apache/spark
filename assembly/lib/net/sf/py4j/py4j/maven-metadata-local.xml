@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<metadata>
+  <groupId>net.sf.py4j</groupId>
+  <artifactId>py4j</artifactId>
+  <versioning>
+    <release>0.7</release>
+    <versions>
+      <version>0.7</version>
+    </versions>
+    <lastUpdated>20130828020333</lastUpdated>
+  </versioning>
+</metadata>

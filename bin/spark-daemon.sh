@@ -1,7 +1,5 @@
 #!/usr/bin/env bash
 
-# This Spark deploy script is a modified version of the Apache Hadoop deploy
-# script, available under the Apache 2 license:
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
 # contributor license agreements.  See the NOTICE file distributed with
@@ -10,13 +8,14 @@
 # (the "License"); you may not use this file except in compliance with
 # the License.  You may obtain a copy of the License at
 #
-#     http://www.apache.org/licenses/LICENSE-2.0
+#    http://www.apache.org/licenses/LICENSE-2.0
 #
 # Unless required by applicable law or agreed to in writing, software
 # distributed under the License is distributed on an "AS IS" BASIS,
 # WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 # See the License for the specific language governing permissions and
 # limitations under the License.
+#
 
 # Runs a Spark command as a daemon.
 #
@@ -76,6 +75,9 @@ if [ "$SPARK_IDENT_STRING" = "" ]; then
   export SPARK_IDENT_STRING="$USER"
 fi
 
+
+export SPARK_PRINT_LAUNCH_COMMAND="1"
+
 # get log directory
 if [ "$SPARK_LOG_DIR" = "" ]; then
   export SPARK_LOG_DIR="$SPARK_HOME/logs"
@@ -86,7 +88,7 @@ TEST_LOG_DIR=$?
 if [ "${TEST_LOG_DIR}" = "0" ]; then
   rm -f $SPARK_LOG_DIR/.spark_test
 else
-  chown $SPARK_IDENT_STRING $SPARK_LOG_DIR 
+  chown $SPARK_IDENT_STRING $SPARK_LOG_DIR
 fi
 
 if [ "$SPARK_PID_DIR" = "" ]; then
@@ -108,7 +110,7 @@ fi
 case $startStop in
 
   (start)
-    
+
     mkdir -p "$SPARK_PID_DIR"
 
     if [ -f $pid ]; then
@@ -123,14 +125,21 @@ case $startStop in
       rsync -a -e ssh --delete --exclude=.svn --exclude='logs/*' --exclude='contrib/hod/logs/*' $SPARK_MASTER/ "$SPARK_HOME"
     fi
 
-    spark_rotate_log $log
+    spark_rotate_log "$log"
     echo starting $command, logging to $log
     cd "$SPARK_PREFIX"
-    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/run $command "$@" > "$log" 2>&1 < /dev/null &
-    echo $! > $pid
-    sleep 1; head "$log"
+    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+    newpid=$!
+    echo $newpid > $pid
+    sleep 2
+    # Check if the process has died; in that case we'll tail the log so the user can see
+    if ! kill -0 $newpid >/dev/null 2>&1; then
+      echo "failed to launch $command:"
+      tail -2 "$log" | sed 's/^/  /'
+      echo "full log in $log"
+    fi
     ;;
-          
+
   (stop)
 
     if [ -f $pid ]; then
