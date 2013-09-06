@@ -281,16 +281,23 @@ class SparkContext(object):
 
 class StorageLevelReader:
     """
-    Mimics the Scala StorageLevel by directing all attribute requests
+    Mimics the Scala StorageLevel by delegating all attribute requests
     (e.g., StorageLevel.DISK_ONLY) to the JVM for reflection.
+    Memoizes results to reduce JVM call/memory overheads.
     """
 
     def __init__(self, sc):
         self.sc = sc
+        self.memoized = {}
 
     def __getattr__(self, name):
+        if name in self.memoized: 
+          return self.memoized[name]
+
         try:
-            return self.sc._jvm.PythonRDD.getStorageLevel(name)
+            storageLevel = self.sc._jvm.PythonRDD.getStorageLevelByName(name)
+            self.memoized[name] = storageLevel
+            return storageLevel
         except:
             print "Failed to find StorageLevel:", name
 

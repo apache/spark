@@ -275,7 +275,7 @@ private[spark] object PythonRDD {
    * Returns the StorageLevel with the given string name.
    * Throws an exception if the name is not a valid StorageLevel.
    */
-  def getStorageLevel(name: String) : StorageLevel = {
+  def getStorageLevelByName(name: String) : StorageLevel = {
     // In Scala, "val MEMORY_ONLY" produces a public getter by the same name.
     val storageLevelGetter = StorageLevel.getClass().getDeclaredMethod(name)
     return storageLevelGetter.invoke(StorageLevel).asInstanceOf[StorageLevel]
