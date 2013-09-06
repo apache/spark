@@ -90,7 +90,7 @@ class LocalSchedulerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Local FIFO scheduler end-to-end test") {
-    System.setProperty("spark.cluster.schedulingmode", "FIFO")
+    System.setProperty("spark.scheduler.mode", "FIFO")
     sc = new SparkContext("local[4]", "test")
     val sem = new Semaphore(0)
 
@@ -150,7 +150,7 @@ class LocalSchedulerSuite extends FunSuite with LocalSparkContext {
   test("Local fair scheduler end-to-end test") {
     sc = new SparkContext("local[8]", "LocalSchedulerSuite")
     val sem = new Semaphore(0)
-    System.setProperty("spark.cluster.schedulingmode", "FAIR")
+    System.setProperty("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     System.setProperty("spark.fairscheduler.allocation.file", xmlPath)
 

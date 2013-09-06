@@ -43,7 +43,7 @@ private[spark] object UIWorkloadGenerator {
     val appName = "Spark UI Tester"
 
     if (schedulingMode == SchedulingMode.FAIR) {
-      System.setProperty("spark.cluster.schedulingmode", "FAIR")
+      System.setProperty("spark.scheduler.mode", "FAIR")
     }
     val sc = new SparkContext(master, appName)
 
