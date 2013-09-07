@@ -3,14 +3,17 @@ layout: global
 title: Running with Cloudera and HortonWorks Distributions
 ---
 
-Spark is fully compatible with all versions of Cloudera's Distribution Including Hadoop (CDH) and
-the Hortonworks Data Platform (HDP). There are a few things to keep in mind when running against
+Spark can run against all versions of Cloudera's Distribution Including Hadoop (CDH) and
+the Hortonworks Data Platform (HDP). There are a few things to keep in mind when using Spark with
 these distributions:
 
 # Compile-time Hadoop Version
 When compiling Spark, you'll need to 
-[set the HADOOP_VERSION flag](http://localhost:4000/index.html#a-note-about-hadoop-versions). 
-The table below lists the corresponding HADOOP_VERSION for each CDH/HDP release. _Note_ that
+[set the HADOOP_VERSION flag](http://localhost:4000/index.html#a-note-about-hadoop-versions):
+
+    HADOOP_VERSION=1.0.4 sbt/sbt assembly
+
+The table below lists the corresponding HADOOP_VERSION for each CDH/HDP release. Note that
 some Hadoop releases are binary compatible across client versions. This means the pre-built Spark
 distribution may "just work" without you needing to compile. That said, we recommend compiling with 
 the _exact_ Hadoop version you are running to avoid any compatibility errors.
@@ -51,16 +54,25 @@ Spark can run in a variety of deployment modes:
   cores dedicated to Spark on each node.
 * Run Spark alongside Hadoop using a cluster resource manager, such as YARN or Mesos.
 
-These options are identical for those using CDH and HDP. Note that if you are running a YARN 
-cluster, you may still choose to run Spark on dedicated nodes. In this case, you should use 
-the `mr1` versions of HADOOP_HOME when compiling, not the YARN versions.
+These options are identical for those using CDH and HDP. Note that if you have a YARN cluster,
+but still prefer to run Spark on a dedicated set of nodes rather than scheduling through YARN, 
+use `mr1` versions of HADOOP_HOME when compiling.
 
 # Inheriting Cluster Configuration
-If you plan to read and write from HDFS using Spark, it is good to include copies of two relevant 
-Hadoop configuration files in your $SPARK_HOME/conf directory. These are `hdfs-site.xml`, which 
-provides default behaviors for the HDFS client, and `core-site.xml`, which sets the default 
-filesystem name. The location of these configuration files varies across CDH and HDP versions, but
+If you plan to read and write from HDFS using Spark, there are two Hadoop configuration files that
+should be included on Spark's classpath:
+
+* `hdfs-site.xml`, which provides default behaviors for the HDFS client.
+* `core-site.xml`, which sets the default filesystem name.
+
+The location of these configuration files varies across CDH and HDP versions, but
 a common location is inside of `/etc/hadoop/conf`. Some tools, such as Cloudera Manager, create
 configurations on-the-fly, but offer a mechanisms to download copies of them.
 
-If you can locate these files, copy them into $SPARK_HOME/conf/.
+There are a few ways to make these files visible to Spark:
+
+* You can copy these files into `$SPARK_HOME/conf` and they will be included in Spark's
+classpath automatically.
+* If you are running Spark on the same nodes as Hadoop _and_ your distribution includes both
+`hdfs-site.xml` and `core-site.xml` in the same directory, you can set `HADOOP_CONF_DIR` 
+in `$SPARK_HOME/spark-env.sh` to that directory.
