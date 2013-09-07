@@ -46,6 +46,11 @@ Spark supports several options for deployment:
 * [Apache Mesos](running-on-mesos.html)
 * [Hadoop YARN](running-on-yarn.html)
 
+There is a script, `./make-distribution.sh`, which will create a binary distribution of Spark for deployment
+to any machine with only the Java runtime as a necessary dependency.
+Running the script creates a distribution directory in `dist/`, or the `-tgz` option to create a .tgz file.
+Check the script for additional options.
+
 # A Note About Hadoop Versions
 
 Spark uses the Hadoop-client library to talk to HDFS and other Hadoop-supported
