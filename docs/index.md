@@ -21,9 +21,6 @@ Spark uses [Simple Build Tool](http://www.scala-sbt.org), which is bundled with 
 
 For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_VERSION}}. If you write applications in Scala, you will need to use this same version of Scala in your own program -- newer major versions may not work. You can get the right version of Scala from [scala-lang.org](http://www.scala-lang.org/download/).
 
-Note: if you are building a binary distribution using `./make-distribution.sh`, you will not need to run
-`sbt/sbt assembly`.
-
 # Testing the Build
 
 Spark comes with several sample programs in the `examples` directory.
