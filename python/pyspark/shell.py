@@ -23,13 +23,13 @@ This file is designed to be launched as a PYTHONSTARTUP script.
 import os
 import platform
 import pyspark
-from pyspark.context import SparkContext, StorageLevelReader
+from pyspark.context import SparkContext
 
 # this is the equivalent of ADD_JARS
 add_files = os.environ.get("ADD_FILES").split(',') if os.environ.get("ADD_FILES") != None else None
 
 sc = SparkContext(os.environ.get("MASTER", "local"), "PySparkShell", pyFiles=add_files)
-StorageLevel = StorageLevelReader(sc)
+StorageLevel = sc.StorageLevel # alias StorageLevel to global scope
 
 print """Welcome to
       ____              __
