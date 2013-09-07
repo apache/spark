@@ -77,7 +77,8 @@ class RDD(object):
         have a storage level set yet.
         """
         self.is_cached = True
-        self._jrdd.persist(storageLevel)
+        javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
+        self._jrdd.persist(javaStorageLevel)
         return self
 
     def unpersist(self):

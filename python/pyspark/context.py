@@ -27,6 +27,7 @@ from pyspark.broadcast import Broadcast
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import dump_pickle, write_with_length, batched
+from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 
 from py4j.java_collections import ListConverter
@@ -118,29 +119,6 @@ class SparkContext(object):
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir()
         self._temp_dir = \
             self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
-
-        self._initStorageLevel()
-
-    def _initStorageLevel(self):
-        """
-        Initializes the StorageLevel object, which mimics the behavior of the scala object
-        by the same name. e.g., StorageLevel.DISK_ONLY returns the equivalent Java StorageLevel.
-        """
-        newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
-        levels = {
-            'NONE': newStorageLevel(False, False, False, 1),
-            'DISK_ONLY': newStorageLevel(True, False, False, 1),
-            'DISK_ONLY_2': newStorageLevel(True, False, False, 2),
-            'MEMORY_ONLY': newStorageLevel(False, True, True, 1),
-            'MEMORY_ONLY_2': newStorageLevel(False, True, True, 2),
-            'MEMORY_ONLY_SER': newStorageLevel(False, True, False, 1),
-            'MEMORY_ONLY_SER_2': newStorageLevel(False, True, False, 2),
-            'MEMORY_AND_DISK': newStorageLevel(True, True, True, 1),
-            'MEMORY_AND_DISK_2': newStorageLevel(True, True, True, 2),
-            'MEMORY_AND_DISK_SER': newStorageLevel(True, True, False, 1),
-            'MEMORY_AND_DISK_SER_2': newStorageLevel(True, True, False, 2),
-        }
-        self.StorageLevel = type('StorageLevel', (), levels)
 
     @property
     def defaultParallelism(self):
@@ -302,6 +280,17 @@ class SparkContext(object):
         accidental overriding of checkpoint files in the existing directory.
         """
         self._jsc.sc().setCheckpointDir(dirName, useExisting)
+
+    def _getJavaStorageLevel(self, storageLevel):
+        """
+        Returns a Java StorageLevel based on a pyspark.StorageLevel.
+        """
+        if not isinstance(storageLevel, StorageLevel):
+            raise Exception("storageLevel must be of type pyspark.StorageLevel")
+
+        newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
+        return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
+            storageLevel.deserialized, storageLevel.replication)
 
 def _test():
     import atexit
