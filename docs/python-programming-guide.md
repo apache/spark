@@ -53,20 +53,20 @@ In addition, PySpark fully supports interactive use---simply run `./pyspark` to 
 # Installing and Configuring PySpark
 
 PySpark requires Python 2.6 or higher.
-PySpark jobs are executed using a standard CPython interpreter in order to support Python modules that use C extensions.
+PySpark applications are executed using a standard CPython interpreter in order to support Python modules that use C extensions.
 We have not tested PySpark with Python 3 or with alternative Python interpreters, such as [PyPy](http://pypy.org/) or [Jython](http://www.jython.org/).
 
 By default, PySpark requires `python` to be available on the system `PATH` and use it to run programs; an alternate Python executable may be specified by setting the `PYSPARK_PYTHON` environment variable in `conf/spark-env.sh` (or `.cmd` on Windows).
 
 All of PySpark's library dependencies, including [Py4J](http://py4j.sourceforge.net/), are bundled with PySpark and automatically imported.
 
-Standalone PySpark jobs should be run using the `pyspark` script, which automatically configures the Java and Python environment using the settings in `conf/spark-env.sh` or `.cmd`.
+Standalone PySpark applications should be run using the `pyspark` script, which automatically configures the Java and Python environment using the settings in `conf/spark-env.sh` or `.cmd`.
 The script automatically adds the `pyspark` package to the `PYTHONPATH`.
 
 
 # Interactive Use
 
-The `pyspark` script launches a Python interpreter that is configured to run PySpark jobs. To use `pyspark` interactively, first build Spark, then launch it directly from the command line without any options:
+The `pyspark` script launches a Python interpreter that is configured to run PySpark applications. To use `pyspark` interactively, first build Spark, then launch it directly from the command line without any options:
 
 {% highlight bash %}
 $ sbt/sbt assembly
@@ -82,7 +82,7 @@ The Python shell can be used explore data interactively and is a simple way to l
 >>> help(pyspark) # Show all pyspark functions
 {% endhighlight %}
 
-By default, the `pyspark` shell creates SparkContext that runs jobs locally on a single core.
+By default, the `pyspark` shell creates SparkContext that runs applications locally on a single core.
 To connect to a non-local cluster, or use multiple cores, set the `MASTER` environment variable.
 For example, to use the `pyspark` shell with a [standalone Spark cluster](spark-standalone.html):
 
@@ -119,13 +119,13 @@ IPython also works on a cluster or on multiple cores if you set the `MASTER` env
 # Standalone Programs
 
 PySpark can also be used from standalone Python scripts by creating a SparkContext in your script and running the script using `pyspark`.
-The Quick Start guide includes a [complete example](quick-start.html#a-standalone-job-in-python) of a standalone Python job.
+The Quick Start guide includes a [complete example](quick-start.html#a-standalone-app-in-python) of a standalone Python application.
 
 Code dependencies can be deployed by listing them in the `pyFiles` option in the SparkContext constructor:
 
 {% highlight python %}
 from pyspark import SparkContext
-sc = SparkContext("local", "Job Name", pyFiles=['MyFile.py', 'lib.zip', 'app.egg'])
+sc = SparkContext("local", "App Name", pyFiles=['MyFile.py', 'lib.zip', 'app.egg'])
 {% endhighlight %}
 
 Files listed here will be added to the `PYTHONPATH` and shipped to remote worker machines.

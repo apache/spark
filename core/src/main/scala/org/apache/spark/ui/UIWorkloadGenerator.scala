@@ -49,7 +49,7 @@ private[spark] object UIWorkloadGenerator {
 
     def setProperties(s: String) = {
       if(schedulingMode == SchedulingMode.FAIR) {
-        sc.setLocalProperty("spark.scheduler.cluster.fair.pool", s)
+        sc.setLocalProperty("spark.scheduler.pool", s)
       }
       sc.setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, s)
     }

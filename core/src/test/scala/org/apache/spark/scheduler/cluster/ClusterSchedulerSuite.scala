@@ -166,7 +166,7 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
 
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
-    System.setProperty("spark.fairscheduler.allocation.file", xmlPath)
+    System.setProperty("spark.scheduler.allocation.file", xmlPath)
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
     val schedulableBuilder = new FairSchedulableBuilder(rootPool)
     schedulableBuilder.buildPools()
@@ -183,9 +183,9 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     assert(rootPool.getSchedulableByName("3").weight === 1)
 
     val properties1 = new Properties()
-    properties1.setProperty("spark.scheduler.cluster.fair.pool","1")
+    properties1.setProperty("spark.scheduler.pool","1")
     val properties2 = new Properties()
-    properties2.setProperty("spark.scheduler.cluster.fair.pool","2")
+    properties2.setProperty("spark.scheduler.pool","2")
 
     val taskSetManager10 = createDummyTaskSetManager(1, 0, 1, clusterScheduler, taskSet)
     val taskSetManager11 = createDummyTaskSetManager(1, 1, 1, clusterScheduler, taskSet)

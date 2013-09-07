@@ -3,14 +3,19 @@ layout: global
 title: Job Scheduling
 ---
 
-Spark has several facilities for scheduling resources between jobs. First, recall that, as described
+* This will become a table of contents (this text will be scraped).
+{:toc}
+
+# Overview
+
+Spark has several facilities for scheduling resources between computations. First, recall that, as described
 in the [cluster mode overview](cluster-overview.html), each Spark application (instance of SparkContext)
 runs an independent set of executor processes. The cluster managers that Spark runs on provide
 facilities for [scheduling across applications](#scheduling-across-applications). Second,
-_within_ each Spark application, multiple jobs may be running concurrently if they were submitted
-from different threads. This is common if your application is serving requests over the network; for
-example, the [Shark](http://shark.cs.berkeley.edu) server works this way. Spark includes a
-[fair scheduler](#scheduling-within-an-application) to schedule between these jobs.
+_within_ each Spark application, multiple "jobs" (Spark actions) may be running concurrently
+if they were submitted by different threads. This is common if your application is serving requests
+over the network; for example, the [Shark](http://shark.cs.berkeley.edu) server works this way. Spark
+includes a [fair scheduler](#scheduling-within-an-application) to schedule resources within each SparkContext.
 
 # Scheduling Across Applications
 
@@ -76,6 +81,88 @@ mode is best for multi-user settings.
 To enable the fair scheduler, simply set the `spark.scheduler.mode` to `FAIR` before creating
 a SparkContext:
 
-    System.setProperty("spark.scheduler.mode", "FAIR")
+{% highlight scala %}
+System.setProperty("spark.scheduler.mode", "FAIR")
+{% endhighlight %}
 
-The fair scheduler also supports
+## Fair Scheduler Pools
+
+The fair scheduler also supports grouping jobs into _pools_, and setting different scheduling options
+(e.g. weight) for each pool. This can be useful to create a "high-priority" pool for more important jobs,
+for example, or to group the jobs of each user together and give _users_ equal shares regardless of how
+many concurrent jobs they have instead of giving _jobs_ equal shares. This approach is modeled after the
+[Hadoop Fair Scheduler](http://hadoop.apache.org/docs/stable/fair_scheduler.html).
+
+Without any intervention, newly submitted jobs go into a _default pool_, but jobs' pools can be set by
+adding the `spark.scheduler.pool` "local property" to the SparkContext in the thread that's submitting them.
+This is done as follows:
+
+{% highlight scala %}
+// Assuming context is your SparkContext variable
+context.setLocalProperty("spark.scheduler.pool", "pool1")
+{% endhighlight %}
+
+After setting this local property, _all_ jobs submitted within this thread (by calls in this thread
+to `RDD.save`, `count`, `collect`, etc) will use this pool name. The setting is per-thread to make
+it easy to have a thread run multiple jobs on behalf of the same user. If you'd like to clear the
+pool that a thread is associated with, simply call:
+
+{% highlight scala %}
+context.setLocalProperty("spark.scheduler.pool", null)
+{% endhighlight %}
+
+## Default Behavior of Pools
+
+By default, each pool gets an equal share of the cluster (also equal in share to each job in the default
+pool), but inside each pool, jobs run in FIFO order. For example, if you create one pool per user, this
+means that each user will get an equal share of the cluster, and that each user's queries will run in
+order instead of later queries taking resources from that user's earlier ones.
+
+## Configuring Pool Properties
+
+Specific pools' properties can also be modified through a configuration file. Each pool supports three
+properties:
+
+* `schedulingMode`: This can be FIFO or FAIR, to control whether jobs within the pool queue up behind
+  each other (the default) or share the pool's resources fairly.
+* `weight`: This controls the pool's share of the cluster relative to other pools. By default, all pools
+  have a weight of 1. If you give a specific pool a weight of 2, for example, it will get 2x more
+  resources as other active pools. Setting a high weight such as 1000 also makes it possible to implement
+  _priority_ between pools---in essence, the weight-1000 pool will always get to launch tasks first
+  whenever it has jobs active.
+* `minShare`: Apart from an overall weight, each pool can be given a _minimum shares_ (as a number of
+  CPU cores) that the administrator would like it to have. The fair scheduler always attempts to meet
+  all active pools' minimum shares before redistributing extra resources according to the weights.
+  The `minShare` property can therefore be another way to ensure that a pool can always get up to a
+  certain number of resources (e.g. 10 cores) quickly without giving it a high priority for the rest
+  of the cluster. By default, each pool's `minShare` is 0.
+
+The pool properties can be set by creating an XML file, similar to `conf/fairscheduler.xml.template`,
+and setting the `spark.scheduler.allocation.file` property:
+
+{% highlight scala %}
+System.setProperty("spark.scheduler.allocation.file", "/path/to/file")
+{% endhighlight %}
+
+The format of the XML file is simply a `<pool>` element for each pool, with different elements
+within it for the various settings. For example:
+
+{% highlight xml %}
+<?xml version="1.0"?>
+<allocations>
+  <pool name="production">
+    <schedulingMode>FAIR</schedulingMode>
+    <weight>1</weight>
+    <minShare>2</minShare>
+  </pool>
+  <pool name="test">
+    <schedulingMode>FIFO</schedulingMode>
+    <weight>2</weight>
+    <minShare>3</minShare>
+  </pool>
+</allocations>
+{% endhighlight %}
+
+A full example is also available in `conf/fairscheduler.xml.template`. Note that any pools not
+configured in the XML file will simply get default values for all settings (scheduling mode FIFO,
+weight 1, and minShare 0).

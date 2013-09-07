@@ -260,7 +260,7 @@ class SparkContext(
   private val localProperties = new DynamicVariable[Properties](null)
 
   def initLocalProperties() {
-      localProperties.value = new Properties()
+    localProperties.value = new Properties()
   }
 
   def setLocalProperty(key: String, value: String) {
@@ -723,7 +723,8 @@ class SparkContext(
     val callSite = Utils.formatSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler, localProperties.value)
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler,
+      localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
     result

@@ -48,11 +48,11 @@ Finally, the following configuration options can be passed to the master and wor
   </tr>
   <tr>
     <td><code>-c CORES</code>, <code>--cores CORES</code></td>
-    <td>Total CPU cores to allow Spark jobs to use on the machine (default: all available); only on worker</td>
+    <td>Total CPU cores to allow Spark applicatons to use on the machine (default: all available); only on worker</td>
   </tr>
   <tr>
     <td><code>-m MEM</code>, <code>--memory MEM</code></td>
-    <td>Total amount of memory to allow Spark jobs to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GB); only on worker</td>
+    <td>Total amount of memory to allow Spark applicatons to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GB); only on worker</td>
   </tr>
   <tr>
     <td><code>-d DIR</code>, <code>--work-dir DIR</code></td>
@@ -98,15 +98,15 @@ You can optionally configure the cluster further by setting environment variable
   </tr>
   <tr>
     <td><code>SPARK_WORKER_DIR</code></td>
-    <td>Directory to run jobs in, which will include both logs and scratch space (default: SPARK_HOME/work).</td>
+    <td>Directory to run applications in, which will include both logs and scratch space (default: SPARK_HOME/work).</td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_CORES</code></td>
-    <td>Total number of cores to allow Spark jobs to use on the machine (default: all available cores).</td>
+    <td>Total number of cores to allow Spark applications to use on the machine (default: all available cores).</td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_MEMORY</code></td>
-    <td>Total amount of memory to allow Spark jobs to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GB); note that each job's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
+    <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_WEBUI_PORT</code></td>
@@ -133,9 +133,9 @@ You can optionally configure the cluster further by setting environment variable
 
 **Note:** The launch scripts do not currently support Windows. To run a Spark cluster on Windows, start the master and workers by hand.
 
-# Connecting a Job to the Cluster
+# Connecting an Application to the Cluster
 
-To run a job on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
+To run an application on the Spark cluster, simply pass the `spark://IP:PORT` URL of the master as to the [`SparkContext`
 constructor](scala-programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
@@ -147,12 +147,14 @@ automatically set MASTER from the `SPARK_MASTER_IP` and `SPARK_MASTER_PORT` vari
 
 You can also pass an option `-c <numCores>` to control the number of cores that spark-shell uses on the cluster.
 
-# Job Scheduling
+# Resource Scheduling
 
-The standalone cluster mode currently only supports a simple FIFO scheduler across jobs.
-However, to allow multiple concurrent jobs, you can control the maximum number of resources each Spark job will acquire.
-By default, it will acquire *all* the cores in the cluster, which only makes sense if you run just a single
-job at a time. You can cap the number of cores using `System.setProperty("spark.cores.max", "10")` (for example).
+The standalone cluster mode currently only supports a simple FIFO scheduler across applications.
+However, to allow multiple concurrent users, you can control the maximum number of resources each
+application will acquire.
+By default, it will acquire *all* cores in the cluster, which only makes sense if you just run one
+application at a time. You can cap the number of cores using
+`System.setProperty("spark.cores.max", "10")` (for example).
 This value must be set *before* initializing your SparkContext.
 
 

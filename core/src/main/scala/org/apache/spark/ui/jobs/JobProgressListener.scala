@@ -95,7 +95,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     activeStages += stage
 
     val poolName = Option(stageSubmitted.properties).map {
-      p => p.getProperty("spark.scheduler.cluster.fair.pool", DEFAULT_POOL_NAME)
+      p => p.getProperty("spark.scheduler.pool", DEFAULT_POOL_NAME)
     }.getOrElse(DEFAULT_POOL_NAME)
     stageToPool(stage) = poolName
 
