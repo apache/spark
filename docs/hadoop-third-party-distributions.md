@@ -54,9 +54,7 @@ Spark can run in a variety of deployment modes:
   cores dedicated to Spark on each node.
 * Run Spark alongside Hadoop using a cluster resource manager, such as YARN or Mesos.
 
-These options are identical for those using CDH and HDP. Note that if you have a YARN cluster,
-but still prefer to run Spark on a dedicated set of nodes rather than scheduling through YARN, 
-use `mr1` versions of HADOOP_HOME when compiling.
+These options are identical for those using CDH and HDP. 
 
 # Inheriting Cluster Configuration
 If you plan to read and write from HDFS using Spark, there are two Hadoop configuration files that
