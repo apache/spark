@@ -106,16 +106,6 @@
 
   <profiles>
     <profile>
-      <id>hadoop2-yarn</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn</artifactId>
-          <version>${project.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
-    <profile>
       <id>deb</id>
       <build>
         <plugins>
