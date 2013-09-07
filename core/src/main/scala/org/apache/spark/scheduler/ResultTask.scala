@@ -77,7 +77,7 @@ private[spark] class ResultTask[T, U](
     var func: (TaskContext, Iterator[T]) => U,
     var partition: Int,
     @transient locs: Seq[TaskLocation],
-    val outputId: Int)
+    var outputId: Int)
   extends Task[U](stageId) with Externalizable {
 
   def this() = this(0, null, null, 0, null, 0)
@@ -130,7 +130,7 @@ private[spark] class ResultTask[T, U](
     rdd = rdd_.asInstanceOf[RDD[T]]
     func = func_.asInstanceOf[(TaskContext, Iterator[T]) => U]
     partition = in.readInt()
-    val outputId = in.readInt()
+    outputId = in.readInt()
     epoch = in.readLong()
     split = in.readObject().asInstanceOf[Partition]
   }
