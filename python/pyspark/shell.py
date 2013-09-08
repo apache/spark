@@ -24,6 +24,7 @@ import os
 import platform
 import pyspark
 from pyspark.context import SparkContext
+from pyspark.storagelevel import StorageLevel
 
 # this is the equivalent of ADD_JARS
 add_files = os.environ.get("ADD_FILES").split(',') if os.environ.get("ADD_FILES") != None else None
