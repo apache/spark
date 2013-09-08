@@ -20,10 +20,12 @@ package org.apache.spark.scheduler
 import com.codahale.metrics.{Gauge,MetricRegistry}
 
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.SparkContext
 
-private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler) extends Source {
+private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler, sc: SparkContext)
+    extends Source {
   val metricRegistry = new MetricRegistry()
-  val sourceName = "DAGScheduler"
+  val sourceName = "%s.DAGScheduler".format(sc.appName)
 
   metricRegistry.register(MetricRegistry.name("stage", "failedStages", "number"), new Gauge[Int] {
     override def getValue: Int = dagScheduler.failed.size

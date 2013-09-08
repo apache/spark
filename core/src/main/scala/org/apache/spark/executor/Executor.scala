@@ -98,7 +98,7 @@ private[spark] class Executor(
     }
   )
 
-  val executorSource = new ExecutorSource(this)
+  val executorSource = new ExecutorSource(this, executorId)
 
   // Initialize Spark environment (using system properties read above)
   val env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0, false, false)
