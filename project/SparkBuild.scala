@@ -207,6 +207,7 @@ object SparkBuild extends Build {
       "com.codahale.metrics" % "metrics-core" % "3.0.0",
       "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
       "com.codahale.metrics" % "metrics-json" % "3.0.0",
+      "com.codahale.metrics" % "metrics-ganglia" % "3.0.0",
       "com.twitter" % "chill_2.9.3" % "0.3.1",
       "com.twitter" % "chill-java" % "0.3.1"
     )
