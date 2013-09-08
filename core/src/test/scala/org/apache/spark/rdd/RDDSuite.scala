@@ -140,7 +140,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(rdd.union(emptyKv).collect().size === 2)
   }
 
-  test("cogrouped RDDs") {
+  test("coalesced RDDs") {
     val data = sc.parallelize(1 to 10, 10)
 
     val coalesced1 = data.coalesce(2)
@@ -175,8 +175,14 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val coalesced5 = data.coalesce(1, shuffle = true)
     assert(coalesced5.dependencies.head.rdd.dependencies.head.rdd.asInstanceOf[ShuffledRDD[_, _, _]] !=
       null)
+
+    // when shuffling, we can increase the number of partitions
+    val coalesced6 = data.coalesce(20, shuffle = true)
+    assert(coalesced6.partitions.size === 20)
+    assert(coalesced6.collect().toList === (1 to 10).toList)
   }
-  test("cogrouped RDDs with locality") {
+
+  test("coalesced RDDs with locality") {
     val data3 = sc.makeRDD(List((1,List("a","c")), (2,List("a","b","c")), (3,List("b"))))
     val coal3 = data3.coalesce(3)
     val list3 = coal3.partitions.map(p => p.asInstanceOf[CoalescedRDDPartition].preferredLocation)
@@ -197,11 +203,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val coalesced4 = data.coalesce(20)
     val listOfLists = coalesced4.glom().collect().map(_.toList).toList
     val sortedList = listOfLists.sortWith{ (x, y) => !x.isEmpty && (y.isEmpty || (x(0) < y(0))) }
-    assert( sortedList === (1 to 9).
+    assert(sortedList === (1 to 9).
       map{x => List(x)}.toList, "Tried coalescing 9 partitions to 20 but didn't get 9 back")
   }
 
-  test("cogrouped RDDs with locality, large scale (10K partitions)") {
+  test("coalesced RDDs with locality, large scale (10K partitions)") {
     // large scale experiment
     import collection.mutable
     val rnd = scala.util.Random
