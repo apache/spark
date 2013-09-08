@@ -68,3 +68,50 @@ access this UI. The [monitoring guide](monitoring.html) also describes other mon
 Spark gives control over resource allocation both _across_ applications (at the level of the cluster
 manager) and _within_ applications (if multiple computations are happening on the same SparkContext).
 The [job scheduling overview](job-scheduling.html) describes this in more detail.
+
+# Glossary
+
+The following table summarizes terms you'll see used to refer to cluster concepts:
+
+<table class="table">
+  <thead>
+    <tr><th style="width: 130px;">Term</th><th>Meaning</th></tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Application</td>
+      <td>Any user program invoking Spark</td>
+    </tr>
+    <tr>
+      <td>Driver program</td>
+      <td>The process running the main() function of the application and creating the SparkContext</td>
+    </tr>
+    <tr>
+      <td>Cluster manager</td>
+      <td>An external service for acquiring resources on the cluster (e.g. standalone manager, Mesos, YARN)</td>
+    </tr>
+    <tr>
+      <td>Worker node</td>
+      <td>Any node that can run application code in the cluster</td>
+    </tr>
+    <tr>
+      <td>Executor</td>
+      <td>A process launched for an application on a worker node, that runs tasks and keeps data in memory
+        or disk storage across them. Each application has its own executors.</td>
+    </tr>
+    <tr>
+      <td>Task</td>
+      <td>A unit of work that will be sent to one executor</td>
+    </tr>
+    <tr>
+      <td>Job</td>
+      <td>A parallel computation consisting of multiple tasks that gets spawned in response to a Spark action
+        (e.g. <code>save</code>, <code>collect</code>); you'll see this term used in the driver's logs.</td>
+    </tr>
+    <tr>
+      <td>Stage</td>
+      <td>Each job gets divided into smaller sets of tasks called <em>stages</em> that depend on each other
+        (similar to the map and reduce stages in MapReduce); you'll see this term used in the driver's logs.</td>
+    </tr>
+  </tbody>
+</table>

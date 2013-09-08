@@ -25,7 +25,7 @@ different options to manage allocation, depending on the cluster manager.
 
 The simplest option, available on all cluster managers, is _static partitioning_ of resources. With
 this approach, each application is given a maximum amount of resources it can use, and holds onto them
-for its whole duration. This is the only approach available in Spark's [standalone](spark-standalone.html)
+for its whole duration. This is the approach used in Spark's [standalone](spark-standalone.html)
 and [YARN](running-on-yarn.html) modes, as well as the
 [coarse-grained Mesos mode](running-on-mesos.html#mesos-run-modes).
 Resource allocation can be configured as follows, based on the cluster type:
