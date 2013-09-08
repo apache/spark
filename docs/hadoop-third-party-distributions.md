@@ -1,19 +1,20 @@
 ---
 layout: global
-title: Running with Cloudera and HortonWorks Distributions
+title: Running with Cloudera and HortonWorks
 ---
 
-Spark can run against all versions of Cloudera's Distribution Including Hadoop (CDH) and
-the Hortonworks Data Platform (HDP). There are a few things to keep in mind when using Spark with
-these distributions:
+Spark can run against all versions of Cloudera's Distribution Including Apache Hadoop (CDH) and
+the Hortonworks Data Platform (HDP). There are a few things to keep in mind when using Spark
+with these distributions:
 
 # Compile-time Hadoop Version
+
 When compiling Spark, you'll need to 
-[set the HADOOP_VERSION flag](http://localhost:4000/index.html#a-note-about-hadoop-versions):
+[set the SPARK_HADOOP_VERSION flag](http://localhost:4000/index.html#a-note-about-hadoop-versions):
 
-    HADOOP_VERSION=1.0.4 sbt/sbt assembly
+    SPARK_HADOOP_VERSION=1.0.4 sbt/sbt assembly
 
-The table below lists the corresponding HADOOP_VERSION for each CDH/HDP release. Note that
+The table below lists the corresponding `SPARK_HADOOP_VERSION` code for each CDH/HDP release. Note that
 some Hadoop releases are binary compatible across client versions. This means the pre-built Spark
 distribution may "just work" without you needing to compile. That said, we recommend compiling with 
 the _exact_ Hadoop version you are running to avoid any compatibility errors.
@@ -22,8 +23,8 @@ the _exact_ Hadoop version you are running to avoid any compatibility errors.
   <tr valign="top">
     <td>
       <h3>CDH Releases</h3>
-      <table class="table" style="width:350px;">
-        <tr><th>Version</th><th>HADOOP_VERSION</th></tr>
+      <table class="table" style="width:350px; margin-right: 20px;">
+        <tr><th>Release</th><th>Version code</th></tr>
         <tr><td>CDH 4.X.X (YARN mode)</td><td>2.0.0-chd4.X.X</td></tr>
         <tr><td>CDH 4.X.X</td><td>2.0.0-mr1-chd4.X.X</td></tr>
         <tr><td>CDH 3u6</td><td>0.20.2-cdh3u6</td></tr>
@@ -34,7 +35,7 @@ the _exact_ Hadoop version you are running to avoid any compatibility errors.
     <td>
       <h3>HDP Releases</h3>
       <table class="table" style="width:350px;">
-        <tr><th>Version</th><th>HADOOP_VERSION</th></tr>
+        <tr><th>Release</th><th>Version code</th></tr>
         <tr><td>HDP 1.3</td><td>1.2.0</td></tr>
         <tr><td>HDP 1.2</td><td>1.1.2</td></tr>
         <tr><td>HDP 1.1</td><td>1.0.3</td></tr>
@@ -44,7 +45,47 @@ the _exact_ Hadoop version you are running to avoid any compatibility errors.
   </tr>
 </table>
 
+# Linking Applications to the Hadoop Version
+
+In addition to compiling Spark itself against the right version, you need to add a Maven dependency on that
+version of `hadoop-client` to any Spark applications you run, so they can also talk to the HDFS version
+on the cluster. If you are using CDH, you also need to add the Cloudera Maven repository.
+This looks as follows in SBT:
+
+{% highlight scala %}
+libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "<version>"
+
+// If using CDH, also add Cloudera repo
+resolvers += "Cloudera Repository" at "https://repository.cloudera.com/artifactory/cloudera-repos/"
+{% endhighlight %}
+
+Or in Maven:
+
+{% highlight xml %}
+<project>
+  <dependencies>
+    ...
+    <dependency>
+      <groupId>org.apache.hadoop</groupId>
+      <artifactId>hadoop-client</artifactId>
+      <version>[version]</version>
+    </dependency>
+  </dependencies>
+
+  <!-- If using CDH, also add Cloudera repo -->
+  <repositories>
+    ...
+    <repository>
+      <id>Cloudera repository</id>
+      <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
+    </repository>
+  </repositories>
+</project>
+
+{% endhighlight %}
+
 # Where to Run Spark
+
 As described in the [Hardware Provisioning](hardware-provisioning.html#storage-systems) guide,
 Spark can run in a variety of deployment modes:
 
@@ -57,6 +98,7 @@ Spark can run in a variety of deployment modes:
 These options are identical for those using CDH and HDP. 
 
 # Inheriting Cluster Configuration
+
 If you plan to read and write from HDFS using Spark, there are two Hadoop configuration files that
 should be included on Spark's classpath:
 
