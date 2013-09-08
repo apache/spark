@@ -3,19 +3,30 @@ layout: global
 title: Monitoring and Instrumentation
 ---
 
-There are several ways to monitor the progress of Spark jobs.
+There are several ways to monitor Spark applications.
 
 # Web Interfaces
-When a SparkContext is initialized, it launches a web server (by default at port 3030) which 
-displays useful information. This includes a list of active and completed scheduler stages, 
-a summary of RDD blocks and partitions, and environmental information. If multiple SparkContexts
-are running on the same host, they will bind to succesive ports beginning with 3030 (3031, 3032, 
-etc).
 
-Spark's Standlone Mode scheduler also has its own 
-[web interface](spark-standalone.html#monitoring-and-logging). 
+Every SparkContext launches a web UI, by default on port 3030, that 
+displays useful information about the application. This includes:
 
-# Spark Metrics
+* A list of scheduler stages and tasks
+* A summary of RDD sizes and memory usage
+* Information about the running executors
+* Environmental information.
+
+You can access this interface by simply opening `http://<driver-node>:3030` in a web browser.
+If multiple SparkContexts are running on the same host, they will bind to succesive ports
+beginning with 3030 (3031, 3032, etc).
+
+Spark's Standlone Mode cluster manager also has its own 
+[web UI](spark-standalone.html#monitoring-and-logging). 
+
+Note that in both of these UIs, the tables are sortable by clicking their headers,
+making it easy to identify slow tasks, data skew, etc.
+
+# Metrics
+
 Spark has a configurable metrics system based on the 
 [Coda Hale Metrics Library](http://metrics.codahale.com/). 
 This allows users to report Spark metrics to a variety of sinks including HTTP, JMX, and CSV 
@@ -35,6 +46,7 @@ The syntax of the metrics configuration file is defined in an example configurat
 `$SPARK_HOME/conf/metrics.conf.template`.
 
 # Advanced Instrumentation
+
 Several external tools can be used to help profile the performance of Spark jobs:
 
 * Cluster-wide monitoring tools, such as [Ganglia](http://ganglia.sourceforge.net/), can provide 
