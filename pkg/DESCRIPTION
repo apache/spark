@@ -1,0 +1,9 @@
+Package: SparkR
+Type: Package
+Title: R frontend for Spark
+Version: 0.1
+Date: 2013-09-09
+Author: Shivaram Venkataraman
+Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
+Description: R frontend for Spark
+License: BSD
