@@ -282,8 +282,8 @@ class SparkContext(
   // Post init
   taskScheduler.postStartHook()
 
-  val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler)
-  val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager)
+  val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
+  val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
 
   def initDriverMetrics() {
     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)

@@ -31,6 +31,15 @@ set of sinks to which metrics are reported. The following instances are currentl
 * `executor`: A Spark executor.
 * `driver`: The Spark driver process (the process in which your SparkContext is created).
 
+Each instance can report to zero or more _sinks_. Sinks are contained in the
+`org.apache.spark.metrics.sink` package:
+
+* `ConsoleSink`: Logs metrics information to the console.
+* `CSVSink`: Exports metrics data to CSV files at regular intervals.
+* `GangliaSink`: Sends metrics to a Ganglia node or multicast group.
+* `JmxSink`: Registers metrics for viewing in a JXM console.
+* `MetricsServlet`: Adds a servlet within the existing Spark UI to serve metrics data as JSON data.
+
 The syntax of the metrics configuration file is defined in an example configuration file, 
 `$SPARK_HOME/conf/metrics.conf.template`.
 

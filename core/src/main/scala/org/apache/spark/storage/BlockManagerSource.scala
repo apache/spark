@@ -20,11 +20,13 @@ package org.apache.spark.storage
 import com.codahale.metrics.{Gauge,MetricRegistry}
 
 import org.apache.spark.metrics.source.Source
+import org.apache.spark.SparkContext
 
 
-private[spark] class BlockManagerSource(val blockManager: BlockManager) extends Source {
+private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: SparkContext)
+    extends Source {
   val metricRegistry = new MetricRegistry()
-  val sourceName = "BlockManager"
+  val sourceName = "%s.BlockManager".format(sc.appName)
 
   metricRegistry.register(MetricRegistry.name("memory", "maxMem", "MBytes"), new Gauge[Long] {
     override def getValue: Long = {
