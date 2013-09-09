@@ -179,7 +179,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     // when shuffling, we can increase the number of partitions
     val coalesced6 = data.coalesce(20, shuffle = true)
     assert(coalesced6.partitions.size === 20)
-    assert(coalesced6.collect().toList === (1 to 10).toList)
+    assert(coalesced6.collect().toSet === (1 to 10).toSet)
   }
 
   test("coalesced RDDs with locality") {
