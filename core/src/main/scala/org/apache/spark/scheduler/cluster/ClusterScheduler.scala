@@ -94,7 +94,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   var rootPool: Pool = null
   // default scheduler is FIFO
   val schedulingMode: SchedulingMode = SchedulingMode.withName(
-    System.getProperty("spark.cluster.schedulingmode", "FIFO"))
+    System.getProperty("spark.scheduler.mode", "FIFO"))
 
   override def setListener(listener: TaskSchedulerListener) {
     this.listener = listener

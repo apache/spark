@@ -17,10 +17,10 @@ Spark can run on private clusters managed by the [Apache Mesos](http://incubator
    * On all nodes, edit `<prefix>/var/mesos/conf/mesos.conf` and add the line `master=HOST:5050`, where HOST is your master node.
    * Run `<prefix>/sbin/mesos-start-cluster.sh` on your master to start Mesos. If all goes well, you should see Mesos's web UI on port 8080 of the master machine.
    * See Mesos's README file for more information on deploying it.
-8. To run a Spark job against the cluster, when you create your `SparkContext`, pass the string `mesos://HOST:5050` as the first parameter, where `HOST` is the machine running your Mesos master. In addition, pass the location of Spark on your nodes as the third parameter, and a list of JAR files containing your JAR's code as the fourth (these will automatically get copied to the workers). For example:
+8. To run a Spark application against the cluster, when you create your `SparkContext`, pass the string `mesos://HOST:5050` as the first parameter, where `HOST` is the machine running your Mesos master. In addition, pass the location of Spark on your nodes as the third parameter, and a list of JAR files containing your JAR's code as the fourth (these will automatically get copied to the workers). For example:
 
 {% highlight scala %}
-new SparkContext("mesos://HOST:5050", "My Job Name", "/home/user/spark", List("my-job.jar"))
+new SparkContext("mesos://HOST:5050", "My App Name", "/home/user/spark", List("my-app.jar"))
 {% endhighlight %}
 
 If you want to run Spark on Amazon EC2, you can use the Spark [EC2 launch scripts](ec2-scripts.html), which provide an easy way to launch a cluster with Mesos, Spark, and HDFS pre-configured. This will get you a cluster in about five minutes without any configuration on your part.
@@ -28,24 +28,23 @@ If you want to run Spark on Amazon EC2, you can use the Spark [EC2 launch script
 # Mesos Run Modes
 
 Spark can run over Mesos in two modes: "fine-grained" and "coarse-grained". In fine-grained mode, which is the default,
-each Spark task runs as a separate Mesos task. This allows multiple instances of Spark (and other applications) to share
-machines at a very fine granularity, where each job gets more or fewer machines as it ramps up, but it comes with an
-additional overhead in launching each task, which may be inappropriate for low-latency applications that aim for
-sub-second Spark operations (e.g. interactive queries or serving web requests). The coarse-grained mode will instead
+each Spark task runs as a separate Mesos task. This allows multiple instances of Spark (and other frameworks) to share
+machines at a very fine granularity, where each application gets more or fewer machines as it ramps up, but it comes with an
+additional overhead in launching each task, which may be inappropriate for low-latency applications (e.g. interactive queries or serving web requests). The coarse-grained mode will instead
 launch only *one* long-running Spark task on each Mesos machine, and dynamically schedule its own "mini-tasks" within
 it. The benefit is much lower startup overhead, but at the cost of reserving the Mesos resources for the complete duration
-of the job.
+of the application.
 
 To run in coarse-grained mode, set the `spark.mesos.coarse` system property to true *before* creating your SparkContext:
 
 {% highlight scala %}
 System.setProperty("spark.mesos.coarse", "true")
-val sc = new SparkContext("mesos://HOST:5050", "Job Name", ...)
+val sc = new SparkContext("mesos://HOST:5050", "App Name", ...)
 {% endhighlight %}
 
 In addition, for coarse-grained mode, you can control the maximum number of resources Spark will acquire. By default,
-it will acquire *all* cores in the cluster (that get offered by Mesos), which only makes sense if you run just a single
-job at a time. You can cap the maximum number of cores using `System.setProperty("spark.cores.max", "10")` (for example).
+it will acquire *all* cores in the cluster (that get offered by Mesos), which only makes sense if you run just one
+application at a time. You can cap the maximum number of cores using `System.setProperty("spark.cores.max", "10")` (for example).
 Again, this must be done *before* initializing a SparkContext.
 
 
