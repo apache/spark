@@ -29,7 +29,7 @@ import org.apache.spark.mllib.util.DataValidators
 import org.jblas.DoubleMatrix
 
 /**
- * Model built using SVM.
+ * Model for Support Vector Machines (SVMs).
  *
  * @param weights Weights computed for every feature.
  * @param intercept Intercept computed for this model.
@@ -48,8 +48,8 @@ class SVMModel(
 }
 
 /**
- * Train an SVM using Stochastic Gradient Descent.
- * NOTE: Labels used in SVM should be {0, 1}
+ * Train a Support Vector Machine (SVM) using Stochastic Gradient Descent.
+ * NOTE: Labels used in SVM should be {0, 1}.
  */
 class SVMWithSGD private (
     var stepSize: Double,
@@ -79,7 +79,7 @@ class SVMWithSGD private (
 }
 
 /**
- * Top-level methods for calling SVM. NOTE: Labels used in SVM should be {0, 1}
+ * Top-level methods for calling SVM. NOTE: Labels used in SVM should be {0, 1}.
  */
 object SVMWithSGD {
 
@@ -88,14 +88,15 @@ object SVMWithSGD {
    * of iterations of gradient descent using the specified step size. Each iteration uses
    * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
    * gradient descent are initialized using the initial weights provided.
-   * NOTE: Labels used in SVM should be {0, 1}
+   *
+   * NOTE: Labels used in SVM should be {0, 1}.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
-   * @param initialWeights Initial set of weights to be used. Array should be equal in size to 
+   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
    */
   def train(

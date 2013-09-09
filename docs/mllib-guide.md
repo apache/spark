@@ -4,7 +4,7 @@ title: Machine Learning Library (MLlib)
 ---
 
 MLlib is a Spark implementation of some common machine learning (ML)
-functionality, as well associated unit tests and data generators.  MLlib
+functionality, as well associated tests and data generators.  MLlib
 currently supports four common types of machine learning problem settings,
 namely, binary classification, regression, clustering and collaborative
 filtering, as well as an underlying gradient descent optimization primitive.
@@ -44,22 +44,20 @@ import org.apache.spark.mllib.regression.LabeledPoint
 
 // Load and parse the data file
 val data = sc.textFile("mllib/data/sample_svm_data.txt")
-val parsedData = data.map(line => {
+val parsedData = data.map { line =>
   val parts = line.split(' ')
   LabeledPoint(parts(0).toDouble, parts.tail.map(x => x.toDouble).toArray)
-})
+}
 
 // Run training algorithm
 val numIterations = 20
-val model = SVMWithSGD.train(
-  parsedData,
-  numIterations)
+val model = SVMWithSGD.train(parsedData, numIterations)
  
 // Evaluate model on training examples and compute training error
-val labelAndPreds = parsedData.map(r => {
-  val prediction = model.predict(r.features)
-  (r.label, prediction)
-})
+val labelAndPreds = parsedData.map { point =>
+  val prediction = model.predict(point.features)
+  (point.label, prediction)
+}
 val trainErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / parsedData.count
 println("trainError = " + trainErr)
 {% endhighlight %}
