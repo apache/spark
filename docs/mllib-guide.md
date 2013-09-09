@@ -43,26 +43,20 @@ import org.apache.spark.mllib.classification.SVMWithSGD
 import org.apache.spark.mllib.regression.LabeledPoint
 
 // Load and parse the data file
-val data = sc.textFile("sample_wiki_ngrams.txt")
+val data = sc.textFile("mllib/data/sample_svm_data.txt")
 val parsedData = data.map(line => {
   val parts = line.split(' ')
   LabeledPoint(parts(0).toDouble, parts.tail.map(x => x.toDouble).toArray)
 })
 
 // Run training algorithm
-val stepSizeVal = 1.0
-val regParamVal = 0.1
-val numIterationsVal = 200
-val miniBatchFractionVal = 1.0
+val numIterations = 20
 val model = SVMWithSGD.train(
   parsedData,
-  numIterationsVal,
-  stepSizeVal,
-  regParamVal,
-  miniBatchFractionVal)
+  numIterations)
  
 // Evaluate model on training examples and compute training error
-val labelAnPreds = parsedData.map(r => {
+val labelAndPreds = parsedData.map(r => {
   val prediction = model.predict(r.features)
   (r.label, prediction)
 })
@@ -70,30 +64,31 @@ val trainErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / parsedDa
 println("trainError = " + trainErr)
 {% endhighlight %}
 
-The `SVMWithSGD` algorithm performs L2 regularization by default. If we want to
-configure this algorithm to generate an L1 regularized variant of SVMs, we can
-use the builder design pattern as follows:
+The `SVMWithSGD.train()` method by default performs L2 regularization with the
+regularization parameter set to 1.0. If we want to configure this algorithm, we
+can customize `SVMWithSGD` further by creating a new object directly and
+calling setter methods. All other MLlib algorithms support customization in
+this way as well. For example, the following code produces an L1 regularized
+variant of SVMs with regularization parameter set to 0.1, and runs the training
+algorithm for 200 iterations. 
 
 {% highlight scala %}
 import org.apache.spark.mllib.optimization.L1Updater
 
 val svmAlg = new SVMWithSGD()
 svmAlg.optimizer.setNumIterations(200)
-  .setStepSize(1.0)
   .setRegParam(0.1)
-  .setMiniBatchFraction(1.0)
-svmAlg.optimizer.setUpdater(new L1Updater)
+  .setUpdater(new L1Updater)
 val modelL1 = svmAlg.run(parsedData)
 {% endhighlight %}
 
 Both of the code snippets above can be executed in `spark-shell` to generate a
-classifier for the provided dataset.  Moreover, note that static methods and
-builder patterns, similar to the ones displayed above, are available for all
-algorithms in MLlib.
+classifier for the provided dataset.
 
-[SVMWithSGD](`api/mllib/index.html#org.apache.spark.mllib.classification.SVMWithSGD`)
+Available algorithms for binary classification:
 
-[LogisticRegressionWithSGD](`api/mllib/index.html#org.apache.spark.mllib.classification.LogistictRegressionWithSGD`)
+* [SVMWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
+* [LogisticRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.LogisticRegressionWithSGD)
 
 # Linear Regression
 
@@ -108,7 +103,11 @@ The regression algorithms in MLlib also leverage the underlying gradient
 descent primitive (described [below](#gradient-descent-primitive)), and have
 the same parameters as the binary classification algorithms described above. 
 
-[RidgeRegressionWithSGD](`api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD`)
+Available algorithms for linear regression: 
+
+* [LinearRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LinearRegressionWithSGD)
+* [RidgeRegressionWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD)
+* [LassoWithSGD](api/mllib/index.html#org.apache.spark.mllib.regression.LassoWithSGD)
 
 # Clustering
 
@@ -134,7 +133,9 @@ a given dataset, the algorithm returns the best clustering result).
 * *initializiationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged. 
 
-[KMeans](`api/mllib/index.html#org.apache.spark.mllib.clustering.KMeans`)
+Available algorithms for clustering: 
+
+* [KMeans](api/mllib/index.html#org.apache.spark.mllib.clustering.KMeans)
 
 # Collaborative Filtering 
 
@@ -154,7 +155,9 @@ following parameters:
 * *iterations* is the number of iterations to run.
 * *lambda* specifies the regularization parameter in ALS. 
 
-[ALS](`api/mllib/index.html#org.apache.spark.mllib.recommendation.ALS`)
+Available algorithms for collaborative filtering: 
+
+* [ALS](api/mllib/index.html#org.apache.spark.mllib.recommendation.ALS)
 
 # Gradient Descent Primitive
 
@@ -183,4 +186,6 @@ stepSize / sqrt(t).
 * *miniBatchFraction* is the fraction of the data used to compute the gradient
 at each iteration.
 
-[GradientDescent](`api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent`)
+Available algorithms for gradient descent:
+
+* [GradientDescent](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
