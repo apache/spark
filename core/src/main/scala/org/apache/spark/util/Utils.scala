@@ -459,7 +459,9 @@ private[spark] object Utils extends Logging {
 
   private def listFilesSafely(file: File): Seq[File] = {
     val files = file.listFiles()
-    if (files == null) throw new IOException("Failed to list files for dir: " + file)
+    if (files == null) {
+      throw new IOException("Failed to list files for dir: " + file)
+    }
     files
   }
 
