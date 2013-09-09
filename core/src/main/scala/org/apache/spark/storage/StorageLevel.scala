@@ -23,9 +23,9 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
  * whether to drop the RDD to disk if it falls out of memory, whether to keep the data in memory
  * in a serialized format, and whether to replicate the RDD partitions on multiple nodes.
- * The [[org.apache.spark.storage.StorageLevel$]] singleton object contains some static constants for
- * commonly useful storage levels. To create your own storage level object, use the factor method
- * of the singleton object (`StorageLevel(...)`).
+ * The [[org.apache.spark.storage.StorageLevel$]] singleton object contains some static constants
+ * for commonly useful storage levels. To create your own storage level object, use the
+ * factory method of the singleton object (`StorageLevel(...)`).
  */
 class StorageLevel private(
     private var useDisk_ : Boolean,

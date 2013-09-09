@@ -66,10 +66,12 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         }
         try {
           // If we got here, we have to load the split
-          val elements = new ArrayBuffer[Any]
           logInfo("Computing partition " + split)
-          elements ++= rdd.computeOrReadCheckpoint(split, context)
-          // Try to put this block in the blockManager
+          val computedValues = rdd.computeOrReadCheckpoint(split, context)
+          // Persist the result, so long as the task is not running locally
+          if (context.runningLocally) { return computedValues }
+          val elements = new ArrayBuffer[Any]
+          elements ++= computedValues
           blockManager.put(key, elements, storageLevel, true)
           return elements.iterator.asInstanceOf[Iterator[T]]
         } finally {
