@@ -282,8 +282,8 @@ abstract class RDD[T: ClassManifest](
    * Note: With shuffle = true, you can actually coalesce to a larger number
    * of partitions. This is useful if you have a small number of partitions,
    * say 100, potentially with a few partitions being abnormally large. Calling
-   * coalecse(1000, shuffle = true) will result in 1000 partitions with the
-   * data evenly distributed into each partition.
+   * coalesce(1000, shuffle = true) will result in 1000 partitions with the
+   * data distributed using a hash partitioner.
    */
   def coalesce(numPartitions: Int, shuffle: Boolean = false): RDD[T] = {
     if (shuffle) {
