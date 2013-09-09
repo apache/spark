@@ -3,13 +3,13 @@ layout: global
 title: Machine Learning Library (MLlib)
 ---
 
-MLlib is a Spark implementation of some common ML functionality, as well
-associated unit tests and data generators.  MLlib currently supports four
-common types of machine learning problem settings, namely, binary
-classification, regression, clustering and collaborative filtering, as well as an
-underlying gradient descent optimization primitive.  This guide will outline
-the functionality supported in MLlib and also provides an example of invoking
-MLlib.
+MLlib is a Spark implementation of some common machine learning (ML)
+functionality, as well associated unit tests and data generators.  MLlib
+currently supports four common types of machine learning problem settings,
+namely, binary classification, regression, clustering and collaborative
+filtering, as well as an underlying gradient descent optimization primitive.
+This guide will outline the functionality supported in MLlib and also provides
+an example of invoking MLlib.
 
 # Binary Classification
 
@@ -33,43 +33,67 @@ parameter (*regParam*) along with various parameters associated with gradient
 descent (*stepSize*, *numIterations*, *miniBatchFraction*). 
 
 The following code snippet illustrates how to load a sample dataset, execute a
-training algorithm on this training data, and to make predictions with the
-resulting model to compute the training error.
+training algorithm on this training data using a static method in the algorithm
+object, and make predictions with the resulting model to compute the training
+error.
 
-    import org.apache.spark.SparkContext
-    import org.apache.spark.mllib.classification.SVMWithSGD
-    import org.apache.spark.mllib.regression.LabeledPoint
+{% highlight scala %}
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.classification.SVMWithSGD
+import org.apache.spark.mllib.regression.LabeledPoint
 
-    // Load and parse the data file
-    val data = sc.textFile("sample_wiki_ngrams.txt")
-    val parsedData = data.map(line => {
-      val parts = line.split(' ')
-      LabeledPoint(parts(0).toDouble, parts.tail.map(x => x.toDouble).toArray)
-    })
+// Load and parse the data file
+val data = sc.textFile("sample_wiki_ngrams.txt")
+val parsedData = data.map(line => {
+  val parts = line.split(' ')
+  LabeledPoint(parts(0).toDouble, parts.tail.map(x => x.toDouble).toArray)
+})
 
-    // Run training algorithm
-    val svmAlg = new SVMWithSGD()
-    svmAlg.optimizer.setNumIterations(200)
-      .setStepSize(1.0)
-      .setRegParam(0.1)
-      .setMiniBatchFraction(1.0)
-    val model = svmAlg.run(parsedData)
-                
-    // Evaluate model on training examples and compute training error
-    val labelAndPreds = parsedData.map(r => {
-      val prediction = model.predict(r.features)
-      (r.label, prediction)
-    })
-    val trainErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / parsedData.count
-    println("trainError = " + trainErr)
+// Run training algorithm
+val stepSizeVal = 1.0
+val regParamVal = 0.1
+val numIterationsVal = 200
+val miniBatchFractionVal = 1.0
+val model = SVMWithSGD.train(
+  parsedData,
+  numIterationsVal,
+  stepSizeVal,
+  regParamVal,
+  miniBatchFractionVal)
+ 
+// Evaluate model on training examples and compute training error
+val labelAnPreds = parsedData.map(r => {
+  val prediction = model.predict(r.features)
+  (r.label, prediction)
+})
+val trainErr = labelAndPreds.filter(r => r._1 != r._2).count.toDouble / parsedData.count
+println("trainError = " + trainErr)
+{% endhighlight %}
 
-The `SVMWithSGD` algorithm performs L2 regularization by default,
-and if we want to generate an L1 regularized variant of SVMs, we can do the
-following:
+The `SVMWithSGD` algorithm performs L2 regularization by default. If we want to
+configure this algorithm to generate an L1 regularized variant of SVMs, we can
+use the builder design pattern as follows:
 
-    import org.apache.spark.mllib.optimization.L1Updater
-    svmAlg.optimizer.setUpdater(new L1Updater)
-    val modelL1 = svmAlg.run(parsedData)
+{% highlight scala %}
+import org.apache.spark.mllib.optimization.L1Updater
+
+val svmAlg = new SVMWithSGD()
+svmAlg.optimizer.setNumIterations(200)
+  .setStepSize(1.0)
+  .setRegParam(0.1)
+  .setMiniBatchFraction(1.0)
+svmAlg.optimizer.setUpdater(new L1Updater)
+val modelL1 = svmAlg.run(parsedData)
+{% endhighlight %}
+
+Both of the code snippets above can be executed in `spark-shell` to generate a
+classifier for the provided dataset.  Moreover, note that static methods and
+builder patterns, similar to the ones displayed above, are available for all
+algorithms in MLlib.
+
+[SVMWithSGD](`api/mllib/index.html#org.apache.spark.mllib.classification.SVMWithSGD`)
+
+[LogisticRegressionWithSGD](`api/mllib/index.html#org.apache.spark.mllib.classification.LogistictRegressionWithSGD`)
 
 # Linear Regression
 
@@ -84,27 +108,33 @@ The regression algorithms in MLlib also leverage the underlying gradient
 descent primitive (described [below](#gradient-descent-primitive)), and have
 the same parameters as the binary classification algorithms described above. 
 
+[RidgeRegressionWithSGD](`api/mllib/index.html#org.apache.spark.mllib.regression.RidgeRegressionWithSGD`)
+
 # Clustering
 
 Clustering is an unsupervised learning problem whereby we aim to group subsets
 of entities with one another based on some notion of similarity.  Clustering is
-often used for exploratary analysis and/or as a component of a hierarchical
+often used for exploratory analysis and/or as a component of a hierarchical
 supervised learning pipeline (in which distinct classifiers or regression
 models are trained for each cluster). MLlib supports
 [k-means](http://en.wikipedia.org/wiki/K-means_clustering) clustering, arguably
 the most commonly used clustering approach that clusters the data points into
-*k* clusters. The implementation in MLlib has the following parameters:  
+*k* clusters. The MLlib implementation includes a parallelized 
+variant of the [k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method
+called [kmeans||](http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf).
+The implementation in MLlib has the following parameters:  
 
 * *k* is the number of clusters.
 * *maxIterations* is the maximum number of iterations to run.
 * *initializationMode* specifies either random initialization or
-initialization via a parallelized variant of the
-[k-means++](http://en.wikipedia.org/wiki/K-means%2B%2B) method.
+initialization via k-means\|\|.
 * *runs* is the number of times to run the k-means algorithm (k-means is not
 guaranteed to find a globally optimal solution, and when run multiple times on
 a given dataset, the algorithm returns the best clustering result).
-* *initializiationSteps* determines the number of steps in the k-means++ algorithm.
+* *initializiationSteps* determines the number of steps in the k-means\|\| algorithm.
 * *epsilon* determines the distance threshold within which we consider k-means to have converged. 
+
+[KMeans](`api/mllib/index.html#org.apache.spark.mllib.clustering.KMeans`)
 
 # Collaborative Filtering 
 
@@ -123,6 +153,8 @@ following parameters:
 * *rank* is the number of latent factors in our model.
 * *iterations* is the number of iterations to run.
 * *lambda* specifies the regularization parameter in ALS. 
+
+[ALS](`api/mllib/index.html#org.apache.spark.mllib.recommendation.ALS`)
 
 # Gradient Descent Primitive
 
@@ -150,3 +182,5 @@ stepSize / sqrt(t).
 * *regParam* is the regularization parameter when using L1 or L2 regularization.
 * *miniBatchFraction* is the fraction of the data used to compute the gradient
 at each iteration.
+
+[GradientDescent](`api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent`)
