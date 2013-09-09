@@ -179,7 +179,7 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     assert(rootPool.getSchedulableByName("1").weight === 1)
     assert(rootPool.getSchedulableByName("2").minShare === 3)
     assert(rootPool.getSchedulableByName("2").weight === 1)
-    assert(rootPool.getSchedulableByName("3").minShare === 2)
+    assert(rootPool.getSchedulableByName("3").minShare === 0)
     assert(rootPool.getSchedulableByName("3").weight === 1)
 
     val properties1 = new Properties()
