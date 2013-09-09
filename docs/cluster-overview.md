@@ -80,7 +80,7 @@ The following table summarizes terms you'll see used to refer to cluster concept
   <tbody>
     <tr>
       <td>Application</td>
-      <td>Any user program invoking Spark</td>
+      <td>User program built on Spark. Consists of a <em>driver program</em> and <em>executors</em> on the cluster.</td>
     </tr>
     <tr>
       <td>Driver program</td>

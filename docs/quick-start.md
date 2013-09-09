@@ -36,7 +36,7 @@ scala> textFile.count() // Number of items in this RDD
 res0: Long = 74
 
 scala> textFile.first() // First item in this RDD
-res1: String = Welcome to the Spark documentation!
+res1: String = # Apache Spark
 {% endhighlight %}
 
 Now let's use a transformation. We will use the [`filter`](scala-programming-guide.html#transformations) transformation to return a new RDD with a subset of the items in the file.
