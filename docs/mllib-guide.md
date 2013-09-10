@@ -11,6 +11,13 @@ filtering, as well as an underlying gradient descent optimization primitive.
 This guide will outline the functionality supported in MLlib and also provides
 an example of invoking MLlib.
 
+# Dependencies
+MLlib uses the [jblas](https://github.com/mikiobraun/jblas) linear algebra library, which itself
+depends on native Fortran routines. You may need to install the 
+[gfortran runtime library](https://github.com/mikiobraun/jblas/wiki/Missing-Libraries)
+if it is not already present on your nodes. MLlib will throw a linking error if it cannot 
+detect these libraries automatically.
+
 # Binary Classification
 
 Binary classification is a supervised learning problem in which we want to
