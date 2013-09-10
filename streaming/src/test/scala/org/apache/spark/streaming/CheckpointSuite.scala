@@ -29,9 +29,9 @@ import org.scalatest.BeforeAndAfter
 
 import com.google.common.io.Files
 
-import spark.streaming.StreamingContext.toPairDStreamFunctions
-import spark.streaming.dstream.FileInputDStream
-import spark.streaming.util.ManualClock
+import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
+import org.apache.spark.streaming.dstream.FileInputDStream
+import org.apache.spark.streaming.util.ManualClock
 
 
 
