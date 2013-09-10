@@ -457,12 +457,20 @@ private[spark] object Utils extends Logging {
   def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor =
     Executors.newFixedThreadPool(nThreads, daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
+  private def listFilesSafely(file: File): Seq[File] = {
+    val files = file.listFiles()
+    if (files == null) {
+      throw new IOException("Failed to list files for dir: " + file)
+    }
+    files
+  }
+
   /**
    * Delete a file or directory and its contents recursively.
    */
   def deleteRecursively(file: File) {
     if (file.isDirectory) {
-      for (child <- file.listFiles()) {
+      for (child <- listFilesSafely(file)) {
         deleteRecursively(child)
       }
     }
