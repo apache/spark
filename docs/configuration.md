@@ -82,17 +82,6 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td>spark.mesos.coarse</td>
-  <td>false</td>
-  <td>
-    If set to "true", runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
-    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
-    duration of the Spark job.
-  </td>
-</tr>
-<tr>
   <td>spark.default.parallelism</td>
   <td>8</td>
   <td>
@@ -107,6 +96,17 @@ Apart from these, the following properties are also available, and may be useful
     Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
     generation of objects in the JVM, which by default is given 2/3 of the heap, but you can increase
     it if you configure your own old generation size.
+  </td>
+</tr>
+<tr>
+  <td>spark.mesos.coarse</td>
+  <td>false</td>
+  <td>
+    If set to "true", runs over Mesos clusters in
+    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
+    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
+    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
+    duration of the Spark job.
   </td>
 </tr>
 <tr>
@@ -158,6 +158,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>32768</td>
   <td>
     Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec is used.
+  </td>
+</tr>
+<tr>
+  <td>spark.scheduler.mode</td>
+  <td>FIFO</td>
+  <td>
+    The <a href="job-scheduling.html#scheduling-within-an-application">scheduling mode</a> between
+    jobs submitted to the same SparkContext. Can be set to <code>FAIR</code>
+    to use fair sharing instead of queueing jobs one after another. Useful for
+    multi-user services.
   </td>
 </tr>
 <tr>
@@ -315,7 +325,7 @@ Apart from these, the following properties are also available, and may be useful
 # Environment Variables
 
 Certain Spark settings can also be configured through environment variables, which are read from the `conf/spark-env.sh`
-script in the directory where Spark is installed. These variables are meant to be for machine-specific settings, such
+script in the directory where Spark is installed (or `conf/spark-env.cmd` on Windows). These variables are meant to be for machine-specific settings, such
 as library search paths. While Java system properties can also be set here, for application settings, we recommend setting
 these properties within the application instead of in `spark-env.sh` so that different applications can use different
 settings.
@@ -325,6 +335,8 @@ Note that `conf/spark-env.sh` does not exist by default when Spark is installed.
 
 The following variables can be set in `spark-env.sh`:
 
+* `JAVA_HOME`, the location where Java is installed (if it's not on your default `PATH`)
+* `PYSPARK_PYTHON`, the Python binary to use for PySpark
 * `SPARK_LOCAL_IP`, to configure which IP address of the machine to bind to.
 * `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
 * `SPARK_CLASSPATH`, to add elements to Spark's classpath that you want to be present for _all_ applications.

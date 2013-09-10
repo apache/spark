@@ -25,38 +25,45 @@ import org.apache.spark.SparkContext
 private[spark] object UIUtils {
   import Page._
 
+  // Yarn has to go through a proxy so the base uri is provided and has to be on all links
+  private[spark] val uiRoot : String = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).
+    getOrElse("")
+
+  def prependBaseUri(resource: String = "") = uiRoot + resource
+
   /** Returns a spark page with correctly formatted headers */
   def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String, page: Page.Value)
   : Seq[Node] = {
     val jobs = page match {
-      case Stages => <li class="active"><a href="/stages">Stages</a></li>
-      case _ => <li><a href="/stages">Stages</a></li>
+      case Stages => <li class="active"><a href={prependBaseUri("/stages")}>Stages</a></li>
+      case _ => <li><a href={prependBaseUri("/stages")}>Stages</a></li>
     }
     val storage = page match {
-      case Storage => <li class="active"><a href="/storage">Storage</a></li>
-      case _ => <li><a href="/storage">Storage</a></li>
+      case Storage => <li class="active"><a href={prependBaseUri("/storage")}>Storage</a></li>
+      case _ => <li><a href={prependBaseUri("/storage")}>Storage</a></li>
     }
     val environment = page match {
-      case Environment => <li class="active"><a href="/environment">Environment</a></li>
-      case _ => <li><a href="/environment">Environment</a></li>
+      case Environment => 
+        <li class="active"><a href={prependBaseUri("/environment")}>Environment</a></li>
+      case _ => <li><a href={prependBaseUri("/environment")}>Environment</a></li>
     }
     val executors = page match {
-      case Executors => <li class="active"><a href="/executors">Executors</a></li>
-      case _ => <li><a href="/executors">Executors</a></li>
+      case Executors => <li class="active"><a href={prependBaseUri("/executors")}>Executors</a></li>
+      case _ => <li><a href={prependBaseUri("/executors")}>Executors</a></li>
     }
 
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href="/static/bootstrap.min.css" type="text/css" />
-        <link rel="stylesheet" href="/static/webui.css" type="text/css" />
-        <script src="/static/sorttable.js"></script>
+        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css" />
+        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
+        <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{sc.appName} - {title}</title>
       </head>
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href="/" class="brand"><img src="/static/spark-logo-77x50px-hd.png" /></a>
+            <a href={prependBaseUri("/")} class="brand"><img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}  /></a>
             <ul class="nav">
               {jobs}
               {storage}
@@ -86,9 +93,9 @@ private[spark] object UIUtils {
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href="/static/bootstrap.min.css" type="text/css" />
-        <link rel="stylesheet" href="/static/webui.css" type="text/css" />
-        <script src="/static/sorttable.js"></script>
+        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css" />
+        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
+        <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{title}</title>
       </head>
       <body>
@@ -96,7 +103,7 @@ private[spark] object UIUtils {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <img src="/static/spark-logo-77x50px-hd.png" style="margin-right: 15px;" />
+                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} style="margin-right: 15px;" />
                 {title}
               </h3>
             </div>

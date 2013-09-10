@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.ui.jobs
 
 import java.util.Date
@@ -7,6 +24,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.scheduler.cluster.{SchedulingMode, TaskInfo}
 import org.apache.spark.scheduler.Stage
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 
@@ -81,7 +99,8 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
 
     val poolName = listener.stageToPool.get(s)
 
-    val nameLink = <a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a>
+    val nameLink =
+      <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(),s.id)}>{s.name}</a>
     val description = listener.stageToDescription.get(s)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
@@ -90,7 +109,8 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
     <tr>
       <td>{s.id}</td>
       {if (isFairScheduler) {
-        <td><a href={"/stages/pool?poolname=%s".format(poolName.get)}>{poolName.get}</a></td>}
+        <td><a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),poolName.get)}>
+          {poolName.get}</a></td>}
       }
       <td>{description}</td>
       <td valign="middle">{submissionTime}</td>

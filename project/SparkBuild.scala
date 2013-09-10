@@ -33,15 +33,19 @@ object SparkBuild extends Build {
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
 
+  // Target JVM version
+  val SCALAC_JVM_VERSION = "jvm-1.5"
+  val JAVAC_JVM_VERSION = "1.5"
+
   lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects: _*)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
-    .dependsOn(core, bagel, mllib) dependsOn(maybeYarn: _*)
+    .dependsOn(core, bagel, mllib)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, bagel, streaming) dependsOn(maybeYarn: _*)
+    .dependsOn(core, mllib, bagel, streaming)
 
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
@@ -77,7 +81,9 @@ object SparkBuild extends Build {
     organization := "org.apache.spark",
     version := "0.8.0-SNAPSHOT",
     scalaVersion := "2.9.3",
-    scalacOptions := Seq("-unchecked", "-optimize", "-deprecation"),
+    scalacOptions := Seq("-unchecked", "-optimize", "-deprecation", 
+      "-target:" + SCALAC_JVM_VERSION),
+    javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
@@ -103,6 +109,11 @@ object SparkBuild extends Build {
     //useGpg in Global := true,
 
     pomExtra := (
+      <parent>
+        <groupId>org.apache</groupId>
+        <artifactId>apache</artifactId>
+        <version>13</version>
+      </parent>
       <url>http://spark.incubator.apache.org/</url>
       <licenses>
         <license>
@@ -202,6 +213,7 @@ object SparkBuild extends Build {
       "com.codahale.metrics" % "metrics-core" % "3.0.0",
       "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
       "com.codahale.metrics" % "metrics-json" % "3.0.0",
+      "com.codahale.metrics" % "metrics-ganglia" % "3.0.0",
       "com.twitter" % "chill_2.9.3" % "0.3.1",
       "com.twitter" % "chill-java" % "0.3.1"
     )

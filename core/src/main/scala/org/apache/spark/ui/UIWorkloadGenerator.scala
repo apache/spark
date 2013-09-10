@@ -43,13 +43,13 @@ private[spark] object UIWorkloadGenerator {
     val appName = "Spark UI Tester"
 
     if (schedulingMode == SchedulingMode.FAIR) {
-      System.setProperty("spark.cluster.schedulingmode", "FAIR")
+      System.setProperty("spark.scheduler.mode", "FAIR")
     }
     val sc = new SparkContext(master, appName)
 
     def setProperties(s: String) = {
       if(schedulingMode == SchedulingMode.FAIR) {
-        sc.setLocalProperty("spark.scheduler.cluster.fair.pool", s)
+        sc.setLocalProperty("spark.scheduler.pool", s)
       }
       sc.setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, s)
     }

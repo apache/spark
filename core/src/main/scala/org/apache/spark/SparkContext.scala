@@ -196,7 +196,7 @@ class SparkContext(
 
       case "yarn-standalone" =>
         val scheduler = try {
-          val clazz = Class.forName("spark.scheduler.cluster.YarnClusterScheduler")
+          val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
           cons.newInstance(this).asInstanceOf[ClusterScheduler]
         } catch {
@@ -260,7 +260,7 @@ class SparkContext(
   private val localProperties = new DynamicVariable[Properties](null)
 
   def initLocalProperties() {
-      localProperties.value = new Properties()
+    localProperties.value = new Properties()
   }
 
   def setLocalProperty(key: String, value: String) {
@@ -282,8 +282,8 @@ class SparkContext(
   // Post init
   taskScheduler.postStartHook()
 
-  val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler)
-  val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager)
+  val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
+  val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
 
   def initDriverMetrics() {
     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
@@ -631,20 +631,26 @@ class SparkContext(
    * filesystems), or an HTTP, HTTPS or FTP URI.
    */
   def addJar(path: String) {
-    if (null == path) {
+    if (path == null) {
       logWarning("null specified as parameter to addJar",
         new SparkException("null specified as parameter to addJar"))
     } else {
-      val env = SparkEnv.get
-      val uri = new URI(path)
-      val key = uri.getScheme match {
-        case null | "file" =>
-          if (env.hadoop.isYarnMode()) {
-            logWarning("local jar specified as parameter to addJar under Yarn mode")
-            return
-          }
-          env.httpFileServer.addJar(new File(uri.getPath))
-        case _ => path
+      var key = ""
+      if (path.contains("\\")) {
+        // For local paths with backslashes on Windows, URI throws an exception
+        key = env.httpFileServer.addJar(new File(path))
+      } else {
+        val uri = new URI(path)
+        key = uri.getScheme match {
+          case null | "file" =>
+            if (env.hadoop.isYarnMode()) {
+              logWarning("local jar specified as parameter to addJar under Yarn mode")
+              return
+            }
+            env.httpFileServer.addJar(new File(uri.getPath))
+          case _ =>
+            path
+        }
       }
       addedJars(key) = System.currentTimeMillis
       logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
@@ -717,7 +723,8 @@ class SparkContext(
     val callSite = Utils.formatSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler, localProperties.value)
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler,
+      localProperties.value)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
     result
