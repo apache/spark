@@ -59,8 +59,8 @@ and `addFile`.
 
 # Monitoring
 
-Each driver program has a web UI, typically on port 3030, that displays information about running
-tasks, executors, and storage usage. Simply go to `http://<driver-node>:3030` in a web browser to
+Each driver program has a web UI, typically on port 4040, that displays information about running
+tasks, executors, and storage usage. Simply go to `http://<driver-node>:4040` in a web browser to
 access this UI. The [monitoring guide](monitoring.html) also describes other monitoring options.
 
 # Job Scheduling
