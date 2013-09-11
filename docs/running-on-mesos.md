@@ -10,12 +10,12 @@ Spark can run on clusters managed by [Apache Mesos](http://mesos.apache.org/). F
 3. Create a Spark "distribution" using `make-distribution.sh`.
 4. Rename the `dist` directory created from `make-distribution.sh` to `spark-{{site.SPARK_VERSION}}`.
 5. Create a `tar` archive: `tar czf spark-{{site.SPARK_VERSION}}.tar.gz spark-{{site.SPARK_VERSION}}`
-6. Upload this archive to your HDFS or another place accessible from Mesos via `http://`, e.g., [Amazon Simple Storage Service](http://aws.amazon.com/s3): `hadoop fs -put spark-{{site.SPARK_VERSION}}.tar.gz /path/to/spark-{{site.SPARK_VERSION}}.tar.gz`
+6. Upload this archive to HDFS or another place accessible from Mesos via `http://`, e.g., [Amazon Simple Storage Service](http://aws.amazon.com/s3): `hadoop fs -put spark-{{site.SPARK_VERSION}}.tar.gz /path/to/spark-{{site.SPARK_VERSION}}.tar.gz`
 7. Create a file called `spark-env.sh` in Spark's `conf` directory, by copying `conf/spark-env.sh.template`, and add the following lines to it:
    * `export MESOS_NATIVE_LIBRARY=<path to libmesos.so>`. This path is usually `<prefix>/lib/libmesos.so` (where the prefix is `/usr/local` by default, see above). Also, on Mac OS X, the library is called `libmesos.dylib` instead of `libmesos.so`.
    * `export SPARK_EXECUTOR_URI=<path to spark-{{site.SPARK_VERSION}}.tar.gz uploaded above>`.
    * `export MASTER=mesos://HOST:PORT` where HOST:PORT is the host and port (default: 5050) of your Mesos master (or `zk://...` if using Mesos with ZooKeeper).
-8. To run a Spark application against the cluster, when you create your `SparkContext`, pass the string `mesos://HOST:PORT` as the first parameter. In addition, you'll need to set the `spark.executor.uri` property. For example
+8. To run a Spark application against the cluster, when you create your `SparkContext`, pass the string `mesos://HOST:PORT` as the first parameter. In addition, you'll need to set the `spark.executor.uri` property. For example:
 
 {% highlight scala %}
 System.setProperty("spark.executor.uri", "<path to spark-{{site.SPARK_VERSION}}.tar.gz uploaded above>")
