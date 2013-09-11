@@ -36,6 +36,6 @@ sparkR.init <- function(
      env=.sparkREnv
   )
 
-  return(get(".sparkRjsc", env=.sparkREnv))
+  get(".sparkRjsc", env=.sparkREnv)
 }
 
