@@ -39,14 +39,14 @@ fi
 # to avoid the -sources and -doc packages that are built by publish-local.
 EXAMPLES_DIR="$FWDIR"/examples
 SPARK_EXAMPLES_JAR=""
-if [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9T]*.jar ]; then
+if [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar ]; then
   # Use the JAR from the SBT build
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9T]*.jar`
+  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar`
 fi
-if [ -e "$EXAMPLES_DIR"/target/spark-examples*[0-9T]*.jar ]; then
+if [ -e "$EXAMPLES_DIR"/target/spark-examples*[0-9Tg].jar ]; then
   # Use the JAR from the Maven build
   # TODO: this also needs to become an assembly!
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/spark-examples*[0-9T]*.jar`
+  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/spark-examples*[0-9Tg].jar`
 fi
 if [[ -z $SPARK_EXAMPLES_JAR ]]; then
   echo "Failed to find Spark examples assembly in $FWDIR/examples/target" >&2
