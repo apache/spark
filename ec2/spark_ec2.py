@@ -37,6 +37,9 @@ import boto
 from boto.ec2.blockdevicemapping import BlockDeviceMapping, EBSBlockDeviceType
 from boto import ec2
 
+class UsageError(Exception):
+  pass
+
 # A URL prefix from which to fetch AMI information
 AMI_PREFIX = "https://raw.github.com/mesos/spark-ec2/v2/ami-list"
 
@@ -580,8 +583,12 @@ def ssh(host, opts, command):
         ssh_command(opts) + ['-t', '%s@%s' % (opts.user, host), stringify_command(command)])
     except subprocess.CalledProcessError as e:
       if (tries > 2):
-        raise e
-      print "Error connecting to host, sleeping 30: {0}".format(e)
+        # If this was an ssh failure, provide the user with hints.
+        if e.returncode == 255:
+          raise UsageError("Failed to SSH to remote host {0}.\nPlease check that you have provided the correct --identity-file and --key-pair parameters and try again.".format(host))
+        else:
+          raise e
+      print >> stderr, "Error executing remote command, retrying after 30 seconds: {0}".format(e)
       time.sleep(30)
       tries = tries + 1
 
@@ -599,12 +606,13 @@ def ssh_write(host, opts, command, input):
         stdin=subprocess.PIPE)
     proc.stdin.write(input)
     proc.stdin.close()
-    if proc.wait() == 0:
+    status = proc.wait()
+    if status == 0:
       break
     elif (tries > 2):
-      raise RuntimeError("ssh_write error %s" % proc.returncode)
+      raise RuntimeError("ssh_write failed with error %s" % proc.returncode)
     else:
-      print "Error connecting to host, sleeping 30"
+      print >> stderr, "Error {0} while executing remote command, retrying after 30 seconds".format(status)
       time.sleep(30)
       tries = tries + 1
 
@@ -626,7 +634,7 @@ def get_partition(total, num_partitions, current_partitions):
   return num_slaves_this_zone
 
 
-def main():
+def real_main():
   (opts, action, cluster_name) = parse_args()
   try:
     conn = ec2.connect_to_region(opts.region)
@@ -753,6 +761,13 @@ def main():
   else:
     print >> stderr, "Invalid action: %s" % action
     sys.exit(1)
+
+
+def main():
+  try:
+    real_main()
+  except UsageError, e:
+    print >> stderr, "\nError:\n", e
 
 
 if __name__ == "__main__":
