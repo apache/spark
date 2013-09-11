@@ -7,7 +7,7 @@ There are several ways to monitor Spark applications.
 
 # Web Interfaces
 
-Every SparkContext launches a web UI, by default on port 3030, that 
+Every SparkContext launches a web UI, by default on port 4040, that 
 displays useful information about the application. This includes:
 
 * A list of scheduler stages and tasks
@@ -15,9 +15,9 @@ displays useful information about the application. This includes:
 * Information about the running executors
 * Environmental information.
 
-You can access this interface by simply opening `http://<driver-node>:3030` in a web browser.
+You can access this interface by simply opening `http://<driver-node>:4040` in a web browser.
 If multiple SparkContexts are running on the same host, they will bind to succesive ports
-beginning with 3030 (3031, 3032, etc).
+beginning with 4040 (4041, 4042, etc).
 
 Spark's Standlone Mode cluster manager also has its own 
 [web UI](spark-standalone.html#monitoring-and-logging). 

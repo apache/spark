@@ -43,7 +43,7 @@ rest for the operating system and buffer cache.
 
 How much memory you will need will depend on your application. To determine how much your
 application uses for a certain dataset size, load part of your dataset in a Spark RDD and use the
-Storage tab of Spark's monitoring UI (`http://<driver-node>:3030`) to see its size in memory.
+Storage tab of Spark's monitoring UI (`http://<driver-node>:4040`) to see its size in memory.
 Note that memory usage is greatly affected by storage level and serialization format -- see
 the [tuning guide](tuning.html) for tips on how to reduce it.
 
@@ -59,7 +59,7 @@ In our experience, when the data is in memory, a lot of Spark applications are n
 Using a **10 Gigabit** or higher network is the best way to make these applications faster.
 This is especially true for "distributed reduce" applications such as group-bys, reduce-bys, and
 SQL joins. In any given application, you can see how much data Spark shuffles across the network
-from the application's monitoring UI (`http://<driver-node>:3030`).
+from the application's monitoring UI (`http://<driver-node>:4040`).
 
 # CPU Cores
 
