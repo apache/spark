@@ -111,7 +111,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.ui.port</td>
-  <td>3030</td>
+  <td>4040</td>
   <td>
     Port for your application's dashboard, which shows memory and workload data
   </td>
