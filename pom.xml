@@ -38,7 +38,7 @@
   </licenses>
   <scm>
     <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
-    <developerConnection>scm:git:git@github.com:apache/incubator-spark.git</developerConnection>
+    <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/incubator-spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/incubator-spark.git</url>
   </scm>
   <developers>
