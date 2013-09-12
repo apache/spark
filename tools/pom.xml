@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>0.8.0-incubating-rc3</version>
+    <version>0.8.0-incubating-rc4-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
