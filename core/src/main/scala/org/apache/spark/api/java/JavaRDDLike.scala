@@ -68,6 +68,14 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     new JavaRDD(rdd.map(f)(f.returnType()))(f.returnType())
 
   /**
+   * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
+   * of the original partition.
+   */
+  def mapPartitionsWithIndex(f: JFunction2[Int, T, R],
+			     preservesPartitioning: Boolean = false): JavaRDD[R] =
+    new JavaRDD(MapPartitionsWithIndexRDD(this, sc.clean(f), preservesPartitioning))
+
+  /**
    * Return a new RDD by applying a function to all elements of this RDD.
    */
   def map[R](f: DoubleFunction[T]): JavaDoubleRDD =
