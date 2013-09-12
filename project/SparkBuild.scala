@@ -79,7 +79,7 @@ object SparkBuild extends Build {
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.apache.spark",
-    version := "0.8.0-incubating-rc3-SNAPSHOT",
+    version := "0.8.0-incubating-SNAPSHOT",
     scalaVersion := "2.9.3",
     scalacOptions := Seq("-unchecked", "-optimize", "-deprecation", 
       "-target:" + SCALAC_JVM_VERSION),
