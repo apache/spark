@@ -21,3 +21,10 @@ RRDD <- function(jrdd) {
   new("RRDD", jrdd = jrdd)
 }
 
+# collect()
+setGeneric("collect", function(x) { standardGeneric("collect") })
+setMethod("collect", signature(x = "RRDD"),
+          function(x) { 
+            collected <- x@jrdd$collect()
+            JavaListToRList(collected)
+          })
