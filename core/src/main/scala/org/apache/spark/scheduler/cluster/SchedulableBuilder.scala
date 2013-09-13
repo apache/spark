@@ -17,14 +17,12 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.io.{File, FileInputStream, FileOutputStream, FileNotFoundException, InputStream}
+import java.io.{FileInputStream, InputStream}
 import java.util.Properties
 
-import scala.xml.XML
-
 import org.apache.spark.Logging
-import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
 
+import scala.xml.XML
 
 /**
  * An interface to build Schedulable tree
@@ -67,17 +65,17 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool)
   override def buildPools() {
     var is: Option[InputStream] = None
     try {
-      is = Option {
-        schedulerAllocFile map { f =>
+      is = Option{
+        schedulerAllocFile.map{ f =>
           new FileInputStream(f)
-        } getOrElse {
+        }.getOrElse{
           getClass.getClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE)
         }
       }
 
-      is foreach { i => buildFairSchedulerPool(i) }
+      is.foreach{ i => buildFairSchedulerPool(i) }
     } finally {
-      is.foreach(_.close)
+      is.foreach(_.close())
     }
 
     // finally create "default" pool
@@ -108,7 +106,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool)
         try {
           schedulingMode = SchedulingMode.withName(xmlSchedulingMode)
         } catch {
-          case e: Exception => logInfo("Error xml schedulingMode, using default schedulingMode")
+          case e: Exception => logWarning("Error xml schedulingMode, using default schedulingMode")
         }
       }
 
