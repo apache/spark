@@ -83,6 +83,7 @@
     <slf4j.version>1.7.2</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
+    <yarn.version>0.23.7</yarn.version>
     <hbase.version>0.94.6</hbase.version>
 
     <PermGen>64m</PermGen>
@@ -383,7 +384,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-api</artifactId>
-        <version>${hadoop.version}</version>
+        <version>${yarn.version}</version>
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
@@ -414,7 +415,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-common</artifactId>
-        <version>${hadoop.version}</version>
+        <version>${yarn.version}</version>
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
@@ -445,7 +446,7 @@
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-client</artifactId>
-        <version>${hadoop.version}</version>
+        <version>${yarn.version}</version>
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
@@ -701,8 +702,8 @@
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
-        <!-- <hadoop.version>0.23.7</hadoop.version> -->
-        <hadoop.version>2.0.5-alpha</hadoop.version>
+        <hadoop.version>0.23.7</hadoop.version>
+        <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
 
       <modules>
