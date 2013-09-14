@@ -25,7 +25,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
-  <version>0.8.0-incubating_2.9.3-SNAPSHOT</version>
+  <version>0.8.0-incubating_2.9.3</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -40,7 +40,7 @@
     <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
     <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/incubator-spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/incubator-spark.git</url>
-    <tag>HEAD</tag>
+    <tag>v0.8.0-incubating</tag>
   </scm>
   <developers>
     <developer>
