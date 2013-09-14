@@ -20,12 +20,12 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>0.8.0-incubating_2.9.3-SNAPSHOT</version>
+    <version>0.8.0-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-tools</artifactId>
+  <artifactId>spark-tools_${scala.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Tools</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -33,12 +33,12 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core</artifactId>
+      <artifactId>spark-core_${scala.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming</artifactId>
+      <artifactId>spark-streaming_${scala.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

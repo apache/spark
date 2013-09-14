@@ -21,12 +21,12 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>0.8.0-incubating_2.9.3-SNAPSHOT</version>
+    <version>0.8.0-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-mllib</artifactId>
+  <artifactId>spark-mllib_${scala.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project ML Library</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -34,7 +34,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core</artifactId>
+      <artifactId>spark-core_${scala.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
