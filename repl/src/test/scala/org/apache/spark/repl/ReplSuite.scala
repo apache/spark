@@ -51,7 +51,7 @@ class ReplSuite extends FunSuite {
                                            |val accum = sc.accumulator(0)
                                            |sc.parallelize(1 to 10).foreach(x => accum += x)
                                            |accum.value
-                                         """)
+                                         """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res1: Int = 55", output)
@@ -63,7 +63,7 @@ class ReplSuite extends FunSuite {
                                            |sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
                                            |v = 10
                                            |sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
-                                         """)
+                                         """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 70", output)
@@ -76,7 +76,7 @@ class ReplSuite extends FunSuite {
                                            |def foo = 5
                                            |}
                                            |sc.parallelize(1 to 10).map(x => (new C).foo).collect.reduceLeft(_+_)
-                                         """)
+                                         """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 50", output)
@@ -86,7 +86,7 @@ class ReplSuite extends FunSuite {
     val output = runInterpreter("local", """
                                            |def double(x: Int) = x + x
                                            |sc.parallelize(1 to 10).map(x => double(x)).collect.reduceLeft(_+_)
-                                         """)
+                                         """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 110", output)
@@ -99,7 +99,7 @@ class ReplSuite extends FunSuite {
                                            |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
                                            |v = 10
                                            |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
-                                         """)
+                                         """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 70", output)
@@ -177,7 +177,7 @@ class ReplSuite extends FunSuite {
                                                   |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
                                                   |array(0) = 5
                                                   |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
-                                                """)
+                                                """.stripMargin)
       assertDoesNotContain("error:", output)
       assertDoesNotContain("Exception", output)
       assertContains("res0: Int = 70", output)

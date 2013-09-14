@@ -76,7 +76,7 @@ object SparkBuild extends Build {
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.apache.spark",
     version            := "0.8.0-SNAPSHOT",
-    scalaVersion       := "2.10.1",
+    scalaVersion       := "2.10.2",
     scalacOptions      := Seq("-unchecked", "-optimize", "-deprecation"),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
@@ -208,10 +208,10 @@ object SparkBuild extends Build {
         "com.codahale.metrics"     % "metrics-core"     % "3.0.0",
         "com.codahale.metrics"     % "metrics-jvm"      % "3.0.0",
         "com.codahale.metrics"     % "metrics-json"     % "3.0.0",
-        "com.twitter"              % "chill_2.9.3"      % "0.3.1",
+        "com.twitter"             %% "chill"            % "0.3.1",
         "com.twitter"              % "chill-java"       % "0.3.1",
-        "org.scala-lang"           % "jline"            % "2.10.1",
-        "org.scala-lang"           % "scala-reflect"    % "2.10.1"
+        "org.scala-lang"           % "jline"            % "2.10.2",
+        "org.scala-lang"           % "scala-reflect"    % "2.10.2"
       ) 
   )
 
@@ -222,7 +222,7 @@ object SparkBuild extends Build {
  def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   
   def examplesSettings = sharedSettings ++ Seq(
