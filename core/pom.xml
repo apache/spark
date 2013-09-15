@@ -83,7 +83,7 @@
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>chill_2.9.3</artifactId>
+      <artifactId>chill_2.10</artifactId>
       <version>0.3.1</version>
     </dependency>
     <dependency>

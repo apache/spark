@@ -76,17 +76,9 @@
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
     <java.version>1.5</java.version>
-<<<<<<< HEAD
     <scala.version>2.10</scala.version>
     <mesos.version>0.9.0-incubating</mesos.version>
     <akka.version>2.1.4</akka.version>
-    <spray.version>1.1-M7</spray.version>
-    <spray.json.version>1.2.3</spray.json.version>
-=======
-    <scala.version>2.9.3</scala.version>
-    <mesos.version>0.12.1</mesos.version>
-    <akka.version>2.0.5</akka.version>
->>>>>>> master
     <slf4j.version>1.7.2</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
