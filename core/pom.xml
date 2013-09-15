@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-core_${scala.version}</artifactId>
+  <artifactId>spark-core_2.9.3</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -82,7 +82,7 @@
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>chill_${scala.version}</artifactId>
+      <artifactId>chill_2.9.3</artifactId>
       <version>0.3.1</version>
     </dependency>
     <dependency>
@@ -161,12 +161,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.version}</artifactId>
+      <artifactId>scalatest_2.9.3</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.version}</artifactId>
+      <artifactId>scalacheck_2.9.3</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-assembly_${scala.version}</artifactId>
+  <artifactId>spark-assembly_2.9.3</artifactId>
   <name>Spark Project Assembly</name>
   <url>http://spark.incubator.apache.org/</url>
 
@@ -41,27 +41,27 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.version}</artifactId>
+      <artifactId>spark-core_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_${scala.version}</artifactId>
+      <artifactId>spark-bagel_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_${scala.version}</artifactId>
+      <artifactId>spark-mllib_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-repl_${scala.version}</artifactId>
+      <artifactId>spark-repl_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala.version}</artifactId>
+      <artifactId>spark-streaming_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -128,7 +128,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn_${scala.version}</artifactId>
+          <artifactId>spark-yarn_2.9.3</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

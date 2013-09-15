@@ -25,7 +25,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-yarn_${scala.version}</artifactId>
+  <artifactId>spark-yarn_2.9.3</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project YARN Support</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -33,7 +33,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala.version}</artifactId>
+      <artifactId>spark-core_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
