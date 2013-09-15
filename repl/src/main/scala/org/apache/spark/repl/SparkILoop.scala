@@ -915,6 +915,10 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   }
 
   def createSparkContext(): SparkContext = {
+   val uri = System.getenv("SPARK_EXECUTOR_URI")
+   if (uri != null) {
+         System.setProperty("spark.executor.uri", uri)
+   }
     val master = this.master match {
       case Some(m) => m
       case None => {

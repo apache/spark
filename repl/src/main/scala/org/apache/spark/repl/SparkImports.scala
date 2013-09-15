@@ -185,8 +185,13 @@ trait SparkImports {
             if (currentImps contains imv) addWrapper()
             val objName = req.lineRep.readPath
             val valName = "$VAL" + newValId();
-            code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
-            code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
+            
+            if(!code.toString.endsWith(".`" + imv + "`;\n")) { // Which means already imported
+               code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
+               code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
+            }
+            // code.append("val " + valName + " = " + objName + ".INSTANCE;\n")
+            // code.append("import " + valName + req.accessPath + ".`" + imv + "`;\n")
             // code append ("import " + (req fullPath imv) + "\n")
             currentImps += imv
           }
