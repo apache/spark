@@ -33,15 +33,19 @@ object SparkBuild extends Build {
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
 
+  // Target JVM version
+  val SCALAC_JVM_VERSION = "jvm-1.5"
+  val JAVAC_JVM_VERSION = "1.5"
+
   lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects: _*)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
-    .dependsOn(core, bagel, mllib) dependsOn(maybeYarn: _*)
+    .dependsOn(core, bagel, mllib)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, bagel, streaming) dependsOn(maybeYarn: _*)
+    .dependsOn(core, mllib, bagel, streaming)
 
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
@@ -77,7 +81,8 @@ object SparkBuild extends Build {
     organization       := "org.apache.spark",
     version            := "0.8.0-SNAPSHOT",
     scalaVersion       := "2.10.2",
-    scalacOptions      := Seq("-unchecked", "-optimize", "-deprecation"),
+    scalacOptions      := Seq("-unchecked", "-optimize", "-deprecation", "-target:" + SCALAC_JVM_VERSION),
+    javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
@@ -186,7 +191,7 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
         "com.google.guava"         % "guava"            % "14.0.1",
         "com.google.code.findbugs" % "jsr305"           % "1.3.9",
-        "log4j"                    % "log4j"            % "1.2.16",
+        "log4j"                    % "log4j"            % "1.2.17",
         "org.slf4j"                % "slf4j-api"        % slf4jVersion,
         "org.slf4j"                % "slf4j-log4j12"    % slf4jVersion,
         "com.ning"                 % "compress-lzf"     % "0.8.4",
@@ -200,7 +205,8 @@ object SparkBuild extends Build {
         "net.liftweb"             %% "lift-json"        % "2.5.1",
         "it.unimi.dsi"             % "fastutil"         % "6.4.4",
         "colt"                     % "colt"             % "1.2.0",
-        "org.apache.mesos"         % "mesos"            % "0.9.0-incubating",
+        "org.apache.mesos"         % "mesos"            % "0.12.1",
+        "net.java.dev.jets3t"      % "jets3t"           % "0.7.1",
         "org.apache.derby"         % "derby"            % "10.4.2.0"                     % "test",
         "org.apache.hadoop"        % "hadoop-client"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
         "org.apache.avro"          % "avro"             % "1.7.4",
@@ -208,6 +214,7 @@ object SparkBuild extends Build {
         "com.codahale.metrics"     % "metrics-core"     % "3.0.0",
         "com.codahale.metrics"     % "metrics-jvm"      % "3.0.0",
         "com.codahale.metrics"     % "metrics-json"     % "3.0.0",
+        "com.codahale.metrics"     % "metrics-ganglia"  % "3.0.0",
         "com.twitter"             %% "chill"            % "0.3.1",
         "com.twitter"              % "chill-java"       % "0.3.1",
         "org.scala-lang"           % "jline"            % "2.10.2",
@@ -296,6 +303,7 @@ object SparkBuild extends Build {
     mergeStrategy in assembly := {
       case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$") => MergeStrategy.discard
+      case "META-INF/services/org.apache.hadoop.fs.FileSystem" => MergeStrategy.concat
       case "reference.conf" => MergeStrategy.concat
       case _ => MergeStrategy.first
     }

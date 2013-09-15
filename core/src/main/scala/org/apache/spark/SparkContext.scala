@@ -258,20 +258,20 @@ class SparkContext(
   private[spark] var checkpointDir: Option[String] = None
 
   // Thread Local variable that can be used by users to pass information down the stack
-  private val localProperties = new DynamicVariable[Properties](null)
+  private val localProperties = new ThreadLocal[Properties]
 
   def initLocalProperties() {
-      localProperties.value = new Properties()
+    localProperties.set(new Properties())
   }
 
   def setLocalProperty(key: String, value: String) {
-    if (localProperties.value == null) {
-      localProperties.value = new Properties()
+    if (localProperties.get() == null) {
+      localProperties.set(new Properties())
     }
     if (value == null) {
-      localProperties.value.remove(key)
+      localProperties.get.remove(key)
     } else {
-      localProperties.value.setProperty(key, value)
+      localProperties.get.setProperty(key, value)
     }
   }
 
@@ -283,8 +283,8 @@ class SparkContext(
   // Post init
   taskScheduler.postStartHook()
 
-  val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler)
-  val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager)
+  val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
+  val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
 
   def initDriverMetrics() {
     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
@@ -724,7 +724,8 @@ class SparkContext(
     val callSite = Utils.formatSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler, localProperties.value)
+    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler,
+      localProperties.get)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
     result
@@ -807,7 +808,8 @@ class SparkContext(
     val callSite = Utils.formatSparkCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout, localProperties.value)
+    val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout,
+      localProperties.get)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
   }

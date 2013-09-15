@@ -42,7 +42,7 @@ This would be used to connect to the cluster, write to the dfs and submit jobs t
 
 The command to launch the YARN Client is as follows:
 
-    SPARK_JAR=<SPARK_YARN_JAR_FILE> ./spark-class org.apache.spark.deploy.yarn.Client \
+    SPARK_JAR=<SPARK_ASSEMBLY_JAR_FILE> ./spark-class org.apache.spark.deploy.yarn.Client \
       --jar <YOUR_APP_JAR_FILE> \
       --class <APP_MAIN_CLASS> \
       --args <APP_MAIN_ARGUMENTS> \
@@ -54,14 +54,27 @@ The command to launch the YARN Client is as follows:
 
 For example:
 
-    SPARK_JAR=./yarn/target/spark-yarn-assembly-{{site.SPARK_VERSION}}.jar ./spark-class org.apache.spark.deploy.yarn.Client \
-      --jar examples/target/scala-{{site.SCALA_VERSION}}/spark-examples_{{site.SCALA_VERSION}}-{{site.SPARK_VERSION}}.jar \
-      --class org.apache.spark.examples.SparkPi \
-      --args yarn-standalone \
-      --num-workers 3 \
-      --master-memory 4g \
-      --worker-memory 2g \
-      --worker-cores 1
+    # Build the Spark assembly JAR and the Spark examples JAR
+    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true ./sbt/sbt assembly
+
+    # Configure logging
+    $ cp conf/log4j.properties.template conf/log4j.properties
+
+    # Submit Spark's ApplicationMaster to YARN's ResourceManager, and instruct Spark to run the SparkPi example
+    $ SPARK_JAR=./assembly/target/scala-{{site.SCALA_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop2.0.5-alpha.jar \
+        ./spark-class org.apache.spark.deploy.yarn.Client \
+          --jar examples/target/scala-{{site.SCALA_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
+          --class org.apache.spark.examples.SparkPi \
+          --args yarn-standalone \
+          --num-workers 3 \
+          --master-memory 4g \
+          --worker-memory 2g \
+          --worker-cores 1
+
+    # Examine the output (replace $YARN_APP_ID in the following with the "application identifier" output by the previous command)
+    # (Note: YARN_APP_LOGS_DIR is usually /tmp/logs or $HADOOP_HOME/logs/userlogs depending on the Hadoop version.)
+    $ cat $YARN_APP_LOGS_DIR/$YARN_APP_ID/container*_000001/stdout
+    Pi is roughly 3.13794
 
 The above starts a YARN Client programs which periodically polls the Application Master for status updates and displays them in the console. The client will exit once your application has finished running.
 
