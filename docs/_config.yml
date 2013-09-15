@@ -6,5 +6,5 @@ markdown: kramdown
 SPARK_VERSION: 0.8.0-SNAPSHOT
 SPARK_VERSION_SHORT: 0.8.0
 SCALA_VERSION: 2.9.3
-MESOS_VERSION: 0.9.0-incubating
+MESOS_VERSION: 0.13.0
 SPARK_ISSUE_TRACKER_URL: https://spark-project.atlassian.net
