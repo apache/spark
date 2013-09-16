@@ -82,17 +82,6 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td>spark.mesos.coarse</td>
-  <td>false</td>
-  <td>
-    If set to "true", runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
-    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
-    duration of the Spark job.
-  </td>
-</tr>
-<tr>
   <td>spark.default.parallelism</td>
   <td>8</td>
   <td>
@@ -110,8 +99,19 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.mesos.coarse</td>
+  <td>false</td>
+  <td>
+    If set to "true", runs over Mesos clusters in
+    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
+    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
+    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
+    duration of the Spark job.
+  </td>
+</tr>
+<tr>
   <td>spark.ui.port</td>
-  <td>3030</td>
+  <td>4040</td>
   <td>
     Port for your application's dashboard, which shows memory and workload data
   </td>
@@ -158,6 +158,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>32768</td>
   <td>
     Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec is used.
+  </td>
+</tr>
+<tr>
+  <td>spark.scheduler.mode</td>
+  <td>FIFO</td>
+  <td>
+    The <a href="job-scheduling.html#scheduling-within-an-application">scheduling mode</a> between
+    jobs submitted to the same SparkContext. Can be set to <code>FAIR</code>
+    to use fair sharing instead of queueing jobs one after another. Useful for
+    multi-user services.
   </td>
 </tr>
 <tr>

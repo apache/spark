@@ -267,6 +267,23 @@ abstract class RDD[T: ClassManifest](
 
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
+   *
+   * This results in a narrow dependency, e.g. if you go from 1000 partitions
+   * to 100 partitions, there will not be a shuffle, instead each of the 100
+   * new partitions will claim 10 of the current partitions.
+   *
+   * However, if you're doing a drastic coalesce, e.g. to numPartitions = 1,
+   * this may result in your computation taking place on fewer nodes than
+   * you like (e.g. one node in the case of numPartitions = 1). To avoid this,
+   * you can pass shuffle = true. This will add a shuffle step, but means the
+   * current upstream partitions will be executed in parallel (per whatever
+   * the current partitioning is).
+   *
+   * Note: With shuffle = true, you can actually coalesce to a larger number
+   * of partitions. This is useful if you have a small number of partitions,
+   * say 100, potentially with a few partitions being abnormally large. Calling
+   * coalesce(1000, shuffle = true) will result in 1000 partitions with the
+   * data distributed using a hash partitioner.
    */
   def coalesce(numPartitions: Int, shuffle: Boolean = false): RDD[T] = {
     if (shuffle) {

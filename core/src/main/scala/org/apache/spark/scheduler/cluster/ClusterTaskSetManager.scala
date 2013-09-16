@@ -335,7 +335,7 @@ private[spark] class ClusterTaskSetManager(
   }
 
   /**
-   * Respond to an offer of a single slave from the scheduler by finding a task
+   * Respond to an offer of a single executor from the scheduler by finding a task
    */
   override def resourceOffer(
       execId: String,
@@ -358,7 +358,7 @@ private[spark] class ClusterTaskSetManager(
           val task = tasks(index)
           val taskId = sched.newTaskId()
           // Figure out whether this should count as a preferred launch
-          logInfo("Starting task %s:%d as TID %s on slave %s: %s (%s)".format(
+          logInfo("Starting task %s:%d as TID %s on executor %s: %s (%s)".format(
             taskSet.id, index, taskId, execId, host, taskLocality))
           // Do various bookkeeping
           copiesRunning(index) += 1

@@ -132,7 +132,7 @@ private[spark] class ShuffleMapTask(
   override def run(attemptId: Long): MapStatus = {
     val numOutputSplits = dep.partitioner.numPartitions
 
-    val taskContext = new TaskContext(stageId, partition, attemptId)
+    val taskContext = new TaskContext(stageId, partition, attemptId, runningLocally = false)
     metrics = Some(taskContext.taskMetrics)
 
     val blockManager = SparkEnv.get.blockManager

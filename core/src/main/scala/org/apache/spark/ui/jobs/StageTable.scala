@@ -24,6 +24,7 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark.scheduler.cluster.{SchedulingMode, TaskInfo}
 import org.apache.spark.scheduler.Stage
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 
@@ -98,7 +99,8 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
 
     val poolName = listener.stageToPool.get(s)
 
-    val nameLink = <a href={"/stages/stage?id=%s".format(s.id)}>{s.name}</a>
+    val nameLink =
+      <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(),s.id)}>{s.name}</a>
     val description = listener.stageToDescription.get(s)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
@@ -107,7 +109,8 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
     <tr>
       <td>{s.id}</td>
       {if (isFairScheduler) {
-        <td><a href={"/stages/pool?poolname=%s".format(poolName.get)}>{poolName.get}</a></td>}
+        <td><a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),poolName.get)}>
+          {poolName.get}</a></td>}
       }
       <td>{description}</td>
       <td valign="middle">{submissionTime}</td>
