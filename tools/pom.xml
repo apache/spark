@@ -25,7 +25,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-tools_2.9.3</artifactId>
+  <artifactId>spark-tools_${scala.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Tools</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -33,17 +33,17 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_2.9.3</artifactId>
+      <artifactId>spark-core_${scala.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_2.9.3</artifactId>
+      <artifactId>spark-streaming_${scala.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_2.9.3</artifactId>
+      <artifactId>scalatest_${scala.version}</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>

@@ -215,7 +215,7 @@
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
-        <artifactId>chill_2.9.3</artifactId>
+        <artifactId>chill_${scala.version}</artifactId>
         <version>0.3.1</version>
       </dependency>
       <dependency>
@@ -323,7 +323,7 @@
 
       <dependency>
         <groupId>org.scalatest</groupId>
-        <artifactId>scalatest_2.9.3</artifactId>
+        <artifactId>scalatest_${scala.version}</artifactId>
         <version>1.9.1</version>
         <scope>test</scope>
       </dependency>
@@ -335,7 +335,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalacheck</groupId>
-        <artifactId>scalacheck_2.9.3</artifactId>
+        <artifactId>scalacheck_${scala.version}</artifactId>
         <version>1.10.0</version>
         <scope>test</scope>
       </dependency>
