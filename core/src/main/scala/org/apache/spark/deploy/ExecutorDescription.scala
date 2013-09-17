@@ -15,12 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.master
+package org.apache.spark.deploy
 
-private[spark] object WorkerState
-  extends Enumeration("ALIVE", "DEAD", "DECOMMISSIONED", "UNKNOWN") {
+private[spark] class ExecutorDescription(
+    val appId: String,
+    val execId: Int,
+    val cores: Int,
+    val state: ExecutorState.Value)
+  extends Serializable {
 
-  type WorkerState = Value
-
-  val ALIVE, DEAD, DECOMMISSIONED, UNKNOWN = Value
+  override def toString: String =
+    "ExecutorState(appId=%s, execId=%d, cores=%d, state=%s)".format(appId, execId, cores, state)
 }

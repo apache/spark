@@ -52,6 +52,8 @@ private[deploy] object DeployMessages {
       exitStatus: Option[Int])
     extends DeployMessage
 
+  case class WorkerSchedulerStateResponse(id: String, executors: List[ExecutorDescription])
+
   case class Heartbeat(workerId: String) extends DeployMessage
 
   // Master to Worker
@@ -76,6 +78,8 @@ private[deploy] object DeployMessages {
   case class RegisterApplication(appDescription: ApplicationDescription)
     extends DeployMessage
 
+  case class MasterChangeAcknowledged(appId: String)
+
   // Master to Client
 
   case class RegisteredApplication(appId: String) extends DeployMessage
@@ -93,6 +97,10 @@ private[deploy] object DeployMessages {
   // Internal message in Client
 
   case object StopClient
+
+  // Master to Worker & Client
+
+  case class MasterChanged(masterUrl: String, masterWebUiUrl: String)
 
   // MasterWebUI To Master
 
@@ -126,6 +134,10 @@ private[deploy] object DeployMessages {
   // Actor System to Master
 
   case object CheckForWorkerTimeOut
+
+  case class BeginRecovery(storedApps: Seq[ApplicationInfo], storedWorkers: Seq[WorkerInfo])
+
+  case object EndRecoveryProcess
 
   case object RequestWebUIPort
 

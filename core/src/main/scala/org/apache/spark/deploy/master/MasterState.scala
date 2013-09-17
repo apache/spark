@@ -17,10 +17,10 @@
 
 package org.apache.spark.deploy.master
 
-private[spark] object WorkerState
-  extends Enumeration("ALIVE", "DEAD", "DECOMMISSIONED", "UNKNOWN") {
+private[spark] object MasterState
+  extends Enumeration("ALIVE", "RECOVERING", "COMPLETING_RECOVERY") {
 
-  type WorkerState = Value
+  type MasterState = Value
 
-  val ALIVE, DEAD, DECOMMISSIONED, UNKNOWN = Value
+  val ALIVE, RECOVERING, COMPLETING_RECOVERY = Value
 }

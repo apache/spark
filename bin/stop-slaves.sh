@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-# Starts the master on the machine this script is executed on.
+# Starts workers on the machine this script is executed on.
 
 bin=`dirname "$0"`
 bin=`cd "$bin"; pwd`

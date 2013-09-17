@@ -29,20 +29,36 @@ private[spark] class WorkerInfo(
   val memory: Int,
   val actor: ActorRef,
   val webUiPort: Int,
-  val publicAddress: String) {
+  val publicAddress: String)
+  extends Serializable {
 
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
 
-  var executors = new mutable.HashMap[String, ExecutorInfo]  // fullId => info
-  var state: WorkerState.Value = WorkerState.ALIVE
-  var coresUsed = 0
-  var memoryUsed = 0
+  @transient var executors: mutable.HashMap[String, ExecutorInfo] = _ // fullId => info
+  @transient var state: WorkerState.Value = _
+  @transient var coresUsed: Int = _
+  @transient var memoryUsed: Int = _
 
-  var lastHeartbeat = System.currentTimeMillis()
+  @transient var lastHeartbeat: Long = _
+
+  init()
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
+
+  private def readObject(in: java.io.ObjectInputStream) : Unit = {
+    in.defaultReadObject()
+    init()
+  }
+
+  private def init() {
+    executors = new mutable.HashMap[String, ExecutorInfo]
+    state = WorkerState.ALIVE
+    coresUsed = 0
+    memoryUsed = 0
+    lastHeartbeat = System.currentTimeMillis()
+  }
 
   def hostPort: String = {
     assert (port > 0)

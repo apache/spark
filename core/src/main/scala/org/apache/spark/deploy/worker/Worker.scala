@@ -27,8 +27,8 @@ import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 import akka.util.duration._
 
-import org.apache.spark.{Logging}
-import org.apache.spark.deploy.ExecutorState
+import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
@@ -42,7 +42,7 @@ private[spark] class Worker(
     webUiPort: Int,
     cores: Int,
     memory: Int,
-    masterUrl: String,
+    var masterUrl: String,
     workDirPath: String = null)
   extends Actor with Logging {
 
@@ -125,19 +125,30 @@ private[spark] class Worker(
         master ! Heartbeat(workerId)
       }
 
+    case MasterChanged(url, uiUrl) =>
+      logInfo("Master has changed, new master is at " + url)
+      masterUrl = url
+      masterWebUiUrl = uiUrl
+      context.unwatch(master)
+      master = context.actorFor(Master.toAkkaUrl(masterUrl))
+      context.watch(master) // Doesn't work with remote actors, but useful for testing
+      val execs = executors.values.
+        map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
+      sender ! WorkerSchedulerStateResponse(workerId, execs.toList)
+
     case RegisterWorkerFailed(message) =>
       logError("Worker registration failed: " + message)
       System.exit(1)
 
     case LaunchExecutor(appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
       logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
-      val manager = new ExecutorRunner(
-        appId, execId, appDesc, cores_, memory_, self, workerId, host, new File(execSparkHome_), workDir)
+      val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
+        self, workerId, host, new File(execSparkHome_), workDir, ExecutorState.RUNNING)
       executors(appId + "/" + execId) = manager
       manager.start()
       coresUsed += cores_
       memoryUsed += memory_
-      master ! ExecutorStateChanged(appId, execId, ExecutorState.RUNNING, None, None)
+      master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
 
     case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
       master ! ExecutorStateChanged(appId, execId, state, message, exitStatus)
@@ -174,11 +185,7 @@ private[spark] class Worker(
   }
 
   def masterDisconnected() {
-    // TODO: It would be nice to try to reconnect to the master, but just shut down for now.
-    // (Note that if reconnecting we would also need to assign IDs differently.)
-    logError("Connection to master failed! Shutting down.")
-    executors.values.foreach(_.kill())
-    System.exit(1)
+    logError("Connection to master failed! Waiting for master to reconnect...")
   }
 
   def generateWorkerId(): String = {

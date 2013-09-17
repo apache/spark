@@ -92,20 +92,25 @@ private[spark] class Client(
           listener.executorRemoved(fullId, message.getOrElse(""), exitStatus)
         }
 
+      case MasterChanged(materUrl, masterWebUiUrl) =>
+        logInfo("Master has changed, new master is at " + masterUrl)
+        context.unwatch(master)
+        master = context.actorFor(Master.toAkkaUrl(masterUrl))
+        masterAddress = master.path.address
+        sender ! MasterChangeAcknowledged(appId)
+        context.watch(master)
+
       case Terminated(actor_) if actor_ == master =>
-        logError("Connection to master failed; stopping client")
+        logError("Connection to master failed; waiting for master to reconnect...")
         markDisconnected()
-        context.stop(self)
 
       case RemoteClientDisconnected(transport, address) if address == masterAddress =>
-        logError("Connection to master failed; stopping client")
+        logError("Connection to master failed; waiting for master to reconnect...")
         markDisconnected()
-        context.stop(self)
 
       case RemoteClientShutdown(transport, address) if address == masterAddress =>
-        logError("Connection to master failed; stopping client")
+        logError("Connection to master failed; waiting for master to reconnect...")
         markDisconnected()
-        context.stop(self)
 
       case StopClient =>
         markDisconnected()

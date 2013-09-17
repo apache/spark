@@ -27,16 +27,17 @@ import akka.actor.Terminated
 import akka.dispatch.Await
 import akka.pattern.ask
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
+import akka.serialization.SerializationExtension
 import akka.util.duration._
-import akka.util.Timeout
+import akka.util.{Duration, Timeout}
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.master.MasterState.MasterState
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.util.{Utils, AkkaUtils}
-import akka.util.{Duration, Timeout}
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
@@ -44,7 +45,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
   val RETAINED_APPLICATIONS = System.getProperty("spark.deploy.retainedApplications", "200").toInt
   val REAPER_ITERATIONS = System.getProperty("spark.dead.worker.persistence", "15").toInt
- 
+  val RECOVERY_DIR = System.getProperty("spark.deploy.recoveryDirectory", "")
+
   var nextAppNumber = 0
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
@@ -74,6 +76,10 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     if (envVar != null) envVar else host
   }
 
+  var state: MasterState = _
+
+  var persistenceEngine: PersistenceEngine = _
+
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
@@ -89,6 +95,23 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     masterMetricsSystem.registerSource(masterSource)
     masterMetricsSystem.start()
     applicationMetricsSystem.start()
+
+    persistenceEngine =
+      if (RECOVERY_DIR.isEmpty()) {
+        new BlackHolePersistenceEngine()
+      } else {
+        logInfo("Persisting recovery state to directory: " + RECOVERY_DIR)
+        new FileSystemPersistenceEngine(RECOVERY_DIR, SerializationExtension(context.system))
+      }
+
+    val (storedApps, storedWorkers) = persistenceEngine.readPersistedData()
+    state =
+      if (storedApps.isEmpty && storedWorkers.isEmpty) {
+        MasterState.ALIVE
+      } else {
+        self ! BeginRecovery(storedApps, storedWorkers)
+        MasterState.RECOVERING
+      }
   }
 
   override def postStop() {
@@ -98,14 +121,16 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   }
 
   override def receive = {
-    case RegisterWorker(id, host, workerPort, cores, memory, worker_webUiPort, publicAddress) => {
+    case RegisterWorker(id, host, workerPort, cores, memory, webUiPort, publicAddress) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         host, workerPort, cores, Utils.megabytesToString(memory)))
       if (idToWorker.contains(id)) {
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {
-        addWorker(id, host, workerPort, cores, memory, worker_webUiPort, publicAddress)
+        val worker = new WorkerInfo(id, host, port, cores, memory, sender, webUiPort, publicAddress)
+        registerWorker(worker)
         context.watch(sender)  // This doesn't work with remote actors but helps for testing
+        persistenceEngine.addWorker(worker)
         sender ! RegisteredWorker("http://" + masterPublicAddress + ":" + webUi.boundPort.get)
         schedule()
       }
@@ -113,10 +138,11 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     case RegisterApplication(description) => {
       logInfo("Registering app " + description.name)
-      val app = addApplication(description, sender)
+      val app = createApplication(description, sender)
+      registerApplication(app)
       logInfo("Registered app " + description.name + " with ID " + app.id)
-      waitingApps += app
       context.watch(sender)  // This doesn't work with remote actors but helps for testing
+      persistenceEngine.addApplication(app)
       sender ! RegisteredApplication(app.id)
       schedule()
     }
@@ -158,23 +184,78 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       }
     }
 
+    case BeginRecovery(storedApps, storedWorkers) => {
+      context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis, self, EndRecoveryProcess)
+
+      val masterUrl = "spark://" + host + ":" + port
+      val masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort.get
+      for (app <- storedApps) {
+        registerApplication(app)
+        app.state = ApplicationState.UNKNOWN
+        app.driver ! MasterChanged(masterUrl, masterWebUiUrl)
+      }
+      for (worker <- storedWorkers) {
+        registerWorker(worker)
+        worker.state = WorkerState.UNKNOWN
+        worker.actor ! MasterChanged(masterUrl, masterWebUiUrl)
+      }
+    }
+
+    case MasterChangeAcknowledged(appId) => {
+      val appOption = idToApp.get(appId)
+      appOption match {
+        case Some(app) =>
+          app.state = ApplicationState.WAITING
+        case None =>
+          logWarning("Master change ack from unknown app: " + appId)
+      }
+
+      if (canCompleteRecovery) { completeRecovery() }
+    }
+
+    case WorkerSchedulerStateResponse(workerId, executors) => {
+      idToWorker.get(workerId) match {
+        case Some(worker) =>
+          worker.state = WorkerState.ALIVE
+
+          val validExecutors = executors.filter(exec => idToApp.get(exec.appId) != None)
+          for (exec <- validExecutors) {
+            val app = idToApp.get(exec.appId).get
+            val execInfo = app.addExecutor(worker, exec.cores, Some(exec.execId))
+            worker.addExecutor(execInfo)
+            execInfo.copyState(exec)
+          }
+        case None =>
+          logWarning("Scheduler state from unknown worker: " + workerId)
+      }
+
+      if (canCompleteRecovery) { completeRecovery() }
+    }
+
+    case EndRecoveryProcess => {
+      completeRecovery()
+    }
+
     case Terminated(actor) => {
       // The disconnected actor could've been either a worker or an app; remove whichever of
       // those we have an entry for in the corresponding actor hashmap
       actorToWorker.get(actor).foreach(removeWorker)
       actorToApp.get(actor).foreach(finishApplication)
+      if (state == MasterState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
     case RemoteClientDisconnected(transport, address) => {
       // The disconnected client could've been either a worker or an app; remove whichever it was
       addressToWorker.get(address).foreach(removeWorker)
       addressToApp.get(address).foreach(finishApplication)
+      if (state == MasterState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
     case RemoteClientShutdown(transport, address) => {
       // The disconnected client could've been either a worker or an app; remove whichever it was
       addressToWorker.get(address).foreach(removeWorker)
       addressToApp.get(address).foreach(finishApplication)
+      if (state == MasterState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
     case RequestMasterState => {
@@ -188,6 +269,25 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     case RequestWebUIPort => {
       sender ! WebUIPortResponse(webUi.boundPort.getOrElse(-1))
     }
+  }
+
+  def canCompleteRecovery =
+    workers.count(_.state == WorkerState.UNKNOWN) == 0 &&
+      apps.count(_.state == ApplicationState.UNKNOWN) == 0
+
+  def completeRecovery() {
+    synchronized {
+      if (state != MasterState.RECOVERING) { return }
+      state = MasterState.COMPLETING_RECOVERY
+    }
+
+    // Kill off any workers and apps that didn't respond to us.
+    workers.filter(_.state == WorkerState.UNKNOWN).foreach(removeWorker(_))
+    apps.filter(_.state == ApplicationState.UNKNOWN).foreach(finishApplication(_))
+
+    state = MasterState.ALIVE
+    schedule()
+    logInfo("Recovery complete - resuming operations!")
   }
 
   /**
@@ -204,6 +304,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
    * every time a new app joins or resource availability changes.
    */
   def schedule() {
+    if (state != MasterState.ALIVE) { return }
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
     if (spreadOutApps) {
@@ -257,8 +358,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       exec.id, worker.id, worker.hostPort, exec.cores, exec.memory)
   }
 
-  def addWorker(id: String, host: String, port: Int, cores: Int, memory: Int, webUiPort: Int,
-    publicAddress: String): WorkerInfo = {
+  def registerWorker(worker: WorkerInfo): Unit = {
     // There may be one or more refs to dead workers on this same node (w/ different ID's),
     // remove them.
     workers.filter { w =>
@@ -266,12 +366,17 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }.foreach { w =>
       workers -= w
     }
-    val worker = new WorkerInfo(id, host, port, cores, memory, sender, webUiPort, publicAddress)
+
+    val workerAddress = worker.actor.path.address
+    if (addressToWorker.contains(workerAddress)) {
+      logInfo("Attempted to re-register worker at same address: " + workerAddress)
+      return
+    }
+
     workers += worker
     idToWorker(worker.id) = worker
     actorToWorker(sender) = worker
-    addressToWorker(sender.path.address) = worker
-    worker
+    addressToWorker(workerAddress) = worker
   }
 
   def removeWorker(worker: WorkerInfo) {
@@ -286,25 +391,35 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         exec.id, ExecutorState.LOST, Some("worker lost"), None)
       exec.application.removeExecutor(exec)
     }
+    persistenceEngine.removeWorker(worker)
   }
 
-  def addApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
+  def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    val app = new ApplicationInfo(now, newApplicationId(date), desc, date, driver, desc.appUiUrl)
+    new ApplicationInfo(now, newApplicationId(date), desc, date, driver, desc.appUiUrl)
+  }
+
+  def registerApplication(app: ApplicationInfo): Unit = {
+    val appAddress = app.driver.path.address
+    if (addressToWorker.contains(appAddress)) {
+      logInfo("Attempted to re-register application at same address: " + appAddress)
+      return
+    }
+
     applicationMetricsSystem.registerSource(app.appSource)
     apps += app
     idToApp(app.id) = app
-    actorToApp(driver) = app
-    addressToApp(driver.path.address) = app
+    actorToApp(app.driver) = app
+    addressToApp(appAddress) = app
     if (firstApp == None) {
       firstApp = Some(app)
     }
     val workersAlive = workers.filter(_.state == WorkerState.ALIVE).toArray
-    if (workersAlive.size > 0 && !workersAlive.exists(_.memoryFree >= desc.memoryPerSlave)) {
+    if (workersAlive.size > 0 && !workersAlive.exists(_.memoryFree >= app.desc.memoryPerSlave)) {
       logWarning("Could not find any workers with enough memory for " + firstApp.get.id)
     }
-    app
+    waitingApps += app
   }
 
   def finishApplication(app: ApplicationInfo) {
@@ -336,6 +451,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       if (state != ApplicationState.FINISHED) {
         app.driver ! ApplicationRemoved(state.toString)
       }
+      persistenceEngine.removeApplication(app)
       schedule()
     }
   }
