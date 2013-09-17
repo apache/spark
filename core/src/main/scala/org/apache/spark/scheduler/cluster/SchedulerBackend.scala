@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.{SparkContext}
+import org.apache.spark.SparkContext
 
 /**
  * A backend interface for cluster scheduling systems that allows plugging in different ones under
@@ -29,6 +29,10 @@ private[spark] trait SchedulerBackend {
   def stop(): Unit
   def reviveOffers(): Unit
   def defaultParallelism(): Int
+
+  def killTask(taskId: Long, executorId: String) {
+    throw new UnsupportedOperationException
+  }
 
   // Memory used by each executor (in megabytes)
   protected val executorMemory: Int = SparkContext.executorMemoryRequested

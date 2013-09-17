@@ -25,6 +25,7 @@ class TaskContext(
   val splitId: Int,
   val attemptId: Long,
   val runningLocally: Boolean = false,
+  @volatile var interrupted: Boolean = false,
   val taskMetrics: TaskMetrics = TaskMetrics.empty()
 ) extends Serializable {
 

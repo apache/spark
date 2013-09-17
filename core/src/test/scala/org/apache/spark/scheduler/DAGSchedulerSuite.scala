@@ -29,12 +29,13 @@ import org.apache.spark.SparkContext
 import org.apache.spark.Partition
 import org.apache.spark.TaskContext
 import org.apache.spark.{Dependency, ShuffleDependency, OneToOneDependency}
-import org.apache.spark.{FetchFailed, Success, TaskEndReason}
+import org.apache.spark.{Success, TaskEndReason}
 import org.apache.spark.storage.{BlockManagerId, BlockManagerMaster}
 
 import org.apache.spark.scheduler.cluster.Pool
 import org.apache.spark.scheduler.cluster.SchedulingMode
 import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
+import org.apache.spark.FetchFailed
 
 /**
  * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler
@@ -62,6 +63,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
       taskSets += taskSet
     }
+    override def killTasks(stageId: Int) {}
     override def setListener(listener: TaskSchedulerListener) = {}
     override def defaultParallelism() = 2
   }

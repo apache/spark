@@ -15,25 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark
 
-import java.util.Properties
+class InterruptibleIterator[+T](val context: TaskContext, val delegate: Iterator[T])
+  extends Iterator[T] {
 
-/**
- * A set of tasks submitted together to the low-level TaskScheduler, usually representing
- * missing partitions of a particular stage.
- */
-private[spark] class TaskSet(
-    val tasks: Array[Task[_]],
-    val stageId: Int,
-    val attempt: Int,
-    val priority: Int,
-    val properties: Properties) {
-    val id: String = stageId + "." + attempt
+  def hasNext: Boolean = !context.interrupted && delegate.hasNext
 
-  def kill() {
-    tasks.foreach(_.kill())
-  }
-
-  override def toString: String = "TaskSet " + id
+  def next(): T = delegate.next()
 }

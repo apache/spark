@@ -128,6 +128,7 @@ class DAGScheduler(
   //       stray messages to detect.
   val failedEpoch = new HashMap[String, Long]
 
+  // stage id to the active job
   val idToActiveJob = new HashMap[Int, ActiveJob]
 
   val waiting = new HashSet[Stage] // Stages we need to run whose parents aren't done
@@ -332,6 +333,35 @@ class DAGScheduler(
     val partitions = (0 until rdd.partitions.size).toArray
     eventQueue.put(JobSubmitted(rdd, func2, partitions, allowLocal = false, callSite, listener, properties))
     listener.awaitResult()    // Will throw an exception if the job fails
+  }
+
+  def killJob(jobId: Int) {
+    activeJobs.find(job => job.jobId == jobId).foreach(job => killJob(job))
+  }
+
+  private def killJob(job: ActiveJob) {
+    logInfo("Killing Job and cleaning up stages %d".format(job.jobId))
+    activeJobs.remove(job)
+    idToActiveJob.remove(job.jobId)
+    val stage = job.finalStage
+    resultStageToJob.remove(stage)
+    killStage(stage)
+    // recursively remove all parent stages
+    stage.parents.foreach(p => killStage(p))
+    job.listener.jobFailed(new SparkException("Job killed"))
+  }
+
+  private def killStage(stage: Stage) {
+    logInfo("Killing Stage %s".format(stage.id))
+    stageIdToStage.remove(stage.id)
+    if (stage.isShuffleMap) {
+      shuffleToMapStage.remove(stage.id)
+    }
+    waiting.remove(stage)
+    pendingTasks.remove(stage)
+    running.remove(stage)
+    taskSched.killTasks(stage.id)
+    stage.parents.foreach(p => killStage(p))
   }
 
   /**
@@ -579,6 +609,11 @@ class DAGScheduler(
    */
   private def handleTaskCompletion(event: CompletionEvent) {
     val task = event.task
+
+    if (!stageIdToStage.contains(task.stageId)) {
+      // Skip all the actions if the stage has been cancelled.
+      return
+    }
     val stage = stageIdToStage(task.stageId)
 
     def markStageAsFinished(stage: Stage) = {

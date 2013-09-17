@@ -166,6 +166,20 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     backend.reviveOffers()
   }
 
+  override def killTasks(stageId: Int) {
+    synchronized {
+      schedulableBuilder.popTaskSetManagers(stageId).foreach { t =>
+        val ts = t.asInstanceOf[TaskSetManager].taskSet
+        ts.kill()
+        val taskIds = taskSetTaskIds(ts.id)
+        taskIds.foreach { tid =>
+          val execId = taskIdToExecutorId(tid)
+          backend.killTask(tid, execId)
+        }
+      }
+    }
+  }
+
   def taskSetFinished(manager: TaskSetManager) {
     this.synchronized {
       activeTaskSets -= manager.taskSet.id

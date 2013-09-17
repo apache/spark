@@ -38,17 +38,17 @@ private[spark] object ResultTask {
     synchronized {
       val old = serializedInfoCache.get(stageId).orNull
       if (old != null) {
-        return old
+        old
       } else {
         val out = new ByteArrayOutputStream
-        val ser = SparkEnv.get.closureSerializer.newInstance
+        val ser = SparkEnv.get.closureSerializer.newInstance()
         val objOut = ser.serializeStream(new GZIPOutputStream(out))
         objOut.writeObject(rdd)
         objOut.writeObject(func)
         objOut.close()
         val bytes = out.toByteArray
         serializedInfoCache.put(stageId, bytes)
-        return bytes
+        bytes
       }
     }
   }
@@ -56,11 +56,11 @@ private[spark] object ResultTask {
   def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], (TaskContext, Iterator[_]) => _) = {
     val loader = Thread.currentThread.getContextClassLoader
     val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
-    val ser = SparkEnv.get.closureSerializer.newInstance
+    val ser = SparkEnv.get.closureSerializer.newInstance()
     val objIn = ser.deserializeStream(in)
     val rdd = objIn.readObject().asInstanceOf[RDD[_]]
     val func = objIn.readObject().asInstanceOf[(TaskContext, Iterator[_]) => _]
-    return (rdd, func)
+    (rdd, func)
   }
 
   def clearCache() {
@@ -75,25 +75,20 @@ private[spark] class ResultTask[T, U](
     stageId: Int,
     var rdd: RDD[T],
     var func: (TaskContext, Iterator[T]) => U,
-    var partition: Int,
+    _partition: Int,
     @transient locs: Seq[TaskLocation],
     var outputId: Int)
-  extends Task[U](stageId) with Externalizable {
+  extends Task[U](stageId, _partition) with Externalizable {
 
   def this() = this(0, null, null, 0, null, 0)
 
-  var split = if (rdd == null) {
-    null
-  } else {
-    rdd.partitions(partition)
-  }
+  var split = if (rdd == null) null else rdd.partitions(partition)
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq
   }
 
-  override def run(attemptId: Long): U = {
-    val context = new TaskContext(stageId, partition, attemptId, runningLocally = false)
+  override def runTask(context: TaskContext): U = {
     metrics = Some(context.taskMetrics)
     try {
       func(context, rdd.iterator(split, context))

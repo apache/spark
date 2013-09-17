@@ -19,6 +19,7 @@ package org.apache.spark.scheduler
 
 import org.apache.spark.scheduler.cluster.Pool
 import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
+
 /**
  * Low-level task scheduler interface, implemented by both ClusterScheduler and LocalScheduler.
  * These schedulers get sets of tasks submitted to them from the DAGScheduler for each stage,
@@ -43,6 +44,9 @@ private[spark] trait TaskScheduler {
 
   // Submit a sequence of tasks to run.
   def submitTasks(taskSet: TaskSet): Unit
+
+  // Kill the stage.
+  def killTasks(stageId: Int)
 
   // Set a listener for upcalls. This is guaranteed to be set before submitTasks is called.
   def setListener(listener: TaskSchedulerListener): Unit

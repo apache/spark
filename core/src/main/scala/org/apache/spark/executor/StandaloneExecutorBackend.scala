@@ -69,6 +69,12 @@ private[spark] class StandaloneExecutorBackend(
         executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
       }
 
+    case KillTask(taskId, _) =>
+      logInfo("Kill task %s %s".format(taskId, executorId))
+      if (executor != null) {
+        executor.killTask(taskId)
+      }
+
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       logError("Driver terminated or disconnected! Shutting down.")
       System.exit(1)

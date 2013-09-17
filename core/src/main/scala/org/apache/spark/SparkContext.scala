@@ -813,6 +813,13 @@ class SparkContext(
   }
 
   /**
+   * Kill a running job.
+   */
+  def killJob(jobId: Int) {
+    dagScheduler.killJob(jobId)
+  }
+
+  /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
    */

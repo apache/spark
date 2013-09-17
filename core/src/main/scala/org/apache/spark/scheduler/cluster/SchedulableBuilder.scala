@@ -32,8 +32,17 @@ import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
  * addTaskSetManager: build the leaf nodes(TaskSetManagers)
  */
 private[spark] trait SchedulableBuilder {
+  def rootPool: Pool
+
   def buildPools()
+
   def addTaskSetManager(manager: Schedulable, properties: Properties)
+
+  def popTaskSetManagers(stageId: Int): Iterable[Schedulable] = {
+    val taskSets = rootPool.schedulableQueue.filter(_.stageId == stageId)
+    taskSets.foreach(rootPool.removeSchedulable)
+    taskSets
+  }
 }
 
 private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)

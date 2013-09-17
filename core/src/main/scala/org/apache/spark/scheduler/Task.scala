@@ -17,25 +17,59 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.serializer.SerializerInstance
 import java.io.{DataInputStream, DataOutputStream}
 import java.nio.ByteBuffer
-import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
-import org.apache.spark.util.ByteBufferInputStream
+
 import scala.collection.mutable.HashMap
+
+import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+
+import org.apache.spark.TaskContext
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.serializer.SerializerInstance
+import org.apache.spark.util.ByteBufferInputStream
+
 
 /**
  * A task to execute on a worker node.
  */
-private[spark] abstract class Task[T](val stageId: Int) extends Serializable {
-  def run(attemptId: Long): T
+private[spark] abstract class Task[T](val stageId: Int, var partition: Int) extends Serializable {
+
+  def run(attemptId: Long): T = {
+    context = new TaskContext(stageId, partition, attemptId, runningLocally = false)
+    if (killed) {
+      kill()
+    }
+    runTask(context)
+  }
+
+  def runTask(context: TaskContext): T
+
   def preferredLocations: Seq[TaskLocation] = Nil
 
-  var epoch: Long = -1   // Map output tracker epoch. Will be set by TaskScheduler.
+  // Map output tracker epoch. Will be set by TaskScheduler.
+  var epoch: Long = -1
 
   var metrics: Option[TaskMetrics] = None
 
+  // Task context, to be initialized in run().
+  @transient protected var context: TaskContext = _
+
+  // A flag to indicate whether the task is killed. This is used in case context is not yet
+  // initialized when kill() is invoked.
+  @volatile @transient private var killed = false
+
+  /**
+   * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark
+   * code and user code to properly handle the flag. This function should be idempotent so it can
+   * be called multiple times.
+   */
+  def kill() {
+    killed = true
+    if (context != null) {
+      context.interrupted = true
+    }
+  }
 }
 
 /**
