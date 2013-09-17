@@ -58,6 +58,7 @@
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka</artifactId>
       <version>0.7.2-spark</version>  <!-- Comes from our in-project repository -->
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.flume</groupId>

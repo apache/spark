@@ -31,6 +31,14 @@
   <name>Spark Project Examples</name>
   <url>http://spark.incubator.apache.org/</url>
 
+  <repositories>
+    <!-- A repository in the local filesystem for the Kafka JAR, which we modified for Scala 2.9 -->
+    <repository>
+      <id>lib</id>
+      <url>file://${project.basedir}/lib</url>
+    </repository>
+  </repositories>
+
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
@@ -70,6 +78,12 @@
           <artifactId>netty</artifactId>
         </exclusion>
       </exclusions>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.kafka</groupId>
+      <artifactId>kafka</artifactId>
+      <version>0.7.2-spark</version>  <!-- Comes from our in-project repository -->
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
