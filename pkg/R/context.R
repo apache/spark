@@ -17,9 +17,20 @@ textFile <- function(jsc, name, minSplits=NULL) {
 
 
 # Distribute a local R collection (list/vector) to form an RRDD.
-# FIXME: bound/safeguard numSlices
+# TODO: bound/safeguard numSlices
+# TODO: unit tests for if the split works for all primitives
 parallelize <- function(jsc, coll, numSlices) {
   sliceLen <- length(coll) / numSlices
   slices <- split(coll, rep(1:(numSlices + 1), each = sliceLen)[1:length(coll)])
-  serializedSlices <- lapply(slices, serialize, connection = NULL)
+  # serializedSlices <- lapply(slices, serialize, connection = NULL)
+  serializedSlices <- serialize(slices, connection = NULL)
+
+  # primitive byte[]
+  javaPrimitiveByteArray <- .jarray(serializedSlices)
+  # convert into List<Byte>
+  javaByteList <- .jcall("java/util/Arrays", "Ljava/util/List;", "asList", .jcast(javaPrimitiveByteArray, "[Ljava/lang/Object;"), evalArray = FALSE)
+
+  jrdd <- .jcall(jsc, "Lorg/apache/spark/api/java/JavaRDD;", "parallelize", javaByteList, as.integer(numSlices))
+
+  RRDD(jrdd)
 }
