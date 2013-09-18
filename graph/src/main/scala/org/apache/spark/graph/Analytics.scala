@@ -1,6 +1,6 @@
-package spark.graph
+package org.apache.spark.graph
 
-import spark._
+import org.apache.spark._
 
 
 

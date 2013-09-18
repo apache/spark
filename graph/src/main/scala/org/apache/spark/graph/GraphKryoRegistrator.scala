@@ -1,8 +1,8 @@
-package spark.graph
+package org.apache.spark.graph
 
 import com.esotericsoftware.kryo.Kryo
 
-import spark.KryoRegistrator
+import org.apache.spark.serializer.KryoRegistrator
 
 
 class GraphKryoRegistrator extends KryoRegistrator {

@@ -1,4 +1,4 @@
-package spark.graph
+package org.apache.spark.graph
 
 /**
  * A graph vertex consists of a vertex id and attribute.

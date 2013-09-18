@@ -1,4 +1,4 @@
-package spark.graph
+package org.apache.spark.graph
 
 /**
  * An edge triplet represents two vertices and edge along with their attributes.

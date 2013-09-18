@@ -1,4 +1,4 @@
-package spark.graph.util
+package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
@@ -7,10 +7,9 @@ import scala.collection.mutable.HashSet
 import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
 import org.objectweb.asm.Opcodes._
 
-import spark.Utils
 
 
-private[graph] object BytecodeUtils {
+private[spark] object BytecodeUtils {
 
   /**
    * Test whether the given closure invokes the specified method in the specified class.

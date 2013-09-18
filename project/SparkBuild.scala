@@ -42,16 +42,16 @@ object SparkBuild extends Build {
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
-    .dependsOn(core, bagel, mllib)
+    .dependsOn(core, graph, bagel, mllib)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, bagel, streaming)
+    .dependsOn(core, mllib, graph, bagel, streaming)
 
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn(core)
 
-  lazy val graph = Project("graph", file("graph"), settings = graphSettings) dependsOn(core)
+  lazy val graph = Project("graph", file("graph"), settings = graphSettings) dependsOn(core) 
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
@@ -60,7 +60,7 @@ object SparkBuild extends Build {
   lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn(core)
 
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
-    .dependsOn(core, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*)
+    .dependsOn(core, graph, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*)
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -77,7 +77,7 @@ object SparkBuild extends Build {
   lazy val maybeYarn = if(isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
   lazy val maybeYarnRef = if(isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
   lazy val allProjects = Seq[ProjectReference](
-    core, repl, examples, bagel, streaming, mllib, tools, assemblyProj) ++ maybeYarnRef
+    core, repl, examples, graph, bagel, streaming, mllib, tools, assemblyProj) ++ maybeYarnRef
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.apache.spark",
@@ -254,6 +254,10 @@ object SparkBuild extends Build {
     name := "spark-tools"
   )
 
+  def graphSettings = sharedSettings ++ Seq(
+    name := "spark-graphx"
+  )
+
   def bagelSettings = sharedSettings ++ Seq(
     name := "spark-bagel"
   )
@@ -264,8 +268,6 @@ object SparkBuild extends Build {
       "org.jblas" % "jblas" % "1.2.3"
     )
   )
-
-  def graphSettings = sharedSettings ++ Seq(name := "spark-graph")
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",

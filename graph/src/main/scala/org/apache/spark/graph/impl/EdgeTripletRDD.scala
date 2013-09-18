@@ -1,9 +1,15 @@
-package spark.graph.impl
+package org.apache.spark.graph.impl
 
-import spark.{Aggregator, HashPartitioner, Partition, RDD, SparkEnv, TaskContext}
-import spark.{Dependency, OneToOneDependency, ShuffleDependency}
-import spark.SparkContext._
-import spark.graph._
+import org.apache.spark.Aggregator
+import org.apache.spark.Partition
+import org.apache.spark.SparkEnv
+import org.apache.spark.TaskContext
+import org.apache.spark.rdd.RDD
+import org.apache.spark.Dependency
+import org.apache.spark.OneToOneDependency
+import org.apache.spark.ShuffleDependency
+import org.apache.spark.SparkContext._
+import org.apache.spark.graph._
 
 
 private[graph]

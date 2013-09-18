@@ -1,6 +1,7 @@
-package spark.graph
+package org.apache.spark.graph
 
-import spark.RDD
+
+import org.apache.spark.rdd.RDD
 
 
 
@@ -366,8 +367,8 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
 object Graph {
 
-  import spark.graph.impl._
-  import spark.SparkContext._
+  import org.apache.spark.graph.impl._
+  import org.apache.spark.SparkContext._
 
   def apply(rawEdges: RDD[(Vid, Vid)], uniqueEdges: Boolean = true): Graph[Int, Int] = {
     // Reduce to unique edges.

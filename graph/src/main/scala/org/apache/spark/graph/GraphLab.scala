@@ -1,7 +1,7 @@
-package spark.graph
+package org.apache.spark.graph
 
 import scala.collection.JavaConversions._
-import spark.RDD
+import org.apache.spark.rdd.RDD
 
 /**
  * This object implement the graphlab gather-apply-scatter api.

@@ -1,12 +1,16 @@
-package spark.graph.impl
+package org.apache.spark.graph.impl
 
 import scala.collection.JavaConversions._
 
-import spark.{ClosureCleaner, Partitioner, HashPartitioner, RDD}
-import spark.SparkContext._
+import org.apache.spark.SparkContext._
+import org.apache.spark.Partitioner
+import org.apache.spark.HashPartitioner 
+import org.apache.spark.util.ClosureCleaner
 
-import spark.graph._
-import spark.graph.impl.GraphImpl._
+import org.apache.spark.rdd.RDD
+
+import org.apache.spark.graph._
+import org.apache.spark.graph.impl.GraphImpl._
 
 
 

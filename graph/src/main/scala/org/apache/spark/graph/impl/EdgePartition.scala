@@ -1,10 +1,10 @@
-package spark.graph.impl
+package org.apache.spark.graph.impl
 
 import scala.collection.mutable.ArrayBuilder
 
 import it.unimi.dsi.fastutil.ints.IntArrayList
 
-import spark.graph._
+import org.apache.spark.graph._
 
 
 /**

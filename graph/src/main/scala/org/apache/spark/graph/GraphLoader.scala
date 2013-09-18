@@ -1,9 +1,9 @@
-package spark.graph
+package org.apache.spark.graph
 
-import spark.RDD
-import spark.SparkContext
-import spark.SparkContext._
-import spark.graph.impl.GraphImpl
+import org.apache.spark.rdd.RDD
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+import org.apache.spark.graph.impl.GraphImpl
 
 
 object GraphLoader {

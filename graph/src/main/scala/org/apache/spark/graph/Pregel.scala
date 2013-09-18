@@ -1,6 +1,6 @@
-package spark.graph
+package org.apache.spark.graph
 
-import spark.RDD
+import org.apache.spark.rdd.RDD
 
 
 object Pregel {

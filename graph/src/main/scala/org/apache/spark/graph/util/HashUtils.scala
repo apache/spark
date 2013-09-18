@@ -1,4 +1,4 @@
-package spark.graph.util
+package org.apache.spark.graph.util
 
 
 object HashUtils {
