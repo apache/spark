@@ -1,3 +1,19 @@
+<!--
+  ~ Licensed to the Apache Software Foundation (ASF) under one or more
+  ~ contributor license agreements.  See the NOTICE file distributed with
+  ~ this work for additional information regarding copyright ownership.
+  ~ The ASF licenses this file to You under the Apache License, Version 2.0
+  ~ (the "License"); you may not use this file except in compliance with
+  ~ the License.  You may obtain a copy of the License at
+  ~
+  ~    http://www.apache.org/licenses/LICENSE-2.0
+  ~
+  ~ Unless required by applicable law or agreed to in writing, software
+  ~ distributed under the License is distributed on an "AS IS" BASIS,
+  ~ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+  ~ See the License for the specific language governing permissions and
+  ~ limitations under the License.
+  -->
 <assembly>
   <id>dist</id>
   <formats>
@@ -14,9 +30,9 @@
     </fileSet>
     <fileSet>
       <directory>
-        ${project.parent.basedir}/core/src/main/resources/spark/ui/static/
+        ${project.parent.basedir}/core/src/main/resources/org/apache/spark/ui/static/
       </directory>
-      <outputDirectory>/ui-resources/spark/ui/static</outputDirectory>
+      <outputDirectory>/ui-resources/org/apache/spark/ui/static</outputDirectory>
       <includes>
         <include>**/*</include>
       </includes>
@@ -36,7 +52,8 @@
       </directory>
       <outputDirectory>/bin</outputDirectory>
       <includes>
-        <include>run*</include>
+        <include>run-example*</include>
+        <include>spark-class*</include>
         <include>spark-shell*</include>
         <include>spark-executor*</include>
       </includes>
@@ -46,10 +63,10 @@
   <dependencySets>
     <dependencySet>
       <includes>
-        <include>org.spark-project:*:jar</include>
+        <include>org.apache.spark:*:jar</include>
       </includes>
       <excludes>
-        <exclude>org.spark-project:spark-assembly:jar</exclude>
+        <exclude>org.apache.spark:spark-assembly:jar</exclude>
       </excludes>
     </dependencySet>
     <dependencySet>
@@ -60,7 +77,7 @@
       <useProjectArtifact>false</useProjectArtifact>
       <excludes>
         <exclude>org.apache.hadoop:*:jar</exclude>
-        <exclude>org.spark-project:*:jar</exclude>
+        <exclude>org.apache.spark:*:jar</exclude>
       </excludes>
     </dependencySet>
   </dependencySets>

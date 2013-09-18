@@ -26,30 +26,39 @@ import AssemblyKeys._
 object SparkBuild extends Build {
   // Hadoop version to build against. For example, "1.0.4" for Apache releases, or
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
-  // through the environment variables SPARK_HADOOP_VERSION and SPARK_WITH_YARN.
+  // through the environment variables SPARK_HADOOP_VERSION and SPARK_YARN.
   val DEFAULT_HADOOP_VERSION = "1.0.4"
-  val DEFAULT_WITH_YARN = false
+  val DEFAULT_YARN = false
 
   // HBase version; set as appropriate.
   val HBASE_VERSION = "0.94.6"
 
-  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects:_*)
+  // Target JVM version
+  val SCALAC_JVM_VERSION = "jvm-1.5"
+  val JAVAC_JVM_VERSION = "1.5"
+
+  lazy val root = Project("root", file("."), settings = rootSettings) aggregate(allProjects: _*)
 
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
-  lazy val repl = Project("repl", file("repl"), settings = replSettings) dependsOn(core) dependsOn(bagel) dependsOn(mllib) dependsOn(maybeYarn:_*)
+  lazy val repl = Project("repl", file("repl"), settings = replSettings)
+    .dependsOn(core, bagel, mllib)
 
-  lazy val examples = Project("examples", file("examples"), settings = examplesSettings) dependsOn (core) dependsOn (streaming) dependsOn(mllib)
+  lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
+    .dependsOn(core, mllib, bagel, streaming)
 
-  lazy val tools = Project("tools", file("tools"), settings = examplesSettings) dependsOn (core) dependsOn (streaming)
+  lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
-  lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn (core)
+  lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn(core)
 
-  lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn (core)
+  lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
-  lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn (core)
+  lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
 
-  lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn (core)
+  lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn(core)
+
+  lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
+    .dependsOn(core, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*)
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -57,21 +66,24 @@ object SparkBuild extends Build {
 
   // Allows build configuration to be set through environment variables
   lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
-  lazy val isYarnEnabled = scala.util.Properties.envOrNone("SPARK_WITH_YARN") match {
-    case None => DEFAULT_WITH_YARN
+  lazy val isYarnEnabled = scala.util.Properties.envOrNone("SPARK_YARN") match {
+    case None => DEFAULT_YARN
     case Some(v) => v.toBoolean
   }
 
   // Conditionally include the yarn sub-project
   lazy val maybeYarn = if(isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
   lazy val maybeYarnRef = if(isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
-  lazy val allProjects = Seq[ProjectReference](core, repl, examples, bagel, streaming, mllib, tools) ++ maybeYarnRef
+  lazy val allProjects = Seq[ProjectReference](
+    core, repl, examples, bagel, streaming, mllib, tools, assemblyProj) ++ maybeYarnRef
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
-    organization := "org.spark-project",
+    organization := "org.apache.spark",
     version := "0.8.0-SNAPSHOT",
     scalaVersion := "2.9.3",
-    scalacOptions := Seq("-unchecked", "-optimize", "-deprecation"),
+    scalacOptions := Seq("-unchecked", "-optimize", "-deprecation", 
+      "-target:" + SCALAC_JVM_VERSION),
+    javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
@@ -80,7 +92,7 @@ object SparkBuild extends Build {
 
     // Fork new JVMs for tests and set Java options for those
     fork := true,
-    javaOptions += "-Xmx2500m",
+    javaOptions += "-Xmx3g",
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
@@ -97,17 +109,22 @@ object SparkBuild extends Build {
     //useGpg in Global := true,
 
     pomExtra := (
-      <url>http://spark-project.org/</url>
+      <parent>
+        <groupId>org.apache</groupId>
+        <artifactId>apache</artifactId>
+        <version>13</version>
+      </parent>
+      <url>http://spark.incubator.apache.org/</url>
       <licenses>
         <license>
-          <name>BSD License</name>
-          <url>https://github.com/mesos/spark/blob/master/LICENSE</url>
+          <name>Apache 2.0 License</name>
+          <url>http://www.apache.org/licenses/LICENSE-2.0.html</url>
           <distribution>repo</distribution>
         </license>
       </licenses>
       <scm>
-        <connection>scm:git:git@github.com:mesos/spark.git</connection>
-        <url>scm:git:git@github.com:mesos/spark.git</url>
+        <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
+        <url>scm:git:git@github.com:apache/incubator-spark.git</url>
       </scm>
       <developers>
         <developer>
@@ -115,10 +132,14 @@ object SparkBuild extends Build {
           <name>Matei Zaharia</name>
           <email>matei.zaharia@gmail.com</email>
           <url>http://www.cs.berkeley.edu/~matei</url>
-          <organization>U.C. Berkeley Computer Science</organization>
-          <organizationUrl>http://www.cs.berkeley.edu/</organizationUrl>
+          <organization>Apache Software Foundation</organization>
+          <organizationUrl>http://spark.incubator.apache.org</organizationUrl>
         </developer>
       </developers>
+      <issueManagement>
+        <system>JIRA</system>
+        <url>https://spark-project.atlassian.net/browse/SPARK</url>
+      </issueManagement>
     ),
 
 /*
@@ -183,19 +204,21 @@ object SparkBuild extends Build {
       "it.unimi.dsi" % "fastutil" % "6.4.4",
       "colt" % "colt" % "1.2.0",
       "net.liftweb" % "lift-json_2.9.2" % "2.5",
-      "org.apache.mesos" % "mesos" % "0.12.1",
+      "org.apache.mesos" % "mesos" % "0.13.0",
       "io.netty" % "netty-all" % "4.0.0.Beta2",
       "org.apache.derby" % "derby" % "10.4.2.0" % "test",
       "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+      "net.java.dev.jets3t" % "jets3t" % "0.7.1",
       "org.apache.avro" % "avro" % "1.7.4",
       "org.apache.avro" % "avro-ipc" % "1.7.4" excludeAll(excludeNetty),
       "com.codahale.metrics" % "metrics-core" % "3.0.0",
       "com.codahale.metrics" % "metrics-jvm" % "3.0.0",
       "com.codahale.metrics" % "metrics-json" % "3.0.0",
+      "com.codahale.metrics" % "metrics-ganglia" % "3.0.0",
       "com.twitter" % "chill_2.9.3" % "0.3.1",
       "com.twitter" % "chill-java" % "0.3.1"
     )
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def rootSettings = sharedSettings ++ Seq(
     publish := {}
@@ -204,7 +227,7 @@ object SparkBuild extends Build {
   def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
     libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
@@ -223,7 +246,7 @@ object SparkBuild extends Build {
         exclude("org.apache.cassandra.deps", "avro")
         excludeAll(excludeSnappy)
     )
-  )
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def toolsSettings = sharedSettings ++ Seq(
     name := "spark-tools"
@@ -251,11 +274,11 @@ object SparkBuild extends Build {
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty),
       "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty)
     )
-  ) ++ assemblySettings ++ extraAssemblySettings
+  )
 
   def yarnSettings = sharedSettings ++ Seq(
     name := "spark-yarn"
-  ) ++ extraYarnSettings ++ assemblySettings ++ extraAssemblySettings
+  ) ++ extraYarnSettings
 
   // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain
   // if we refer to nonexistent dependencies (e.g. hadoop-yarn-api from a Hadoop version without YARN).
@@ -271,10 +294,17 @@ object SparkBuild extends Build {
     )
   )
 
-  def extraAssemblySettings() = Seq(test in assembly := {}) ++ Seq(
+  def assemblyProjSettings = sharedSettings ++ Seq(
+    name := "spark-assembly",
+    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" }
+  ) ++ assemblySettings ++ extraAssemblySettings
+
+  def extraAssemblySettings() = Seq(
+    test in assembly := {},
     mergeStrategy in assembly := {
       case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$") => MergeStrategy.discard
+      case "META-INF/services/org.apache.hadoop.fs.FileSystem" => MergeStrategy.concat
       case "reference.conf" => MergeStrategy.concat
       case _ => MergeStrategy.first
     }

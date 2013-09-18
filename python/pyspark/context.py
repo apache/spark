@@ -27,6 +27,7 @@ from pyspark.broadcast import Broadcast
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import dump_pickle, write_with_length, batched
+from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 
 from py4j.java_collections import ListConverter
@@ -114,9 +115,9 @@ class SparkContext(object):
             self.addPyFile(path)
 
         # Create a temporary directory inside spark.local.dir:
-        local_dir = self._jvm.spark.Utils.getLocalDir()
+        local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir()
         self._temp_dir = \
-            self._jvm.spark.Utils.createTempDir(local_dir).getAbsolutePath()
+            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
     @property
     def defaultParallelism(self):
@@ -279,6 +280,16 @@ class SparkContext(object):
         """
         self._jsc.sc().setCheckpointDir(dirName, useExisting)
 
+    def _getJavaStorageLevel(self, storageLevel):
+        """
+        Returns a Java StorageLevel based on a pyspark.StorageLevel.
+        """
+        if not isinstance(storageLevel, StorageLevel):
+            raise Exception("storageLevel must be of type pyspark.StorageLevel")
+
+        newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
+        return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
+            storageLevel.deserialized, storageLevel.replication)
 
 def _test():
     import atexit

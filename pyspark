@@ -23,11 +23,17 @@ FWDIR="$(cd `dirname $0`; pwd)"
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
+SCALA_VERSION=2.9.3
+
 # Exit if the user hasn't compiled Spark
-if [ ! -e "$SPARK_HOME/repl/target" ]; then
-  echo "Failed to find Spark classes in $SPARK_HOME/repl/target" >&2
-  echo "You need to compile Spark before running this program" >&2
-  exit 1
+if [ ! -f "$FWDIR/RELEASE" ]; then
+  # Exit if the user hasn't compiled Spark
+  ls "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*.jar >& /dev/null
+  if [[ $? != 0 ]]; then
+    echo "Failed to find Spark assembly in $FWDIR/assembly/target" >&2
+    echo "You need to build Spark with sbt/sbt assembly before running this program" >&2
+    exit 1
+  fi
 fi
 
 # Load environment variables from conf/spark-env.sh, if it exists
@@ -47,11 +53,6 @@ export PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
 # Load the PySpark shell.py script when ./pyspark is used interactively:
 export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
 export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
-
-# Launch with `scala` by default:
-if [[ "$SPARK_LAUNCH_WITH_SCALA" != "0" ]] ; then
-    export SPARK_LAUNCH_WITH_SCALA=1
-fi
 
 if [ -n "$IPYTHON_OPTS" ]; then
   IPYTHON=1

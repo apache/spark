@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package spark.rdd
+package org.apache.spark.rdd
 
 import java.nio.ByteBuffer
 
@@ -25,12 +25,12 @@ import java.util.{HashMap => JHashMap, BitSet => JBitSet, HashSet => JHashSet}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
-import spark._
-import spark.rdd._
-import spark.SparkContext._
-import spark.Partitioner._
+import org.apache.spark._
+import org.apache.spark.rdd._
+import org.apache.spark.SparkContext._
+import org.apache.spark.Partitioner._
 
-import spark.storage.StorageLevel
+import org.apache.spark.storage.StorageLevel
 
 
 

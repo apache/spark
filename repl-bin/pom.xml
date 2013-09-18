@@ -19,17 +19,17 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
   <modelVersion>4.0.0</modelVersion>
   <parent>
-    <groupId>org.spark-project</groupId>
+    <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
     <version>0.8.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
-  <groupId>org.spark-project</groupId>
+  <groupId>org.apache.spark</groupId>
   <artifactId>spark-repl-bin</artifactId>
   <packaging>pom</packaging>
   <name>Spark Project REPL binary packaging</name>
-  <url>http://spark-project.org/</url>
+  <url>http://spark.incubator.apache.org/</url>
 
   <properties>
     <deb.pkg.name>spark</deb.pkg.name>
@@ -39,18 +39,18 @@
 
   <dependencies>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-core</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-bagel</artifactId>
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>
-      <groupId>org.spark-project</groupId>
+      <groupId>org.apache.spark</groupId>
       <artifactId>spark-repl</artifactId>
       <version>${project.version}</version>
       <scope>runtime</scope>
@@ -105,16 +105,6 @@
   </build>
 
   <profiles>
-    <profile>
-      <id>hadoop2-yarn</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.spark-project</groupId>
-          <artifactId>spark-yarn</artifactId>
-          <version>${project.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
     <profile>
       <id>deb</id>
       <build>

@@ -15,19 +15,15 @@
  * limitations under the License.
  */
 
-package spark
+package org.apache.spark.rdd
 
 import java.util.{HashMap => JHashMap, BitSet => JBitSet, HashSet => JHashSet}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
-import spark._
+import org.apache.spark._
 
-import spark.rdd.ShuffledRDD
-import spark.rdd.IndexedRDD
-import spark.rdd.BlockIndex
-import spark.rdd.RDDIndex
 
 
 class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K,V])

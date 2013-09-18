@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package spark
+package org.apache.spark
 
 
 import org.scalatest.FunSuite
@@ -29,11 +29,11 @@ import com.google.common.io.Files
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 
-import spark.rdd.ShuffledRDD
-import spark.rdd.IndexedRDD
+import org.apache.spark.rdd.ShuffledRDD
+import org.apache.spark.rdd.IndexedRDD
 
-import spark.SparkContext._
-import spark._
+import org.apache.spark.SparkContext._
+import org.apache.spark._
 
 
 

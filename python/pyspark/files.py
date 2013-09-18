@@ -52,4 +52,4 @@ class SparkFiles(object):
             return cls._root_directory
         else:
             # This will have to change if we support multiple SparkContexts:
-            return cls._sc._jvm.spark.SparkFiles.getRootDirectory()
+            return cls._sc._jvm.org.apache.spark.SparkFiles.getRootDirectory()

@@ -80,7 +80,7 @@ another.
 permissions on your private key file, you can run `launch` with the
 `--resume` option to restart the setup process on an existing cluster.
 
-# Running Jobs
+# Running Applications
 
 -   Go into the `ec2` directory in the release of Spark you downloaded.
 -   Run `./spark-ec2 -k <keypair> -i <key-file> login <cluster-name>` to
@@ -90,7 +90,7 @@ permissions on your private key file, you can run `launch` with the
 -   To deploy code or data within your cluster, you can log in and use the
     provided script `~/spark-ec2/copy-dir`, which,
     given a directory path, RSYNCs it to the same location on all the slaves.
--   If your job needs to access large datasets, the fastest way to do
+-   If your application needs to access large datasets, the fastest way to do
     that is to load them from Amazon S3 or an Amazon EBS device into an
     instance of the Hadoop Distributed File System (HDFS) on your nodes.
     The `spark-ec2` script already sets up a HDFS instance for you. It's
@@ -103,8 +103,8 @@ permissions on your private key file, you can run `launch` with the
     (about 3 GB), but you can use the `--ebs-vol-size` option to
     `spark-ec2` to attach a persistent EBS volume to each node for
     storing the persistent HDFS.
--   Finally, if you get errors while running your jobs, look at the slave's logs
-    for that job inside of the scheduler work directory (/root/spark/work). You can
+-   Finally, if you get errors while running your application, look at the slave's logs
+    for that application inside of the scheduler work directory (/root/spark/work). You can
     also view the status of the cluster using the web UI: `http://<master-hostname>:8080`.
 
 # Configuration
