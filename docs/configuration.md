@@ -5,49 +5,13 @@ title: Spark Configuration
 
 Spark provides three main locations to configure the system:
 
-* [Environment variables](#environment-variables) for launching Spark workers, which can
-  be set either in your driver program or in the `conf/spark-env.sh` script.
-* [Java system properties](#system-properties), which control internal configuration parameters and can be set either
-  programmatically (by calling `System.setProperty` *before* creating a `SparkContext`) or through the
-  `SPARK_JAVA_OPTS` environment variable in `spark-env.sh`.
+* [Java system properties](#system-properties), which control internal configuration parameters and can be set
+  either programmatically (by calling `System.setProperty` *before* creating a `SparkContext`) or through
+  JVM arguments.
+* [Environment variables](#environment-variables) for configuring per-machine settings such as the IP address,
+  which can be set in the `conf/spark-env.sh` script.
 * [Logging configuration](#configuring-logging), which is done through `log4j.properties`.
 
-
-# Environment Variables
-
-Spark determines how to initialize the JVM on worker nodes, or even on the local node when you run `spark-shell`,
-by running the `conf/spark-env.sh` script in the directory where it is installed. This script does not exist by default
-in the Git repository, but but you can create it by copying `conf/spark-env.sh.template`. Make sure that you make
-the copy executable.
-
-Inside `spark-env.sh`, you *must* set at least the following two variables:
-
-* `SCALA_HOME`, to point to your Scala installation, or `SCALA_LIBRARY_PATH` to point to the directory for Scala
-  library JARs (if you install Scala as a Debian or RPM package, there is no `SCALA_HOME`, but these libraries
-  are in a separate path, typically /usr/share/java; look for `scala-library.jar`).
-* `MESOS_NATIVE_LIBRARY`, if you are [running on a Mesos cluster](running-on-mesos.html).
-
-In addition, there are four other variables that control execution. These should be set *in the environment that
-launches the job's driver program* instead of `spark-env.sh`, because they will be automatically propagated to
-workers. Setting these per-job instead of in `spark-env.sh` ensures that different jobs can have different settings
-for these variables.
-
-* `SPARK_JAVA_OPTS`, to add JVM options. This includes any system properties that you'd like to pass with `-D`.
-* `SPARK_CLASSPATH`, to add elements to Spark's classpath.
-* `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
-* `SPARK_MEM`, to set the amount of memory used per node. This should be in the same format as the
-   JVM's -Xmx option, e.g. `300m` or `1g`. Note that this option will soon be deprecated in favor of
-   the `spark.executor.memory` system property, so we recommend using that in new code.
-
-Beware that if you do set these variables in `spark-env.sh`, they will override the values set by user programs,
-which is undesirable; if you prefer, you can choose to have `spark-env.sh` set them only if the user program
-hasn't, as follows:
-
-{% highlight bash %}
-if [ -z "$SPARK_JAVA_OPTS" ] ; then
-  SPARK_JAVA_OPTS="-verbose:gc"
-fi
-{% endhighlight %}
 
 # System Properties
 
@@ -67,18 +31,18 @@ there are at least five properties that you will commonly want to control:
   <td>spark.executor.memory</td>
   <td>512m</td>
   <td>
-    Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. `512m`, `2g`).
+    Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
   </td>
 </tr>
 <tr>
   <td>spark.serializer</td>
-  <td>spark.JavaSerializer</td>
+  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
     Class to use for serializing objects that will be sent over the network or need to be cached
     in serialized form. The default of Java serialization works with any Serializable Java object but is
-    quite slow, so we recommend <a href="tuning.html">using <code>spark.KryoSerializer</code>
+    quite slow, so we recommend <a href="tuning.html">using <code>org.apache.spark.serializer.KryoSerializer</code>
     and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of
-    <a href="api/core/index.html#spark.Serializer"><code>spark.Serializer</code></a>).
+    <a href="api/core/index.html#org.apache.spark.serializer.Serializer"><code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 <tr>
@@ -86,8 +50,8 @@ there are at least five properties that you will commonly want to control:
   <td>(none)</td>
   <td>
     If you use Kryo serialization, set this class to register your custom classes with Kryo.
-    You need to set it to a class that extends
-    <a href="api/core/index.html#spark.KryoRegistrator"><code>spark.KryoRegistrator</code></a>).
+    It should be set to a class that extends
+    <a href="api/core/index.html#org.apache.spark.serializer.KryoRegistrator"><code>KryoRegistrator</code></a>.
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
 </tr>
@@ -97,7 +61,7 @@ there are at least five properties that you will commonly want to control:
   <td>
     Directory to use for "scratch" space in Spark, including map output files and RDDs that get stored
     on disk. This should be on a fast, local disk in your system. It can also be a comma-separated
-    list of multiple directories.
+    list of multiple directories on different disks.
   </td>
 </tr>
 <tr>
@@ -106,7 +70,8 @@ there are at least five properties that you will commonly want to control:
   <td>
     When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
     <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
-    sharing mode</a>, how many CPU cores to request at most. The default will use all available cores.
+    sharing mode</a>, how many CPU cores to request at most. The default will use all available cores
+    offered by the cluster manager.
   </td>
 </tr>
 </table>
@@ -116,17 +81,6 @@ Apart from these, the following properties are also available, and may be useful
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
-<tr>
-  <td>spark.mesos.coarse</td>
-  <td>false</td>
-  <td>
-    If set to "true", runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
-    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
-    duration of the Spark job.
-  </td>
-</tr>
 <tr>
   <td>spark.default.parallelism</td>
   <td>8</td>
@@ -145,8 +99,19 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.mesos.coarse</td>
+  <td>false</td>
+  <td>
+    If set to "true", runs over Mesos clusters in
+    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
+    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
+    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
+    duration of the Spark job.
+  </td>
+</tr>
+<tr>
   <td>spark.ui.port</td>
-  <td>33000</td>
+  <td>4040</td>
   <td>
     Port for your application's dashboard, which shows memory and workload data
   </td>
@@ -182,10 +147,10 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.io.compression.codec</td>
-  <td>spark.io.SnappyCompressionCodec</td>
+  <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
   <td>
     The compression codec class to use for various compressions. By default, Spark provides two
-    codecs: <code>spark.io.LZFCompressionCodec</code> and <code>spark.io.SnappyCompressionCodec</code>.
+    codecs: <code>org.apache.spark.io.LZFCompressionCodec</code> and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
 </tr>
 <tr>
@@ -193,6 +158,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>32768</td>
   <td>
     Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec is used.
+  </td>
+</tr>
+<tr>
+  <td>spark.scheduler.mode</td>
+  <td>FIFO</td>
+  <td>
+    The <a href="job-scheduling.html#scheduling-within-an-application">scheduling mode</a> between
+    jobs submitted to the same SparkContext. Can be set to <code>FAIR</code>
+    to use fair sharing instead of queueing jobs one after another. Useful for
+    multi-user services.
   </td>
 </tr>
 <tr>
@@ -206,7 +181,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.closure.serializer</td>
-  <td>spark.JavaSerializer</td>
+  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
     Serializer class to use for closures. Generally Java is fine unless your distributed functions
     (e.g. map functions) reference large objects in the driver program.
@@ -233,7 +208,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.broadcast.factory</td>
-  <td>spark.broadcast.HttpBroadcastFactory</td>
+  <td>org.apache.spark.broadcast.<br />HttpBroadcastFactory</td>
   <td>
     Which broadcast implementation to use.
   </td>
@@ -243,8 +218,34 @@ Apart from these, the following properties are also available, and may be useful
   <td>3000</td>
   <td>
     Number of milliseconds to wait to launch a data-local task before giving up and launching it
-    in a non-data-local location. You should increase this if your tasks are long and you are seeing
-    poor data locality, but the default generally works well.
+    on a less-local node. The same wait will be used to step through multiple locality levels
+    (process-local, node-local, rack-local and then any). It is also possible to customize the
+    waiting time for each level by setting <code>spark.locality.wait.node</code>, etc.
+    You should increase this setting if your tasks are long and see poor locality, but the
+    default usually works well.
+  </td>
+</tr>
+<tr>
+  <td>spark.locality.wait.process</td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for process locality. This affects tasks that attempt to access
+    cached data in a particular executor process.
+  </td>
+</tr>
+<tr>
+  <td>spark.locality.wait.node</td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for node locality. For example, you can set this to 0 to skip
+    node locality and search immediately for rack locality (if your cluster has rack information).
+  </td>
+</tr>
+<tr>
+  <td>spark.locality.wait.rack</td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for rack locality.
   </td>
 </tr>
 <tr>
@@ -295,7 +296,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.cleaner.ttl</td>
-  <td>(disable)</td>
+  <td>(infinite)</td>
   <td>
     Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
     Periodic cleanups will ensure that metadata older than this duration will be forgetten. This is
@@ -320,6 +321,34 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 
 </table>
+
+# Environment Variables
+
+Certain Spark settings can also be configured through environment variables, which are read from the `conf/spark-env.sh`
+script in the directory where Spark is installed (or `conf/spark-env.cmd` on Windows). These variables are meant to be for machine-specific settings, such
+as library search paths. While Java system properties can also be set here, for application settings, we recommend setting
+these properties within the application instead of in `spark-env.sh` so that different applications can use different
+settings.
+
+Note that `conf/spark-env.sh` does not exist by default when Spark is installed. However, you can copy
+`conf/spark-env.sh.template` to create it. Make sure you make the copy executable.
+
+The following variables can be set in `spark-env.sh`:
+
+* `JAVA_HOME`, the location where Java is installed (if it's not on your default `PATH`)
+* `PYSPARK_PYTHON`, the Python binary to use for PySpark
+* `SPARK_LOCAL_IP`, to configure which IP address of the machine to bind to.
+* `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
+* `SPARK_CLASSPATH`, to add elements to Spark's classpath that you want to be present for _all_ applications.
+   Note that applications can also add dependencies for themselves through `SparkContext.addJar` -- we recommend
+   doing that when possible.
+* `SPARK_JAVA_OPTS`, to add JVM options. This includes Java options like garbage collector settings and any system
+   properties that you'd like to pass with `-D` (e.g., `-Dspark.local.dir=/disk1,/disk2`). 
+* Options for the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
+  to use on each machine and maximum memory.
+
+Since `spark-env.sh` is a shell script, some of these can be set programmatically -- for example, you might
+compute `SPARK_LOCAL_IP` by looking up the IP of a specific network interface.
 
 # Configuring Logging
 

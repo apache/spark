@@ -42,7 +42,7 @@ bin=`cd "$bin"; pwd`
 . "$bin/spark-config.sh"
 
 # If the slaves file is specified in the command line,
-# then it takes precedence over the definition in 
+# then it takes precedence over the definition in
 # spark-env.sh. Save it here.
 HOSTLIST=$SPARK_SLAVES
 
@@ -57,8 +57,6 @@ if [ "$HOSTLIST" = "" ]; then
     export HOSTLIST="${SPARK_SLAVES}"
   fi
 fi
-
-echo $"${@// /\\ }"
 
 # By default disable strict host key checking
 if [ "$SPARK_SSH_OPTS" = "" ]; then

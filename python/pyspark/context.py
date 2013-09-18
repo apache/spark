@@ -27,6 +27,7 @@ from pyspark.broadcast import Broadcast
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import dump_pickle, write_with_length, batched
+from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 
 from py4j.java_collections import ListConverter
@@ -46,6 +47,7 @@ class SparkContext(object):
     _next_accum_id = 0
     _active_spark_context = None
     _lock = Lock()
+    _python_includes = None # zip and egg files that need to be added to PYTHONPATH
 
     def __init__(self, master, jobName, sparkHome=None, pyFiles=None,
         environment=None, batchSize=1024):
@@ -103,16 +105,19 @@ class SparkContext(object):
         # send.
         self._pickled_broadcast_vars = set()
 
+        SparkFiles._sc = self
+        root_dir = SparkFiles.getRootDirectory()
+        sys.path.append(root_dir)
+
         # Deploy any code dependencies specified in the constructor
+        self._python_includes = list()
         for path in (pyFiles or []):
             self.addPyFile(path)
-        SparkFiles._sc = self
-        sys.path.append(SparkFiles.getRootDirectory())
 
         # Create a temporary directory inside spark.local.dir:
-        local_dir = self._jvm.spark.Utils.getLocalDir()
+        local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir()
         self._temp_dir = \
-            self._jvm.spark.Utils.createTempDir(local_dir).getAbsolutePath()
+            self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
     @property
     def defaultParallelism(self):
@@ -257,7 +262,11 @@ class SparkContext(object):
         HTTP, HTTPS or FTP URI.
         """
         self.addFile(path)
-        filename = path.split("/")[-1]
+        (dirname, filename) = os.path.split(path) # dirname may be directory or HDFS/S3 prefix
+
+        if filename.endswith('.zip') or filename.endswith('.ZIP') or filename.endswith('.egg'):
+            self._python_includes.append(filename)
+            sys.path.append(os.path.join(SparkFiles.getRootDirectory(), filename)) # for tests in local mode
 
     def setCheckpointDir(self, dirName, useExisting=False):
         """
@@ -271,6 +280,16 @@ class SparkContext(object):
         """
         self._jsc.sc().setCheckpointDir(dirName, useExisting)
 
+    def _getJavaStorageLevel(self, storageLevel):
+        """
+        Returns a Java StorageLevel based on a pyspark.StorageLevel.
+        """
+        if not isinstance(storageLevel, StorageLevel):
+            raise Exception("storageLevel must be of type pyspark.StorageLevel")
+
+        newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
+        return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
+            storageLevel.deserialized, storageLevel.replication)
 
 def _test():
     import atexit
