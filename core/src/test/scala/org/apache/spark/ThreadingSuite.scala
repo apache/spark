@@ -40,7 +40,7 @@ object ThreadingSuiteState {
 }
 
 class ThreadingSuite extends FunSuite with LocalSparkContext {
-  
+
   test("accessing SparkContext form a different thread") {
     sc = new SparkContext("local", "test")
     val nums = sc.parallelize(1 to 10, 2)
@@ -148,5 +148,41 @@ class ThreadingSuite extends FunSuite with LocalSparkContext {
     if (ThreadingSuiteState.failed.get()) {
       fail("One or more threads didn't see runningThreads = 4")
     }
+  }
+
+  test("set local properties in different thread") {
+    sc = new SparkContext("local", "test")
+
+    val threads = (1 to 5).map{ i =>
+      new Thread() {
+        override def run() {
+          sc.setLocalProperty("test", i.toString)
+          assert(sc.getLocalProperty("test") === i.toString)
+        }
+      }
+    }
+
+    threads.foreach(_.start())
+
+    assert(sc.getLocalProperty("test") === null)
+  }
+
+  test("set and get local properties in parent-children thread") {
+    sc = new SparkContext("local", "test")
+    sc.setLocalProperty("test", "parent")
+
+    val threads = (1 to 5).map{ i =>
+      new Thread() {
+        override def run() {
+          assert(sc.getLocalProperty("test") === "parent")
+          sc.setLocalProperty("test", i.toString)
+          assert(sc.getLocalProperty("test") === i.toString)
+        }
+      }
+    }
+
+    threads.foreach(_.start())
+    assert(sc.getLocalProperty("test") === "parent")
+    assert(sc.getLocalProperty("Foo") === null)
   }
 }

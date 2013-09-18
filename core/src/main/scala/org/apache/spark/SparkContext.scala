@@ -256,7 +256,9 @@ class SparkContext(
   private[spark] var checkpointDir: Option[String] = None
 
   // Thread Local variable that can be used by users to pass information down the stack
-  private val localProperties = new ThreadLocal[Properties]
+  private val localProperties = new InheritableThreadLocal[Properties] {
+    override protected def childValue(parent: Properties): Properties = new Properties(parent)
+  }
 
   def initLocalProperties() {
     localProperties.set(new Properties())
@@ -272,6 +274,8 @@ class SparkContext(
       localProperties.get.setProperty(key, value)
     }
   }
+
+  def getLocalProperty(key: String): String = Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
 
   /** Set a human readable description of the current job. */
   def setJobDescription(value: String) {
