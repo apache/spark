@@ -17,29 +17,40 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
  * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
  * results to the given handler function.
  */
-private[spark] class JobWaiter[T](totalTasks: Int, resultHandler: (Int, T) => Unit)
+private[spark] class JobWaiter[T](
+    dagScheduler: DAGScheduler,
+    jobId: Int,
+    totalTasks: Int,
+    resultHandler: (Int, T) => Unit)
   extends JobListener {
 
   private var finishedTasks = 0
 
-  private var jobFinished = false          // Is the job as a whole finished (succeeded or failed)?
-  private var jobResult: JobResult = null  // If the job is finished, this will be its result
+  // Is the job as a whole finished (succeeded or failed)?
+  private var _jobFinished = totalTasks == 0
+
+  def jobFinished = _jobFinished
+
+  // If the job is finished, this will be its result
+  private var jobResult: JobResult = null
+
+  def kill() {
+    dagScheduler.killJob(jobId)
+  }
 
   override def taskSucceeded(index: Int, result: Any) {
     synchronized {
-      if (jobFinished) {
+      if (_jobFinished) {
         throw new UnsupportedOperationException("taskSucceeded() called on a finished JobWaiter")
       }
       resultHandler(index, result.asInstanceOf[T])
       finishedTasks += 1
       if (finishedTasks == totalTasks) {
-        jobFinished = true
+        _jobFinished = true
         jobResult = JobSucceeded
         this.notifyAll()
       }
@@ -48,17 +59,17 @@ private[spark] class JobWaiter[T](totalTasks: Int, resultHandler: (Int, T) => Un
 
   override def jobFailed(exception: Exception) {
     synchronized {
-      if (jobFinished) {
+      if (_jobFinished) {
         throw new UnsupportedOperationException("jobFailed() called on a finished JobWaiter")
       }
-      jobFinished = true
+      _jobFinished = true
       jobResult = JobFailed(exception, None)
       this.notifyAll()
     }
   }
 
   def awaitResult(): JobResult = synchronized {
-    while (!jobFinished) {
+    while (!_jobFinished) {
       this.wait()
     }
     return jobResult

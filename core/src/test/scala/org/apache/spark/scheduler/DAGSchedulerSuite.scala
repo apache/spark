@@ -190,7 +190,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       func: (TaskContext, Iterator[_]) => _ = jobComputeFunc,
       allowLocal: Boolean = false,
       listener: JobListener = listener) {
-    runEvent(JobSubmitted(rdd, func, partitions, allowLocal, null, listener))
+    val jobId = scheduler.nextJobId.getAndIncrement()
+    runEvent(JobSubmitted(jobId, rdd, func, partitions, allowLocal, null, listener))
   }
 
   /** Sends TaskSetFailed to the scheduler. */
@@ -224,7 +225,8 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       override def getPreferredLocations(split: Partition) = Nil
       override def toString = "DAGSchedulerSuite Local RDD"
     }
-    runEvent(JobSubmitted(rdd, jobComputeFunc, Array(0), true, null, listener))
+    val jobId = scheduler.nextJobId.getAndIncrement()
+    runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, null, listener))
     assert(results === Map(0 -> 42))
   }
 

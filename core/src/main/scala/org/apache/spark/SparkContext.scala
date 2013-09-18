@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io._
 import java.net.URI
 import java.util.Properties
+import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
@@ -810,6 +811,24 @@ class SparkContext(
       localProperties.get)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     result
+  }
+
+  def submitJob[T, U, R](
+      rdd: RDD[T],
+      processPartition: Iterator[T] => U,
+      partitionResultHandler: (Int, U) => Unit,
+      resultFunc: () => R): Future[R] =
+  {
+    val callSite = Utils.formatSparkCallSite
+    val waiter = dagScheduler.submitJob(
+      rdd,
+      (context: TaskContext, iter: Iterator[T]) => processPartition(iter),
+      0 until rdd.partitions.size,
+      callSite,
+      allowLocal = false,
+      partitionResultHandler,
+      null)
+    new FutureJob(waiter, resultFunc)
   }
 
   /**

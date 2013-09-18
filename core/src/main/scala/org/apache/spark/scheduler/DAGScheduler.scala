@@ -105,13 +105,15 @@ class DAGScheduler(
 
   private val eventQueue = new LinkedBlockingQueue[DAGSchedulerEvent]
 
-  val nextJobId = new AtomicInteger(0)
+  private[scheduler] val nextJobId = new AtomicInteger(0)
 
-  val nextStageId = new AtomicInteger(0)
+  def numTotalJobs: Int = nextJobId.get()
 
-  val stageIdToStage = new TimeStampedHashMap[Int, Stage]
+  private val nextStageId = new AtomicInteger(0)
 
-  val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
+  private val stageIdToStage = new TimeStampedHashMap[Int, Stage]
+
+  private val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
 
   private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
@@ -263,54 +265,50 @@ class DAGScheduler(
   }
 
   /**
-   * Returns (and does not submit) a JobSubmitted event suitable to run a given job, and a
-   * JobWaiter whose getResult() method will return the result of the job when it is complete.
-   *
-   * The job is assumed to have at least one partition; zero partition jobs should be handled
-   * without a JobSubmitted event.
+   * Submit a job to the job scheduler and get a JobWaiter object back. The JobWaiter object
+   * can be used to block until the the job finishes executing or can be used to kill the job.
+   * If the given RDD does not contain any partitions, the function returns None.
    */
-  private[scheduler] def prepareJob[T, U: ClassManifest](
-      finalRdd: RDD[T],
+  def submitJob[T, U](
+      rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],
       callSite: String,
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit,
-      properties: Properties = null)
-    : (JobSubmitted, JobWaiter[U]) =
+      properties: Properties = null): JobWaiter[U] =
   {
-    assert(partitions.size > 0)
-    val waiter = new JobWaiter(partitions.size, resultHandler)
-    val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
-    val toSubmit = JobSubmitted(finalRdd, func2, partitions.toArray, allowLocal, callSite, waiter,
-      properties)
-    (toSubmit, waiter)
-  }
-
-  def runJob[T, U: ClassManifest](
-      finalRdd: RDD[T],
-      func: (TaskContext, Iterator[T]) => U,
-      partitions: Seq[Int],
-      callSite: String,
-      allowLocal: Boolean,
-      resultHandler: (Int, U) => Unit,
-      properties: Properties = null)
-  {
+    val jobId = nextJobId.getAndIncrement()
     if (partitions.size == 0) {
-      return
+      return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
 
     // Check to make sure we are not launching a task on a partition that does not exist.
-    val maxPartitions = finalRdd.partitions.length
+    val maxPartitions = rdd.partitions.length
     partitions.find(p => p >= maxPartitions).foreach { p =>
       throw new IllegalArgumentException(
         "Attempting to access a non-existent partition: " + p + ". " +
-        "Total number of partitions: " + maxPartitions)
+          "Total number of partitions: " + maxPartitions)
     }
 
-    val (toSubmit: JobSubmitted, waiter: JobWaiter[_]) = prepareJob(
-        finalRdd, func, partitions, callSite, allowLocal, resultHandler, properties)
-    eventQueue.put(toSubmit)
+    assert(partitions.size > 0)
+    val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
+    val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
+    eventQueue.put(JobSubmitted(jobId, rdd, func2, partitions.toArray, allowLocal, callSite,
+      waiter, properties))
+    waiter
+  }
+
+  def runJob[T, U: ClassManifest](
+      rdd: RDD[T],
+      func: (TaskContext, Iterator[T]) => U,
+      partitions: Seq[Int],
+      callSite: String,
+      allowLocal: Boolean,
+      resultHandler: (Int, U) => Unit,
+      properties: Properties = null)
+  {
+    val waiter = submitJob(rdd, func, partitions, callSite, allowLocal, resultHandler, properties)
     waiter.awaitResult() match {
       case JobSucceeded => {}
       case JobFailed(exception: Exception, _) =>
@@ -331,45 +329,50 @@ class DAGScheduler(
     val listener = new ApproximateActionListener(rdd, func, evaluator, timeout)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.size).toArray
-    eventQueue.put(JobSubmitted(rdd, func2, partitions, allowLocal = false, callSite, listener, properties))
+    val jobId = nextJobId.getAndIncrement()
+    eventQueue.put(JobSubmitted(jobId, rdd, func2, partitions, allowLocal = false, callSite,
+      listener, properties))
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
+  /**
+   * Kill a job that is running or waiting in the queue.
+   */
   def killJob(jobId: Int): Unit = this.synchronized {
     activeJobs.find(job => job.jobId == jobId).foreach(job => killJob(job))
-  }
 
-  private def killJob(job: ActiveJob): Unit = this.synchronized {
-    logInfo("Killing Job and cleaning up stages %d".format(job.jobId))
-    activeJobs.remove(job)
-    idToActiveJob.remove(job.jobId)
-    val stage = job.finalStage
-    resultStageToJob.remove(stage)
-    killStage(job, stage)
-    val e = new SparkException("Job killed")
-    job.listener.jobFailed(e)
-    listenerBus.post(SparkListenerJobEnd(job, JobFailed(e, None)))
-  }
-
-  private def killStage(job: ActiveJob, stage: Stage): Unit = this.synchronized {
-    // TODO: Can we reuse taskSetFailed?
-    logInfo("Killing Stage %s".format(stage.id))
-    stageIdToStage.remove(stage.id)
-    if (stage.isShuffleMap) {
-      shuffleToMapStage.remove(stage.id)
-    }
-    waiting.remove(stage)
-    pendingTasks.remove(stage)
-    taskSched.killTasks(stage.id)
-
-    if (running.contains(stage)) {
-      running.remove(stage)
+    def killJob(job: ActiveJob): Unit = this.synchronized {
+      logInfo("Killing Job and cleaning up stages %d".format(job.jobId))
+      activeJobs.remove(job)
+      idToActiveJob.remove(job.jobId)
+      val stage = job.finalStage
+      resultStageToJob.remove(stage)
+      killStage(job, stage)
       val e = new SparkException("Job killed")
-      listenerBus.post(SparkListenerJobEnd(job, JobFailed(e, Some(stage))))
+      job.listener.jobFailed(e)
+      listenerBus.post(SparkListenerJobEnd(job, JobFailed(e, None)))
     }
 
-    stage.parents.foreach(parentStage => killStage(job, parentStage))
-    //stageToInfos -= stage
+    def killStage(job: ActiveJob, stage: Stage): Unit = this.synchronized {
+      // TODO: Can we reuse taskSetFailed?
+      logInfo("Killing Stage %s".format(stage.id))
+      stageIdToStage.remove(stage.id)
+      if (stage.isShuffleMap) {
+        shuffleToMapStage.remove(stage.id)
+      }
+      waiting.remove(stage)
+      pendingTasks.remove(stage)
+      taskSched.killTasks(stage.id)
+
+      if (running.contains(stage)) {
+        running.remove(stage)
+        val e = new SparkException("Job killed")
+        listenerBus.post(SparkListenerJobEnd(job, JobFailed(e, Some(stage))))
+      }
+
+      stage.parents.foreach(parentStage => killStage(job, parentStage))
+      //stageToInfos -= stage
+    }
   }
 
   /**
@@ -378,9 +381,8 @@ class DAGScheduler(
    */
   private[scheduler] def processEvent(event: DAGSchedulerEvent): Boolean = {
     event match {
-      case JobSubmitted(finalRDD, func, partitions, allowLocal, callSite, listener, properties) =>
-        val jobId = nextJobId.getAndIncrement()
-        val finalStage = newStage(finalRDD, None, jobId, Some(callSite))
+      case JobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite, listener, properties) =>
+        val finalStage = newStage(rdd, None, jobId, Some(callSite))
         val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
         clearCacheLocs()
         logInfo("Got job " + job.jobId + " (" + callSite + ") with " + partitions.length +

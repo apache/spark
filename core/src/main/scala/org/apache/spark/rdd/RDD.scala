@@ -18,6 +18,7 @@
 package org.apache.spark.rdd
 
 import java.util.Random
+import java.util.concurrent.Future
 
 import scala.collection.Map
 import scala.collection.JavaConversions.mapAsScalaMap
@@ -559,6 +560,15 @@ abstract class RDD[T: ClassManifest](
   def collect(): Array[T] = {
     val results = sc.runJob(this, (iter: Iterator[T]) => iter.toArray)
     Array.concat(results: _*)
+  }
+
+  /**
+   * Return a future for retrieving the results of a collect in an asynchronous fashion.
+   */
+  def collectAsync(): Future[Seq[T]] = {
+    val results = new ArrayBuffer[T]
+    sc.submitJob[T, Array[T], Seq[T]](
+      this, _.toArray, (index, data) => results ++= data, () => results)
   }
 
   /**
