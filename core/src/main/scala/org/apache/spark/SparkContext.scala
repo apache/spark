@@ -816,6 +816,7 @@ class SparkContext(
   def submitJob[T, U, R](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
+      partitions: Seq[Int],
       partitionResultHandler: (Int, U) => Unit,
       resultFunc: () => R): Future[R] =
   {
@@ -823,7 +824,7 @@ class SparkContext(
     val waiter = dagScheduler.submitJob(
       rdd,
       (context: TaskContext, iter: Iterator[T]) => processPartition(iter),
-      0 until rdd.partitions.size,
+      partitions,
       callSite,
       allowLocal = false,
       partitionResultHandler,

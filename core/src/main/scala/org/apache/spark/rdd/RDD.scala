@@ -568,7 +568,7 @@ abstract class RDD[T: ClassManifest](
   def collectAsync(): Future[Seq[T]] = {
     val results = new ArrayBuffer[T]
     sc.submitJob[T, Array[T], Seq[T]](
-      this, _.toArray, (index, data) => results ++= data, () => results)
+      this, _.toArray, Range(0, partitions.size), (index, data) => results ++= data, () => results)
   }
 
   /**
