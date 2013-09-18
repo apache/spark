@@ -839,6 +839,12 @@ class SparkContext(
     dagScheduler.killJob(jobId)
   }
 
+  def killAllJobs() {
+    dagScheduler.activeJobs.foreach { job =>
+      killJob(job.jobId)
+    }
+  }
+
   /**
    * Clean a closure to make it ready to serialized and send to tasks
    * (removes unreferenced variables in $outer's, updates REPL variables)
