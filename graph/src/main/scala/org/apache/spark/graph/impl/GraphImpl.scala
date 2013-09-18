@@ -122,57 +122,60 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   // Lower level transformation methods
   //////////////////////////////////////////////////////////////////////////////////////////////////
 
-  override def aggregateNeighbors[VD2: ClassManifest](
-      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[VD2],
-      reduceFunc: (VD2, VD2) => VD2,
-      default: VD2,
+  override def aggregateNeighbors[A: ClassManifest](
+      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
+      reduceFunc: (A, A) => A,
+      default: A,
       gatherDirection: EdgeDirection)
-    : RDD[(Vid, VD2)] = {
+    : Graph[(VD, Option[A]), ED] = {
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
 
     val newVTable = vTableReplicated.mapPartitions({ part =>
-        part.map { v => (v._1, MutableTuple2(v._2, Option.empty[VD2])) }
+        part.map { v => (v._1, MutableTuple2(v._2, Option.empty[A])) }
       }, preservesPartitioning = true)
 
-    new EdgeTripletRDD[MutableTuple2[VD, Option[VD2]], ED](newVTable, eTable)
-      .mapPartitions { part =>
-        val (vmap, edges) = part.next()
-        val edgeSansAcc = new EdgeTriplet[VD, ED]()
-        edgeSansAcc.src = new Vertex[VD]
-        edgeSansAcc.dst = new Vertex[VD]
-        edges.foreach { e: EdgeTriplet[MutableTuple2[VD, Option[VD2]], ED] =>
-          edgeSansAcc.data = e.data
-          edgeSansAcc.src.data = e.src.data._1
-          edgeSansAcc.dst.data = e.dst.data._1
-          edgeSansAcc.src.id = e.src.id
-          edgeSansAcc.dst.id = e.dst.id
-          if (gatherDirection == EdgeDirection.In || gatherDirection == EdgeDirection.Both) {
-            e.dst.data._2 =
-              if (e.dst.data._2.isEmpty) {
-                mapFunc(edgeSansAcc.dst.id, edgeSansAcc)
-              } else {
-                val tmp = mapFunc(edgeSansAcc.dst.id, edgeSansAcc)
-                if (!tmp.isEmpty) Some(reduceFunc(e.dst.data._2.get, tmp.get)) else e.dst.data._2
-              }
+    val newVertices: RDD[(Vid, A)] =
+      new EdgeTripletRDD[MutableTuple2[VD, Option[A]], ED](newVTable, eTable)
+        .mapPartitions { part =>
+          val (vmap, edges) = part.next()
+          val edgeSansAcc = new EdgeTriplet[VD, ED]()
+          edgeSansAcc.src = new Vertex[VD]
+          edgeSansAcc.dst = new Vertex[VD]
+          edges.foreach { e: EdgeTriplet[MutableTuple2[VD, Option[A]], ED] =>
+            edgeSansAcc.data = e.data
+            edgeSansAcc.src.data = e.src.data._1
+            edgeSansAcc.dst.data = e.dst.data._1
+            edgeSansAcc.src.id = e.src.id
+            edgeSansAcc.dst.id = e.dst.id
+            if (gatherDirection == EdgeDirection.In || gatherDirection == EdgeDirection.Both) {
+              e.dst.data._2 =
+                if (e.dst.data._2.isEmpty) {
+                  mapFunc(edgeSansAcc.dst.id, edgeSansAcc)
+                } else {
+                  val tmp = mapFunc(edgeSansAcc.dst.id, edgeSansAcc)
+                  if (!tmp.isEmpty) Some(reduceFunc(e.dst.data._2.get, tmp.get)) else e.dst.data._2
+                }
+            }
+            if (gatherDirection == EdgeDirection.Out || gatherDirection == EdgeDirection.Both) {
+              e.dst.data._2 =
+                if (e.dst.data._2.isEmpty) {
+                  mapFunc(edgeSansAcc.src.id, edgeSansAcc)
+                } else {
+                  val tmp = mapFunc(edgeSansAcc.src.id, edgeSansAcc)
+                  if (!tmp.isEmpty) Some(reduceFunc(e.src.data._2.get, tmp.get)) else e.src.data._2
+                }
+            }
           }
-          if (gatherDirection == EdgeDirection.Out || gatherDirection == EdgeDirection.Both) {
-            e.dst.data._2 =
-              if (e.dst.data._2.isEmpty) {
-                mapFunc(edgeSansAcc.src.id, edgeSansAcc)
-              } else {
-                val tmp = mapFunc(edgeSansAcc.src.id, edgeSansAcc)
-                if (!tmp.isEmpty) Some(reduceFunc(e.src.data._2.get, tmp.get)) else e.src.data._2
-              }
+          vmap.long2ObjectEntrySet().fastIterator().filter(!_.getValue()._2.isEmpty).map{ entry =>
+            (entry.getLongKey(), entry.getValue()._2)
           }
         }
-        vmap.long2ObjectEntrySet().fastIterator().filter(!_.getValue()._2.isEmpty).map{ entry =>
-          (entry.getLongKey(), entry.getValue()._2)
-        }
-      }
-      .map{ case (vid, aOpt) => (vid, aOpt.get) }
-      .combineByKey((v: VD2) => v, reduceFunc, null, vertexPartitioner, false)
+        .map{ case (vid, aOpt) => (vid, aOpt.get) }
+        .combineByKey((v: A) => v, reduceFunc, null, vertexPartitioner, false)
+
+    this.leftJoinVertices(newVertices, (v: Vertex[VD], a: Option[A]) => (v.data, a))
   }
 
   /**

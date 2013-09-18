@@ -232,7 +232,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
       mergeFunc: (A, A) => A,
       direction: EdgeDirection)
     : Graph[(VD, Option[A]), ED]
-  // TODO: consider a version that doesn't preserve the original VD
 
   /**
    * This function is used to compute a statistic for the neighborhood of each
@@ -276,12 +275,12 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @todo Should this return a graph with the new vertex values?
    *
    */
-  def aggregateNeighbors[VD2: ClassManifest](
-      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[VD2],
-      reduceFunc: (VD2, VD2) => VD2,
-      default: VD2, // Should this be a function or a value?
+  def aggregateNeighbors[A: ClassManifest](
+      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
+      reduceFunc: (A, A) => A,
+      default: A, // Should this be a function or a value?
       direction: EdgeDirection)
-    : RDD[(Vid, VD2)]
+    : Graph[(VD, Option[A]), ED]
 
 
   /**
