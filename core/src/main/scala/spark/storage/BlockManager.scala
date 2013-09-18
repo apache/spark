@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.storage
 
 import java.io.{InputStream, OutputStream}
@@ -10,11 +27,10 @@ import akka.dispatch.{Await, Future}
 import akka.util.Duration
 import akka.util.duration._
 
-import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-
 import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
 
 import spark.{Logging, SparkEnv, SparkException, Utils}
+import spark.io.CompressionCodec
 import spark.network._
 import spark.serializer.Serializer
 import spark.util.{ByteBufferInputStream, IdGenerator, MetadataCleaner, TimeStampedHashMap}
@@ -140,6 +156,13 @@ private[spark] class BlockManager(
 
   val metadataCleaner = new MetadataCleaner("BlockManager", this.dropOldBlocks)
   initialize()
+
+  // The compression codec to use. Note that the "lazy" val is necessary because we want to delay
+  // the initialization of the compression codec until it is first used. The reason is that a Spark
+  // program could be using a user-defined codec in a third party jar, which is loaded in
+  // Executor.updateDependencies. When the BlockManager is initialized, user level jars hasn't been
+  // loaded yet.
+  private lazy val compressionCodec: CompressionCodec = CompressionCodec.createCodec()
 
   /**
    * Construct a BlockManager with a memory limit set based on system properties.
@@ -902,18 +925,14 @@ private[spark] class BlockManager(
    * Wrap an output stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: OutputStream): OutputStream = {
-    if (shouldCompress(blockId)) {
-      (new LZFOutputStream(s)).setFinishBlockOnFlush(true)
-    } else {
-      s
-    }
+    if (shouldCompress(blockId)) compressionCodec.compressedOutputStream(s) else s
   }
 
   /**
    * Wrap an input stream for compression if block compression is enabled for its block type
    */
   def wrapForCompression(blockId: String, s: InputStream): InputStream = {
-    if (shouldCompress(blockId)) new LZFInputStream(s) else s
+    if (shouldCompress(blockId)) compressionCodec.compressedInputStream(s) else s
   }
 
   def dataSerialize(

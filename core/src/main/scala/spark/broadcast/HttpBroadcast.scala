@@ -1,20 +1,36 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.broadcast
 
-import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
-
-import java.io._
-import java.net._
-import java.util.UUID
+import java.io.{File, FileOutputStream, ObjectInputStream, OutputStream}
+import java.net.URL
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
-import spark._
+import spark.{HttpServer, Logging, SparkEnv, Utils}
+import spark.io.CompressionCodec
 import spark.storage.StorageLevel
-import util.{MetadataCleaner, TimeStampedHashSet}
+import spark.util.{MetadataCleaner, TimeStampedHashSet}
+
 
 private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
-extends Broadcast[T](id) with Logging with Serializable {
+  extends Broadcast[T](id) with Logging with Serializable {
   
   def value = value_
 
@@ -68,6 +84,7 @@ private object HttpBroadcast extends Logging {
   private val files = new TimeStampedHashSet[String]
   private val cleaner = new MetadataCleaner("HttpBroadcast", cleanup)
 
+  private lazy val compressionCodec = CompressionCodec.createCodec()
 
   def initialize(isDriver: Boolean) {
     synchronized {
@@ -105,10 +122,12 @@ private object HttpBroadcast extends Logging {
 
   def write(id: Long, value: Any) {
     val file = new File(broadcastDir, "broadcast-" + id)
-    val out: OutputStream = if (compress) {
-      new LZFOutputStream(new FileOutputStream(file)) // Does its own buffering
-    } else {
-      new FastBufferedOutputStream(new FileOutputStream(file), bufferSize)
+    val out: OutputStream = {
+      if (compress) {
+        compressionCodec.compressedOutputStream(new FileOutputStream(file))
+      } else {
+        new FastBufferedOutputStream(new FileOutputStream(file), bufferSize)
+      }
     }
     val ser = SparkEnv.get.serializer.newInstance()
     val serOut = ser.serializeStream(out)
@@ -119,10 +138,12 @@ private object HttpBroadcast extends Logging {
 
   def read[T](id: Long): T = {
     val url = serverUri + "/broadcast-" + id
-    var in = if (compress) {
-      new LZFInputStream(new URL(url).openStream()) // Does its own buffering
-    } else {
-      new FastBufferedInputStream(new URL(url).openStream(), bufferSize)
+    val in = {
+      if (compress) {
+        compressionCodec.compressedInputStream(new URL(url).openStream())
+      } else {
+        new FastBufferedInputStream(new URL(url).openStream(), bufferSize)
+      }
     }
     val ser = SparkEnv.get.serializer.newInstance()
     val serIn = ser.deserializeStream(in)

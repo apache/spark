@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler.local
 
 import java.io.File
@@ -12,6 +29,7 @@ import spark.TaskState.TaskState
 import spark.executor.ExecutorURLClassLoader
 import spark.scheduler._
 import spark.scheduler.cluster._
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 import akka.actor._
 
 /**
@@ -20,10 +38,15 @@ import akka.actor._
  * testing fault recovery.
  */
 
-private[spark] case class LocalReviveOffers()
-private[spark] case class LocalStatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
+private[spark]
+case class LocalReviveOffers()
 
-private[spark] class LocalActor(localScheduler: LocalScheduler, var freeCores: Int) extends Actor with Logging {
+private[spark]
+case class LocalStatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
+
+private[spark]
+class LocalActor(localScheduler: LocalScheduler, var freeCores: Int) extends Actor with Logging {
+
   def receive = {
     case LocalReviveOffers =>
       launchTask(localScheduler.resourceOffer(freeCores))
@@ -38,7 +61,7 @@ private[spark] class LocalActor(localScheduler: LocalScheduler, var freeCores: I
       freeCores -= 1
       localScheduler.threadPool.submit(new Runnable {
         def run() {
-          localScheduler.runTask(task.taskId,task.serializedTask)
+          localScheduler.runTask(task.taskId, task.serializedTask)
         }
       })
     }
@@ -63,6 +86,8 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
 
   var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
+  val schedulingMode: SchedulingMode = SchedulingMode.withName(
+    System.getProperty("spark.cluster.schedulingmode", "FIFO"))
   val activeTaskSets = new HashMap[String, TaskSetManager]
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskSetTaskIds = new HashMap[String, HashSet[Long]]
@@ -70,15 +95,13 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
   var localActor: ActorRef = null
 
   override def start() {
-    //default scheduler is FIFO
-    val schedulingMode = System.getProperty("spark.cluster.schedulingmode", "FIFO")
-    //temporarily set rootPool name to empty
-    rootPool = new Pool("", SchedulingMode.withName(schedulingMode), 0, 0)
+    // temporarily set rootPool name to empty
+    rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
-        case "FIFO" =>
+        case SchedulingMode.FIFO =>
           new FIFOSchedulableBuilder(rootPool)
-        case "FAIR" =>
+        case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool)
       }
     }
@@ -93,7 +116,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
 
   override def submitTasks(taskSet: TaskSet) {
     synchronized {
-      var manager = new LocalTaskSetManager(this, taskSet)
+      val manager = new LocalTaskSetManager(this, taskSet)
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
       activeTaskSets(taskSet.id) = manager
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
@@ -107,14 +130,15 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       val tasks = new ArrayBuffer[TaskDescription](freeCores)
       val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
       for (manager <- sortedTaskSetQueue) {
-        logDebug("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
+        logDebug("parentName:%s,name:%s,runningTasks:%s".format(
+          manager.parent.name, manager.name, manager.runningTasks))
       }
 
       var launchTask = false
       for (manager <- sortedTaskSetQueue) {
         do {
           launchTask = false
-          manager.slaveOffer(null,null,freeCpuCores) match {
+          manager.slaveOffer(null, null, freeCpuCores) match {
             case Some(task) =>
               tasks += task
               taskIdToTaskSetId(task.taskId) = manager.taskSet.id
@@ -122,7 +146,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
               freeCpuCores -= 1
               launchTask = true
             case None => {}
-            }
+          }
         } while(launchTask)
       }
       return tasks
@@ -145,6 +169,9 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     // Set the Spark execution environment for the worker thread
     SparkEnv.set(env)
     val ser = SparkEnv.get.closureSerializer.newInstance()
+    var attemptedTask: Option[Task[_]] = None
+    val start = System.currentTimeMillis()
+    var taskStart: Long = 0
     try {
       Accumulators.clear()
       Thread.currentThread().setContextClassLoader(classLoader)
@@ -153,10 +180,11 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
       val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(bytes)
       updateDependencies(taskFiles, taskJars)   // Download any files added with addFile
-      val deserStart = System.currentTimeMillis()
       val deserializedTask = ser.deserialize[Task[_]](
         taskBytes, Thread.currentThread.getContextClassLoader)
-      val deserTime = System.currentTimeMillis() - deserStart
+      attemptedTask = Some(deserializedTask)
+      val deserTime = System.currentTimeMillis() - start
+      taskStart = System.currentTimeMillis()
 
       // Run it
       val result: Any = deserializedTask.run(taskId)
@@ -170,16 +198,19 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       val resultToReturn = ser.deserialize[Any](serResult)
       val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
         ser.serialize(Accumulators.values))
+      val serviceTime = System.currentTimeMillis() - taskStart
       logInfo("Finished " + taskId)
-      deserializedTask.metrics.get.executorRunTime = deserTime.toInt//info.duration.toInt  //close enough
+      deserializedTask.metrics.get.executorRunTime = serviceTime.toInt
       deserializedTask.metrics.get.executorDeserializeTime = deserTime.toInt
-
       val taskResult = new TaskResult(result, accumUpdates, deserializedTask.metrics.getOrElse(null))
       val serializedResult = ser.serialize(taskResult)
       localActor ! LocalStatusUpdate(taskId, TaskState.FINISHED, serializedResult)
     } catch {
       case t: Throwable => {
-        val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace)
+        val serviceTime = System.currentTimeMillis() - taskStart
+        val metrics = attemptedTask.flatMap(t => t.metrics)
+        metrics.foreach{m => m.executorRunTime = serviceTime.toInt}
+        val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
         localActor ! LocalStatusUpdate(taskId, TaskState.FAILED, ser.serialize(failure))
       }
     }

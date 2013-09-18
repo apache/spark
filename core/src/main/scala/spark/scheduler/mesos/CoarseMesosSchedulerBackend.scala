@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler.mesos
 
 import com.google.protobuf.ByteString
@@ -93,12 +110,6 @@ private[spark] class CoarseMesosSchedulerBackend(
   }
 
   def createCommand(offer: Offer, numCores: Int): CommandInfo = {
-    val runScript = new File(sparkHome, "run").getCanonicalPath
-    val driverUrl = "akka://spark@%s:%s/user/%s".format(
-      System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
-      StandaloneSchedulerBackend.ACTOR_NAME)
-    val command = "\"%s\" spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
-      runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores)
     val environment = Environment.newBuilder()
     sc.executorEnvs.foreach { case (key, value) =>
       environment.addVariables(Environment.Variable.newBuilder()
@@ -106,7 +117,26 @@ private[spark] class CoarseMesosSchedulerBackend(
         .setValue(value)
         .build())
     }
-    return CommandInfo.newBuilder().setValue(command).setEnvironment(environment).build()
+    val command = CommandInfo.newBuilder()
+      .setEnvironment(environment)
+    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+      System.getProperty("spark.driver.host"),
+      System.getProperty("spark.driver.port"),
+      StandaloneSchedulerBackend.ACTOR_NAME)
+    val uri = System.getProperty("spark.executor.uri")
+    if (uri == null) {
+      val runScript = new File(sparkHome, "run").getCanonicalPath
+      command.setValue("\"%s\" spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
+        runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
+    } else {
+      // Grab everything to the first '.'. We'll use that and '*' to
+      // glob the directory "correctly".
+      val basename = uri.split('/').last.split('.').head
+      command.setValue("cd %s*; ./run spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
+        basename, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
+      command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
+    }
+    return command.build()
   }
 
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}

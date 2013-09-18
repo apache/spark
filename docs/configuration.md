@@ -22,26 +22,30 @@ the copy executable.
 
 Inside `spark-env.sh`, you *must* set at least the following two variables:
 
-* `SCALA_HOME`, to point to your Scala installation.
+* `SCALA_HOME`, to point to your Scala installation, or `SCALA_LIBRARY_PATH` to point to the directory for Scala
+  library JARs (if you install Scala as a Debian or RPM package, there is no `SCALA_HOME`, but these libraries
+  are in a separate path, typically /usr/share/java; look for `scala-library.jar`).
 * `MESOS_NATIVE_LIBRARY`, if you are [running on a Mesos cluster](running-on-mesos.html).
 
-In addition, there are four other variables that control execution. These can be set *either in `spark-env.sh`
-or in each job's driver program*, because they will automatically be propagated to workers from the driver.
-For a multi-user environment, we recommend setting the in the driver program instead of `spark-env.sh`, so
-that different user jobs can use different amounts of memory, JVM options, etc.
+In addition, there are four other variables that control execution. These should be set *in the environment that
+launches the job's driver program* instead of `spark-env.sh`, because they will be automatically propagated to
+workers. Setting these per-job instead of in `spark-env.sh` ensures that different jobs can have different settings
+for these variables.
 
-* `SPARK_MEM`, to set the amount of memory used per node (this should be in the same format as the 
-   JVM's -Xmx option, e.g. `300m` or `1g`)
 * `SPARK_JAVA_OPTS`, to add JVM options. This includes any system properties that you'd like to pass with `-D`.
 * `SPARK_CLASSPATH`, to add elements to Spark's classpath.
 * `SPARK_LIBRARY_PATH`, to add search directories for native libraries.
+* `SPARK_MEM`, to set the amount of memory used per node. This should be in the same format as the
+   JVM's -Xmx option, e.g. `300m` or `1g`. Note that this option will soon be deprecated in favor of
+   the `spark.executor.memory` system property, so we recommend using that in new code.
 
-Note that if you do set these in `spark-env.sh`, they will override the values set by user programs, which
-is undesirable; you can choose to have `spark-env.sh` set them only if the user program hasn't, as follows:
+Beware that if you do set these variables in `spark-env.sh`, they will override the values set by user programs,
+which is undesirable; if you prefer, you can choose to have `spark-env.sh` set them only if the user program
+hasn't, as follows:
 
 {% highlight bash %}
-if [ -z "$SPARK_MEM" ] ; then
-  SPARK_MEM="1g"
+if [ -z "$SPARK_JAVA_OPTS" ] ; then
+  SPARK_JAVA_OPTS="-verbose:gc"
 fi
 {% endhighlight %}
 
@@ -55,10 +59,17 @@ val sc = new SparkContext(...)
 {% endhighlight %}
 
 Most of the configurable system properties control internal settings that have reasonable default values. However,
-there are at least four properties that you will commonly want to control:
+there are at least five properties that you will commonly want to control:
 
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.executor.memory</td>
+  <td>512m</td>
+  <td>
+    Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. `512m`, `2g`).
+  </td>
+</tr>
 <tr>
   <td>spark.serializer</td>
   <td>spark.JavaSerializer</td>
@@ -66,7 +77,7 @@ there are at least four properties that you will commonly want to control:
     Class to use for serializing objects that will be sent over the network or need to be cached
     in serialized form. The default of Java serialization works with any Serializable Java object but is
     quite slow, so we recommend <a href="tuning.html">using <code>spark.KryoSerializer</code>
-    and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of 
+    and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of
     <a href="api/core/index.html#spark.Serializer"><code>spark.Serializer</code></a>).
   </td>
 </tr>
@@ -75,7 +86,7 @@ there are at least four properties that you will commonly want to control:
   <td>(none)</td>
   <td>
     If you use Kryo serialization, set this class to register your custom classes with Kryo.
-    You need to set it to a class that extends 
+    You need to set it to a class that extends
     <a href="api/core/index.html#spark.KryoRegistrator"><code>spark.KryoRegistrator</code></a>).
     See the <a href="tuning.html#data-serialization">tuning guide</a> for more details.
   </td>
@@ -135,9 +146,16 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.ui.port</td>
-  <td>(random)</td>
+  <td>33000</td>
   <td>
-    Port for your application's dashboard, which shows memory usage of each RDD.
+    Port for your application's dashboard, which shows memory and workload data
+  </td>
+</tr>
+<tr>
+  <td>spark.ui.retained_stages</td>
+  <td>1000</td>
+  <td>
+    How many stages the Spark UI remembers before garbage collecting.
   </td>
 </tr>
 <tr>
@@ -163,6 +181,21 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.io.compression.codec</td>
+  <td>spark.io.SnappyCompressionCodec</td>
+  <td>
+    The compression codec class to use for various compressions. By default, Spark provides two
+    codecs: <code>spark.io.LZFCompressionCodec</code> and <code>spark.io.SnappyCompressionCodec</code>.
+  </td>
+</tr>
+<tr>
+  <td>spark.io.compression.snappy.block.size</td>
+  <td>32768</td>
+  <td>
+    Block size (in bytes) used in Snappy compression, in the case when Snappy compression codec is used.
+  </td>
+</tr>
+<tr>
   <td>spark.reducer.maxMbInFlight</td>
   <td>48</td>
   <td>
@@ -180,8 +213,18 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.kryo.referenceTracking</td>
+  <td>true</td>
+  <td>
+    Whether to track references to the same object when serializing data with Kryo, which is
+    necessary if your object graphs have loops and useful for efficiency if they contain multiple
+    copies of the same object. Can be disabled to improve performance if you know this is not the
+    case.
+  </td>
+</tr>
+<tr>
   <td>spark.kryoserializer.buffer.mb</td>
-  <td>32</td>
+  <td>2</td>
   <td>
     Maximum object size to allow within Kryo (the library needs to create a buffer at least as
     large as the largest single object you'll serialize). Increase this if you get a "buffer limit
@@ -265,6 +308,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>200</td>
   <td>
     Duration (milliseconds) of how long to batch new objects coming from network receivers.
+  </td>
+</tr>
+<tr>
+  <td>spark.task.maxFailures</td>
+  <td>4</td>
+  <td>
+    Number of individual task failures before giving up on the job.
+    Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
 

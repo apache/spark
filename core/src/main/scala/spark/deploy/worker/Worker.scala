@@ -1,19 +1,40 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.deploy.worker
 
-import scala.collection.mutable.{ArrayBuffer, HashMap}
-import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
-import akka.util.duration._
-import spark.{Logging, Utils}
-import spark.util.AkkaUtils
-import spark.deploy._
-import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 import java.text.SimpleDateFormat
 import java.util.Date
-import spark.deploy.RegisterWorker
-import spark.deploy.LaunchExecutor
-import spark.deploy.RegisterWorkerFailed
-import spark.deploy.master.Master
 import java.io.File
+
+import scala.collection.mutable.HashMap
+
+import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
+import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
+import akka.util.duration._
+
+import spark.{Logging, Utils}
+import spark.deploy.ExecutorState
+import spark.deploy.DeployMessages._
+import spark.deploy.master.Master
+import spark.deploy.worker.ui.WorkerWebUI
+import spark.metrics.MetricsSystem
+import spark.util.AkkaUtils
+
 
 private[spark] class Worker(
     host: String,
@@ -44,9 +65,13 @@ private[spark] class Worker(
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
   }
+  var webUi: WorkerWebUI = null
 
   var coresUsed = 0
   var memoryUsed = 0
+
+  val metricsSystem = MetricsSystem.createMetricsSystem("worker")
+  val workerSource = new WorkerSource(this)
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
@@ -75,27 +100,20 @@ private[spark] class Worker(
     sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
+    webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
+    webUi.start()
     connectToMaster()
-    startWebUi()
+
+    metricsSystem.registerSource(workerSource)
+    metricsSystem.start()
   }
 
   def connectToMaster() {
     logInfo("Connecting to master " + masterUrl)
     master = context.actorFor(Master.toAkkaUrl(masterUrl))
-    master ! RegisterWorker(workerId, host, port, cores, memory, webUiPort, publicAddress)
+    master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort.get, publicAddress)
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     context.watch(master) // Doesn't work with remote actors, but useful for testing
-  }
-
-  def startWebUi() {
-    val webUi = new WorkerWebUI(context.system, self, workDir)
-    try {
-      AkkaUtils.startSprayServer(context.system, "0.0.0.0", webUiPort, webUi.handler)
-    } catch {
-      case e: Exception =>
-        logError("Failed to create web UI", e)
-        System.exit(1)
-    }
   }
 
   override def receive = {
@@ -146,10 +164,10 @@ private[spark] class Worker(
 
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       masterDisconnected()
-      
+
     case RequestWorkerState => {
-      sender ! WorkerState(host, port, workerId, executors.values.toList,
-        finishedExecutors.values.toList, masterUrl, cores, memory, 
+      sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
+        finishedExecutors.values.toList, masterUrl, cores, memory,
         coresUsed, memoryUsed, masterWebUiUrl)
     }
   }
@@ -168,6 +186,8 @@ private[spark] class Worker(
 
   override def postStop() {
     executors.values.foreach(_.kill())
+    webUi.stop()
+    metricsSystem.stop()
   }
 }
 

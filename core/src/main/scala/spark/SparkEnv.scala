@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark
 
 import collection.mutable
@@ -7,6 +24,7 @@ import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
 import akka.remote.RemoteActorRefProvider
 
 import spark.broadcast.BroadcastManager
+import spark.metrics.MetricsSystem
 import spark.storage.BlockManager
 import spark.storage.BlockManagerMaster
 import spark.network.ConnectionManager
@@ -36,6 +54,7 @@ class SparkEnv (
     val connectionManager: ConnectionManager,
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
+    val metricsSystem: MetricsSystem,
     // To be set only as part of initialization of SparkContext.
     // (executorId, defaultHostPort) => executorHostPort
     // If executorId is NOT found, return defaultHostPort
@@ -51,6 +70,7 @@ class SparkEnv (
     broadcastManager.stop()
     blockManager.stop()
     blockManager.master.stop()
+    metricsSystem.stop()
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
@@ -59,7 +79,8 @@ class SparkEnv (
 
   def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
     synchronized {
-      pythonWorkers.getOrElseUpdate((pythonExec, envVars), new PythonWorkerFactory(pythonExec, envVars)).create()
+      val key = (pythonExec, envVars)
+      pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
     }
   }
 
@@ -166,6 +187,13 @@ object SparkEnv extends Logging {
     httpFileServer.initialize()
     System.setProperty("spark.fileserver.uri", httpFileServer.serverUri)
 
+    val metricsSystem = if (isDriver) {
+      MetricsSystem.createMetricsSystem("driver")
+    } else {
+      MetricsSystem.createMetricsSystem("executor")
+    }
+    metricsSystem.start()
+
     // Set the sparkFiles directory, used when downloading dependencies.  In local mode,
     // this is a temporary directory; in distributed mode, this is the executor's current working
     // directory.
@@ -195,6 +223,7 @@ object SparkEnv extends Logging {
       connectionManager,
       httpFileServer,
       sparkFilesDir,
+      metricsSystem,
       None)
   }
 }

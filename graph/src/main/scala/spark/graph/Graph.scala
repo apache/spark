@@ -141,6 +141,13 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def mapTriplets[ED2: ClassManifest](
     map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 
+
+  /**
+   * Remove edges conntecting vertices that are not in the graph.
+   *
+   * @todo remove this function and ensure that for a graph G=(V,E):
+   *     if (u,v) in E then u in V and v in V 
+   */
   def correctEdges(): Graph[VD, ED]
 
   /**
@@ -149,6 +156,37 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    */
   def reverse: Graph[VD, ED]
+
+
+  /**
+   * This function takes a vertex and edge predicate and constructs the subgraph
+   * that consists of vertices and edges that satisfy the predict.  The resulting 
+   * graph contains the vertices and edges that satisfy:
+   *
+   * V' = {v : for all v in V where vpred(v)}
+   * E' = {(u,v): for all (u,v) in E where epred((u,v)) && vpred(u) && vpred(v)}
+   *
+   * @param epred the edge predicate which takes a triplet and evaluates to true
+   * if the edge is to remain in the subgraph.  Note that only edges in which both 
+   * vertices satisfy the vertex predicate are considered.
+   *
+   * @param vpred the vertex predicate which takes a vertex object and evaluates
+   * to true if the vertex is to be included in the subgraph
+   *
+   * @return the subgraph containing only the vertices and edges that satisfy the
+   * predicates. 
+   */
+  def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (_ => true), 
+    vpred: Vertex[VD] => Boolean = (_ => true) ): Graph[VD, ED]
+
+
+  // /**
+  //  * Combine the attrributes of edges connecting the same vertices.   
+  //  *
+  //  * @todo Do we want to support this function
+  //  */
+  // def combineEdges(reduce: (ED, ED) => ED): Graph[VD, ED]
+
 
   /**
    * This function is used to compute a statistic for the neighborhood of each
@@ -331,7 +369,7 @@ object Graph {
   import spark.graph.impl._
   import spark.SparkContext._
 
-  def apply(rawEdges: RDD[(Int, Int)], uniqueEdges: Boolean = true): Graph[Int, Int] = {
+  def apply(rawEdges: RDD[(Vid, Vid)], uniqueEdges: Boolean = true): Graph[Int, Int] = {
     // Reduce to unique edges.
     val edges: RDD[Edge[Int]] =
       if (uniqueEdges) {

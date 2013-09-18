@@ -16,8 +16,8 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
   private var _data: Array[ED] = _
   private var _dataBuilder = ArrayBuilder.make[ED]
 
-  val srcIds: IntArrayList = new IntArrayList
-  val dstIds: IntArrayList = new IntArrayList
+  val srcIds = new VertexArrayList
+  val dstIds = new VertexArrayList
 
   def data: Array[ED] = _data
 

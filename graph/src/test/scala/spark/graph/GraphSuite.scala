@@ -3,16 +3,26 @@ package spark.graph
 import org.scalatest.FunSuite
 
 import spark.SparkContext
-import spark.graph.impl.GraphImpl
+import spark.graph._
+
 
 
 class GraphSuite extends FunSuite with LocalSparkContext {
+
+//  val sc = new SparkContext("local[4]", "test")
+
+  test("Graph Creation") {
+    val rawEdges = (0L to 100L).zip((1L to 99L) :+ 0L)
+    val edges = sc.parallelize(rawEdges)
+    val graph = Graph(edges)
+    assert( graph.edges.count() === rawEdges.size )
+  }
 
   test("aggregateNeighbors") {
 
   }
 
-  test("joinVertices") {
+ /* test("joinVertices") {
     sc = new SparkContext("local", "test")
     val vertices = sc.parallelize(Seq(Vertex(1, "one"), Vertex(2, "two"), Vertex(3, "three")), 2)
     val edges = sc.parallelize((Seq(Edge(1, 2, "onetwo"))))
@@ -29,6 +39,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     val e = g1.edges.collect()
     assert(e(0).data === "onetwo")
   }
+  */
 
 //  test("graph partitioner") {
 //    sc = new SparkContext("local", "test")

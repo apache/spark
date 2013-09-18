@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler.cluster
 
 import java.lang.{Boolean => JBoolean}
@@ -9,6 +26,7 @@ import scala.collection.mutable.HashSet
 import spark._
 import spark.TaskState.TaskState
 import spark.scheduler._
+import spark.scheduler.cluster.SchedulingMode.SchedulingMode
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{TimerTask, Timer}
@@ -97,6 +115,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
+  // default scheduler is FIFO
+  val schedulingMode: SchedulingMode = SchedulingMode.withName(
+    System.getProperty("spark.cluster.schedulingmode", "FIFO"))
 
   override def setListener(listener: TaskSchedulerListener) {
     this.listener = listener
@@ -104,15 +125,13 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   def initialize(context: SchedulerBackend) {
     backend = context
-    //default scheduler is FIFO
-    val schedulingMode = System.getProperty("spark.cluster.schedulingmode", "FIFO")
-    //temporarily set rootPool name to empty
-    rootPool = new Pool("", SchedulingMode.withName(schedulingMode), 0, 0)
+    // temporarily set rootPool name to empty
+    rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
       schedulingMode match {
-        case "FIFO" =>
+        case SchedulingMode.FIFO =>
           new FIFOSchedulableBuilder(rootPool)
-        case "FAIR" =>
+        case SchedulingMode.FAIR =>
           new FairSchedulableBuilder(rootPool)
       }
     }
@@ -187,7 +206,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           override def run() {
             if (!hasLaunchedTask) {
               logWarning("Initial job has not accepted any resources; " +
-                "check your cluster UI to ensure that workers are registered")
+                "check your cluster UI to ensure that workers are registered " +
+                "and have sufficient memory")
             } else {
               this.cancel()
             }
@@ -253,10 +273,12 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       }
       var launchedTask = false
       val sortedTaskSetQueue = rootPool.getSortedTaskSetQueue()
-      for (manager <- sortedTaskSetQueue)
-      {
-        logInfo("parentName:%s,name:%s,runningTasks:%s".format(manager.parent.name, manager.name, manager.runningTasks))
+
+      for (manager <- sortedTaskSetQueue) {
+        logDebug("parentName:%s, name:%s, runningTasks:%s".format(
+          manager.parent.name, manager.name, manager.runningTasks))
       }
+
       for (manager <- sortedTaskSetQueue) {
 
         // Split offers based on node local, rack local and off-rack tasks.

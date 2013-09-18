@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package spark.scheduler.cluster
 
 import java.io.{File, FileInputStream, FileOutputStream}
@@ -24,10 +41,11 @@ private[spark] trait SchedulableBuilder {
   def addTaskSetManager(manager: Schedulable, properties: Properties)
 }
 
-private[spark] class FIFOSchedulableBuilder(val rootPool: Pool) extends SchedulableBuilder with Logging {
+private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
+  extends SchedulableBuilder with Logging {
 
   override def buildPools() {
-    //nothing
+    // nothing
   }
 
   override def addTaskSetManager(manager: Schedulable, properties: Properties) {
@@ -35,7 +53,8 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool) extends Schedula
   }
 }
 
-private[spark] class FairSchedulableBuilder(val rootPool: Pool) extends SchedulableBuilder with Logging {
+private[spark] class FairSchedulableBuilder(val rootPool: Pool)
+  extends SchedulableBuilder with Logging {
 
   val schedulerAllocFile = System.getProperty("spark.fairscheduler.allocation.file","unspecified")
   val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.cluster.fair.pool"
@@ -86,9 +105,10 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool) extends Schedula
       }
     }
 
-    //finally create "default" pool
+    // finally create "default" pool
     if (rootPool.getSchedulableByName(DEFAULT_POOL_NAME) == null) {
-      val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
+      val pool = new Pool(DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE,
+        DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
       rootPool.addSchedulable(pool)
       logInfo("Create default pool with name:%s,schedulingMode:%s,minShare:%d,weight:%d".format(
         DEFAULT_POOL_NAME, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
@@ -102,8 +122,10 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool) extends Schedula
       poolName = properties.getProperty(FAIR_SCHEDULER_PROPERTIES, DEFAULT_POOL_NAME)
       parentPool = rootPool.getSchedulableByName(poolName)
       if (parentPool == null) {
-        //we will create a new pool that user has configured in app instead of being defined in xml file
-        parentPool = new Pool(poolName,DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
+        // we will create a new pool that user has configured in app
+        // instead of being defined in xml file
+        parentPool = new Pool(poolName, DEFAULT_SCHEDULING_MODE,
+          DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT)
         rootPool.addSchedulable(parentPool)
         logInfo("Create pool with name:%s,schedulingMode:%s,minShare:%d,weight:%d".format(
           poolName, DEFAULT_SCHEDULING_MODE, DEFAULT_MINIMUM_SHARE, DEFAULT_WEIGHT))
