@@ -129,8 +129,8 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
   }
 
   override def killTasks(stageId: Int) = synchronized {
-    schedulableBuilder.popTaskSetManagers(stageId).foreach {
-      _.asInstanceOf[TaskSetManager].taskSet.kill()
+    schedulableBuilder.getTaskSetManagers(stageId).foreach { sched =>
+      sched.asInstanceOf[TaskSetManager].taskSet.kill()
     }
   }
 

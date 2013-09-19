@@ -267,7 +267,6 @@ class DAGScheduler(
   /**
    * Submit a job to the job scheduler and get a JobWaiter object back. The JobWaiter object
    * can be used to block until the the job finishes executing or can be used to kill the job.
-   * If the given RDD does not contain any partitions, the function returns None.
    */
   def submitJob[T, U](
       rdd: RDD[T],
@@ -339,39 +338,15 @@ class DAGScheduler(
    * Kill a job that is running or waiting in the queue.
    */
   def killJob(jobId: Int): Unit = this.synchronized {
-    activeJobs.find(job => job.jobId == jobId).foreach(job => killJob(job))
-
-    def killJob(job: ActiveJob): Unit = this.synchronized {
-      logInfo("Killing Job and cleaning up stages %d".format(job.jobId))
-      activeJobs.remove(job)
-      idToActiveJob.remove(job.jobId)
-      val stage = job.finalStage
-      resultStageToJob.remove(stage)
-      killStage(job, stage)
-      val e = new SparkException("Job killed")
-      job.listener.jobFailed(e)
-      listenerBus.post(SparkListenerJobEnd(job, JobFailed(e, None)))
+    logInfo("Asked to kill job " + jobId)
+    activeJobs.find(job => job.jobId == jobId).foreach { job =>
+      killStage(job, job.finalStage)
     }
 
     def killStage(job: ActiveJob, stage: Stage): Unit = this.synchronized {
-      // TODO: Can we reuse taskSetFailed?
-      logInfo("Killing Stage %s".format(stage.id))
-      stageIdToStage.remove(stage.id)
-      if (stage.isShuffleMap) {
-        shuffleToMapStage.remove(stage.id)
-      }
-      waiting.remove(stage)
-      pendingTasks.remove(stage)
+      logDebug("Killing stage %s".format(stage.id))
       taskSched.killTasks(stage.id)
-
-      if (running.contains(stage)) {
-        running.remove(stage)
-        val e = new SparkException("Job killed")
-        listenerBus.post(SparkListenerJobEnd(job, JobFailed(e, Some(stage))))
-      }
-
       stage.parents.foreach(parentStage => killStage(job, parentStage))
-      //stageToInfos -= stage
     }
   }
 

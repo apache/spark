@@ -168,9 +168,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   override def killTasks(stageId: Int) {
     synchronized {
-      schedulableBuilder.popTaskSetManagers(stageId).foreach { t =>
+      schedulableBuilder.getTaskSetManagers(stageId).foreach { t =>
+        // Notify the executors to kill the tasks.
         val ts = t.asInstanceOf[TaskSetManager].taskSet
-        ts.kill()
         val taskIds = taskSetTaskIds(ts.id)
         taskIds.foreach { tid =>
           val execId = taskIdToExecutorId(tid)

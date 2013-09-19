@@ -63,15 +63,17 @@ private[spark] class StandaloneExecutorBackend(
     case LaunchTask(taskDesc) =>
       logInfo("Got assigned task " + taskDesc.taskId)
       if (executor == null) {
-        logError("Received launchTask but executor was null")
+        logError("Received LaunchTask command but executor was null")
         System.exit(1)
       } else {
         executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
       }
 
     case KillTask(taskId, _) =>
-      logInfo("Kill task %s %s".format(taskId, executorId))
-      if (executor != null) {
+      if (executor == null) {
+        logError("Received KillTask command but executor was null")
+        System.exit(1)
+      } else {
         executor.killTask(taskId)
       }
 

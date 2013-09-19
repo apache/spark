@@ -107,6 +107,8 @@ private[spark] class Executor(
   SparkEnv.set(env)
   env.metricsSystem.registerSource(executorSource)
 
+  // Akka's message frame size. This is only used to warn the user when the task result is greater
+  // than this value, in which case Akka will silently drop the task result message.
   private val akkaFrameSize = {
     env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
   }
@@ -119,15 +121,15 @@ private[spark] class Executor(
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
 
   def launchTask(context: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer) {
-    val task = new TaskRunner(context, taskId, serializedTask)
-    runningTasks.put(taskId, task)
-    threadPool.execute(task)
+    val tr = new TaskRunner(context, taskId, serializedTask)
+    runningTasks.put(taskId, tr)
+    threadPool.execute(tr)
   }
 
   def killTask(taskId: Long) {
-    val task = runningTasks.get(taskId)
-    if (task != null) {
-      task.kill()
+    val tr = runningTasks.get(taskId)
+    if (tr != null) {
+      tr.kill()
       // We remove the task also in the finally block in TaskRunner.run.
       // The reason we need to remove it here is because killTask might be called before the task
       // is even launched, and never reaching that finally block. ConcurrentHashMap's remove is
@@ -151,14 +153,13 @@ private[spark] class Executor(
     localDirs
   }
 
-  class TaskRunner(context: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer)
+  class TaskRunner(execBackend: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer)
     extends Runnable {
 
     @volatile private var killed = false
     @volatile private var task: Task[Any] = _
 
     def kill() {
-      // Note that there is a tiny possibiliy of raising here.
       killed = true
       if (task != null) {
         task.kill()
@@ -171,11 +172,11 @@ private[spark] class Executor(
       Thread.currentThread.setContextClassLoader(replClassLoader)
       val ser = SparkEnv.get.closureSerializer.newInstance()
       logInfo("Running task ID " + taskId)
-      context.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
+      execBackend.statusUpdate(taskId, TaskState.RUNNING, EMPTY_BYTE_BUFFER)
       var attemptedTask: Option[Task[Any]] = None
       var taskStart: Long = 0
-      def getTotalGCTime = ManagementFactory.getGarbageCollectorMXBeans.map(g => g.getCollectionTime).sum
-      val startGCTime = getTotalGCTime
+      def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
+      val startGCTime = gcTime
 
       try {
         SparkEnv.set(env)
@@ -187,20 +188,29 @@ private[spark] class Executor(
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
         if (killed) {
-          context.statusUpdate(taskId, TaskState.KILLED, ser.serialize(""))
+          logInfo("Task " + taskId + " was killed before it had a chance to run.")
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }
 
         attemptedTask = Some(task)
         logDebug("Its epoch is " + task.epoch)
         env.mapOutputTracker.updateEpoch(task.epoch)
+
+        // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
         val value = task.run(taskId.toInt)
         val taskFinish = System.currentTimeMillis()
+
+        // If the task has been killed, let's fail it.
+        if (task.killed) {
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+        }
+
         for (m <- task.metrics) {
           m.hostname = Utils.localHostName()
           m.executorDeserializeTime = (taskStart - startTime).toInt
           m.executorRunTime = (taskFinish - taskStart).toInt
-          m.jvmGCTime = getTotalGCTime - startGCTime
+          m.jvmGCTime = gcTime - startGCTime
         }
         // TODO I'd also like to track the time it takes to serialize the task results, but that is
         // huge headache, b/c we need to serialize the task metrics first.  If TaskMetrics had a
@@ -209,16 +219,20 @@ private[spark] class Executor(
         val result = new TaskResult(value, accumUpdates, task.metrics.getOrElse(null))
         val serializedResult = ser.serialize(result)
         logInfo("Serialized size of result for " + taskId + " is " + serializedResult.limit)
+
+        // If the task result is too big, it can exceed Akka's message frame and Akka will silently
+        // drop this message. Let's warn the user explicitly by failing the task instead.
         if (serializedResult.limit >= (akkaFrameSize - 1024)) {
-          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(TaskResultTooBigFailure()))
+          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(TaskResultTooBigFailure))
           return
         }
-        context.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
+
+        execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
         logInfo("Finished task ID " + taskId)
       } catch {
         case ffe: FetchFailedException => {
           val reason = ffe.toTaskEndReason
-          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
         }
 
         case t: Throwable => {
@@ -226,10 +240,10 @@ private[spark] class Executor(
           val metrics = attemptedTask.flatMap(t => t.metrics)
           for (m <- metrics) {
             m.executorRunTime = serviceTime
-            m.jvmGCTime = getTotalGCTime - startGCTime
+            m.jvmGCTime = gcTime - startGCTime
           }
           val reason = ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
-          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
 
           // TODO: Should we exit the whole executor here? On the one hand, the failed task may
           // have left some weird state around depending on when the exception was thrown, but on

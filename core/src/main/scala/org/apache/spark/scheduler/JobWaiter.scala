@@ -43,30 +43,23 @@ private[spark] class JobWaiter[T](
     dagScheduler.killJob(jobId)
   }
 
-  override def taskSucceeded(index: Int, result: Any) {
-    synchronized {
-      if (_jobFinished) {
-        throw new UnsupportedOperationException("taskSucceeded() called on a finished JobWaiter")
-      }
-      resultHandler(index, result.asInstanceOf[T])
-      finishedTasks += 1
-      if (finishedTasks == totalTasks) {
-        _jobFinished = true
-        jobResult = JobSucceeded
-        this.notifyAll()
-      }
+  override def taskSucceeded(index: Int, result: Any): Unit = synchronized {
+    if (_jobFinished) {
+      throw new UnsupportedOperationException("taskSucceeded() called on a finished JobWaiter")
+    }
+    resultHandler(index, result.asInstanceOf[T])
+    finishedTasks += 1
+    if (finishedTasks == totalTasks) {
+      _jobFinished = true
+      jobResult = JobSucceeded
+      this.notifyAll()
     }
   }
 
-  override def jobFailed(exception: Exception) {
-    synchronized {
-      if (_jobFinished) {
-        throw new UnsupportedOperationException("jobFailed() called on a finished JobWaiter")
-      }
-      _jobFinished = true
-      jobResult = JobFailed(exception, None)
-      this.notifyAll()
-    }
+  override def jobFailed(exception: Exception): Unit = synchronized {
+    _jobFinished = true
+    jobResult = JobFailed(exception, None)
+    this.notifyAll()
   }
 
   def awaitResult(): JobResult = synchronized {

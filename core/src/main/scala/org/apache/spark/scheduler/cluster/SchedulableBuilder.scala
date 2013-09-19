@@ -38,10 +38,8 @@ private[spark] trait SchedulableBuilder {
 
   def addTaskSetManager(manager: Schedulable, properties: Properties)
 
-  def popTaskSetManagers(stageId: Int): Iterable[Schedulable] = {
-    val taskSets = rootPool.schedulableQueue.filter(_.stageId == stageId)
-    taskSets.foreach(rootPool.removeSchedulable)
-    taskSets
+  def getTaskSetManagers(stageId: Int): Iterable[Schedulable] = {
+    rootPool.schedulableQueue.filter(_.stageId == stageId)
   }
 }
 

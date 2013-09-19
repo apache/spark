@@ -37,7 +37,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partition: Int) exte
 
   def run(attemptId: Long): T = {
     context = new TaskContext(stageId, partition, attemptId, runningLocally = false)
-    if (killed) {
+    if (_killed) {
       kill()
     }
     runTask(context)
@@ -57,7 +57,12 @@ private[spark] abstract class Task[T](val stageId: Int, var partition: Int) exte
 
   // A flag to indicate whether the task is killed. This is used in case context is not yet
   // initialized when kill() is invoked.
-  @volatile @transient private var killed = false
+  @volatile @transient private var _killed = false
+
+  /**
+   * Whether the task has been killed.
+   */
+  def killed: Boolean = _killed
 
   /**
    * Kills a task by setting the interrupted flag to true. This relies on the upper level Spark
@@ -65,7 +70,7 @@ private[spark] abstract class Task[T](val stageId: Int, var partition: Int) exte
    * be called multiple times.
    */
   def kill() {
-    killed = true
+    _killed = true
     if (context != null) {
       context.interrupted = true
     }

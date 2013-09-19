@@ -48,4 +48,6 @@ private[spark] case class ExceptionFailure(
 
 private[spark] case class OtherFailure(message: String) extends TaskEndReason
 
-private[spark] case class TaskResultTooBigFailure() extends TaskEndReason
+private[spark] case object TaskResultTooBigFailure extends TaskEndReason
+
+private[spark] case object TaskKilled extends TaskEndReason

@@ -27,7 +27,7 @@ import scala.math.max
 import scala.math.min
 
 import org.apache.spark.{FetchFailed, Logging, Resubmitted, SparkEnv, Success, TaskEndReason, TaskState}
-import org.apache.spark.{ExceptionFailure, SparkException, TaskResultTooBigFailure}
+import org.apache.spark.{ExceptionFailure, SparkException, TaskResultTooBigFailure, TaskKilled}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler._
 import scala.Some
@@ -501,10 +501,15 @@ private[spark] class ClusterTaskSetManager(
             decreaseRunningTasks(runningTasks)
             return
 
-          case taskResultTooBig: TaskResultTooBigFailure =>
+          case TaskResultTooBigFailure =>
             logInfo("Loss was due to task %s result exceeding Akka frame size; aborting job".format(
               tid))
             abort("Task %s result exceeded Akka frame size".format(tid))
+            return
+
+          case TaskKilled =>
+            logInfo("Task %d was killed.".format(tid))
+            abort("Task %d was killed".format(tid))
             return
 
           case ef: ExceptionFailure =>

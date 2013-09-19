@@ -26,7 +26,8 @@ import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
 
-import org.apache.spark.{Logging, Partition, SerializableWritable, SparkContext, SparkEnv, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Logging, Partition, SerializableWritable,
+  SparkContext, SparkEnv, TaskContext}
 import org.apache.spark.util.NextIterator
 import org.apache.hadoop.conf.{Configuration, Configurable}
 
@@ -80,41 +81,44 @@ class HadoopRDD[K, V](
       .asInstanceOf[InputFormat[K, V]]
   }
 
-  override def compute(theSplit: Partition, context: TaskContext) = new NextIterator[(K, V)] {
-    val split = theSplit.asInstanceOf[HadoopPartition]
-    logInfo("Input split: " + split.inputSplit)
-    var reader: RecordReader[K, V] = null
+  override def compute(theSplit: Partition, context: TaskContext) = {
+    val iter = new NextIterator[(K, V)] {
+      val split = theSplit.asInstanceOf[HadoopPartition]
+      logInfo("Input split: " + split.inputSplit)
+      var reader: RecordReader[K, V] = null
 
-    val conf = confBroadcast.value.value
-    val fmt = createInputFormat(conf)
-    if (fmt.isInstanceOf[Configurable]) {
-      fmt.asInstanceOf[Configurable].setConf(conf)
-    }
-    reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
-
-    // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback{ () => closeIfNeeded() }
-
-    val key: K = reader.createKey()
-    val value: V = reader.createValue()
-
-    override def getNext() = {
-      try {
-        finished = !reader.next(key, value)
-      } catch {
-        case eof: EOFException =>
-          finished = true
+      val conf = confBroadcast.value.value
+      val fmt = createInputFormat(conf)
+      if (fmt.isInstanceOf[Configurable]) {
+        fmt.asInstanceOf[Configurable].setConf(conf)
       }
-      (key, value)
-    }
+      reader = fmt.getRecordReader(split.inputSplit.value, conf, Reporter.NULL)
 
-    override def close() {
-      try {
-        reader.close()
-      } catch {
-        case e: Exception => logWarning("Exception in RecordReader.close()", e)
+      // Register an on-task-completion callback to close the input stream.
+      context.addOnCompleteCallback{ () => closeIfNeeded() }
+
+      val key: K = reader.createKey()
+      val value: V = reader.createValue()
+
+      override def getNext() = {
+        try {
+          finished = !reader.next(key, value)
+        } catch {
+          case eof: EOFException =>
+            finished = true
+        }
+        (key, value)
+      }
+
+      override def close() {
+        try {
+          reader.close()
+        } catch {
+          case e: Exception => logWarning("Exception in RecordReader.close()", e)
+        }
       }
     }
+    new InterruptibleIterator(context, iter)
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
