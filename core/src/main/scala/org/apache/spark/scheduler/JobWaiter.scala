@@ -35,8 +35,9 @@ private[spark] class JobWaiter[T](
 
   def jobFinished = _jobFinished
 
-  // If the job is finished, this will be its result
-  private var jobResult: JobResult = null
+  // If the job is finished, this will be its result. In the case of 0 task jobs (e.g. zero
+  // partition RDDs), we set the jobResult directly to JobSucceeded.
+  private var jobResult: JobResult = if (jobFinished) JobSucceeded else null
 
   def kill() {
     dagScheduler.killJob(jobId)
