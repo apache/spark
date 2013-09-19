@@ -36,9 +36,11 @@ trait PersistenceEngine {
 
   /**
    * Returns the persisted data sorted by their respective ids (which implies that they're
-   * sorted by time order of creation).
+   * sorted by time of creation).
    */
   def readPersistedData(): (Seq[ApplicationInfo], Seq[WorkerInfo])
+
+  def close() {}
 }
 
 class BlackHolePersistenceEngine extends PersistenceEngine {

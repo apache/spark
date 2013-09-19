@@ -23,11 +23,11 @@ import java.io.File
 
 import scala.collection.mutable.HashMap
 
-import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
+import akka.actor._
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 import akka.util.duration._
 
-import org.apache.spark.{SparkEnv, Logging}
+import org.apache.spark.Logging
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -35,14 +35,13 @@ import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{Utils, AkkaUtils}
 
-
 private[spark] class Worker(
     host: String,
     port: Int,
     webUiPort: Int,
     cores: Int,
     memory: Int,
-    var masterUrl: String,
+    masterUrls: Array[String],
     workDirPath: String = null)
   extends Actor with Logging {
 
@@ -54,8 +53,16 @@ private[spark] class Worker(
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   val HEARTBEAT_MILLIS = System.getProperty("spark.worker.timeout", "60").toLong * 1000 / 4
 
+  val REGISTRATION_TIMEOUT = 20.seconds
+  val REGISTRATION_RETRIES = 3
+
+  // Index into masterUrls that we're currently trying to register with.
+  var masterIndex = 0
+
   var master: ActorRef = null
-  var masterWebUiUrl : String = ""
+  var activeMasterUrl: String = ""
+  var activeMasterWebUiUrl : String = ""
+  var registered = false
   val workerId = generateWorkerId()
   var sparkHome: File = null
   var workDir: File = null
@@ -103,35 +110,62 @@ private[spark] class Worker(
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
 
     webUi.start()
-    connectToMaster()
+    registerWithMaster()
 
     metricsSystem.registerSource(workerSource)
     metricsSystem.start()
   }
 
-  def connectToMaster() {
-    logInfo("Connecting to master " + masterUrl)
-    master = context.actorFor(Master.toAkkaUrl(masterUrl))
-    master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort.get, publicAddress)
+  def changeMaster(url: String, uiUrl: String) {
+    activeMasterUrl = url
+    activeMasterWebUiUrl = uiUrl
+    master = context.actorFor(Master.toAkkaUrl(activeMasterUrl))
     context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
     context.watch(master) // Doesn't work with remote actors, but useful for testing
   }
 
+  def tryRegisterAllMasters() {
+    for (masterUrl <- masterUrls) {
+      logInfo("Connecting to master " + masterUrl + "...")
+      val actor = context.actorFor(Master.toAkkaUrl(masterUrl))
+      actor ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort.get,
+        publicAddress)
+    }
+  }
+
+  def registerWithMaster() {
+    tryRegisterAllMasters()
+
+    var retries = 0
+    lazy val retryTimer: Cancellable =
+      context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
+        retries += 1
+        if (registered) {
+          retryTimer.cancel()
+        } else if (retries >= REGISTRATION_RETRIES) {
+          logError("All masters are unresponsive! Giving up.")
+          System.exit(1)
+        } else {
+          tryRegisterAllMasters()
+        }
+      }
+    retryTimer // start timer
+  }
+
   override def receive = {
-    case RegisteredWorker(url) =>
-      masterWebUiUrl = url
-      logInfo("Successfully registered with master")
+    case RegisteredWorker(masterUrl, masterWebUiUrl) =>
+      logInfo("Successfully registered with master " + masterUrl)
+      registered = true
+      changeMaster(masterUrl, masterWebUiUrl)
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
         master ! Heartbeat(workerId)
       }
 
-    case MasterChanged(url, uiUrl) =>
-      logInfo("Master has changed, new master is at " + url)
-      masterUrl = url
-      masterWebUiUrl = uiUrl
+    case MasterChanged(masterUrl, masterWebUiUrl) =>
+      logInfo("Master has changed, new master is at " + masterUrl)
       context.unwatch(master)
-      master = context.actorFor(Master.toAkkaUrl(masterUrl))
-      context.watch(master) // Doesn't work with remote actors, but useful for testing
+      changeMaster(masterUrl, masterWebUiUrl)
+
       val execs = executors.values.
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
       sender ! WorkerSchedulerStateResponse(workerId, execs.toList)
@@ -140,15 +174,19 @@ private[spark] class Worker(
       logError("Worker registration failed: " + message)
       System.exit(1)
 
-    case LaunchExecutor(appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
-      logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
-      val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-        self, workerId, host, new File(execSparkHome_), workDir, ExecutorState.RUNNING)
-      executors(appId + "/" + execId) = manager
-      manager.start()
-      coresUsed += cores_
-      memoryUsed += memory_
-      master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
+    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
+      if (masterUrl != activeMasterUrl) {
+        logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
+      } else {
+        logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
+        val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
+          self, workerId, host, new File(execSparkHome_), workDir, ExecutorState.RUNNING)
+        executors(appId + "/" + execId) = manager
+        manager.start()
+        coresUsed += cores_
+        memoryUsed += memory_
+        master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
+      }
 
     case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
       master ! ExecutorStateChanged(appId, execId, state, message, exitStatus)
@@ -164,14 +202,18 @@ private[spark] class Worker(
         memoryUsed -= executor.memory
       }
 
-    case KillExecutor(appId, execId) =>
-      val fullId = appId + "/" + execId
-      executors.get(fullId) match {
-        case Some(executor) =>
-          logInfo("Asked to kill executor " + fullId)
-          executor.kill()
-        case None =>
-          logInfo("Asked to kill unknown executor " + fullId)
+    case KillExecutor(masterUrl, appId, execId) =>
+      if (masterUrl != activeMasterUrl) {
+        logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor " + execId)
+      } else {
+        val fullId = appId + "/" + execId
+        executors.get(fullId) match {
+          case Some(executor) =>
+            logInfo("Asked to kill executor " + fullId)
+            executor.kill()
+          case None =>
+            logInfo("Asked to kill unknown executor " + fullId)
+        }
       }
 
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
@@ -179,8 +221,8 @@ private[spark] class Worker(
 
     case RequestWorkerState => {
       sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
-        finishedExecutors.values.toList, masterUrl, cores, memory,
-        coresUsed, memoryUsed, masterWebUiUrl)
+        finishedExecutors.values.toList, activeMasterUrl, cores, memory,
+        coresUsed, memoryUsed, activeMasterWebUiUrl)
     }
   }
 
@@ -203,17 +245,18 @@ private[spark] object Worker {
   def main(argStrings: Array[String]) {
     val args = new WorkerArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
-      args.memory, args.master, args.workDir)
+      args.memory, args.masters, args.workDir)
     actorSystem.awaitTermination()
   }
 
   def startSystemAndActor(host: String, port: Int, webUiPort: Int, cores: Int, memory: Int,
-    masterUrl: String, workDir: String, workerNumber: Option[Int] = None): (ActorSystem, Int) = {
+    masterUrls: Array[String], workDir: String, workerNumber: Option[Int] = None)
+    : (ActorSystem, Int) = {
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
     val actor = actorSystem.actorOf(Props(new Worker(host, boundPort, webUiPort, cores, memory,
-      masterUrl, workDir)), name = "Worker")
+      masterUrls, workDir)), name = "Worker")
     (actorSystem, boundPort)
   }
 

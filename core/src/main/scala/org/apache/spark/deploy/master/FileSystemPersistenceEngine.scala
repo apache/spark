@@ -32,8 +32,8 @@ import org.apache.spark.Logging
  * @param serialization Used to serialize our objects.
  */
 private[spark] class FileSystemPersistenceEngine(
-  val dir: String,
-  val serialization: Serialization)
+    val dir: String,
+    val serialization: Serialization)
   extends PersistenceEngine with Logging {
 
   new File(dir).mkdir()
@@ -57,11 +57,11 @@ private[spark] class FileSystemPersistenceEngine(
   }
 
   override def readPersistedData(): (Seq[ApplicationInfo], Seq[WorkerInfo]) = {
-    val sortedFiles = new File(dir).listFiles().sortBy(_.getName())
-    val appFiles = sortedFiles.filter(_.getName().startsWith("app_"))
-    val apps = appFiles.map(deserializeFromFile[ApplicationInfo](_))
-    val workerFiles = sortedFiles.filter(_.getName().startsWith("worker_"))
-    val workers = workerFiles.map(deserializeFromFile[WorkerInfo](_))
+    val sortedFiles = new File(dir).listFiles().sortBy(_.getName)
+    val appFiles = sortedFiles.filter(_.getName.startsWith("app_"))
+    val apps = appFiles.map(deserializeFromFile[ApplicationInfo])
+    val workerFiles = sortedFiles.filter(_.getName.startsWith("worker_"))
+    val workers = workerFiles.map(deserializeFromFile[WorkerInfo])
     (apps, workers)
   }
 

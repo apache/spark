@@ -23,6 +23,7 @@ import akka.actor._
 import akka.actor.Terminated
 import akka.pattern.ask
 import akka.util.Duration
+import akka.util.duration._
 import akka.remote.RemoteClientDisconnected
 import akka.remote.RemoteClientLifeCycleEvent
 import akka.remote.RemoteClientShutdown
@@ -40,27 +41,27 @@ import org.apache.spark.deploy.master.Master
  */
 private[spark] class Client(
     actorSystem: ActorSystem,
-    masterUrl: String,
+    masterUrls: Array[String],
     appDescription: ApplicationDescription,
     listener: ClientListener)
   extends Logging {
 
+  val REGISTRATION_TIMEOUT = 60 * 1000
+
   var actor: ActorRef = null
   var appId: String = null
+  var registered = false
+  var activeMasterUrl: String = null
 
   class ClientActor extends Actor with Logging {
     var master: ActorRef = null
     var masterAddress: Address = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
+    var alreadyDead = false  // To avoid calling listener.dead() multiple times
 
     override def preStart() {
-      logInfo("Connecting to master " + masterUrl)
       try {
-        master = context.actorFor(Master.toAkkaUrl(masterUrl))
-        masterAddress = master.path.address
-        master ! RegisterApplication(appDescription)
-        context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-        context.watch(master)  // Doesn't work with remote actors, but useful for testing
+        connectToMaster()
       } catch {
         case e: Exception =>
           logError("Failed to connect to master", e)
@@ -69,9 +70,34 @@ private[spark] class Client(
       }
     }
 
+    def connectToMaster() {
+      for (masterUrl <- masterUrls) {
+        logInfo("Connecting to master " + masterUrl + "...")
+        val actor = context.actorFor(Master.toAkkaUrl(masterUrl))
+        actor ! RegisterApplication(appDescription)
+      }
+
+      context.system.scheduler.scheduleOnce(REGISTRATION_TIMEOUT millis) {
+        if (!registered) {
+          logError("All masters are unresponsive! Giving up.")
+          markDead()
+        }
+      }
+    }
+
+    def changeMaster(url: String) {
+      activeMasterUrl = url
+      master = context.actorFor(Master.toAkkaUrl(url))
+      masterAddress = master.path.address
+      context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+      context.watch(master)  // Doesn't work with remote actors, but useful for testing
+    }
+
     override def receive = {
-      case RegisteredApplication(appId_) =>
+      case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
+        registered = true
+        changeMaster(masterUrl)
         listener.connected(appId)
 
       case ApplicationRemoved(message) =>
@@ -92,13 +118,12 @@ private[spark] class Client(
           listener.executorRemoved(fullId, message.getOrElse(""), exitStatus)
         }
 
-      case MasterChanged(materUrl, masterWebUiUrl) =>
+      case MasterChanged(masterUrl, masterWebUiUrl) =>
         logInfo("Master has changed, new master is at " + masterUrl)
         context.unwatch(master)
-        master = context.actorFor(Master.toAkkaUrl(masterUrl))
-        masterAddress = master.path.address
+        changeMaster(masterUrl)
+        alreadyDisconnected = false
         sender ! MasterChangeAcknowledged(appId)
-        context.watch(master)
 
       case Terminated(actor_) if actor_ == master =>
         logError("Connection to master failed; waiting for master to reconnect...")
@@ -113,7 +138,7 @@ private[spark] class Client(
         markDisconnected()
 
       case StopClient =>
-        markDisconnected()
+        markDead()
         sender ! true
         context.stop(self)
     }
@@ -125,6 +150,13 @@ private[spark] class Client(
       if (!alreadyDisconnected) {
         listener.disconnected()
         alreadyDisconnected = true
+      }
+    }
+
+    def markDead() {
+      if (!alreadyDead) {
+        listener.dead()
+        alreadyDead = true
       }
     }
   }

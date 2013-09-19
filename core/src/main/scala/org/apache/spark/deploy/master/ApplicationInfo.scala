@@ -23,12 +23,12 @@ import akka.actor.ActorRef
 import scala.collection.mutable
 
 private[spark] class ApplicationInfo(
-  val startTime: Long,
-  val id: String,
-  val desc: ApplicationDescription,
-  val submitDate: Date,
-  val driver: ActorRef,
-  val appUiUrl: String)
+    val startTime: Long,
+    val id: String,
+    val desc: ApplicationDescription,
+    val submitDate: Date,
+    val driver: ActorRef,
+    val appUiUrl: String)
   extends Serializable {
 
   @transient var state: ApplicationState.Value = _
@@ -39,14 +39,14 @@ private[spark] class ApplicationInfo(
 
   @transient private var nextExecutorId: Int = _
 
-  init()
+  init
 
   private def readObject(in: java.io.ObjectInputStream) : Unit = {
     in.defaultReadObject()
-    init()
+    init
   }
 
-  private def init() {
+  private def init = {
     state = ApplicationState.WAITING
     executors = new mutable.HashMap[Int, ExecutorInfo]
     coresGranted = 0

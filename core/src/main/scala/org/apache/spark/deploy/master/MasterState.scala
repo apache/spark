@@ -18,9 +18,9 @@
 package org.apache.spark.deploy.master
 
 private[spark] object MasterState
-  extends Enumeration("ALIVE", "RECOVERING", "COMPLETING_RECOVERY") {
+  extends Enumeration("STANDBY", "ALIVE", "RECOVERING", "COMPLETING_RECOVERY") {
 
   type MasterState = Value
 
-  val ALIVE, RECOVERING, COMPLETING_RECOVERY = Value
+  val STANDBY, ALIVE, RECOVERING, COMPLETING_RECOVERY = Value
 }

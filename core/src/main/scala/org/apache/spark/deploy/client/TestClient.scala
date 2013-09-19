@@ -33,6 +33,11 @@ private[spark] object TestClient {
       System.exit(0)
     }
 
+    def dead() {
+      logInfo("Could not connect to master")
+      System.exit(0)
+    }
+
     def executorAdded(id: String, workerId: String, hostPort: String, cores: Int, memory: Int) {}
 
     def executorRemoved(id: String, message: String, exitStatus: Option[Int]) {}
@@ -44,7 +49,7 @@ private[spark] object TestClient {
     val desc = new ApplicationDescription(
       "TestClient", 1, 512, Command("spark.deploy.client.TestExecutor", Seq(), Map()), "dummy-spark-home", "ignored")
     val listener = new TestListener
-    val client = new Client(actorSystem, url, desc, listener)
+    val client = new Client(actorSystem, Array(url), desc, listener)
     client.start()
     actorSystem.awaitTermination()
   }

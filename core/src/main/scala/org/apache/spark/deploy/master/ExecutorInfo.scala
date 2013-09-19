@@ -28,7 +28,7 @@ private[spark] class ExecutorInfo(
 
   var state = ExecutorState.LAUNCHING
 
-  /** Copy all state variables from the given on-the-wire ExecutorDescription. */
+  /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
   def copyState(execDesc: ExecutorDescription) {
     state = execDesc.state
   }

@@ -17,6 +17,11 @@
 
 package org.apache.spark.deploy
 
+/**
+ * Used to send state on-the-wire about Executors from Worker to Master.
+ * This state is sufficient for the Master to reconstruct its internal data structures during
+ * failover.
+ */
 private[spark] class ExecutorDescription(
     val appId: String,
     val execId: Int,
