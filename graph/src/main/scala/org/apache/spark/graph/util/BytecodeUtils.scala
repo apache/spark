@@ -1,4 +1,4 @@
-package org.apache.spark.util
+package org.apache.spark.graph.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
