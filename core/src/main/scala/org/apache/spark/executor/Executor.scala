@@ -160,6 +160,7 @@ private[spark] class Executor(
     @volatile private var task: Task[Any] = _
 
     def kill() {
+      logInfo("Executor is trying to kill task " + taskId)
       killed = true
       if (task != null) {
         task.kill()
@@ -188,7 +189,7 @@ private[spark] class Executor(
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
         if (killed) {
-          logInfo("Task " + taskId + " was killed before it had a chance to run.")
+          logInfo("Executor killed task " + taskId)
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }
 
@@ -203,6 +204,7 @@ private[spark] class Executor(
 
         // If the task has been killed, let's fail it.
         if (task.killed) {
+          logInfo("Executor killed task " + taskId)
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }
 

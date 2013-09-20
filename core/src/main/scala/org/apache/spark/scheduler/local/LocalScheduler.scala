@@ -42,11 +42,14 @@ import org.apache.spark.util.Utils
  * testing fault recovery.
  */
 
-private[spark]
+private[local]
 case class LocalReviveOffers()
 
-private[spark]
+private[local]
 case class LocalStatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
+
+private[local]
+case class KillTask(taskId: Long)
 
 private[spark]
 class LocalActor(localScheduler: LocalScheduler, var freeCores: Int) extends Actor with Logging {
@@ -54,10 +57,14 @@ class LocalActor(localScheduler: LocalScheduler, var freeCores: Int) extends Act
   def receive = {
     case LocalReviveOffers =>
       launchTask(localScheduler.resourceOffer(freeCores))
+
     case LocalStatusUpdate(taskId, state, serializeData) =>
       freeCores += 1
       localScheduler.statusUpdate(taskId, state, serializeData)
       launchTask(localScheduler.resourceOffer(freeCores))
+
+    case KillTask(taskId) =>
+      killTask(taskId)
   }
 
   def launchTask(tasks : Seq[TaskDescription]) {
@@ -69,6 +76,10 @@ class LocalActor(localScheduler: LocalScheduler, var freeCores: Int) extends Act
         }
       })
     }
+  }
+
+  def killTask(taskId: Long) {
+
   }
 }
 
@@ -128,9 +139,12 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     }
   }
 
-  override def killTasks(stageId: Int) = synchronized {
+  override def killTasks(stageId: Int): Unit = synchronized {
     schedulableBuilder.getTaskSetManagers(stageId).foreach { sched =>
-      sched.asInstanceOf[TaskSetManager].taskSet.kill()
+      val taskIds = taskSetTaskIds(sched.asInstanceOf[TaskSetManager].taskSet.id)
+      for (tid <- taskIds) {
+        localActor ! KillTask(tid)
+      }
     }
   }
 
@@ -183,7 +197,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     var attemptedTask: Option[Task[_]] = None   
     val start = System.currentTimeMillis()
     var taskStart: Long = 0
-    def getTotalGCTime = ManagementFactory.getGarbageCollectorMXBeans.map(g => g.getCollectionTime).sum
+    def getTotalGCTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
     val startGCTime = getTotalGCTime
 
     try {
