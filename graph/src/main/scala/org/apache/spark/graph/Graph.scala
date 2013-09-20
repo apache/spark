@@ -219,7 +219,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * {{{
    * val graph: Graph[Int,Int] = loadGraph()
    * val averageFollowerAge: RDD[(Int, Int)] =
-   *   graph.aggregateNeigbhros[(Int,Double)](
+   *   graph.aggregateNeighbors[(Int,Double)](
    *     (vid, edge) => (edge.otherVertex(vid).data, 1),
    *     (a, b) => (a._1 + b._1, a._2 + b._2),
    *     EdgeDirection.In)
@@ -265,7 +265,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * {{{
    * val graph: Graph[Int,Int] = loadGraph()
    * val averageFollowerAge: RDD[(Int, Int)] =
-   *   graph.aggregateNeigbhros[(Int,Double)](
+   *   graph.aggregateNeighbors[(Int,Double)](
    *     (vid, edge) => (edge.otherVertex(vid).data, 1),
    *     (a, b) => (a._1 + b._1, a._2 + b._2),
    *     -1,
