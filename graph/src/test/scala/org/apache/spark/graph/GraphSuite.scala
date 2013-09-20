@@ -20,7 +20,27 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   }
 
   test("aggregateNeighbors") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val star = Graph(sc.parallelize(List((0, 1), (0, 2), (0, 3))))
 
+      val indegrees = star.aggregateNeighbors(
+        (vid, edge) => Some(1),
+        (a: Int, b: Int) => a + b,
+        EdgeDirection.In).vertices.map(v => (v.id, v.data._2.getOrElse(0)))
+      assert(indegrees.collect().toSet === Set((0, 0), (1, 1), (2, 1), (3, 1)))
+
+      val outdegrees = star.aggregateNeighbors(
+        (vid, edge) => Some(1),
+        (a: Int, b: Int) => a + b,
+        EdgeDirection.Out).vertices.map(v => (v.id, v.data._2.getOrElse(0)))
+      assert(outdegrees.collect().toSet === Set((0, 3), (1, 0), (2, 0), (3, 0)))
+
+      val noVertexValues = star.aggregateNeighbors[Int](
+        (vid: Vid, edge: EdgeTriplet[Int, Int]) => None,
+        (a: Int, b: Int) => throw new Exception("reduceFunc called unexpectedly"),
+        EdgeDirection.In).vertices.map(v => (v.id, v.data._2))
+      assert(noVertexValues.collect().toSet === Set((0, None), (1, None), (2, None), (3, None)))
+    }
   }
 
  /* test("joinVertices") {

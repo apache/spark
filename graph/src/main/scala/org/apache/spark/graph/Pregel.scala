@@ -19,18 +19,25 @@ object Pregel {
 
     def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertex(vid).id, edge)
 
-    def runProg(v: Vertex[VD], msg: Option[A]): VD = {
-      if (msg.isEmpty) v.data else vprog(v, msg.get)
+    def runProg(vertexWithMsgs: Vertex[(VD, Option[A])]): VD = {
+      val (vData, msg) = vertexWithMsgs.data
+      val v = Vertex(vertexWithMsgs.id, vData)
+      msg match {
+        case Some(m) => vprog(v, m)
+        case None => v.data
+      }
     }
 
-    var msgs: RDD[(Vid, A)] = g.vertices.map{ v => (v.id, initialMsg) }
+    var graphWithMsgs: Graph[(VD, Option[A]), ED] =
+      g.mapVertices(v => (v.data, Some(initialMsg)))
 
     while (i < numIter) {
-      g = g.leftJoinVertices(msgs, runProg).cache()
-      msgs = g.aggregateNeighbors(mapF, mergeMsg, EdgeDirection.In)
+      val newGraph: Graph[VD, ED] = graphWithMsgs.mapVertices(runProg).cache()
+      graphWithMsgs = newGraph.aggregateNeighbors(mapF, mergeMsg, EdgeDirection.In)
       i += 1
     }
-    g
+    graphWithMsgs.mapVertices(vertexWithMsgs => vertexWithMsgs.data match {
+      case (vData, _) => vData
+    })
   }
-
 }
