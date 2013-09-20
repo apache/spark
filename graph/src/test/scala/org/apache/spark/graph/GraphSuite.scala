@@ -1,9 +1,9 @@
-package spark.graph
+package org.apache.spark.graph
 
 import org.scalatest.FunSuite
 
-import spark.SparkContext
-import spark.graph._
+import org.apache.spark.SparkContext
+import org.apache.spark.graph._
 
 
 
