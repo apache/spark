@@ -1,9 +1,9 @@
-package spark.graph
+package org.apache.spark.graph
 
 import org.scalatest.Suite
 import org.scalatest.BeforeAndAfterEach
 
-import spark.SparkContext
+import org.apache.spark.SparkContext
 
 
 /** Manages a local `sc` {@link SparkContext} variable, correctly stopping it after each test. */

@@ -29,6 +29,7 @@ import com.google.common.io.Files
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
 
+import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.ShuffledRDD
 import org.apache.spark.rdd.IndexedRDD
 

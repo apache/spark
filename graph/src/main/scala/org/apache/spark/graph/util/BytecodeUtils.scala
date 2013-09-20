@@ -1,8 +1,10 @@
-package org.apache.spark.util
+package org.apache.spark.graph.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.HashSet
+
+import org.apache.spark.util.Utils
 
 import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
 import org.objectweb.asm.Opcodes._
