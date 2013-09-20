@@ -100,6 +100,10 @@ class StreamingContext private (
       "both SparkContext and checkpoint as null")
   }
 
+  if(cp_ != null && cp_.delaySeconds >= 0 && MetadataCleaner.getDelaySeconds < 0) {
+    MetadataCleaner.setDelaySeconds(cp_.delaySeconds)
+  }
+
   if (MetadataCleaner.getDelaySeconds < 0) {
     throw new SparkException("Spark Streaming cannot be used without setting spark.cleaner.ttl; "
       + "set this property before creating a SparkContext (use SPARK_JAVA_OPTS for the shell)")
