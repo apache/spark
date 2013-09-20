@@ -37,7 +37,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
       case Some(cachedValues) =>
         // Partition is in cache, so just return its values
         logInfo("Found partition in cache!")
-        return cachedValues.asInstanceOf[Iterator[T]]
+        return new InterruptibleIterator(context, cachedValues.asInstanceOf[Iterator[T]])
 
       case None =>
         // Mark the split as loading (unless someone else marks it first)
@@ -55,7 +55,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
             // downside of the current code is that threads wait serially if this does happen.
             blockManager.get(key) match {
               case Some(values) =>
-                return values.asInstanceOf[Iterator[T]]
+                return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
               case None =>
                 logInfo("Whoever was loading " + key + " failed; we'll try it ourselves")
                 loading.add(key)
