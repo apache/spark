@@ -40,17 +40,17 @@ trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self
   }
 
   def resetSparkContext() = {
-    if (sc != null) {
-      LocalSparkContext.stop(sc)
-      sc = null
-    }
+    LocalSparkContext.stop(sc)
+    sc = null
   }
 
 }
 
 object LocalSparkContext {
   def stop(sc: SparkContext) {
-    sc.stop()
+    if (sc != null) {
+      sc.stop()
+    }
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.driver.port")
     System.clearProperty("spark.hostPort")
