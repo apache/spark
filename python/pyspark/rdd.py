@@ -70,6 +70,25 @@ class RDD(object):
         self._jrdd.cache()
         return self
 
+    def persist(self, storageLevel):
+        """
+        Set this RDD's storage level to persist its values across operations after the first time
+        it is computed. This can only be used to assign a new storage level if the RDD does not
+        have a storage level set yet.
+        """
+        self.is_cached = True
+        javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
+        self._jrdd.persist(javaStorageLevel)
+        return self
+
+    def unpersist(self):
+        """
+        Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+        """
+        self.is_cached = False
+        self._jrdd.unpersist()
+        return self
+
     def checkpoint(self):
         """
         Mark this RDD for checkpointing. It will be saved to a file inside the

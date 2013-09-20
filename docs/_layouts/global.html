@@ -51,7 +51,7 @@
             <div class="navbar-inner">
                 <div class="container">
                     <div class="brand"><a href="index.html">
-                      <img src="img/spark-logo-77x50px-hd.png" /></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
+                      <img src="img/spark-logo-hd.png" style="height:50px;"/></a><span class="version">{{site.SPARK_VERSION_SHORT}}</span>
                     </div>
                     <ul class="nav">
                         <!--TODO(andyk): Add class="active" attribute to li some how.-->
@@ -86,6 +86,7 @@
                         <li class="dropdown">
                             <a href="#" class="dropdown-toggle" data-toggle="dropdown">Deploying<b class="caret"></b></a>
                             <ul class="dropdown-menu">
+                                <li><a href="cluster-overview.html">Overview</a></li>
                                 <li><a href="ec2-scripts.html">Amazon EC2</a></li>
                                 <li><a href="spark-standalone.html">Standalone Mode</a></li>
                                 <li><a href="running-on-mesos.html">Mesos</a></li>
@@ -97,10 +98,14 @@
                             <a href="api.html" class="dropdown-toggle" data-toggle="dropdown">More<b class="caret"></b></a>
                             <ul class="dropdown-menu">
                                 <li><a href="configuration.html">Configuration</a></li>
+                                <li><a href="monitoring.html">Monitoring</a></li>
                                 <li><a href="tuning.html">Tuning Guide</a></li>
+                                <li><a href="hadoop-third-party-distributions.html">Running with CDH/HDP</a></li>
                                 <li><a href="hardware-provisioning.html">Hardware Provisioning</a></li>
+                                <li><a href="job-scheduling.html">Job Scheduling</a></li>
+                                <li class="divider"></li>
                                 <li><a href="building-with-maven.html">Building Spark with Maven</a></li>
-                                <li><a href="contributing-to-spark.html">Contributing to Spark</a></li>
+                                <li><a href="https://cwiki.apache.org/confluence/display/SPARK/Contributing+to+Spark">Contributing to Spark</a></li>
                             </ul>
                         </li>
                     </ul>

@@ -31,7 +31,7 @@
 #    1. To add a new sink, set the "class" option to a fully qualified class
 #    name (see examples below).
 #    2. Some sinks involve a polling period. The minimum allowed polling period
-#    is  1 second.
+#    is 1 second.
 #    3. Wild card properties can be overridden by more specific properties.
 #    For example, master.sink.console.period takes precedence over
 #    *.sink.console.period.
@@ -47,11 +47,45 @@
 #    instance master and applications. MetricsServlet may not be configured by self.
 #
 
+## List of available sinks and their properties.
+
+# org.apache.spark.metrics.sink.ConsoleSink
+#   Name:   Default:   Description:
+#   period  10         Poll period
+#   unit    seconds    Units of poll period
+
+# org.apache.spark.metrics.sink.CSVSink
+#   Name:     Default:   Description:
+#   period    10         Poll period
+#   unit      seconds    Units of poll period
+#   directory /tmp       Where to store CSV files
+
+# org.apache.spark.metrics.sink.GangliaSink
+#   Name:     Default:   Description:
+#   host      NONE       Hostname or multicast group of Ganglia server
+#   port      NONE       Port of Ganglia server(s)
+#   period    10         Poll period
+#   unit      seconds    Units of poll period
+#   ttl       1          TTL of messages sent by Ganglia
+#   mode      multicast  Ganglia network mode ('unicast' or 'mulitcast')
+
+# org.apache.spark.metrics.sink.JmxSink
+
+# org.apache.spark.metrics.sink.MetricsServlet
+#   Name:     Default:   Description:
+#   path      VARIES*    Path prefix from the web server root
+#   sample    false      Whether to show entire set of samples for histograms ('false' or 'true')
+#
+# * Default path is /metrics/json for all instances except the master. The master has two paths:
+#     /metrics/aplications/json # App information
+#     /metrics/master/json      # Master information
+
+## Examples
 # Enable JmxSink for all instances by class name
-#*.sink.jmx.class=spark.metrics.sink.JmxSink
+#*.sink.jmx.class=org.apache.spark.metrics.sink.JmxSink
 
 # Enable ConsoleSink for all instances by class name
-#*.sink.console.class=spark.metrics.sink.ConsoleSink
+#*.sink.console.class=org.apache.spark.metrics.sink.ConsoleSink
 
 # Polling period for ConsoleSink
 #*.sink.console.period=10
@@ -64,7 +98,7 @@
 #master.sink.console.unit=seconds
 
 # Enable CsvSink for all instances
-#*.sink.csv.class=spark.metrics.sink.CsvSink
+#*.sink.csv.class=org.apache.spark.metrics.sink.CsvSink
 
 # Polling period for CsvSink
 #*.sink.csv.period=1
@@ -80,11 +114,11 @@
 #worker.sink.csv.unit=minutes
 
 # Enable jvm source for instance master, worker, driver and executor
-#master.source.jvm.class=spark.metrics.source.JvmSource
+#master.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
-#worker.source.jvm.class=spark.metrics.source.JvmSource
+#worker.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
-#driver.source.jvm.class=spark.metrics.source.JvmSource
+#driver.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 
-#executor.source.jvm.class=spark.metrics.source.JvmSource
+#executor.source.jvm.class=org.apache.spark.metrics.source.JvmSource
 

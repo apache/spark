@@ -62,7 +62,7 @@ class SparkEnv (
     val yarnMode = java.lang.Boolean.valueOf(System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if(yarnMode) {
       try {
-        Class.forName("spark.deploy.yarn.YarnSparkHadoopUtil").newInstance.asInstanceOf[SparkHadoopUtil]
+        Class.forName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil").newInstance.asInstanceOf[SparkHadoopUtil]
       } catch {
         case th: Throwable => throw new SparkException("Unable to load YARN support", th)
       }

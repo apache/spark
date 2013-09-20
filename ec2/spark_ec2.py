@@ -215,11 +215,10 @@ def launch_cluster(conn, opts, cluster_name):
     master_group.authorize(src_group=slave_group)
     master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
     master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
-    master_group.authorize('tcp', 33000, 33000, '0.0.0.0/0')
     master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
     master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
     master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
-    master_group.authorize('tcp', 3030, 3035, '0.0.0.0/0')
+    master_group.authorize('tcp', 4040, 4045, '0.0.0.0/0')
     if opts.ganglia:
       master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
   if slave_group.rules == []: # Group was just now created
@@ -365,12 +364,12 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
   slave_nodes = []
   for res in reservations:
     active = [i for i in res.instances if is_active(i)]
-    if len(active) > 0:
-      group_names = [g.name for g in res.groups]
+    for inst in active:
+      group_names = [g.name for g in inst.groups]
       if group_names == [cluster_name + "-master"]:
-        master_nodes += res.instances
+        master_nodes.append(inst)
       elif group_names == [cluster_name + "-slaves"]:
-        slave_nodes += res.instances
+        slave_nodes.append(inst)
   if any((master_nodes, slave_nodes)):
     print ("Found %d master(s), %d slaves" %
            (len(master_nodes), len(slave_nodes)))

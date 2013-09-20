@@ -457,12 +457,20 @@ private[spark] object Utils extends Logging {
   def newDaemonFixedThreadPool(nThreads: Int): ThreadPoolExecutor =
     Executors.newFixedThreadPool(nThreads, daemonThreadFactory).asInstanceOf[ThreadPoolExecutor]
 
+  private def listFilesSafely(file: File): Seq[File] = {
+    val files = file.listFiles()
+    if (files == null) {
+      throw new IOException("Failed to list files for dir: " + file)
+    }
+    files
+  }
+
   /**
    * Delete a file or directory and its contents recursively.
    */
   def deleteRecursively(file: File) {
     if (file.isDirectory) {
-      for (child <- file.listFiles()) {
+      for (child <- listFilesSafely(file)) {
         deleteRecursively(child)
       }
     }
@@ -613,7 +621,7 @@ private[spark] object Utils extends Logging {
    * A regular expression to match classes of the "core" Spark API that we want to skip when
    * finding the call site of a method.
    */
-  private val SPARK_CLASS_REGEX = """^spark(\.api\.java)?(\.rdd)?\.[A-Z]""".r
+  private val SPARK_CLASS_REGEX = """^org\.apache\.spark(\.api\.java)?(\.util)?(\.rdd)?\.[A-Z]""".r
 
   private[spark] class CallSiteInfo(val lastSparkMethod: String, val firstUserFile: String,
                                     val firstUserLine: Int, val firstUserClass: String)
@@ -777,5 +785,19 @@ private[spark] object Utils extends Logging {
   def nonNegativeMod(x: Int, mod: Int): Int = {
     val rawMod = x % mod
     rawMod + (if (rawMod < 0) mod else 0)
+  }
+
+  // Handles idiosyncracies with hash (add more as required)
+  def nonNegativeHash(obj: AnyRef): Int = {
+
+    // Required ?
+    if (obj eq null) return 0
+
+    val hash = obj.hashCode
+    // math.abs fails for Int.MinValue
+    val hashAbs = if (Int.MinValue != hash) math.abs(hash) else 0
+
+    // Nothing else to guard against ?
+    hashAbs
   }
 }
