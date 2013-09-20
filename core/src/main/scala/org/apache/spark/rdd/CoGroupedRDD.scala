@@ -23,7 +23,7 @@ import java.util.{HashMap => JHashMap}
 import scala.collection.JavaConversions
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Partition, Partitioner, SparkEnv, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
 
 
@@ -134,7 +134,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         }
       }
     }
-    JavaConversions.mapAsScalaMap(map).iterator
+    new InterruptibleIterator(context, JavaConversions.mapAsScalaMap(map).iterator)
   }
 
   override def clearDependencies() {

@@ -852,6 +852,11 @@ abstract class RDD[T: ClassManifest](
     map(x => (f(x), x))
   }
 
+  /**
+   * Creates an interruptible version of this RDD.
+   */
+  def interruptible(): RDD[T] = new InterruptibleRDD(this)
+
   /** A private method for tests, to look at the contents of each partition */
   private[spark] def collectPartitions(): Array[Array[T]] = {
     sc.runJob(this, (iter: Iterator[T]) => iter.toArray)

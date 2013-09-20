@@ -85,17 +85,20 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     if (self.partitioner == Some(partitioner)) {
       self.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
+        .interruptible()
     } else if (mapSideCombine) {
       val combined = self.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
       val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
         .setSerializer(serializerClass)
       partitioned.mapPartitions(aggregator.combineCombinersByKey, preservesPartitioning = true)
+        .interruptible()
     } else {
       // Don't apply map-side combiner.
       // A sanity check to make sure mergeCombiners is not defined.
       assert(mergeCombiners == null)
       val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializerClass)
       values.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
+        .interruptible()
     }
   }
 
