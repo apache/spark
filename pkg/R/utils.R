@@ -8,6 +8,7 @@
            # jElem <- .jcall(jList, "Ljava/lang/Object;", "get", as.integer(index))
            # .jsimplify(jElem)
          # })
+  # NOTE: toArray() allocates memory for a copy
   .jevalArray(.jcall(jList, "[Ljava/lang/Object;", "toArray"))
 }
           
