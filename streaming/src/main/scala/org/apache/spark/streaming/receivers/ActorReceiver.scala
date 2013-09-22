@@ -51,7 +51,7 @@ object ReceiverSupervisorStrategy {
  * @example {{{
  *  class MyActor extends Actor with Receiver{
  *      def receive {
- *          case anything :String ⇒ pushBlock(anything)
+ *          case anything :String => pushBlock(anything)
  *      }
  *  }
  *  //Can be plugged in actorStream as follows
@@ -121,7 +121,7 @@ private[streaming] class ActorReceiver[T: ClassTag](
   protected lazy val supervisor = env.actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
-  private class Supervisor extends Actor {
+  class Supervisor extends Actor {
 
     override val supervisorStrategy = receiverSupervisorStrategy
     val worker = context.actorOf(props, name)

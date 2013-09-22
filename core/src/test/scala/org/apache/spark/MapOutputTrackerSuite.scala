@@ -109,7 +109,7 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0)
     val slaveTracker = new MapOutputTracker()
     slaveTracker.trackerActor = slaveSystem.actorFor(
-        "akka://spark@localhost:" + boundPort + "/user/MapOutputTracker")
+        "akka.tcp://spark@localhost:" + boundPort + "/user/MapOutputTracker")
 
     masterTracker.registerShuffle(10, 1)
     masterTracker.incrementEpoch()

@@ -25,9 +25,9 @@ import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 
 import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
-import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
+import akka.remote.{RemotingLifecycleEvent, AssociationErrorEvent, DisassociatedEvent}
 
-import org.apache.spark.{Logging}
+import org.apache.spark.Logging
 import org.apache.spark.deploy.ExecutorState
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -113,7 +113,7 @@ private[spark] class Worker(
     logInfo("Connecting to master " + masterUrl)
     master = context.actorFor(Master.toAkkaUrl(masterUrl))
     master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort.get, publicAddress)
-    context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     context.watch(master) // Doesn't work with remote actors, but useful for testing
   }
 
@@ -165,7 +165,7 @@ private[spark] class Worker(
           logInfo("Asked to kill unknown executor " + fullId)
       }
 
-    case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
+    case _: Terminated | DisassociatedEvent | AssociationErrorEvent =>
       masterDisconnected()
 
     case RequestWorkerState => {
@@ -207,8 +207,8 @@ private[spark] object Worker {
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
-    val actor = actorSystem.actorOf(Props(new Worker(host, boundPort, webUiPort, cores, memory,
-      masterUrl, workDir)), name = "Worker")
+    actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
+      masterUrl, workDir), name = "Worker")
     (actorSystem, boundPort)
   }
 

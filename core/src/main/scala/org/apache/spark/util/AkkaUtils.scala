@@ -48,28 +48,27 @@ private[spark] object AkkaUtils {
 
     val akkaConf = ConfigFactory.parseString("""
       akka.daemonic = on
-      akka.event-handlers = ["akka.event.slf4j.Slf4jEventHandler"]
+      akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
       akka.stdout-loglevel = "ERROR"
       akka.actor.provider = "akka.remote.RemoteActorRefProvider"
-      akka.remote.transport = "akka.remote.netty.NettyRemoteTransport"
-      akka.remote.netty.hostname = "%s"
-      akka.remote.netty.port = %d
-      akka.remote.netty.connection-timeout = %ds
-      akka.remote.netty.message-frame-size = %d MiB
-      akka.remote.netty.execution-pool-size = %d
+      akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
+      akka.remote.netty.tcp.hostname = "%s"
+      akka.remote.netty.tcp.port = %d
+      akka.remote.netty.tcp.connection-timeout = %ds
+      akka.remote.netty.tcp.message-frame-size = %d MiB
+      akka.remote.netty.tcp.execution-pool-size = %d
       akka.actor.default-dispatcher.throughput = %d
       akka.remote.log-remote-lifecycle-events = %s
-      akka.remote.netty.write-timeout = %ds
-      """.format(host, port, akkaTimeout, akkaFrameSize, akkaThreads, akkaBatchSize,
-        lifecycleEvents, akkaWriteTimeout))
+                                             """.format(host, port, akkaTimeout, akkaFrameSize, akkaThreads, akkaBatchSize,
+        lifecycleEvents))
 
     val actorSystem = ActorSystem(name, akkaConf)
 
     // Figure out the port number we bound to, in case port was passed as 0. This is a bit of a
     // hack because Akka doesn't let you figure out the port through the public API yet.
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
-    val boundPort = provider.asInstanceOf[RemoteActorRefProvider].transport.address.port.get
-    return (actorSystem, boundPort)
+    val boundPort = provider.getDefaultAddress.port.get
+    (actorSystem, boundPort)
   }
 
 }

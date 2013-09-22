@@ -29,6 +29,7 @@ import twitter4j.Status
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
 import akka.zeromq.Subscribe
+import akka.util.ByteString
 
 import twitter4j.auth.Authorization
 
@@ -475,7 +476,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   def zeroMQStream[T](
       publisherUrl:String,
       subscribe: Subscribe,
-      bytesToObjects: Seq[Seq[Byte]] ⇒ Iterator[T],
+      bytesToObjects: Seq[ByteString] ⇒ Iterator[T],
       storageLevel: StorageLevel,
       supervisorStrategy: SupervisorStrategy
     ): JavaDStream[T] = {
@@ -502,7 +503,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     ): JavaDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    def fn(x: Seq[Seq[Byte]]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
+    def fn(x: Seq[ByteString]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
     ssc.zeroMQStream[T](publisherUrl, subscribe, fn, storageLevel)
   }
 
@@ -522,7 +523,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     ): JavaDStream[T] = {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    def fn(x: Seq[Seq[Byte]]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
+    def fn(x: Seq[ByteString]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
     ssc.zeroMQStream[T](publisherUrl, subscribe, fn)
   }
 

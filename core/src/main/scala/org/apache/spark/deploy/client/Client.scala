@@ -26,9 +26,7 @@ import akka.actor._
 import akka.actor.Terminated
 import akka.pattern.AskTimeoutException
 import akka.pattern.ask
-import akka.remote.RemoteClientDisconnected
-import akka.remote.RemoteClientLifeCycleEvent
-import akka.remote.RemoteClientShutdown
+import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent, AssociationErrorEvent}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
@@ -61,7 +59,7 @@ private[spark] class Client(
         master = context.actorFor(Master.toAkkaUrl(masterUrl))
         masterAddress = master.path.address
         master ! RegisterApplication(appDescription)
-        context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+        context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
         context.watch(master)  // Doesn't work with remote actors, but useful for testing
       } catch {
         case e: Exception =>
@@ -99,12 +97,12 @@ private[spark] class Client(
         markDisconnected()
         context.stop(self)
 
-      case RemoteClientDisconnected(transport, address) if address == masterAddress =>
+      case DisassociatedEvent(_, address, _) if address == masterAddress =>
         logError("Connection to master failed; stopping client")
         markDisconnected()
         context.stop(self)
 
-      case RemoteClientShutdown(transport, address) if address == masterAddress =>
+      case AssociationErrorEvent(_, _, address, _) if address == masterAddress =>
         logError("Connection to master failed; stopping client")
         markDisconnected()
         context.stop(self)

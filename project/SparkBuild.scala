@@ -81,7 +81,7 @@ object SparkBuild extends Build {
     organization       := "org.apache.spark",
     version            := "0.8.0-SNAPSHOT",
     scalaVersion       := "2.10.2",
-    scalacOptions      := Seq("-unchecked", "-optimize", "-deprecation", "-target:" + SCALAC_JVM_VERSION),
+//    scalacOptions      := Seq("-unchecked", "-optimize", "-deprecation", "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
@@ -150,7 +150,7 @@ object SparkBuild extends Build {
 */
 
     libraryDependencies ++= Seq(
-        "io.netty"          % "netty-all"       % "4.0.0.Beta2",
+        "io.netty"          % "netty-all"       % "4.0.0.CR1",
         "org.eclipse.jetty" % "jetty-server"    % "7.6.8.v20121106",
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
@@ -183,9 +183,9 @@ object SparkBuild extends Build {
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
     resolvers ++= Seq(
-      "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
-      "Spray Repository"     at "http://repo.spray.cc/",
-      "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/"
+      // "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
+      // "Spray Repository"     at "http://repo.spray.cc/",
+       "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
 
     libraryDependencies ++= Seq(
@@ -200,9 +200,9 @@ object SparkBuild extends Build {
         "org.ow2.asm"              % "asm"              % "4.0",
         "com.google.protobuf"      % "protobuf-java"    % "2.4.1",
         "de.javakaffee"            % "kryo-serializers" % "0.22",
-        "com.typesafe.akka"       %% "akka-remote"      % "2.1.4"        excludeAll(excludeNetty),
-        "com.typesafe.akka"       %% "akka-slf4j"       % "2.1.4"        excludeAll(excludeNetty),
-        "net.liftweb"             %% "lift-json"        % "2.5.1",
+        "com.typesafe.akka"       %% "akka-remote"      % "2.2.1"  excludeAll(excludeNetty), 
+        "com.typesafe.akka"       %% "akka-slf4j"       % "2.2.1"  excludeAll(excludeNetty),
+        "net.liftweb"             %% "lift-json"        % "2.5.1"  excludeAll(excludeNetty),
         "it.unimi.dsi"             % "fastutil"         % "6.4.4",
         "colt"                     % "colt"             % "1.2.0",
         "org.apache.mesos"         % "mesos"            % "0.12.1",
@@ -271,7 +271,7 @@ object SparkBuild extends Build {
       "org.apache.flume"      % "flume-ng-sdk"     % "1.2.0" % "compile"  excludeAll(excludeNetty, excludeSnappy),
       "com.github.sgroschupf" % "zkclient"         % "0.1"                excludeAll(excludeNetty),
       "org.twitter4j"         % "twitter4j-stream" % "3.0.3"              excludeAll(excludeNetty),
-      "com.typesafe.akka"    %%  "akka-zeromq"     % "2.1.4"              excludeAll(excludeNetty)
+      "com.typesafe.akka"    %%  "akka-zeromq"     % "2.2.1"              excludeAll(excludeNetty)
     )
   )
 

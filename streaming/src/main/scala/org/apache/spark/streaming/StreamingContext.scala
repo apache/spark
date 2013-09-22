@@ -47,6 +47,7 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import twitter4j.Status
 import twitter4j.auth.Authorization
+import akka.util.ByteString
 
 
 /**
@@ -231,11 +232,11 @@ class StreamingContext private (
   def zeroMQStream[T: ClassTag](
       publisherUrl:String,
       subscribe: Subscribe,
-      bytesToObjects: Seq[Seq[Byte]] ⇒ Iterator[T],
+      bytesToObjects: Seq[ByteString] ⇒ Iterator[T],
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
       supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
     ): DStream[T] = {
-    actorStream(Props(new ZeroMQReceiver(publisherUrl,subscribe,bytesToObjects)),
+    actorStream(Props(new ZeroMQReceiver(publisherUrl, subscribe, bytesToObjects)),
         "ZeroMQReceiver", storageLevel, supervisorStrategy)
   }
 

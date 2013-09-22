@@ -209,7 +209,7 @@ private[yarn] class YarnAllocationHandler(val conf: Configuration, val resourceM
         else {
           // deallocate + allocate can result in reusing id's wrongly - so use a different counter (workerIdCounter)
           val workerId = workerIdCounter.incrementAndGet().toString
-          val driverUrl = "akka://spark@%s:%s/user/%s".format(
+          val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
             System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
             StandaloneSchedulerBackend.ACTOR_NAME)
 

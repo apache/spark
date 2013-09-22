@@ -25,7 +25,7 @@ import scala.concurrent.duration._
 
 import akka.actor._
 import akka.pattern.ask
-import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
+import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 
 import org.apache.spark.{SparkException, Logging, TaskState}
 import org.apache.spark.scheduler.cluster.StandaloneClusterMessages._
@@ -53,7 +53,7 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
-      context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
       // Periodically revive offers to allow delay scheduling to work
       val reviveInterval = System.getProperty("spark.scheduler.revive.interval", "1000").toLong
@@ -101,11 +101,11 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
       case Terminated(actor) =>
         actorToExecutorId.get(actor).foreach(removeExecutor(_, "Akka actor terminated"))
 
-      case RemoteClientDisconnected(transport, address) =>
-        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client disconnected"))
+      case DisassociatedEvent(_, remoteAddress, _) =>
+        addressToExecutorId.get(remoteAddress).foreach(removeExecutor(_, "remote Akka client disconnected"))
 
-      case RemoteClientShutdown(transport, address) =>
-        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client shutdown"))
+      case AssociationErrorEvent(_, _, remoteAddress, _) =>
+        addressToExecutorId.get(remoteAddress).foreach(removeExecutor(_, "remote Akka client shutdown"))
     }
 
     // Make fake resource offers on all executors

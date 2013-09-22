@@ -169,7 +169,7 @@ object SparkEnv extends Logging {
         val driverHost: String = System.getProperty("spark.driver.host", "localhost")
         val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
         Utils.checkHost(driverHost, "Expected hostname")
-        val url = "akka://spark@%s:%s/user/%s".format(driverHost, driverPort, name)
+        val url = "akka.tcp://spark@%s:%s/user/%s".format(driverHost, driverPort, name)
         logInfo("Connecting to " + name + ": " + url)
         actorSystem.actorFor(url)
       }

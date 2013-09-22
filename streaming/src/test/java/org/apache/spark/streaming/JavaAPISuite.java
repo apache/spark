@@ -48,7 +48,7 @@ import java.util.*;
 
 import akka.actor.Props;
 import akka.zeromq.Subscribe;
-
+import akka.util.ByteString;
 
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
