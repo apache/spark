@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler.cluster
 
 import java.io.{FileInputStream, InputStream}
-import java.util.Properties
+import java.util.{NoSuchElementException, Properties}
 
 import org.apache.spark.Logging
 
@@ -65,15 +65,15 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool)
   override def buildPools() {
     var is: Option[InputStream] = None
     try {
-      is = Option{
-        schedulerAllocFile.map{ f =>
+      is = Option {
+        schedulerAllocFile.map { f =>
           new FileInputStream(f)
-        }.getOrElse{
+        }.getOrElse {
           getClass.getClassLoader.getResourceAsStream(DEFAULT_SCHEDULER_FILE)
         }
       }
 
-      is.foreach{ i => buildFairSchedulerPool(i) }
+      is.foreach { i => buildFairSchedulerPool(i) }
     } finally {
       is.foreach(_.close())
     }
@@ -106,7 +106,8 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool)
         try {
           schedulingMode = SchedulingMode.withName(xmlSchedulingMode)
         } catch {
-          case e: Exception => logWarning("Error xml schedulingMode, using default schedulingMode")
+          case e: NoSuchElementException =>
+            logWarning("Error xml schedulingMode, using default schedulingMode")
         }
       }
 
