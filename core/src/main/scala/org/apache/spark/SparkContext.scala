@@ -332,7 +332,7 @@ class SparkContext(
       valueClass: Class[V],
       minSplits: Int = defaultMinSplits
       ): RDD[(K, V)] = {
-    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
+    new HadoopDatasetRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
@@ -343,9 +343,15 @@ class SparkContext(
       valueClass: Class[V],
       minSplits: Int = defaultMinSplits
       ) : RDD[(K, V)] = {
-    val conf = new JobConf(hadoopConfiguration)
-    FileInputFormat.setInputPaths(conf, path)
-    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
+    val broadcastHadoopConfiguration = broadcast(new SerializableWritable(hadoopConfiguration))
+    new HadoopFileRDD(
+      this,
+      path,
+      broadcastHadoopConfiguration,
+      inputFormatClass,
+      keyClass,
+      valueClass,
+      minSplits)
   }
 
   /**
