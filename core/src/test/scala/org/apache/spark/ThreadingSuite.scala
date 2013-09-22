@@ -152,36 +152,43 @@ class ThreadingSuite extends FunSuite with LocalSparkContext {
 
   test("set local properties in different thread") {
     sc = new SparkContext("local", "test")
+    val sem = new Semaphore(0)
 
-    val threads = (1 to 5).map{ i =>
+    val threads = (1 to 5).map { i =>
       new Thread() {
         override def run() {
           sc.setLocalProperty("test", i.toString)
           assert(sc.getLocalProperty("test") === i.toString)
+          sem.release()
         }
       }
     }
 
     threads.foreach(_.start())
 
+    sem.acquire(5)
     assert(sc.getLocalProperty("test") === null)
   }
 
   test("set and get local properties in parent-children thread") {
     sc = new SparkContext("local", "test")
     sc.setLocalProperty("test", "parent")
+    val sem = new Semaphore(0)
 
-    val threads = (1 to 5).map{ i =>
+    val threads = (1 to 5).map { i =>
       new Thread() {
         override def run() {
           assert(sc.getLocalProperty("test") === "parent")
           sc.setLocalProperty("test", i.toString)
           assert(sc.getLocalProperty("test") === i.toString)
+          sem.release()
         }
       }
     }
 
     threads.foreach(_.start())
+
+    sem.acquire(5)
     assert(sc.getLocalProperty("test") === "parent")
     assert(sc.getLocalProperty("Foo") === null)
   }

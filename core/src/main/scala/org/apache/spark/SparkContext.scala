@@ -275,7 +275,8 @@ class SparkContext(
     }
   }
 
-  def getLocalProperty(key: String): String = Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
+  def getLocalProperty(key: String): String =
+    Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
 
   /** Set a human readable description of the current job. */
   def setJobDescription(value: String) {
