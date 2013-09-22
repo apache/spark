@@ -69,18 +69,12 @@ class HadoopFileRDD[K, V](
  */
 class HadoopDatasetRDD[K, V](
     sc: SparkContext,
-    @transient conf: JobConf,
+    confBroadcast: Broadcast[SerializableWritable[JobConf]],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
     minSplits: Int)
   extends HadoopRDD[K, V](sc, inputFormatClass, keyClass, valueClass, minSplits) {
-
-  // Add necessary security credentials to the JobConf before broadcasting it.
-  SparkEnv.get.hadoop.addCredentials(conf)
-
-  // A Hadoop JobConf can be about 10 KB, which is pretty big, so broadcast it.
-  private val confBroadcast = sc.broadcast(new SerializableWritable(conf))
 
   override def getJobConf(): JobConf = confBroadcast.value.value
 }
