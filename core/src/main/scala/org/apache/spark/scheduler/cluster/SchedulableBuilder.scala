@@ -51,8 +51,8 @@ private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)
 private[spark] class FairSchedulableBuilder(val rootPool: Pool)
   extends SchedulableBuilder with Logging {
 
-  val schedulerAllocFile = System.getProperty("spark.fairscheduler.allocation.file")
-  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.cluster.fair.pool"
+  val schedulerAllocFile = System.getProperty("spark.scheduler.allocation.file")
+  val FAIR_SCHEDULER_PROPERTIES = "spark.scheduler.pool"
   val DEFAULT_POOL_NAME = "default"
   val MINIMUM_SHARES_PROPERTY = "minShare"
   val SCHEDULING_MODE_PROPERTY = "schedulingMode"
@@ -60,7 +60,7 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool)
   val POOL_NAME_PROPERTY = "@name"
   val POOLS_PROPERTY = "pool"
   val DEFAULT_SCHEDULING_MODE = SchedulingMode.FIFO
-  val DEFAULT_MINIMUM_SHARE = 2
+  val DEFAULT_MINIMUM_SHARE = 0
   val DEFAULT_WEIGHT = 1
 
   override def buildPools() {

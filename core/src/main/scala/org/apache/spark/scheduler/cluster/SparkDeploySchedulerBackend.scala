@@ -50,7 +50,7 @@ private[spark] class SparkDeploySchedulerBackend(
       "org.apache.spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
     val sparkHome = sc.getSparkHome().getOrElse(null)
     val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome,
-        sc.ui.appUIAddress)
+        "http://" + sc.ui.appUIAddress)
 
     client = new Client(sc.env.actorSystem, master, appDesc, this)
     client.start()
@@ -76,17 +76,17 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  override def executorAdded(executorId: String, workerId: String, hostPort: String, cores: Int, memory: Int) {
+  override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int, memory: Int) {
     logInfo("Granted executor ID %s on hostPort %s with %d cores, %s RAM".format(
-       executorId, hostPort, cores, Utils.megabytesToString(memory)))
+      fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }
 
-  override def executorRemoved(executorId: String, message: String, exitStatus: Option[Int]) {
+  override def executorRemoved(fullId: String, message: String, exitStatus: Option[Int]) {
     val reason: ExecutorLossReason = exitStatus match {
       case Some(code) => ExecutorExited(code)
       case None => SlaveLost(message)
     }
-    logInfo("Executor %s removed: %s".format(executorId, message))
-    removeExecutor(executorId, reason.toString)
+    logInfo("Executor %s removed: %s".format(fullId, message))
+    removeExecutor(fullId.split("/")(1), reason.toString)
   }
 }

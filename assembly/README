@@ -4,10 +4,9 @@ It creates a single tar.gz file that includes all needed dependency of the proje
 except for org.apache.hadoop.* jars that are supposed to be available from the
 deployed Hadoop cluster.
 
-This module is off by default to avoid spending extra time on top of repl-bin
-module. To activate it specify the profile in the command line
-  -Passembly
+This module is off by default. To activate it specify the profile in the command line
+  -Pbigtop-dist
 
-In case you want to avoid building time-expensive repl-bin module, that shaders
-all the dependency into a big flat jar supplement maven command with
-  -DnoExpensive
+If you need to build an assembly for a different version of Hadoop the
+hadoop-version system property needs to be set as in this example:
+  -Dhadoop.version=2.0.6-alpha
