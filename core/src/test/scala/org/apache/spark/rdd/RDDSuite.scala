@@ -25,7 +25,6 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
 import scala.collection.parallel.mutable
 import org.apache.spark._
-import org.apache.spark.rdd.CoalescedRDDPartition
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
