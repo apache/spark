@@ -17,22 +17,25 @@
 
 package org.apache.spark.deploy.yarn
 
+import java.io.IOException;
 import java.net.Socket
+import java.security.PrivilegedExceptionAction
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.net.NetUtils
+import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
-import scala.collection.JavaConversions._
 import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.util.Utils
 import org.apache.hadoop.security.UserGroupInformation
-import java.security.PrivilegedExceptionAction
+import scala.collection.JavaConversions._
 
 class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) extends Logging {
 
@@ -43,18 +46,26 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   private var appAttemptId: ApplicationAttemptId = null
   private var userThread: Thread = null
   private val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
+  private val fs = FileSystem.get(yarnConf)
 
   private var yarnAllocator: YarnAllocationHandler = null
   private var isFinished:Boolean = false
   private var uiAddress: String = ""
+  private val maxAppAttempts: Int = conf.getInt(YarnConfiguration.RM_AM_MAX_RETRIES,
+    YarnConfiguration.DEFAULT_RM_AM_MAX_RETRIES)
+  private var isLastAMRetry: Boolean = true
 
 
   def run() {
     // setup the directories so things go to yarn approved directories rather
     // then user specified and /tmp
     System.setProperty("spark.local.dir", getLocalDirs())
+
+    // use priority 30 as its higher then HDFS. Its same priority as MapReduce is using
+    ShutdownHookManager.get().addShutdownHook(new AppMasterShutdownHook(this), 30)
     
     appAttemptId = getApplicationAttemptId()
+    isLastAMRetry = appAttemptId.getAttemptId() >= maxAppAttempts;
     resourceManager = registerWithResourceManager()
 
     // Workaround until hadoop moves to something which has
@@ -183,6 +194,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
           // It need shutdown hook to set SUCCEEDED
           successed = true
         } finally {
+          logDebug("finishing main")
+          isLastAMRetry = true;
           if (successed) {
             ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.SUCCEEDED)
           } else {
@@ -228,8 +241,6 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       ApplicationMaster.incrementAllocatorLoop(ApplicationMaster.ALLOCATOR_LOOP_WAIT_COUNT)
     }
   }
-
-
 
   private def allocateWorkers() {
     try {
@@ -329,6 +340,40 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     resourceManager.finishApplicationMaster(finishReq)
 
   }
+
+  /**
+   * clean up the staging directory. 
+   */
+  private def cleanupStagingDir() { 
+    var stagingDirPath: Path = null
+    try {
+      val preserveFiles = System.getProperty("spark.yarn.preserve.staging.files", "false").toBoolean
+      if (!preserveFiles) {
+        stagingDirPath = new Path(System.getenv("SPARK_YARN_JAR_PATH")).getParent()
+        if (stagingDirPath == null) {
+          logError("Staging directory is null")
+          return
+        }
+        logInfo("Deleting staging directory " + stagingDirPath)
+        fs.delete(stagingDirPath, true)
+      }
+    } catch {
+      case e: IOException =>
+        logError("Failed to cleanup staging dir " + stagingDirPath, e)
+    }
+  }
+
+  // The shutdown hook that runs when a signal is received AND during normal
+  // close of the JVM. 
+  class AppMasterShutdownHook(appMaster: ApplicationMaster) extends Runnable {
+
+    def run() {
+      logInfo("AppMaster received a signal.")
+      // we need to clean up staging dir before HDFS is shut down
+      // make sure we don't delete it until this is the last AM
+      if (appMaster.isLastAMRetry) appMaster.cleanupStagingDir()
+    }
+  }
  
 }
 
@@ -368,6 +413,8 @@ object ApplicationMaster {
     // Add a shutdown hook - as a best case effort in case users do not call sc.stop or do System.exit
     // Should not really have to do this, but it helps yarn to evict resources earlier.
     // not to mention, prevent Client declaring failure even though we exit'ed properly.
+    // Note that this will unfortunately not properly clean up the staging files because it gets called to 
+    // late and the filesystem is already shutdown.
     if (modified) {
       Runtime.getRuntime().addShutdownHook(new Thread with Logging { 
         // This is not just to log, but also to ensure that log system is initialized for this instance when we actually are 'run'
