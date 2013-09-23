@@ -35,7 +35,7 @@ class DriverSuite extends FunSuite with Timeouts {
     val masters = Table(("master"), ("local"), ("local-cluster[2,1,512]"))
     forAll(masters) { (master: String) =>
       failAfter(30 seconds) {
-        Utils.execute(Seq("./spark-class", "org.apache.spark.DriverWithoutCleanup", master),
+        Utils.execute(Seq("./sbin/spark-class", "org.apache.spark.DriverWithoutCleanup", master),
           new File(System.getenv("SPARK_HOME")))
       }
     }
