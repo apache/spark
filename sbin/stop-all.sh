@@ -17,19 +17,16 @@
 # limitations under the License.
 #
 
-# Run a Spark command on all slave hosts.
+# Start all spark daemons.
+# Run this on the master nde
 
-usage="Usage: spark-daemons.sh [--config confdir] [--hosts hostlistfile] [start|stop] command instance-number args..."
 
-# if no args specified, show usage
-if [ $# -le 1 ]; then
-  echo $usage
-  exit 1
-fi
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+# Load the Spark configuration
+. "$sbin/spark-config.sh"
 
-. "$bin/spark-config.sh"
-
-exec "$bin/slaves.sh" cd "$SPARK_HOME" \; "$bin/spark-daemon.sh" "$@"
+# Stop the slaves, then the master
+"$sbin"/stop-slaves.sh
+"$sbin"/stop-master.sh

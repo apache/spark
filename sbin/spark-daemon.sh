@@ -37,10 +37,10 @@ if [ $# -le 1 ]; then
   exit 1
 fi
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
-. "$bin/spark-config.sh"
+. "$sbin/spark-config.sh"
 
 # get arguments
 startStop=$1

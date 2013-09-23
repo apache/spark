@@ -17,21 +17,18 @@
 # limitations under the License.
 #
 
-# Starts the master on the machine this script is executed on.
+# Start all spark daemons.
+# Starts the master on this node.
+# Starts a worker on each node specified in conf/slaves
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
-. "$bin/spark-config.sh"
+# Load the Spark configuration
+. "$sbin/spark-config.sh"
 
-if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
-  . "${SPARK_CONF_DIR}/spark-env.sh"
-fi
+# Start Master
+"$sbin"/start-master.sh
 
-if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  "$bin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker 1
-else
-  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$bin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
-  done
-fi
+# Start Workers
+"$sbin"/start-slaves.sh
