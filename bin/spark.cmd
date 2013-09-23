@@ -17,7 +17,11 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
+rem This is the entry point for running a Spark class. To avoid polluting
+rem the environment, it just launches a new cmd to do the real work.
+
+
 rem Find the path of sbin
 set SBIN=%~dp0..\sbin\
 
-cmd /V /E /C %SBIN%spark-class2.cmd org.apache.spark.repl.Main %*
+cmd /V /E /C %SBIN%spark-class2.cmd %*

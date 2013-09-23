@@ -17,6 +17,7 @@
 # limitations under the License.
 #
 
-FWDIR="`dirname $0`"
+FWDIR="$(cd `dirname $0`/..; pwd)"
+
 echo "Running spark-executor with framework dir = $FWDIR"
-exec $FWDIR/spark-class org.apache.spark.executor.MesosExecutorBackend
+exec $FWDIR/sbin/spark-class org.apache.spark.executor.MesosExecutorBackend

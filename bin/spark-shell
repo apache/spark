@@ -28,7 +28,7 @@
 # Enter posix mode for bash
 set -o posix
 
-FWDIR="`dirname $0`"
+FWDIR="$(cd `dirname $0`/..; pwd)"
 
 for o in "$@"; do
   if [ "$1" = "-c" -o "$1" = "--cores" ]; then
@@ -79,7 +79,7 @@ if [[ ! $? ]]; then
   saved_stty=""
 fi
 
-$FWDIR/spark-class $OPTIONS org.apache.spark.repl.Main "$@"
+$FWDIR/sbin/spark-class $OPTIONS org.apache.spark.repl.Main "$@"
 
 # record the exit status lest it be overwritten:
 # then reenable echo and propagate the code.
