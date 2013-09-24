@@ -20,16 +20,13 @@ RRDD <- function(jrdd) {
   new("RRDD", jrdd = jrdd)
 }
 
-# collect(): Return a vector that contains all of the elements in this RRDD.
-# TODO
-setGeneric("collect", function(x) { standardGeneric("collect") })
+# collect(): Return a list that contains all of the elements in this RRDD.
+# NOTE: supports only RRDD[Array[Byte]] and RRDD[primitive java type] for now.
+setGeneric("collect", function(rrdd) { standardGeneric("collect") })
 setMethod("collect",
-          signature(x = "RRDD"),
-          function(x) { 
-            collected <- .jcall(x@jrdd, "Ljava/util/List;", "collect")
+          signature(rrdd = "RRDD"),
+          function(rrdd) { 
+            collected <- .jcall(rrdd@jrdd, "Ljava/util/List;", "collect")
             JavaListToRList(collected)
           })
-# For JavaRDD[Array[Byte]]:
-# x <- jrdd$collect()
-# byteArrays <- .jevalArray(x$toArray())
-# unserialize(.jevalArray(byteArrays[[1]]))
+

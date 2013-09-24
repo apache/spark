@@ -15,11 +15,17 @@ textFile <- function(jsc, name, minSplits=NULL) {
   RRDD(jrdd)
 }
 
-# Distribute a local R collection (list/vector) to form an RRDD.
+# Distribute a local R collection  to form an RRDD[Array[Byte]].
 # TODO: bound/safeguard numSlices
 # TODO: unit tests for if the split works for all primitives
-parallelize <- function(jsc, coll, numSlices) {
-  sliceLen <- length(coll) / numSlices
+# TODO: support matrix, data frame, etc
+parallelize <- function(jsc, coll, numSlices = 1) {
+  if (numSlices > length(coll)) {
+    message("context.R: parallelize: numSlices larger than coll's length; defaulting numSlices to the length.")
+    numSlices = length(coll)
+  }
+
+  sliceLen <- length(coll) %/% numSlices
   slices <- split(coll, rep(1:(numSlices + 1), each = sliceLen)[1:length(coll)])
 
   # vector of raws
