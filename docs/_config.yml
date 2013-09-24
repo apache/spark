@@ -3,8 +3,8 @@ markdown: kramdown
 
 # These allow the documentation to be updated with nerw releases
 # of Spark, Scala, and Mesos.
-SPARK_VERSION: 0.8.0-incubating
-SPARK_VERSION_SHORT: 0.8.0
+SPARK_VERSION: 0.8.1-incubating-SNAPSHOT
+SPARK_VERSION_SHORT: 0.8.1-SNAPSHOT
 SCALA_VERSION: 2.9.3
 MESOS_VERSION: 0.13.0
 SPARK_ISSUE_TRACKER_URL: https://spark-project.atlassian.net
