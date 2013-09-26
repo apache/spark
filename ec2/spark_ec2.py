@@ -364,12 +364,12 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
   slave_nodes = []
   for res in reservations:
     active = [i for i in res.instances if is_active(i)]
-    if len(active) > 0:
-      group_names = [g.name for g in res.groups]
+    for inst in active:
+      group_names = [g.name for g in inst.groups]
       if group_names == [cluster_name + "-master"]:
-        master_nodes += res.instances
+        master_nodes.append(inst)
       elif group_names == [cluster_name + "-slaves"]:
-        slave_nodes += res.instances
+        slave_nodes.append(inst)
   if any((master_nodes, slave_nodes)):
     print ("Found %d master(s), %d slaves" %
            (len(master_nodes), len(slave_nodes)))

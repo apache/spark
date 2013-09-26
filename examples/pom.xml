@@ -93,7 +93,7 @@
     <dependency>
       <groupId>org.apache.cassandra</groupId>
       <artifactId>cassandra-all</artifactId>
-      <version>1.2.5</version>
+      <version>1.2.6</version>
       <exclusions>
         <exclusion>
           <groupId>com.google.guava</groupId>

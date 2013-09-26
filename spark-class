@@ -37,7 +37,7 @@ fi
 
 # If this is a standalone cluster daemon, reset SPARK_JAVA_OPTS and SPARK_MEM to reasonable
 # values for that; it doesn't need a lot
-if [ "$1" = "spark.deploy.master.Master" -o "$1" = "spark.deploy.worker.Worker" ]; then
+if [ "$1" = "org.apache.spark.deploy.master.Master" -o "$1" = "org.apache.spark.deploy.worker.Worker" ]; then
   SPARK_MEM=${SPARK_DAEMON_MEMORY:-512m}
   SPARK_DAEMON_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS -Dspark.akka.logLifecycleEvents=true"
   # Do not overwrite SPARK_JAVA_OPTS environment variable in this script
@@ -49,19 +49,19 @@ fi
 
 # Add java opts for master, worker, executor. The opts maybe null
 case "$1" in
-  'spark.deploy.master.Master')
+  'org.apache.spark.deploy.master.Master')
     OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_MASTER_OPTS"
     ;;
-  'spark.deploy.worker.Worker')
+  'org.apache.spark.deploy.worker.Worker')
     OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_WORKER_OPTS"
     ;;
-  'spark.executor.StandaloneExecutorBackend')
+  'org.apache.spark.executor.StandaloneExecutorBackend')
     OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     ;;
-  'spark.executor.MesosExecutorBackend')
+  'org.apache.spark.executor.MesosExecutorBackend')
     OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     ;;
-  'spark.repl.Main')
+  'org.apache.spark.repl.Main')
     OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_REPL_OPTS"
     ;;
 esac

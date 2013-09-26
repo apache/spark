@@ -81,7 +81,7 @@ object SparkBuild extends Build {
     organization       := "org.apache.spark",
     version            := "0.8.0-SNAPSHOT",
     scalaVersion       := "2.10.2",
-//    scalacOptions      := Seq("-unchecked", "-optimize", "-deprecation", "-target:" + SCALAC_JVM_VERSION),
+    scalacOptions      := Seq("-unchecked", "-optimize", "-deprecation", "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
@@ -195,7 +195,7 @@ object SparkBuild extends Build {
         "org.slf4j"                % "slf4j-log4j12"    % slf4jVersion,
         "com.ning"                 % "compress-lzf"     % "0.8.4",
         "org.xerial.snappy"        % "snappy-java"      % "1.0.5",
-        "commons-daemon"           % "commons-daemon"   % "1.0.10",
+        "commons-daemon"           % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
         "org.ow2.asm"              % "asm"              % "4.0",
         "com.google.protobuf"      % "protobuf-java"    % "2.4.1",
         "de.javakaffee"            % "kryo-serializers" % "0.22",
@@ -204,7 +204,7 @@ object SparkBuild extends Build {
         "net.liftweb"             %% "lift-json"        % "2.5.1"  excludeAll(excludeNetty),
         "it.unimi.dsi"             % "fastutil"         % "6.4.4",
         "colt"                     % "colt"             % "1.2.0",
-        "org.apache.mesos"         % "mesos"            % "0.12.1",
+        "org.apache.mesos"         % "mesos"            % "0.13.0",
         "net.java.dev.jets3t"      % "jets3t"           % "0.7.1",
         "org.apache.derby"         % "derby"            % "10.4.2.0"                     % "test",
         "org.apache.hadoop"        % "hadoop-client"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
@@ -215,9 +215,7 @@ object SparkBuild extends Build {
         "com.codahale.metrics"     % "metrics-json"     % "3.0.0",
         "com.codahale.metrics"     % "metrics-ganglia"  % "3.0.0",
         "com.twitter"             %% "chill"            % "0.3.1",
-        "com.twitter"              % "chill-java"       % "0.3.1",
-        "org.scala-lang"           % "jline"            % "2.10.2",
-        "org.scala-lang"           % "scala-reflect"    % "2.10.2"
+        "com.twitter"              % "chill-java"       % "0.3.1"
       ) 
   )
 
@@ -227,7 +225,9 @@ object SparkBuild extends Build {
 
  def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
-    libraryDependencies <+= scalaVersion("org.scala-lang" % "scala-compiler" % _)
+   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
+   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v ),
+   libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
   )
 
   
@@ -237,7 +237,7 @@ object SparkBuild extends Build {
       "com.twitter"          %% "algebird-core"   % "0.1.11",
       "org.apache.hbase"     %  "hbase"           % "0.94.6" excludeAll(excludeNetty, excludeAsm),
       "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm),
-      "org.apache.cassandra" % "cassandra-all" % "1.2.5"
+      "org.apache.cassandra" % "cassandra-all" % "1.2.6"
         exclude("com.google.guava", "guava")
         exclude("com.googlecode.concurrentlinkedhashmap", "concurrentlinkedhashmap-lru")
         exclude("com.ning","compress-lzf")
