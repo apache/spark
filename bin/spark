@@ -31,40 +31,11 @@ if [ -e $FWDIR/conf/spark-env.sh ] ; then
 fi
 
 if [ -z "$1" ]; then
-  echo "Usage: spark-class <class> [<args>]" >&2
+  echo "Usage: spark <class> [<args>]" >&2
+  echo "Usage: export SPARK_CLASSPATH before running the command" >&2
   exit 1
 fi
 
-# If this is a standalone cluster daemon, reset SPARK_JAVA_OPTS and SPARK_MEM to reasonable
-# values for that; it doesn't need a lot
-if [ "$1" = "org.apache.spark.deploy.master.Master" -o "$1" = "org.apache.spark.deploy.worker.Worker" ]; then
-  SPARK_MEM=${SPARK_DAEMON_MEMORY:-512m}
-  SPARK_DAEMON_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS -Dspark.akka.logLifecycleEvents=true"
-  # Do not overwrite SPARK_JAVA_OPTS environment variable in this script
-  OUR_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS"   # Empty by default
-else
-  OUR_JAVA_OPTS="$SPARK_JAVA_OPTS"
-fi
-
-
-# Add java opts for master, worker, executor. The opts maybe null
-case "$1" in
-  'org.apache.spark.deploy.master.Master')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_MASTER_OPTS"
-    ;;
-  'org.apache.spark.deploy.worker.Worker')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_WORKER_OPTS"
-    ;;
-  'org.apache.spark.executor.StandaloneExecutorBackend')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
-    ;;
-  'org.apache.spark.executor.MesosExecutorBackend')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
-    ;;
-  'org.apache.spark.repl.Main')
-    OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_REPL_OPTS"
-    ;;
-esac
 
 # Find the java binary
 if [ -n "${JAVA_HOME}" ]; then
@@ -78,14 +49,18 @@ else
   fi
 fi
 
-# Set SPARK_MEM if it isn't already set since we also use it for this process
+# Set SPARK_MEM if it isn't already set
 SPARK_MEM=${SPARK_MEM:-512m}
 export SPARK_MEM
+
+# Set APP_MEM if it isn't already set, we use this for this process as the app driver process may need 
+# as much memory as specified in SPARK_MEM
+APP_MEM=${APP_MEM:-512m}
 
 # Set JAVA_OPTS to be able to load native libraries and to set heap size
 JAVA_OPTS="$OUR_JAVA_OPTS"
 JAVA_OPTS="$JAVA_OPTS -Djava.library.path=$SPARK_LIBRARY_PATH"
-JAVA_OPTS="$JAVA_OPTS -Xms$SPARK_MEM -Xmx$SPARK_MEM"
+JAVA_OPTS="$JAVA_OPTS -Xms$APP_MEM -Xmx$APP_MEM"
 # Load extra JAVA_OPTS from conf/java-opts, if it exists
 if [ -e $FWDIR/conf/java-opts ] ; then
   JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
