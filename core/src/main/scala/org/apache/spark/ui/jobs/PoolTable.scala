@@ -21,8 +21,7 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.xml.Node
 
-import org.apache.spark.scheduler.Stage
-import org.apache.spark.scheduler.cluster.Schedulable
+import org.apache.spark.scheduler.{Schedulable, Stage}
 import org.apache.spark.ui.UIUtils
 
 /** Table showing list of pools */

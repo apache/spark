@@ -28,7 +28,6 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.scheduler.cluster.TaskInfo
 import org.apache.spark.storage.{BlockManager, BlockManagerMaster}
 import org.apache.spark.util.{MetadataCleaner, TimeStampedHashMap}
 
