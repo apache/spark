@@ -64,8 +64,8 @@
   </dependencies>
 
   <build>
-    <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala.version}/test-classes</testOutputDirectory>
+    <outputDirectory>target/scala-${scala-short.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala-short.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

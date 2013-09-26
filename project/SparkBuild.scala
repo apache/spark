@@ -183,8 +183,7 @@ object SparkBuild extends Build {
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
     resolvers ++= Seq(
-      // "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
-      // "Spray Repository"     at "http://repo.spray.cc/",
+       "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
        "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
 

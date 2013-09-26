@@ -86,17 +86,17 @@
     </dependency>
     <dependency>
       <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-zeromq_${scala.version}</artifactId>
+      <artifactId>akka-zeromq_${scala-short.version}</artifactId>
       <version>${akka.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.version}</artifactId>
+      <artifactId>scalatest_${scala-short.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.version}</artifactId>
+      <artifactId>scalacheck_${scala-short.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -109,10 +109,14 @@
       <artifactId>slf4j-log4j12</artifactId>
       <scope>test</scope>
     </dependency>
+    <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+    </dependency>
   </dependencies>
   <build>
-    <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala.version}/test-classes</testOutputDirectory>
+    <outputDirectory>target/scala-${scala-short.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala-short.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
         <groupId>org.scalatest</groupId>

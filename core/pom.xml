@@ -83,7 +83,7 @@
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>chill_2.10</artifactId>
+      <artifactId>chill_${scala-short.version}</artifactId>
       <version>0.3.1</version>
     </dependency>
     <dependency>
@@ -92,20 +92,12 @@
       <version>0.3.1</version>
     </dependency>
     <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>scala-actors</artifactId>
+      <groupId>com.typesafe.akka</groupId>
+      <artifactId>akka-remote_${scala-short.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-remote_${scala.version}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-slf4j_${scala.version}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>scalap</artifactId>
+      <artifactId>akka-slf4j_${scala-short.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
@@ -113,7 +105,7 @@
     </dependency>
     <dependency>
       <groupId>net.liftweb</groupId>
-      <artifactId>lift-json_2.10</artifactId>
+      <artifactId>lift-json_${scala-short.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>it.unimi.dsi</groupId>
@@ -125,7 +117,7 @@
     </dependency>
     <dependency>
       <groupId>com.github.scala-incubator.io</groupId>
-      <artifactId>scala-io-file_2.10</artifactId>
+      <artifactId>scala-io-file_${scala-short.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.mesos</groupId>
@@ -161,13 +153,18 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.version}</artifactId>
+      <artifactId>scalatest_${scala-short.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.version}</artifactId>
+      <artifactId>scalacheck_${scala-short.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -187,8 +184,8 @@
     </dependency>
   </dependencies>
   <build>
-    <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala.version}/test-classes</testOutputDirectory>
+    <outputDirectory>target/scala-${scala-short.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala-short.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
