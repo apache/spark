@@ -557,7 +557,6 @@
             <useZincServer>true</useZincServer>
             <args>
               <arg>-unchecked</arg>
-              <arg>-optimise</arg>
               <arg>-deprecation</arg>
             </args>
             <jvmArgs>
