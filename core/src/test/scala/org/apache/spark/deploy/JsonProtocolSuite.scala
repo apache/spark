@@ -79,7 +79,7 @@ class JsonProtocolSuite extends FunSuite {
   }
   def createExecutorRunner() : ExecutorRunner = {
     new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
-      new File("sparkHome"), new File("workDir"))
+      new File("sparkHome"), new File("workDir"), ExecutorState.RUNNING)
   }
 
   def assertValidJson(json: JValue) {
