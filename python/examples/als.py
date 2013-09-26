@@ -1,3 +1,20 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 """
 This example requires numpy (http://www.numpy.org/)
 """
@@ -31,8 +48,7 @@ def update(i, vec, mat, ratings):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print >> sys.stderr, \
-            "Usage: PythonALS <master> <M> <U> <F> <iters> <slices>"
+        print >> sys.stderr, "Usage: als <master> <M> <U> <F> <iters> <slices>"
         exit(-1)
     sc = SparkContext(sys.argv[1], "PythonALS", pyFiles=[realpath(__file__)])
     M = int(sys.argv[2]) if len(sys.argv) > 2 else 100
@@ -67,5 +83,5 @@ if __name__ == "__main__":
         usb = sc.broadcast(us)
 
         error = rmse(R, ms, us)
-        print "Iteration %d:" % i 
+        print "Iteration %d:" % i
         print "\nRMSE: %5.4f\n" % error

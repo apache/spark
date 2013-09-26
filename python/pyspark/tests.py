@@ -1,3 +1,20 @@
+#
+# Licensed to the Apache Software Foundation (ASF) under one or more
+# contributor license agreements.  See the NOTICE file distributed with
+# this work for additional information regarding copyright ownership.
+# The ASF licenses this file to You under the Apache License, Version 2.0
+# (the "License"); you may not use this file except in compliance with
+# the License.  You may obtain a copy of the License at
+#
+#    http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+#
+
 """
 Unit tests for PySpark; additional tests are implemented as doctests in
 individual modules.
@@ -47,7 +64,7 @@ class TestCheckpoint(PySparkTestCase):
         flatMappedRDD = parCollection.flatMap(lambda x: range(1, x + 1))
 
         self.assertFalse(flatMappedRDD.isCheckpointed())
-        self.assertIsNone(flatMappedRDD.getCheckpointFile())
+        self.assertTrue(flatMappedRDD.getCheckpointFile() is None)
 
         flatMappedRDD.checkpoint()
         result = flatMappedRDD.collect()
@@ -62,13 +79,13 @@ class TestCheckpoint(PySparkTestCase):
         flatMappedRDD = parCollection.flatMap(lambda x: [x])
 
         self.assertFalse(flatMappedRDD.isCheckpointed())
-        self.assertIsNone(flatMappedRDD.getCheckpointFile())
+        self.assertTrue(flatMappedRDD.getCheckpointFile() is None)
 
         flatMappedRDD.checkpoint()
         flatMappedRDD.count()  # forces a checkpoint to be computed
         time.sleep(1)  # 1 second
 
-        self.assertIsNotNone(flatMappedRDD.getCheckpointFile())
+        self.assertTrue(flatMappedRDD.getCheckpointFile() is not None)
         recovered = self.sc._checkpointFile(flatMappedRDD.getCheckpointFile())
         self.assertEquals([1, 2, 3, 4], recovered.collect())
 
@@ -107,6 +124,17 @@ class TestAddFile(PySparkTestCase):
         self.sc.addFile(path)
         from userlibrary import UserClass
         self.assertEqual("Hello World!", UserClass().hello())
+
+    def test_add_egg_file_locally(self):
+        # To ensure that we're actually testing addPyFile's effects, check that
+        # this fails due to `userlibrary` not being on the Python path:
+        def func():
+            from userlib import UserClass
+        self.assertRaises(ImportError, func)
+        path = os.path.join(SPARK_HOME, "python/test_support/userlib-0.1-py2.7.egg")
+        self.sc.addPyFile(path)
+        from userlib import UserClass
+        self.assertEqual("Hello World from inside a package!", UserClass().hello())
 
 
 class TestIO(PySparkTestCase):
@@ -147,9 +175,12 @@ class TestDaemon(unittest.TestCase):
         time.sleep(1)
 
         # daemon should no longer accept connections
-        with self.assertRaises(EnvironmentError) as trap:
+        try:
             self.connect(port)
-        self.assertEqual(trap.exception.errno, ECONNREFUSED)
+        except EnvironmentError as exception:
+            self.assertEqual(exception.errno, ECONNREFUSED)
+        else:
+            self.fail("Expected EnvironmentError to be raised")
 
     def test_termination_stdin(self):
         """Ensure that daemon and workers terminate when stdin is closed."""
