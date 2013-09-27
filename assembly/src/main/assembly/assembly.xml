@@ -39,23 +39,20 @@
     </fileSet>
     <fileSet>
       <directory>
-        ${project.parent.basedir}/bin/
+        ${project.parent.basedir}/sbin/
       </directory>
-      <outputDirectory>/bin</outputDirectory>
+      <outputDirectory>/sbin</outputDirectory>
       <includes>
         <include>**/*</include>
       </includes>
     </fileSet>
     <fileSet>
       <directory>
-        ${project.parent.basedir}
+        ${project.parent.basedir}/bin/
       </directory>
       <outputDirectory>/bin</outputDirectory>
       <includes>
-        <include>run-example*</include>
-        <include>spark-class*</include>
-        <include>spark-shell*</include>
-        <include>spark-executor*</include>
+        <include>**/*</include>
       </includes>
     </fileSet>
   </fileSets>

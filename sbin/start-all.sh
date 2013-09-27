@@ -1,4 +1,4 @@
-#!/bin/sh
+#!/usr/bin/env bash
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,6 +17,18 @@
 # limitations under the License.
 #
 
-FWDIR="`dirname $0`"
-echo "Running spark-executor with framework dir = $FWDIR"
-exec $FWDIR/spark-class org.apache.spark.executor.MesosExecutorBackend
+# Start all spark daemons.
+# Starts the master on this node.
+# Starts a worker on each node specified in conf/slaves
+
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
+
+# Load the Spark configuration
+. "$sbin/spark-config.sh"
+
+# Start Master
+"$sbin"/start-master.sh
+
+# Start Workers
+"$sbin"/start-slaves.sh

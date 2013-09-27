@@ -125,7 +125,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       StandaloneSchedulerBackend.ACTOR_NAME)
     val uri = System.getProperty("spark.executor.uri")
     if (uri == null) {
-      val runScript = new File(sparkHome, "spark-class").getCanonicalPath
+      val runScript = new File(sparkHome, "./sbin/spark-class").getCanonicalPath
       command.setValue(
         "\"%s\" org.apache.spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
           runScript, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
@@ -134,7 +134,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
       command.setValue(
-        "cd %s*; ./spark-class org.apache.spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
+        "cd %s*; ./sbin/spark-class org.apache.spark.executor.StandaloneExecutorBackend %s %s %s %d".format(
           basename, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }

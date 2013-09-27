@@ -37,10 +37,10 @@ if [ $# -le 1 ]; then
   exit 1
 fi
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
-. "$bin/spark-config.sh"
+. "$sbin/spark-config.sh"
 
 # get arguments
 startStop=$1
@@ -128,7 +128,7 @@ case $startStop in
     spark_rotate_log "$log"
     echo starting $command, logging to $log
     cd "$SPARK_PREFIX"
-    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
+    nohup nice -n $SPARK_NICENESS "$SPARK_PREFIX"/sbin/spark-class $command "$@" >> "$log" 2>&1 < /dev/null &
     newpid=$!
     echo $newpid > $pid
     sleep 2

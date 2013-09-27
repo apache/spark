@@ -17,19 +17,21 @@
 # limitations under the License.
 #
 
-# Usage: start-slave.sh <worker#> <master-spark-URL>
-#   where <master-spark-URL> is like "spark://localhost:7077"
+# Starts the master on the machine this script is executed on.
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
-# Set SPARK_PUBLIC_DNS so slaves can be linked in master web UI
-if [ "$SPARK_PUBLIC_DNS" = "" ]; then
-    # If we appear to be running on EC2, use the public address by default:
-    # NOTE: ec2-metadata is installed on Amazon Linux AMI. Check based on that and hostname
-    if command -v ec2-metadata > /dev/null || [[ `hostname` == *ec2.internal ]]; then
-        export SPARK_PUBLIC_DNS=`wget -q -O - http://instance-data.ec2.internal/latest/meta-data/public-hostname`
-    fi
+. "$sbin/spark-config.sh"
+
+if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
+  . "${SPARK_CONF_DIR}/spark-env.sh"
 fi
 
-"$bin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker "$@"
+if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
+  "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker 1
+else
+  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
+    "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
+  done
+fi
