@@ -43,40 +43,23 @@ import org.apache.hadoop.conf.{Configuration, Configurable}
 class HadoopFileRDD[K, V](
     sc: SparkContext,
     path: String,
-    hadoopConfBroadcast: Broadcast[SerializableWritable[Configuration]],
+    confBroadcast: Broadcast[SerializableWritable[Configuration]],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
     minSplits: Int)
-  extends HadoopRDD[K, V](sc, inputFormatClass, keyClass, valueClass, minSplits) {
-
-  private val jobConfCacheKey = "rdd_%d_job_conf".format(id)
+  extends HadoopRDD[K, V](sc, confBroadcast, inputFormatClass, keyClass, valueClass, minSplits) {
 
   override def getJobConf(): JobConf = {
     if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
       return HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
     } else {
-      val newJobConf = new JobConf(hadoopConfBroadcast.value.value)
+      val newJobConf = new JobConf(confBroadcast.value.value)
       FileInputFormat.setInputPaths(newJobConf, path)
       HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
       return newJobConf
     }
   }
-}
-
-/**
- * An RDD that reads a Hadoop dataset as specified by a JobConf (e.g. tables in HBase).
- */
-class HadoopDatasetRDD[K, V](
-    sc: SparkContext,
-    confBroadcast: Broadcast[SerializableWritable[JobConf]],
-    inputFormatClass: Class[_ <: InputFormat[K, V]],
-    keyClass: Class[K],
-    valueClass: Class[V],
-    minSplits: Int)
-  extends HadoopRDD[K, V](sc, inputFormatClass, keyClass, valueClass, minSplits) {
-
-  override def getJobConf(): JobConf = confBroadcast.value.value
 }
 
 /**
@@ -95,18 +78,49 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
 /**
  * A base class that provides core functionality for reading data partitions stored in Hadoop.
  */
-abstract class HadoopRDD[K, V](
+class HadoopRDD[K, V](
     sc: SparkContext,
+    confBroadcast: Broadcast[SerializableWritable[Configuration]],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
     minSplits: Int)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
+  def this(
+      sc: SparkContext,
+      jobConf: JobConf,
+      inputFormatClass: Class[_ <: InputFormat[K, V]],
+      keyClass: Class[K],
+      valueClass: Class[V],
+      minSplits: Int) = {
+    this(
+      sc,
+      sc.broadcast(new SerializableWritable(jobConf))
+        .asInstanceOf[Broadcast[SerializableWritable[Configuration]]],
+      inputFormatClass,
+      keyClass,
+      valueClass,
+      minSplits)
+  }
+
+  protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
+
   private val inputFormatCacheKey = "rdd_%d_input_format".format(id)
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
-  protected def getJobConf(): JobConf
+  protected def getJobConf(): JobConf = {
+    val conf: Configuration = confBroadcast.value.value
+    if (conf.isInstanceOf[JobConf]) {
+      return conf.asInstanceOf[JobConf]
+    } else if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
+      return HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
+    } else {
+      val newJobConf = new JobConf(confBroadcast.value.value)
+      HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
+      return newJobConf
+    }
+  }
 
   def getInputFormat(conf: JobConf): InputFormat[K, V] = {
     if (HadoopRDD.containsCachedMetadata(inputFormatCacheKey)) {
