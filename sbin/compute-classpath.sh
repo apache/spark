@@ -26,7 +26,7 @@ SCALA_VERSION=2.9.3
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 # Load environment variables from conf/spark-env.sh, if it exists
-if [ -e $FWDIR/conf/spark-env.sh ] ; then
+if [ -e "$FWDIR/conf/spark-env.sh" ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
