@@ -19,8 +19,7 @@ package org.apache.spark.scheduler.cluster
 
 import java.nio.ByteBuffer
 
-import org.scalatest.BeforeAndAfter
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkEnv}
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, TaskResult}
@@ -56,21 +55,22 @@ class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterSched
 /**
  * Tests related to handling task results (both direct and indirect).
  */
-class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
+class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndAfterAll
+  with LocalSparkContext {
 
-  override def beforeAll() {
-    super.beforeAll()
-
+  override def beforeAll {
     // Set the Akka frame size to be as small as possible (it must be an integer, so 1 is as small
     // as we can make it) so the tests don't take too long.
     System.setProperty("spark.akka.frameSize", "1")
+  }
+
+  before {
     // Use local-cluster mode because results are returned differently when running with the
     // LocalScheduler.
     sc = new SparkContext("local-cluster[1,1,512]", "test")
   }
 
-  override def afterAll() {
-    super.afterAll()
+  override def afterAll {
     System.clearProperty("spark.akka.frameSize")
   }
 
