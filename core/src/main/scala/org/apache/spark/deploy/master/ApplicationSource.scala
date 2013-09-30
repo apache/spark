@@ -31,12 +31,13 @@ class ApplicationSource(val application: ApplicationInfo) extends Source {
     override def getValue: String = application.state.toString
   })
 
-  metricRegistry.register(MetricRegistry.name(NamingConventions.makeMetricName("runtime", "ms")), new Gauge[Long] {
-    override def getValue: Long = application.duration
-  })
+  metricRegistry.register(
+    MetricRegistry.name(NamingConventions.makeMetricName("runtime", "ms")), 
+    new Gauge[Long] { override def getValue: Long = application.duration })
 
-  metricRegistry.register(MetricRegistry.name(NamingConventions.makeMetricName("cores", "number")), new Gauge[Int] {
-    override def getValue: Int = application.coresGranted
-  })
+  metricRegistry.register(
+    MetricRegistry.name(NamingConventions.makeMetricName("cores", "number")), 
+    new Gauge[Int] { override def getValue: Int = application.coresGranted })
 
 }
+

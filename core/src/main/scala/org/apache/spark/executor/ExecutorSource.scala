@@ -44,31 +44,42 @@ class ExecutorSource(val executor: Executor, executorId: String) extends Source 
   val sourceName = "executor.%s".format(executorId)
 
   // Gauge for executor thread pool's actively executing task counts
-  metricRegistry.register(MetricRegistry.name("threadpool", NamingConventions.makeMetricName("activeTask", "count")), new Gauge[Int] {
-    override def getValue: Int = executor.threadPool.getActiveCount()
-  })
+  metricRegistry.register(
+    MetricRegistry.name("threadpool", NamingConventions.makeMetricName("activeTask", "count")), 
+    new Gauge[Int] { override def getValue: Int = executor.threadPool.getActiveCount() })
 
   // Gauge for executor thread pool's approximate total number of tasks that have been completed
-  metricRegistry.register(MetricRegistry.name("threadpool", NamingConventions.makeMetricName("completeTask", "count")), new Gauge[Long] {
-    override def getValue: Long = executor.threadPool.getCompletedTaskCount()
-  })
+  metricRegistry.register(
+    MetricRegistry.name("threadpool", NamingConventions.makeMetricName("completeTask", "count")), 
+    new Gauge[Long] { override def getValue: Long = executor.threadPool.getCompletedTaskCount() })
 
   // Gauge for executor thread pool's current number of threads
-  metricRegistry.register(MetricRegistry.name("threadpool", NamingConventions.makeMetricName("currentPool", "size")), new Gauge[Int] {
-    override def getValue: Int = executor.threadPool.getPoolSize()
-  })
+  metricRegistry.register(
+    MetricRegistry.name("threadpool", NamingConventions.makeMetricName("currentPool", "size")), 
+    new Gauge[Int] { override def getValue: Int = executor.threadPool.getPoolSize() })
 
   // Gauge got executor thread pool's largest number of threads that have ever simultaneously been in th pool
-  metricRegistry.register(MetricRegistry.name("threadpool", NamingConventions.makeMetricName("maxPool", "size")), new Gauge[Int] {
-    override def getValue: Int = executor.threadPool.getMaximumPoolSize()
-  })
+  metricRegistry.register(
+    MetricRegistry.name("threadpool", NamingConventions.makeMetricName("maxPool", "size")), 
+    new Gauge[Int] { override def getValue: Int = executor.threadPool.getMaximumPoolSize() })
 
   // Gauge for file system stats of this executor
   for (scheme <- Array("hdfs", "file")) {
-    registerFileSystemStat(scheme, NamingConventions.makeMetricName("read", "bytes"), _.getBytesRead(), 0L)
-    registerFileSystemStat(scheme, NamingConventions.makeMetricName("write", "bytes"), _.getBytesWritten(), 0L)
-    registerFileSystemStat(scheme, NamingConventions.makeMetricName("read", "ops"), _.getReadOps(), 0)
-    registerFileSystemStat(scheme, NamingConventions.makeMetricName("largeRead", "ops"), _.getLargeReadOps(), 0)
-    registerFileSystemStat(scheme, NamingConventions.makeMetricName("write", "ops"), _.getWriteOps(), 0)
+    registerFileSystemStat(scheme, 
+      NamingConventions.makeMetricName("read", "bytes"),
+      _.getBytesRead(), 0L)
+    registerFileSystemStat(scheme, 
+      NamingConventions.makeMetricName("write", "bytes"), 
+      _.getBytesWritten(), 0L)
+    registerFileSystemStat(scheme, 
+      NamingConventions.makeMetricName("read", "ops"), 
+      _.getReadOps(), 0)
+    registerFileSystemStat(scheme, 
+      NamingConventions.makeMetricName("largeRead", "ops"), 
+      _.getLargeReadOps(), 0)
+    registerFileSystemStat(scheme, 
+      NamingConventions.makeMetricName("write", "ops"), 
+      _.getWriteOps(), 0)
   }
 }
+

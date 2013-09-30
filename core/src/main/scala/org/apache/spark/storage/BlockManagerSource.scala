@@ -29,40 +29,48 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: Spar
   val metricRegistry = new MetricRegistry()
   val sourceName = "%s.BlockManager".format(sc.appName)
 
-  metricRegistry.register(MetricRegistry.name("memory", NamingConventions.makeMetricName("maxMem", "MBytes")), new Gauge[Long] {
-    override def getValue: Long = {
-      val storageStatusList = blockManager.master.getStorageStatus
-      val maxMem = storageStatusList.map(_.maxMem).reduce(_ + _)
-      maxMem / 1024 / 1024
-    }
+  metricRegistry.register(
+    MetricRegistry.name("memory", NamingConventions.makeMetricName("maxMem", "MBytes")), 
+    new Gauge[Long] {
+      override def getValue: Long = {
+        val storageStatusList = blockManager.master.getStorageStatus
+        val maxMem = storageStatusList.map(_.maxMem).reduce(_ + _)
+        maxMem / 1024 / 1024
+      }
   })
 
-  metricRegistry.register(MetricRegistry.name("memory", NamingConventions.makeMetricName("remainingMem", "MBytes")), new Gauge[Long] {
-    override def getValue: Long = {
-      val storageStatusList = blockManager.master.getStorageStatus
-      val remainingMem = storageStatusList.map(_.memRemaining).reduce(_ + _)
-      remainingMem / 1024 / 1024
-    }
+  metricRegistry.register(
+    MetricRegistry.name("memory", NamingConventions.makeMetricName("remainingMem", "MBytes")), 
+    new Gauge[Long] {
+      override def getValue: Long = {
+        val storageStatusList = blockManager.master.getStorageStatus
+        val remainingMem = storageStatusList.map(_.memRemaining).reduce(_ + _)
+        remainingMem / 1024 / 1024
+      }
   })
 
-  metricRegistry.register(MetricRegistry.name("memory", NamingConventions.makeMetricName("memUsed", "MBytes")), new Gauge[Long] {
-    override def getValue: Long = {
-      val storageStatusList = blockManager.master.getStorageStatus
-      val maxMem = storageStatusList.map(_.maxMem).reduce(_ + _)
-      val remainingMem = storageStatusList.map(_.memRemaining).reduce(_ + _)
-      (maxMem - remainingMem) / 1024 / 1024
-    }
+  metricRegistry.register(
+    MetricRegistry.name("memory", NamingConventions.makeMetricName("memUsed", "MBytes")), 
+    new Gauge[Long] {
+      override def getValue: Long = {
+        val storageStatusList = blockManager.master.getStorageStatus
+        val maxMem = storageStatusList.map(_.maxMem).reduce(_ + _)
+        val remainingMem = storageStatusList.map(_.memRemaining).reduce(_ + _)
+        (maxMem - remainingMem) / 1024 / 1024
+      }
   })
 
-  metricRegistry.register(MetricRegistry.name("disk", NamingConventions.makeMetricName("diskSpaceUsed", "MBytes")), new Gauge[Long] {
-    override def getValue: Long = {
-      val storageStatusList = blockManager.master.getStorageStatus
-      val diskSpaceUsed = storageStatusList
-      	.flatMap(_.blocks.values.map(_.diskSize))
-      	.reduceOption(_ + _)
-      	.getOrElse(0L)
-
-      diskSpaceUsed / 1024 / 1024
-    }
+  metricRegistry.register(
+    MetricRegistry.name("disk", NamingConventions.makeMetricName("diskSpaceUsed", "MBytes")), new Gauge[Long] {
+      override def getValue: Long = {
+        val storageStatusList = blockManager.master.getStorageStatus
+        val diskSpaceUsed = storageStatusList
+          .flatMap(_.blocks.values.map(_.diskSize))
+          .reduceOption(_ + _)
+          .getOrElse(0L)
+  
+        diskSpaceUsed / 1024 / 1024
+      }
   })
 }
+
