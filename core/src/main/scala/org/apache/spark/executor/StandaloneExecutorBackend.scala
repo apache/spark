@@ -81,7 +81,7 @@ private[spark] class StandaloneExecutorBackend(
         executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
       }
 
-    case _: Terminated | DisassociatedEvent | AssociationErrorEvent =>
+    case DisassociatedEvent(_, _, _) =>
       logError("Driver terminated or disconnected! Shutting down.")
       System.exit(1)
   }
