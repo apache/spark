@@ -1,3 +1,5 @@
+# run in REPL with 'test_dir(path/to/inst/tests)'
+
 context("parallelize() and collect()")
 
 # Mock data
@@ -43,22 +45,22 @@ test_that("parallelize() on simple vectors and lists returns an RRDD", {
 })
 
 test_that("collect(), following a parallelize(), gives back the original collections", {
-  # numVectorRRDD <- parallelize(jsc, numVector, 10)
-  # expect_that(collect(numVectorRRDD), equals(numVector))
-  # expect_that(collect(numVectorRRDD), is_identical_to(numVector))
+  numVectorRRDD <- parallelize(jsc, numVector, 10)
+  expect_equal(collect(numVectorRRDD), as.list(numVector))
 
-  # numListRRDD <- parallelize(jsc, numList, 1)
-  # numListRRDD2 <- parallelize(jsc, numList, 4)
-  # expect_that(class(numListRRDD), is_equivalent_to("RRDD"))
-  # expect_that(class(numListRRDD2), is_equivalent_to("RRDD"))
+  numListRRDD <- parallelize(jsc, numList, 1)
+  numListRRDD2 <- parallelize(jsc, numList, 4)
+  expect_equal(collect(numListRRDD), as.list(numList))
+  expect_equal(collect(numListRRDD2), as.list(numList))
 
-  # strVectorRRDD <- parallelize(jsc, strVector, 2)
-  # strVectorRRDD2 <- parallelize(jsc, strVector, 3)
-  # expect_that(class(strVectorRRDD), is_equivalent_to("RRDD"))
-  # expect_that(class(strVectorRRDD2), is_equivalent_to("RRDD"))
+  strVectorRRDD <- parallelize(jsc, strVector, 2)
+  strVectorRRDD2 <- parallelize(jsc, strVector, 3)
+  expect_equal(collect(strVectorRRDD), as.list(strVector))
+  expect_equal(collect(strVectorRRDD2), as.list(strVector))
 
-  # strListRRDD <- parallelize(jsc, strList, 4)
-  # strListRRDD2 <- parallelize(jsc, strList, 1)
-  # expect_that(class(strListRRDD), is_equivalent_to("RRDD"))
-  # expect_that(class(strListRRDD2), is_equivalent_to("RRDD"))
+  strListRRDD <- parallelize(jsc, strList, 4)
+  strListRRDD2 <- parallelize(jsc, strList, 1)
+  expect_equal(collect(strListRRDD), as.list(strList))
+  expect_equal(collect(strListRRDD2), as.list(strList))
 })
+

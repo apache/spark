@@ -25,8 +25,8 @@ RRDD <- function(jrdd) {
 setGeneric("collect", function(rrdd) { standardGeneric("collect") })
 setMethod("collect",
           signature(rrdd = "RRDD"),
-          function(rrdd) { 
+          function(rrdd) {
             collected <- .jcall(rrdd@jrdd, "Ljava/util/List;", "collect")
-            JavaListToRList(collected)
+            JavaListToRList(collected, flatten = TRUE)
           })
 

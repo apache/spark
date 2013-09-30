@@ -15,11 +15,21 @@ textFile <- function(jsc, name, minSplits=NULL) {
   RRDD(jrdd)
 }
 
-# Distribute a local R collection  to form an RRDD[Array[Byte]].
+# Distribute a local R homogeneous list to form an RRDD[Array[Byte]]. If a
+# vector is passed as `coll', as.list() will be called on it to convert it to a
+# list.
 # TODO: bound/safeguard numSlices
 # TODO: unit tests for if the split works for all primitives
 # TODO: support matrix, data frame, etc
 parallelize <- function(jsc, coll, numSlices = 1) {
+  if (!is.list(coll)) {
+    if (!is.vector(coll)) {
+      message(paste("context.R: parallelize() currently only supports lists and vectors.",
+                    "Calling as.list() to coerce coll into a list."))
+    }
+    coll = as.list(coll)
+  }
+
   if (numSlices > length(coll)) {
     message("context.R: parallelize: numSlices larger than coll's length; defaulting numSlices to the length.")
     numSlices = length(coll)
