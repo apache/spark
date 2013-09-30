@@ -253,6 +253,23 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     assert(manager.resourceOffer("exec2", "host2", 1, ANY) === None)
   }
 
+  test("task result lost") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeClusterScheduler(sc, ("exec1", "host1"))
+    val taskSet = createTaskSet(1)
+    val clock = new FakeClock
+    val manager = new ClusterTaskSetManager(sched, taskSet, clock)
+
+    assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
+
+    // Tell it the task has finished but the result was lost.
+    manager.handleFailedTask(0, TaskState.FINISHED, Some(TaskResultLost))
+    assert(sched.endedTasks(0) === TaskResultLost)
+
+    // Re-offer the host -- now we should get task 0 again.
+    assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
+  }
+
   /**
    * Utility method to create a TaskSet, potentially setting a particular sequence of preferred
    * locations for each task (given as varargs) if this sequence is not empty.

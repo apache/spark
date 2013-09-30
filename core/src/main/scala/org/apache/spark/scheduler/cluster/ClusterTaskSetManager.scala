@@ -25,7 +25,6 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.math.max
 import scala.math.min
-import scala.Some
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -458,8 +457,6 @@ private[spark] class ClusterTaskSetManager(
     removeRunningTask(tid)
     val index = info.index
     info.markFailed()
-    // Count failed attempts only on FAILED and LOST state (not on KILLED)
-    var countFailedTaskAttempt = (state == TaskState.FAILED || state == TaskState.LOST)
     if (!successful(index)) {
       logInfo("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
       copiesRunning(index) -= 1
@@ -505,7 +502,6 @@ private[spark] class ClusterTaskSetManager(
 
           case TaskResultLost =>
             logInfo("Lost result for TID %s on host %s".format(tid, info.host))
-            countFailedTaskAttempt = true
             sched.listener.taskEnded(tasks(index), TaskResultLost, null, null, info, null)
 
           case _ => {}
@@ -513,7 +509,7 @@ private[spark] class ClusterTaskSetManager(
       }
       // On non-fetch failures, re-enqueue the task as pending for a max number of retries
       addPendingTask(index)
-      if (countFailedTaskAttempt) {
+      if (state != TaskState.KILLED) {
         numFailures(index) += 1
         if (numFailures(index) > MAX_TASK_FAILURES) {
           logError("Task %s:%d failed more than %d times; aborting job".format(

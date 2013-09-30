@@ -26,10 +26,7 @@ import java.nio.ByteBuffer
 import org.apache.spark.util.Utils
 
 // Task result. Also contains updates to accumulator variables.
-// TODO: Use of distributed cache to return result is a hack to get around
-// what seems to be a bug with messages over 60KB in libprocess; fix it
-private[spark]
-sealed abstract class TaskResult[T]
+private[spark] sealed trait TaskResult[T]
 
 /** A reference to a DirectTaskResult that has been stored in the worker's BlockManager. */
 private[spark]

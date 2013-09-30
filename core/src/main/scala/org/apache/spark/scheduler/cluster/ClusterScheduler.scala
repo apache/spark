@@ -100,7 +100,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     System.getProperty("spark.scheduler.mode", "FIFO"))
 
   // This is a var so that we can reset it for testing purposes.
-  private[spark] var taskResultResolver = new TaskResultResolver(sc.env, this)
+  private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
   override def setListener(listener: TaskSchedulerListener) {
     this.listener = listener
@@ -267,10 +267,10 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
             activeTaskSets.get(taskSetId).foreach { taskSet =>
               if (state == TaskState.FINISHED) {
                 taskSet.removeRunningTask(tid)
-                taskResultResolver.enqueueSuccessfulTask(taskSet, tid, serializedData)
+                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
               } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
                 taskSet.removeRunningTask(tid)
-                taskResultResolver.enqueueFailedTask(taskSet, tid, state, serializedData)
+                taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
               }
             }
           case None =>
@@ -338,8 +338,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     if (jarServer != null) {
       jarServer.stop()
     }
-    if (taskResultResolver != null) {
-      taskResultResolver.stop()
+    if (taskResultGetter != null) {
+      taskResultGetter.stop()
     }
 
     // sleeping for an arbitrary 5 seconds : to ensure that messages are sent out.

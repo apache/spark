@@ -26,17 +26,16 @@ import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, TaskRes
 import org.apache.spark.serializer.SerializerInstance
 
 /**
- * Runs a thread pool that deserializes and remotely fetches (if neceessary) task results.
+ * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
  */
-private[spark] class TaskResultResolver(sparkEnv: SparkEnv, scheduler: ClusterScheduler)
+private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterScheduler)
   extends Logging {
-  private val MIN_THREADS = 20
-  private val MAX_THREADS = 60
-  private val KEEP_ALIVE_SECONDS = 60
+  private val MIN_THREADS = System.getProperty("spark.resultGetter.minThreads", "4").toInt
+  private val MAX_THREADS = System.getProperty("spark.resultGetter.maxThreads", "4").toInt
   private val getTaskResultExecutor = new ThreadPoolExecutor(
     MIN_THREADS,
     MAX_THREADS,
-    KEEP_ALIVE_SECONDS,
+    0L,
     TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable],
     new ResultResolverThreadFactory)

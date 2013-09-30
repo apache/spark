@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.scheduler.cluster
 
 import java.nio.ByteBuffer
 
@@ -23,16 +23,16 @@ import org.scalatest.BeforeAndAfter
 import org.scalatest.FunSuite
 
 import org.apache.spark.{LocalSparkContext, SparkContext, SparkEnv}
-import org.apache.spark.scheduler.cluster.{ClusterScheduler, ClusterTaskSetManager, TaskResultResolver}
+import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, TaskResult}
 
 /**
- * Removes the TaskResult from the BlockManager before delegating to a normal TaskResultResolver.
+ * Removes the TaskResult from the BlockManager before delegating to a normal TaskResultGetter.
  *
  * Used to test the case where a BlockManager evicts the task result (or dies) before the
  * TaskResult is retrieved.
  */
-class ResultDeletingTaskResultResolver(sparkEnv: SparkEnv, scheduler: ClusterScheduler)
-  extends TaskResultResolver(sparkEnv, scheduler) {
+class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterScheduler)
+  extends TaskResultGetter(sparkEnv, scheduler) {
   var removedResult = false
 
   override def enqueueSuccessfulTask(
@@ -44,7 +44,7 @@ class ResultDeletingTaskResultResolver(sparkEnv: SparkEnv, scheduler: ClusterSch
         case IndirectTaskResult(blockId) =>
           sparkEnv.blockManager.master.removeBlock(blockId)
         case directResult: DirectTaskResult[_] =>
-          taskSetManager.abort("Expect only indirect results") 
+          taskSetManager.abort("Internal error: expect only indirect results") 
       }
       serializedData.rewind()
       removedResult = true
@@ -56,15 +56,22 @@ class ResultDeletingTaskResultResolver(sparkEnv: SparkEnv, scheduler: ClusterSch
 /**
  * Tests related to handling task results (both direct and indirect).
  */
-class TaskResultResolverSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
+class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
-  before {
+  override def beforeAll() {
+    super.beforeAll()
+
     // Set the Akka frame size to be as small as possible (it must be an integer, so 1 is as small
     // as we can make it) so the tests don't take too long.
     System.setProperty("spark.akka.frameSize", "1")
     // Use local-cluster mode because results are returned differently when running with the
     // LocalScheduler.
     sc = new SparkContext("local-cluster[1,1,512]", "test")
+  }
+
+  override def afterAll() {
+    super.afterAll()
+    System.clearProperty("spark.akka.frameSize")
   }
 
   test("handling results smaller than Akka frame size") {
@@ -93,7 +100,7 @@ class TaskResultResolverSuite extends FunSuite with BeforeAndAfter with LocalSpa
         assert(false, "Expect local cluster to use ClusterScheduler")
         throw new ClassCastException
     }
-    scheduler.taskResultResolver = new ResultDeletingTaskResultResolver(sc.env, scheduler)
+    scheduler.taskResultGetter = new ResultDeletingTaskResultGetter(sc.env, scheduler)
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x, y) => x)
