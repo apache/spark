@@ -25,12 +25,12 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.math.max
 import scala.math.min
+import scala.Some
 
-import org.apache.spark._
+import org.apache.spark.{ExceptionFailure, FetchFailed, Logging, Resubmitted, SparkEnv,
+  SparkException, Success, TaskEndReason, TaskResultTooBigFailure, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler._
-import org.apache.spark.FetchFailed
-import org.apache.spark.ExceptionFailure
 import org.apache.spark.util.{SystemClock, Clock}
 
 

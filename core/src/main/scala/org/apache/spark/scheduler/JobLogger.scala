@@ -30,7 +30,6 @@ import scala.io.Source
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.cluster.TaskInfo
 
 // Used to record runtime information for each job, including RDD graph 
 // tasks' start/stop shuffle information and information from outside

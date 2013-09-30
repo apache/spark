@@ -23,9 +23,8 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.{ExceptionFailure, Logging, SparkEnv, SparkException, Success, TaskState}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Task, TaskResult, TaskSet}
-import org.apache.spark.scheduler.cluster.{Pool, Schedulable, TaskDescription, TaskInfo}
-import org.apache.spark.scheduler.cluster.{TaskLocality, TaskSetManager}
+import org.apache.spark.scheduler.{Schedulable, Task, TaskDescription, TaskInfo, TaskLocality,
+  TaskResult, TaskSet, TaskSetManager}
 
 
 private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: TaskSet)

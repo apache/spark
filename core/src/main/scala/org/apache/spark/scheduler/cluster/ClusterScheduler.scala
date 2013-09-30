@@ -29,8 +29,7 @@ import scala.collection.mutable.HashSet
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
-
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
  * The main TaskScheduler implementation, for running tasks on a cluster. Clients should first call
