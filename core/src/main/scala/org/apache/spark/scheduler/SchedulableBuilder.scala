@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler
 
 import java.io.{FileInputStream, InputStream}
 import java.util.{NoSuchElementException, Properties}
