@@ -29,6 +29,7 @@ import akka.util.Duration
 import akka.util.duration._
 
 import org.apache.spark.{SparkException, Logging, TaskState}
+import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.StandaloneClusterMessages._
 import org.apache.spark.util.Utils
 

@@ -15,23 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler
 
-import java.nio.ByteBuffer
-import org.apache.spark.util.SerializableBuffer
+/**
+ *  "FAIR" and "FIFO" determines which policy is used
+ *    to order tasks amongst a Schedulable's sub-queues
+ *  "NONE" is used when the a Schedulable has no sub-queues.
+ */
+object SchedulingMode extends Enumeration("FAIR", "FIFO", "NONE") {
 
-private[spark] class TaskDescription(
-    val taskId: Long,
-    val executorId: String,
-    val name: String,
-    val index: Int,    // Index within this task's TaskSet
-    _serializedTask: ByteBuffer)
-  extends Serializable {
-
-  // Because ByteBuffers are not serializable, wrap the task in a SerializableBuffer
-  private val buffer = new SerializableBuffer(_serializedTask)
-
-  def serializedTask: ByteBuffer = buffer.value
-
-  override def toString: String = "TaskDescription(TID=%d, index=%d)".format(taskId, index)
+  type SchedulingMode = Value
+  val FAIR,FIFO,NONE = Value
 }

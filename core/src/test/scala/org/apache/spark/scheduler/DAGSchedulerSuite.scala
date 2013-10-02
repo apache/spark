@@ -22,6 +22,7 @@ import scala.collection.mutable.{Map, HashMap}
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 
+import org.apache.spark.FetchFailed
 import org.apache.spark.LocalSparkContext
 import org.apache.spark.MapOutputTracker
 import org.apache.spark.rdd.RDD
@@ -31,11 +32,7 @@ import org.apache.spark.TaskContext
 import org.apache.spark.{Dependency, ShuffleDependency, OneToOneDependency}
 import org.apache.spark.{Success, TaskEndReason}
 import org.apache.spark.storage.{BlockManagerId, BlockManagerMaster}
-
-import org.apache.spark.scheduler.cluster.Pool
-import org.apache.spark.scheduler.cluster.SchedulingMode
-import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
-import org.apache.spark.FetchFailed
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
  * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler

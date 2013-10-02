@@ -32,8 +32,8 @@ import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.{ExceptionFailure, SparkContext, Success}
 import org.apache.spark.scheduler._
 import collection.mutable
-import org.apache.spark.scheduler.cluster.SchedulingMode
-import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
+import org.apache.spark.scheduler.SchedulingMode
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */

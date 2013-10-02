@@ -763,24 +763,42 @@ abstract class RDD[T: ClassManifest](
   }
 
   /**
-   * Take the first num elements of the RDD. This currently scans the partitions *one by one*, so
-   * it will be slow if a lot of partitions are required. In that case, use collect() to get the
-   * whole RDD instead.
+   * Take the first num elements of the RDD. It works by first scanning one partition, and use the
+   * results from that partition to estimate the number of additional partitions needed to satisfy
+   * the limit.
    */
   def take(num: Int): Array[T] = {
     if (num == 0) {
       return new Array[T](0)
     }
+
     val buf = new ArrayBuffer[T]
-    var p = 0
-    while (buf.size < num && p < partitions.size) {
+    val totalParts = this.partitions.length
+    var partsScanned = 0
+    while (buf.size < num && partsScanned < totalParts) {
+      // The number of partitions to try in this iteration. It is ok for this number to be
+      // greater than totalParts because we actually cap it at totalParts in runJob.
+      var numPartsToTry = 1
+      if (partsScanned > 0) {
+        // If we didn't find any rows after the first iteration, just try all partitions next.
+        // Otherwise, interpolate the number of partitions we need to try, but overestimate it
+        // by 50%.
+        if (buf.size == 0) {
+          numPartsToTry = totalParts - 1
+        } else {
+          numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt
+        }
+      }
+      numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
+
       val left = num - buf.size
-      val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, Array(p), true)
-      buf ++= res(0)
-      if (buf.size == num)
-        return buf.toArray
-      p += 1
+      val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
+      val res = sc.runJob(this, (it: Iterator[T]) => it.take(left).toArray, p, allowLocal = true)
+
+      res.foreach(buf ++= _.take(num - buf.size))
+      partsScanned += numPartsToTry
     }
+
     return buf.toArray
   }
 

@@ -19,7 +19,6 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
-import org.apache.spark.scheduler.cluster.TaskInfo
 import scala.collection.mutable.Map
 
 import org.apache.spark._
