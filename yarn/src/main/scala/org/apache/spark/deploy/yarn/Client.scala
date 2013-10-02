@@ -106,7 +106,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     logInfo("Setting up application submission context for ASM")
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     appContext.setApplicationId(appId)
-    appContext.setApplicationName("Spark")
+    appContext.setApplicationName(args.appName)
     return appContext
   }
   

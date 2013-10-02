@@ -50,6 +50,7 @@ The command to launch the YARN Client is as follows:
       --master-memory <MEMORY_FOR_MASTER> \
       --worker-memory <MEMORY_PER_WORKER> \
       --worker-cores <CORES_PER_WORKER> \
+      --name <application_name> \
       --queue <queue_name>
 
 For example:
