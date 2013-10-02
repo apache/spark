@@ -41,6 +41,7 @@ private[spark] object JsonProtocol {
     ("starttime" -> obj.startTime) ~
     ("id" -> obj.id) ~
     ("name" -> obj.desc.name) ~
+    ("appuiurl" -> obj.appUiUrl) ~
     ("cores" -> obj.desc.maxCores) ~
     ("user" ->  obj.desc.user) ~
     ("memoryperslave" -> obj.desc.memoryPerSlave) ~
