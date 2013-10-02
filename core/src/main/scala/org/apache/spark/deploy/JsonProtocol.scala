@@ -64,7 +64,7 @@ private[spark] object JsonProtocol {
   }
 
   def writeMasterState(obj: MasterStateResponse) = {
-    ("url" -> ("spark://" + obj.uri)) ~
+    ("url" -> obj.uri) ~
     ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
     ("cores" -> obj.workers.map(_.cores).sum) ~
     ("coresused" -> obj.workers.map(_.coresUsed).sum) ~
