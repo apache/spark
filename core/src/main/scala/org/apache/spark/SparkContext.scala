@@ -146,7 +146,7 @@ class SparkContext(
   }
 
   // Create and start the scheduler
-  private var taskScheduler: TaskScheduler = {
+  private[spark] var taskScheduler: TaskScheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks

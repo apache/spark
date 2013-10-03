@@ -27,12 +27,16 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.scheduler._
 import org.apache.spark._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
-
 /**
+<<<<<<< HEAD
  * The backend executor for Spark. The executor maintains a thread pool and uses it to execute
  * tasks.
+=======
+ * Spark executor used with Mesos and the standalone scheduler.
+>>>>>>> master
  */
 private[spark] class Executor(
     executorId: String,
@@ -218,15 +222,21 @@ private[spark] class Executor(
         // huge headache, b/c we need to serialize the task metrics first.  If TaskMetrics had a
         // custom serialized format, we could just change the relevants bytes in the byte buffer
         val accumUpdates = Accumulators.values
-        val result = new TaskResult(value, accumUpdates, task.metrics.getOrElse(null))
-        val serializedResult = ser.serialize(result)
-        logInfo("Serialized size of result for " + taskId + " is " + serializedResult.limit)
 
-        // If the task result is too big, it can exceed Akka's message frame and Akka will silently
-        // drop this message. Let's warn the user explicitly by failing the task instead.
-        if (serializedResult.limit >= (akkaFrameSize - 1024)) {
-          execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(TaskResultTooBigFailure))
-          return
+        val directResult = new DirectTaskResult(value, accumUpdates, task.metrics.getOrElse(null))
+        val serializedDirectResult = ser.serialize(directResult)
+        logInfo("Serialized size of result for " + taskId + " is " + serializedDirectResult.limit)
+        val serializedResult = {
+          if (serializedDirectResult.limit >= akkaFrameSize - 1024) {
+            logInfo("Storing result for " + taskId + " in local BlockManager")
+            val blockId = "taskresult_" + taskId
+            env.blockManager.putBytes(
+              blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
+            ser.serialize(new IndirectTaskResult[Any](blockId))
+          } else {
+            logInfo("Sending result for " + taskId + " directly to driver")
+            serializedDirectResult
+          }
         }
 
         execBackend.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
