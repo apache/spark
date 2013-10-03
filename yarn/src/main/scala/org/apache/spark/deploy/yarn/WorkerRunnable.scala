@@ -77,8 +77,9 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       JAVA_OPTS += env("SPARK_JAVA_OPTS") + " "
     }
 
-    JAVA_OPTS += " -Djava.io.tmpdir=" + new Path(Environment.PWD.$(),
-                                                 YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+    JAVA_OPTS += " -Djava.io.tmpdir=" + 
+      new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
+
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove it once cpuset version is pushed out.
     // The context is, default gc for server class machines end up using all cores to do gc - hence if there are multiple containers in same
@@ -215,15 +216,9 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
   def prepareEnvironment: HashMap[String, String] = {
     val env = new HashMap[String, String]()
 
-    // If log4j present, ensure ours overrides all others
-    if (System.getenv("SPARK_YARN_LOG4J_PATH") != null) {
-      // Which is correct ?
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./log4j.properties")
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./")
-    }
-
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./*")
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$())
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, 
+      Environment.PWD.$() + Path.SEPARATOR + "*")
     Client.populateHadoopClasspath(yarnConf, env)
 
     // allow users to specify some environment variables

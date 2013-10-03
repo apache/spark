@@ -127,7 +127,8 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       originalPath: Path,
       replication: Short,
       localResources: HashMap[String,LocalResource],
-      fragment: String) = {
+      fragment: String,
+      appMasterOnly: Boolean = false): Unit = {
     val fs = FileSystem.get(conf)
     val newPath = new Path(dstDir, originalPath.getName())
     logInfo("Uploading " + originalPath + " to " + newPath)
@@ -149,6 +150,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       pathURI = new URI(newPath.toString() + "#" + fragment);
     }
     val distPath = pathURI.toString()
+    if (appMasterOnly == true) return
     if (resourceType == LocalResourceType.FILE) {
       distFiles match {
         case Some(path) =>
@@ -223,6 +225,16 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       }
     }
 
+    // handle any add jars
+    if ((args.addJars != null) && (!args.addJars.isEmpty())){
+      args.addJars.split(',').foreach { case file: String =>
+        val tmpURI = new URI(file)
+        val tmp = new Path(tmpURI)
+        copyLocalFile(dst, LocalResourceType.FILE, tmp, replication, localResources,
+          tmpURI.getFragment(), true)
+      }
+    }
+
     // handle any distributed cache files
     if ((args.files != null) && (!args.files.isEmpty())){
       args.files.split(',').foreach { case file: String =>
@@ -253,11 +265,10 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     val env = new HashMap[String, String]()
 
-    // If log4j present, ensure ours overrides all others
-    if (log4jConfLocalRes != null) Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./")
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$())
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name,
+      Environment.PWD.$() + Path.SEPARATOR + "*")
 
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./*")
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
     Client.populateHadoopClasspath(yarnConf, env)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_JAR_PATH") = 
@@ -279,6 +290,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       env("SPARK_YARN_LOG4J_SIZE") =  log4jConfLocalRes.getSize().toString()
     }
 
+    // set the environment variables to be passed on to the Workers
     if (distFiles != None) {
       env("SPARK_YARN_CACHE_FILES") = distFiles.get
       env("SPARK_YARN_CACHE_FILES_TIME_STAMPS") = distFilesTimeStamps.get
@@ -328,8 +340,8 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     // Add Xmx for am memory
     JAVA_OPTS += "-Xmx" + amMemory + "m "
 
-    JAVA_OPTS += " -Djava.io.tmpdir=" + new Path(Environment.PWD.$(),
-                                                 YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+    JAVA_OPTS += " -Djava.io.tmpdir=" + 
+      new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
 
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove it once cpuset version is pushed out.
@@ -345,6 +357,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       JAVA_OPTS += " -XX:CMSIncrementalDutyCycleMin=0 "
       JAVA_OPTS += " -XX:CMSIncrementalDutyCycle=10 "
     }
+
     if (env.isDefinedAt("SPARK_JAVA_OPTS")) {
       JAVA_OPTS += env("SPARK_JAVA_OPTS") + " "
     }

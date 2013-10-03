@@ -24,6 +24,7 @@ import org.apache.spark.scheduler.{InputFormatInfo, SplitInfo}
 
 // TODO: Add code and support for ensuring that yarn resource 'asks' are location aware !
 class ClientArguments(val args: Array[String]) {
+  var addJars: String = null
   var files: String = null
   var archives: String = null
   var userJar: String = null
@@ -80,6 +81,10 @@ class ClientArguments(val args: Array[String]) {
           amQueue = value
           args = tail
 
+        case ("--addJars") :: value :: tail =>
+          addJars = value
+          args = tail
+
         case ("--files") :: value :: tail =>
           files = value
           args = tail
@@ -119,8 +124,9 @@ class ClientArguments(val args: Array[String]) {
       "  --master-memory MEM  Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
       "  --worker-memory MEM  Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\n" +
       "  --queue QUEUE        The hadoop queue to use for allocation requests (Default: 'default')\n" +
-      "  --files file         Comma separated list of files to be distributed with the job.\n" +
-      "  --archives archive   Comma separated list of archives to be distributed with the job."
+      "  --addJars jars       Comma separated list of local jars that want SparkContext.addJar to work with.\n" +
+      "  --files files        Comma separated list of files to be distributed with the job.\n" +
+      "  --archives archives  Comma separated list of archives to be distributed with the job."
       )
     System.exit(exitCode)
   }
