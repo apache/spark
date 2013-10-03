@@ -20,7 +20,6 @@ package org.apache.spark
 import java.io._
 import java.net.URI
 import java.util.Properties
-import java.util.concurrent.Future
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
@@ -823,7 +822,7 @@ class SparkContext(
       processPartition: Iterator[T] => U,
       partitions: Seq[Int],
       partitionResultHandler: (Int, U) => Unit,
-      resultFunc: () => R): Future[R] =
+      resultFunc: () => R): FutureJob[R] =
   {
     val callSite = Utils.formatSparkCallSite
     val waiter = dagScheduler.submitJob(
@@ -932,6 +931,8 @@ object SparkContext {
 
   implicit def rddToPairRDDFunctions[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
     new PairRDDFunctions(rdd)
+
+  implicit def rddToAsyncRDDActions[T: ClassManifest](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
   implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassManifest, V <% Writable: ClassManifest](
       rdd: RDD[(K, V)]) =

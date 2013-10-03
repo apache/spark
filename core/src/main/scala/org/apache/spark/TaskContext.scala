@@ -17,8 +17,9 @@
 
 package org.apache.spark
 
-import executor.TaskMetrics
 import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark.executor.TaskMetrics
 
 class TaskContext(
   val stageId: Int,
@@ -29,10 +30,14 @@ class TaskContext(
   val taskMetrics: TaskMetrics = TaskMetrics.empty()
 ) extends Serializable {
 
-  @transient val onCompleteCallbacks = new ArrayBuffer[() => Unit]
+  // List of callback functions to execute when the task completes.
+  @transient private val onCompleteCallbacks = new ArrayBuffer[() => Unit]
 
-  // Add a callback function to be executed on task completion. An example use
-  // is for HadoopRDD to register a callback to close the input stream.
+  /**
+   * Add a callback function to be executed on task completion. An example use
+   * is for HadoopRDD to register a callback to close the input stream.
+   * @param f Callback function.
+   */
   def addOnCompleteCallback(f: () => Unit) {
     onCompleteCallbacks += f
   }

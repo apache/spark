@@ -17,34 +17,99 @@
 
 package org.apache.spark
 
-import java.util.concurrent.{ExecutionException, TimeUnit, Future}
+import java.util.concurrent.TimeoutException
+
+import scala.concurrent.{CanAwait, ExecutionContext, Future}
+import scala.concurrent.duration.Duration
+import scala.util.Try
 
 import org.apache.spark.scheduler.{JobFailed, JobSucceeded, JobWaiter}
 
 class FutureJob[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: () => T)
   extends Future[T] {
 
-  override def isDone: Boolean = jobWaiter.jobFinished
-
-  override def cancel(mayInterruptIfRunning: Boolean): Boolean = {
+  /**
+   * Cancels the execution of this job.
+   */
+  def cancel() {
     jobWaiter.kill()
-    true
   }
 
-  override def isCancelled: Boolean = {
-    throw new UnsupportedOperationException
+  /**
+   * Blocks until this job completes.
+   * @param atMost maximum wait time, which may be negative (no waiting is done), Duration.Inf
+   *               for unbounded waiting, or a finite positive duration
+   * @return this FutureJob
+   */
+  override def ready(atMost: Duration)(implicit permit: CanAwait): FutureJob.this.type = {
+    if (atMost.isFinite()) {
+      awaitResult()
+    } else {
+      val finishTime = System.currentTimeMillis() + atMost.toMillis
+      while (!isCompleted) {
+        val time = System.currentTimeMillis()
+        if (time >= finishTime) {
+          throw new TimeoutException
+        } else {
+          jobWaiter.wait(finishTime - time)
+        }
+      }
+    }
+    this
   }
 
-  override def get(): T = {
-    jobWaiter.awaitResult() match {
-      case JobSucceeded =>
-        resultFunc()
-      case JobFailed(e: Exception, _) =>
-        throw new ExecutionException(e)
+  /**
+   * Await and return the result (of type T) of this job.
+   * @param atMost maximum wait time, which may be negative (no waiting is done), Duration.Inf
+   *               for unbounded waiting, or a finite positive duration
+   * @throws Exception exception during job execution
+   * @return the result value if the job is completed within the specific maximum wait time
+   */
+  @throws(classOf[Exception])
+  override def result(atMost: Duration)(implicit permit: CanAwait): T = {
+    ready(atMost)(permit)
+    awaitResult() match {
+      case scala.util.Success(res) => res
+      case scala.util.Failure(e) => throw e
     }
   }
 
-  override def get(timeout: Long, unit: TimeUnit): T = {
-    throw new UnsupportedOperationException
+  /**
+   * When this job is completed, either through an exception, or a value, apply the provided
+   * function.
+   */
+  def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext) {
+    executor.execute(new Runnable {
+      override def run() {
+        func(awaitResult())
+      }
+    })
+  }
+
+  /**
+   * Returns whether the job has already been completed with a value or an exception.
+   */
+  def isCompleted: Boolean = jobWaiter.jobFinished
+
+  /**
+   * The value of this Future.
+   *
+   * If the future is not completed the returned value will be None. If the future is completed
+   * the value will be Some(Success(t)) if it contains a valid result, or Some(Failure(error)) if
+   * it contains an exception.
+   */
+  def value: Option[Try[T]] = {
+    if (jobWaiter.jobFinished) {
+      Some(awaitResult())
+    } else {
+      None
+    }
+  }
+
+  private def awaitResult(): Try[T] = {
+    jobWaiter.awaitResult() match {
+      case JobSucceeded => scala.util.Success(resultFunc())
+      case JobFailed(e: Exception, _) => scala.util.Failure(e)
+    }
   }
 }
