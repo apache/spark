@@ -2,6 +2,7 @@ package org.apache.spark.graph.util
 
 import util._
 import math._
+import scala.annotation.tailrec
 //import scala.collection.mutable
 
 
@@ -181,7 +182,8 @@ object GraphGenerator {
    *
    * @param src is the 
    */
-  @tailrec def chooseCell(x: Int, y: Int, t: Int): (Int, Int) = {
+  @tailrec
+  def chooseCell(x: Int, y: Int, t: Int): (Int, Int) = {
     if (t <= 1)
       (x,y)
     else {
