@@ -25,17 +25,40 @@ import org.apache.spark.FutureJob
  * A set of asynchronous RDD actions available through an implicit conversion.
  * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
-class AsyncRDDActions[T: ClassManifest](self: RDD[T]) {
+class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable {
 
-  private val allPartitions = Range(0, self.partitions.size)
+  /**
+   * Return a future for counting the number of elements in the RDD.
+   */
+  def countAsync(): FutureJob[Long] = {
+    var totalCount: java.lang.Long = 0L
+    self.context.submitJob[T, Long, Long](
+      self,
+      (iter: Iterator[T]) => {
+        var result = 0L
+        while (iter.hasNext) {
+          result += 1L
+          iter.next()
+        }
+        result
+      },
+      Range(0, self.partitions.size),
+      (index, data) => totalCount += data,
+      () => totalCount)
+  }
 
   /**
    * Return a future for retrieving all elements of this RDD.
    */
   def collectAsync(): FutureJob[Seq[T]] = {
     val results = new ArrayBuffer[T]
-    self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, allPartitions,
+    self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.size),
       (index, data) => results ++= data, () => results)
+  }
+
+  def takeAsync(num: Int): FutureJob[Seq[T]] = {
+    // TODO: Implement this.
+    null
   }
 
   /**
@@ -43,7 +66,7 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) {
    */
   def foreachAsync(f: T => Unit): FutureJob[Unit] = {
     val cleanF = self.context.clean(f)
-    self.context.submitJob[T, Unit, Unit](self, _.foreach(cleanF), allPartitions,
+    self.context.submitJob[T, Unit, Unit](self, _.foreach(cleanF), Range(0, self.partitions.size),
       (index, data) => Unit, () => Unit)
   }
 
@@ -52,7 +75,7 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) {
    */
   def foreachPartitionAsync(f: Iterator[T] => Unit): FutureJob[Unit] = {
     val cleanF = self.context.clean(f)
-    self.context.submitJob[T, Unit, Unit](self, cleanF, allPartitions, (index, data) => Unit,
-      () => Unit)
+    self.context.submitJob[T, Unit, Unit](self, cleanF, Range(0, self.partitions.size),
+      (index, data) => Unit, () => Unit)
   }
 }

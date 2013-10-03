@@ -675,6 +675,8 @@ abstract class RDD[T: ClassManifest](
    */
   def count(): Long = {
     sc.runJob(this, (iter: Iterator[T]) => {
+      // Use a while loop to count the number of elements rather than iter.size because
+      // iter.size uses a for loop, which is slightly slower in current version of Scala.
       var result = 0L
       while (iter.hasNext) {
         result += 1L

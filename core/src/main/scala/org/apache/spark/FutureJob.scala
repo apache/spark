@@ -106,6 +106,17 @@ class FutureJob[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: () => T)
     }
   }
 
+  /**
+   * Block and return the result of this job.
+   */
+  @throws(classOf[Exception])
+  def get(): T = {
+    awaitResult() match {
+      case scala.util.Success(res) => res
+      case scala.util.Failure(e) => throw e
+    }
+  }
+
   private def awaitResult(): Try[T] = {
     jobWaiter.awaitResult() match {
       case JobSucceeded => scala.util.Success(resultFunc())

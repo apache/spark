@@ -31,12 +31,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
 /**
-<<<<<<< HEAD
- * The backend executor for Spark. The executor maintains a thread pool and uses it to execute
- * tasks.
-=======
  * Spark executor used with Mesos and the standalone scheduler.
->>>>>>> master
  */
 private[spark] class Executor(
     executorId: String,
