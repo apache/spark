@@ -40,6 +40,7 @@ class FakeClusterScheduler(sc: SparkContext, liveExecutors: (String, String)* /*
   val startedTasks = new ArrayBuffer[Long]
   val endedTasks = new mutable.HashMap[Long, TaskEndReason]
   val finishedManagers = new ArrayBuffer[TaskSetManager]
+  val taskSetsFailed = new ArrayBuffer[String]
 
   val executors = new mutable.HashMap[String, String] ++ liveExecutors
 
@@ -63,7 +64,9 @@ class FakeClusterScheduler(sc: SparkContext, liveExecutors: (String, String)* /*
 
     def executorLost(execId: String) {}
 
-    def taskSetFailed(taskSet: TaskSet, reason: String) {}
+    def taskSetFailed(taskSet: TaskSet, reason: String) {
+      taskSetsFailed += taskSet.id
+    }
   }
 
   def removeExecutor(execId: String): Unit = executors -= execId
@@ -101,7 +104,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     assert(manager.resourceOffer("exec1", "host1", 2, PROCESS_LOCAL) === None)
 
     // Tell it the task has finished
-    manager.statusUpdate(0, TaskState.FINISHED, createTaskResult(0))
+    manager.handleSuccessfulTask(0, createTaskResult(0))
     assert(sched.endedTasks(0) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -125,14 +128,14 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     assert(manager.resourceOffer("exec1", "host1", 1, PROCESS_LOCAL) === None)
 
     // Finish the first two tasks
-    manager.statusUpdate(0, TaskState.FINISHED, createTaskResult(0))
-    manager.statusUpdate(1, TaskState.FINISHED, createTaskResult(1))
+    manager.handleSuccessfulTask(0, createTaskResult(0))
+    manager.handleSuccessfulTask(1, createTaskResult(1))
     assert(sched.endedTasks(0) === Success)
     assert(sched.endedTasks(1) === Success)
     assert(!sched.finishedManagers.contains(manager))
 
     // Finish the last task
-    manager.statusUpdate(2, TaskState.FINISHED, createTaskResult(2))
+    manager.handleSuccessfulTask(2, createTaskResult(2))
     assert(sched.endedTasks(2) === Success)
     assert(sched.finishedManagers.contains(manager))
   }
@@ -253,6 +256,47 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     assert(manager.resourceOffer("exec2", "host2", 1, ANY) === None)
   }
 
+  test("task result lost") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeClusterScheduler(sc, ("exec1", "host1"))
+    val taskSet = createTaskSet(1)
+    val clock = new FakeClock
+    val manager = new ClusterTaskSetManager(sched, taskSet, clock)
+
+    assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
+
+    // Tell it the task has finished but the result was lost.
+    manager.handleFailedTask(0, TaskState.FINISHED, Some(TaskResultLost))
+    assert(sched.endedTasks(0) === TaskResultLost)
+
+    // Re-offer the host -- now we should get task 0 again.
+    assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
+  }
+
+  test("repeated failures lead to task set abortion") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeClusterScheduler(sc, ("exec1", "host1"))
+    val taskSet = createTaskSet(1)
+    val clock = new FakeClock
+    val manager = new ClusterTaskSetManager(sched, taskSet, clock)
+
+    // Fail the task MAX_TASK_FAILURES times, and check that the task set is aborted
+    // after the last failure.
+    (0 until manager.MAX_TASK_FAILURES).foreach { index =>
+      val offerResult = manager.resourceOffer("exec1", "host1", 1, ANY)
+      assert(offerResult != None,
+        "Expect resource offer on iteration %s to return a task".format(index))
+      assert(offerResult.get.index === 0)
+      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, Some(TaskResultLost))
+      if (index < manager.MAX_TASK_FAILURES) {
+        assert(!sched.taskSetsFailed.contains(taskSet.id))
+      } else {
+        assert(sched.taskSetsFailed.contains(taskSet.id))
+      }
+    }
+  }
+
+
   /**
    * Utility method to create a TaskSet, potentially setting a particular sequence of preferred
    * locations for each task (given as varargs) if this sequence is not empty.
@@ -267,7 +311,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     new TaskSet(tasks, 0, 0, 0, null)
   }
 
-  def createTaskResult(id: Int): ByteBuffer = {
-    ByteBuffer.wrap(Utils.serialize(new TaskResult[Int](id, mutable.Map.empty, new TaskMetrics)))
+  def createTaskResult(id: Int): DirectTaskResult[Int] = {
+    new DirectTaskResult[Int](id, mutable.Map.empty, new TaskMetrics)
   }
 }
