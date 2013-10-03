@@ -113,7 +113,7 @@ class ClientArguments(val args: Array[String]) {
       "  --worker-cores NUM   Number of cores for the workers (Default: 1). This is unsused right now.\n" +
       "  --master-memory MEM  Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
       "  --worker-memory MEM  Memory per Worker (e.g. 1000M, 2G) (Default: 1G)\n" +
-      "  --name NAME          The name of your application\n" + 
+      "  --name NAME          The name of your application (Default: Spark)\n" + 
       "  --queue QUEUE        The hadoop queue to use for allocation requests (Default: 'default')"
       )
     System.exit(exitCode)
