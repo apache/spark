@@ -45,7 +45,7 @@ private[spark] class Pool(
   var priority = 0
   var stageId = 0
   var name = poolName
-  var parent:Schedulable = null
+  var parent: Pool = null
 
   var taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
     schedulingMode match {
@@ -101,14 +101,14 @@ private[spark] class Pool(
     return sortedTaskSetQueue
   }
 
-  override def increaseRunningTasks(taskNum: Int) {
+  def increaseRunningTasks(taskNum: Int) {
     runningTasks += taskNum
     if (parent != null) {
       parent.increaseRunningTasks(taskNum)
     }
   }
 
-  override def decreaseRunningTasks(taskNum: Int) {
+  def decreaseRunningTasks(taskNum: Int) {
     runningTasks -= taskNum
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)
