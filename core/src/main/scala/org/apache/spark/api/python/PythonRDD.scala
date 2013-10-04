@@ -187,14 +187,14 @@ private class PythonException(msg: String) extends Exception(msg)
  * This is used by PySpark's shuffle operations.
  */
 private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
-  RDD[(Array[Byte], Array[Byte])](prev) {
+  RDD[(Long, Array[Byte])](prev) {
   override def getPartitions = prev.partitions
   override def compute(split: Partition, context: TaskContext) =
     prev.iterator(split, context).grouped(2).map {
-      case Seq(a, b) => (a, b)
+      case Seq(a, b) => (Utils.deserializeLongValue(a), b)
       case x          => throw new SparkException("PairwiseRDD: unexpected value: " + x)
     }
-  val asJavaPairRDD : JavaPairRDD[Array[Byte], Array[Byte]] = JavaPairRDD.fromRDD(this)
+  val asJavaPairRDD : JavaPairRDD[Long, Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
 
 private[spark] object PythonRDD {
