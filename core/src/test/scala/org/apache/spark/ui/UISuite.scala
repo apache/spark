@@ -28,9 +28,9 @@ class UISuite extends FunSuite {
     val server = new Server(startPort)
 
     Try { server.start() } match {
-    	case Success(s) => 
-	case Failure(e) => 
-    	// Either case server port is busy hence setup for test complete
+      case Success(s) => 
+      case Failure(e) => 
+      // Either case server port is busy hence setup for test complete
     }
     val (jettyServer1, boundPort1) = JettyUtils.startJettyServer("localhost", startPort, Seq())
     val (jettyServer2, boundPort2) = JettyUtils.startJettyServer("localhost", startPort, Seq())

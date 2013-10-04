@@ -247,7 +247,7 @@ object SparkBuild extends Build {
         exclude("log4j","log4j")
         exclude("org.apache.cassandra.deps", "avro")
         excludeAll(excludeSnappy)
-	excludeAll(excludeCglib)
+        excludeAll(excludeCglib)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
