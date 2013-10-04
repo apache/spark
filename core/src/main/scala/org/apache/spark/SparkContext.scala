@@ -55,7 +55,7 @@ import org.apache.spark.deploy.LocalSparkCluster
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend,
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend,
   ClusterScheduler}
 import org.apache.spark.scheduler.local.LocalScheduler
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
@@ -205,7 +205,7 @@ class SparkContext(
             throw new SparkException("YARN mode not available ?", th)
           }
         }
-        val backend = new StandaloneSchedulerBackend(scheduler, this.env.actorSystem)
+        val backend = new CoarseGrainedSchedulerBackend(scheduler, this.env.actorSystem)
         scheduler.initialize(backend)
         scheduler
 
