@@ -588,7 +588,7 @@ object ALS {
 
     val sc = new SparkContext(master, "ALS")
     val ratings = sc.textFile(ratingsFile).map { line =>
-      val fields = line.split("\\D{2}|\\s|,")
+      val fields = line.split(',')
       Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)
     }
     val model = new ALS(rank = rank, iterations = iters, lambda = lambda,
