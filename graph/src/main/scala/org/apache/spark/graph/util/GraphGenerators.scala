@@ -6,6 +6,8 @@ import scala.annotation.tailrec
 //import scala.collection.mutable
 
 
+import org.apache.spark._
+import org.apache.spark.serializer._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
@@ -18,7 +20,7 @@ import org.apache.spark.graph.impl.GraphImpl
 
 // TODO(crankshaw) I might want to pull at least RMAT out into a separate class.
 // Might simplify the code to have classwide variables and such.
-object GraphGenerator {
+object GraphGenerators {
 
   val RMATa = 0.45
   val RMATb = 0.15
@@ -33,12 +35,36 @@ object GraphGenerator {
   def main(args: Array[String]) {
 
 
-    System.setProperty("spark.serializer", "spark.KryoSerializer")
+    val serializer = "org.apache.spark.serializer.KryoSerializer"
+    System.setProperty("spark.serializer", serializer)
     //System.setProperty("spark.shuffle.compress", "false")
     System.setProperty("spark.kryo.registrator", "spark.graph.GraphKryoRegistrator")
     val host = "local[4]"
     val sc = new SparkContext(host, "Lognormal graph generator")
-    println("hello world")
+
+    val lnGraph = lognormalGraph(sc, 10000)
+
+    val rmat = rmatGraph(sc, 1000, 3000)
+
+    //for (v <- lnGraph.vertices) {
+    //  println(v.id + ":\t" + v.data)
+    //}
+
+    val times = 100000
+    //val nums = (1 to times).flatMap { n => List(sampleLogNormal(4.0, 1.3, times)) }.toList
+    //val avg = nums.sum / nums.length
+    //val sumSquares = nums.foldLeft(0.0) {(total, next) =>
+    //  (total + math.pow((next - avg), 2)) }
+    //val stdev = math.sqrt(sumSquares/(nums.length - 1))
+
+    //println("avg: " + avg + "+-" + stdev)
+
+
+    //for (i <- 1 to 1000) {
+    //  println(sampleLogNormal(4.0, 1.3, 1000))
+    //}
+
+    sc.stop()
 
   }
 
@@ -107,9 +133,11 @@ object GraphGenerator {
     val s = math.sqrt((math.exp(sigma*sigma) - 1) * math.exp(2*mu + sigma*sigma))
     // Z ~ N(0, 1)
     var X: Double = maxVal
+
     while (X >= maxVal) {
       val Z = rand.nextGaussian()
-      X = math.exp((m + s*Z))
+      //X = math.exp((m + s*Z))
+      X = math.exp((mu + sigma*Z))
     }
     math.round(X.toFloat)
   }
@@ -123,6 +151,9 @@ object GraphGenerator {
     val numVertices = math.round(math.pow(2.0, math.ceil(math.log(requestedNumVertices)/math.log(2.0)))).toInt
     var edges: Set[Edge[Int]] = Set()
     while (edges.size < numEdges) {
+      if (edges.size % 100 == 0) {
+        println(edges.size + " edges")
+      }
       edges += addEdge(numVertices)
 
     }
@@ -195,14 +226,6 @@ object GraphGenerator {
         case 3 => chooseCell(x+newT, y+newT, newT)
       }
     }
-    
-
-
-
-
-
-
-
   }
 
   // TODO(crankshaw) turn result into an enum (or case class for pattern matching}
