@@ -79,9 +79,9 @@ object SparkBuild extends Build {
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.apache.spark",
-    version := "0.8.0-SNAPSHOT",
+    version := "0.9.0-incubating-SNAPSHOT",
     scalaVersion := "2.9.3",
-    scalacOptions := Seq("-unchecked", "-optimize", "-deprecation", 
+    scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
       "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
@@ -96,6 +96,9 @@ object SparkBuild extends Build {
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
+
+    // also check the local Maven repository ~/.m2
+    resolvers ++= Seq(Resolver.file("Local Maven Repo", file(Path.userHome + "/.m2/repository"))),
 
     // Shared between both core and streaming.
     resolvers ++= Seq("Akka Repository" at "http://repo.akka.io/releases/"),

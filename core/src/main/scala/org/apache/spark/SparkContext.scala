@@ -56,9 +56,9 @@ import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{StandaloneSchedulerBackend, SparkDeploySchedulerBackend,
-  ClusterScheduler, Schedulable, SchedulingMode}
+  ClusterScheduler}
 import org.apache.spark.scheduler.local.LocalScheduler
-import org.apache.spark.scheduler.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
+import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.storage.{StorageUtils, BlockManagerSource}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ClosureCleaner, Utils, MetadataCleaner, TimeStampedHashMap}
@@ -145,7 +145,7 @@ class SparkContext(
   }
 
   // Create and start the scheduler
-  private var taskScheduler: TaskScheduler = {
+  private[spark] var taskScheduler: TaskScheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
@@ -256,7 +256,9 @@ class SparkContext(
   private[spark] var checkpointDir: Option[String] = None
 
   // Thread Local variable that can be used by users to pass information down the stack
-  private val localProperties = new ThreadLocal[Properties]
+  private val localProperties = new InheritableThreadLocal[Properties] {
+    override protected def childValue(parent: Properties): Properties = new Properties(parent)
+  }
 
   def initLocalProperties() {
     localProperties.set(new Properties())
@@ -272,6 +274,9 @@ class SparkContext(
       localProperties.get.setProperty(key, value)
     }
   }
+
+  def getLocalProperty(key: String): String =
+    Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
 
   /** Set a human readable description of the current job. */
   def setJobDescription(value: String) {

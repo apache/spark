@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler
 
-import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 import scala.collection.mutable.ArrayBuffer
 /**
@@ -25,7 +25,7 @@ import scala.collection.mutable.ArrayBuffer
  * there are two type of Schedulable entities(Pools and TaskSetManagers)
  */
 private[spark] trait Schedulable {
-  var parent: Schedulable
+  var parent: Pool
   // child queues
   def schedulableQueue: ArrayBuffer[Schedulable]
   def schedulingMode: SchedulingMode
@@ -36,8 +36,6 @@ private[spark] trait Schedulable {
   def stageId: Int
   def name: String
 
-  def increaseRunningTasks(taskNum: Int): Unit
-  def decreaseRunningTasks(taskNum: Int): Unit
   def addSchedulable(schedulable: Schedulable): Unit
   def removeSchedulable(schedulable: Schedulable): Unit
   def getSchedulableByName(name: String): Schedulable
