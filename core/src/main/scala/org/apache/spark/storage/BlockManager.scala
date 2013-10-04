@@ -154,7 +154,8 @@ private[spark] class BlockManager(
 
   var heartBeatTask: Cancellable = null
 
-  val metadataCleaner = new MetadataCleaner("BlockManager", this.dropOldBlocks)
+  private val metadataCleaner = new MetadataCleaner(MetadataCleanerType.BLOCK_MANAGER, this.dropOldNonBroadcastBlocks)
+  private val broadcastCleaner = new MetadataCleaner(MetadataCleanerType.BROADCAST_VARS, this.dropOldBroadcastBlocks)
   initialize()
 
   // The compression codec to use. Note that the "lazy" val is necessary because we want to delay
@@ -911,13 +912,36 @@ private[spark] class BlockManager(
     }
   }
 
-  def dropOldBlocks(cleanupTime: Long) {
-    logInfo("Dropping blocks older than " + cleanupTime)
+  private def dropOldNonBroadcastBlocks(cleanupTime: Long) {
+    logInfo("Dropping non broadcast blocks older than " + cleanupTime)
     val iterator = blockInfo.internalMap.entrySet().iterator()
     while (iterator.hasNext) {
       val entry = iterator.next()
       val (id, info, time) = (entry.getKey, entry.getValue._1, entry.getValue._2)
-      if (time < cleanupTime) {
+      if (time < cleanupTime && ! BlockManager.isBroadcastBlock(id) ) {
+        info.synchronized {
+          val level = info.level
+          if (level.useMemory) {
+            memoryStore.remove(id)
+          }
+          if (level.useDisk) {
+            diskStore.remove(id)
+          }
+          iterator.remove()
+          logInfo("Dropped block " + id)
+        }
+        reportBlockStatus(id, info)
+      }
+    }
+  }
+
+  private def dropOldBroadcastBlocks(cleanupTime: Long) {
+    logInfo("Dropping broadcast blocks older than " + cleanupTime)
+    val iterator = blockInfo.internalMap.entrySet().iterator()
+    while (iterator.hasNext) {
+      val entry = iterator.next()
+      val (id, info, time) = (entry.getKey, entry.getValue._1, entry.getValue._2)
+      if (time < cleanupTime && BlockManager.isBroadcastBlock(id) ) {
         info.synchronized {
           val level = info.level
           if (level.useMemory) {
@@ -937,7 +961,7 @@ private[spark] class BlockManager(
   def shouldCompress(blockId: String): Boolean = {
     if (ShuffleBlockManager.isShuffle(blockId)) {
       compressShuffle
-    } else if (blockId.startsWith("broadcast_")) {
+    } else if (BlockManager.isBroadcastBlock(blockId)) {
       compressBroadcast
     } else if (blockId.startsWith("rdd_")) {
       compressRdds
@@ -994,6 +1018,7 @@ private[spark] class BlockManager(
     memoryStore.clear()
     diskStore.clear()
     metadataCleaner.cancel()
+    broadcastCleaner.cancel()
     logInfo("BlockManager stopped")
   }
 }
@@ -1067,5 +1092,9 @@ private[spark] object BlockManager extends Logging {
   {
     blockIdsToBlockManagers(blockIds, env, blockManagerMaster).mapValues(s => s.map(_.host))
   }
+
+  def isBroadcastBlock(blockId: String): Boolean = null != blockId && blockId.startsWith("broadcast_")
+
+  def toBroadcastId(id: Long): String = "broadcast_" + id
 }
 

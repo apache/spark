@@ -25,7 +25,7 @@ import scala.collection.mutable.{ListBuffer, Map, Set}
 import scala.math
 
 import org.apache.spark._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{BlockManager, StorageLevel}
 import org.apache.spark.util.Utils
 
 private[spark] class TreeBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
@@ -33,7 +33,7 @@ extends Broadcast[T](id) with Logging with Serializable {
 
   def value = value_
 
-  def blockId = "broadcast_" + id
+  def blockId = BlockManager.toBroadcastId(id)
 
   MultiTracker.synchronized {
     SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
