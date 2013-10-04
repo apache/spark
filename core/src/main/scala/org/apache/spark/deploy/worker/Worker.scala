@@ -165,7 +165,7 @@ private[spark] class Worker(
           logInfo("Asked to kill unknown executor " + fullId)
       }
 
-    case _: Terminated | DisassociatedEvent | AssociationErrorEvent =>
+    case DisassociatedEvent(_, _, _) =>
       masterDisconnected()
 
     case RequestWorkerState => {
