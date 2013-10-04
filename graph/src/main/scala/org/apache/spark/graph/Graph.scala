@@ -189,6 +189,8 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   // def combineEdges(reduce: (ED, ED) => ED): Graph[VD, ED]
 
 
+
+
   /**
    * This function is used to compute a statistic for the neighborhood of each
    * vertex.

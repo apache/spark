@@ -27,11 +27,6 @@ object GraphGenerators {
   val RMATc = 0.15
   val RMATd = 0.25
 
-  /*
-  * TODO(crankshaw) delete
-  * How do I create a spark context and RDD and stuff?
-  * Like how do I actually make this program run?
-  */
   def main(args: Array[String]) {
 
 
