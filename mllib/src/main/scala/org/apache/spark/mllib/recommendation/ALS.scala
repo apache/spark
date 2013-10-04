@@ -207,20 +207,19 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
    * @return Option[YtY] - whose value is only used in the implicit preference model
    */
   def computeYtY(factors: RDD[(Int, Array[Array[Double]])]) = {
-    implicitPrefs match {
-      case true => {
-        Option(
-          factors.flatMapValues{ case factorArray =>
-            factorArray.map{ vector =>
-              val x = new DoubleMatrix(vector)
-              x.mmul(x.transpose())
-            }
-          }.reduceByKeyLocally((a, b) => a.addi(b))
-           .values
-           .reduce((a, b) => a.addi(b))
-        )
-      }
-      case false => None
+    if (implicitPrefs) {
+      Option(
+        factors.flatMapValues{ case factorArray =>
+          factorArray.map{ vector =>
+            val x = new DoubleMatrix(vector)
+            x.mmul(x.transpose())
+          }
+        }.reduceByKeyLocally((a, b) => a.addi(b))
+         .values
+         .reduce((a, b) => a.addi(b))
+      )
+    } else {
+      None
     }
   }
 
