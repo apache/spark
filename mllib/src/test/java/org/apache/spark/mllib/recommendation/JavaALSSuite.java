@@ -90,8 +90,8 @@ public class JavaALSSuite implements Serializable {
           double err = confidence * (truePref - prediction) * (truePref - prediction);
           sqErr += err;
           denom += 1.0;
-          }
         }
+      }
       double rmse = Math.sqrt(sqErr / denom);
       Assert.assertTrue(String.format("Confidence-weighted RMSE=%2.4f above threshold of %2.2f",
               rmse, matchThreshold), Math.abs(rmse) < matchThreshold);
