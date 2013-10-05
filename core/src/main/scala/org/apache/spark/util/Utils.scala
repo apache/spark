@@ -70,6 +70,19 @@ private[spark] object Utils extends Logging {
     return ois.readObject.asInstanceOf[T]
   }
 
+  /** Deserialize a Long value (used for {@link org.apache.spark.api.python.PythonPartitioner}) */
+  def deserializeLongValue(bytes: Array[Byte]) : Long = {
+    // Note: we assume that we are given a Long value encoded in network (big-endian) byte order
+    var result = bytes(7) & 0xFFL
+    result = result + ((bytes(6) & 0xFFL) << 8)
+    result = result + ((bytes(5) & 0xFFL) << 16)
+    result = result + ((bytes(4) & 0xFFL) << 24)
+    result = result + ((bytes(3) & 0xFFL) << 32)
+    result = result + ((bytes(2) & 0xFFL) << 40)
+    result = result + ((bytes(1) & 0xFFL) << 48)
+    result + ((bytes(0) & 0xFFL) << 56)
+  }
+
   /** Serialize via nested stream using specific serializer */
   def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(f: SerializationStream => Unit) = {
     val osWrapper = ser.serializeStream(new OutputStream {

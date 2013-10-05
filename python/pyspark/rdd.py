@@ -29,7 +29,7 @@ from threading import Thread
 
 from pyspark import cloudpickle
 from pyspark.serializers import batched, Batch, dump_pickle, load_pickle, \
-    read_from_pickle_file
+    read_from_pickle_file, pack_long
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -736,11 +736,13 @@ class RDD(object):
         # form the hash buckets in Python, transferring O(numPartitions) objects
         # to Java.  Each object is a (splitNumber, [objects]) pair.
         def add_shuffle_key(split, iterator):
+
             buckets = defaultdict(list)
+
             for (k, v) in iterator:
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
             for (split, items) in buckets.iteritems():
-                yield str(split)
+                yield pack_long(split)
                 yield dump_pickle(Batch(items))
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
@@ -877,8 +879,8 @@ class RDD(object):
         >>> sorted(x.subtractByKey(y).collect())
         [('b', 4), ('b', 5)]
         """ 
-        filter_func = lambda tpl: len(tpl[1][0]) > 0 and len(tpl[1][1]) == 0
-        map_func = lambda tpl: [(tpl[0], val) for val in tpl[1][0]]
+        filter_func = lambda (key, vals): len(vals[0]) > 0 and len(vals[1]) == 0
+        map_func = lambda (key, vals): [(key, val) for val in vals[0]]
         return self.cogroup(other, numPartitions).filter(filter_func).flatMap(map_func)
 
     def subtract(self, other, numPartitions=None):
