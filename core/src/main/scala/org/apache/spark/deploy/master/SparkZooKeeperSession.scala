@@ -35,7 +35,7 @@ import org.apache.zookeeper.Watcher.Event.KeeperState
  * Additionally, all commands sent to ZooKeeper will be retried until they either fail too many
  * times or a semantic exception is thrown (e.g.., "node already exists").
  */
-class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher) extends Logging {
+private[spark] class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher) extends Logging {
   val ZK_URL = System.getProperty("spark.deploy.zookeeper.url", "")
 
   val ZK_ACL = ZooDefs.Ids.OPEN_ACL_UNSAFE
@@ -53,10 +53,13 @@ class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher) extends Logging {
   /** Connect to ZooKeeper to start the session. Must be called before anything else. */
   def connect() {
     connectToZooKeeper()
-    spawn(sessionMonitorThread)
+
+    new Thread() {
+      override def run() = sessionMonitorThread()
+    }.start()
   }
 
-  def sessionMonitorThread = {
+  def sessionMonitorThread(): Unit = {
     while (!closed) {
       Thread.sleep(ZK_CHECK_PERIOD_MILLIS)
       if (zk.getState != ZooKeeper.States.CONNECTED) {
@@ -170,7 +173,7 @@ class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher) extends Logging {
    *
    * @param fn Block to execute, possibly multiple times.
    */
-  def retry[T](fn: => T)(implicit n: Int = MAX_RECONNECT_ATTEMPTS): T = {
+  def retry[T](fn: => T, n: Int = MAX_RECONNECT_ATTEMPTS): T = {
     try {
       fn
     } catch {
@@ -179,7 +182,7 @@ class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher) extends Logging {
       case e if n > 0 =>
         logError("ZooKeeper exception, " + n + " more retries...", e)
         Thread.sleep(RETRY_WAIT_MILLIS)
-        retry(fn)(n-1)
+        retry(fn, n-1)
     }
   }
 }

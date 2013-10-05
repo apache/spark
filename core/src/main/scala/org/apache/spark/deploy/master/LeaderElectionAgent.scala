@@ -29,12 +29,12 @@ import org.apache.spark.deploy.master.MasterMessages.ElectedLeader
  * [[org.apache.spark.deploy.master.MasterMessages.ElectedLeader ElectedLeader]]
  * [[org.apache.spark.deploy.master.MasterMessages.RevokedLeadership RevokedLeadership]]
  */
-trait LeaderElectionAgent extends Actor {
+private[spark] trait LeaderElectionAgent extends Actor {
   val masterActor: ActorRef
 }
 
 /** Single-node implementation of LeaderElectionAgent -- we're initially and always the leader. */
-class MonarchyLeaderAgent(val masterActor: ActorRef) extends LeaderElectionAgent {
+private[spark] class MonarchyLeaderAgent(val masterActor: ActorRef) extends LeaderElectionAgent {
   override def preStart() {
     masterActor ! ElectedLeader
   }

@@ -42,17 +42,17 @@ private[spark] class WorkerInfo(
 
   @transient var lastHeartbeat: Long = _
 
-  init
+  init()
 
   def coresFree: Int = cores - coresUsed
   def memoryFree: Int = memory - memoryUsed
 
   private def readObject(in: java.io.ObjectInputStream) : Unit = {
     in.defaultReadObject()
-    init
+    init()
   }
 
-  private def init = {
+  private def init() {
     executors = new mutable.HashMap
     state = WorkerState.ALIVE
     coresUsed = 0

@@ -17,8 +17,6 @@
 # limitations under the License.
 #
 
-# Starts workers on the machine this script is executed on.
-
 bin=`dirname "$0"`
 bin=`cd "$bin"; pwd`
 

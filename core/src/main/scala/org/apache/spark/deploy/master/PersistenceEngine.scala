@@ -23,9 +23,10 @@ package org.apache.spark.deploy.master
  *   - addApplication and addWorker are called before completing registration of a new app/worker.
  *   - removeApplication and removeWorker are called at any time.
  * Given these two requirements, we will have all apps and workers persisted, but
- * we might not have yet deleted apps or workers that finished.
+ * we might not have yet deleted apps or workers that finished (so their liveness must be verified
+ * during recovery).
  */
-trait PersistenceEngine {
+private[spark] trait PersistenceEngine {
   def addApplication(app: ApplicationInfo)
 
   def removeApplication(app: ApplicationInfo)
@@ -43,7 +44,7 @@ trait PersistenceEngine {
   def close() {}
 }
 
-class BlackHolePersistenceEngine extends PersistenceEngine {
+private[spark] class BlackHolePersistenceEngine extends PersistenceEngine {
   override def addApplication(app: ApplicationInfo) {}
   override def removeApplication(app: ApplicationInfo) {}
   override def addWorker(worker: WorkerInfo) {}

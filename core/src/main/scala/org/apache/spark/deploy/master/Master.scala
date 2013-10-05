@@ -79,7 +79,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val masterUrl = "spark://" + host + ":" + port
   var masterWebUiUrl: String = _
 
-  var state = MasterState.STANDBY
+  var state = RecoveryState.STANDBY
 
   var persistenceEngine: PersistenceEngine = _
 
@@ -139,13 +139,13 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     case ElectedLeader => {
       val (storedApps, storedWorkers) = persistenceEngine.readPersistedData()
       state = if (storedApps.isEmpty && storedWorkers.isEmpty)
-        MasterState.ALIVE
+        RecoveryState.ALIVE
       else
-        MasterState.RECOVERING
+        RecoveryState.RECOVERING
 
       logInfo("I have been elected leader! New state: " + state)
 
-      if (state == MasterState.RECOVERING) {
+      if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedWorkers)
         context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis) { completeRecovery() }
       }
@@ -159,7 +159,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     case RegisterWorker(id, host, workerPort, cores, memory, webUiPort, publicAddress) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         host, workerPort, cores, Utils.megabytesToString(memory)))
-      if (state == MasterState.STANDBY) {
+      if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
       } else if (idToWorker.contains(id)) {
         sender ! RegisterWorkerFailed("Duplicate worker ID")
@@ -174,7 +174,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
 
     case RegisterApplication(description) => {
-      if (state == MasterState.STANDBY) {
+      if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
       } else {
         logInfo("Registering app " + description.name)
@@ -262,21 +262,21 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       // those we have an entry for in the corresponding actor hashmap
       actorToWorker.get(actor).foreach(removeWorker)
       actorToApp.get(actor).foreach(finishApplication)
-      if (state == MasterState.RECOVERING && canCompleteRecovery) { completeRecovery() }
+      if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
     case RemoteClientDisconnected(transport, address) => {
       // The disconnected client could've been either a worker or an app; remove whichever it was
       addressToWorker.get(address).foreach(removeWorker)
       addressToApp.get(address).foreach(finishApplication)
-      if (state == MasterState.RECOVERING && canCompleteRecovery) { completeRecovery() }
+      if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
     case RemoteClientShutdown(transport, address) => {
       // The disconnected client could've been either a worker or an app; remove whichever it was
       addressToWorker.get(address).foreach(removeWorker)
       addressToApp.get(address).foreach(finishApplication)
-      if (state == MasterState.RECOVERING && canCompleteRecovery) { completeRecovery() }
+      if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
     case RequestMasterState => {
@@ -324,15 +324,15 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   def completeRecovery() {
     // Ensure "only-once" recovery semantics using a short synchronization period.
     synchronized {
-      if (state != MasterState.RECOVERING) { return }
-      state = MasterState.COMPLETING_RECOVERY
+      if (state != RecoveryState.RECOVERING) { return }
+      state = RecoveryState.COMPLETING_RECOVERY
     }
 
     // Kill off any workers and apps that didn't respond to us.
     workers.filter(_.state == WorkerState.UNKNOWN).foreach(removeWorker)
     apps.filter(_.state == ApplicationState.UNKNOWN).foreach(finishApplication)
 
-    state = MasterState.ALIVE
+    state = RecoveryState.ALIVE
     schedule()
     logInfo("Recovery complete - resuming operations!")
   }
@@ -351,7 +351,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
    * every time a new app joins or resource availability changes.
    */
   def schedule() {
-    if (state != MasterState.ALIVE) { return }
+    if (state != RecoveryState.ALIVE) { return }
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
     if (spreadOutApps) {

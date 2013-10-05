@@ -17,17 +17,14 @@
 
 package org.apache.spark.deploy.master
 
-import scala.collection.JavaConversions._
-
-import org.apache.spark.deploy.master.MasterMessages.{CheckLeader, ElectedLeader, RevokedLeadership}
-import org.apache.spark.Logging
+import akka.actor.ActorRef
 import org.apache.zookeeper._
 import org.apache.zookeeper.Watcher.Event.EventType
 
-import akka.actor.{Cancellable, ActorRef}
-import akka.util.duration._
+import org.apache.spark.deploy.master.MasterMessages._
+import org.apache.spark.Logging
 
-class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef, masterUrl: String)
+private[spark] class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef, masterUrl: String)
   extends LeaderElectionAgent with SparkZooKeeperWatcher with Logging  {
 
   val WORKING_DIR = System.getProperty("spark.deploy.zookeeper.dir", "/spark") + "/leader_election"

@@ -21,7 +21,7 @@ import scala.collection.immutable.List
 
 import org.apache.spark.deploy.ExecutorState.ExecutorState
 import org.apache.spark.deploy.master.{WorkerInfo, ApplicationInfo}
-import org.apache.spark.deploy.master.MasterState.MasterState
+import org.apache.spark.deploy.master.RecoveryState.MasterState
 import org.apache.spark.deploy.worker.ExecutorRunner
 import org.apache.spark.util.Utils
 

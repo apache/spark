@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-private[spark] object MasterState
+private[spark] object RecoveryState
   extends Enumeration("STANDBY", "ALIVE", "RECOVERING", "COMPLETING_RECOVERY") {
 
   type MasterState = Value
