@@ -46,7 +46,8 @@ private[spark] class Client(
     listener: ClientListener)
   extends Logging {
 
-  val REGISTRATION_TIMEOUT = 60 * 1000
+  val REGISTRATION_TIMEOUT = 20.seconds
+  val REGISTRATION_RETRIES = 3
 
   var actor: ActorRef = null
   var appId: String = null
@@ -61,7 +62,7 @@ private[spark] class Client(
 
     override def preStart() {
       try {
-        connectToMaster()
+        registerWithMaster()
       } catch {
         case e: Exception =>
           logError("Failed to connect to master", e)
@@ -70,19 +71,31 @@ private[spark] class Client(
       }
     }
 
-    def connectToMaster() {
+    def tryRegisterAllMasters() {
       for (masterUrl <- masterUrls) {
         logInfo("Connecting to master " + masterUrl + "...")
         val actor = context.actorFor(Master.toAkkaUrl(masterUrl))
         actor ! RegisterApplication(appDescription)
       }
+    }
 
-      context.system.scheduler.scheduleOnce(REGISTRATION_TIMEOUT millis) {
-        if (!registered) {
-          logError("All masters are unresponsive! Giving up.")
-          markDead()
+    def registerWithMaster() {
+      tryRegisterAllMasters()
+
+      var retries = 0
+      lazy val retryTimer: Cancellable =
+        context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
+          retries += 1
+          if (registered) {
+            retryTimer.cancel()
+          } else if (retries >= REGISTRATION_RETRIES) {
+            logError("All masters are unresponsive! Giving up.")
+            markDead()
+          } else {
+            tryRegisterAllMasters()
+          }
         }
-      }
+      retryTimer // start timer
     }
 
     def changeMaster(url: String) {

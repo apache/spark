@@ -123,6 +123,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   }
 
   override def preRestart(reason: Throwable, message: Option[Any]) {
+    super.preRestart(reason, message) // calls postStop()!
     logError("Master actor restarted due to exception", reason)
   }
 
@@ -279,7 +280,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
 
     case RequestMasterState => {
-      sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray)
+      sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
+        state)
     }
 
     case CheckForWorkerTimeOut => {
@@ -297,14 +299,25 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   def beginRecovery(storedApps: Seq[ApplicationInfo], storedWorkers: Seq[WorkerInfo]) {
     for (app <- storedApps) {
-      registerApplication(app)
-      app.state = ApplicationState.UNKNOWN
-      app.driver ! MasterChanged(masterUrl, masterWebUiUrl)
+      logInfo("Trying to recover app: " + app.id)
+      try {
+        registerApplication(app)
+        app.state = ApplicationState.UNKNOWN
+        app.driver ! MasterChanged(masterUrl, masterWebUiUrl)
+      } catch {
+        case e: Exception => logInfo("App " + app.id + " had exception on reconnect")
+      }
     }
+
     for (worker <- storedWorkers) {
-      registerWorker(worker)
-      worker.state = WorkerState.UNKNOWN
-      worker.actor ! MasterChanged(masterUrl, masterWebUiUrl)
+      logInfo("Trying to recover worker: " + worker.id)
+      try {
+        registerWorker(worker)
+        worker.state = WorkerState.UNKNOWN
+        worker.actor ! MasterChanged(masterUrl, masterWebUiUrl)
+      } catch {
+        case e: Exception => logInfo("Worker " + worker.id + " had exception on reconnect")
+      }
     }
   }
 
@@ -409,7 +422,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     workers += worker
     idToWorker(worker.id) = worker
-    actorToWorker(sender) = worker
+    actorToWorker(worker.actor) = worker
     addressToWorker(workerAddress) = worker
   }
 

@@ -21,6 +21,7 @@ import scala.collection.immutable.List
 
 import org.apache.spark.deploy.ExecutorState.ExecutorState
 import org.apache.spark.deploy.master.{WorkerInfo, ApplicationInfo}
+import org.apache.spark.deploy.master.MasterState.MasterState
 import org.apache.spark.deploy.worker.ExecutorRunner
 import org.apache.spark.util.Utils
 
@@ -111,7 +112,8 @@ private[deploy] object DeployMessages {
   // Master to MasterWebUI
 
   case class MasterStateResponse(host: String, port: Int, workers: Array[WorkerInfo],
-    activeApps: Array[ApplicationInfo], completedApps: Array[ApplicationInfo]) {
+    activeApps: Array[ApplicationInfo], completedApps: Array[ApplicationInfo],
+    status: MasterState) {
 
     Utils.checkHost(host, "Required hostname")
     assert (port > 0)
@@ -133,4 +135,7 @@ private[deploy] object DeployMessages {
     assert (port > 0)
   }
 
+  // Actor System to Worker
+
+  case object SendHeartbeat
 }

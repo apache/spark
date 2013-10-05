@@ -59,10 +59,12 @@ private[spark] class Worker(
   // Index into masterUrls that we're currently trying to register with.
   var masterIndex = 0
 
+  val masterLock: Object = new Object()
   var master: ActorRef = null
   var activeMasterUrl: String = ""
   var activeMasterWebUiUrl : String = ""
-  var registered = false
+  @volatile var registered = false
+  @volatile var connected = false
   val workerId = generateWorkerId()
   var sparkHome: File = null
   var workDir: File = null
@@ -102,6 +104,7 @@ private[spark] class Worker(
   }
 
   override def preStart() {
+    assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
     sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
@@ -117,11 +120,14 @@ private[spark] class Worker(
   }
 
   def changeMaster(url: String, uiUrl: String) {
-    activeMasterUrl = url
-    activeMasterWebUiUrl = uiUrl
-    master = context.actorFor(Master.toAkkaUrl(activeMasterUrl))
-    context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-    context.watch(master) // Doesn't work with remote actors, but useful for testing
+    masterLock.synchronized {
+      activeMasterUrl = url
+      activeMasterWebUiUrl = uiUrl
+      master = context.actorFor(Master.toAkkaUrl(activeMasterUrl))
+      context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+      context.watch(master) // Doesn't work with remote actors, but useful for testing
+      connected = true
+    }
   }
 
   def tryRegisterAllMasters() {
@@ -157,8 +163,11 @@ private[spark] class Worker(
       logInfo("Successfully registered with master " + masterUrl)
       registered = true
       changeMaster(masterUrl, masterWebUiUrl)
-      context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
-        master ! Heartbeat(workerId)
+      context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
+
+    case SendHeartbeat =>
+      masterLock.synchronized {
+        if (connected) { master ! Heartbeat(workerId) }
       }
 
     case MasterChanged(masterUrl, masterWebUiUrl) =>
@@ -171,8 +180,10 @@ private[spark] class Worker(
       sender ! WorkerSchedulerStateResponse(workerId, execs.toList)
 
     case RegisterWorkerFailed(message) =>
-      logError("Worker registration failed: " + message)
-      System.exit(1)
+      if (!registered) {
+        logError("Worker registration failed: " + message)
+        System.exit(1)
+      }
 
     case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
       if (masterUrl != activeMasterUrl) {
@@ -185,11 +196,15 @@ private[spark] class Worker(
         manager.start()
         coresUsed += cores_
         memoryUsed += memory_
-        master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
+        masterLock.synchronized {
+          master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
+        }
       }
 
     case ExecutorStateChanged(appId, execId, state, message, exitStatus) =>
-      master ! ExecutorStateChanged(appId, execId, state, message, exitStatus)
+      masterLock.synchronized {
+        master ! ExecutorStateChanged(appId, execId, state, message, exitStatus)
+      }
       val fullId = appId + "/" + execId
       if (ExecutorState.isFinished(state)) {
         val executor = executors(fullId)
@@ -216,7 +231,13 @@ private[spark] class Worker(
         }
       }
 
-    case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
+    case Terminated(actor_) if actor_ == master =>
+      masterDisconnected()
+
+    case RemoteClientDisconnected(transport, address) if address == master.path.address =>
+      masterDisconnected()
+
+    case RemoteClientShutdown(transport, address) if address == master.path.address =>
       masterDisconnected()
 
     case RequestWorkerState => {
@@ -228,6 +249,7 @@ private[spark] class Worker(
 
   def masterDisconnected() {
     logError("Connection to master failed! Waiting for master to reconnect...")
+    connected = false
   }
 
   def generateWorkerId(): String = {

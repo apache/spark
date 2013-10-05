@@ -38,6 +38,8 @@ private[master] object MasterMessages {
 
   case class BeginRecovery(storedApps: Seq[ApplicationInfo], storedWorkers: Seq[WorkerInfo])
 
+  case object CompleteRecovery
+
   case object RequestWebUIPort
 
   case class WebUIPortResponse(webUIBoundPort: Int)

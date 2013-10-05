@@ -44,10 +44,18 @@ class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef, masterUrl: String)
   }
 
   override def zkSessionCreated() {
-    zk.mkdirRecursive(WORKING_DIR)
-    myLeaderFile =
-      zk.create(WORKING_DIR + "/master_", masterUrl.getBytes, CreateMode.EPHEMERAL_SEQUENTIAL)
-    self ! CheckLeader
+    synchronized {
+      zk.mkdirRecursive(WORKING_DIR)
+      myLeaderFile =
+        zk.create(WORKING_DIR + "/master_", masterUrl.getBytes, CreateMode.EPHEMERAL_SEQUENTIAL)
+      self ! CheckLeader
+    }
+  }
+
+  override def preRestart(reason: scala.Throwable, message: scala.Option[scala.Any]) {
+    logError("LeaderElectionAgent failed, waiting " + zk.ZK_TIMEOUT_MILLIS + "...", reason)
+    Thread.sleep(zk.ZK_TIMEOUT_MILLIS)
+    super.preRestart(reason, message)
   }
 
   override def zkDown() {
@@ -75,7 +83,7 @@ class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef, masterUrl: String)
   /** Uses ZK leader election. Navigates several ZK potholes along the way. */
   def checkLeader() {
     val masters = zk.getChildren(WORKING_DIR).toList
-    val leader = masters.sorted.get(0)
+    val leader = masters.sorted.head
     val leaderFile = WORKING_DIR + "/" + leader
 
     // Setup a watch for the current leader.
@@ -92,20 +100,25 @@ class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef, masterUrl: String)
         return
     }
 
-    val isLeader = myLeaderFile == leaderFile
-    if (!isLeader && leaderUrl == masterUrl) {
-      // We found a different master file pointing to this process.
-      // This can happen in the following two cases:
-      // (1) The master process was restarted on the same node.
-      // (2) The ZK server died between creating the node and returning the name of the node.
-      //     For this case, we will end up creating a second file, and MUST explicitly delete the
-      //     first one, since our ZK session is still open.
-      // Note that this deletion will cause a NodeDeleted event to be fired so we check again for
-      // leader changes.
-      logWarning("Cleaning up old ZK master election file that points to this master.")
-      zk.delete(leaderFile)
-    } else {
-      updateLeadershipStatus(isLeader)
+    // Synchronization used to ensure no interleaving between the creation of a new session and the
+    // checking of a leader, which could cause us to delete our real leader file erroneously.
+    synchronized {
+      val isLeader = myLeaderFile == leaderFile
+      if (!isLeader && leaderUrl == masterUrl) {
+        // We found a different master file pointing to this process.
+        // This can happen in the following two cases:
+        // (1) The master process was restarted on the same node.
+        // (2) The ZK server died between creating the node and returning the name of the node.
+        //     For this case, we will end up creating a second file, and MUST explicitly delete the
+        //     first one, since our ZK session is still open.
+        // Note that this deletion will cause a NodeDeleted event to be fired so we check again for
+        // leader changes.
+        assert(leaderFile < myLeaderFile)
+        logWarning("Cleaning up old ZK master election file that points to this master.")
+        zk.delete(leaderFile)
+      } else {
+        updateLeadershipStatus(isLeader)
+      }
     }
   }
 
