@@ -332,6 +332,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
     }
     exception.getMessage should endWith("result exceeded Akka frame size")
   }
+
 }
 
 object DistributedSuite {

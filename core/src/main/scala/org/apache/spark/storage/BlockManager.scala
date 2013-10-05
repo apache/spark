@@ -484,7 +484,7 @@ private[spark] class BlockManager(
     for (loc <- locations) {
       logDebug("Getting remote block " + blockId + " from " + loc)
       val data = BlockManagerWorker.syncGetBlock(
-          GetBlock(blockId), ConnectionManagerId(loc.host, loc.port))
+        GetBlock(blockId), ConnectionManagerId(loc.host, loc.port))
       if (data != null) {
         return Some(dataDeserialize(blockId, data))
       }
@@ -493,6 +493,31 @@ private[spark] class BlockManager(
     logDebug("Block " + blockId + " not found")
     return None
   }
+
+  /**
+   * Get block from remote block managers as serialized bytes.
+   */
+   def getRemoteBytes(blockId: String): Option[ByteBuffer] = {
+     // TODO: As with getLocalBytes, this is very similar to getRemote and perhaps should be
+     // refactored.
+     if (blockId == null) {
+       throw new IllegalArgumentException("Block Id is null")
+     }
+     logDebug("Getting remote block " + blockId + " as bytes")
+     
+     val locations = master.getLocations(blockId)
+     for (loc <- locations) {
+       logDebug("Getting remote block " + blockId + " from " + loc)
+       val data = BlockManagerWorker.syncGetBlock(
+         GetBlock(blockId), ConnectionManagerId(loc.host, loc.port))
+       if (data != null) {
+         return Some(data)
+       }
+       logDebug("The value of block " + blockId + " is null")
+     }
+     logDebug("Block " + blockId + " not found")
+     return None
+   }
 
   /**
    * Get a block from the block manager (either local or remote).
