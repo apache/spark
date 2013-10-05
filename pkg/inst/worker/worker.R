@@ -10,7 +10,7 @@ source_local("serialize.R")
 
 # NOTE: We use "stdin" to get the process stdin instead of the command line
 inputCon  <- file("stdin", open = "rb")
-outputFileName <- paste("/tmp/", Sys.getpid(), ".out", sep="")
+outputFileName <- tempfile(pattern="spark-exec", fileext=".out")
 outputCon <- file(outputFileName, open="wb")
 
 # First read the function
@@ -18,14 +18,18 @@ execFunction <- unserialize(readRaw(inputCon))
 
 isSerialized <- readInt(inputCon)
 
-#depsFile <- readString(inputCon)
 execFunctionDeps <- readRaw(inputCon)
-depsFileName <- paste("/tmp/", Sys.getpid(), ".deps", sep="")
+depsFileName <- tempfile(pattern="spark-exec", fileext=".deps")
 depsFile <- file(depsFileName, open="wb")
 writeBin(execFunctionDeps, depsFile, endian="big")
 close(depsFile)
 
 load(depsFileName, envir=environment(execFunction))
+unlink(depsFileName)
+
+# Redirect stdout to stderr to prevent print statements from 
+# interfering with outputStream
+sink(stderr())
 
 if (isSerialized) {
   # Now read as many characters as described in funcLen
@@ -45,6 +49,9 @@ writeRaw(outputCon, output)
 writeInt(outputCon, 0L)
 
 close(outputCon)
+
+# Restore stdout
+sink()
 
 # Finally print the name of the output file
 cat(outputFileName, "\n")

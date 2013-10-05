@@ -20,6 +20,14 @@ RRDD <- function(jrdd, serialized = TRUE) {
   new("RRDD", jrdd = jrdd, serialized = serialized)
 }
 
+setGeneric("cache", function(rrdd) { standardGeneric("cache") })
+setMethod("cache",
+          signature(rrdd = "RRDD"),
+          function(rrdd) {
+            .jcall(rrdd@jrdd, "Lorg/apache/spark/api/java/JavaRDD;", "cache")
+            rrdd
+          })
+
 # collect(): Return a list that contains all of the elements in this RRDD.
 # NOTE: supports only RRDD[Array[Byte]] and RRDD[primitive java type] for now.
 setGeneric("collect", function(rrdd, ...) { standardGeneric("collect") })
@@ -70,8 +78,6 @@ setMethod("lapplyPartition",
 
             depsBin <- getDependencies(FUN)
             depsBinArr <- .jarray(depsBin)
-            #jsc <- get(".sparkRjsc", env=.sparkREnv)
-            #jsc$addFile(depsFile)
             rrddRef <- new(J("org.apache.spark.api.r.RRDD"),
                            X@jrdd$rdd(),
                            serializedFuncArr,

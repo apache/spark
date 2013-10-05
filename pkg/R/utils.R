@@ -43,14 +43,17 @@ isRRDD <- function(name, env) {
 }
 
 getDependencies <- function(name) {
-  fileName <- paste("/tmp/", as.character(quote(name)), "-",
-                    as.numeric(Sys.time()), ".deps", sep="")
+  fileName <- tempfile(pattern="spark-utils", fileext=".deps")
+  #paste(tempdir(), "/", as.character(quote(name)), "-",
+  #                  as.numeric(Sys.time()), ".deps", sep="")
   funcEnv <- environment(name)
   varsToSave <- ls(funcEnv)
   filteredVars <- Filter(function(x) { !isRRDD(x, funcEnv) }, varsToSave)
-  #cat("Saving ", filteredVars, "\n")
+
   save(list=filteredVars, file=fileName, envir=funcEnv)
   fileSize <- file.info(fileName)$size
-  readBin(fileName, raw(), fileSize, endian="big")
-  #fileName
+  binData <- readBin(fileName, raw(), fileSize, endian="big")
+
+  unlink(fileName)
+  binData
 }

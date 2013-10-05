@@ -11,17 +11,18 @@ sc <- sparkR.init(args[[1]], "LogisticRegressionR")
 iterations <- as.integer(args[[3]])
 D <- 10
 
-begin <- proc.time()[3]
-
 readPartition <- function(part) {
   t(sapply(part, function(line) {
     as.numeric(strsplit(line, " ")[[1]])
   }))
 }
-points <- lapplyPartition(textFile(sc, args[[2]]), readPartition)
 
+begin <- as.numeric(Sys.time())
+
+points <- cache(lapplyPartition(textFile(sc, args[[2]]), readPartition))
 
 # Initialize w to a random value
+#w <- rep(0, 10)
 w <- runif(n=D, min = -1, max = 1)
 cat("Initial w: ", w, "\n")
 
@@ -44,5 +45,5 @@ for (i in 1:iterations) {
 
 cat("Final w: ", w, "\n")
 
-end <- proc.time()[3]
-cat("\n", "------------ ", end-begin, " -------------", "\n")
+end <- as.numeric(Sys.time())
+cat("\n", "------------ Time taken:", end-begin, " -------------", "\n")

@@ -4,7 +4,7 @@ JAR_NAME := sparkr-1.0-allinone.jar
 all: sparkR
 
 SparkR: pkg/R/*
-	R CMD INSTALL -d --library=$(LIB_DIR) pkg/
+	R CMD INSTALL --library=$(LIB_DIR) pkg/
 
 sparkR: SparkR
 

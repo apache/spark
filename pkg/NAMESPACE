@@ -1,6 +1,14 @@
 #exportPattern("^[[:alpha:]]+")
 exportClasses("RRDD")
-exportMethods("collect", "lapply", "count", "length", "reduce", "lapplyPartition")
+exportMethods(
+              "cache",
+              "collect",
+              "count",
+              "length",
+              "lapply",
+              "lapplyPartition",
+              "reduce"
+             )
 
 # S3 methods exported
 export("textFile", "parallelize")
