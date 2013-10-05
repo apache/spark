@@ -361,7 +361,7 @@ object GraphImpl {
    * Notice that P0 has many edges and as a consequence this 
    * partitioning would lead to poor work balance.  To improve
    * balance we first multiply each vertex id by a large prime 
-   * to effectively suffle the vertex locations. 
+   * to effectively shuffle the vertex locations. 
    *
    * One of the limitations of this approach is that the number of
    * machines must either be a perfect square.  We partially address
@@ -375,6 +375,20 @@ object GraphImpl {
   protected def edgePartitionFunction2D(src: Vid, dst: Vid, 
     numParts: Pid, ceilSqrtNumParts: Pid): Pid = {
     val mixingPrime: Vid = 1125899906842597L 
+    val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
+    val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
+    (col * ceilSqrtNumParts + row) % numParts
+  }
+
+
+  protected def canonicalEdgePartitionFunction2D(srcOrig: Vid, dstOrig: Vid, 
+    numParts: Pid, ceilSqrtNumParts: Pid): Pid = {
+    val mixingPrime: Vid = 1125899906842597L 
+
+    // Partitions by canonical edge direction
+    // @todo(crankshaw) evaluate the cases 
+    val src = math.min(srcOrig, dstOrig)
+    val dst = math.max(srcOrig, dstOrig)
     val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
     val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
     (col * ceilSqrtNumParts + row) % numParts
