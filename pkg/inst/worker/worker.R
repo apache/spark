@@ -8,6 +8,12 @@ source_local <- function(fname) {
 
 source_local("serialize.R")
 
+# Set libPaths to include SparkR package as loadNamespace needs this
+# TODO: Figure out if we can avoid this by not loading any objects that require
+# SparkR namespace
+sparkHome <- Sys.getenv("SPARK_HOME")
+.libPaths(c( .libPaths(), paste(sparkHome,"/R/lib", sep="")))
+
 # NOTE: We use "stdin" to get the process stdin instead of the command line
 inputCon  <- file("stdin", open = "rb")
 outputFileName <- tempfile(pattern="spark-exec", fileext=".out")
