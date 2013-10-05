@@ -21,9 +21,10 @@ import org.apache.spark.Partitioner
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.CoGroupedRDD
 import org.apache.spark.streaming.{Time, DStream, Duration}
+import scala.reflect.ClassTag
 
 private[streaming]
-class CoGroupedDStream[K : ClassManifest](
+class CoGroupedDStream[K : ClassTag](
     parents: Seq[DStream[(K, _)]],
     partitioner: Partitioner
   ) extends DStream[(K, Seq[Seq[_]])](parents.head.ssc) {

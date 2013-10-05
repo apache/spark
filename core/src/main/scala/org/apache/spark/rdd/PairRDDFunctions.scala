@@ -51,7 +51,7 @@ import org.apache.spark.Partitioner.defaultPartitioner
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
-class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
+class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   extends Logging
   with SparkHadoopMapReduceUtil
   with Serializable {

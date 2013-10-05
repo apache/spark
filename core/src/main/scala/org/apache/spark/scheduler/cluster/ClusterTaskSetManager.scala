@@ -461,7 +461,7 @@ private[spark] class ClusterTaskSetManager(
         case cnf: ClassNotFoundException =>
           val loader = Thread.currentThread().getContextClassLoader
           throw new SparkException("ClassNotFound with classloader: " + loader, cnf)
-        case ex => throw ex
+        case ex: Throwable => throw ex
       }
       // Mark finished and stop if we've finished all the tasks
       finished(index) = true

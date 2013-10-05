@@ -20,8 +20,6 @@ package org.apache.spark.mllib.recommendation;
 import java.io.Serializable;
 import java.util.List;
 
-import scala.Tuple2;
-
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;

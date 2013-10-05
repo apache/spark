@@ -20,7 +20,6 @@ package org.apache.spark.network.netty;
 import java.net.InetSocketAddress;
 
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.oio.OioEventLoopGroup;
