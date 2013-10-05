@@ -11,8 +11,9 @@ textFile <- function(jsc, name, minSplits=NULL) {
     defaultParallelism <- .jcall(sc, "I", "defaultParallelism")
     minSplits <- min(defaultParallelism, 2)
   }
-  jrdd <- .jcall(jsc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", name, as.integer(minSplits))
-  RRDD(jrdd)
+  jrdd <- .jcall(jsc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", name,
+                 as.integer(minSplits))
+  RRDD(jrdd, FALSE)
 }
 
 # Distribute a local R homogeneous list to form an RRDD[Array[Byte]]. If a
@@ -31,7 +32,8 @@ parallelize <- function(jsc, coll, numSlices = 1) {
   }
 
   if (numSlices > length(coll)) {
-    message("context.R: parallelize: numSlices larger than coll's length; defaulting numSlices to the length.")
+    message(paste("context.R: parallelize: numSlices larger than coll's length",
+                  "; defaulting numSlices to the length.", sep=""))
     numSlices = length(coll)
   }
 
@@ -49,5 +51,5 @@ parallelize <- function(jsc, coll, numSlices = 1) {
                  jsc,
                  javaSerializedSlices)
 
-  RRDD(jrdd)
+  RRDD(jrdd, TRUE)
 }

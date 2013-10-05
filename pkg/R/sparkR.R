@@ -11,7 +11,7 @@ sparkR.onLoad <- function(libname, pkgname) {
 
   assign("sparkJar", classPath, env=.sparkREnv)
 
-  cat("[SparkR] Initializing with classpath ", classPath, "\n")
+  packageStartupMessage("[SparkR] Initializing with classpath ", classPath, "\n")
 
   .jinit(classpath=classPath)
 }
@@ -20,7 +20,7 @@ sparkR.onLoad <- function(libname, pkgname) {
 sparkR.init <- function(
   master = "local[2]",
   appName = "SparkR",
-  sparkHome = NULL,
+  sparkHome = Sys.getenv("SPARK_HOME"),
   jars = NULL,
   jarFile = NULL,
   environment = NULL) {
@@ -31,7 +31,7 @@ sparkR.init <- function(
 
   # TODO: support other constructors
   assign(
-    ".sparkRjsc", 
+    ".sparkRjsc",
      .jnew("org/apache/spark/api/java/JavaSparkContext", master, appName),
      env=.sparkREnv
   )

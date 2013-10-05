@@ -2,7 +2,7 @@
 
 # TODO: test with RRDD[T] where T is not String
 # Given a List<T>, returns an R list.
-"JavaListToRList" <- function(jList, flatten = FALSE) {
+JavaListToRList <- function(jList, flatten = FALSE) {
   size <- .jcall(jList, "I", "size")
   results <-
     lapply(0:(size - 1),
@@ -37,3 +37,20 @@
   }
 }
 
+isRRDD <- function(name, env) {
+  obj <- get(name, envir=env)
+  class(obj) == "RRDD"
+}
+
+getDependencies <- function(name) {
+  fileName <- paste("/tmp/", as.character(quote(name)), "-",
+                    as.numeric(Sys.time()), ".deps", sep="")
+  funcEnv <- environment(name)
+  varsToSave <- ls(funcEnv)
+  filteredVars <- Filter(function(x) { !isRRDD(x, funcEnv) }, varsToSave)
+  #cat("Saving ", filteredVars, "\n")
+  save(list=filteredVars, file=fileName, envir=funcEnv)
+  fileSize <- file.info(fileName)$size
+  readBin(fileName, raw(), fileSize, endian="big")
+  #fileName
+}

@@ -1,1 +1,7 @@
-exportPattern("^[[:alpha:]]+")
+#exportPattern("^[[:alpha:]]+")
+exportClasses("RRDD")
+exportMethods("collect", "lapply", "count", "length", "reduce", "lapplyPartition")
+
+# S3 methods exported
+export("textFile", "parallelize")
+exportPattern("^sparkR")

@@ -1,4 +1,3 @@
-.onLoad <- function(libname, pkgname) {
-  library(rJava)
+.onAttach <- function(libname, pkgname) {
   sparkR.onLoad(libname, pkgname)
 }
