@@ -1,5 +1,4 @@
-LIB_DIR := lib/
-JAR_NAME := sparkr-1.0-allinone.jar
+LIB_DIR := $(shell pwd)/lib/
 
 all: sparkR
 
@@ -9,6 +8,3 @@ SparkR: pkg/R/*
 sparkR: SparkR
 
 sparkr: SparkR
-
-#java:
-	#mvn package shade:shade
