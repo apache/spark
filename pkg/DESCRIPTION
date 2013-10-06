@@ -5,6 +5,7 @@ Version: 0.1
 Date: 2013-09-09
 Author: Shivaram Venkataraman
 Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
-Depends: R (>= 3.0), rJava
+Depends: R (>= 3.0), methods, rJava
+Suggests: testthat
 Description: R frontend for Spark
 License: BSD

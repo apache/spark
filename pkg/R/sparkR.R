@@ -9,7 +9,7 @@ sparkR.onLoad <- function(libname, pkgname) {
   sparkJarAbsPath <- c(sparkDir[[1]][1:(length(sparkDir[[1]]) - 2)], sparkJarPath)
   classPath <- paste(sparkJarAbsPath, collapse = "/")
 
-  assign("sparkJar", classPath, env=.sparkREnv)
+  assign("sparkJar", classPath, envir=.sparkREnv)
 
   packageStartupMessage("[SparkR] Initializing with classpath ", classPath, "\n")
 
@@ -25,17 +25,17 @@ sparkR.init <- function(
   jarFile = NULL,
   environment = NULL) {
 
-  if (exists(".sparkRjsc", env=.sparkREnv)) {
-    return(get(".sparkRjsc", env=.sparkREnv))
+  if (exists(".sparkRjsc", envir=.sparkREnv)) {
+    return(get(".sparkRjsc", envir=.sparkREnv))
   }
 
   # TODO: support other constructors
   assign(
     ".sparkRjsc",
      .jnew("org/apache/spark/api/java/JavaSparkContext", master, appName),
-     env=.sparkREnv
+     envir=.sparkREnv
   )
 
-  get(".sparkRjsc", env=.sparkREnv)
+  get(".sparkRjsc", envir=.sparkREnv)
 }
 

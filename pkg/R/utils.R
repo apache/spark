@@ -44,8 +44,6 @@ isRRDD <- function(name, env) {
 
 getDependencies <- function(name) {
   fileName <- tempfile(pattern="spark-utils", fileext=".deps")
-  #paste(tempdir(), "/", as.character(quote(name)), "-",
-  #                  as.numeric(Sys.time()), ".deps", sep="")
   funcEnv <- environment(name)
   varsToSave <- ls(funcEnv)
   filteredVars <- Filter(function(x) { !isRRDD(x, funcEnv) }, varsToSave)

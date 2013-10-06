@@ -73,7 +73,7 @@ setGeneric("lapplyPartition", function(X, FUN) {
 setMethod("lapplyPartition",
           signature(X = "RRDD", FUN = "function"),
           function(X, FUN) {
-            serializedFunc <- serialize(FUN, conn = NULL, ascii = TRUE)
+            serializedFunc <- serialize(FUN, connection = NULL, ascii = TRUE)
             serializedFuncArr <- .jarray(serializedFunc)
 
             depsBin <- getDependencies(FUN)
