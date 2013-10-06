@@ -106,7 +106,7 @@ class HadoopRDD[K, V](
 
   protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
 
-  private val inputFormatCacheKey = "rdd_%d_input_format".format(id)
+  protected val inputFormatCacheKey = "rdd_%d_input_format".format(id)
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
@@ -122,7 +122,7 @@ class HadoopRDD[K, V](
     }
   }
 
-  def getInputFormat(conf: JobConf): InputFormat[K, V] = {
+  protected def getInputFormat(conf: JobConf): InputFormat[K, V] = {
     if (HadoopRDD.containsCachedMetadata(inputFormatCacheKey)) {
       return HadoopRDD.getCachedMetadata(inputFormatCacheKey).asInstanceOf[InputFormat[K, V]]
     }
@@ -196,7 +196,7 @@ class HadoopRDD[K, V](
   def getConf: Configuration = getJobConf()
 }
 
-object HadoopRDD {
+private[spark] object HadoopRDD {
   def getCachedMetadata(key: String) = SparkEnv.get.hadoop.hadoopJobMetadata.get(key)
 
   def containsCachedMetadata(key: String) = SparkEnv.get.hadoop.hadoopJobMetadata.containsKey(key)
