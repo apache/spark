@@ -52,8 +52,15 @@ class HadoopFileRDD[K, V](
 
   override def getJobConf(): JobConf = {
     if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
+      // getJobConf() has been called previously, so there is already a local cache of the JobConf
+      // needed by this RDD.
       return HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
     } else {
+      // Create a new JobConf, set the input file/directory paths to read from, and cache the
+      // JobConf (i.e., in a shared hash map in the slave's JVM process that's accessible through
+      // HadoopRDD.putCachedMetadata()), so that we only create one copy across multiple
+      // getJobConf() calls for this RDD in the local process.
+      // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
       val newJobConf = new JobConf(broadcastedConf.value.value)
       FileInputFormat.setInputPaths(newJobConf, path)
       HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
@@ -112,10 +119,16 @@ class HadoopRDD[K, V](
   protected def getJobConf(): JobConf = {
     val conf: Configuration = broadcastedConf.value.value
     if (conf.isInstanceOf[JobConf]) {
+      // A user-broadcasted JobConf was provided to the HadoopRDD, so always use it.
       return conf.asInstanceOf[JobConf]
     } else if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
+      // getJobConf() has been called previously, so there is already a local cache of the JobConf
+      // needed by this RDD.
       return HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
     } else {
+      // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in the
+      // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
+      // The caching helps minimize GC, since a JobConf can contain ~10KB of temporary objects.
       val newJobConf = new JobConf(broadcastedConf.value.value)
       HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
       return newJobConf
@@ -126,6 +139,8 @@ class HadoopRDD[K, V](
     if (HadoopRDD.containsCachedMetadata(inputFormatCacheKey)) {
       return HadoopRDD.getCachedMetadata(inputFormatCacheKey).asInstanceOf[InputFormat[K, V]]
     }
+    // Once an InputFormat for this RDD is created, cache it so that only one reflection call is
+    // done in each local process.
     val newInputFormat = ReflectionUtils.newInstance(inputFormatClass.asInstanceOf[Class[_]], conf)
       .asInstanceOf[InputFormat[K, V]]
     if (newInputFormat.isInstanceOf[Configurable]) {
@@ -197,6 +212,10 @@ class HadoopRDD[K, V](
 }
 
 private[spark] object HadoopRDD {
+  /**
+   * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
+   * the local process.
+   */
   def getCachedMetadata(key: String) = SparkEnv.get.hadoop.hadoopJobMetadata.get(key)
 
   def containsCachedMetadata(key: String) = SparkEnv.get.hadoop.hadoopJobMetadata.containsKey(key)
