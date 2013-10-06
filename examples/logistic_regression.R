@@ -7,6 +7,7 @@ if (length(args) != 3) {
   q("no")
 }
 
+# Initialize Spark context
 sc <- sparkR.init(args[[1]], "LogisticRegressionR")
 iterations <- as.integer(args[[3]])
 D <- 10
@@ -17,12 +18,10 @@ readPartition <- function(part) {
   }))
 }
 
-begin <- as.numeric(Sys.time())
-
+# Read data points and convert each partition to a matrix
 points <- cache(lapplyPartition(textFile(sc, args[[2]]), readPartition))
 
 # Initialize w to a random value
-#w <- rep(0, 10)
 w <- runif(n=D, min = -1, max = 1)
 cat("Initial w: ", w, "\n")
 
@@ -31,7 +30,7 @@ gradient <- function(partition) {
   Y <- partition[, 1]  # point labels (first column of input file)
   X <- partition[, -1] # point coordinates
 
-  # For each point (x, y), compute gradient function, then sum these up
+  # For each point (x, y), compute gradient function
   dot <- X %*% w
   logit <- 1 / (1 + exp(-Y * dot))
   grad <- t(X) %*% ((logit - 1) * Y)
@@ -44,6 +43,3 @@ for (i in 1:iterations) {
 }
 
 cat("Final w: ", w, "\n")
-
-end <- as.numeric(Sys.time())
-cat("\n", "------------ Time taken:", end-begin, " -------------", "\n")
