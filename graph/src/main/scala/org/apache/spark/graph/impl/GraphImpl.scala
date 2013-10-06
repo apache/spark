@@ -124,7 +124,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   // We will want to keep the same partitioning scheme. Use newGraph() rather than
   // new GraphImpl()
-  override def groupEdges[ED2: ClassManifest](f: Iterator[EdgeTriplet[ED,VD]] => ED2 ):
+  override def groupEdges[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ):
     Graph[VD,ED2] = {
 
       // I think that
@@ -153,6 +153,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         .mapValues { ts => f(ts.toIterator) }
         // convert the resulting map back to a list of tuples
         .toList
+        // TODO(crankshaw) needs an iterator over the tuples? Why can't I map over the list?
+        .toIterator
         // map over those tuples that contain src and dst info plus the
         // new edge data to make my new edges
         .map { case ((src, dst), data) => Edge(src, dst, data) }
