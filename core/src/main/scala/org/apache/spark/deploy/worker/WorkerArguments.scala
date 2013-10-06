@@ -89,7 +89,7 @@ private[spark] class WorkerArguments(args: Array[String]) {
       if (masters != null) {  // Two positional arguments were given
         printUsageAndExit(1)
       }
-      masters = value.split(",")
+      masters = value.stripPrefix("spark://").split(",").map("spark://" + _)
       parse(tail)
 
     case Nil =>

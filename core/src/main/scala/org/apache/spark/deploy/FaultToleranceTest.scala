@@ -36,6 +36,8 @@ import org.apache.spark.deploy.master.RecoveryState
 
 /**
  * This suite tests the fault tolerance of the Spark standalone scheduler, mainly the Master.
+ * Execute using
+ * ./spark-class org.apache.spark.deploy.FaultToleranceTest
  *
  * In order to mimic a real distributed cluster more closely, Docker is used.
  * Unfortunately, this dependency means that the suite cannot be run automatically without a
@@ -56,7 +58,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
   assertTrue(sparkHome != null, "Run with a valid SPARK_HOME")
 
   val containerSparkHome = "/opt/spark"
-  val dockerMountString = "%s:%s".format(sparkHome, containerSparkHome)
+  val dockerMountDir = "%s:%s".format(sparkHome, containerSparkHome)
 
   System.setProperty("spark.driver.host", "172.17.42.1") // default docker host ip
 
@@ -172,12 +174,12 @@ private[spark] object FaultToleranceTest extends App with Logging {
   }
 
   def addMasters(num: Int) {
-    (1 to num).foreach { _ => masters += SparkDocker.startMaster(sparkHome) }
+    (1 to num).foreach { _ => masters += SparkDocker.startMaster(dockerMountDir) }
   }
 
   def addWorkers(num: Int) {
     val masterUrls = getMasterUrls(masters)
-    (1 to num).foreach { _ => workers += SparkDocker.startWorker(sparkHome, masterUrls) }
+    (1 to num).foreach { _ => workers += SparkDocker.startWorker(dockerMountDir, masterUrls) }
   }
 
   /** Creates a SparkContext, which constructs a Client to interact with our cluster. */
@@ -190,7 +192,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
   }
 
   def getMasterUrls(masters: Seq[TestMasterInfo]): String = {
-    masters.map(master => "spark://" + master.ip + ":7077").mkString(",")
+    "spark://" + masters.map(master => master.ip + ":7077").mkString(",")
   }
 
   def getLeader: TestMasterInfo = {
