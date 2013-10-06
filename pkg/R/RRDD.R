@@ -33,7 +33,7 @@ setMethod("cache",
 setGeneric("collect", function(rrdd, ...) { standardGeneric("collect") })
 setMethod("collect",
           signature(rrdd = "RRDD"),
-          function(rrdd, flatten=FALSE) {
+          function(rrdd, flatten = TRUE) {
             collected <- .jcall(rrdd@jrdd, "Ljava/util/List;", "collect")
             JavaListToRList(collected, flatten)
           })
@@ -97,6 +97,7 @@ setMethod("reduce",
               Reduce(func, part)
             }
 
-            partitionList <- collect(lapplyPartition(rrdd, reducePartition))
+            partitionList <- collect(lapplyPartition(rrdd, reducePartition),
+                                     flatten=FALSE)
             Reduce(func, partitionList)
           })

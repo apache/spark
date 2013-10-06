@@ -2,7 +2,7 @@
 
 # TODO: test with RRDD[T] where T is not String
 # Given a List<T>, returns an R list.
-JavaListToRList <- function(jList, flatten = FALSE) {
+JavaListToRList <- function(jList, flatten) {
   size <- .jcall(jList, "I", "size")
   results <-
     lapply(0:(size - 1),
@@ -31,7 +31,7 @@ JavaListToRList <- function(jList, flatten = FALSE) {
              res
            })
   if (flatten) {
-    as.list(unlist(results))
+    as.list(unlist(results, recursive = FALSE))
   } else {
     as.list(results)
   }
