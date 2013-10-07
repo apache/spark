@@ -43,6 +43,41 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("groupEdges") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val vertices = sc.parallelize(List(Vertex(6, 1),Vertex(7, 1), Vertex(8,1)))
+      val edges = sc.parallelize(List(
+        Edge(6, 7, 0.4),
+        Edge(6, 7, 0.9),
+        Edge(6, 7, 0.7),
+        Edge(7, 6, 25.0),
+        Edge(7, 6, 300.0),
+        Edge(7, 6, 600.0),
+        Edge(8, 7, 11.0),
+        Edge(7, 8, 89.0)))
+
+      val original = Graph(vertices, edges)
+      for (e <- original.edges) {
+        println("(" + e.src + ", " + e.dst + ", " + e.data + ")")
+      }
+      //assert(original.edges.count() === 6)
+      val grouped = original.groupEdgeTriplets { iter => 
+        println("----------------------------------------")
+        iter.map(_.data).sum }
+
+      for (e <- grouped.edges) {
+        println("******************************(" + e.src + ", " + e.dst + ", " + e.data + ")")
+      }
+
+      //val groups: Map[(Vid, Vid), List[Edge[Double]]] = original.edges.collect.toList.groupBy { e => (e.src, e.dst) }
+      //for (k <- groups.keys) {
+      //  println("#################  " + k + "  #################")
+      //}
+      //assert(grouped.edges.count() === 2)
+      //assert(grouped.edges.collect().toSet === Set(Edge(0, 1, 2.0), Edge(1, 0, 6.0)))
+    }
+  }
+
  /* test("joinVertices") {
     sc = new SparkContext("local", "test")
     val vertices = sc.parallelize(Seq(Vertex(1, "one"), Vertex(2, "two"), Vertex(3, "three")), 2)

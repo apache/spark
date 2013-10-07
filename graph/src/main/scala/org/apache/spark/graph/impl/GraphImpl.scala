@@ -124,7 +124,11 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   // We will want to keep the same partitioning scheme. Use newGraph() rather than
   // new GraphImpl()
-  override def groupEdges[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ):
+  // TODO(crankshaw) is there a better way to do this using RDD.groupBy()
+  // functions?
+
+  override def groupEdgeTriplets[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ):
+  //override def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ):
     Graph[VD,ED2] = {
 
       // I think that
@@ -139,18 +143,21 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
       // TODO(crankshaw) figure out how to actually get the new Edge RDD and what
       // type that should have
-      val newEdges: RDD[Edge[ED2]] = triplets.mapPartitions { partIterator =>
+      val newEdges: RDD[Edge[ED2]] = triplets.mapPartitions { partIter =>
         // toList lets us operate on all EdgeTriplets in a single partition at once
-        partIterator.toList
+        partIter.toList
         // groups all ETs in this partition that have the same src and dst
         // Because all ETs with the same src and dst will live on the same
         // partition due to the EdgePartitioner, this guarantees that these
         // ET groups will be complete.
-        .groupBy { t => (t.src.id, t.dst.id) }
+        .groupBy { t: EdgeTriplet[VD, ED] => 
+            println(t.src.id + " " + t.dst.id)
+            (t.src.id, t.dst.id) }
+        //.groupBy { e => (e.src, e.dst) }
         // Apply the user supplied supplied edge group function to
         // each group of edges
         // The result of this line is Map[(Long, Long, ED2]
-        .mapValues { ts => f(ts.toIterator) }
+        .mapValues { ts: List[EdgeTriplet[VD, ED]] => f(ts.toIterator) }
         // convert the resulting map back to a list of tuples
         .toList
         // TODO(crankshaw) needs an iterator over the tuples? Why can't I map over the list?
@@ -172,6 +179,44 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       newGraph(vertices, newEdges)
 
   }
+
+
+  override def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ):
+    Graph[VD,ED2] = {
+
+      val newEdges: RDD[Edge[ED2]] = edges.mapPartitions { partIter =>
+        partIter.toList
+        .groupBy { e: Edge[ED] => 
+            println(e.src + " " + e.dst)
+            (e.src, e.dst) }
+        .mapValues { ts => f(ts.toIterator) }
+        .toList
+        .toIterator
+        .map { case ((src, dst), data) => Edge(src, dst, data) }
+
+
+      }
+      newGraph(vertices, newEdges)
+
+  }
+
+
+
+
+  //override def groupEdges[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ):
+  //  Graph[VD,ED] = {
+  //  val groups = triplets.collect.toList.groupBy { t => (t.src.id, t.dst.id) }
+  //  for (k <- groups.keys) {
+  //      println("^^^^^^^^^^^^^^^^^  " + k + "  ^^^^^^^^^^^^^^^^^^^^^")
+
+  //  }
+  //  val transformMap: Map[(Vid, Vid), ED2] = groups.mapValues { ts => f(ts.toIterator) }
+  //  val newList: List[((Vid, Vid), ED2)] = transformMap.toList
+  //  val newEdges: List[Edge[ED2]] = newList.map { case ((src, dst), data) => Edge(src, dst, data) }
+
+  //  newGraph(vertices, edges)
+
+  //}
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
@@ -467,8 +512,8 @@ object GraphImpl {
       .map { e =>
         // Random partitioning based on the source vertex id.
         // val part: Pid = edgePartitionFunction1D(e.src, e.dst, numPartitions)
-        //val part: Pid = edgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
-        val part: Pid = canonicalEdgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
+        val part: Pid = edgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
+        //val part: Pid = canonicalEdgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
 
         // Should we be using 3-tuple or an optimized class
         (part, (e.src, e.dst, e.data))
