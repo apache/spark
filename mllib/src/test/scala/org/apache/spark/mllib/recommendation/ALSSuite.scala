@@ -87,19 +87,19 @@ class ALSSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("rank-1 matrices") {
-    testALS(10, 20, 1, 15, 0.7, 0.3)
+    testALS(50, 100, 1, 15, 0.7, 0.3)
   }
 
   test("rank-2 matrices") {
-    testALS(20, 30, 2, 15, 0.7, 0.3)
+    testALS(100, 200, 2, 15, 0.7, 0.3)
   }
 
   test("rank-1 matrices implicit") {
-    testALS(40, 80, 1, 15, 0.7, 0.4, true)
+    testALS(80, 160, 1, 15, 0.7, 0.4, true)
   }
 
   test("rank-2 matrices implicit") {
-    testALS(50, 100, 2, 15, 0.7, 0.4, true)
+    testALS(100, 200, 2, 15, 0.7, 0.4, true)
   }
 
   /**

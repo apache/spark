@@ -102,8 +102,8 @@ public class JavaALSSuite implements Serializable {
   public void runALSUsingStaticMethods() {
     int features = 1;
     int iterations = 15;
-    int users = 10;
-    int products = 10;
+    int users = 50;
+    int products = 100;
     scala.Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
         users, products, features, 0.7, false);
 
@@ -116,8 +116,8 @@ public class JavaALSSuite implements Serializable {
   public void runALSUsingConstructor() {
     int features = 2;
     int iterations = 15;
-    int users = 20;
-    int products = 30;
+    int users = 100;
+    int products = 200;
     scala.Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
         users, products, features, 0.7, false);
 
@@ -133,8 +133,8 @@ public class JavaALSSuite implements Serializable {
   public void runImplicitALSUsingStaticMethods() {
     int features = 1;
     int iterations = 15;
-    int users = 40;
-    int products = 80;
+    int users = 80;
+    int products = 160;
     scala.Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
       users, products, features, 0.7, true);
 
@@ -147,8 +147,8 @@ public class JavaALSSuite implements Serializable {
   public void runImplicitALSUsingConstructor() {
     int features = 2;
     int iterations = 15;
-    int users = 50;
-    int products = 100;
+    int users = 100;
+    int products = 200;
     scala.Tuple3<List<Rating>, DoubleMatrix, DoubleMatrix> testData = ALSSuite.generateRatingsAsJavaList(
       users, products, features, 0.7, true);
 
