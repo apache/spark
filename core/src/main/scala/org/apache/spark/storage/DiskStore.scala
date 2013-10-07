@@ -48,7 +48,6 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     /** Intercepts write calls and tracks total time spent writing. Not thread safe. */
     private class TimeTrackingOutputStream(out: OutputStream) extends OutputStream {
       def timeWriting = _timeWriting
-
       private var _timeWriting = 0L
 
       private def callWithTiming(f: => Unit) = {
@@ -88,6 +87,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     override def close() {
       if (initialized) {
         if (syncWrites) {
+          // Force outstanding writes to disk and track how long it takes
           val start = System.nanoTime()
           objOut.flush()
           fos.getFD.sync()

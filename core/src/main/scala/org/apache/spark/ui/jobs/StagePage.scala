@@ -86,7 +86,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         Seq("Task ID", "Status", "Locality Level", "Executor", "Launch Time", "Duration") ++
         Seq("GC Time") ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
-        {if (hasShuffleWrite) Seq("Shuffle Write") else Nil} ++
+        {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
         Seq("Errors")
 
       val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite), tasks)
@@ -152,22 +152,6 @@ private[spark] class StagePage(parent: JobProgressUI) {
       else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
     val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
 
-
-    val remoteBytesRead: Option[Long] = metrics.flatMap{m => m.shuffleReadMetrics}.map(r => r.remoteBytesRead)
-    val shuffleBytesWritten: Option[Long] = metrics.flatMap{m => m.shuffleWriteMetrics}.map(r => r.shuffleBytesWritten)
-
-    val writeThroughput: Option[Long] = metrics.flatMap{m => m.shuffleWriteMetrics}.flatMap{ s=>
-      val bytesWritten = s.shuffleBytesWritten
-      val timeTaken = s.shuffleWriteTime
-      val timeSeconds = timeTaken / (1000 * 1000 * 1000.0)
-      if (bytesWritten < 10000 || timeSeconds < .01) { // To little data to form an useful average
-        None
-      } else {
-        Some((bytesWritten / timeSeconds).toLong)
-      }
-    }
-    val writeThroughputStr = writeThroughput.map(t => " (%s/s)".format(Utils.bytesToString(t)))
-
     <tr>
       <td>{info.taskId}</td>
       <td>{info.status}</td>
@@ -185,10 +169,10 @@ private[spark] class StagePage(parent: JobProgressUI) {
           Utils.bytesToString(s.remoteBytesRead)}.getOrElse("")}</td>
       }}
       {if (shuffleWrite) {
+      <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
+        parent.formatDuration(s.shuffleWriteTime / (1000 * 1000))}.getOrElse("")}</td>
         <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
-          Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")}
-          {writeThroughputStr.getOrElse("")}
-        </td>
+          Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")}</td>
       }}
       <td>{exception.map(e =>
         <span>
