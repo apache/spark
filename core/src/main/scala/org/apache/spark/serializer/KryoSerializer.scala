@@ -38,8 +38,6 @@ class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging
 
   def newKryoOutput() = new KryoOutput(bufferSize)
 
-  def newKryoInput() = new KryoInput(bufferSize)
-
   def newKryo(): Kryo = {
     val instantiator = new ScalaKryoInstantiator
     val kryo = instantiator.newKryo()
@@ -118,8 +116,10 @@ class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends Deser
 
 private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
   val kryo = ks.newKryo()
-  val output = ks.newKryoOutput()
-  val input = ks.newKryoInput()
+
+  // Make these lazy vals to avoid creating a buffer unless we use them
+  lazy val output = ks.newKryoOutput()
+  lazy val input = new KryoInput()
 
   def serialize[T](t: T): ByteBuffer = {
     output.clear()
