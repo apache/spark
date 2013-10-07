@@ -145,13 +145,14 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       // type that should have
       val newEdges: RDD[Edge[ED2]] = triplets.mapPartitions { partIter =>
         // toList lets us operate on all EdgeTriplets in a single partition at once
-        partIter.toList
+        partIter
+        .toList
         // groups all ETs in this partition that have the same src and dst
         // Because all ETs with the same src and dst will live on the same
         // partition due to the EdgePartitioner, this guarantees that these
         // ET groups will be complete.
         .groupBy { t: EdgeTriplet[VD, ED] => 
-            println(t.src.id + " " + t.dst.id)
+            //println("(" + t.src.id + ", " + t.dst.id + ", " + t.data + ")")
             (t.src.id, t.dst.id) }
         //.groupBy { e => (e.src, e.dst) }
         // Apply the user supplied supplied edge group function to
@@ -201,22 +202,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
 
-
-
-  //override def groupEdges[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ):
-  //  Graph[VD,ED] = {
-  //  val groups = triplets.collect.toList.groupBy { t => (t.src.id, t.dst.id) }
-  //  for (k <- groups.keys) {
-  //      println("^^^^^^^^^^^^^^^^^  " + k + "  ^^^^^^^^^^^^^^^^^^^^^")
-
-  //  }
-  //  val transformMap: Map[(Vid, Vid), ED2] = groups.mapValues { ts => f(ts.toIterator) }
-  //  val newList: List[((Vid, Vid), ED2)] = transformMap.toList
-  //  val newEdges: List[Edge[ED2]] = newList.map { case ((src, dst), data) => Edge(src, dst, data) }
-
-  //  newGraph(vertices, edges)
-
-  //}
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
