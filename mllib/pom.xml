@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-mllib</artifactId>
+  <artifactId>spark-mllib_${scala-short.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project ML Library</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -34,7 +34,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core</artifactId>
+      <artifactId>spark-core_${scala-short.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -48,12 +48,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_2.10</artifactId>
+      <artifactId>scalatest_${scala-short.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_2.10</artifactId>
+      <artifactId>scalacheck_${scala-short.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>

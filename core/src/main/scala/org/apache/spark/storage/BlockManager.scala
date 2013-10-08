@@ -523,7 +523,17 @@ private[spark] class BlockManager(
    * Get a block from the block manager (either local or remote).
    */
   def get(blockId: String): Option[Iterator[Any]] = {
-    getLocal(blockId).orElse(getRemote(blockId))
+    val local = getLocal(blockId)
+    if (local.isDefined) {
+      logInfo("Found block %s locally".format(blockId))
+      return local
+    }
+    val remote = getRemote(blockId)
+    if (remote.isDefined) {
+      logInfo("Found block %s remotely".format(blockId))
+      return remote
+    }
+    None
   }
 
   /**

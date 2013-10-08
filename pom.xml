@@ -40,6 +40,7 @@
     <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
     <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/incubator-spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/incubator-spark.git</url>
+    <tag>HEAD</tag>
   </scm>
   <developers>
     <developer>
@@ -598,7 +599,7 @@
             <junitxml>.</junitxml>
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xms64m -Xmx3g</argLine>
-            <stderr/>
+            <stderr />
           </configuration>
           <executions>
             <execution>

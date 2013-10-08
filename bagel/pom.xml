@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-bagel</artifactId>
+  <artifactId>spark-bagel_${scala-short.version}</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Bagel</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -34,7 +34,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core</artifactId>
+      <artifactId>spark-core_${scala-short.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>

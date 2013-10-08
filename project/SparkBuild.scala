@@ -153,6 +153,7 @@ object SparkBuild extends Build {
 
 */
 
+
     libraryDependencies ++= Seq(
         "io.netty"          % "netty-all"       % "4.0.0.CR1",
         "org.eclipse.jetty" % "jetty-server"    % "7.6.8.v20121106",
@@ -179,6 +180,7 @@ object SparkBuild extends Build {
 
   val slf4jVersion = "1.7.2"
 
+  val excludeCglib = ExclusionRule(organization = "org.sonatype.sisu.inject")
   val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
   val excludeAsm = ExclusionRule(organization = "asm")
@@ -202,7 +204,6 @@ object SparkBuild extends Build {
         "commons-daemon"           % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
         "org.ow2.asm"              % "asm"              % "4.0",
         "com.google.protobuf"      % "protobuf-java"    % "2.4.1",
-        "de.javakaffee"            % "kryo-serializers" % "0.22",
         "com.typesafe.akka"       %% "akka-remote"      % "2.2.1"  excludeAll(excludeNetty), 
         "com.typesafe.akka"       %% "akka-slf4j"       % "2.2.1"  excludeAll(excludeNetty),
         "net.liftweb"             %% "lift-json"        % "2.5.1"  excludeAll(excludeNetty),
@@ -220,7 +221,7 @@ object SparkBuild extends Build {
         "com.codahale.metrics"     % "metrics-ganglia"  % "3.0.0",
         "com.twitter"             %% "chill"            % "0.3.1",
         "com.twitter"              % "chill-java"       % "0.3.1"
-      ) 
+      )
   )
 
   def rootSettings = sharedSettings ++ Seq(
@@ -250,6 +251,7 @@ object SparkBuild extends Build {
         exclude("log4j","log4j")
         exclude("org.apache.cassandra.deps", "avro")
         excludeAll(excludeSnappy)
+        excludeAll(excludeCglib)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
@@ -289,10 +291,10 @@ object SparkBuild extends Build {
   def yarnEnabledSettings = Seq(
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
-      "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
-      "org.apache.hadoop" % "hadoop-yarn-api" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
-      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
-      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm)
+      "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+      "org.apache.hadoop" % "hadoop-yarn-api" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
     )
   )
 
