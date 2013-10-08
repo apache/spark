@@ -88,11 +88,11 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
       if (initialized) {
         if (syncWrites) {
           // Force outstanding writes to disk and track how long it takes
-          val start = System.nanoTime()
           objOut.flush()
+          val start = System.nanoTime()
           fos.getFD.sync()
-          objOut.close()
           _timeWriting += System.nanoTime() - start
+          objOut.close()
         } else {
           objOut.close()
         }
