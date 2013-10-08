@@ -34,12 +34,11 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
   def getOrCompute[T](rdd: RDD[T], split: Partition, context: TaskContext, storageLevel: StorageLevel)
       : Iterator[T] = {
     val key = "rdd_%d_%d".format(rdd.id, split.index)
-    logInfo("Cache key is " + key)
+    logInfo("Looking for partition " + key)
     blockManager.get(key) match {
-      case Some(cachedValues) =>
-        // Partition is in cache, so just return its values
-        logInfo("Found partition in cache!")
-        return cachedValues.asInstanceOf[Iterator[T]]
+      case Some(values) =>
+        // Partition is already materialized, so just return its values
+        return values.asInstanceOf[Iterator[T]]
 
       case None =>
         // Mark the split as loading (unless someone else marks it first)
@@ -68,7 +67,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         }
         try {
           // If we got here, we have to load the split
-          logInfo("Computing partition " + split)
+          logInfo("Partition %s not found, computing it".format(key))
           val computedValues = rdd.computeOrReadCheckpoint(split, context)
           // Persist the result, so long as the task is not running locally
           if (context.runningLocally) { return computedValues }
