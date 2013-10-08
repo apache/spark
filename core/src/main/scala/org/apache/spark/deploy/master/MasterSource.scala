@@ -27,18 +27,17 @@ private[spark] class MasterSource(val master: Master) extends Source {
   val sourceName = "master"
 
   // Gauge for worker numbers in cluster
-  metricRegistry.register(
-    MetricRegistry.name(NamingConventions.makeMetricName("workers","number")), 
-    new Gauge[Int] { override def getValue: Int = master.workers.size })
+  metricRegistry.register(MetricRegistry.name(NamingConventions.makeMetricName("workers","number")), new Gauge[Int] {
+    override def getValue: Int = master.workers.size
+  })
 
   // Gauge for application numbers in cluster
-  metricRegistry.register(
-    MetricRegistry.name(NamingConventions.makeMetricName("apps", "number")), 
-    new Gauge[Int] { override def getValue: Int = master.apps.size })
+  metricRegistry.register(MetricRegistry.name(NamingConventions.makeMetricName("apps", "number")), new Gauge[Int] {
+    override def getValue: Int = master.apps.size
+  })
 
   // Gauge for waiting application numbers in cluster
-  metricRegistry.register(
-    MetricRegistry.name(NamingConventions.makeMetricName("waitingApps", "number")), 
-    new Gauge[Int] { override def getValue: Int = master.waitingApps.size })
+  metricRegistry.register(MetricRegistry.name(NamingConventions.makeMetricName("waitingApps", "number")), new Gauge[Int] {
+    override def getValue: Int = master.waitingApps.size
+  })
 }
-

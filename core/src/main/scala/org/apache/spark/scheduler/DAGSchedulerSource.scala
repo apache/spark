@@ -28,24 +28,23 @@ private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler, sc: Spar
   val metricRegistry = new MetricRegistry()
   val sourceName = "%s.DAGScheduler".format(sc.appName)
 
-  metricRegistry.register(
-    MetricRegistry.name("stage", NamingConventions.makeMetricName("failedStages", "number")), 
-    new Gauge[Int] { override def getValue: Int = dagScheduler.failed.size })
+  metricRegistry.register(MetricRegistry.name("stage", NamingConventions.makeMetricName("failedStages", "number")), new Gauge[Int] {
+    override def getValue: Int = dagScheduler.failed.size
+  })
 
-  metricRegistry.register(
-    MetricRegistry.name("stage", NamingConventions.makeMetricName("runningStages", "number")), 
-    new Gauge[Int] { override def getValue: Int = dagScheduler.running.size })
+  metricRegistry.register(MetricRegistry.name("stage", NamingConventions.makeMetricName("runningStages", "number")), new Gauge[Int] {
+    override def getValue: Int = dagScheduler.running.size
+  })
 
-  metricRegistry.register(
-    MetricRegistry.name("stage", NamingConventions.makeMetricName("waitingStages", "number")), 
-    new Gauge[Int] { override def getValue: Int = dagScheduler.waiting.size })
+  metricRegistry.register(MetricRegistry.name("stage", NamingConventions.makeMetricName("waitingStages", "number")), new Gauge[Int] {
+    override def getValue: Int = dagScheduler.waiting.size
+  })
 
-  metricRegistry.register(
-    MetricRegistry.name("job", NamingConventions.makeMetricName("allJobs", "number")), 
-    new Gauge[Int] { override def getValue: Int = dagScheduler.nextJobId.get() })
+  metricRegistry.register(MetricRegistry.name("job", NamingConventions.makeMetricName("allJobs", "number")), new Gauge[Int] {
+    override def getValue: Int = dagScheduler.nextJobId.get()
+  })
 
-  metricRegistry.register(
-    MetricRegistry.name("job", NamingConventions.makeMetricName("activeJobs", "number")), 
-    new Gauge[Int] { override def getValue: Int = dagScheduler.activeJobs.size })
+  metricRegistry.register(MetricRegistry.name("job", NamingConventions.makeMetricName("activeJobs", "number")), new Gauge[Int] {
+    override def getValue: Int = dagScheduler.activeJobs.size
+  })
 }
-
