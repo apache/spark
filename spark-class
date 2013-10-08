@@ -41,7 +41,7 @@ if [ "$1" = "org.apache.spark.deploy.master.Master" -o "$1" = "org.apache.spark.
   SPARK_MEM=${SPARK_DAEMON_MEMORY:-512m}
   SPARK_DAEMON_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS -Dspark.akka.logLifecycleEvents=true"
   # Do not overwrite SPARK_JAVA_OPTS environment variable in this script
-  OUR_JAVA_OPTS="$SPARK_JAVA_OPTS $SPARK_DAEMON_JAVA_OPTS"   # Empty by default
+  OUR_JAVA_OPTS="$SPARK_DAEMON_JAVA_OPTS"   # Empty by default
 else
   OUR_JAVA_OPTS="$SPARK_JAVA_OPTS"
 fi
