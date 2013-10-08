@@ -106,10 +106,12 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     // e.g. for `(k, a) cogroup (k, b)`, K -> Seq(ArrayBuffer as, ArrayBuffer bs)
     val map = new AppendOnlyMap[K, Seq[ArrayBuffer[Any]]]
 
-    def getSeq(k: K): Seq[ArrayBuffer[Any]] = {
-      map.changeValue(k, (hadValue, oldValue) => {
-        if (hadValue) oldValue else Array.fill(numRdds)(new ArrayBuffer[Any])
-      })
+    val update: (Boolean, Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] = (hadVal, oldVal) => {
+      if (hadVal) oldVal else Array.fill(numRdds)(new ArrayBuffer[Any])
+    }
+
+    val getSeq = (k: K) => {
+      map.changeValue(k, update)
     }
 
     val ser = SparkEnv.get.serializerManager.get(serializerClass)
