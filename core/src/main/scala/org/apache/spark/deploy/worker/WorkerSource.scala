@@ -25,12 +25,12 @@ private[spark] class WorkerSource(val worker: Worker) extends Source {
   val sourceName = "worker"
   val metricRegistry = new MetricRegistry()
 
-  metricRegistry.register(MetricRegistry.name("executors_number"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("executors"), new Gauge[Int] {
     override def getValue: Int = worker.executors.size
   })
 
   // Gauge for cores used of this worker
-  metricRegistry.register(MetricRegistry.name("coresUsed_number"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("coresUsed"), new Gauge[Int] {
     override def getValue: Int = worker.coresUsed
   })
 
@@ -40,7 +40,7 @@ private[spark] class WorkerSource(val worker: Worker) extends Source {
   })
 
   // Gauge for cores free of this worker
-  metricRegistry.register(MetricRegistry.name("coresFree_number"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("coresFree"), new Gauge[Int] {
     override def getValue: Int = worker.coresFree
   })
 
