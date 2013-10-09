@@ -23,7 +23,7 @@ import java.io.{EOFException, InputStream, OutputStream}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.esotericsoftware.kryo.{KryoException, Kryo}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
-import com.twitter.chill.ScalaKryoInstantiator
+import com.twitter.chill.{EmptyScalaKryoInstantiator, AllScalaRegistrar}
 
 import org.apache.spark.{SerializableWritable, Logging}
 import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock, StorageLevel}
@@ -39,7 +39,7 @@ class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging
   def newKryoOutput() = new KryoOutput(bufferSize)
 
   def newKryo(): Kryo = {
-    val instantiator = new ScalaKryoInstantiator
+    val instantiator = new EmptyScalaKryoInstantiator
     val kryo = instantiator.newKryo()
     val classLoader = Thread.currentThread.getContextClassLoader
 
@@ -49,7 +49,11 @@ class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging
       StorageLevel.MEMORY_ONLY,
       PutBlock("1", ByteBuffer.allocate(1), StorageLevel.MEMORY_ONLY),
       GotBlock("1", ByteBuffer.allocate(1)),
-      GetBlock("1")
+      GetBlock("1"),
+      1 to 10,
+      1 until 10,
+      1L to 10L,
+      1L until 10L
     )
 
     for (obj <- toRegister) kryo.register(obj.getClass)
@@ -68,6 +72,10 @@ class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging
     } catch {
       case _: Exception => println("Failed to register spark.kryo.registrator")
     }
+
+    // Register Chill's classes; we do this after our ranges and the user's own classes to let
+    // our code override the generic serialziers in Chill for things like Seq
+    new AllScalaRegistrar().apply(kryo)
 
     kryo.setClassLoader(classLoader)
 

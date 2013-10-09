@@ -103,6 +103,27 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
     check(List(mutable.HashMap("one" -> 1, "two" -> 2),mutable.HashMap(1->"one",2->"two",3->"three")))
   }
 
+  test("ranges") {
+    val ser = (new KryoSerializer).newInstance()
+    def check[T](t: T) {
+      assert(ser.deserialize[T](ser.serialize(t)) === t)
+      // Check that very long ranges don't get written one element at a time
+      assert(ser.serialize(t).limit < 100)
+    }
+    check(1 to 1000000)
+    check(1 to 1000000 by 2)
+    check(1 until 1000000)
+    check(1 until 1000000 by 2)
+    check(1L to 1000000L)
+    check(1L to 1000000L by 2L)
+    check(1L until 1000000L)
+    check(1L until 1000000L by 2L)
+    check(1.0 to 1000000.0 by 1.0)
+    check(1.0 to 1000000.0 by 2.0)
+    check(1.0 until 1000000.0 by 1.0)
+    check(1.0 until 1000000.0 by 2.0)
+  }
+
   test("custom registrator") {
     System.setProperty("spark.kryo.registrator", classOf[MyRegistrator].getName)
 
