@@ -54,16 +54,23 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
     assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (4)
-    listener.stageInfos.foreach {stageInfo =>
-      //small test, so some tasks might take less than 1 millisecond, but average should be greater than 1 ms
+    listener.stageInfos.foreach { stageInfo =>
+      /* small test, so some tasks might take less than 1 millisecond, but average should be greater
+       * than 0 ms. */
       checkNonZeroAvg(stageInfo.taskInfos.map{_._1.duration}, stageInfo + " duration")
-      checkNonZeroAvg(stageInfo.taskInfos.map{_._2.executorRunTime.toLong}, stageInfo + " executorRunTime")
-      checkNonZeroAvg(stageInfo.taskInfos.map{_._2.executorDeserializeTime.toLong}, stageInfo + " executorDeserializeTime")
+      checkNonZeroAvg(
+        stageInfo.taskInfos.map{_._2.executorRunTime.toLong},
+        stageInfo + " executorRunTime")
+      checkNonZeroAvg(
+        stageInfo.taskInfos.map{_._2.executorDeserializeTime.toLong},
+        stageInfo + " executorDeserializeTime")
       if (stageInfo.stage.rdd.name == d4.name) {
-        checkNonZeroAvg(stageInfo.taskInfos.map{_._2.shuffleReadMetrics.get.fetchWaitTime}, stageInfo + " fetchWaitTime")
+        checkNonZeroAvg(
+          stageInfo.taskInfos.map{_._2.shuffleReadMetrics.get.fetchWaitTime},
+          stageInfo + " fetchWaitTime")
       }
 
-      stageInfo.taskInfos.foreach{case (taskInfo, taskMetrics) =>
+      stageInfo.taskInfos.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
         if (isStage(stageInfo, Set(d2.name, d3.name), Set(d4.name))) {
           taskMetrics.shuffleWriteMetrics should be ('defined)
