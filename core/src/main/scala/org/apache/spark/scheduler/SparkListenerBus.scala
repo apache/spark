@@ -71,11 +71,11 @@ private[spark] class SparkListenerBus() extends Logging {
     }
   }
 
-  /** Waits until there are no more events in the queue, or until the specified time has elapsed.
-    * 
-    * Used for testing only. Returns true if the queue has emptied and false is the specified time
-    * elapsed before the queue emptied.
-    */
+  /**
+   * Waits until there are no more events in the queue, or until the specified time has elapsed.
+   * Used for testing only. Returns true if the queue has emptied and false is the specified time
+   * elapsed before the queue emptied.
+   */
   def waitUntilEmpty(timeoutMillis: Int): Boolean = {
     val finishTime = System.currentTimeMillis + timeoutMillis
     while (!eventQueue.isEmpty()) {
