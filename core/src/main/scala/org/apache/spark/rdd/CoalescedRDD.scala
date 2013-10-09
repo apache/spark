@@ -22,6 +22,7 @@ import java.io.{ObjectOutputStream, IOException}
 import scala.collection.mutable
 import scala.Some
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
 
 /**
  * Class that captures a coalesced RDD by essentially keeping track of parent partitions
@@ -68,7 +69,7 @@ case class CoalescedRDDPartition(
  * @param maxPartitions number of desired partitions in the coalesced RDD
  * @param balanceSlack used to trade-off balance and locality. 1.0 is all locality, 0 is all balance
  */
-class CoalescedRDD[T: ClassManifest](
+class CoalescedRDD[T: ClassTag](
                                       @transient var prev: RDD[T],
                                       maxPartitions: Int,
                                       balanceSlack: Double = 0.10)

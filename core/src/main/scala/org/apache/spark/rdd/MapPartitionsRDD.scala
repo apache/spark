@@ -18,10 +18,11 @@
 package org.apache.spark.rdd
 
 import org.apache.spark.{Partition, TaskContext}
+import scala.reflect.ClassTag
 
 
 private[spark]
-class MapPartitionsRDD[U: ClassManifest, T: ClassManifest](
+class MapPartitionsRDD[U: ClassTag, T: ClassTag](
     prev: RDD[T],
     f: Iterator[T] => Iterator[U],
     preservesPartitioning: Boolean = false)

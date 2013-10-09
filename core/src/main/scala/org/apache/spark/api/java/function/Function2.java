@@ -19,7 +19,6 @@ package org.apache.spark.api.java.function;
 
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
-import scala.runtime.AbstractFunction2;
 
 import java.io.Serializable;
 

@@ -18,7 +18,7 @@
 package org.apache.spark.deploy.master
 
 private[spark] object ApplicationState
-  extends Enumeration("WAITING", "RUNNING", "FINISHED", "FAILED") {
+  extends Enumeration {
 
   type ApplicationState = Value
 

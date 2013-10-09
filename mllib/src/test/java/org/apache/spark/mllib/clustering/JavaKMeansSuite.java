@@ -77,7 +77,7 @@ public class JavaKMeansSuite implements Serializable {
 
   @Test
   public void runKMeansUsingStaticMethods() {
-    List<double[]> points = new ArrayList();
+    List<double[]> points = new ArrayList<double[]>();
     points.add(new double[]{1.0, 2.0, 6.0});
     points.add(new double[]{1.0, 3.0, 0.0});
     points.add(new double[]{1.0, 4.0, 6.0});
@@ -94,7 +94,7 @@ public class JavaKMeansSuite implements Serializable {
 
   @Test
   public void runKMeansUsingConstructor() {
-    List<double[]> points = new ArrayList();
+    List<double[]> points = new ArrayList<double[]>();
     points.add(new double[]{1.0, 2.0, 6.0});
     points.add(new double[]{1.0, 3.0, 0.0});
     points.add(new double[]{1.0, 4.0, 6.0});

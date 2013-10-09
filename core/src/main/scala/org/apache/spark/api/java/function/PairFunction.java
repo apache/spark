@@ -20,7 +20,6 @@ package org.apache.spark.api.java.function;
 import scala.Tuple2;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
-import scala.runtime.AbstractFunction1;
 
 import java.io.Serializable;
 

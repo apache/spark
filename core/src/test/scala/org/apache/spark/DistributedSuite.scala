@@ -313,7 +313,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
           Thread.sleep(200)
         }
       } catch {
-        case _ => { Thread.sleep(10) }
+        case _: Throwable => { Thread.sleep(10) }
           // Do nothing. We might see exceptions because block manager
           // is racing this thread to remove entries from the driver.
       }
