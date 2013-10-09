@@ -231,7 +231,7 @@ class SparkContext(
   }
   taskScheduler.start()
 
-  @volatile private var dagScheduler = new DAGScheduler(taskScheduler)
+  @volatile private[spark] var dagScheduler = new DAGScheduler(taskScheduler)
   dagScheduler.start()
 
   ui.start()
