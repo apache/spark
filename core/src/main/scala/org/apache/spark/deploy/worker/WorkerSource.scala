@@ -35,7 +35,7 @@ private[spark] class WorkerSource(val worker: Worker) extends Source {
   })
 
   // Gauge for memory used of this worker
-  metricRegistry.register(MetricRegistry.name("memUsed_MBytes"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("memUsed_MB"), new Gauge[Int] {
     override def getValue: Int = worker.memoryUsed
   })
 
@@ -45,7 +45,7 @@ private[spark] class WorkerSource(val worker: Worker) extends Source {
   })
 
   // Gauge for memory free of this worker
-  metricRegistry.register(MetricRegistry.name("memFree_MBytes"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("memFree_MB"), new Gauge[Int] {
     override def getValue: Int = worker.memoryFree
   })
 }
