@@ -25,7 +25,7 @@
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
-  <version>0.8.0-SNAPSHOT</version>
+  <version>0.9.0-incubating-SNAPSHOT</version>
   <packaging>pom</packaging>
   <name>Spark Project Parent POM</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -40,6 +40,7 @@
     <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
     <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/incubator-spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/incubator-spark.git</url>
+    <tag>HEAD</tag>
   </scm>
   <developers>
     <developer>
@@ -558,7 +559,6 @@
             <useZincServer>true</useZincServer>
             <args>
               <arg>-unchecked</arg>
-              <arg>-optimise</arg>
               <arg>-deprecation</arg>
             </args>
             <jvmArgs>
@@ -605,7 +605,7 @@
             <junitxml>.</junitxml>
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xms64m -Xmx3g</argLine>
-            <stderr/>
+            <stderr />
           </configuration>
           <executions>
             <execution>

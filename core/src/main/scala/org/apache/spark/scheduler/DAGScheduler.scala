@@ -29,7 +29,6 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.scheduler.cluster.TaskInfo
 import org.apache.spark.storage.{BlockManager, BlockManagerMaster}
 import org.apache.spark.util.{MetadataCleaner, TimeStampedHashMap}
 
@@ -554,7 +553,7 @@ class DAGScheduler(
         SparkEnv.get.closureSerializer.newInstance().serialize(tasks.head)
       } catch {
         case e: NotSerializableException =>
-          abortStage(stage, e.toString)
+          abortStage(stage, "Task not serializable: " + e.toString)
           running -= stage
           return
       }
@@ -705,6 +704,9 @@ class DAGScheduler(
 
       case ExceptionFailure(className, description, stackTrace, metrics) =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
+
+      case TaskResultLost =>
+        // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
       case other =>
         // Unrecognized failure - abort all jobs depending on this stage

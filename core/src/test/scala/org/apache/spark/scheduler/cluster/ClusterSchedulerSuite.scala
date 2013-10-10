@@ -43,16 +43,16 @@ class FakeTaskSetManager(
   stageId = initStageId
   name = "TaskSet_"+stageId
   override val numTasks = initNumTasks
-  tasksFinished = 0
+  tasksSuccessful = 0
 
-  override def increaseRunningTasks(taskNum: Int) {
+  def increaseRunningTasks(taskNum: Int) {
     runningTasks += taskNum
     if (parent != null) {
       parent.increaseRunningTasks(taskNum)
     }
   }
 
-  override def decreaseRunningTasks(taskNum: Int) {
+  def decreaseRunningTasks(taskNum: Int) {
     runningTasks -= taskNum
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)
@@ -79,7 +79,7 @@ class FakeTaskSetManager(
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
-    if (tasksFinished + runningTasks < numTasks) {
+    if (tasksSuccessful + runningTasks < numTasks) {
       increaseRunningTasks(1)
       return Some(new TaskDescription(0, execId, "task 0:0", 0, null))
     }
@@ -92,8 +92,8 @@ class FakeTaskSetManager(
 
   def taskFinished() {
     decreaseRunningTasks(1)
-    tasksFinished +=1
-    if (tasksFinished == numTasks) {
+    tasksSuccessful +=1
+    if (tasksSuccessful == numTasks) {
       parent.removeSchedulable(this)
     }
   }
@@ -114,7 +114,8 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     val taskSetQueue = rootPool.getSortedTaskSetQueue()
     /* Just for Test*/
     for (manager <- taskSetQueue) {
-       logInfo("parentName:%s, parent running tasks:%d, name:%s,runningTasks:%d".format(manager.parent.name, manager.parent.runningTasks, manager.name, manager.runningTasks))
+       logInfo("parentName:%s, parent running tasks:%d, name:%s,runningTasks:%d".format(
+         manager.parent.name, manager.parent.runningTasks, manager.name, manager.runningTasks))
     }
     for (taskSet <- taskSetQueue) {
       taskSet.resourceOffer("execId_1", "hostname_1", 1, TaskLocality.ANY) match {
