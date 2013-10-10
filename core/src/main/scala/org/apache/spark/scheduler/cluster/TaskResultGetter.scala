@@ -87,7 +87,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterSche
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
             taskSetManager.abort("ClassNotFound with classloader: " + loader)
-          case ex =>
+          case ex: Throwable =>
             taskSetManager.abort("Exception while deserializing and fetching task: %s".format(ex))
         }
       }
@@ -111,7 +111,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterSche
             val loader = Thread.currentThread.getContextClassLoader
             logError(
               "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
-          case ex => {}
+          case ex: Throwable => {}
         }
         scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
       }
