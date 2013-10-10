@@ -467,6 +467,15 @@ object GraphImpl {
 
 
   /**
+   * Assign edges to an aribtrary machine corresponding to a 
+   * random vertex cut.
+   */
+  protected def randomVertexCut(src: Vid, dst: Vid, numParts: Pid): Pid = {
+    math.abs((src, dst).hashCode()) % Pid
+  }
+
+
+  /**
    * @todo(crankshaw) how does this effect load balancing?
    */
   protected def canonicalEdgePartitionFunction2D(srcOrig: Vid, dstOrig: Vid, 
