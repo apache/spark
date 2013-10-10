@@ -40,7 +40,7 @@ private[spark] class JobWaiter[T](
   private var jobResult: JobResult = if (jobFinished) JobSucceeded else null
 
   def kill() {
-    dagScheduler.killJob(jobId)
+    dagScheduler.cancelJob(jobId)
   }
 
   override def taskSucceeded(index: Int, result: Any): Unit = synchronized {

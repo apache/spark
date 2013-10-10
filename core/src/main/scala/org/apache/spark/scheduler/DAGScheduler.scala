@@ -265,7 +265,7 @@ class DAGScheduler(
 
   /**
    * Submit a job to the job scheduler and get a JobWaiter object back. The JobWaiter object
-   * can be used to block until the the job finishes executing or can be used to kill the job.
+   * can be used to block until the the job finishes executing or can be used to cancel the job.
    */
   def submitJob[T, U](
       rdd: RDD[T],
@@ -334,10 +334,10 @@ class DAGScheduler(
   }
 
   /**
-   * Kill a job that is running or waiting in the queue.
+   * Cancel a job that is running or waiting in the queue.
    */
-  def killJob(jobId: Int): Unit = this.synchronized {
-    logInfo("Asked to kill job " + jobId)
+  def cancelJob(jobId: Int): Unit = this.synchronized {
+    logInfo("Asked to cancel job " + jobId)
     eventQueue.put(JobCancelled(jobId))
   }
 

@@ -40,13 +40,13 @@ import org.apache.hadoop.conf.{Configuration, Configurable}
  * created from the Configuration.
  */
 class HadoopFileRDD[K, V](
-                           sc: SparkContext,
-                           path: String,
-                           broadcastedConf: Broadcast[SerializableWritable[Configuration]],
-                           inputFormatClass: Class[_ <: InputFormat[K, V]],
-                           keyClass: Class[K],
-                           valueClass: Class[V],
-                           minSplits: Int)
+    sc: SparkContext,
+    path: String,
+    broadcastedConf: Broadcast[SerializableWritable[Configuration]],
+    inputFormatClass: Class[_ <: InputFormat[K, V]],
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minSplits: Int)
   extends HadoopRDD[K, V](sc, broadcastedConf, inputFormatClass, keyClass, valueClass, minSplits) {
 
   override def getJobConf(): JobConf = {
@@ -85,21 +85,21 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  * A base class that provides core functionality for reading data partitions stored in Hadoop.
  */
 class HadoopRDD[K, V](
-                       sc: SparkContext,
-                       broadcastedConf: Broadcast[SerializableWritable[Configuration]],
-                       inputFormatClass: Class[_ <: InputFormat[K, V]],
-                       keyClass: Class[K],
-                       valueClass: Class[V],
-                       minSplits: Int)
+    sc: SparkContext,
+    broadcastedConf: Broadcast[SerializableWritable[Configuration]],
+    inputFormatClass: Class[_ <: InputFormat[K, V]],
+    keyClass: Class[K],
+    valueClass: Class[V],
+    minSplits: Int)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   def this(
-            sc: SparkContext,
-            conf: JobConf,
-            inputFormatClass: Class[_ <: InputFormat[K, V]],
-            keyClass: Class[K],
-            valueClass: Class[V],
-            minSplits: Int) = {
+      sc: SparkContext,
+      conf: JobConf,
+      inputFormatClass: Class[_ <: InputFormat[K, V]],
+      keyClass: Class[K],
+      valueClass: Class[V],
+      minSplits: Int) = {
     this(
       sc,
       sc.broadcast(new SerializableWritable(conf))

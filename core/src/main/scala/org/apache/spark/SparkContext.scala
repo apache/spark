@@ -866,15 +866,11 @@ class SparkContext(
   }
 
   /**
-   * Kill a running job.
+   * Cancel all jobs that have been scheduled or are running.
    */
-  def killJob(jobId: Int) {
-    dagScheduler.killJob(jobId)
-  }
-
-  def killAllJobs() {
+  def cancelAllJobs() {
     dagScheduler.activeJobs.foreach { job =>
-      killJob(job.jobId)
+      dagScheduler.cancelJob(job.jobId)
     }
   }
 
