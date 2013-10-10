@@ -105,7 +105,7 @@ private[spark] class Executor(
   SparkEnv.set(env)
   env.metricsSystem.registerSource(executorSource)
 
-  private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.message-frame-size")
+  private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size")
 
   // Start worker thread pool
   val threadPool = new ThreadPoolExecutor(
