@@ -116,6 +116,91 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     new GraphImpl(newVertices, newEdges)
   }
 
+
+  // Because of the edgepartitioner, we know that all edges with the same src and dst
+  // will be in the same partition
+
+  // We will want to keep the same partitioning scheme. Use newGraph() rather than
+  // new GraphImpl()
+  // TODO(crankshaw) is there a better way to do this using RDD.groupBy()
+  // functions?
+
+  override def groupEdgeTriplets[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ):
+  //override def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ):
+    Graph[VD,ED2] = {
+
+      // I think that
+      // myRDD.mapPartitions { part => 
+      //  val (vmap, edges) = part.next()
+      // gives me access to the vertex map and the set of
+      // edges within that partition
+
+      // This is what happens during mapPartitions
+      // The iterator iterates over all partitions
+      // val result: RDD[U] = new RDD[T]().mapPartitions(f: Iterator[T] => Iterator[U])
+
+      // TODO(crankshaw) figure out how to actually get the new Edge RDD and what
+      // type that should have
+      val newEdges: RDD[Edge[ED2]] = triplets.mapPartitions { partIter =>
+        // toList lets us operate on all EdgeTriplets in a single partition at once
+        partIter
+        .toList
+        // groups all ETs in this partition that have the same src and dst
+        // Because all ETs with the same src and dst will live on the same
+        // partition due to the EdgePartitioner, this guarantees that these
+        // ET groups will be complete.
+        .groupBy { t: EdgeTriplet[VD, ED] => 
+            //println("(" + t.src.id + ", " + t.dst.id + ", " + t.data + ")")
+            (t.src.id, t.dst.id) }
+        //.groupBy { e => (e.src, e.dst) }
+        // Apply the user supplied supplied edge group function to
+        // each group of edges
+        // The result of this line is Map[(Long, Long, ED2]
+        .mapValues { ts: List[EdgeTriplet[VD, ED]] => f(ts.toIterator) }
+        // convert the resulting map back to a list of tuples
+        .toList
+        // TODO(crankshaw) needs an iterator over the tuples? Why can't I map over the list?
+        .toIterator
+        // map over those tuples that contain src and dst info plus the
+        // new edge data to make my new edges
+        .map { case ((src, dst), data) => Edge(src, dst, data) }
+
+        // How do I convert from a scala map to a list?
+        // I want to be able to apply a function like:
+        // f: (key, value): (K, V) => result: [R]
+        // so that I can transfrom a Map[K, V] to List[R]
+
+        // Maybe look at collections.breakOut
+        // see http://stackoverflow.com/questions/1715681/scala-2-8-breakout
+        // and http://stackoverflow.com/questions/6998676/converting-a-scala-map-to-a-list
+
+      }
+      newGraph(vertices, newEdges)
+
+  }
+
+
+  override def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ):
+    Graph[VD,ED2] = {
+
+      val newEdges: RDD[Edge[ED2]] = edges.mapPartitions { partIter =>
+        partIter.toList
+        .groupBy { e: Edge[ED] => 
+            println(e.src + " " + e.dst)
+            (e.src, e.dst) }
+        .mapValues { ts => f(ts.toIterator) }
+        .toList
+        .toIterator
+        .map { case ((src, dst), data) => Edge(src, dst, data) }
+
+
+      }
+      newGraph(vertices, newEdges)
+
+  }
+
+
+
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -361,7 +446,7 @@ object GraphImpl {
    * Notice that P0 has many edges and as a consequence this 
    * partitioning would lead to poor work balance.  To improve
    * balance we first multiply each vertex id by a large prime 
-   * to effectively suffle the vertex locations. 
+   * to effectively shuffle the vertex locations. 
    *
    * One of the limitations of this approach is that the number of
    * machines must either be a perfect square.  We partially address
@@ -375,6 +460,21 @@ object GraphImpl {
   protected def edgePartitionFunction2D(src: Vid, dst: Vid, 
     numParts: Pid, ceilSqrtNumParts: Pid): Pid = {
     val mixingPrime: Vid = 1125899906842597L 
+    val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
+    val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
+    (col * ceilSqrtNumParts + row) % numParts
+  }
+
+
+  /**
+   * @todo(crankshaw) how does this effect load balancing?
+   */
+  protected def canonicalEdgePartitionFunction2D(srcOrig: Vid, dstOrig: Vid, 
+    numParts: Pid, ceilSqrtNumParts: Pid): Pid = {
+    val mixingPrime: Vid = 1125899906842597L 
+    // Partitions by canonical edge direction
+    val src = math.min(srcOrig, dstOrig)
+    val dst = math.max(srcOrig, dstOrig)
     val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
     val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
     (col * ceilSqrtNumParts + row) % numParts
@@ -398,6 +498,7 @@ object GraphImpl {
         // Random partitioning based on the source vertex id.
         // val part: Pid = edgePartitionFunction1D(e.src, e.dst, numPartitions)
         val part: Pid = edgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
+        //val part: Pid = canonicalEdgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
 
         // Should we be using 3-tuple or an optimized class
         MessageToPartition(part, (e.src, e.dst, e.data))

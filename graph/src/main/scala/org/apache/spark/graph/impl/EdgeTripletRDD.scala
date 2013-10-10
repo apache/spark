@@ -1,5 +1,7 @@
 package org.apache.spark.graph.impl
 
+import scala.collection.mutable
+
 import org.apache.spark.Aggregator
 import org.apache.spark.Partition
 import org.apache.spark.SparkEnv
@@ -29,8 +31,8 @@ class EdgeTripletRDD[VD: ClassManifest, ED: ClassManifest](
     eTable: RDD[(Pid, EdgePartition[ED])])
   extends RDD[(VertexHashMap[VD], Iterator[EdgeTriplet[VD, ED]])](eTable.context, Nil) {
 
-  println(vTableReplicated.partitioner.get.numPartitions)
-  println(eTable.partitioner.get.numPartitions)
+  //println("ddshfkdfhds" + vTableReplicated.partitioner.get.numPartitions)
+  //println("9757984589347598734549" + eTable.partitioner.get.numPartitions)
 
   assert(vTableReplicated.partitioner == eTable.partitioner)
 
@@ -77,9 +79,32 @@ class EdgeTripletRDD[VD: ClassManifest, ED: ClassManifest](
         // assert(vmap.containsKey(e.dst.id))
         e.dst.data = vmap.get(e.dst.id)
 
+        //println("Iter called: " + pos)
         e.data = edgePartition.data(pos)
         pos += 1
         e
+      }
+
+      override def toList: List[EdgeTriplet[VD, ED]] = {
+        val lb = new mutable.ListBuffer[EdgeTriplet[VD,ED]]
+        for (i <- (0 until edgePartition.size)) {
+          val currentEdge = new EdgeTriplet[VD, ED]
+          currentEdge.src = new Vertex[VD]
+          currentEdge.dst = new Vertex[VD]
+          currentEdge.src.id = edgePartition.srcIds.getLong(i)
+          // assert(vmap.containsKey(e.src.id))
+          currentEdge.src.data = vmap.get(currentEdge.src.id)
+
+          currentEdge.dst.id = edgePartition.dstIds.getLong(i)
+          // assert(vmap.containsKey(e.dst.id))
+          currentEdge.dst.data = vmap.get(currentEdge.dst.id)
+
+          currentEdge.data = edgePartition.data(i)
+          //println("Iter: " + pos + " " + e.src.id + " " + e.dst.id + " " + e.data)
+          //println("List: " + i + " " + currentEdge.src.id + " " + currentEdge.dst.id + " " + currentEdge.data)
+          lb += currentEdge
+        }
+        lb.toList
       }
     }
     Iterator((vmap, iter))

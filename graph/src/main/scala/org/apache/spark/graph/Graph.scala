@@ -188,6 +188,11 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   //  */
   // def combineEdges(reduce: (ED, ED) => ED): Graph[VD, ED]
 
+  def groupEdgeTriplets[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ): Graph[VD,ED2]
+
+  def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ): Graph[VD,ED2]
+
+
 
 
 
