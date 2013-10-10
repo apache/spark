@@ -43,7 +43,7 @@ private[spark] class Pool(
   var runningTasks = 0
 
   var priority = 0
-  var stageId = 0
+  var stageId = -1
   var name = poolName
   var parent: Pool = null
 

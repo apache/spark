@@ -172,7 +172,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   override def cancelTasks(stageId: Int): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
-    schedulableBuilder.getTaskSetManagers(stageId).foreach { case tsm: TaskSetManager =>
+    schedulableBuilder.getTaskSetManagers(stageId).foreach { tsm =>
       // There are two possible cases here:
       // 1. The task set manager has been created and some tasks have been scheduled.
       //    In this case, send a kill signal to the executors to kill the task.
