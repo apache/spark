@@ -11,9 +11,7 @@ import org.apache.spark.rdd.RDD
 
 import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
-
-
-
+import org.apache.spark.graph.impl.MessageToPartitionRDDFunctions._
 
 
 /**
@@ -394,11 +392,13 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // Join vid2pid and vTable, generate a shuffle dependency on the joined result, and get
     // the shuffle id so we can use it on the slave.
     vTable
-      .flatMap { case (vid, (vdata, pids)) => pids.iterator.map { pid => (pid, (vid, vdata)) } }
+      .flatMap { case (vid, (vdata, pids)) =>
+        pids.iterator.map { pid => MessageToPartition(pid, (vid, vdata)) }
+      }
       .partitionBy(edgePartitioner)
-      .mapPartitions(
-        { part => part.map { case(pid, (vid, vdata)) => (vid, vdata) } },
-        preservesPartitioning = true)
+      .mapPartitions({ part =>
+        part.map { message => (message.data._1, message.data._2) }
+      }, preservesPartitioning = true)
   }
 }
 
@@ -501,14 +501,16 @@ object GraphImpl {
         //val part: Pid = canonicalEdgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
 
         // Should we be using 3-tuple or an optimized class
-        (part, (e.src, e.dst, e.data))
+        MessageToPartition(part, (e.src, e.dst, e.data))
         //  (math.abs(e.src) % numPartitions, (e.src, e.dst, e.data))
-       
       }
       .partitionBy(new HashPartitioner(numPartitions))
       .mapPartitionsWithIndex({ (pid, iter) =>
         val edgePartition = new EdgePartition[ED]
-        iter.foreach { case (_, (src, dst, data)) => edgePartition.add(src, dst, data) }
+        iter.foreach { message =>
+          val data = message.data
+          edgePartition.add(data._1, data._2, data._3)
+        }
         edgePartition.trim()
         Iterator((pid, edgePartition))
       }, preservesPartitioning = true)
