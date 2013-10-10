@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming</artifactId>
+  <artifactId>spark-streaming_2.9.3</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Streaming</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -42,7 +42,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core</artifactId>
+      <artifactId>spark-core_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -58,6 +58,7 @@
       <groupId>org.apache.kafka</groupId>
       <artifactId>kafka</artifactId>
       <version>0.7.2-spark</version>  <!-- Comes from our in-project repository -->
+      <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.flume</groupId>
@@ -91,12 +92,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.version}</artifactId>
+      <artifactId>scalatest_2.9.3</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.version}</artifactId>
+      <artifactId>scalacheck_2.9.3</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
