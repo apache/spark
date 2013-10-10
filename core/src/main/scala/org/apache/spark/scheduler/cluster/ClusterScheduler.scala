@@ -185,12 +185,14 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   def taskSetFinished(manager: TaskSetManager) {
     this.synchronized {
-      activeTaskSets -= manager.taskSet.id
-      manager.parent.removeSchedulable(manager)
-      logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id, manager.parent.name))
-      taskIdToTaskSetId --= taskSetTaskIds(manager.taskSet.id)
-      taskIdToExecutorId --= taskSetTaskIds(manager.taskSet.id)
-      taskSetTaskIds.remove(manager.taskSet.id)
+      if (activeTaskSets.contains(manager.taskSet.id)) {
+        activeTaskSets -= manager.taskSet.id
+        manager.parent.removeSchedulable(manager)
+        logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id, manager.parent.name))
+        taskIdToTaskSetId --= taskSetTaskIds(manager.taskSet.id)
+        taskIdToExecutorId --= taskSetTaskIds(manager.taskSet.id)
+        taskSetTaskIds.remove(manager.taskSet.id)
+      }
     }
   }
 

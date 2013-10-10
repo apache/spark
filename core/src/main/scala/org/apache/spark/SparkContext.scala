@@ -817,17 +817,23 @@ class SparkContext(
     result
   }
 
+  /**
+   * Submit a job for execution and return a FutureJob holding the result. Note that the
+   * processPartition closure will be "cleaned" so the caller doesn't have to clean the closure
+   * explicitly.
+   */
   def submitJob[T, U, R](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
       partitions: Seq[Int],
       partitionResultHandler: (Int, U) => Unit,
-      resultFunc: () => R): FutureJob[R] =
+      resultFunc: => R): FutureJob[R] =
   {
+    val cleanF = clean(processPartition)
     val callSite = Utils.formatSparkCallSite
     val waiter = dagScheduler.submitJob(
       rdd,
-      (context: TaskContext, iter: Iterator[T]) => processPartition(iter),
+      (context: TaskContext, iter: Iterator[T]) => cleanF(iter),
       partitions,
       callSite,
       allowLocal = false,
