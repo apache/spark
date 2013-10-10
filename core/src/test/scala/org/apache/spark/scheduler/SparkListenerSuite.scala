@@ -38,7 +38,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     }
 
     val d = sc.parallelize(1 to 1e4.toInt, 64).map{i => w(i)}
-    d.count
+    d.count()
     val WAIT_TIMEOUT_MILLIS = 10000
     assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (1)
@@ -50,7 +50,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     val d4 = d2.cogroup(d3, 64).map{case(k,(v1,v2)) => w(k) -> (v1.size, v2.size)}
     d4.setName("A Cogroup")
 
-    d4.collectAsMap
+    d4.collectAsMap()
 
     assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (4)
