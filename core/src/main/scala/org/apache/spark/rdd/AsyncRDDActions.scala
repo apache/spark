@@ -20,8 +20,6 @@ package org.apache.spark.rdd
 import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.ArrayBuffer
-import scala.concurrent.Await
-import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.apache.spark.{Logging, CancellablePromise, FutureAction}
@@ -90,22 +88,12 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with 
         val left = num - buf.size
         val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
 
-        val job = self.context.submitJob(
-          self,
+        promise.runJob(self,
           (it: Iterator[T]) => it.take(left).toArray,
           p,
           (index: Int, data: Array[T]) => buf ++= data.take(num - buf.size),
           Unit)
 
-        // Wait for the job to complete. If the action is cancelled (with an interrupt),
-        // cancel the job and stop the execution.
-        try {
-          Await.result(job, Duration.Inf)
-        } catch {
-          case e: InterruptedException =>
-            job.cancel()
-            throw e
-        }
         partsScanned += numPartsToTry
       }
       buf.toSeq

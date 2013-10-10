@@ -23,6 +23,7 @@ import scala.util.Try
 
 import org.apache.spark.scheduler.{JobSucceeded, JobWaiter}
 import org.apache.spark.scheduler.JobFailed
+import org.apache.spark.rdd.RDD
 
 
 /**
@@ -170,14 +171,13 @@ class CancellablePromise[T] extends FutureAction[T] with Promise[T] {
   }
 
   /**
-   * Executes some action enclosed in the closure. This execution of func is wrapped in a
-   * synchronized block to guarantee that this promise can only be cancelled when the task is
-   * waiting for
+   * Executes some action enclosed in the closure. To properly enable cancellation, the closure
+   * should use runJob implementation in this promise. See takeAsync for example.
    */
   def run(func: => T)(implicit executor: ExecutionContext): Unit = scala.concurrent.future {
     thread = Thread.currentThread
     try {
-      this.success(this.synchronized {
+      this.success({
         if (cancelled) {
           // This action has been cancelled before this thread even started running.
           throw new InterruptedException
@@ -188,6 +188,38 @@ class CancellablePromise[T] extends FutureAction[T] with Promise[T] {
       case e: Exception => this.failure(e)
     } finally {
       thread = null
+    }
+  }
+
+  /**
+   * Runs a Spark job. This is a wrapper around the same functionality provided by SparkContext
+   * to enable cancellation.
+   */
+  def runJob[T, U, R](
+      rdd: RDD[T],
+      processPartition: Iterator[T] => U,
+      partitions: Seq[Int],
+      partitionResultHandler: (Int, U) => Unit,
+      resultFunc: => R) {
+    // If the action hasn't been cancelled yet, submit the job. The check and the submitJob
+    // command need to be in an atomic block.
+    val job = this.synchronized {
+      if (!cancelled) {
+        rdd.context.submitJob(rdd, processPartition, partitions, partitionResultHandler, resultFunc)
+      } else {
+        throw new SparkException("action has been cancelled")
+      }
+    }
+
+    // Wait for the job to complete. If the action is cancelled (with an interrupt),
+    // cancel the job and stop the execution. This is not in a synchronized block because
+    // Await.ready eventually waits on the monitor in FutureJob.jobWaiter.
+    try {
+      Await.ready(job, Duration.Inf)
+    } catch {
+      case e: InterruptedException =>
+        job.cancel()
+        throw new SparkException("action has been cancelled")
     }
   }
 
