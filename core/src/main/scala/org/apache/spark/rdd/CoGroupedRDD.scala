@@ -18,13 +18,12 @@
 package org.apache.spark.rdd
 
 import java.io.{ObjectOutputStream, IOException}
-import java.util.{HashMap => JHashMap}
 
-import scala.collection.JavaConversions
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
+import org.apache.spark.util.AppendOnlyMap
 
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
@@ -105,17 +104,14 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
     // e.g. for `(k, a) cogroup (k, b)`, K -> Seq(ArrayBuffer as, ArrayBuffer bs)
-    val map = new JHashMap[K, Seq[ArrayBuffer[Any]]]
+    val map = new AppendOnlyMap[K, Seq[ArrayBuffer[Any]]]
 
-    def getSeq(k: K): Seq[ArrayBuffer[Any]] = {
-      val seq = map.get(k)
-      if (seq != null) {
-        seq
-      } else {
-        val seq = Array.fill(numRdds)(new ArrayBuffer[Any])
-        map.put(k, seq)
-        seq
-      }
+    val update: (Boolean, Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] = (hadVal, oldVal) => {
+      if (hadVal) oldVal else Array.fill(numRdds)(new ArrayBuffer[Any])
+    }
+
+    val getSeq = (k: K) => {
+      map.changeValue(k, update)
     }
 
     val ser = SparkEnv.get.serializerManager.get(serializerClass)
@@ -134,7 +130,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         }
       }
     }
-    JavaConversions.mapAsScalaMap(map).iterator
+    map.iterator
   }
 
   override def clearDependencies() {
