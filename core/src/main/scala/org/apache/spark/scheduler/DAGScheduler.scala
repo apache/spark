@@ -338,15 +338,7 @@ class DAGScheduler(
    */
   def killJob(jobId: Int): Unit = this.synchronized {
     logInfo("Asked to kill job " + jobId)
-    activeJobs.find(job => job.jobId == jobId).foreach { job =>
-      killStage(job, job.finalStage)
-    }
-
-    def killStage(job: ActiveJob, stage: Stage): Unit = this.synchronized {
-      logDebug("Killing stage %s".format(stage.id))
-      taskSched.killTasks(stage.id)
-      stage.parents.foreach(parentStage => killStage(job, parentStage))
-    }
+    eventQueue.put(JobCancelled(jobId))
   }
 
   /**
@@ -373,6 +365,12 @@ class DAGScheduler(
           activeJobs += job
           resultStageToJob(finalStage) = job
           submitStage(finalStage)
+        }
+
+      case JobCancelled(jobId) =>
+        // Cancel a job: find all the running stages that are linked to this job, and cancel them.
+        running.find(_.jobId == jobId).foreach { stage =>
+          taskSched.cancelTasks(stage.id)
         }
 
       case ExecutorGained(execId, host) =>

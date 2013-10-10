@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.lang.{Boolean => JBoolean}
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{TimerTask, Timer}
@@ -171,28 +170,37 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     backend.reviveOffers()
   }
 
-  override def killTasks(stageId: Int): Unit = synchronized {
-    schedulableBuilder.getTaskSetManagers(stageId).foreach { t =>
-      // Notify the executors to kill the tasks.
-      val ts = t.asInstanceOf[TaskSetManager].taskSet
-      val taskIds = taskSetTaskIds(ts.id)
-      taskIds.foreach { tid =>
-        val execId = taskIdToExecutorId(tid)
-        backend.killTask(tid, execId)
+  override def cancelTasks(stageId: Int): Unit = synchronized {
+    logInfo("Cancelling stage " + stageId)
+    schedulableBuilder.getTaskSetManagers(stageId).foreach { case tsm: TaskSetManager =>
+      // There are two possible cases here:
+      // 1. The task set manager has been created and some tasks have been scheduled.
+      //    In this case, send a kill signal to the executors to kill the task.
+      // 2. The task set manager has been created but no tasks has been scheduled. In this case,
+      //    simply abort the task set.
+      val taskIds = taskSetTaskIds(tsm.taskSet.id)
+      if (taskIds.size > 0) {
+        taskIds.foreach { tid =>
+          val execId = taskIdToExecutorId(tid)
+          backend.killTask(tid, execId)
+        }
+      } else {
+        tsm.error("Stage %d was cancelled before any tasks was launched".format(stageId))
       }
     }
   }
 
-  def taskSetFinished(manager: TaskSetManager) {
-    this.synchronized {
-      if (activeTaskSets.contains(manager.taskSet.id)) {
-        activeTaskSets -= manager.taskSet.id
-        manager.parent.removeSchedulable(manager)
-        logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id, manager.parent.name))
-        taskIdToTaskSetId --= taskSetTaskIds(manager.taskSet.id)
-        taskIdToExecutorId --= taskSetTaskIds(manager.taskSet.id)
-        taskSetTaskIds.remove(manager.taskSet.id)
-      }
+  def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
+    // Check to see if the given task set has been removed. This is possible in the case of
+    // multiple unrecoverable task failures (e.g. if the entire task set is killed when it has
+    // more than one running tasks).
+    if (activeTaskSets.contains(manager.taskSet.id)) {
+      activeTaskSets -= manager.taskSet.id
+      manager.parent.removeSchedulable(manager)
+      logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id, manager.parent.name))
+      taskIdToTaskSetId --= taskSetTaskIds(manager.taskSet.id)
+      taskIdToExecutorId --= taskSetTaskIds(manager.taskSet.id)
+      taskSetTaskIds.remove(manager.taskSet.id)
     }
   }
 
