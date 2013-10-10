@@ -18,6 +18,12 @@ import org.apache.spark.rdd.RDD
  */
 abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
+
+  def replication: Double
+
+  def balance: Array[Int]
+
+
   /**
    * Get the vertices and their data.
    *

@@ -56,6 +56,16 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     this
   }
 
+
+  override def replication(): Double = {
+    val rep = vTable.map{ case (_, (_, a)) => a.size }.sum
+    rep / vTable.count
+  }
+
+  override def balance(): Array[Int] = {
+    eTable.map{ case (_, epart) => epart.data.size }.collect
+  }
+
   override def reverse: Graph[VD, ED] = {
     newGraph(vertices, edges.map{ case Edge(s, t, e) => Edge(t, s, e) })
   }

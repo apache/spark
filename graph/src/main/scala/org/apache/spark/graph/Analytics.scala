@@ -47,6 +47,17 @@ object Analytics extends Logging {
     val pagerankGraph = graph.leftJoinVertices[Int, (Int, Double)](graph.outDegrees,
       (vertex, deg) => (deg.getOrElse(0), 1.0)
     )
+
+    println("Vertex Replication: " + pagerankGraph.replication)
+    
+    val edgeCounts = pagerankGraph.balance
+    
+    println("Edge Balance:       " + (edgeCounts.max.toDouble / edgeCounts.min ) )
+    println("Min edge block:     " + edgeCounts.min)
+    println("Max edge block:     " + edgeCounts.max) 
+
+
+
     Pregel.iterate[(Int, Double), ED, Double](pagerankGraph)(
       (vertex, a: Double) => (vertex.data._1, (resetProb + (1.0 - resetProb) * a)), // apply
       (me_id, edge) => Some(edge.src.data._2 / edge.src.data._1), // gather
