@@ -71,7 +71,7 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def disconnected() {
     if (!stopping) {
-      logError("Disconnected from Spark cluster! Waiting for reconnection...")
+      logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
     }
   }
 

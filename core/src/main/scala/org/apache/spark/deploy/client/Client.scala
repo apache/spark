@@ -67,7 +67,7 @@ private[spark] class Client(
         registerWithMaster()
       } catch {
         case e: Exception =>
-          logError("Failed to connect to master", e)
+          logWarning("Failed to connect to master", e)
           markDisconnected()
           context.stop(self)
       }
@@ -141,15 +141,15 @@ private[spark] class Client(
         sender ! MasterChangeAcknowledged(appId)
 
       case Terminated(actor_) if actor_ == master =>
-        logError("Connection to master failed; waiting for master to reconnect...")
+        logWarning("Connection to master failed; waiting for master to reconnect...")
         markDisconnected()
 
       case RemoteClientDisconnected(transport, address) if address == masterAddress =>
-        logError("Connection to master failed; waiting for master to reconnect...")
+        logWarning("Connection to master failed; waiting for master to reconnect...")
         markDisconnected()
 
       case RemoteClientShutdown(transport, address) if address == masterAddress =>
-        logError("Connection to master failed; waiting for master to reconnect...")
+        logWarning("Connection to master failed; waiting for master to reconnect...")
         markDisconnected()
 
       case StopClient =>

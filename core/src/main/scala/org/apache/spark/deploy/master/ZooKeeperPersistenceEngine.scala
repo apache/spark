@@ -22,7 +22,11 @@ import org.apache.zookeeper._
 
 import akka.serialization.Serialization
 
-class ZooKeeperPersistenceEngine(serialization: Serialization) extends PersistenceEngine with SparkZooKeeperWatcher with Logging {
+class ZooKeeperPersistenceEngine(serialization: Serialization)
+  extends PersistenceEngine
+  with SparkZooKeeperWatcher
+  with Logging
+{
   val WORKING_DIR = System.getProperty("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
 
   val zk = new SparkZooKeeperSession(this)
