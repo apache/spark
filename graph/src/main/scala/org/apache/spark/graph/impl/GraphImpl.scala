@@ -471,7 +471,7 @@ object GraphImpl {
    * random vertex cut.
    */
   protected def randomVertexCut(src: Vid, dst: Vid, numParts: Pid): Pid = {
-    math.abs((src, dst).hashCode()) % Pid
+    math.abs((src, dst).hashCode()) % numParts
   }
 
 
