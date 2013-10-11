@@ -45,56 +45,6 @@ class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll {
 
   lazy val zeroPartRdd = new EmptyRDD[Int](sc)
 
-  test("job cancellation before any tasks is launched") {
-    val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.countAsync()
-    future { f.cancel() }
-    val e = intercept[SparkException] { f.get() }
-    assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
-  }
-
-  test("job cancellation after some tasks have been launched") {
-    // Add a listener to release the semaphore once any tasks are launched.
-    val sem = new Semaphore(0)
-    sc.dagScheduler.addSparkListener(new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart) {
-        sem.release()
-      }
-    })
-
-    val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.countAsync()
-    future {
-      // Wait until some tasks were launched before we cancel the job.
-      sem.acquire()
-      f.cancel()
-    }
-    val e = intercept[SparkException] { f.get() }
-    assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
-  }
-
-  test("cancelling take action") {
-    val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.takeAsync(5000)
-    future { f.cancel() }
-    val e = intercept[SparkException] { f.get() }
-    assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
-  }
-
-  test("cancelling take action after some tasks have been launched") {
-    // Add a listener to release the semaphore once any tasks are launched.
-    val sem = new Semaphore(0)
-    sc.dagScheduler.addSparkListener(new SparkListener {
-      override def onTaskStart(taskStart: SparkListenerTaskStart) {
-        sem.release()
-      }
-    })
-    val f = sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.takeAsync(5000)
-    future {
-      sem.acquire()
-      f.cancel()
-    }
-    val e = intercept[SparkException] { f.get() }
-    assert(e.getMessage.contains("cancelled") || e.getMessage.contains("killed"))
-  }
-
   test("countAsync") {
     assert(zeroPartRdd.countAsync().get() === 0)
     assert(sc.parallelize(1 to 10000, 5).countAsync().get() === 10000)
