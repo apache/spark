@@ -15,23 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.master
+package org.apache.spark.deploy
 
-import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
-
-private[spark] class ExecutorInfo(
-    val id: Int,
-    val application: ApplicationInfo,
-    val worker: WorkerInfo,
+/**
+ * Used to send state on-the-wire about Executors from Worker to Master.
+ * This state is sufficient for the Master to reconstruct its internal data structures during
+ * failover.
+ */
+private[spark] class ExecutorDescription(
+    val appId: String,
+    val execId: Int,
     val cores: Int,
-    val memory: Int) {
+    val state: ExecutorState.Value)
+  extends Serializable {
 
-  var state = ExecutorState.LAUNCHING
-
-  /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
-  def copyState(execDesc: ExecutorDescription) {
-    state = execDesc.state
-  }
-
-  def fullId: String = application.id + "/" + id
+  override def toString: String =
+    "ExecutorState(appId=%s, execId=%d, cores=%d, state=%s)".format(appId, execId, cores, state)
 }
