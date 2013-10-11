@@ -48,9 +48,12 @@ private[spark] trait SchedulableBuilder {
             return Some(tsm)
           }
         case pool: Pool =>
-          getTsm(pool)
+          val found = getTsm(pool)
+          if (found.isDefined) {
+            return getTsm(pool)
+          }
       }
-      return None
+      None
     }
     getTsm(rootPool)
   }

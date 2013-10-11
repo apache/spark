@@ -209,7 +209,6 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
   }
 
   override def stop() {
-    //threadPool.shutdownNow()
   }
 
   override def defaultParallelism() = threads

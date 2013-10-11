@@ -78,12 +78,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   private val executorIdToHost = new HashMap[String, String]
 
-  // JAR server, if any JARs were added by the user to the SparkContext
-  var jarServer: HttpServer = null
-
-  // URIs of JARs to pass to executor
-  var jarUris: String = ""
-
   // Listener object to pass upcalls into
   var listener: TaskSchedulerListener = null
 
@@ -355,9 +349,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   override def stop() {
     if (backend != null) {
       backend.stop()
-    }
-    if (jarServer != null) {
-      jarServer.stop()
     }
     if (taskResultGetter != null) {
       taskResultGetter.stop()
