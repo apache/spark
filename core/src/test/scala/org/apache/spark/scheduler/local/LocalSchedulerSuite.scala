@@ -64,6 +64,7 @@ object TaskThreadInfo {
 class LocalSchedulerSuite extends FunSuite with LocalSparkContext with BeforeAndAfterEach {
 
   override def afterEach() {
+    super.afterEach()
     System.clearProperty("spark.scheduler.mode")
   }
 
@@ -150,11 +151,12 @@ class LocalSchedulerSuite extends FunSuite with LocalSparkContext with BeforeAnd
   }
 
   test("Local fair scheduler end-to-end test") {
-    sc = new SparkContext("local[8]", "LocalSchedulerSuite")
-    val sem = new Semaphore(0)
     System.setProperty("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     System.setProperty("spark.scheduler.allocation.file", xmlPath)
+
+    sc = new SparkContext("local[8]", "LocalSchedulerSuite")
+    val sem = new Semaphore(0)
 
     createThread(10,"1",sc,sem)
     TaskThreadInfo.threadToStarted(10).await()

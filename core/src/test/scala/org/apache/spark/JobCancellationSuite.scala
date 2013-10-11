@@ -39,6 +39,7 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
   with LocalSparkContext {
 
   override def afterEach() {
+    super.afterEach()
     System.clearProperty("spark.scheduler.mode")
   }
 
