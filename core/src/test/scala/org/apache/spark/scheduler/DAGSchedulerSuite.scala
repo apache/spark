@@ -250,7 +250,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   test("trivial job failure") {
     submit(makeRdd(1, Nil), Array(0))
     failed(taskSets(0), "some failure")
-    assert(failure.getMessage === "Job failed: some failure")
+    assert(failure.getMessage === "Job aborted: some failure")
   }
 
   test("run trivial shuffle") {
