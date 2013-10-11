@@ -63,9 +63,6 @@ object GraphGenerators {
 
   }
 
-  // For now just writes graph to a file. Eventually
-  // it will return a spark.graph.Graph
-
 
   // Right now it just generates a bunch of edges where
   // the edge data is the weight (default 1)

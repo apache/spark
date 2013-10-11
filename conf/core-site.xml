@@ -1,0 +1,43 @@
+<?xml version="1.0"?>
+<?xml-stylesheet type="text/xsl" href="configuration.xsl"?>
+
+<!-- Put site-specific property overrides in this file. -->
+
+<configuration>
+
+  <property>
+    <name>hadoop.tmp.dir</name>
+    <value>/mnt/ephemeral-hdfs</value>
+  </property>
+
+  <property>
+    <name>fs.default.name</name>
+    <value>hdfs://ec2-50-17-7-68.compute-1.amazonaws.com:9000</value>
+  </property>
+
+  <property>
+    <name>io.file.buffer.size</name>
+    <value>65536</value>
+  </property>
+
+  <property>
+    <name>dfs.client.read.shortcircuit</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>dfs.client.read.shortcircuit.skip.checksum</name>
+    <value>false</value>
+  </property>
+
+  <property>
+    <name>dfs.domain.socket.path</name>
+    <value>/var/run/hadoop-hdfs/dn._PORT</value>
+  </property>
+
+  <property>
+    <name>dfs.client.file-block-storage-locations.timeout</name>
+    <value>3000</value>
+  </property>
+
+</configuration>
