@@ -43,7 +43,8 @@ private[spark] class ExecutorRunner(
     val workerId: String,
     val host: String,
     val sparkHome: File,
-    val workDir: File)
+    val workDir: File,
+    var state: ExecutorState.Value)
   extends Logging {
 
   val fullId = appId + "/" + execId
@@ -83,7 +84,8 @@ private[spark] class ExecutorRunner(
         process.destroy()
         process.waitFor()
       }
-      worker ! ExecutorStateChanged(appId, execId, ExecutorState.KILLED, None, None)
+      state = ExecutorState.KILLED
+      worker ! ExecutorStateChanged(appId, execId, state, None, None)
       Runtime.getRuntime.removeShutdownHook(shutdownHook)
     }
   }
@@ -180,9 +182,9 @@ private[spark] class ExecutorRunner(
       // long-lived processes only. However, in the future, we might restart the executor a few
       // times on the same machine.
       val exitCode = process.waitFor()
+      state = ExecutorState.FAILED
       val message = "Command exited with code " + exitCode
-      worker ! ExecutorStateChanged(appId, execId, ExecutorState.FAILED, Some(message),
-                                    Some(exitCode))
+      worker ! ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode))
     } catch {
       case interrupted: InterruptedException =>
         logInfo("Runner thread for executor " + fullId + " interrupted")
@@ -192,8 +194,9 @@ private[spark] class ExecutorRunner(
         if (process != null) {
           process.destroy()
         }
+        state = ExecutorState.FAILED
         val message = e.getClass + ": " + e.getMessage
-        worker ! ExecutorStateChanged(appId, execId, ExecutorState.FAILED, Some(message), None)
+        worker ! ExecutorStateChanged(appId, execId, state, Some(message), None)
       }
     }
   }

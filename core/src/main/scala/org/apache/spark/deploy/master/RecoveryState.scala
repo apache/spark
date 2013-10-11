@@ -17,21 +17,10 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
+private[spark] object RecoveryState
+  extends Enumeration("STANDBY", "ALIVE", "RECOVERING", "COMPLETING_RECOVERY") {
 
-private[spark] class ExecutorInfo(
-    val id: Int,
-    val application: ApplicationInfo,
-    val worker: WorkerInfo,
-    val cores: Int,
-    val memory: Int) {
+  type MasterState = Value
 
-  var state = ExecutorState.LAUNCHING
-
-  /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
-  def copyState(execDesc: ExecutorDescription) {
-    state = execDesc.state
-  }
-
-  def fullId: String = application.id + "/" + id
+  val STANDBY, ALIVE, RECOVERING, COMPLETING_RECOVERY = Value
 }
