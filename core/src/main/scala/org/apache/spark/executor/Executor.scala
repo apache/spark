@@ -36,7 +36,8 @@ import org.apache.spark.util.Utils
 private[spark] class Executor(
     executorId: String,
     slaveHostname: String,
-    properties: Seq[(String, String)])
+    properties: Seq[(String, String)],
+    isLocal: Boolean = false)
   extends Logging
 {
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
@@ -101,10 +102,17 @@ private[spark] class Executor(
   val executorSource = new ExecutorSource(this, executorId)
 
   // Initialize Spark environment (using system properties read above)
-  private val env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0,
-    isDriver = false, isLocal = false)
-  SparkEnv.set(env)
-  env.metricsSystem.registerSource(executorSource)
+  private val env = {
+    if (!isLocal) {
+      val _env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0,
+        isDriver = false, isLocal = false)
+      SparkEnv.set(_env)
+      _env.metricsSystem.registerSource(executorSource)
+      _env
+    } else {
+      SparkEnv.get
+    }
+  }
 
   // Akka's message frame size. This is only used to warn the user when the task result is greater
   // than this value, in which case Akka will silently drop the task result message.
@@ -205,6 +213,7 @@ private[spark] class Executor(
         if (task.killed) {
           logInfo("Executor killed task " + taskId)
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+          return
         }
 
         for (m <- task.metrics) {
