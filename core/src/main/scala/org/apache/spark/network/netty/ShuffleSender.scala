@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
+import org.apache.spark.storage.ShuffleBlockManager
 
 
 private[spark] class ShuffleSender(portIn: Int, val pResolver: PathResolver) extends Logging {
@@ -54,7 +55,7 @@ private[spark] object ShuffleSender {
 
     val pResovler = new PathResolver {
       override def getAbsolutePath(blockId: String): String = {
-        if (!blockId.startsWith("shuffle_")) {
+        if (!ShuffleBlockManager.isShuffle(blockId)) {
           throw new Exception("Block " + blockId + " is not a shuffle block")
         }
         // Figure out which local directory it hashes to, and which subdirectory in that
