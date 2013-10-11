@@ -177,13 +177,11 @@ class CancellablePromise[T] extends FutureAction[T] with Promise[T] {
   def run(func: => T)(implicit executor: ExecutionContext): Unit = scala.concurrent.future {
     thread = Thread.currentThread
     try {
-      this.success({
-        if (cancelled) {
-          // This action has been cancelled before this thread even started running.
-          throw new InterruptedException
-        }
-        func
-      })
+      if (cancelled) {
+        // This action has been cancelled before this thread even started running.
+        this.failure(new SparkException("action cancelled"))
+      }
+      this.success(func)
     } catch {
       case e: Exception => this.failure(e)
     } finally {
