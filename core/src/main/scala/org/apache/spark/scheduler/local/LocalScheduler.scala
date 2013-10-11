@@ -57,8 +57,10 @@ class LocalActor(localScheduler: LocalScheduler, private var freeCores: Int)
       launchTask(localScheduler.resourceOffer(freeCores))
 
     case LocalStatusUpdate(taskId, state, serializeData) =>
-      freeCores += 1
-      launchTask(localScheduler.resourceOffer(freeCores))
+      if (TaskState.isFinished(state)) {
+        freeCores += 1
+        launchTask(localScheduler.resourceOffer(freeCores))
+      }
 
     case KillTask(taskId) =>
       executor.killTask(taskId)
@@ -128,20 +130,21 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
 
   override def cancelTasks(stageId: Int): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
-    schedulableBuilder.getTaskSetManagers(stageId).foreach { tsm =>
+    logInfo("Cancelling stage " + activeTaskSets.map(_._2.stageId))
+    activeTaskSets.find(_._2.stageId == stageId).foreach { case (_, tsm) =>
       // There are two possible cases here:
       // 1. The task set manager has been created and some tasks have been scheduled.
-      //    In this case, send a kill signal to the executors to kill the task.
+      //    In this case, send a kill signal to the executors to kill the task and then abort
+      //    the stage.
       // 2. The task set manager has been created but no tasks has been scheduled. In this case,
-      //    simply abort the task set.
+      //    simply abort the stage.
       val taskIds = taskSetTaskIds(tsm.taskSet.id)
       if (taskIds.size > 0) {
         taskIds.foreach { tid =>
           localActor ! KillTask(tid)
         }
-      } else {
-        tsm.error("Stage %d was cancelled before any tasks was launched".format(stageId))
       }
+      tsm.error("Stage %d was cancelled".format(stageId))
     }
   }
 
@@ -185,26 +188,27 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
-    if (TaskState.isFinished(state)) synchronized {
-      taskIdToTaskSetId.get(taskId) match {
-        case Some(taskSetId) =>
-          val taskSetManager = activeTaskSets(taskSetId)
-          taskSetTaskIds(taskSetId) -= taskId
+    if (TaskState.isFinished(state)) {
+      synchronized {
+        taskIdToTaskSetId.get(taskId) match {
+          case Some(taskSetId) =>
+            val taskSetManager = activeTaskSets(taskSetId)
+            taskSetTaskIds(taskSetId) -= taskId
 
-          state match {
-            case TaskState.FINISHED =>
-              taskSetManager.taskEnded(taskId, state, serializedData)
-            case TaskState.FAILED =>
-              taskSetManager.taskFailed(taskId, state, serializedData)
-            case TaskState.KILLED =>
-              taskSetManager.error("Task %d was killed".format(taskId))
-            case _ => {}
-          }
-
-          localActor ! LocalStatusUpdate(taskId, state, serializedData)
-        case None =>
-          logInfo("Ignoring update from TID " + taskId + " because its task set is gone")
+            state match {
+              case TaskState.FINISHED =>
+                taskSetManager.taskEnded(taskId, state, serializedData)
+              case TaskState.FAILED =>
+                taskSetManager.taskFailed(taskId, state, serializedData)
+              case TaskState.KILLED =>
+                taskSetManager.error("Task %d was killed".format(taskId))
+              case _ => {}
+            }
+          case None =>
+            logInfo("Ignoring update from TID " + taskId + " because its task set is gone")
+        }
       }
+      localActor ! LocalStatusUpdate(taskId, state, serializedData)
     }
   }
 

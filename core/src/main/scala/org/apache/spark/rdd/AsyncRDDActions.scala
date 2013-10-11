@@ -31,7 +31,7 @@ import org.apache.spark.{Logging, CancellablePromise, FutureAction}
 class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with Logging {
 
   /**
-   * Return a future for counting the number of elements in the RDD.
+   * Returns a future for counting the number of elements in the RDD.
    */
   def countAsync(): FutureAction[Long] = {
     val totalCount = new AtomicLong
@@ -51,7 +51,7 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with 
   }
 
   /**
-   * Return a future for retrieving all elements of this RDD.
+   * Returns a future for retrieving all elements of this RDD.
    */
   def collectAsync(): FutureAction[Seq[T]] = {
     val results = new Array[Array[T]](self.partitions.size)
@@ -60,7 +60,7 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with 
   }
 
   /**
-   * The async version of take that returns a FutureAction.
+   * Returns a future for retrieving the first num elements of the RDD.
    */
   def takeAsync(num: Int): FutureAction[Seq[T]] = {
     val promise = new CancellablePromise[Seq[T]]

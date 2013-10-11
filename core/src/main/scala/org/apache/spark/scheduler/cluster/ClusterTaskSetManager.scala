@@ -17,8 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.nio.ByteBuffer
-import java.util.{Arrays, NoSuchElementException}
+import java.util.Arrays
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -27,7 +26,7 @@ import scala.math.max
 import scala.math.min
 
 import org.apache.spark.{ExceptionFailure, FetchFailed, Logging, Resubmitted, SparkEnv,
-  SparkException, Success, TaskEndReason, TaskResultLost, TaskState, TaskKilled}
+  Success, TaskEndReason, TaskKilled, TaskResultLost, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler._
 import org.apache.spark.util.{SystemClock, Clock}

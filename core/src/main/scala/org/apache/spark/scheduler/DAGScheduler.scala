@@ -88,7 +88,8 @@ class DAGScheduler(
     eventQueue.put(ExecutorGained(execId, host))
   }
 
-  // Called by TaskScheduler to cancel an entire TaskSet due to repeated failures.
+  // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
+  // cancellation of the job itself.
   override def taskSetFailed(taskSet: TaskSet, reason: String) {
     eventQueue.put(TaskSetFailed(taskSet, reason))
   }
@@ -336,9 +337,16 @@ class DAGScheduler(
   /**
    * Cancel a job that is running or waiting in the queue.
    */
-  def cancelJob(jobId: Int): Unit = this.synchronized {
+  def cancelJob(jobId: Int) {
     logInfo("Asked to cancel job " + jobId)
     eventQueue.put(JobCancelled(jobId))
+  }
+
+  /**
+   * Cancel all jobs that are running or waiting in the queue.
+   */
+  def cancelAllJobs() {
+    eventQueue.put(AllJobsCancelled)
   }
 
   /**
@@ -370,6 +378,12 @@ class DAGScheduler(
       case JobCancelled(jobId) =>
         // Cancel a job: find all the running stages that are linked to this job, and cancel them.
         running.find(_.jobId == jobId).foreach { stage =>
+          taskSched.cancelTasks(stage.id)
+        }
+
+      case AllJobsCancelled =>
+        // Cancel all running jobs.
+        running.foreach { stage =>
           taskSched.cancelTasks(stage.id)
         }
 
@@ -777,7 +791,7 @@ class DAGScheduler(
     failedStage.completionTime = Some(System.currentTimeMillis())
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
-      val error = new SparkException("Job failed: " + reason)
+      val error = new SparkException("Job aborted: " + reason)
       job.listener.jobFailed(error)
       listenerBus.post(SparkListenerJobEnd(job, JobFailed(error, Some(failedStage))))
       idToActiveJob -= resultStage.jobId

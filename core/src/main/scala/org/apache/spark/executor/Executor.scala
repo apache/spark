@@ -114,8 +114,8 @@ private[spark] class Executor(
     }
   }
 
-  // Akka's message frame size. This is only used to warn the user when the task result is greater
-  // than this value, in which case Akka will silently drop the task result message.
+  // Akka's message frame size. If task result is bigger than this, we use the block manager
+  // to send the result back.
   private val akkaFrameSize = {
     env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
   }
@@ -198,6 +198,7 @@ private[spark] class Executor(
         if (killed) {
           logInfo("Executor killed task " + taskId)
           execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+          return
         }
 
         attemptedTask = Some(task)

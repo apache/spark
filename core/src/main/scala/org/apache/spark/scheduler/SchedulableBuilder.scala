@@ -35,28 +35,6 @@ private[spark] trait SchedulableBuilder {
   def buildPools()
 
   def addTaskSetManager(manager: Schedulable, properties: Properties)
-
-  /**
-   * Find the TaskSetManager for the given stage. In fair scheduler, this function examines
-   * all the pools to find the TaskSetManager.
-   */
-  def getTaskSetManagers(stageId: Int): Option[TaskSetManager] = {
-    def getTsm(pool: Pool): Option[TaskSetManager] = {
-      pool.schedulableQueue.foreach {
-        case tsm: TaskSetManager =>
-          if (tsm.stageId == stageId) {
-            return Some(tsm)
-          }
-        case pool: Pool =>
-          val found = getTsm(pool)
-          if (found.isDefined) {
-            return getTsm(pool)
-          }
-      }
-      None
-    }
-    getTsm(rootPool)
-  }
 }
 
 private[spark] class FIFOSchedulableBuilder(val rootPool: Pool)

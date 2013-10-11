@@ -31,9 +31,8 @@ import org.apache.spark.scheduler.{SparkListenerTaskStart, SparkListener}
 
 /**
  * Test suite for cancelling running jobs. We run the cancellation tasks for single job action
- * (e.g. count) as well as multi-job action (e.g. take). We test in the combination of:
- * - FIFO vs fair scheduler
- * - local vs local cluster
+ * (e.g. count) as well as multi-job action (e.g. take). We test the local and cluster schedulers
+ * in both FIFO and fair scheduling modes.
  */
 class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
   with LocalSparkContext {
@@ -48,14 +47,8 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     sc = new SparkContext("local[2]", "test")
     testCount()
     testTake()
-    resetSparkContext()
-  }
-
-  test("cluster mode, FIFO scheduler") {
-    System.setProperty("spark.scheduler.mode", "FIFO")
-    sc = new SparkContext("local-cluster[2,1,512]", "test")
-    testCount()
-    testTake()
+    // Make sure we can still launch tasks.
+    assert(sc.parallelize(1 to 10, 2).count === 10)
     resetSparkContext()
   }
 
@@ -66,6 +59,18 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     sc = new SparkContext("local[2]", "test")
     testCount()
     testTake()
+    // Make sure we can still launch tasks.
+    assert(sc.parallelize(1 to 10, 2).count === 10)
+    resetSparkContext()
+  }
+
+  test("cluster mode, FIFO scheduler") {
+    System.setProperty("spark.scheduler.mode", "FIFO")
+    sc = new SparkContext("local-cluster[2,1,512]", "test")
+    testCount()
+    testTake()
+    // Make sure we can still launch tasks.
+    assert(sc.parallelize(1 to 10, 2).count === 10)
     resetSparkContext()
   }
 
@@ -76,6 +81,8 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     sc = new SparkContext("local-cluster[2,1,512]", "test")
     testCount()
     testTake()
+    // Make sure we can still launch tasks.
+    assert(sc.parallelize(1 to 10, 2).count === 10)
     resetSparkContext()
   }
 

@@ -46,7 +46,7 @@ trait FutureAction[T] extends Future[T] {
   override def ready(atMost: Duration)(implicit permit: CanAwait): FutureAction.this.type
 
   /**
-   * Await and return the result (of type T) of this action.
+   * Awaits and returns the result (of type T) of this action.
    * @param atMost maximum wait time, which may be negative (no waiting is done), Duration.Inf
    *               for unbounded waiting, or a finite positive duration
    * @throws Exception exception during action execution
@@ -76,7 +76,7 @@ trait FutureAction[T] extends Future[T] {
   override def value: Option[Try[T]]
 
   /**
-   * Block and return the result of this job.
+   * Blocks and returns the result of this job.
    */
   @throws(classOf[Exception])
   def get(): T = Await.result(this, Duration.Inf)
