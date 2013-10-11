@@ -17,7 +17,7 @@
 
 package org.apache.spark.executor
 
-import java.io.{File}
+import java.io.File
 import java.lang.management.ManagementFactory
 import java.nio.ByteBuffer
 import java.util.concurrent._
@@ -27,11 +27,11 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.scheduler._
 import org.apache.spark._
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.Utils
 
-
 /**
- * The Mesos executor for Spark.
+ * Spark executor used with Mesos and the standalone scheduler.
  */
 private[spark] class Executor(
     executorId: String,
@@ -105,7 +105,7 @@ private[spark] class Executor(
   SparkEnv.set(env)
   env.metricsSystem.registerSource(executorSource)
 
-  private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.message-frame-size")
+  private val akkaFrameSize = env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size")
 
   // Start worker thread pool
   val threadPool = new ThreadPoolExecutor(
@@ -167,12 +167,20 @@ private[spark] class Executor(
         // we need to serialize the task metrics first.  If TaskMetrics had a custom serialized format, we could
         // just change the relevants bytes in the byte buffer
         val accumUpdates = Accumulators.values
-        val result = new TaskResult(value, accumUpdates, task.metrics.getOrElse(null))
-        val serializedResult = ser.serialize(result)
-        logInfo("Serialized size of result for " + taskId + " is " + serializedResult.limit)
-        if (serializedResult.limit >= (akkaFrameSize - 1024)) {
-          context.statusUpdate(taskId, TaskState.FAILED, ser.serialize(TaskResultTooBigFailure()))
-          return
+        val directResult = new DirectTaskResult(value, accumUpdates, task.metrics.getOrElse(null))
+        val serializedDirectResult = ser.serialize(directResult)
+        logInfo("Serialized size of result for " + taskId + " is " + serializedDirectResult.limit)
+        val serializedResult = {
+          if (serializedDirectResult.limit >= akkaFrameSize - 1024) {
+            logInfo("Storing result for " + taskId + " in local BlockManager")
+            val blockId = "taskresult_" + taskId
+            env.blockManager.putBytes(
+              blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
+            ser.serialize(new IndirectTaskResult[Any](blockId))
+          } else {
+            logInfo("Sending result for " + taskId + " directly to driver")
+            serializedDirectResult
+          }
         }
         context.statusUpdate(taskId, TaskState.FINISHED, serializedResult)
         logInfo("Finished task ID " + taskId)

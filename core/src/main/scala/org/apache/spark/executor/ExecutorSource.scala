@@ -43,31 +43,31 @@ class ExecutorSource(val executor: Executor, executorId: String) extends Source 
   val sourceName = "executor.%s".format(executorId)
 
   // Gauge for executor thread pool's actively executing task counts
-  metricRegistry.register(MetricRegistry.name("threadpool", "activeTask", "count"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("threadpool", "activeTasks"), new Gauge[Int] {
     override def getValue: Int = executor.threadPool.getActiveCount()
   })
 
   // Gauge for executor thread pool's approximate total number of tasks that have been completed
-  metricRegistry.register(MetricRegistry.name("threadpool", "completeTask", "count"), new Gauge[Long] {
+  metricRegistry.register(MetricRegistry.name("threadpool", "completeTasks"), new Gauge[Long] {
     override def getValue: Long = executor.threadPool.getCompletedTaskCount()
   })
 
   // Gauge for executor thread pool's current number of threads
-  metricRegistry.register(MetricRegistry.name("threadpool", "currentPool", "size"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("threadpool", "currentPool_size"), new Gauge[Int] {
     override def getValue: Int = executor.threadPool.getPoolSize()
   })
 
   // Gauge got executor thread pool's largest number of threads that have ever simultaneously been in th pool
-  metricRegistry.register(MetricRegistry.name("threadpool", "maxPool", "size"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("threadpool", "maxPool_size"), new Gauge[Int] {
     override def getValue: Int = executor.threadPool.getMaximumPoolSize()
   })
 
   // Gauge for file system stats of this executor
   for (scheme <- Array("hdfs", "file")) {
-    registerFileSystemStat(scheme, "bytesRead", _.getBytesRead(), 0L)
-    registerFileSystemStat(scheme, "bytesWritten", _.getBytesWritten(), 0L)
-    registerFileSystemStat(scheme, "readOps", _.getReadOps(), 0)
-    registerFileSystemStat(scheme, "largeReadOps", _.getLargeReadOps(), 0)
-    registerFileSystemStat(scheme, "writeOps", _.getWriteOps(), 0)
+    registerFileSystemStat(scheme, "read_bytes", _.getBytesRead(), 0L)
+    registerFileSystemStat(scheme, "write_bytes", _.getBytesWritten(), 0L)
+    registerFileSystemStat(scheme, "read_ops", _.getReadOps(), 0)
+    registerFileSystemStat(scheme, "largeRead_ops", _.getLargeReadOps(), 0)
+    registerFileSystemStat(scheme, "write_ops", _.getWriteOps(), 0)
   }
 }

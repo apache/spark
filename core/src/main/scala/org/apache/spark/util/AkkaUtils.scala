@@ -54,8 +54,8 @@ private[spark] object AkkaUtils {
       akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
       akka.remote.netty.tcp.hostname = "%s"
       akka.remote.netty.tcp.port = %d
-      akka.remote.netty.tcp.connection-timeout = %ds
-      akka.remote.netty.tcp.message-frame-size = %d MiB
+      akka.remote.netty.tcp.connection-timeout = %d s
+      akka.remote.netty.tcp.maximum-frame-size = %dMiB
       akka.remote.netty.tcp.execution-pool-size = %d
       akka.actor.default-dispatcher.throughput = %d
       akka.remote.log-remote-lifecycle-events = %s

@@ -17,8 +17,8 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.scheduler.cluster.TaskInfo
 import scala.collection._
+
 import org.apache.spark.executor.TaskMetrics
 
 case class StageInfo(

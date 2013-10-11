@@ -31,8 +31,7 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster._
-import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import akka.actor._
 import org.apache.spark.util.Utils
 
@@ -92,7 +91,7 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
   var rootPool: Pool = null
   val schedulingMode: SchedulingMode = SchedulingMode.withName(
     System.getProperty("spark.scheduler.mode", "FIFO"))
-  val activeTaskSets = new HashMap[String, TaskSetManager]
+  val activeTaskSets = new HashMap[String, LocalTaskSetManager]
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskSetTaskIds = new HashMap[String, HashSet[Long]]
 
@@ -211,7 +210,8 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       deserializedTask.metrics.get.executorRunTime = serviceTime.toInt
       deserializedTask.metrics.get.jvmGCTime = getTotalGCTime - startGCTime
       deserializedTask.metrics.get.executorDeserializeTime = deserTime.toInt
-      val taskResult = new TaskResult(result, accumUpdates, deserializedTask.metrics.getOrElse(null))
+      val taskResult = new DirectTaskResult(
+        result, accumUpdates, deserializedTask.metrics.getOrElse(null))
       val serializedResult = ser.serialize(taskResult)
       localActor ! LocalStatusUpdate(taskId, TaskState.FINISHED, serializedResult)
     } catch {

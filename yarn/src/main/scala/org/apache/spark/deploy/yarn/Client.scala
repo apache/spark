@@ -106,7 +106,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     logInfo("Setting up application submission context for ASM")
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     appContext.setApplicationId(appId)
-    appContext.setApplicationName("Spark")
+    appContext.setApplicationName(args.appName)
     return appContext
   }
   
@@ -224,8 +224,8 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     // Add Xmx for am memory
     JAVA_OPTS += "-Xmx" + amMemory + "m "
 
-    JAVA_OPTS += " -Djava.io.tmpdir=" + new Path(Environment.PWD.$(),
-                                                 YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+    JAVA_OPTS += " -Djava.io.tmpdir=" + 
+      new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
 
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove it once cpuset version is pushed out.
@@ -241,6 +241,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       JAVA_OPTS += " -XX:CMSIncrementalDutyCycleMin=0 "
       JAVA_OPTS += " -XX:CMSIncrementalDutyCycle=10 "
     }
+
     if (env.isDefinedAt("SPARK_JAVA_OPTS")) {
       JAVA_OPTS += env("SPARK_JAVA_OPTS") + " "
     }

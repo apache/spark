@@ -25,15 +25,12 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.math.max
 import scala.math.min
+import scala.Some
 
-import org.apache.spark.{FetchFailed, Logging, Resubmitted, SparkEnv, Success, TaskEndReason, TaskState}
-import org.apache.spark.{ExceptionFailure, SparkException, TaskResultTooBigFailure}
+import org.apache.spark.{ExceptionFailure, FetchFailed, Logging, Resubmitted, SparkEnv,
+  SparkException, Success, TaskEndReason, TaskResultLost, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler._
-import scala.Some
-import org.apache.spark.FetchFailed
-import org.apache.spark.ExceptionFailure
-import org.apache.spark.TaskResultTooBigFailure
 import org.apache.spark.util.{SystemClock, Clock}
 
 
@@ -71,18 +68,20 @@ private[spark] class ClusterTaskSetManager(
   val tasks = taskSet.tasks
   val numTasks = tasks.length
   val copiesRunning = new Array[Int](numTasks)
-  val finished = new Array[Boolean](numTasks)
+  val successful = new Array[Boolean](numTasks)
   val numFailures = new Array[Int](numTasks)
   val taskAttempts = Array.fill[List[TaskInfo]](numTasks)(Nil)
-  var tasksFinished = 0
+  var tasksSuccessful = 0
 
   var weight = 1
   var minShare = 0
-  var runningTasks = 0
   var priority = taskSet.priority
   var stageId = taskSet.stageId
   var name = "TaskSet_"+taskSet.stageId.toString
-  var parent: Schedulable = null
+  var parent: Pool = null
+
+  var runningTasks = 0
+  private val runningTasksSet = new HashSet[Long]
 
   // Set of pending tasks for each executor. These collections are actually
   // treated as stacks, in which new tasks are added to the end of the
@@ -223,7 +222,7 @@ private[spark] class ClusterTaskSetManager(
     while (!list.isEmpty) {
       val index = list.last
       list.trimEnd(1)
-      if (copiesRunning(index) == 0 && !finished(index)) {
+      if (copiesRunning(index) == 0 && !successful(index)) {
         return Some(index)
       }
     }
@@ -243,7 +242,7 @@ private[spark] class ClusterTaskSetManager(
   private def findSpeculativeTask(execId: String, host: String, locality: TaskLocality.Value)
     : Option[(Int, TaskLocality.Value)] =
   {
-    speculatableTasks.retain(index => !finished(index)) // Remove finished tasks from set
+    speculatableTasks.retain(index => !successful(index)) // Remove finished tasks from set
 
     if (!speculatableTasks.isEmpty) {
       // Check for process-local or preference-less tasks; note that tasks can be process-local
@@ -344,7 +343,7 @@ private[spark] class ClusterTaskSetManager(
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
-    if (tasksFinished < numTasks && availableCpus >= CPUS_PER_TASK) {
+    if (tasksSuccessful < numTasks && availableCpus >= CPUS_PER_TASK) {
       val curTime = clock.getTime()
 
       var allowedLocality = getAllowedLocalityLevel(curTime)
@@ -375,7 +374,7 @@ private[spark] class ClusterTaskSetManager(
           val serializedTask = Task.serializeWithDependencies(
             task, sched.sc.addedFiles, sched.sc.addedJars, ser)
           val timeTaken = clock.getTime() - startTime
-          increaseRunningTasks(1)
+          addRunningTask(taskId)
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
@@ -417,94 +416,61 @@ private[spark] class ClusterTaskSetManager(
     index
   }
 
-  /** Called by cluster scheduler when one of our tasks changes state */
-  override def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
-    SparkEnv.set(env)
-    state match {
-      case TaskState.FINISHED =>
-        taskFinished(tid, state, serializedData)
-      case TaskState.LOST =>
-        taskLost(tid, state, serializedData)
-      case TaskState.FAILED =>
-        taskLost(tid, state, serializedData)
-      case TaskState.KILLED =>
-        taskLost(tid, state, serializedData)
-      case _ =>
-    }
-  }
-
-  def taskStarted(task: Task[_], info: TaskInfo) {
+  private def taskStarted(task: Task[_], info: TaskInfo) {
     sched.listener.taskStarted(task, info)
   }
 
-  def taskFinished(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+  /**
+   * Marks the task as successful and notifies the listener that a task has ended.
+   */
+  def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]) = {
     val info = taskInfos(tid)
-    if (info.failed) {
-      // We might get two task-lost messages for the same task in coarse-grained Mesos mode,
-      // or even from Mesos itself when acks get delayed.
-      return
-    }
     val index = info.index
     info.markSuccessful()
-    decreaseRunningTasks(1)
-    if (!finished(index)) {
-      tasksFinished += 1
+    removeRunningTask(tid)
+    if (!successful(index)) {
       logInfo("Finished TID %s in %d ms on %s (progress: %d/%d)".format(
-        tid, info.duration, info.host, tasksFinished, numTasks))
-      // Deserialize task result and pass it to the scheduler
-      try {
-        val result = ser.deserialize[TaskResult[_]](serializedData)
-        result.metrics.resultSize = serializedData.limit()
-        sched.listener.taskEnded(
-          tasks(index), Success, result.value, result.accumUpdates, info, result.metrics)
-      } catch {
-        case cnf: ClassNotFoundException =>
-          val loader = Thread.currentThread().getContextClassLoader
-          throw new SparkException("ClassNotFound with classloader: " + loader, cnf)
-        case ex: Throwable => throw ex
-      }
-      // Mark finished and stop if we've finished all the tasks
-      finished(index) = true
-      if (tasksFinished == numTasks) {
+        tid, info.duration, info.host, tasksSuccessful, numTasks))
+      sched.listener.taskEnded(
+        tasks(index), Success, result.value, result.accumUpdates, info, result.metrics)
+
+      // Mark successful and stop if all the tasks have succeeded.
+      tasksSuccessful += 1
+      successful(index) = true
+      if (tasksSuccessful == numTasks) {
         sched.taskSetFinished(this)
       }
     } else {
-      logInfo("Ignoring task-finished event for TID " + tid +
-        " because task " + index + " is already finished")
+      logInfo("Ignorning task-finished event for TID " + tid + " because task " +
+        index + " has already completed successfully")
     }
   }
 
-  def taskLost(tid: Long, state: TaskState, serializedData: ByteBuffer) {
+  /**
+   * Marks the task as failed, re-adds it to the list of pending tasks, and notifies the listener.
+   */
+  def handleFailedTask(tid: Long, state: TaskState, reason: Option[TaskEndReason]) {
     val info = taskInfos(tid)
     if (info.failed) {
-      // We might get two task-lost messages for the same task in coarse-grained Mesos mode,
-      // or even from Mesos itself when acks get delayed.
       return
     }
+    removeRunningTask(tid)
     val index = info.index
     info.markFailed()
-    decreaseRunningTasks(1)
-    if (!finished(index)) {
+    if (!successful(index)) {
       logInfo("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
       copiesRunning(index) -= 1
       // Check if the problem is a map output fetch failure. In that case, this
       // task will never succeed on any node, so tell the scheduler about it.
-      if (serializedData != null && serializedData.limit() > 0) {
-        val reason = ser.deserialize[TaskEndReason](serializedData, getClass.getClassLoader)
-        reason match {
+      reason.foreach {
+        _ match {
           case fetchFailed: FetchFailed =>
             logInfo("Loss was due to fetch failure from " + fetchFailed.bmAddress)
             sched.listener.taskEnded(tasks(index), fetchFailed, null, null, info, null)
-            finished(index) = true
-            tasksFinished += 1
+            successful(index) = true
+            tasksSuccessful += 1
             sched.taskSetFinished(this)
-            decreaseRunningTasks(runningTasks)
-            return
-
-          case taskResultTooBig: TaskResultTooBigFailure =>
-            logInfo("Loss was due to task %s result exceeding Akka frame size; aborting job".format(
-              tid))
-            abort("Task %s result exceeded Akka frame size".format(tid))
+            removeAllRunningTasks()
             return
 
           case ef: ExceptionFailure =>
@@ -534,13 +500,16 @@ private[spark] class ClusterTaskSetManager(
               logInfo("Loss was due to %s [duplicate %d]".format(ef.description, dupCount))
             }
 
+          case TaskResultLost =>
+            logInfo("Lost result for TID %s on host %s".format(tid, info.host))
+            sched.listener.taskEnded(tasks(index), TaskResultLost, null, null, info, null)
+
           case _ => {}
         }
       }
       // On non-fetch failures, re-enqueue the task as pending for a max number of retries
       addPendingTask(index)
-      // Count failed attempts only on FAILED and LOST state (not on KILLED)
-      if (state == TaskState.FAILED || state == TaskState.LOST) {
+      if (state != TaskState.KILLED) {
         numFailures(index) += 1
         if (numFailures(index) > MAX_TASK_FAILURES) {
           logError("Task %s:%d failed more than %d times; aborting job".format(
@@ -564,22 +533,36 @@ private[spark] class ClusterTaskSetManager(
     causeOfFailure = message
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.listener.taskSetFailed(taskSet, message)
-    decreaseRunningTasks(runningTasks)
+    removeAllRunningTasks()
     sched.taskSetFinished(this)
   }
 
-  override def increaseRunningTasks(taskNum: Int) {
-    runningTasks += taskNum
-    if (parent != null) {
-      parent.increaseRunningTasks(taskNum)
+  /** If the given task ID is not in the set of running tasks, adds it.
+   *
+   * Used to keep track of the number of running tasks, for enforcing scheduling policies.
+   */
+  def addRunningTask(tid: Long) {
+    if (runningTasksSet.add(tid) && parent != null) {
+      parent.increaseRunningTasks(1)
     }
+    runningTasks = runningTasksSet.size
   }
 
-  override def decreaseRunningTasks(taskNum: Int) {
-    runningTasks -= taskNum
-    if (parent != null) {
-      parent.decreaseRunningTasks(taskNum)
+  /** If the given task ID is in the set of running tasks, removes it. */
+  def removeRunningTask(tid: Long) {
+    if (runningTasksSet.remove(tid) && parent != null) {
+      parent.decreaseRunningTasks(1)
     }
+    runningTasks = runningTasksSet.size
+  }
+
+  private def removeAllRunningTasks() {
+    val numRunningTasks = runningTasksSet.size
+    runningTasksSet.clear()
+    if (parent != null) {
+      parent.decreaseRunningTasks(numRunningTasks)
+    }
+    runningTasks = 0
   }
 
   override def getSchedulableByName(name: String): Schedulable = {
@@ -615,10 +598,10 @@ private[spark] class ClusterTaskSetManager(
     if (tasks(0).isInstanceOf[ShuffleMapTask]) {
       for ((tid, info) <- taskInfos if info.executorId == execId) {
         val index = taskInfos(tid).index
-        if (finished(index)) {
-          finished(index) = false
+        if (successful(index)) {
+          successful(index) = false
           copiesRunning(index) -= 1
-          tasksFinished -= 1
+          tasksSuccessful -= 1
           addPendingTask(index)
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
@@ -628,7 +611,7 @@ private[spark] class ClusterTaskSetManager(
     }
     // Also re-enqueue any tasks that were running on the node
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      taskLost(tid, TaskState.KILLED, null)
+      handleFailedTask(tid, TaskState.KILLED, None)
     }
   }
 
@@ -641,13 +624,13 @@ private[spark] class ClusterTaskSetManager(
    */
   override def checkSpeculatableTasks(): Boolean = {
     // Can't speculate if we only have one task, or if all tasks have finished.
-    if (numTasks == 1 || tasksFinished == numTasks) {
+    if (numTasks == 1 || tasksSuccessful == numTasks) {
       return false
     }
     var foundTasks = false
     val minFinishedForSpeculation = (SPECULATION_QUANTILE * numTasks).floor.toInt
     logDebug("Checking for speculative tasks: minFinished = " + minFinishedForSpeculation)
-    if (tasksFinished >= minFinishedForSpeculation) {
+    if (tasksSuccessful >= minFinishedForSpeculation) {
       val time = clock.getTime()
       val durations = taskInfos.values.filter(_.successful).map(_.duration).toArray
       Arrays.sort(durations)
@@ -658,7 +641,7 @@ private[spark] class ClusterTaskSetManager(
       logDebug("Task length threshold for speculation: " + threshold)
       for ((tid, info) <- taskInfos) {
         val index = info.index
-        if (!finished(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
+        if (!successful(index) && copiesRunning(index) == 1 && info.timeRunning(time) > threshold &&
           !speculatableTasks.contains(index)) {
           logInfo(
             "Marking task %s:%d (on %s) as speculatable because it ran more than %.0f ms".format(
@@ -672,7 +655,7 @@ private[spark] class ClusterTaskSetManager(
   }
 
   override def hasPendingTasks(): Boolean = {
-    numTasks > 0 && tasksFinished < numTasks
+    numTasks > 0 && tasksSuccessful < numTasks
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
