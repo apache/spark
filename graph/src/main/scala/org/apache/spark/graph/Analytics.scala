@@ -64,7 +64,7 @@ object Analytics extends Logging {
    * lowest vertex id in the connected component containing
    * that vertex.
    */
-  def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]) = {
+  def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
     val ccGraph = graph.mapVertices { case Vertex(vid, _) => vid }
 
     GraphLab.iterate(ccGraph)(
@@ -72,6 +72,7 @@ object Analytics extends Logging {
       (a: Vid, b: Vid) => math.min(a, b), // merge
       (v, a: Option[Vid]) => math.min(v.data, a.getOrElse(Long.MaxValue)), // apply
       (me_id, edge) => (edge.vertex(me_id).data < edge.otherVertex(me_id).data), // scatter
+      numIter,
       gatherDirection = EdgeDirection.Both, scatterDirection = EdgeDirection.Both
     )
   }
@@ -157,38 +158,38 @@ object Analytics extends Logging {
          sc.stop()
        }
 
-//        case "cc" => {
-//
-//           var numIter = Int.MaxValue
-//           var isDynamic = false
-//
-//           options.foreach{
-//             case ("numIter", v) => numIter = v.toInt
-//             case ("dynamic", v) => isDynamic = v.toBoolean
-//             case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
-//           }
-//
-//           if(!isDynamic && numIter == Int.MaxValue) {
-//             println("Set number of iterations!")
-//             sys.exit(1)
-//           }
-//           println("======================================")
-//           println("|      Connected Components          |")
-//           println("--------------------------------------")
-//           println(" Using parameters:")
-//           println(" \tDynamic:  " + isDynamic)
-//           println(" \tNumIter:  " + numIter)
-//           println("======================================")
-//
-//           val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")")
-//           val graph = GraphLoader.textFile(sc, fname, a => 1.0F)
-//           //val cc = Analytics.connectedComponents(graph, numIter)
-//           // val cc = if(isDynamic) Analytics.dynamicConnectedComponents(graph, numIter)
-//           //   else  Analytics.connectedComponents(graph, numIter)
-//           println("Components: " + cc.vertices.map(_.data).distinct())
-//
-//           sc.stop()
-//         }
+        case "cc" => {
+
+           var numIter = Int.MaxValue
+           var isDynamic = false
+
+           options.foreach{
+             case ("numIter", v) => numIter = v.toInt
+             case ("dynamic", v) => isDynamic = v.toBoolean
+             case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
+           }
+
+           if(!isDynamic && numIter == Int.MaxValue) {
+             println("Set number of iterations!")
+             sys.exit(1)
+           }
+           println("======================================")
+           println("|      Connected Components          |")
+           println("--------------------------------------")
+           println(" Using parameters:")
+           println(" \tDynamic:  " + isDynamic)
+           println(" \tNumIter:  " + numIter)
+           println("======================================")
+
+           val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")")
+           val graph = GraphLoader.textFile(sc, fname, a => 1.0F)
+           val cc = Analytics.connectedComponents(graph, numIter)
+           //val cc = if(isDynamic) Analytics.dynamicConnectedComponents(graph, numIter)
+           //         else Analytics.connectedComponents(graph, numIter)
+           println("Components: " + cc.vertices.map(_.data).distinct())
+
+           sc.stop()
+         }
 //
 //        case "shortestpath" => {
 //
