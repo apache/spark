@@ -39,22 +39,23 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
   private val masterActorSystems = ArrayBuffer[ActorSystem]()
   private val workerActorSystems = ArrayBuffer[ActorSystem]()
   
-  def start(): String = {
+  def start(): Array[String] = {
     logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
 
     /* Start the Master */
     val (masterSystem, masterPort, _) = Master.startSystemAndActor(localHostname, 0, 0)
     masterActorSystems += masterSystem
     val masterUrl = "spark://" + localHostname + ":" + masterPort
+    val masters = Array(masterUrl)
 
     /* Start the Workers */
     for (workerNum <- 1 to numWorkers) {
       val (workerSystem, _) = Worker.startSystemAndActor(localHostname, 0, 0, coresPerWorker,
-        memoryPerWorker, masterUrl, null, Some(workerNum))
+        memoryPerWorker, masters, null, Some(workerNum))
       workerActorSystems += workerSystem
     }
 
-    return masterUrl
+    return masters
   }
 
   def stop() {

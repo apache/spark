@@ -17,21 +17,30 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
+sealed trait MasterMessages extends Serializable
 
-private[spark] class ExecutorInfo(
-    val id: Int,
-    val application: ApplicationInfo,
-    val worker: WorkerInfo,
-    val cores: Int,
-    val memory: Int) {
+/** Contains messages seen only by the Master and its associated entities. */
+private[master] object MasterMessages {
 
-  var state = ExecutorState.LAUNCHING
+  // LeaderElectionAgent to Master
 
-  /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
-  def copyState(execDesc: ExecutorDescription) {
-    state = execDesc.state
-  }
+  case object ElectedLeader
 
-  def fullId: String = application.id + "/" + id
+  case object RevokedLeadership
+
+  // Actor System to LeaderElectionAgent
+
+  case object CheckLeader
+
+  // Actor System to Master
+
+  case object CheckForWorkerTimeOut
+
+  case class BeginRecovery(storedApps: Seq[ApplicationInfo], storedWorkers: Seq[WorkerInfo])
+
+  case object CompleteRecovery
+
+  case object RequestWebUIPort
+
+  case class WebUIPortResponse(webUIBoundPort: Int)
 }

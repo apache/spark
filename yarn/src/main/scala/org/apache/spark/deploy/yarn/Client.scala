@@ -45,7 +45,13 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
   
   var rpc: YarnRPC = YarnRPC.create(conf)
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
-  val credentials = UserGroupInformation.getCurrentUser().getCredentials();
+  val credentials = UserGroupInformation.getCurrentUser().getCredentials()
+  private var distFiles = None: Option[String]
+  private var distFilesTimeStamps = None: Option[String]
+  private var distFilesFileSizes = None: Option[String]
+  private var distArchives = None: Option[String]
+  private var distArchivesTimeStamps = None: Option[String]
+  private var distArchivesFileSizes = None: Option[String]
   
   def run() {
     init(yarnConf)
@@ -57,7 +63,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     verifyClusterResources(newApp)
     val appContext = createApplicationSubmissionContext(appId)
-    val localResources = prepareLocalResources(appId, "spark")
+    val localResources = prepareLocalResources(appId, ".sparkStaging")
     val env = setupLaunchEnv(localResources)
     val amContainer = createContainerLaunchContext(newApp, localResources, env)
 
@@ -109,10 +115,73 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     appContext.setApplicationName(args.appName)
     return appContext
   }
-  
-  def prepareLocalResources(appId: ApplicationId, appName: String): HashMap[String, LocalResource] = {
+
+  /**
+   * Copy the local file into HDFS and configure to be distributed with the
+   * job via the distributed cache.
+   * If a fragment is specified the file will be referenced as that fragment.
+   */
+  private def copyLocalFile(
+      dstDir: Path,
+      resourceType: LocalResourceType,
+      originalPath: Path,
+      replication: Short,
+      localResources: HashMap[String,LocalResource],
+      fragment: String,
+      appMasterOnly: Boolean = false): Unit = {
+    val fs = FileSystem.get(conf)
+    val newPath = new Path(dstDir, originalPath.getName())
+    logInfo("Uploading " + originalPath + " to " + newPath)
+    fs.copyFromLocalFile(false, true, originalPath, newPath)
+    fs.setReplication(newPath, replication);
+    val destStatus = fs.getFileStatus(newPath)
+
+    val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
+    amJarRsrc.setType(resourceType)
+    amJarRsrc.setVisibility(LocalResourceVisibility.APPLICATION)
+    amJarRsrc.setResource(ConverterUtils.getYarnUrlFromPath(newPath))
+    amJarRsrc.setTimestamp(destStatus.getModificationTime())
+    amJarRsrc.setSize(destStatus.getLen())
+    var pathURI: URI = new URI(newPath.toString() + "#" + originalPath.getName());
+    if ((fragment == null) || (fragment.isEmpty())){
+      localResources(originalPath.getName()) = amJarRsrc
+    } else {
+      localResources(fragment) = amJarRsrc
+      pathURI = new URI(newPath.toString() + "#" + fragment);
+    }
+    val distPath = pathURI.toString()
+    if (appMasterOnly == true) return
+    if (resourceType == LocalResourceType.FILE) {
+      distFiles match {
+        case Some(path) =>
+          distFilesFileSizes = Some(distFilesFileSizes.get + "," + 
+            destStatus.getLen().toString())
+          distFilesTimeStamps = Some(distFilesTimeStamps.get + "," + 
+            destStatus.getModificationTime().toString())
+          distFiles = Some(path + "," + distPath)
+        case _ => 
+          distFilesFileSizes = Some(destStatus.getLen().toString())
+          distFilesTimeStamps = Some(destStatus.getModificationTime().toString())
+          distFiles = Some(distPath)
+      }
+    } else {
+      distArchives match {
+        case Some(path) =>
+          distArchivesTimeStamps = Some(distArchivesTimeStamps.get + "," +
+            destStatus.getModificationTime().toString())
+          distArchivesFileSizes = Some(distArchivesFileSizes.get + "," + 
+            destStatus.getLen().toString())
+          distArchives = Some(path + "," + distPath)
+        case _ => 
+          distArchivesTimeStamps = Some(destStatus.getModificationTime().toString())
+          distArchivesFileSizes = Some(destStatus.getLen().toString())
+          distArchives = Some(distPath)
+      }
+    }
+  }
+
+  def prepareLocalResources(appId: ApplicationId, sparkStagingDir: String): HashMap[String, LocalResource] = {
     logInfo("Preparing Local resources")
-    val locaResources = HashMap[String, LocalResource]()
     // Upload Spark and the application JAR to the remote file system
     // Add them as local resources to the AM
     val fs = FileSystem.get(conf)
@@ -125,33 +194,69 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       }
     }
 
+    val pathSuffix = sparkStagingDir + "/" + appId.toString() + "/"
+    val dst = new Path(fs.getHomeDirectory(), pathSuffix)
+    val replication = System.getProperty("spark.yarn.submit.file.replication", "3").toShort
+
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val dstFs = dst.getFileSystem(conf)
+      dstFs.addDelegationTokens(delegTokenRenewer, credentials);
+    }
+    val localResources = HashMap[String, LocalResource]()
+
     Map("spark.jar" -> System.getenv("SPARK_JAR"), "app.jar" -> args.userJar, "log4j.properties" -> System.getenv("SPARK_LOG4J_CONF"))
     .foreach { case(destName, _localPath) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
       if (! localPath.isEmpty()) {
         val src = new Path(localPath)
-        val pathSuffix = appName + "/" + appId.getId() + destName
-        val dst = new Path(fs.getHomeDirectory(), pathSuffix)
-        logInfo("Uploading " + src + " to " + dst)
-        fs.copyFromLocalFile(false, true, src, dst)
-        val destStatus = fs.getFileStatus(dst)
-
-        // get tokens for anything we upload to hdfs
-        if (UserGroupInformation.isSecurityEnabled()) {
-          fs.addDelegationTokens(delegTokenRenewer, credentials);
-        }
+        val newPath = new Path(dst, destName)
+        logInfo("Uploading " + src + " to " + newPath)
+        fs.copyFromLocalFile(false, true, src, newPath)
+        fs.setReplication(newPath, replication);
+        val destStatus = fs.getFileStatus(newPath)
 
         val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
         amJarRsrc.setType(LocalResourceType.FILE)
         amJarRsrc.setVisibility(LocalResourceVisibility.APPLICATION)
-        amJarRsrc.setResource(ConverterUtils.getYarnUrlFromPath(dst))
+        amJarRsrc.setResource(ConverterUtils.getYarnUrlFromPath(newPath))
         amJarRsrc.setTimestamp(destStatus.getModificationTime())
         amJarRsrc.setSize(destStatus.getLen())
-        locaResources(destName) = amJarRsrc
+        localResources(destName) = amJarRsrc
       }
     }
+
+    // handle any add jars
+    if ((args.addJars != null) && (!args.addJars.isEmpty())){
+      args.addJars.split(',').foreach { case file: String =>
+        val tmpURI = new URI(file)
+        val tmp = new Path(tmpURI)
+        copyLocalFile(dst, LocalResourceType.FILE, tmp, replication, localResources,
+          tmpURI.getFragment(), true)
+      }
+    }
+
+    // handle any distributed cache files
+    if ((args.files != null) && (!args.files.isEmpty())){
+      args.files.split(',').foreach { case file: String =>
+        val tmpURI = new URI(file)
+        val tmp = new Path(tmpURI)
+        copyLocalFile(dst, LocalResourceType.FILE, tmp, replication, localResources,
+          tmpURI.getFragment())
+      }
+    }
+
+    // handle any distributed cache archives
+    if ((args.archives != null) && (!args.archives.isEmpty())) {
+      args.archives.split(',').foreach { case file:String =>
+        val tmpURI = new URI(file)
+        val tmp = new Path(tmpURI)
+        copyLocalFile(dst, LocalResourceType.ARCHIVE, tmp, replication, 
+          localResources, tmpURI.getFragment())
+      }
+    }
+
     UserGroupInformation.getCurrentUser().addCredentials(credentials);
-    return locaResources
+    return localResources
   }
   
   def setupLaunchEnv(localResources: HashMap[String, LocalResource]): HashMap[String, String] = {
@@ -160,11 +265,10 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     val env = new HashMap[String, String]()
 
-    // If log4j present, ensure ours overrides all others
-    if (log4jConfLocalRes != null) Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./")
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$())
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name,
+      Environment.PWD.$() + Path.SEPARATOR + "*")
 
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./*")
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
     Client.populateHadoopClasspath(yarnConf, env)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_JAR_PATH") = 
@@ -184,6 +288,18 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
         log4jConfLocalRes.getResource().getScheme.toString() + "://" + log4jConfLocalRes.getResource().getFile().toString()
       env("SPARK_YARN_LOG4J_TIMESTAMP") =  log4jConfLocalRes.getTimestamp().toString()
       env("SPARK_YARN_LOG4J_SIZE") =  log4jConfLocalRes.getSize().toString()
+    }
+
+    // set the environment variables to be passed on to the Workers
+    if (distFiles != None) {
+      env("SPARK_YARN_CACHE_FILES") = distFiles.get
+      env("SPARK_YARN_CACHE_FILES_TIME_STAMPS") = distFilesTimeStamps.get
+      env("SPARK_YARN_CACHE_FILES_FILE_SIZES") = distFilesFileSizes.get
+    }
+    if (distArchives != None) {
+      env("SPARK_YARN_CACHE_ARCHIVES") = distArchives.get
+      env("SPARK_YARN_CACHE_ARCHIVES_TIME_STAMPS") = distArchivesTimeStamps.get
+      env("SPARK_YARN_CACHE_ARCHIVES_FILE_SIZES") = distArchivesFileSizes.get
     }
 
     // allow users to specify some environment variables
