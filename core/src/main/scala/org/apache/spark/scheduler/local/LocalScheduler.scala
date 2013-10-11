@@ -50,7 +50,7 @@ private[spark]
 class LocalActor(localScheduler: LocalScheduler, private var freeCores: Int)
   extends Actor with Logging {
 
-  val executor = new Executor("local", "local", Seq.empty, isLocal = true)
+  val executor = new Executor("localhost", "localhost", Seq.empty, isLocal = true)
 
   def receive = {
     case LocalReviveOffers =>
