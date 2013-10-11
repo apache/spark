@@ -53,8 +53,7 @@ class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll {
   test("collectAsync") {
     assert(zeroPartRdd.collectAsync().get() === Seq.empty)
 
-    // Note that we sort the collected output because the order is indeterministic.
-    val collected = sc.parallelize(1 to 1000, 3).collectAsync().get().sorted
+    val collected = sc.parallelize(1 to 1000, 3).collectAsync().get()
     assert(collected === (1 to 1000))
   }
 
@@ -80,10 +79,9 @@ class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll {
 
   test("takeAsync") {
     def testTake(rdd: RDD[Int], input: Seq[Int], num: Int) {
-      // Note that we sort the collected output because the order is indeterministic.
-      val expected = input.take(num).size
-      val saw = rdd.takeAsync(num).get().size
-      assert(saw == expected, "incorrect result for rdd with %d partitions (expected %d, saw %d)"
+      val expected = input.take(num)
+      val saw = rdd.takeAsync(num).get()
+      assert(saw == expected, "incorrect result for rdd with %d partitions (expected %s, saw %s)"
         .format(rdd.partitions.size, expected, saw))
     }
     val input = Range(1, 1000)

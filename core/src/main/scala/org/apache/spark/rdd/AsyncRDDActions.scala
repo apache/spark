@@ -54,9 +54,9 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with 
    * Return a future for retrieving all elements of this RDD.
    */
   def collectAsync(): FutureAction[Seq[T]] = {
-    val results = new ArrayBuffer[T]
+    val results = new Array[Array[T]](self.partitions.size)
     self.context.submitJob[T, Array[T], Seq[T]](self, _.toArray, Range(0, self.partitions.size),
-      (index, data) => results ++= data, results)
+      (index, data) => results(index) = data, results.flatten.toSeq)
   }
 
   /**
@@ -66,10 +66,10 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with 
     val promise = new CancellablePromise[Seq[T]]
 
     promise.run {
-      val buf = new ArrayBuffer[T](num)
+      val results = new ArrayBuffer[T](num)
       val totalParts = self.partitions.length
       var partsScanned = 0
-      while (buf.size < num && partsScanned < totalParts) {
+      while (results.size < num && partsScanned < totalParts) {
         // The number of partitions to try in this iteration. It is ok for this number to be
         // greater than totalParts because we actually cap it at totalParts in runJob.
         var numPartsToTry = 1
@@ -77,26 +77,28 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with 
           // If we didn't find any rows after the first iteration, just try all partitions next.
           // Otherwise, interpolate the number of partitions we need to try, but overestimate it
           // by 50%.
-          if (buf.size == 0) {
+          if (results.size == 0) {
             numPartsToTry = totalParts - 1
           } else {
-            numPartsToTry = (1.5 * num * partsScanned / buf.size).toInt
+            numPartsToTry = (1.5 * num * partsScanned / results.size).toInt
           }
         }
         numPartsToTry = math.max(0, numPartsToTry)  // guard against negative num of partitions
 
-        val left = num - buf.size
+        val left = num - results.size
         val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
 
+        val buf = new Array[Array[T]](p.size)
         promise.runJob(self,
           (it: Iterator[T]) => it.take(left).toArray,
           p,
-          (index: Int, data: Array[T]) => buf ++= data.take(num - buf.size),
+          (index: Int, data: Array[T]) => buf(index) = data,
           Unit)
 
+        buf.foreach(results ++= _.take(num - results.size))
         partsScanned += numPartsToTry
       }
-      buf.toSeq
+      results.toSeq
     }
 
     promise.future
