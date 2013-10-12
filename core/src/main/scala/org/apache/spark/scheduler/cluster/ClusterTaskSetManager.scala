@@ -461,54 +461,52 @@ private[spark] class ClusterTaskSetManager(
       // Check if the problem is a map output fetch failure. In that case, this
       // task will never succeed on any node, so tell the scheduler about it.
       reason.foreach {
-        _ match {
-          case fetchFailed: FetchFailed =>
-            logInfo("Loss was due to fetch failure from " + fetchFailed.bmAddress)
-            sched.listener.taskEnded(tasks(index), fetchFailed, null, null, info, null)
-            successful(index) = true
-            tasksSuccessful += 1
-            sched.taskSetFinished(this)
-            removeAllRunningTasks()
-            return
+        case fetchFailed: FetchFailed =>
+          logInfo("Loss was due to fetch failure from " + fetchFailed.bmAddress)
+          sched.listener.taskEnded(tasks(index), fetchFailed, null, null, info, null)
+          successful(index) = true
+          tasksSuccessful += 1
+          sched.taskSetFinished(this)
+          removeAllRunningTasks()
+          return
 
-          case TaskKilled =>
-            logInfo("Task %d was killed.".format(tid))
-            abort("Task %d was killed".format(tid))
-            return
+        case TaskKilled =>
+          logInfo("Task %d was killed.".format(tid))
+          sched.listener.taskEnded(tasks(index), reason.get, null, null, info, null)
+          return
 
-          case ef: ExceptionFailure =>
-            sched.listener.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
-            val key = ef.description
-            val now = clock.getTime()
-            val (printFull, dupCount) = {
-              if (recentExceptions.contains(key)) {
-                val (dupCount, printTime) = recentExceptions(key)
-                if (now - printTime > EXCEPTION_PRINT_INTERVAL) {
-                  recentExceptions(key) = (0, now)
-                  (true, 0)
-                } else {
-                  recentExceptions(key) = (dupCount + 1, printTime)
-                  (false, dupCount + 1)
-                }
-              } else {
+        case ef: ExceptionFailure =>
+          sched.listener.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
+          val key = ef.description
+          val now = clock.getTime()
+          val (printFull, dupCount) = {
+            if (recentExceptions.contains(key)) {
+              val (dupCount, printTime) = recentExceptions(key)
+              if (now - printTime > EXCEPTION_PRINT_INTERVAL) {
                 recentExceptions(key) = (0, now)
                 (true, 0)
+              } else {
+                recentExceptions(key) = (dupCount + 1, printTime)
+                (false, dupCount + 1)
               }
-            }
-            if (printFull) {
-              val locs = ef.stackTrace.map(loc => "\tat %s".format(loc.toString))
-              logInfo("Loss was due to %s\n%s\n%s".format(
-                ef.className, ef.description, locs.mkString("\n")))
             } else {
-              logInfo("Loss was due to %s [duplicate %d]".format(ef.description, dupCount))
+              recentExceptions(key) = (0, now)
+              (true, 0)
             }
+          }
+          if (printFull) {
+            val locs = ef.stackTrace.map(loc => "\tat %s".format(loc.toString))
+            logInfo("Loss was due to %s\n%s\n%s".format(
+              ef.className, ef.description, locs.mkString("\n")))
+          } else {
+            logInfo("Loss was due to %s [duplicate %d]".format(ef.description, dupCount))
+          }
 
-          case TaskResultLost =>
-            logInfo("Lost result for TID %s on host %s".format(tid, info.host))
-            sched.listener.taskEnded(tasks(index), TaskResultLost, null, null, info, null)
+        case TaskResultLost =>
+          logInfo("Lost result for TID %s on host %s".format(tid, info.host))
+          sched.listener.taskEnded(tasks(index), TaskResultLost, null, null, info, null)
 
-          case _ => {}
-        }
+        case _ => {}
       }
       // On non-fetch failures, re-enqueue the task as pending for a max number of retries
       addPendingTask(index)

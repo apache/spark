@@ -56,7 +56,7 @@ trait FutureAction[T] extends Future[T] {
   override def result(atMost: Duration)(implicit permit: CanAwait): T
 
   /**
-   * When this action is completed, either through an exception, or a value, apply the provided
+   * When this action is completed, either through an exception, or a value, applies the provided
    * function.
    */
   def onComplete[U](func: (Try[T]) => U)(implicit executor: ExecutionContext)
@@ -91,7 +91,7 @@ class FutureJob[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: => T)
   extends FutureAction[T] {
 
   override def cancel() {
-    jobWaiter.kill()
+    jobWaiter.cancel()
   }
 
   override def ready(atMost: Duration)(implicit permit: CanAwait): FutureJob.this.type = {

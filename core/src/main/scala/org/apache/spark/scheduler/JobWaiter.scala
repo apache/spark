@@ -39,7 +39,12 @@ private[spark] class JobWaiter[T](
   // partition RDDs), we set the jobResult directly to JobSucceeded.
   private var jobResult: JobResult = if (jobFinished) JobSucceeded else null
 
-  def kill() {
+  /**
+   * Sends a signal to the DAGScheduler to cancel the job. The cancellation itself is handled
+   * asynchronously. After the low level scheduler cancels all the tasks belonging to this job, it
+   * will fail this job with a SparkException.
+   */
+  def cancel() {
     dagScheduler.cancelJob(jobId)
   }
 
