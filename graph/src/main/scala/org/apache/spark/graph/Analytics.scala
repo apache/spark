@@ -161,11 +161,15 @@ object Analytics extends Logging {
         case "cc" => {
 
            var numIter = Int.MaxValue
+           var numVPart = 4
+           var numEPart = 4
            var isDynamic = false
 
            options.foreach{
              case ("numIter", v) => numIter = v.toInt
              case ("dynamic", v) => isDynamic = v.toBoolean
+             case ("numEPart", v) => numEPart = v.toInt
+             case ("numVPart", v) => numVPart = v.toInt
              case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
            }
 
@@ -182,7 +186,8 @@ object Analytics extends Logging {
            println("======================================")
 
            val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")")
-           val graph = GraphLoader.textFile(sc, fname, a => 1.0F)
+           //val graph = GraphLoader.textFile(sc, fname, a => 1.0F)
+           val graph = GraphLoader.textFile(sc, fname, a => 1.0F, numEPart).withPartitioner(numVPart, numEPart).cache()
            val cc = Analytics.connectedComponents(graph, numIter)
            //val cc = if(isDynamic) Analytics.dynamicConnectedComponents(graph, numIter)
            //         else Analytics.connectedComponents(graph, numIter)
