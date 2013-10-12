@@ -75,7 +75,8 @@ object SparkBuild extends Build {
   lazy val allProjects = Seq[ProjectReference](
     core, repl, examples, bagel, streaming, mllib, tools, assemblyProj) ++ maybeYarnRef
 
-  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, tools) ++ maybeYarnRef
+  // Everything except assembly and examples belongs to packageProjects
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib) ++ maybeYarnRef
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.apache.spark",
