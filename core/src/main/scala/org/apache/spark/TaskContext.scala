@@ -22,13 +22,16 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.executor.TaskMetrics
 
 class TaskContext(
-  val stageId: Int,
-  val splitId: Int,
+  private[spark] val stageId: Int,
+  val partitionId: Int,
   val attemptId: Long,
   val runningLocally: Boolean = false,
   @volatile var interrupted: Boolean = false,
-  val taskMetrics: TaskMetrics = TaskMetrics.empty()
+  private[spark] val taskMetrics: TaskMetrics = TaskMetrics.empty()
 ) extends Serializable {
+
+  @deprecated("use partitionId", "0.8.1")
+  def splitId = partitionId
 
   // List of callback functions to execute when the task completes.
   @transient private val onCompleteCallbacks = new ArrayBuffer[() => Unit]

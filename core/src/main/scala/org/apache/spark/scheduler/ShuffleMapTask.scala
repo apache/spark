@@ -85,13 +85,25 @@ private[spark] object ShuffleMapTask {
   }
 }
 
+/**
+ * A ShuffleMapTask divides the elements of an RDD into multiple buckets (based on a partitioner
+ * specified in the ShuffleDependency).
+ *
+ * See [[org.apache.spark.scheduler.Task]] for more information.
+ *
+ * @param stageId id of the stage this task belongs to
+ * @param rdd the final RDD in this stage
+ * @param dep the ShuffleDependency
+ * @param _partitionId index of the number in the RDD
+ * @param locs preferred task execution locations for locality scheduling
+ */
 private[spark] class ShuffleMapTask(
     stageId: Int,
     var rdd: RDD[_],
     var dep: ShuffleDependency[_,_],
-    _partition: Int,
+    _partitionId: Int,
     @transient private var locs: Seq[TaskLocation])
-  extends Task[MapStatus](stageId, _partition)
+  extends Task[MapStatus](stageId, _partitionId)
   with Externalizable
   with Logging {
 
@@ -101,16 +113,16 @@ private[spark] class ShuffleMapTask(
     if (locs == null) Nil else locs.toSet.toSeq
   }
 
-  var split = if (rdd == null) null else rdd.partitions(partition)
+  var split = if (rdd == null) null else rdd.partitions(partitionId)
 
   override def writeExternal(out: ObjectOutput) {
     RDDCheckpointData.synchronized {
-      split = rdd.partitions(partition)
+      split = rdd.partitions(partitionId)
       out.writeInt(stageId)
       val bytes = ShuffleMapTask.serializeInfo(stageId, rdd, dep)
       out.writeInt(bytes.length)
       out.write(bytes)
-      out.writeInt(partition)
+      out.writeInt(partitionId)
       out.writeLong(epoch)
       out.writeObject(split)
     }
@@ -124,7 +136,7 @@ private[spark] class ShuffleMapTask(
     val (rdd_, dep_) = ShuffleMapTask.deserializeInfo(stageId, bytes)
     rdd = rdd_
     dep = dep_
-    partition = in.readInt()
+    partitionId = in.readInt()
     epoch = in.readLong()
     split = in.readObject().asInstanceOf[Partition]
   }
@@ -141,7 +153,7 @@ private[spark] class ShuffleMapTask(
       // Obtain all the block writers for shuffle blocks.
       val ser = SparkEnv.get.serializerManager.get(dep.serializerClass)
       shuffle = blockManager.shuffleBlockManager.forShuffle(dep.shuffleId, numOutputSplits, ser)
-      buckets = shuffle.acquireWriters(partition)
+      buckets = shuffle.acquireWriters(partitionId)
 
       // Write the map output to its associated buckets.
       for (elem <- rdd.iterator(split, context)) {
@@ -185,5 +197,5 @@ private[spark] class ShuffleMapTask(
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
-  override def toString = "ShuffleMapTask(%d, %d)".format(stageId, partition)
+  override def toString = "ShuffleMapTask(%d, %d)".format(stageId, partitionId)
 }

@@ -39,6 +39,7 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
 
   override def afterEach() {
     super.afterEach()
+    resetSparkContext()
     System.clearProperty("spark.scheduler.mode")
   }
 
@@ -49,7 +50,6 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     testTake()
     // Make sure we can still launch tasks.
     assert(sc.parallelize(1 to 10, 2).count === 10)
-    resetSparkContext()
   }
 
   test("local mode, fair scheduler") {
@@ -61,7 +61,6 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     testTake()
     // Make sure we can still launch tasks.
     assert(sc.parallelize(1 to 10, 2).count === 10)
-    resetSparkContext()
   }
 
   test("cluster mode, FIFO scheduler") {
@@ -71,7 +70,6 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     testTake()
     // Make sure we can still launch tasks.
     assert(sc.parallelize(1 to 10, 2).count === 10)
-    resetSparkContext()
   }
 
   test("cluster mode, fair scheduler") {
@@ -83,7 +81,40 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     testTake()
     // Make sure we can still launch tasks.
     assert(sc.parallelize(1 to 10, 2).count === 10)
-    resetSparkContext()
+  }
+
+  test("two jobs sharing the same stage") {
+    // sem1: make sure cancel is issued after some tasks are launched
+    // sem2: make sure the first stage is not finished until cancel is issued
+    val sem1 = new Semaphore(0)
+    val sem2 = new Semaphore(0)
+
+    sc = new SparkContext("local[2]", "test")
+    sc.dagScheduler.addSparkListener(new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart) {
+        sem1.release()
+      }
+    })
+
+    // Create two actions that would share the some stages.
+    val rdd = sc.parallelize(1 to 10, 2).map { i =>
+      sem2.acquire()
+      (i, i)
+    }.reduceByKey(_+_)
+    val f1 = rdd.collectAsync()
+    val f2 = rdd.countAsync()
+
+    // Kill one of the action.
+    future {
+      sem1.acquire()
+      f1.cancel()
+      sem2.release(10)
+    }
+
+    // Expect both to fail now.
+    // TODO: update this test when we change Spark so cancelling f1 wouldn't affect f2.
+    intercept[SparkException] { f1.get() }
+    intercept[SparkException] { f2.get() }
   }
 
   def testCount() {

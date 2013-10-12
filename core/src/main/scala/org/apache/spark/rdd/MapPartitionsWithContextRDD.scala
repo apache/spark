@@ -21,14 +21,14 @@ import org.apache.spark.{Partition, TaskContext}
 
 
 /**
- * A variant of the MapPartitionsRDD that passes the partition index into the
- * closure. This can be used to generate or collect partition specific
- * information such as the number of tuples in a partition.
+ * A variant of the MapPartitionsRDD that passes the TaskContext into the closure. From the
+ * TaskContext, the closure can either get access to the interruptible flag or get the index
+ * of the partition in the RDD.
  */
 private[spark]
-class MapPartitionsWithIndexRDD[U: ClassManifest, T: ClassManifest](
+class MapPartitionsWithContextRDD[U: ClassManifest, T: ClassManifest](
     prev: RDD[T],
-    f: (Int, Iterator[T]) => Iterator[U],
+    f: (TaskContext, Iterator[T]) => Iterator[U],
     preservesPartitioning: Boolean
   ) extends RDD[U](prev) {
 
@@ -37,5 +37,5 @@ class MapPartitionsWithIndexRDD[U: ClassManifest, T: ClassManifest](
   override val partitioner = if (preservesPartitioning) prev.partitioner else None
 
   override def compute(split: Partition, context: TaskContext) =
-    f(split.index, firstParent[T].iterator(split, context))
+    f(context, firstParent[T].iterator(split, context))
 }

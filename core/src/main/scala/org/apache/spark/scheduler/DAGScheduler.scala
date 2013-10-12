@@ -377,7 +377,7 @@ class DAGScheduler(
 
       case JobCancelled(jobId) =>
         // Cancel a job: find all the running stages that are linked to this job, and cancel them.
-        running.find(_.jobId == jobId).foreach { stage =>
+        running.filter(_.jobId == jobId).foreach { stage =>
           taskSched.cancelTasks(stage.id)
         }
 
@@ -658,7 +658,7 @@ class DAGScheduler(
             if (failedEpoch.contains(execId) && smt.epoch <= failedEpoch(execId)) {
               logInfo("Ignoring possibly bogus ShuffleMapTask completion from " + execId)
             } else {
-              stage.addOutputLoc(smt.partition, status)
+              stage.addOutputLoc(smt.partitionId, status)
             }
             if (running.contains(stage) && pendingTasks(stage).isEmpty) {
               markStageAsFinished(stage)

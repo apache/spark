@@ -18,19 +18,18 @@
 package org.apache.spark.rdd
 
 import java.util.concurrent.Semaphore
-import java.util.concurrent.atomic.AtomicInteger
 
-import scala.concurrent.future
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.concurrent.Timeouts
+import org.scalatest.time.SpanSugar._
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.{SparkContext, SparkException, LocalSparkContext}
-import org.apache.spark.scheduler._
 
 
-class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll {
+class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll with Timeouts {
 
   @transient private var sc: SparkContext = _
 
@@ -114,29 +113,29 @@ class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll {
   test("async success handling") {
     val f = sc.parallelize(1 to 10, 2).countAsync()
 
-    // This semaphore is used to make sure our final assert waits until onComplete / onSuccess
-    // finishes execution.
+    // Use a semaphore to make sure onSuccess and onComplete's success path will be called.
+    // If not, the test will hang.
     val sem = new Semaphore(0)
 
-    AsyncRDDActionsSuite.asyncSuccessHappened.set(0)
     f.onComplete {
       case scala.util.Success(res) =>
-        AsyncRDDActionsSuite.asyncSuccessHappened.incrementAndGet()
         sem.release()
       case scala.util.Failure(e) =>
+        info("Should not have reached this code path (onComplete matching Failure)")
         throw new Exception("Task should succeed")
-        sem.release()
     }
     f.onSuccess { case a: Any =>
-      AsyncRDDActionsSuite.asyncSuccessHappened.incrementAndGet()
       sem.release()
     }
     f.onFailure { case t =>
+      info("Should not have reached this code path (onFailure)")
       throw new Exception("Task should succeed")
     }
     assert(f.get() === 10)
-    sem.acquire(2)
-    assert(AsyncRDDActionsSuite.asyncSuccessHappened.get() === 2)
+
+    failAfter(10 seconds) {
+      sem.acquire(2)
+    }
   }
 
   /**
@@ -148,38 +147,30 @@ class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll {
       throw new Exception("intentional"); i
     }.countAsync()
 
-    // This semaphore is used to make sure our final assert waits until onComplete / onFailure
-    // finishes execution.
+    // Use a semaphore to make sure onFailure and onComplete's failure path will be called.
+    // If not, the test will hang.
     val sem = new Semaphore(0)
 
-    AsyncRDDActionsSuite.asyncFailureHappend.set(0)
     f.onComplete {
       case scala.util.Success(res) =>
+        info("Should not have reached this code path (onComplete matching Success)")
         throw new Exception("Task should fail")
-        sem.release()
       case scala.util.Failure(e) =>
-        AsyncRDDActionsSuite.asyncFailureHappend.incrementAndGet()
         sem.release()
     }
     f.onSuccess { case a: Any =>
+      info("Should not have reached this code path (onSuccess)")
       throw new Exception("Task should fail")
     }
     f.onFailure { case t =>
-      AsyncRDDActionsSuite.asyncFailureHappend.incrementAndGet()
       sem.release()
     }
     intercept[SparkException] {
       f.get()
     }
-    sem.acquire(2)
-    assert(AsyncRDDActionsSuite.asyncFailureHappend.get() === 2)
+
+    failAfter(10 seconds) {
+      sem.acquire(2)
+    }
   }
 }
-
-object AsyncRDDActionsSuite {
-  // Some counters used in the test cases above.
-  var asyncSuccessHappened = new AtomicInteger
-
-  var asyncFailureHappend = new AtomicInteger
-}
-

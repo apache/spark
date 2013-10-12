@@ -31,6 +31,8 @@ import org.apache.spark.rdd.RDD
  * support cancellation.
  */
 trait FutureAction[T] extends Future[T] {
+  // Note that we redefine methods of the Future trait here explicitly so we can specify a different
+  // documentation (with reference to the word "action").
 
   /**
    * Cancels the execution of this action.
@@ -87,14 +89,14 @@ trait FutureAction[T] extends Future[T] {
  * The future holding the result of an action that triggers a single job. Examples include
  * count, collect, reduce.
  */
-class FutureJob[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: => T)
+class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: => T)
   extends FutureAction[T] {
 
   override def cancel() {
     jobWaiter.cancel()
   }
 
-  override def ready(atMost: Duration)(implicit permit: CanAwait): FutureJob.this.type = {
+  override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
     if (!atMost.isFinite()) {
       awaitResult()
     } else {
@@ -149,19 +151,20 @@ class FutureJob[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: => T)
 
 /**
  * A FutureAction for actions that could trigger multiple Spark jobs. Examples include take,
- * takeSample.
- *
- * This is implemented as a Scala Promise that can be cancelled. Note that the promise itself is
- * also its own Future (i.e. this.future returns this). See the implementation of takeAsync for
- * usage.
+ * takeSample. Cancellation works by setting the cancelled flag to true and interrupting the
+ * action thread if it is being blocked by a job.
  */
-class CancellablePromise[T] extends FutureAction[T] with Promise[T] {
-  // Cancellation works by setting the cancelled flag to true and interrupt the action thread
-  // if it is in progress. Before executing the action, the execution thread needs to check the
-  // cancelled flag in case cancel() is called before the thread even starts to execute. Because
-  // this and the execution thread is synchronized on the same promise object (this), the actual
-  // cancellation/interrupt event can only be triggered when the execution thread is waiting for
-  // the result of a job.
+class ComplexFutureAction[T] extends FutureAction[T] {
+
+  // Pointer to the thread that is executing the action. It is set when the action is run.
+  @volatile private var thread: Thread = _
+
+  // A flag indicating whether the future has been cancelled. This is used in case the future
+  // is cancelled before the action was even run (and thus we have no thread to interrupt).
+  @volatile private var _cancelled: Boolean = false
+
+  // A promise used to signal the future.
+  private val p = promise[T]()
 
   override def cancel(): Unit = this.synchronized {
     _cancelled = true
@@ -174,15 +177,18 @@ class CancellablePromise[T] extends FutureAction[T] with Promise[T] {
    * Executes some action enclosed in the closure. To properly enable cancellation, the closure
    * should use runJob implementation in this promise. See takeAsync for example.
    */
-  def run(func: => T)(implicit executor: ExecutionContext): Unit = scala.concurrent.future {
-    thread = Thread.currentThread
-    try {
-      this.success(func)
-    } catch {
-      case e: Exception => this.failure(e)
-    } finally {
-      thread = null
+  def run(func: => T)(implicit executor: ExecutionContext): this.type = {
+    scala.concurrent.future {
+      thread = Thread.currentThread
+      try {
+        p.success(func)
+      } catch {
+        case e: Exception => p.failure(e)
+      } finally {
+        thread = null
+      }
     }
+    this
   }
 
   /**
@@ -193,15 +199,15 @@ class CancellablePromise[T] extends FutureAction[T] with Promise[T] {
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
       partitions: Seq[Int],
-      partitionResultHandler: (Int, U) => Unit,
+      resultHandler: (Int, U) => Unit,
       resultFunc: => R) {
     // If the action hasn't been cancelled yet, submit the job. The check and the submitJob
     // command need to be in an atomic block.
     val job = this.synchronized {
       if (!cancelled) {
-        rdd.context.submitJob(rdd, processPartition, partitions, partitionResultHandler, resultFunc)
+        rdd.context.submitJob(rdd, processPartition, partitions, resultHandler, resultFunc)
       } else {
-        throw new SparkException("action has been cancelled")
+        throw new SparkException("Action has been cancelled")
       }
     }
 
@@ -213,7 +219,7 @@ class CancellablePromise[T] extends FutureAction[T] with Promise[T] {
     } catch {
       case e: InterruptedException =>
         job.cancel()
-        throw new SparkException("action has been cancelled")
+        throw new SparkException("Action has been cancelled")
     }
   }
 
@@ -222,28 +228,14 @@ class CancellablePromise[T] extends FutureAction[T] with Promise[T] {
    */
   def cancelled: Boolean = _cancelled
 
-  // Pointer to the thread that is executing the action. It is set when the action is run.
-  @volatile private var thread: Thread = _
-
-  // A flag indicating whether the future has been cancelled. This is used in case the future
-  // is cancelled before the action was even run (and thus we have no thread to interrupt).
-  @volatile private var _cancelled: Boolean = false
-
-  // Internally, we delegate most functionality to this promise.
-  private val p = promise[T]()
-
-  override def future: this.type = this
-
-  override def tryComplete(result: Try[T]): Boolean = p.tryComplete(result)
-
-  @scala.throws(classOf[InterruptedException])
-  @scala.throws(classOf[scala.concurrent.TimeoutException])
+  @throws(classOf[InterruptedException])
+  @throws(classOf[scala.concurrent.TimeoutException])
   override def ready(atMost: Duration)(implicit permit: CanAwait): this.type = {
     p.future.ready(atMost)(permit)
     this
   }
 
-  @scala.throws(classOf[Exception])
+  @throws(classOf[Exception])
   override def result(atMost: Duration)(implicit permit: CanAwait): T = {
     p.future.result(atMost)(permit)
   }

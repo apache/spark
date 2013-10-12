@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
 
-import org.apache.spark.{Logging, CancellablePromise, FutureAction}
+import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
 
 /**
  * A set of asynchronous RDD actions available through an implicit conversion.
@@ -63,9 +63,9 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with 
    * Returns a future for retrieving the first num elements of the RDD.
    */
   def takeAsync(num: Int): FutureAction[Seq[T]] = {
-    val promise = new CancellablePromise[Seq[T]]
+    val f = new ComplexFutureAction[Seq[T]]
 
-    promise.run {
+    f.run {
       val results = new ArrayBuffer[T](num)
       val totalParts = self.partitions.length
       var partsScanned = 0
@@ -89,7 +89,7 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with 
         val p = partsScanned until math.min(partsScanned + numPartsToTry, totalParts)
 
         val buf = new Array[Array[T]](p.size)
-        promise.runJob(self,
+        f.runJob(self,
           (it: Iterator[T]) => it.take(left).toArray,
           p,
           (index: Int, data: Array[T]) => buf(index) = data,
@@ -101,7 +101,7 @@ class AsyncRDDActions[T: ClassManifest](self: RDD[T]) extends Serializable with 
       results.toSeq
     }
 
-    promise.future
+    f
   }
 
   /**

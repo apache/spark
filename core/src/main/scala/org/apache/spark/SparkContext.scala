@@ -760,10 +760,11 @@ class SparkContext(
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
     val callSite = Utils.formatSparkCallSite
+    val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
-    val result = dagScheduler.runJob(rdd, func, partitions, callSite, allowLocal, resultHandler,
-      localProperties.get)
+    val result = dagScheduler.runJob(rdd, cleanedFunc, partitions, callSite, allowLocal,
+      resultHandler, localProperties.get)
     logInfo("Job finished: " + callSite + ", took " + (System.nanoTime - start) / 1e9 + " s")
     rdd.doCheckpoint()
     result
@@ -853,16 +854,14 @@ class SparkContext(
   }
 
   /**
-   * Submit a job for execution and return a FutureJob holding the result. Note that the
-   * processPartition closure will be "cleaned" so the caller doesn't have to clean the closure
-   * explicitly.
+   * Submit a job for execution and return a FutureJob holding the result.
    */
   def submitJob[T, U, R](
       rdd: RDD[T],
       processPartition: Iterator[T] => U,
       partitions: Seq[Int],
-      partitionResultHandler: (Int, U) => Unit,
-      resultFunc: => R): FutureJob[R] =
+      resultHandler: (Int, U) => Unit,
+      resultFunc: => R): SimpleFutureAction[R] =
   {
     val cleanF = clean(processPartition)
     val callSite = Utils.formatSparkCallSite
@@ -872,9 +871,9 @@ class SparkContext(
       partitions,
       callSite,
       allowLocal = false,
-      partitionResultHandler,
+      resultHandler,
       null)
-    new FutureJob(waiter, resultFunc)
+    new SimpleFutureAction(waiter, resultFunc)
   }
 
   /**
