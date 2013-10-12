@@ -18,13 +18,11 @@
 package org.apache.spark.streaming.examples
 
 import java.util.Properties
-import kafka.message.Message
-import kafka.producer.SyncProducerConfig
+
 import kafka.producer._
-import org.apache.spark.SparkContext
+
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.util.RawTextHelper._
 
 /**
@@ -54,9 +52,10 @@ object KafkaWordCount {
     ssc.checkpoint("checkpoint")
 
     val topicpMap = topics.split(",").map((_,numThreads.toInt)).toMap
-    val lines = ssc.kafkaStream(zkQuorum, group, topicpMap)
+    val lines = ssc.kafkaStream(zkQuorum, group, topicpMap).map(_._2)
     val words = lines.flatMap(_.split(" "))
-    val wordCounts = words.map(x => (x, 1l)).reduceByKeyAndWindow(add _, subtract _, Minutes(10), Seconds(2), 2)
+    val wordCounts = words.map(x => (x, 1l))
+      .reduceByKeyAndWindow(add _, subtract _, Minutes(10), Seconds(2), 2)
     wordCounts.print()
     
     ssc.start()
@@ -68,15 +67,16 @@ object KafkaWordCountProducer {
 
   def main(args: Array[String]) {
     if (args.length < 2) {
-      System.err.println("Usage: KafkaWordCountProducer <zkQuorum> <topic> <messagesPerSec> <wordsPerMessage>")
+      System.err.println("Usage: KafkaWordCountProducer <metadataBrokerList> <topic> " +
+        "<messagesPerSec> <wordsPerMessage>")
       System.exit(1)
     }
 
-    val Array(zkQuorum, topic, messagesPerSec, wordsPerMessage) = args
+    val Array(brokers, topic, messagesPerSec, wordsPerMessage) = args
 
     // Zookeper connection properties
     val props = new Properties()
-    props.put("zk.connect", zkQuorum)
+    props.put("metadata.broker.list", brokers)
     props.put("serializer.class", "kafka.serializer.StringEncoder")
     
     val config = new ProducerConfig(props)
@@ -85,11 +85,13 @@ object KafkaWordCountProducer {
     // Send some messages
     while(true) {
       val messages = (1 to messagesPerSec.toInt).map { messageNum =>
-        (1 to wordsPerMessage.toInt).map(x => scala.util.Random.nextInt(10).toString).mkString(" ")
+        val str = (1 to wordsPerMessage.toInt).map(x => scala.util.Random.nextInt(10).toString)
+          .mkString(" ")
+
+        new KeyedMessage[String, String](topic, str)
       }.toArray
-      println(messages.mkString(","))
-      val data = new ProducerData[String, String](topic, messages)
-      producer.send(data)
+
+      producer.send(messages: _*)
       Thread.sleep(100)
     }
   }

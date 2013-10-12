@@ -252,10 +252,14 @@ class StreamingContext private (
       groupId: String,
       topics: Map[String, Int],
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
-    ): DStream[String] = {
+    ): DStream[(String, String)] = {
     val kafkaParams = Map[String, String](
-      "zk.connect" -> zkQuorum, "groupid" -> groupId, "zk.connectiontimeout.ms" -> "10000")
-    kafkaStream[String, kafka.serializer.StringDecoder](kafkaParams, topics, storageLevel)
+      "zookeeper.connect" -> zkQuorum, "group.id" -> groupId,
+      "zookeeper.connection.timeout.ms" -> "10000")
+    kafkaStream[String, String, kafka.serializer.StringDecoder, kafka.serializer.StringDecoder](
+      kafkaParams,
+      topics,
+      storageLevel)
   }
 
   /**
@@ -266,12 +270,16 @@ class StreamingContext private (
    *               in its own thread.
    * @param storageLevel  Storage level to use for storing the received objects
    */
-  def kafkaStream[T: ClassManifest, D <: kafka.serializer.Decoder[_]: Manifest](
+  def kafkaStream[
+    K: ClassManifest,
+    V: ClassManifest,
+    U <: kafka.serializer.Decoder[_]: Manifest,
+    T <: kafka.serializer.Decoder[_]: Manifest](
       kafkaParams: Map[String, String],
       topics: Map[String, Int],
       storageLevel: StorageLevel
-    ): DStream[T] = {
-    val inputStream = new KafkaInputDStream[T, D](this, kafkaParams, topics, storageLevel)
+    ): DStream[(K, V)] = {
+    val inputStream = new KafkaInputDStream[K, V, U, T](this, kafkaParams, topics, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }

@@ -32,10 +32,16 @@
   <url>http://spark.incubator.apache.org/</url>
 
   <repositories>
-    <!-- A repository in the local filesystem for the Kafka JAR, which we modified for Scala 2.9 -->
     <repository>
-      <id>lib</id>
-      <url>file://${project.basedir}/lib</url>
+      <id>apache-repo</id>
+      <name>Apache Repository</name>
+      <url>https://repository.apache.org/content/repositories/releases</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
     </repository>
   </repositories>
 
@@ -56,9 +62,18 @@
     </dependency>
     <dependency>
       <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka</artifactId>
-      <version>0.7.2-spark</version>  <!-- Comes from our in-project repository -->
-      <scope>provided</scope>
+      <artifactId>kafka_2.9.2</artifactId>
+      <version>0.8.0-beta1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.sun.jmx</groupId>
+          <artifactId>jmxri</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.sun.jdmk</groupId>
+          <artifactId>jmxtools</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.apache.flume</groupId>
@@ -70,11 +85,6 @@
           <artifactId>netty</artifactId>
         </exclusion>
       </exclusions>
-    </dependency>
-    <dependency>
-      <groupId>com.github.sgroschupf</groupId>
-      <artifactId>zkclient</artifactId>
-      <version>0.1</version>
     </dependency>
     <dependency>
       <groupId>org.twitter4j</groupId>

@@ -141,7 +141,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     zkQuorum: String,
     groupId: String,
     topics: JMap[String, JInt])
-  : JavaDStream[String] = {
+  : JavaPairDStream[String, String] = {
     implicit val cmt: ClassManifest[String] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[String]]
     ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
@@ -162,7 +162,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     groupId: String,
     topics: JMap[String, JInt],
     storageLevel: StorageLevel)
-  : JavaDStream[String] = {
+  : JavaPairDStream[String, String] = {
     implicit val cmt: ClassManifest[String] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[String]]
     ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
@@ -171,25 +171,34 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * @param typeClass Type of RDD
-   * @param decoderClass Type of kafka decoder
+   * @param keyTypeClass Key type of RDD
+   * @param valueTypeClass value type of RDD
+   * @param keyDecoderClass Type of kafka key decoder
+   * @param valueDecoderClass Type of kafka value decoder
    * @param kafkaParams Map of kafka configuration paramaters.
    *                    See: http://kafka.apache.org/configuration.html
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
    * @param storageLevel RDD storage level. Defaults to memory-only
    */
-  def kafkaStream[T, D <: kafka.serializer.Decoder[_]](
-    typeClass: Class[T],
-    decoderClass: Class[D],
+  def kafkaStream[K, V, U <: kafka.serializer.Decoder[_], T <: kafka.serializer.Decoder[_]](
+    keyTypeClass: Class[K],
+    valueTypeClass: Class[V],
+    keyDecoderClass: Class[U],
+    valueDecoderClass: Class[T],
     kafkaParams: JMap[String, String],
     topics: JMap[String, JInt],
     storageLevel: StorageLevel)
-  : JavaDStream[T] = {
-    implicit val cmt: ClassManifest[T] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
-    implicit val cmd: Manifest[D] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[D]]
-    ssc.kafkaStream[T, D](
+  : JavaPairDStream[K, V] = {
+    implicit val keyCmt: ClassManifest[K] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[K]]
+    implicit val valueCmt: ClassManifest[V] =
+      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[V]]
+
+    implicit val keyCmd: Manifest[U] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[U]]
+    implicit val valueCmd: Manifest[T] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[T]]
+
+    ssc.kafkaStream[K, V, U, T](
       kafkaParams.toMap,
       Map(topics.mapValues(_.intValue()).toSeq: _*),
       storageLevel)

@@ -273,13 +273,16 @@ object SparkBuild extends Build {
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
     resolvers ++= Seq(
-      "Akka Repository" at "http://repo.akka.io/releases/"
+      "Akka Repository" at "http://repo.akka.io/releases/",
+      "Apache repo" at "https://repository.apache.org/content/repositories/releases"
     ),
     libraryDependencies ++= Seq(
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty, excludeSnappy),
-      "com.github.sgroschupf" % "zkclient" % "0.1" excludeAll(excludeNetty),
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty),
-      "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty)
+      "com.typesafe.akka" % "akka-zeromq" % "2.0.5" excludeAll(excludeNetty),
+      "org.apache.kafka" % "kafka_2.9.2" % "0.8.0-beta1" 
+        exclude("com.sun.jdmk", "jmxtools")
+        exclude("com.sun.jmx", "jmxri")
     )
   )
 
