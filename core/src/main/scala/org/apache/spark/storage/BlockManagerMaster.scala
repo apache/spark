@@ -60,7 +60,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
 
   def updateBlockInfo(
       blockManagerId: BlockManagerId,
-      blockId: String,
+      blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
       diskSize: Long): Boolean = {
@@ -71,12 +71,12 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
   }
 
   /** Get locations of the blockId from the driver */
-  def getLocations(blockId: String): Seq[BlockManagerId] = {
+  def getLocations(blockId: BlockId): Seq[BlockManagerId] = {
     askDriverWithReply[Seq[BlockManagerId]](GetLocations(blockId))
   }
 
   /** Get locations of multiple blockIds from the driver */
-  def getLocations(blockIds: Array[String]): Seq[Seq[BlockManagerId]] = {
+  def getLocations(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
     askDriverWithReply[Seq[Seq[BlockManagerId]]](GetLocationsMultipleBlockIds(blockIds))
   }
 
@@ -94,7 +94,7 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
    * Remove a block from the slaves that have it. This can only be used to remove
    * blocks that the driver knows about.
    */
-  def removeBlock(blockId: String) {
+  def removeBlock(blockId: BlockId) {
     askDriverWithReply(RemoveBlock(blockId))
   }
 

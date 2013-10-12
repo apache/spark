@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.{StorageStatus, StorageUtils}
+import org.apache.spark.storage.{BlockId, StorageStatus, StorageUtils}
 import org.apache.spark.storage.BlockManagerMasterActor.BlockStatus
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
@@ -33,21 +33,20 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
   val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val id = request.getParameter("id")
-    val prefix = "rdd_" + id.toString
+    val id = request.getParameter("id").toInt
     val storageStatusList = sc.getExecutorStorageStatus
-    val filteredStorageStatusList = StorageUtils.
-      filterStorageStatusByPrefix(storageStatusList, prefix)
+    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, id)
     val rddInfo = StorageUtils.rddInfoFromStorageStatus(filteredStorageStatusList, sc).head
 
     val workerHeaders = Seq("Host", "Memory Usage", "Disk Usage")
-    val workers = filteredStorageStatusList.map((prefix, _))
+    val workers = filteredStorageStatusList.map((id, _))
     val workerTable = listingTable(workerHeaders, workerRow, workers)
 
     val blockHeaders = Seq("Block Name", "Storage Level", "Size in Memory", "Size on Disk",
       "Executors")
 
-    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).toArray.sortWith(_._1 < _._1)
+    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).toArray.
+      sortWith(_._1.filename < _._1.filename)
     val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
     val blocks = blockStatuses.map {
       case(id, status) => (id, status, blockLocations.get(id).getOrElse(Seq("UNKNOWN")))
@@ -99,7 +98,7 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
     headerSparkPage(content, parent.sc, "RDD Storage Info for " + rddInfo.name, Storage)
   }
 
-  def blockRow(row: (String, BlockStatus, Seq[String])): Seq[Node] = {
+  def blockRow(row: (BlockId, BlockStatus, Seq[String])): Seq[Node] = {
     val (id, block, locations) = row
     <tr>
       <td>{id}</td>
@@ -118,15 +117,15 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
     </tr>
   }
 
-  def workerRow(worker: (String, StorageStatus)): Seq[Node] = {
-    val (prefix, status) = worker
+  def workerRow(worker: (Int, StorageStatus)): Seq[Node] = {
+    val (rddId, status) = worker
     <tr>
       <td>{status.blockManagerId.host + ":" + status.blockManagerId.port}</td>
       <td>
-        {Utils.bytesToString(status.memUsed(prefix))}
+        {Utils.bytesToString(status.memUsedByRDD(rddId))}
         ({Utils.bytesToString(status.memRemaining)} Remaining)
       </td>
-      <td>{Utils.bytesToString(status.diskUsed(prefix))}</td>
+      <td>{Utils.bytesToString(status.diskUsedByRDD(rddId))}</td>
     </tr>
   }
 }

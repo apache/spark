@@ -24,6 +24,7 @@ import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundMessageHandlerAdapter;
 import io.netty.channel.DefaultFileRegion;
 
+import org.apache.spark.storage.BlockId;
 
 class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
 
@@ -34,8 +35,9 @@ class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
   }
 
   @Override
-  public void messageReceived(ChannelHandlerContext ctx, String blockId) {
-    String path = pResolver.getAbsolutePath(blockId);
+  public void messageReceived(ChannelHandlerContext ctx, String blockIdString) {
+    BlockId blockId = BlockId.fromString(blockIdString);
+    String path = pResolver.getAbsolutePath(blockId.filename());
     // if getFilePath returns null, close the channel
     if (path == null) {
       //ctx.close();

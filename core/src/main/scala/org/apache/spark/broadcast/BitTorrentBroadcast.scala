@@ -26,7 +26,7 @@ import scala.collection.mutable.{ListBuffer, Map, Set}
 import scala.math
 
 import org.apache.spark._
-import org.apache.spark.storage.{BlockManager, StorageLevel}
+import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
@@ -36,7 +36,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
 
   def value = value_
 
-  def blockId: String = BlockManager.toBroadcastId(id)
+  def blockId = BroadcastBlockId(id)
 
   MultiTracker.synchronized {
     SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)

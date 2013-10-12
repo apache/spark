@@ -24,9 +24,9 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.network._
 
-private[spark] case class GetBlock(id: String)
-private[spark] case class GotBlock(id: String, data: ByteBuffer)
-private[spark] case class PutBlock(id: String, data: ByteBuffer, level: StorageLevel) 
+private[spark] case class GetBlock(id: BlockId)
+private[spark] case class GotBlock(id: BlockId, data: ByteBuffer)
+private[spark] case class PutBlock(id: BlockId, data: ByteBuffer, level: StorageLevel)
 
 private[spark] class BlockMessage() {
   // Un-initialized: typ = 0
@@ -34,7 +34,7 @@ private[spark] class BlockMessage() {
   // GotBlock: typ = 2
   // PutBlock: typ = 3
   private var typ: Int = BlockMessage.TYPE_NON_INITIALIZED
-  private var id: String = null
+  private var id: BlockId = null
   private var data: ByteBuffer = null
   private var level: StorageLevel = null
  
@@ -74,7 +74,7 @@ private[spark] class BlockMessage() {
     for (i <- 1 to idLength) {
       idBuilder += buffer.getChar()
     }
-    id = idBuilder.toString()
+    id = BlockId.fromString(idBuilder.toString)
     
     if (typ == BlockMessage.TYPE_PUT_BLOCK) {
 
@@ -109,28 +109,17 @@ private[spark] class BlockMessage() {
     set(buffer)
   }
   
-  def getType: Int = {
-    return typ
-  }
-  
-  def getId: String = {
-    return id
-  }
-  
-  def getData: ByteBuffer = {
-    return data
-  }
-  
-  def getLevel: StorageLevel = {
-    return level
-  }
+  def getType: Int = typ
+  def getId: BlockId = id
+  def getData: ByteBuffer = data
+  def getLevel: StorageLevel =  level
   
   def toBufferMessage: BufferMessage = {
     val startTime = System.currentTimeMillis
     val buffers = new ArrayBuffer[ByteBuffer]()
-    var buffer = ByteBuffer.allocate(4 + 4 + id.length() * 2)
-    buffer.putInt(typ).putInt(id.length())
-    id.foreach((x: Char) => buffer.putChar(x))
+    var buffer = ByteBuffer.allocate(4 + 4 + id.filename.length * 2) // TODO: Why x2?
+    buffer.putInt(typ).putInt(id.filename.length)
+    id.filename.foreach((x: Char) => buffer.putChar(x))
     buffer.flip()
     buffers += buffer
 
@@ -212,7 +201,8 @@ private[spark] object BlockMessage {
 
   def main(args: Array[String]) {
     val B = new BlockMessage()
-    B.set(new PutBlock("ABC", ByteBuffer.allocate(10), StorageLevel.MEMORY_AND_DISK_SER_2))
+    B.set(new PutBlock(
+      new TestBlockId("ABC"), ByteBuffer.allocate(10), StorageLevel.MEMORY_AND_DISK_SER_2))
     val bMsg = B.toBufferMessage
     val C = new BlockMessage()
     C.set(bMsg)
