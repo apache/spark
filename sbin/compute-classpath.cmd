@@ -29,7 +29,7 @@ rem Load environment variables from conf\spark-env.cmd, if it exists
 if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
 
 rem Build up classpath
-set CLASSPATH=%SPARK_CLASSPATH%;%FWDIR%conf
+set CLASSPATH=%FWDIR%conf
 if exist "%FWDIR%RELEASE" (
   for %%d in ("%FWDIR%jars\spark-assembly*.jar") do (
     set ASSEMBLY_JAR=%%d

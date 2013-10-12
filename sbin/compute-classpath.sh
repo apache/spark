@@ -31,7 +31,7 @@ if [ -e "$FWDIR/conf/spark-env.sh" ] ; then
 fi
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
+CLASSPATH="$FWDIR/conf"
 if [ -f "$FWDIR/RELEASE" ]; then
   ASSEMBLY_JAR=`ls "$FWDIR"/jars/spark-assembly*.jar`
 else
