@@ -106,7 +106,7 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       }
     }
     visit(sums)
-    assert(deps.size === 3) // ShuffledRDD, ParallelCollection, InterruptibleRDD.
+    assert(deps.size === 2) // ShuffledRDD, ParallelCollection.
   }
 
   test("join") {
