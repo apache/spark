@@ -25,8 +25,11 @@ package org.apache.spark.storage
  * If your BlockId should be serializable, be sure to add it to the BlockId.fromString() method.
  */
 private[spark] abstract class BlockId {
-  // Physical filename and unique identifier of this Block.
-  def filename: String
+  /** A globally unique identifier for this Block. Can be used for ser/de. */
+  def name: String
+
+  /** Physical filename for this block. May not be valid for Blocks are not file-backed. */
+  def asFilename = name
 
   // convenience methods
   def asRDDId = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
@@ -34,41 +37,40 @@ private[spark] abstract class BlockId {
   def isShuffle = isInstanceOf[ShuffleBlockId]
   def isBroadcast = isInstanceOf[BroadcastBlockId]
 
-  override def toString = filename
-  override def hashCode = filename.hashCode
+  override def toString = name
+  override def hashCode = name.hashCode
   override def equals(other: Any): Boolean = other match {
-    case o: BlockId => filename.equals(o.filename)
+    case o: BlockId => getClass == o.getClass && name.equals(o.name)
     case _ => false
   }
 }
 
 private[spark] case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
-  def filename = "rdd_" + rddId + "_" + splitIndex
+  def name = "rdd_" + rddId + "_" + splitIndex
 }
 
 private[spark]
 case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
-  def filename = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
+  def name = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
 private[spark] case class BroadcastBlockId(broadcastId: Long) extends BlockId {
-  def filename = "broadcast_" + broadcastId
+  def name = "broadcast_" + broadcastId
 }
 
 private[spark] case class TaskResultBlockId(taskId: Long) extends BlockId {
-  def filename = "taskresult_" + taskId
+  def name = "taskresult_" + taskId
 }
 
 private[spark] case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
-  def filename = "input-" + streamId + "-" + uniqueId
+  def name = "input-" + streamId + "-" + uniqueId
 }
 
 // Intended only for testing purposes
 private[spark] case class TestBlockId(id: String) extends BlockId {
-  def filename = "test_" + id
+  def name = "test_" + id
 }
 
-// Contains deserialization logic (i.e., String -> BlockId).
 private[spark] object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
   val Shuffle = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
@@ -77,6 +79,7 @@ private[spark] object BlockId {
   val StreamInput = "input-([0-9]+)-([0-9]+)".r
   val Test = "test_(.*)".r
 
+  /** Converts a BlockId "name" String back into a BlockId. */
   def apply(id: String) = id match {
     case RDD(rddId, splitIndex) => RDDBlockId(rddId.toInt, splitIndex.toInt)
     case Shuffle(shuffleId, mapId, reduceId) =>

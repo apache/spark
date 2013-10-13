@@ -30,8 +30,8 @@ private[spark] class FileHeader (
     val buf = Unpooled.buffer()
     buf.capacity(FileHeader.HEADER_SIZE)
     buf.writeInt(fileLen)
-    buf.writeInt(blockId.filename.length)
-    blockId.filename.foreach((x: Char) => buf.writeByte(x))
+    buf.writeInt(blockId.name.length)
+    blockId.name.foreach((x: Char) => buf.writeByte(x))
     //padding the rest of header
     if (FileHeader.HEADER_SIZE - buf.readableBytes > 0 ) {
       buf.writeZero(FileHeader.HEADER_SIZE - buf.readableBytes)

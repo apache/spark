@@ -117,9 +117,9 @@ private[spark] class BlockMessage() {
   def toBufferMessage: BufferMessage = {
     val startTime = System.currentTimeMillis
     val buffers = new ArrayBuffer[ByteBuffer]()
-    var buffer = ByteBuffer.allocate(4 + 4 + id.filename.length * 2)
-    buffer.putInt(typ).putInt(id.filename.length)
-    id.filename.foreach((x: Char) => buffer.putChar(x))
+    var buffer = ByteBuffer.allocate(4 + 4 + id.name.length * 2)
+    buffer.putInt(typ).putInt(id.name.length)
+    id.name.foreach((x: Char) => buffer.putChar(x))
     buffer.flip()
     buffers += buffer
 

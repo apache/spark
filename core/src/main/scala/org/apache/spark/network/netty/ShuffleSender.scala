@@ -64,7 +64,7 @@ private[spark] object ShuffleSender {
         val dirId = hash % localDirs.length
         val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
         val subDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        val file = new File(subDir, blockId.filename)
+        val file = new File(subDir, blockId.asFilename)
         return file.getAbsolutePath
       }
     }

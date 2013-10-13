@@ -120,7 +120,7 @@ private object HttpBroadcast extends Logging {
   }
 
   def write(id: Long, value: Any) {
-    val file = new File(broadcastDir, BroadcastBlockId(id).filename)
+    val file = new File(broadcastDir, BroadcastBlockId(id).asFilename)
     val out: OutputStream = {
       if (compress) {
         compressionCodec.compressedOutputStream(new FileOutputStream(file))
@@ -136,7 +136,7 @@ private object HttpBroadcast extends Logging {
   }
 
   def read[T](id: Long): T = {
-    val url = serverUri + "/" + BroadcastBlockId(id).filename
+    val url = serverUri + "/" + BroadcastBlockId(id).asFilename
     val in = {
       if (compress) {
         compressionCodec.compressedInputStream(new URL(url).openStream())

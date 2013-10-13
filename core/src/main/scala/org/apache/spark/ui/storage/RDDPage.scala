@@ -46,7 +46,7 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
       "Executors")
 
     val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).toArray.
-      sortWith(_._1.filename < _._1.filename)
+      sortWith(_._1.name < _._1.name)
     val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
     val blocks = blockStatuses.map {
       case(id, status) => (id, status, blockLocations.get(id).getOrElse(Seq("UNKNOWN")))
