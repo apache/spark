@@ -55,7 +55,7 @@ private[spark] object ShuffleSender {
 
     val pResovler = new PathResolver {
       override def getAbsolutePath(blockIdString: String): String = {
-        val blockId = BlockId.fromString(blockIdString)
+        val blockId = BlockId(blockIdString)
         if (!blockId.isShuffle) {
           throw new Exception("Block " + blockId + " is not a shuffle block")
         }

@@ -42,28 +42,29 @@ private[spark] abstract class BlockId {
   }
 }
 
-case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
+private[spark] case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {
   def filename = "rdd_" + rddId + "_" + splitIndex
 }
 
+private[spark]
 case class ShuffleBlockId(shuffleId: Int, mapId: Int, reduceId: Int) extends BlockId {
   def filename = "shuffle_" + shuffleId + "_" + mapId + "_" + reduceId
 }
 
-case class BroadcastBlockId(broadcastId: Long) extends BlockId {
+private[spark] case class BroadcastBlockId(broadcastId: Long) extends BlockId {
   def filename = "broadcast_" + broadcastId
 }
 
-case class TaskResultBlockId(taskId: Long) extends BlockId {
+private[spark] case class TaskResultBlockId(taskId: Long) extends BlockId {
   def filename = "taskresult_" + taskId
 }
 
-case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
+private[spark] case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
   def filename = "input-" + streamId + "-" + uniqueId
 }
 
 // Intended only for testing purposes
-case class TestBlockId(id: String) extends BlockId {
+private[spark] case class TestBlockId(id: String) extends BlockId {
   def filename = "test_" + id
 }
 
@@ -76,7 +77,7 @@ private[spark] object BlockId {
   val StreamInput = "input-([0-9]+)-([0-9]+)".r
   val Test = "test_(.*)".r
 
-  def fromString(id: String) = id match {
+  def apply(id: String) = id match {
     case RDD(rddId, splitIndex) => RDDBlockId(rddId.toInt, splitIndex.toInt)
     case Shuffle(shuffleId, mapId, reduceId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)

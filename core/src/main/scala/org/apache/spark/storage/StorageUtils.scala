@@ -25,15 +25,15 @@ private[spark]
 case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
   blocks: Map[BlockId, BlockStatus]) {
 
-  def memUsed() = blocks.values.map(_.memSize).reduceOption(_+_).getOrElse(0l)
+  def memUsed() = blocks.values.map(_.memSize).reduceOption(_+_).getOrElse(0L)
 
   def memUsedByRDD(rddId: Int) =
-    rddBlocks.filterKeys(_.rddId == rddId).values.map(_.memSize).reduceOption(_+_).getOrElse(0l)
+    rddBlocks.filterKeys(_.rddId == rddId).values.map(_.memSize).reduceOption(_+_).getOrElse(0L)
 
-  def diskUsed() = blocks.values.map(_.diskSize).reduceOption(_+_).getOrElse(0l)
+  def diskUsed() = blocks.values.map(_.diskSize).reduceOption(_+_).getOrElse(0L)
 
   def diskUsedByRDD(rddId: Int) =
-    rddBlocks.filterKeys(_.rddId == rddId).values.map(_.diskSize).reduceOption(_+_).getOrElse(0l)
+    rddBlocks.filterKeys(_.rddId == rddId).values.map(_.diskSize).reduceOption(_+_).getOrElse(0L)
 
   def memRemaining : Long = maxMem - memUsed()
 

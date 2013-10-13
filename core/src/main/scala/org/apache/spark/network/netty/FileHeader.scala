@@ -58,7 +58,7 @@ private[spark] object FileHeader {
     for (i <- 1 to idLength) {
       idBuilder += buf.readByte().asInstanceOf[Char]
     }
-    val blockId = BlockId.fromString(idBuilder.toString())
+    val blockId = BlockId(idBuilder.toString())
     new FileHeader(length, blockId)
   }
 

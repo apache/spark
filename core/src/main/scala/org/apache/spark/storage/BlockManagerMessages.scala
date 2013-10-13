@@ -70,7 +70,7 @@ private[storage] object BlockManagerMessages {
 
     override def readExternal(in: ObjectInput) {
       blockManagerId = BlockManagerId(in)
-      blockId = BlockId.fromString(in.readUTF())
+      blockId = BlockId(in.readUTF())
       storageLevel = StorageLevel(in)
       memSize = in.readLong()
       diskSize = in.readLong()
