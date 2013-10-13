@@ -346,30 +346,6 @@ class SparkContext(
     new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
   }
 
-  /**
-   * Get an RDD for a Hadoop file with an arbitray InputFormat. Accept a Hadoop Configuration
-   * that has already been broadcast and use it to construct JobConfs local to each process. These
-   * JobConfs will be initialized using an optional, user-specified closure.
-   */
-  def hadoopRDD[K, V](
-      path: String,
-      confBroadcast: Broadcast[SerializableWritable[Configuration]],
-      initLocalJobConfOpt: Option[JobConf => Unit],
-      inputFormatClass: Class[_ <: InputFormat[K, V]],
-      keyClass: Class[K],
-      valueClass: Class[V],
-      minSplits: Int
-    ): RDD[(K, V)] = {
-    new HadoopRDD(
-      this,
-      confBroadcast,
-      initLocalJobConfOpt,
-      inputFormatClass,
-      keyClass,
-      valueClass,
-      minSplits)
-  }
-
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
   def hadoopFile[K, V](
       path: String,
@@ -380,11 +356,11 @@ class SparkContext(
       ): RDD[(K, V)] = {
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
-    val setInputPathsFunc = Some((jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path))
+    val setInputPathsFunc = (jobConf: JobConf) => FileInputFormat.setInputPaths(jobConf, path)
     new HadoopRDD(
       this,
       confBroadcast,
-      setInputPathsFunc,
+      Some(setInputPathsFunc),
       inputFormatClass,
       keyClass,
       valueClass,
