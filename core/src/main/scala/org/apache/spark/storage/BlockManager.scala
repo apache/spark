@@ -970,7 +970,7 @@ private[spark] class BlockManager(
     case ShuffleBlockId(_, _, _) => compressShuffle
     case BroadcastBlockId(_) => compressBroadcast
     case RDDBlockId(_, _) => compressRdds
-    case _ => false // Won't happen in a real cluster, but it can in tests
+    case _ => false
   }
 
   /**

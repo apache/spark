@@ -42,7 +42,7 @@ private[spark] class ShuffleCopier extends Logging {
     try {
       fc.init()
       fc.connect(host, port)
-      fc.sendRequest(blockId.asFilename)
+      fc.sendRequest(blockId.name)
       fc.waitForClose()
       fc.close()
     } catch {

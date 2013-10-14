@@ -22,29 +22,20 @@ import org.scalatest.FunSuite
 class BlockIdSuite extends FunSuite {
   def assertSame(id1: BlockId, id2: BlockId) {
     assert(id1.name === id2.name)
-    assert(id1.asFilename === id2.asFilename)
     assert(id1.hashCode === id2.hashCode)
     assert(id1 === id2)
   }
 
   def assertDifferent(id1: BlockId, id2: BlockId) {
     assert(id1.name != id2.name)
-    assert(id1.asFilename != id2.asFilename)
     assert(id1.hashCode != id2.hashCode)
     assert(id1 != id2)
   }
 
-  test("basic-functions") {
-    case class MyBlockId(name: String) extends BlockId
-
-    val id = MyBlockId("a")
-    assertSame(id, MyBlockId("a"))
-    assertDifferent(id, MyBlockId("b"))
-    assert(id.asRDDId === None)
-
+  test("test-bad-deserialization") {
     try {
       // Try to deserialize an invalid block id.
-      BlockId("a")
+      BlockId("myblock")
       fail()
     } catch {
       case e: IllegalStateException => // OK

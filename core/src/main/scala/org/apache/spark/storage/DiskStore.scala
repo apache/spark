@@ -258,7 +258,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
       }
     }
 
-    new File(subDir, blockId.asFilename)
+    new File(subDir, blockId.name)
   }
 
   private def createLocalDirs(): Array[File] = {

@@ -24,12 +24,9 @@ package org.apache.spark.storage
  *
  * If your BlockId should be serializable, be sure to add it to the BlockId.fromString() method.
  */
-private[spark] abstract class BlockId {
+private[spark] sealed abstract class BlockId {
   /** A globally unique identifier for this Block. Can be used for ser/de. */
   def name: String
-
-  /** Physical filename for this block. May not be valid for Blocks are not file-backed. */
-  def asFilename = name
 
   // convenience methods
   def asRDDId = if (isRDD) Some(asInstanceOf[RDDBlockId]) else None
@@ -73,21 +70,27 @@ private[spark] case class TestBlockId(id: String) extends BlockId {
 
 private[spark] object BlockId {
   val RDD = "rdd_([0-9]+)_([0-9]+)".r
-  val Shuffle = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
-  val Broadcast = "broadcast_([0-9]+)".r
-  val TaskResult = "taskresult_([0-9]+)".r
-  val StreamInput = "input-([0-9]+)-([0-9]+)".r
-  val Test = "test_(.*)".r
+  val SHUFFLE = "shuffle_([0-9]+)_([0-9]+)_([0-9]+)".r
+  val BROADCAST = "broadcast_([0-9]+)".r
+  val TASKRESULT = "taskresult_([0-9]+)".r
+  val STREAM = "input-([0-9]+)-([0-9]+)".r
+  val TEST = "test_(.*)".r
 
   /** Converts a BlockId "name" String back into a BlockId. */
   def apply(id: String) = id match {
-    case RDD(rddId, splitIndex) => RDDBlockId(rddId.toInt, splitIndex.toInt)
-    case Shuffle(shuffleId, mapId, reduceId) =>
+    case RDD(rddId, splitIndex) =>
+      RDDBlockId(rddId.toInt, splitIndex.toInt)
+    case SHUFFLE(shuffleId, mapId, reduceId) =>
       ShuffleBlockId(shuffleId.toInt, mapId.toInt, reduceId.toInt)
-    case Broadcast(broadcastId) => BroadcastBlockId(broadcastId.toLong)
-    case TaskResult(taskId) => TaskResultBlockId(taskId.toLong)
-    case StreamInput(streamId, uniqueId) => StreamBlockId(streamId.toInt, uniqueId.toLong)
-    case Test(value) => TestBlockId(value)
-    case _ => throw new IllegalStateException("Unrecognized BlockId: " + id)
+    case BROADCAST(broadcastId) =>
+      BroadcastBlockId(broadcastId.toLong)
+    case TASKRESULT(taskId) =>
+      TaskResultBlockId(taskId.toLong)
+    case STREAM(streamId, uniqueId) =>
+      StreamBlockId(streamId.toInt, uniqueId.toLong)
+    case TEST(value) =>
+      TestBlockId(value)
+    case _ =>
+      throw new IllegalStateException("Unrecognized BlockId: " + id)
   }
 }

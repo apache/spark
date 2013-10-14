@@ -37,7 +37,7 @@ class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
   @Override
   public void messageReceived(ChannelHandlerContext ctx, String blockIdString) {
     BlockId blockId = BlockId.apply(blockIdString);
-    String path = pResolver.getAbsolutePath(blockId.asFilename());
+    String path = pResolver.getAbsolutePath(blockId.name());
     // if getFilePath returns null, close the channel
     if (path == null) {
       //ctx.close();
