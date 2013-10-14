@@ -20,7 +20,7 @@ object GraphLoader {
     : GraphImpl[Int, ED] = {
 
     // Parse the edge data table
-    val edges = sc.textFile(path).flatMap { line =>
+    val edges = sc.textFile(path, minEdgePartitions).flatMap { line =>
       if (!line.isEmpty && line(0) != '#') {
         val lineArray = line.split("\\s+")
         if(lineArray.length < 2) {

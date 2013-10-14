@@ -526,7 +526,8 @@ def apply[VD: ClassManifest, ED: ClassManifest](
       .map { e =>
         // Random partitioning based on the source vertex id.
         // val part: Pid = edgePartitionFunction1D(e.src, e.dst, numPartitions)
-        val part: Pid = edgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
+        // val part: Pid = edgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
+        val part: Pid = randomVertexCut(e.src, e.dst, numPartitions)
         //val part: Pid = canonicalEdgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
 
         // Should we be using 3-tuple or an optimized class
@@ -638,7 +639,6 @@ def apply[VD: ClassManifest, ED: ClassManifest](
     val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
     (col * ceilSqrtNumParts + row) % numParts
   }
-
 
 
 
