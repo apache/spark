@@ -111,14 +111,15 @@ private[spark] object BlockMessageArray {
   }
   
   def main(args: Array[String]) {
-    val blockMessages = 
+    val blockMessages =
       (0 until 10).map { i =>
         if (i % 2 == 0) {
           val buffer =  ByteBuffer.allocate(100)
           buffer.clear
-          BlockMessage.fromPutBlock(PutBlock(i.toString, buffer, StorageLevel.MEMORY_ONLY_SER))
+          BlockMessage.fromPutBlock(PutBlock(TestBlockId(i.toString), buffer,
+            StorageLevel.MEMORY_ONLY_SER))
         } else {
-          BlockMessage.fromGetBlock(GetBlock(i.toString))
+          BlockMessage.fromGetBlock(GetBlock(TestBlockId(i.toString)))
         }
       }
     val blockMessageArray = new BlockMessageArray(blockMessages)

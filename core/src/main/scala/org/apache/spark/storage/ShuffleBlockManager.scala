@@ -30,7 +30,6 @@ trait ShuffleBlocks {
   def releaseWriters(group: ShuffleWriterGroup)
 }
 
-
 private[spark]
 class ShuffleBlockManager(blockManager: BlockManager) {
 
@@ -40,7 +39,7 @@ class ShuffleBlockManager(blockManager: BlockManager) {
       override def acquireWriters(mapId: Int): ShuffleWriterGroup = {
         val bufferSize = System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
         val writers = Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
-          val blockId = ShuffleBlockManager.blockId(shuffleId, bucketId, mapId)
+          val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
           blockManager.getDiskBlockWriter(blockId, serializer, bufferSize)
         }
         new ShuffleWriterGroup(mapId, writers)
@@ -51,17 +50,4 @@ class ShuffleBlockManager(blockManager: BlockManager) {
       }
     }
   }
-}
-
-
-private[spark]
-object ShuffleBlockManager {
-
-  // Returns the block id for a given shuffle block.
-  def blockId(shuffleId: Int, bucketId: Int, groupId: Int): String = {
-    "shuffle_" + shuffleId + "_" + groupId + "_" + bucketId
-  }
-
-  // Returns true if the block is a shuffle block.
-  def isShuffle(blockId: String): Boolean = blockId.startsWith("shuffle_")
 }

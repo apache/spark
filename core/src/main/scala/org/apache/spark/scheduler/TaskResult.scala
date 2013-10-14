@@ -24,13 +24,14 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.{SparkEnv}
 import java.nio.ByteBuffer
 import org.apache.spark.util.Utils
+import org.apache.spark.storage.BlockId
 
 // Task result. Also contains updates to accumulator variables.
 private[spark] sealed trait TaskResult[T]
 
 /** A reference to a DirectTaskResult that has been stored in the worker's BlockManager. */
 private[spark]
-case class IndirectTaskResult[T](val blockId: String) extends TaskResult[T] with Serializable
+case class IndirectTaskResult[T](blockId: BlockId) extends TaskResult[T] with Serializable
 
 /** A TaskResult that contains the task's return value and accumulator updates. */
 private[spark]

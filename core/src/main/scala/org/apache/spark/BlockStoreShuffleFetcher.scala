@@ -22,7 +22,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.executor.{ShuffleReadMetrics, TaskMetrics}
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.storage.{BlockId, BlockManagerId, ShuffleBlockId}
 import org.apache.spark.util.CompletionIterator
 
 
@@ -45,12 +45,12 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
       splitsByAddress.getOrElseUpdate(address, ArrayBuffer()) += ((index, size))
     }
 
-    val blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])] = splitsByAddress.toSeq.map {
+    val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])] = splitsByAddress.toSeq.map {
       case (address, splits) =>
-        (address, splits.map(s => ("shuffle_%d_%d_%d".format(shuffleId, s._1, reduceId), s._2)))
+        (address, splits.map(s => (ShuffleBlockId(shuffleId, s._1, reduceId), s._2)))
     }
 
-    def unpackBlock(blockPair: (String, Option[Iterator[Any]])) : Iterator[T] = {
+    def unpackBlock(blockPair: (BlockId, Option[Iterator[Any]])) : Iterator[T] = {
       val blockId = blockPair._1
       val blockOption = blockPair._2
       blockOption match {
@@ -58,9 +58,8 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
           block.asInstanceOf[Iterator[T]]
         }
         case None => {
-          val regex = "shuffle_([0-9]*)_([0-9]*)_([0-9]*)".r
           blockId match {
-            case regex(shufId, mapId, _) =>
+            case ShuffleBlockId(shufId, mapId, _) =>
               val address = statuses(mapId.toInt)._1
               throw new FetchFailedException(address, shufId.toInt, mapId.toInt, reduceId, null)
             case _ =>

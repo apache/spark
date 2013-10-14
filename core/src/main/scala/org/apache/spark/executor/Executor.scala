@@ -27,7 +27,7 @@ import scala.collection.mutable.HashMap
 
 import org.apache.spark.scheduler._
 import org.apache.spark._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util.Utils
 
 /**
@@ -173,7 +173,7 @@ private[spark] class Executor(
         val serializedResult = {
           if (serializedDirectResult.limit >= akkaFrameSize - 1024) {
             logInfo("Storing result for " + taskId + " in local BlockManager")
-            val blockId = "taskresult_" + taskId
+            val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
               blockId, serializedDirectResult, StorageLevel.MEMORY_AND_DISK_SER)
             ser.serialize(new IndirectTaskResult[Any](blockId))

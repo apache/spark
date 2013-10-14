@@ -77,7 +77,7 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
     }
   }
 
-  private def putBlock(id: String, bytes: ByteBuffer, level: StorageLevel) {
+  private def putBlock(id: BlockId, bytes: ByteBuffer, level: StorageLevel) {
     val startTimeMs = System.currentTimeMillis()
     logDebug("PutBlock " + id + " started from " + startTimeMs + " with data: " + bytes)
     blockManager.putBytes(id, bytes, level)
@@ -85,7 +85,7 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
         + " with data size: " + bytes.limit)
   }
 
-  private def getBlock(id: String): ByteBuffer = {
+  private def getBlock(id: BlockId): ByteBuffer = {
     val startTimeMs = System.currentTimeMillis()
     logDebug("GetBlock " + id + " started from " + startTimeMs)
     val buffer = blockManager.getLocalBytes(id) match {
