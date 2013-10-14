@@ -179,7 +179,7 @@ extends Logging {
     initialized = false
   }
 
-  val BlockSize = System.getProperty("spark.broadcast.blockSize", "2048").toInt * 1024
+  val BlockSize = System.getProperty("spark.broadcast.blockSize", "4096").toInt * 1024
   
   def blockifyObject[IN](obj: IN): TorrentInfo = {
     val byteArray = Utils.serialize[IN](obj)
