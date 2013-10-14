@@ -24,9 +24,9 @@ import org.apache.spark.graph.impl.MessageToPartitionRDDFunctions._
  * A Graph RDD that supports computation on graphs.
  */
 class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
-    val vTable: IndexedRDD[Vid, VD],
-    val vid2pid: IndexedRDD[Vid, Pid],
-    val eTable: IndexedRDD[Pid, EdgePartition[ED]])
+    @transient val vTable: IndexedRDD[Vid, VD],
+    @transient val vid2pid: IndexedRDD[Vid, Pid],
+    @transient val eTable: IndexedRDD[Pid, EdgePartition[ED]])
   extends Graph[VD, ED] {
 
 
@@ -34,24 +34,9 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
    * The vTableReplicated is a version of the vertex data after it is 
    * replicated.
    */
-  val vTableReplicated: IndexedRDD[Pid, VertexHashMap[VD]] = {
-    // Join vid2pid and vTable, generate a shuffle dependency on the joined 
-    // result, and get the shuffle id so we can use it on the slave.
-    vTable.cogroup(vid2pid)
-      .flatMap { case (vid, (vdatas, pids)) => 
-        pids.iterator.map { 
-          pid => MessageToPartition(pid, (vid, vdatas.head)) 
-        }
-      }
-      .partitionBy(eTable.partitioner.get) //@todo assert edge table has partitioner
-      .mapPartitionsWithIndex( (pid, iter) => {
-        // Build the hashmap for each partition
-        val vmap = new VertexHashMap[VD]
-        for( msg <- iter ) { vmap.put(msg.data._1, msg.data._2) }
-        Array((pid, vmap)).iterator
-      }, preservesPartitioning = true)
-      .indexed(eTable.index)  
-  }
+  @transient val vTableReplicated: IndexedRDD[Pid, VertexHashMap[VD]] = 
+    createVTableReplicated(vTable, vid2pid, eTable) 
+
 
 
 
@@ -348,9 +333,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
 
+    val mapfun = mapFunc
+    val redfun = reduceFunc
+
     val newVTable: RDD[(Vid, A)] =
       vTableReplicated.join(eTable).flatMap{
-        case (pid, (vmap, edgePartition)) =>
+        case (pid, (vmap, edgePartition)) => 
         val aggMap = new VertexHashMap[A]
         val et = new EdgeTriplet[VD, ED]
         et.src = new Vertex[VD]
@@ -361,9 +349,9 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
           et.src.data = vmap(e.src)
           et.dst.id = e.dst
           et.dst.data = vmap(e.dst)
-          mapFunc(et).foreach{case (vid, a) => 
+          mapfun(et).foreach{case (vid, a) => 
             if(aggMap.containsKey(vid)) {
-              aggMap.put(vid, reduceFunc(aggMap.get(vid), a))             
+              aggMap.put(vid, redfun(aggMap.get(vid), a))             
             } else { aggMap.put(vid, a) }
           }
         }
@@ -372,7 +360,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
           entry => (entry.getLongKey(), entry.getValue())
         }
       }
-      .indexed(vTable.index).reduceByKey(reduceFunc)
+      .indexed(vTable.index).reduceByKey(redfun)
 
     newVTable
   }
@@ -525,9 +513,9 @@ def apply[VD: ClassManifest, ED: ClassManifest](
     edges
       .map { e =>
         // Random partitioning based on the source vertex id.
-        // val part: Pid = edgePartitionFunction1D(e.src, e.dst, numPartitions)
+        val part: Pid = edgePartitionFunction1D(e.src, e.dst, numPartitions)
         // val part: Pid = edgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
-        val part: Pid = randomVertexCut(e.src, e.dst, numPartitions)
+        // val part: Pid = randomVertexCut(e.src, e.dst, numPartitions)
         //val part: Pid = canonicalEdgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
 
         // Should we be using 3-tuple or an optimized class
@@ -554,6 +542,29 @@ def apply[VD: ClassManifest, ED: ClassManifest](
       edgePartition.foreach(e => {vSet.add(e.src); vSet.add(e.dst)})
       vSet.iterator.map { vid => (vid.toLong, pid) }
     }.indexed(vTableIndex)
+  }
+
+
+  protected def createVTableReplicated[VD: ClassManifest, ED: ClassManifest](
+    vTable: IndexedRDD[Vid, VD], vid2pid: IndexedRDD[Vid, Pid],
+    eTable: IndexedRDD[Pid, EdgePartition[ED]]): 
+    IndexedRDD[Pid, VertexHashMap[VD]] = {
+    // Join vid2pid and vTable, generate a shuffle dependency on the joined 
+    // result, and get the shuffle id so we can use it on the slave.
+    vTable.cogroup(vid2pid)
+      .flatMap { case (vid, (vdatas, pids)) => 
+        pids.iterator.map { 
+          pid => MessageToPartition(pid, (vid, vdatas.head)) 
+        }
+      }
+      .partitionBy(eTable.partitioner.get) //@todo assert edge table has partitioner
+      .mapPartitionsWithIndex( (pid, iter) => {
+        // Build the hashmap for each partition
+        val vmap = new VertexHashMap[VD]
+        for( msg <- iter ) { vmap.put(msg.data._1, msg.data._2) }
+        Array((pid, vmap)).iterator
+      }, preservesPartitioning = true)
+      .indexed(eTable.index)  
   }
 
 
