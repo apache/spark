@@ -44,9 +44,9 @@ object Analytics extends Logging {
                                            numIter: Int,
                                            resetProb: Double = 0.15) = {
     // Compute the out degree of each vertex
-    val pagerankGraph = graph.leftJoinVertices[Int, (Int, Double)](graph.outDegrees,
-      (vertex, deg) => (deg.getOrElse(0), 1.0)
-    )
+    val pagerankGraph = graph.outerJoinVertices(graph.outDegrees){
+      (vid, vdata, deg) => (deg.getOrElse(0), 1.0)
+    }
 
     println("Vertex Replication: " + pagerankGraph.replication)
     
@@ -59,11 +59,11 @@ object Analytics extends Logging {
 
 
     Pregel.iterate[(Int, Double), ED, Double](pagerankGraph)(
-      (vertex, a: Double) => (vertex.data._1, (resetProb + (1.0 - resetProb) * a)), // apply
+      (vid, data, a: Double) => (data._1, (resetProb + (1.0 - resetProb) * a)), // apply
       (me_id, edge) => Some(edge.src.data._2 / edge.src.data._1), // gather
       (a: Double, b: Double) => a + b, // merge
       1.0,
-      numIter).mapVertices{ case Vertex(id, (outDeg, r)) => r }
+      numIter).mapVertices{ case (id, (outDeg, r)) => r }
   }
 
   /**
@@ -74,18 +74,19 @@ object Analytics extends Logging {
                                                   maxIter: Int = Integer.MAX_VALUE,
                                                   resetProb: Double = 0.15) = {
     // Compute the out degree of each vertex
-    val pagerankGraph = graph.leftJoinVertices[Int, (Int, Double, Double)](graph.outDegrees,
-      (vertex, degIter) => (degIter.sum, 1.0, 1.0)
-    )
+    val pagerankGraph = graph.outerJoinVertices(graph.outDegrees){
+      (id, data, degIter) => (degIter.sum, 1.0, 1.0)
+    }
+    
 
     // Run PageRank
     GraphLab.iterate(pagerankGraph)(
       (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
       (a: Double, b: Double) => a + b,
-      (vertex, a: Option[Double]) =>
-        (vertex.data._1, (resetProb + (1.0 - resetProb) * a.getOrElse(0.0)), vertex.data._2), // apply
+      (id, data, a: Option[Double]) =>
+        (data._1, (resetProb + (1.0 - resetProb) * a.getOrElse(0.0)), data._2), // apply
       (me_id, edge) => math.abs(edge.src.data._3 - edge.src.data._2) > tol, // scatter
-      maxIter).mapVertices { case Vertex(vid, data) => data._2 }
+      maxIter).mapVertices { case (vid, data) => data._2 }
   }
 
 
@@ -96,12 +97,12 @@ object Analytics extends Logging {
    * that vertex.
    */
   def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]) = {
-    val ccGraph = graph.mapVertices { case Vertex(vid, _) => vid }
+    val ccGraph = graph.mapVertices { case (vid, _) => vid }
 
     GraphLab.iterate(ccGraph)(
       (me_id, edge) => edge.otherVertex(me_id).data, // gather
       (a: Vid, b: Vid) => math.min(a, b), // merge
-      (v, a: Option[Vid]) => math.min(v.data, a.getOrElse(Long.MaxValue)), // apply
+      (id, data, a: Option[Vid]) => math.min(data, a.getOrElse(Long.MaxValue)), // apply
       (me_id, edge) => (edge.vertex(me_id).data < edge.otherVertex(me_id).data), // scatter
       gatherDirection = EdgeDirection.Both, scatterDirection = EdgeDirection.Both
     )

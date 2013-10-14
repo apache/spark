@@ -6,7 +6,7 @@ import org.apache.spark.rdd.RDD
 object Pregel {
 
   def iterate[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](graph: Graph[VD, ED])(
-      vprog: (Vertex[VD], A) => VD,
+      vprog: (Vid, VD, A) => VD,
       sendMsg: (Vid, EdgeTriplet[VD, ED]) => Option[A],
       mergeMsg: (A, A) => A,
       initialMsg: A,
@@ -19,25 +19,26 @@ object Pregel {
 
     def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertex(vid).id, edge)
 
-    def runProg(vertexWithMsgs: Vertex[(VD, Option[A])]): VD = {
-      val (vData, msg) = vertexWithMsgs.data
-      val v = Vertex(vertexWithMsgs.id, vData)
+    def runProg(id: Vid, data: (VD, Option[A]) ): VD = {
+      val (vData, msg) = data
       msg match {
-        case Some(m) => vprog(v, m)
-        case None => v.data
+        case Some(m) => vprog(id, vData, m)
+        case None => vData
       }
     }
 
-    var graphWithMsgs: Graph[(VD, Option[A]), ED] =
-      g.mapVertices(v => (v.data, Some(initialMsg)))
+    // Receive the first set of messages
+    g.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))
 
     while (i < numIter) {
-      val newGraph: Graph[VD, ED] = graphWithMsgs.mapVertices(runProg).cache()
-      graphWithMsgs = newGraph.aggregateNeighbors(mapF, mergeMsg, EdgeDirection.In)
+      // compute the messages
+      val messages = g.aggregateNeighbors(mapF, mergeMsg, EdgeDirection.In)
+      // receive the messages
+      g = g.joinVertices(messages)(vprog)
+      // count the iteration
       i += 1
     }
-    graphWithMsgs.mapVertices(vertexWithMsgs => vertexWithMsgs.data match {
-      case (vData, _) => vData
-    })
+    // Return the final graph
+    g
   }
 }

@@ -1,7 +1,7 @@
 package org.apache.spark.graph
 
 import org.apache.spark.rdd.RDD
-
+import org.apache.spark.SparkContext._
 
 class GraphOps[VD: ClassManifest, ED: ClassManifest](g: Graph[VD, ED]) {
 
@@ -16,22 +16,18 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](g: Graph[VD, ED]) {
   lazy val degrees: RDD[(Vid, Int)] = degreesRDD(EdgeDirection.Both)
 
   def collectNeighborIds(edgeDirection: EdgeDirection) : RDD[(Vid, Array[Vid])] = {
-    val graph: Graph[(VD, Option[Array[Vid]]), ED] = g.aggregateNeighbors(
+    val nbrs = g.aggregateNeighbors[Array[Vid]](
       (vid, edge) => Some(Array(edge.otherVertex(vid).id)),
       (a, b) => a ++ b,
       edgeDirection)
-    graph.vertices.map(v => {
-      val (_, neighborIds) = v.data
-      (v.id, neighborIds.getOrElse(Array()))
-    })
+
+    g.vertices.leftOuterJoin(nbrs).mapValues{
+      case (_, Some(nbrs)) => nbrs
+      case (_, None) => Array.empty[Vid]
+    }
   }
 
   private def degreesRDD(edgeDirection: EdgeDirection): RDD[(Vid, Int)] = {
-    val degreeGraph: Graph[(VD, Option[Int]), ED] =
-      g.aggregateNeighbors((vid, edge) => Some(1), _+_, edgeDirection)
-    degreeGraph.vertices.map(v => {
-      val (_, degree) = v.data
-      (v.id, degree.getOrElse(0))
-    })
+    g.aggregateNeighbors((vid, edge) => Some(1), _+_, edgeDirection)
   }
 }

@@ -2,6 +2,7 @@ package org.apache.spark.graph
 
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.ClosureCleaner
 
 
 
@@ -33,7 +34,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    * @todo should vertices return tuples instead of vertex objects?
    */
-  def vertices: RDD[Vertex[VD]]
+  def vertices: RDD[(Vid,VD)]
 
   /**
    * Get the Edges and their data as an RDD.  The entries in the RDD contain
@@ -101,7 +102,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    *
    */
-  def mapVertices[VD2: ClassManifest](map: Vertex[VD] => VD2): Graph[VD2, ED]
+  def mapVertices[VD2: ClassManifest](map: (Vid, VD) => VD2): Graph[VD2, ED]
 
   /**
    * Construct a new graph where each the value of each edge is transformed by
@@ -149,13 +150,13 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
     map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 
 
-  /**
-   * Remove edges conntecting vertices that are not in the graph.
-   *
-   * @todo remove this function and ensure that for a graph G=(V,E):
-   *     if (u,v) in E then u in V and v in V 
-   */
-  def correctEdges(): Graph[VD, ED]
+  // /**
+  //  * Remove edges conntecting vertices that are not in the graph.
+  //  *
+  //  * @todo remove this function and ensure that for a graph G=(V,E):
+  //  *     if (u,v) in E then u in V and v in V 
+  //  */
+  // def correctEdges(): Graph[VD, ED]
 
   /**
    * Construct a new graph with all the edges reversed.  If this graph contains
@@ -183,8 +184,8 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @return the subgraph containing only the vertices and edges that satisfy the
    * predicates. 
    */
-  def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (_ => true), 
-    vpred: Vertex[VD] => Boolean = (_ => true) ): Graph[VD, ED]
+  def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true), 
+    vpred: (Vid, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
 
 
   // /**
@@ -200,51 +201,55 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
 
 
+  def mapReduceTriplets[A: ClassManifest](
+      mapFunc: EdgeTriplet[VD, ED] => Array[(Vid, A)],
+      reduceFunc: (A, A) => A)
+    : RDD[(Vid, A)] 
 
 
-  /**
-   * This function is used to compute a statistic for the neighborhood of each
-   * vertex.
-   *
-   * This is one of the core functions in the Graph API in that enables
-   * neighborhood level computation.  For example this function can be used to
-   * count neighbors satisfying a predicate or implement PageRank.
-   *
-   * @note The returned RDD may contain fewer entries than their are vertices
-   * in the graph.  This is because some vertices may not have neighbors or the
-   * map function may return None for all neighbors.
-   *
-   * @param mapFunc the function applied to each edge adjacent to each vertex.
-   * The mapFunc can optionally return None in which case it does not
-   * contribute to the final sum.
-   * @param mergeFunc the function used to merge the results of each map
-   * operation.
-   * @param direction the direction of edges to consider (e.g., In, Out, Both).
-   * @tparam VD2 The returned type of the aggregation operation.
-   *
-   * @return A Spark.RDD containing tuples of vertex identifiers and thee
-   * resulting value.  Note that the returned RDD may contain fewer vertices
-   * than in the original graph since some vertices may not have neighbors or
-   * the map function could return None for all neighbors.
-   *
-   * @example We can use this function to compute the average follower age for
-   * each user
-   * {{{
-   * val graph: Graph[Int,Int] = loadGraph()
-   * val averageFollowerAge: RDD[(Int, Int)] =
-   *   graph.aggregateNeighbors[(Int,Double)](
-   *     (vid, edge) => (edge.otherVertex(vid).data, 1),
-   *     (a, b) => (a._1 + b._1, a._2 + b._2),
-   *     EdgeDirection.In)
-   *     .mapValues{ case (sum,followers) => sum.toDouble / followers}
-   * }}}
-   *
-   */
-  def aggregateNeighbors[A: ClassManifest](
-      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
-      mergeFunc: (A, A) => A,
-      direction: EdgeDirection)
-    : Graph[(VD, Option[A]), ED]
+  // /**
+  //  * This function is used to compute a statistic for the neighborhood of each
+  //  * vertex.
+  //  *
+  //  * This is one of the core functions in the Graph API in that enables
+  //  * neighborhood level computation.  For example this function can be used to
+  //  * count neighbors satisfying a predicate or implement PageRank.
+  //  *
+  //  * @note The returned RDD may contain fewer entries than their are vertices
+  //  * in the graph.  This is because some vertices may not have neighbors or the
+  //  * map function may return None for all neighbors.
+  //  *
+  //  * @param mapFunc the function applied to each edge adjacent to each vertex.
+  //  * The mapFunc can optionally return None in which case it does not
+  //  * contribute to the final sum.
+  //  * @param mergeFunc the function used to merge the results of each map
+  //  * operation.
+  //  * @param direction the direction of edges to consider (e.g., In, Out, Both).
+  //  * @tparam VD2 The returned type of the aggregation operation.
+  //  *
+  //  * @return A Spark.RDD containing tuples of vertex identifiers and thee
+  //  * resulting value.  Note that the returned RDD may contain fewer vertices
+  //  * than in the original graph since some vertices may not have neighbors or
+  //  * the map function could return None for all neighbors.
+  //  *
+  //  * @example We can use this function to compute the average follower age for
+  //  * each user
+  //  * {{{
+  //  * val graph: Graph[Int,Int] = loadGraph()
+  //  * val averageFollowerAge: RDD[(Int, Int)] =
+  //  *   graph.aggregateNeighbors[(Int,Double)](
+  //  *     (vid, edge) => (edge.otherVertex(vid).data, 1),
+  //  *     (a, b) => (a._1 + b._1, a._2 + b._2),
+  //  *     EdgeDirection.In)
+  //  *     .mapValues{ case (sum,followers) => sum.toDouble / followers}
+  //  * }}}
+  //  *
+  //  */
+  // def aggregateNeighbors[A: ClassManifest](
+  //     mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
+  //     mergeFunc: (A, A) => A,
+  //     direction: EdgeDirection)
+  //   : Graph[(VD, Option[A]), ED]
 
   /**
    * This function is used to compute a statistic for the neighborhood of each
@@ -291,9 +296,8 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def aggregateNeighbors[A: ClassManifest](
       mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
       reduceFunc: (A, A) => A,
-      default: A, // Should this be a function or a value?
       direction: EdgeDirection)
-    : Graph[(VD, Option[A]), ED]
+    : RDD[(Vid, A)]
 
 
   /**
@@ -328,9 +332,8 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    * @todo Is leftJoinVertices the right name?
    */
-  def leftJoinVertices[U: ClassManifest, VD2: ClassManifest](
-      table: RDD[(Vid, U)],
-      mapFunc: (Vertex[VD], Option[U]) => VD2)
+  def outerJoinVertices[U: ClassManifest, VD2: ClassManifest](table: RDD[(Vid, U)])
+      (mapFunc: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
 
   /**
@@ -366,10 +369,15 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * graph.joinVertices(tbl)( (v, row) => row )
    * }}}
    */
-  def joinVertices[U: ClassManifest](
-      table: RDD[(Vid, U)],
-      mapFunc: (Vertex[VD], U) => VD)
-    : Graph[VD, ED]
+  def joinVertices[U: ClassManifest](table: RDD[(Vid, U)])(mapFunc: (Vid, VD, U) => VD)
+    : Graph[VD, ED] = {
+    ClosureCleaner.clean(mapFunc)
+    def uf(id: Vid, data: VD, o: Option[U]): VD = o match {
+      case Some(u) => mapFunc(id, data, u)
+      case None => data
+    }
+    outerJoinVertices(table)(uf)
+  }
 
   // Save a copy of the GraphOps object so there is always one unique GraphOps object
   // for a given Graph object, and thus the lazy vals in GraphOps would work as intended.
@@ -391,16 +399,16 @@ object Graph {
         rawEdges.map { case (s, t) => Edge(s, t, 1) }
       }
     // Determine unique vertices
-    val vertices: RDD[Vertex[Int]] = edges.flatMap{ case Edge(s, t, cnt) => Array((s, 1), (t, 1)) }
-      .reduceByKey(_ + _)
-      .map{ case (id, deg) => Vertex(id, deg) }
+    val vertices: RDD[(Vid, Int)] = 
+      edges.flatMap{ case Edge(s, t, cnt) => Array((s, 1), (t, 1)) }.reduceByKey(_ + _)
+ 
     // Return graph
-    new GraphImpl(vertices, edges)
+    GraphImpl(vertices, edges)
   }
 
   def apply[VD: ClassManifest, ED: ClassManifest](
-      vertices: RDD[Vertex[VD]], edges: RDD[Edge[ED]]): Graph[VD, ED] = {
-    new GraphImpl(vertices, edges)
+      vertices: RDD[(Vid,VD)], edges: RDD[Edge[ED]]): Graph[VD, ED] = {
+    GraphImpl(vertices, edges)
   }
 
   implicit def graphToGraphOps[VD: ClassManifest, ED: ClassManifest](g: Graph[VD, ED]) = g.ops

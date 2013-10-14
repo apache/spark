@@ -37,7 +37,7 @@ object GraphGenerators {
     val host = "local[4]"
     val sc = new SparkContext(host, "Lognormal graph generator")
 
-    val lnGraph = lognormalGraph(sc, 10000)
+    val lnGraph = logNormalGraph(sc, 10000)
 
     val rmat = rmatGraph(sc, 1000, 3000)
 
@@ -69,19 +69,21 @@ object GraphGenerators {
 
   // Right now it just generates a bunch of edges where
   // the edge data is the weight (default 1)
-  def lognormalGraph(sc: SparkContext, numVertices: Int): GraphImpl[Int, Int] = {
+  def logNormalGraph(sc: SparkContext, numVertices: Int): GraphImpl[Int, Int] = {
     // based on Pregel settings
     val mu = 4
     val sigma = 1.3
     //val vertsAndEdges = (0 until numVertices).flatMap { src => {
-    val vertices = (0 until numVertices).flatMap { src =>
-      Array(Vertex(src, sampleLogNormal(mu, sigma, numVertices))) }
-    val edges = vertices.flatMap( { v =>
-      generateRandomEdges(v.id.toInt, v.data, numVertices) })
+
+    val vertices: RDD[(Vid, Int)] = sc.parallelize(0 until numVertices).map{
+      src => (src, sampleLogNormal(mu, sigma, numVertices))
+    }
+
+    val edges = vertices.flatMap{ 
+      v => generateRandomEdges(v._1.toInt, v._2, numVertices) 
+    }
     
-
-
-    new GraphImpl[Int, Int](sc.parallelize(vertices), sc.parallelize(edges))
+    GraphImpl(vertices, edges)
     //println("Vertices:")
     //for (v <- vertices) {
     //  println(v.id)
@@ -161,8 +163,8 @@ object GraphGenerators {
     
     val vertices = edges.flatMap { edge => List((edge.src, 1)) }
       .reduceByKey(_ + _)
-      .map{ case (vid, degree) => Vertex(vid, degree) }
-    new GraphImpl[Int, ED](vertices, edges)
+      .map{ case (vid, degree) => (vid, degree) }
+    GraphImpl(vertices, edges)
   }
 
   /**

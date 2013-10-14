@@ -393,6 +393,15 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
     new MappedValuesRDD(self, cleanF)
   }
 
+
+  /**
+   * Pass each value in the key-value pair RDD through a map function without changing the keys;
+   * this also retains the original RDD's partitioning.
+   */
+  def mapValuesWithKeys[U: ClassManifest](f: (K, V) => U): RDD[(K, U)] = {
+    self.map{ case (k,v) => (k, f(k,v)) }
+  }
+
   /**
    * Pass each value in the key-value pair RDD through a flatMap function without changing the
    * keys; this also retains the original RDD's partitioning.

@@ -53,6 +53,8 @@ class RDDIndex[@specialized K: ClassManifest](private[spark] val rdd: RDD[BlockI
     rdd.persist(newLevel)
     return this
   }
+
+  def partitioner: Partitioner = rdd.partitioner.get
 }
 
 
@@ -84,6 +86,9 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    */
   override val partitioner = index.rdd.partitioner
   
+
+
+
 
   /**
    * The actual partitions are defined by the tuples.

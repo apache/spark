@@ -48,7 +48,7 @@ object GraphLoader {
   def fromEdges[ED: ClassManifest](edges: RDD[Edge[ED]]): GraphImpl[Int, ED] = {
     val vertices = edges.flatMap { edge => List((edge.src, 1), (edge.dst, 1)) }
       .reduceByKey(_ + _)
-      .map{ case (vid, degree) => Vertex(vid, degree) }
-    new GraphImpl[Int, ED](vertices, edges)
+      .map{ case (vid, degree) => (vid, degree) }
+    GraphImpl(vertices, edges)
   }
 }

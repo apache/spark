@@ -50,6 +50,32 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
 
 
   /**
+   * Pass each value in the key-value pair RDD through a map function without changing the keys;
+   * this also retains the original RDD's partitioning.
+   */
+  override def mapValuesWithKeys[U: ClassManifest](f: (K, V) => U): RDD[(K, U)] = {
+    val cleanF = self.index.rdd.context.clean(f)
+    val newValues = self.index.rdd.zipPartitions(self.valuesRDD){ (keysIter, valuesIter) => 
+      val index = keysIter.next()
+      assert(keysIter.hasNext() == false)
+      val oldValues = valuesIter.next()
+      assert(valuesIter.hasNext() == false)
+      // Allocate the array to store the results into
+      val newValues: Array[Seq[U]] = new Array[Seq[U]](oldValues.size)
+      // Populate the new Values
+      for( (k,i) <- index ) {
+        if(oldValues(i) != null) {
+          newValues(i) = oldValues(i).map( v => f(k,v) )
+        }
+      }
+      Array(newValues.toSeq).iterator
+    }
+    new IndexedRDD[K,U](self.index, newValues)
+  }
+
+
+
+  /**
    * Pass each value in the key-value pair RDD through a flatMap function without changing the
    * keys; this also retains the original RDD's partitioning.
    */
