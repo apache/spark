@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
-import org.apache.spark.storage.{BlockManager, StorageLevel}
+import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, RDDBlockId}
 import org.apache.spark.rdd.RDD
 
 
@@ -28,12 +28,12 @@ import org.apache.spark.rdd.RDD
 private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
   /** Keys of RDD splits that are being computed/loaded. */
-  private val loading = new HashSet[String]()
+  private val loading = new HashSet[RDDBlockId]()
 
   /** Gets or computes an RDD split. Used by RDD.iterator() when an RDD is cached. */
   def getOrCompute[T](rdd: RDD[T], split: Partition, context: TaskContext, storageLevel: StorageLevel)
       : Iterator[T] = {
-    val key = "rdd_%d_%d".format(rdd.id, split.index)
+    val key = RDDBlockId(rdd.id, split.index)
     logDebug("Looking for partition " + key)
     blockManager.get(key) match {
       case Some(values) =>
@@ -73,7 +73,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           if (context.runningLocally) { return computedValues }
           val elements = new ArrayBuffer[Any]
           elements ++= computedValues
-          blockManager.put(key, elements, storageLevel, true)
+          blockManager.put(key, elements, storageLevel, tellMaster = true)
           return elements.iterator.asInstanceOf[Iterator[T]]
         } finally {
           loading.synchronized {
