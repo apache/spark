@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>11</version>
+    <version>13</version>
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
@@ -60,6 +60,29 @@
   <prerequisites>
     <maven>3.0.0</maven>
   </prerequisites>
+
+  <mailingLists>
+    <mailingList>
+      <name>Dev Mailing List</name>
+      <post>dev@spark.incubator.apache.org</post>
+      <subscribe>dev-subscribe@spark.incubator.apache.org</subscribe>
+      <unsubscribe>dev-unsubscribe@spark.incubator.apache.org</unsubscribe>
+    </mailingList>
+
+    <mailingList>
+      <name>User Mailing List</name>
+      <post>user@spark.incubator.apache.org</post>
+      <subscribe>user-subscribe@spark.incubator.apache.org</subscribe>
+      <unsubscribe>user-unsubscribe@spark.incubator.apache.org</unsubscribe>
+    </mailingList>
+
+    <mailingList>
+      <name>Commits Mailing List</name>
+      <post>commits@spark.incubator.apache.org</post>
+      <subscribe>commits-subscribe@spark.incubator.apache.org</subscribe>
+      <unsubscribe>commits-unsubscribe@spark.incubator.apache.org</unsubscribe>
+    </mailingList>
+  </mailingLists>
 
   <modules>
     <module>core</module>
