@@ -17,7 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.lang.{Boolean => JBoolean}
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
 import java.util.{TimerTask, Timer}
@@ -78,12 +77,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   private val executorsByHost = new HashMap[String, HashSet[String]]
 
   private val executorIdToHost = new HashMap[String, String]
-
-  // JAR server, if any JARs were added by the user to the SparkContext
-  var jarServer: HttpServer = null
-
-  // URIs of JARs to pass to executor
-  var jarUris: String = ""
 
   // Listener object to pass upcalls into
   var listener: TaskSchedulerListener = null
@@ -171,8 +164,31 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     backend.reviveOffers()
   }
 
-  def taskSetFinished(manager: TaskSetManager) {
-    this.synchronized {
+  override def cancelTasks(stageId: Int): Unit = synchronized {
+    logInfo("Cancelling stage " + stageId)
+    activeTaskSets.find(_._2.stageId == stageId).foreach { case (_, tsm) =>
+      // There are two possible cases here:
+      // 1. The task set manager has been created and some tasks have been scheduled.
+      //    In this case, send a kill signal to the executors to kill the task and then abort
+      //    the stage.
+      // 2. The task set manager has been created but no tasks has been scheduled. In this case,
+      //    simply abort the stage.
+      val taskIds = taskSetTaskIds(tsm.taskSet.id)
+      if (taskIds.size > 0) {
+        taskIds.foreach { tid =>
+          val execId = taskIdToExecutorId(tid)
+          backend.killTask(tid, execId)
+        }
+      }
+      tsm.error("Stage %d was cancelled".format(stageId))
+    }
+  }
+
+  def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
+    // Check to see if the given task set has been removed. This is possible in the case of
+    // multiple unrecoverable task failures (e.g. if the entire task set is killed when it has
+    // more than one running tasks).
+    if (activeTaskSets.contains(manager.taskSet.id)) {
       activeTaskSets -= manager.taskSet.id
       manager.parent.removeSchedulable(manager)
       logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id, manager.parent.name))
@@ -333,9 +349,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   override def stop() {
     if (backend != null) {
       backend.stop()
-    }
-    if (jarServer != null) {
-      jarServer.stop()
     }
     if (taskResultGetter != null) {
       taskResultGetter.stop()

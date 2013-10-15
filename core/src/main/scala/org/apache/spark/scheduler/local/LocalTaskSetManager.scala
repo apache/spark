@@ -132,17 +132,6 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     return None
   }
 
-  def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
-    SparkEnv.set(env)
-    state match {
-      case TaskState.FINISHED =>
-        taskEnded(tid, state, serializedData)
-      case TaskState.FAILED =>
-        taskFailed(tid, state, serializedData)
-      case _ => {}
-    }
-  }
-
   def taskStarted(task: Task[_], info: TaskInfo) {
     sched.listener.taskStarted(task, info)
   }
@@ -195,5 +184,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   }
 
   override def error(message: String) {
+    sched.listener.taskSetFailed(taskSet, message)
+    sched.taskSetFinished(this)
   }
 }

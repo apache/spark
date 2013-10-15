@@ -15,27 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd
-
-import org.apache.spark.{Partition, TaskContext}
-
+package org.apache.spark
 
 /**
- * A variant of the MapPartitionsRDD that passes the partition index into the
- * closure. This can be used to generate or collect partition specific
- * information such as the number of tuples in a partition.
+ * An iterator that wraps around an existing iterator to provide task killing functionality.
+ * It works by checking the interrupted flag in TaskContext.
  */
-private[spark]
-class MapPartitionsWithIndexRDD[U: ClassManifest, T: ClassManifest](
-    prev: RDD[T],
-    f: (Int, Iterator[T]) => Iterator[U],
-    preservesPartitioning: Boolean
-  ) extends RDD[U](prev) {
+class InterruptibleIterator[+T](val context: TaskContext, val delegate: Iterator[T])
+  extends Iterator[T] {
 
-  override def getPartitions: Array[Partition] = firstParent[T].partitions
+  def hasNext: Boolean = !context.interrupted && delegate.hasNext
 
-  override val partitioner = if (preservesPartitioning) prev.partitioner else None
-
-  override def compute(split: Partition, context: TaskContext) =
-    f(split.index, firstParent[T].iterator(split, context))
+  def next(): T = delegate.next()
 }

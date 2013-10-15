@@ -21,7 +21,7 @@ import java.io.{ObjectOutputStream, IOException}
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.{Partition, Partitioner, SparkEnv, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
 import org.apache.spark.util.AppendOnlyMap
 
@@ -125,12 +125,12 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
         val fetcher = SparkEnv.get.shuffleFetcher
-        fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context.taskMetrics, ser).foreach {
+        fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser).foreach {
           kv => getSeq(kv._1)(depNum) += kv._2
         }
       }
     }
-    map.iterator
+    new InterruptibleIterator(context, map.iterator)
   }
 
   override def clearDependencies() {

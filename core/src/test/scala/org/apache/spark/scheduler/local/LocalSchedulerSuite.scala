@@ -17,17 +17,15 @@
 
 package org.apache.spark.scheduler.local
 
-import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
-
-import org.apache.spark._
-import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster._
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.{ConcurrentMap, HashMap}
 import java.util.concurrent.Semaphore
 import java.util.concurrent.CountDownLatch
-import java.util.Properties
+
+import scala.collection.mutable.HashMap
+
+import org.scalatest.{BeforeAndAfterEach, FunSuite}
+
+import org.apache.spark._
+
 
 class Lock() {
   var finished = false
@@ -63,7 +61,12 @@ object TaskThreadInfo {
  * 5. each task(pending) must use "sleep" to  make sure it has been added to taskSetManager queue,
  *    thus it will be scheduled later when cluster has free cpu cores.
  */
-class LocalSchedulerSuite extends FunSuite with LocalSparkContext {
+class LocalSchedulerSuite extends FunSuite with LocalSparkContext with BeforeAndAfterEach {
+
+  override def afterEach() {
+    super.afterEach()
+    System.clearProperty("spark.scheduler.mode")
+  }
 
   def createThread(threadIndex: Int, poolName: String, sc: SparkContext, sem: Semaphore) {
 
@@ -148,11 +151,12 @@ class LocalSchedulerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Local fair scheduler end-to-end test") {
-    sc = new SparkContext("local[8]", "LocalSchedulerSuite")
-    val sem = new Semaphore(0)
     System.setProperty("spark.scheduler.mode", "FAIR")
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     System.setProperty("spark.scheduler.allocation.file", xmlPath)
+
+    sc = new SparkContext("local[8]", "LocalSchedulerSuite")
+    val sem = new Semaphore(0)
 
     createThread(10,"1",sc,sem)
     TaskThreadInfo.threadToStarted(10).await()
