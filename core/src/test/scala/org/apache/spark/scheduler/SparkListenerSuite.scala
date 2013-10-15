@@ -23,15 +23,9 @@ import scala.collection.mutable
 import org.scalatest.matchers.ShouldMatchers
 import org.apache.spark.SparkContext._
 
-/**
- *
- */
-
 class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
 
-  // TODO: This test has a race condition since the DAGScheduler now reports results
-  //       asynchronously. It needs to be updated for that patch.
-  ignore("local metrics") {
+  test("local metrics") {
     sc = new SparkContext("local[4]", "test")
     val listener = new SaveStageInfo
     sc.addSparkListener(listener)
@@ -44,8 +38,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     }
 
     val d = sc.parallelize(1 to 1e4.toInt, 64).map{i => w(i)}
-    d.count
-    Thread.sleep(1000)
+    d.count()
+    val WAIT_TIMEOUT_MILLIS = 10000
+    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (1)
 
     val d2 = d.map{i => w(i) -> i * 2}.setName("shuffle input 1")
@@ -55,20 +50,27 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     val d4 = d2.cogroup(d3, 64).map{case(k,(v1,v2)) => w(k) -> (v1.size, v2.size)}
     d4.setName("A Cogroup")
 
-    d4.collectAsMap
+    d4.collectAsMap()
 
-    Thread.sleep(1000)
+    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (4)
-    listener.stageInfos.foreach {stageInfo =>
-      //small test, so some tasks might take less than 1 millisecond, but average should be greater than 1 ms
+    listener.stageInfos.foreach { stageInfo =>
+      /* small test, so some tasks might take less than 1 millisecond, but average should be greater
+       * than 0 ms. */
       checkNonZeroAvg(stageInfo.taskInfos.map{_._1.duration}, stageInfo + " duration")
-      checkNonZeroAvg(stageInfo.taskInfos.map{_._2.executorRunTime.toLong}, stageInfo + " executorRunTime")
-      checkNonZeroAvg(stageInfo.taskInfos.map{_._2.executorDeserializeTime.toLong}, stageInfo + " executorDeserializeTime")
+      checkNonZeroAvg(
+        stageInfo.taskInfos.map{_._2.executorRunTime.toLong},
+        stageInfo + " executorRunTime")
+      checkNonZeroAvg(
+        stageInfo.taskInfos.map{_._2.executorDeserializeTime.toLong},
+        stageInfo + " executorDeserializeTime")
       if (stageInfo.stage.rdd.name == d4.name) {
-        checkNonZeroAvg(stageInfo.taskInfos.map{_._2.shuffleReadMetrics.get.fetchWaitTime}, stageInfo + " fetchWaitTime")
+        checkNonZeroAvg(
+          stageInfo.taskInfos.map{_._2.shuffleReadMetrics.get.fetchWaitTime},
+          stageInfo + " fetchWaitTime")
       }
 
-        stageInfo.taskInfos.foreach{case (taskInfo, taskMetrics) =>
+      stageInfo.taskInfos.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
         if (isStage(stageInfo, Set(d2.name, d3.name), Set(d4.name))) {
           taskMetrics.shuffleWriteMetrics should be ('defined)

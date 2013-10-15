@@ -21,6 +21,7 @@ import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.ChannelInboundByteHandlerAdapter;
 
+import org.apache.spark.storage.BlockId;
 
 abstract class FileClientHandler extends ChannelInboundByteHandlerAdapter {
 
@@ -33,7 +34,7 @@ abstract class FileClientHandler extends ChannelInboundByteHandlerAdapter {
   }
 
   public abstract void handle(ChannelHandlerContext ctx, ByteBuf in, FileHeader header);
-  public abstract void handleError(String blockId);
+  public abstract void handleError(BlockId blockId);
 
   @Override
   public ByteBuf newInboundBuffer(ChannelHandlerContext ctx) {

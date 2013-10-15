@@ -137,11 +137,26 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     startReq.setContainerLaunchContext(ctx)
     cm.startContainer(startReq)
   }
+
+  private def setupDistributedCache(file: String,
+      rtype: LocalResourceType,
+      localResources: HashMap[String, LocalResource],
+      timestamp: String,
+      size: String) = {
+    val uri = new URI(file)
+    val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
+    amJarRsrc.setType(rtype)
+    amJarRsrc.setVisibility(LocalResourceVisibility.APPLICATION)
+    amJarRsrc.setResource(ConverterUtils.getYarnUrlFromURI(uri))
+    amJarRsrc.setTimestamp(timestamp.toLong)
+    amJarRsrc.setSize(size.toLong)
+    localResources(uri.getFragment()) = amJarRsrc
+  }
   
   
   def prepareLocalResources: HashMap[String, LocalResource] = {
     logInfo("Preparing Local resources")
-    val locaResources = HashMap[String, LocalResource]()
+    val localResources = HashMap[String, LocalResource]()
     
     // Spark JAR
     val sparkJarResource = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
@@ -151,7 +166,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       new URI(System.getenv("SPARK_YARN_JAR_PATH"))))
     sparkJarResource.setTimestamp(System.getenv("SPARK_YARN_JAR_TIMESTAMP").toLong)
     sparkJarResource.setSize(System.getenv("SPARK_YARN_JAR_SIZE").toLong)
-    locaResources("spark.jar") = sparkJarResource
+    localResources("spark.jar") = sparkJarResource
     // User JAR
     val userJarResource = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
     userJarResource.setType(LocalResourceType.FILE)
@@ -160,7 +175,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       new URI(System.getenv("SPARK_YARN_USERJAR_PATH"))))
     userJarResource.setTimestamp(System.getenv("SPARK_YARN_USERJAR_TIMESTAMP").toLong)
     userJarResource.setSize(System.getenv("SPARK_YARN_USERJAR_SIZE").toLong)
-    locaResources("app.jar") = userJarResource
+    localResources("app.jar") = userJarResource
 
     // Log4j conf - if available
     if (System.getenv("SPARK_YARN_LOG4J_PATH") != null) {
@@ -171,26 +186,39 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
         new URI(System.getenv("SPARK_YARN_LOG4J_PATH"))))
       log4jConfResource.setTimestamp(System.getenv("SPARK_YARN_LOG4J_TIMESTAMP").toLong)
       log4jConfResource.setSize(System.getenv("SPARK_YARN_LOG4J_SIZE").toLong)
-      locaResources("log4j.properties") = log4jConfResource
+      localResources("log4j.properties") = log4jConfResource
     }
 
+    if (System.getenv("SPARK_YARN_CACHE_FILES") != null) {
+      val timeStamps = System.getenv("SPARK_YARN_CACHE_FILES_TIME_STAMPS").split(',')
+      val fileSizes = System.getenv("SPARK_YARN_CACHE_FILES_FILE_SIZES").split(',')
+      val distFiles = System.getenv("SPARK_YARN_CACHE_FILES").split(',')
+      for( i <- 0 to distFiles.length - 1) {
+        setupDistributedCache(distFiles(i), LocalResourceType.FILE, localResources, timeStamps(i),
+          fileSizes(i))
+      }
+    }
+
+    if (System.getenv("SPARK_YARN_CACHE_ARCHIVES") != null) {
+      val timeStamps = System.getenv("SPARK_YARN_CACHE_ARCHIVES_TIME_STAMPS").split(',')
+      val fileSizes = System.getenv("SPARK_YARN_CACHE_ARCHIVES_FILE_SIZES").split(',')
+      val distArchives = System.getenv("SPARK_YARN_CACHE_ARCHIVES").split(',')
+      for( i <- 0 to distArchives.length - 1) {
+        setupDistributedCache(distArchives(i), LocalResourceType.ARCHIVE, localResources, 
+          timeStamps(i), fileSizes(i))
+      }
+    }
     
-    logInfo("Prepared Local resources " + locaResources)
-    return locaResources
+    logInfo("Prepared Local resources " + localResources)
+    return localResources
   }
   
   def prepareEnvironment: HashMap[String, String] = {
     val env = new HashMap[String, String]()
 
-    // If log4j present, ensure ours overrides all others
-    if (System.getenv("SPARK_YARN_LOG4J_PATH") != null) {
-      // Which is correct ?
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./log4j.properties")
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./")
-    }
-
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./*")
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$())
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, 
+      Environment.PWD.$() + Path.SEPARATOR + "*")
     Client.populateHadoopClasspath(yarnConf, env)
 
     // allow users to specify some environment variables

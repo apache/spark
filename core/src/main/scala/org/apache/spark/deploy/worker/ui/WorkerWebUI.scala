@@ -105,7 +105,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
     val logText = <node>{Utils.offsetBytes(path, startByte, endByte)}</node>
 
-    val linkToMaster = <p><a href={worker.masterWebUiUrl}>Back to Master</a></p>
+    val linkToMaster = <p><a href={worker.activeMasterWebUiUrl}>Back to Master</a></p>
 
     val range = <span>Bytes {startByte.toString} - {endByte.toString} of {logLength}</span>
 

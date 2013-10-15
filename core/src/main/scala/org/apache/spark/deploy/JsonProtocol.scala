@@ -72,7 +72,8 @@ private[spark] object JsonProtocol {
     ("memory" -> obj.workers.map(_.memory).sum) ~
     ("memoryused" -> obj.workers.map(_.memoryUsed).sum) ~
     ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
-    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo))
+    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
+    ("status" -> obj.status.toString)
   }
 
   def writeWorkerState(obj: WorkerStateResponse) = {

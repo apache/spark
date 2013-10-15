@@ -17,23 +17,19 @@
 
 package org.apache.spark.scheduler.local
 
-import java.io.File
-import java.lang.management.ManagementFactory
-import java.util.concurrent.atomic.AtomicInteger
 import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicInteger
 
-import scala.collection.JavaConversions._
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+
+import akka.actor._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.executor.ExecutorURLClassLoader
+import org.apache.spark.executor.{Executor, ExecutorBackend}
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
-import akka.actor._
-import org.apache.spark.util.Utils
+
 
 /**
  * A FIFO or Fair TaskScheduler implementation that runs tasks locally in a thread pool. Optionally
@@ -41,51 +37,56 @@ import org.apache.spark.util.Utils
  * testing fault recovery.
  */
 
-private[spark]
+private[local]
 case class LocalReviveOffers()
 
-private[spark]
+private[local]
 case class LocalStatusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer)
 
+private[local]
+case class KillTask(taskId: Long)
+
 private[spark]
-class LocalActor(localScheduler: LocalScheduler, var freeCores: Int) extends Actor with Logging {
+class LocalActor(localScheduler: LocalScheduler, private var freeCores: Int)
+  extends Actor with Logging {
+
+  val executor = new Executor("localhost", "localhost", Seq.empty, isLocal = true)
 
   def receive = {
     case LocalReviveOffers =>
       launchTask(localScheduler.resourceOffer(freeCores))
+
     case LocalStatusUpdate(taskId, state, serializeData) =>
-      freeCores += 1
-      localScheduler.statusUpdate(taskId, state, serializeData)
-      launchTask(localScheduler.resourceOffer(freeCores))
+      if (TaskState.isFinished(state)) {
+        freeCores += 1
+        launchTask(localScheduler.resourceOffer(freeCores))
+      }
+
+    case KillTask(taskId) =>
+      executor.killTask(taskId)
   }
 
-  def launchTask(tasks : Seq[TaskDescription]) {
+  private def launchTask(tasks: Seq[TaskDescription]) {
     for (task <- tasks) {
       freeCores -= 1
-      localScheduler.threadPool.submit(new Runnable {
-        def run() {
-          localScheduler.runTask(task.taskId, task.serializedTask)
-        }
-      })
+      executor.launchTask(localScheduler, task.taskId, task.serializedTask)
     }
   }
 }
 
 private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: SparkContext)
   extends TaskScheduler
+  with ExecutorBackend
   with Logging {
 
-  var attemptId = new AtomicInteger(0)
-  var threadPool = Utils.newDaemonFixedThreadPool(threads)
   val env = SparkEnv.get
+  val attemptId = new AtomicInteger
   var listener: TaskSchedulerListener = null
 
   // Application dependencies (added through SparkContext) that we've fetched so far on this node.
   // Each map holds the master's timestamp for the version of that file or JAR we got.
   val currentFiles: HashMap[String, Long] = new HashMap[String, Long]()
   val currentJars: HashMap[String, Long] = new HashMap[String, Long]()
-
-  val classLoader = new ExecutorURLClassLoader(Array(), Thread.currentThread.getContextClassLoader)
 
   var schedulableBuilder: SchedulableBuilder = null
   var rootPool: Pool = null
@@ -124,6 +125,26 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       activeTaskSets(taskSet.id) = manager
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
       localActor ! LocalReviveOffers
+    }
+  }
+
+  override def cancelTasks(stageId: Int): Unit = synchronized {
+    logInfo("Cancelling stage " + stageId)
+    logInfo("Cancelling stage " + activeTaskSets.map(_._2.stageId))
+    activeTaskSets.find(_._2.stageId == stageId).foreach { case (_, tsm) =>
+      // There are two possible cases here:
+      // 1. The task set manager has been created and some tasks have been scheduled.
+      //    In this case, send a kill signal to the executors to kill the task and then abort
+      //    the stage.
+      // 2. The task set manager has been created but no tasks has been scheduled. In this case,
+      //    simply abort the stage.
+      val taskIds = taskSetTaskIds(tsm.taskSet.id)
+      if (taskIds.size > 0) {
+        taskIds.foreach { tid =>
+          localActor ! KillTask(tid)
+        }
+      }
+      tsm.error("Stage %d was cancelled".format(stageId))
     }
   }
 
@@ -166,107 +187,32 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
     }
   }
 
-  def runTask(taskId: Long, bytes: ByteBuffer) {
-    logInfo("Running " + taskId)
-    val info = new TaskInfo(taskId, 0, System.currentTimeMillis(), "local", "local:1", TaskLocality.NODE_LOCAL)
-    // Set the Spark execution environment for the worker thread
-    SparkEnv.set(env)
-    val ser = SparkEnv.get.closureSerializer.newInstance()
-    val objectSer = SparkEnv.get.serializer.newInstance()
-    var attemptedTask: Option[Task[_]] = None   
-    val start = System.currentTimeMillis()
-    var taskStart: Long = 0
-    def getTotalGCTime = ManagementFactory.getGarbageCollectorMXBeans.map(g => g.getCollectionTime).sum
-    val startGCTime = getTotalGCTime
+  override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
+    if (TaskState.isFinished(state)) {
+      synchronized {
+        taskIdToTaskSetId.get(taskId) match {
+          case Some(taskSetId) =>
+            val taskSetManager = activeTaskSets(taskSetId)
+            taskSetTaskIds(taskSetId) -= taskId
 
-    try {
-      Accumulators.clear()
-      Thread.currentThread().setContextClassLoader(classLoader)
-
-      // Serialize and deserialize the task so that accumulators are changed to thread-local ones;
-      // this adds a bit of unnecessary overhead but matches how the Mesos Executor works.
-      val (taskFiles, taskJars, taskBytes) = Task.deserializeWithDependencies(bytes)
-      updateDependencies(taskFiles, taskJars)   // Download any files added with addFile
-      val deserializedTask = ser.deserialize[Task[_]](
-        taskBytes, Thread.currentThread.getContextClassLoader)
-      attemptedTask = Some(deserializedTask)
-      val deserTime = System.currentTimeMillis() - start
-      taskStart = System.currentTimeMillis()
-
-      // Run it
-      val result: Any = deserializedTask.run(taskId)
-
-      // Serialize and deserialize the result to emulate what the Mesos
-      // executor does. This is useful to catch serialization errors early
-      // on in development (so when users move their local Spark programs
-      // to the cluster, they don't get surprised by serialization errors).
-      val serResult = objectSer.serialize(result)
-      deserializedTask.metrics.get.resultSize = serResult.limit()
-      val resultToReturn = objectSer.deserialize[Any](serResult)
-      val accumUpdates = ser.deserialize[collection.mutable.Map[Long, Any]](
-        ser.serialize(Accumulators.values))
-      val serviceTime = System.currentTimeMillis() - taskStart
-      logInfo("Finished " + taskId)
-      deserializedTask.metrics.get.executorRunTime = serviceTime.toInt
-      deserializedTask.metrics.get.jvmGCTime = getTotalGCTime - startGCTime
-      deserializedTask.metrics.get.executorDeserializeTime = deserTime.toInt
-      val taskResult = new DirectTaskResult(
-        result, accumUpdates, deserializedTask.metrics.getOrElse(null))
-      val serializedResult = ser.serialize(taskResult)
-      localActor ! LocalStatusUpdate(taskId, TaskState.FINISHED, serializedResult)
-    } catch {
-      case t: Throwable => {
-        val serviceTime = System.currentTimeMillis() - taskStart
-        val metrics = attemptedTask.flatMap(t => t.metrics)
-        for (m <- metrics) {
-          m.executorRunTime = serviceTime.toInt
-          m.jvmGCTime = getTotalGCTime - startGCTime
-        }
-        val failure = new ExceptionFailure(t.getClass.getName, t.toString, t.getStackTrace, metrics)
-        localActor ! LocalStatusUpdate(taskId, TaskState.FAILED, ser.serialize(failure))
-      }
-    }
-  }
-
-  /**
-   * Download any missing dependencies if we receive a new set of files and JARs from the
-   * SparkContext. Also adds any new JARs we fetched to the class loader.
-   */
-  private def updateDependencies(newFiles: HashMap[String, Long], newJars: HashMap[String, Long]) {
-    synchronized {
-      // Fetch missing dependencies
-      for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
-        logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
-        currentFiles(name) = timestamp
-      }
-
-      for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
-        logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
-        currentJars(name) = timestamp
-        // Add it to our class loader
-        val localName = name.split("/").last
-        val url = new File(SparkFiles.getRootDirectory, localName).toURI.toURL
-        if (!classLoader.getURLs.contains(url)) {
-          logInfo("Adding " + url + " to class loader")
-          classLoader.addURL(url)
+            state match {
+              case TaskState.FINISHED =>
+                taskSetManager.taskEnded(taskId, state, serializedData)
+              case TaskState.FAILED =>
+                taskSetManager.taskFailed(taskId, state, serializedData)
+              case TaskState.KILLED =>
+                taskSetManager.error("Task %d was killed".format(taskId))
+              case _ => {}
+            }
+          case None =>
+            logInfo("Ignoring update from TID " + taskId + " because its task set is gone")
         }
       }
+      localActor ! LocalStatusUpdate(taskId, state, serializedData)
     }
   }
 
-  def statusUpdate(taskId :Long, state: TaskState, serializedData: ByteBuffer) {
-    synchronized {
-      val taskSetId = taskIdToTaskSetId(taskId)
-      val taskSetManager = activeTaskSets(taskSetId)
-      taskSetTaskIds(taskSetId) -= taskId
-      taskSetManager.statusUpdate(taskId, state, serializedData)
-    }
-  }
-
-   override def stop() {
-    threadPool.shutdownNow()
+  override def stop() {
   }
 
   override def defaultParallelism() = threads

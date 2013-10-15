@@ -54,7 +54,7 @@ trait SparkListener {
   /**
    * Called when a task starts
    */
-  def onTaskStart(taskEnd: SparkListenerTaskStart) { }
+  def onTaskStart(taskStart: SparkListenerTaskStart) { }
 
   /**
    * Called when a task ends
