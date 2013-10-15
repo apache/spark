@@ -59,8 +59,6 @@ class RDDIndex[@specialized K: ClassManifest](private[spark] val rdd: RDD[BlockI
 
 
 
-
-
 /**
  * An IndexedRDD[K,V] extends the RDD[(K,V)] by pre-indexing the keys and 
  * organizing the values to enable faster join operations.
@@ -75,10 +73,12 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   extends RDD[(K, V)](index.rdd.context, 
     List(new OneToOneDependency(index.rdd), new OneToOneDependency(valuesRDD)) ) {
 
+
   /**
    * An internal representation which joins the block indices with the values
    */
-  protected[spark] val tuples = new ZippedRDD(index.rdd.context, index.rdd, valuesRDD)
+  protected[spark] val tuples = 
+    new ZippedRDD(index.rdd.context, index.rdd, valuesRDD)
 
 
   /**
@@ -87,14 +87,12 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   override val partitioner = index.rdd.partitioner
   
 
-
-
-
   /**
    * The actual partitions are defined by the tuples.
    */
   override def getPartitions: Array[Partition] = tuples.getPartitions 
   
+
   /**
    * The preferred locations are computed based on the preferred locations of the tuples.
    */
@@ -112,14 +110,14 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   }
 
 
+  /**
+   * The IndexedRDD has its own optimized version of the pairRDDFunctions.  
+   */
   override def pairRDDFunctions[K1, V1](
       implicit t: (K, V) <:< (K1,V1), k: ClassManifest[K1], v: ClassManifest[V1]): 
     PairRDDFunctions[K1, V1] = {
     new IndexedRDDFunctions[K1,V1](this.asInstanceOf[IndexedRDD[K1,V1]])
   }
-
-
- 
 
 
   /**
@@ -144,11 +142,16 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
 
 
 object IndexedRDD {
+
+  /**
+   * Construct an IndexedRDD from a regular RDD[(K,V)] using an existing index
+   * if one is provided.
+   */
   def apply[K: ClassManifest, V: ClassManifest](
     tbl: RDD[(K,V)],
     existingIndex: RDDIndex[K] = null ): IndexedRDD[K, V] = {
 
-    if (existingIndex == null) {
+    if (existingIndex == null) { // If no index was provided
       // Shuffle the table (if necessary)
       val shuffledTbl =
         if (tbl.partitioner.isEmpty) {
@@ -248,7 +251,7 @@ object IndexedRDD {
     new RDDIndex(index)
   }
 
-}
+} // end of object IndexedRDD
 
 
 
