@@ -26,46 +26,20 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val indegrees = star.aggregateNeighbors(
         (vid, edge) => Some(1),
         (a: Int, b: Int) => a + b,
-        EdgeDirection.In).vertices.map(v => (v.id, v.data._2.getOrElse(0)))
-      assert(indegrees.collect().toSet === Set((0, 0), (1, 1), (2, 1), (3, 1)))
+        EdgeDirection.In)// .map((vid, attr) => (vid, attr._2.getOrElse(0)))
+      assert(indegrees.collect().toSet === Set((1, 1), (2, 1), (3, 1))) // (0, 0),
 
       val outdegrees = star.aggregateNeighbors(
         (vid, edge) => Some(1),
         (a: Int, b: Int) => a + b,
-        EdgeDirection.Out).vertices.map(v => (v.id, v.data._2.getOrElse(0)))
-      assert(outdegrees.collect().toSet === Set((0, 3), (1, 0), (2, 0), (3, 0)))
+        EdgeDirection.Out) //.map((vid, attr) => (vid, attr._2.getOrElse(0)))
+      assert(outdegrees.collect().toSet === Set((0, 3))) //, (1, 0), (2, 0), (3, 0)))
 
       val noVertexValues = star.aggregateNeighbors[Int](
         (vid: Vid, edge: EdgeTriplet[Int, Int]) => None,
         (a: Int, b: Int) => throw new Exception("reduceFunc called unexpectedly"),
-        EdgeDirection.In).vertices.map(v => (v.id, v.data._2))
-      assert(noVertexValues.collect().toSet === Set((0, None), (1, None), (2, None), (3, None)))
-    }
-  }
-
-  test("groupEdges") {
-    withSpark(new SparkContext("local", "test")) { sc =>
-      val vertices = sc.parallelize(List(Vertex(6, 1),Vertex(7, 1), Vertex(8,1)))
-      val edges = sc.parallelize(List(
-        Edge(6, 7, 4),
-        Edge(6, 7, 9),
-        Edge(6, 7, 7),
-        Edge(7, 6, 25),
-        Edge(7, 6, 300),
-        Edge(7, 6, 600),
-        Edge(8, 7, 11),
-        Edge(7, 8, 89)))
-
-      val original = Graph(vertices, edges)
-      val grouped = original.groupEdgeTriplets { iter => 
-        iter.map(_.data).sum }
-
-      assert(grouped.edges.count() === 4)
-      assert(grouped.edges.collect().toSet === Set(
-        Edge(6, 7, 20),
-        Edge(7, 6, 925),
-        Edge(8, 7, 11),
-        Edge(7, 8, 89)))
+        EdgeDirection.In)//.map((vid, attr) => (vid, attr))
+      assert(noVertexValues.collect().toSet === Set.empty[(Vid, Int)] ) // ((0, None), (1, None), (2, None), (3, None)))
     }
   }
 
