@@ -19,13 +19,6 @@ object Pregel {
 
     def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertex(vid).id, edge)
 
-    def runProg(id: Vid, data: (VD, Option[A]) ): VD = {
-      val (vData, msg) = data
-      msg match {
-        case Some(m) => vprog(id, vData, m)
-        case None => vData
-      }
-    }
 
     // Receive the first set of messages
     g.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))
