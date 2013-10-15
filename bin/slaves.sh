@@ -46,6 +46,22 @@ bin=`cd "$bin"; pwd`
 # spark-env.sh. Save it here.
 HOSTLIST=$SPARK_SLAVES
 
+#check if conf dir passed as an argument
+if [ "$1" == "--config" ]
+then
+  shift
+  conf_dir=$1
+  if [ ! -d "$conf_dir" ]
+  then
+    echo "$conf_dir is not a valid directory"
+    echo $usage
+    exit 1
+  else
+    export SPARK_CONF_DIR=$conf_dir
+  fi
+  shift
+fi
+
 if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
   . "${SPARK_CONF_DIR}/spark-env.sh"
 fi

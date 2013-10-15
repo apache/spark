@@ -43,6 +43,23 @@ bin=`cd "$bin"; pwd`
 . "$bin/spark-config.sh"
 
 # get arguments
+
+# check if conf dir passed as an argument
+if [ "$1" == "--config" ]
+then
+  shift
+  conf_dir=$1
+  if [ ! -d "$conf_dir" ]
+  then
+    echo "$conf_dir is not a valid directory"
+    echo "FOUL :"$usage
+    exit 1
+  else
+    export SPARK_CONF_DIR=$conf_dir
+  fi
+  shift
+fi
+
 startStop=$1
 shift
 command=$1
