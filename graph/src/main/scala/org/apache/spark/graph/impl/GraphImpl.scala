@@ -72,6 +72,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     @transient val eTable: IndexedRDD[Pid, EdgePartition[ED]])
   extends Graph[VD, ED] {
 
+//  def this() = this(null,null,null)
+
 
   /**
    * The vTableReplicated is a version of the vertex data after it is 
@@ -84,24 +86,28 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
 
   /** Return a RDD of vertices. */
-  override val vertices: RDD[(Vid, VD)] = vTable
+  @transient override val vertices: RDD[(Vid, VD)] = vTable
 
 
   /** Return a RDD of edges. */
-  override val edges: RDD[Edge[ED]] = {
+  @transient override val edges: RDD[Edge[ED]] = {
     eTable.mapPartitions { iter => iter.next()._2.iterator }
   }
 
 
   /** Return a RDD that brings edges with its source and destination vertices together. */
-  override val triplets: RDD[EdgeTriplet[VD, ED]] = 
-    vTableReplicated.join(eTable).mapPartitions( iter => {
+  @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
+    val iterFun = (iter: Iterator[(Pid, (VertexHashMap[VD], EdgePartition[ED]))]) => {
       val (pid, (vmap, edgePartition)) = iter.next()
       //assert(iter.hasNext == false)
       // Return an iterator that looks up the hash map to find matching 
       // vertices for each edge.
       new EdgeTripletIterator(vmap, edgePartition)
-    }) // end of map partition
+    }
+    ClosureCleaner.clean(iterFun) 
+    vTableReplicated.join(eTable).mapPartitions( iterFun ) // end of map partition
+  }
+
 
 
 
