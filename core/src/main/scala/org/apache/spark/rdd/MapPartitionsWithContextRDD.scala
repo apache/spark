@@ -15,25 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.rdd
 
-import java.util.Properties
+import org.apache.spark.{Partition, TaskContext}
+
 
 /**
- * A set of tasks submitted together to the low-level TaskScheduler, usually representing
- * missing partitions of a particular stage.
+ * A variant of the MapPartitionsRDD that passes the TaskContext into the closure. From the
+ * TaskContext, the closure can either get access to the interruptible flag or get the index
+ * of the partition in the RDD.
  */
-private[spark] class TaskSet(
-    val tasks: Array[Task[_]],
-    val stageId: Int,
-    val attempt: Int,
-    val priority: Int,
-    val properties: Properties) {
-    val id: String = stageId + "." + attempt
+private[spark]
+class MapPartitionsWithContextRDD[U: ClassManifest, T: ClassManifest](
+    prev: RDD[T],
+    f: (TaskContext, Iterator[T]) => Iterator[U],
+    preservesPartitioning: Boolean
+  ) extends RDD[U](prev) {
 
-  def kill() {
-    tasks.foreach(_.kill())
-  }
+  override def getPartitions: Array[Partition] = firstParent[T].partitions
 
-  override def toString: String = "TaskSet " + id
+  override val partitioner = if (preservesPartitioning) prev.partitioner else None
+
+  override def compute(split: Partition, context: TaskContext) =
+    f(context, firstParent[T].iterator(split, context))
 }
