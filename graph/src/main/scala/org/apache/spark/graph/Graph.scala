@@ -19,13 +19,6 @@ import org.apache.spark.util.ClosureCleaner
  */
 abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
-
-  /**
-   * Compute statistics describing the graph representation.
-   */
-  def statistics: Map[String, Any]
-
-
   /**
    * Get the vertices and their data.
    *
@@ -35,7 +28,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @see Vertex for the vertex type.
    *
    */
-  def vertices: RDD[(Vid,VD)]
+  val vertices: RDD[(Vid,VD)]
 
   /**
    * Get the Edges and their data as an RDD.  The entries in the RDD contain
@@ -50,7 +43,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @todo Should edges return 3 tuples instead of Edge objects?  In this case
    * we could rename EdgeTriplet to Edge?
    */
-  def edges: RDD[Edge[ED]]
+  val edges: RDD[Edge[ED]]
 
   /**
    * Get the edges with the vertex data associated with the adjacent pair of
@@ -70,7 +63,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @see edges() If only the edge data and adjacent vertex ids are required.
    *
    */
-  def triplets: RDD[EdgeTriplet[VD, ED]]
+  val triplets: RDD[EdgeTriplet[VD, ED]]
 
   /**
    * Return a graph that is cached when first created. This is used to pin a
@@ -80,6 +73,14 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @see RDD.cache() for a more detailed explanation of caching.
    */
   def cache(): Graph[VD, ED]
+
+
+  /**
+   * Compute statistics describing the graph representation.
+   */
+  def statistics: Map[String, Any]
+
+
 
   /**
    * Construct a new graph where each vertex value has been transformed by the

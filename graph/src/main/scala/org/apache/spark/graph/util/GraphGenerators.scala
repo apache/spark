@@ -13,7 +13,6 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.graph._
 import org.apache.spark.graph.Graph
-import org.apache.spark.graph.Vertex
 import org.apache.spark.graph.Edge
 import org.apache.spark.graph.impl.GraphImpl
 

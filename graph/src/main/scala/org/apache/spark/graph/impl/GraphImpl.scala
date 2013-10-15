@@ -19,6 +19,49 @@ import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
 import org.apache.spark.graph.impl.MessageToPartitionRDDFunctions._
 
+/**
+ * The Iterator type returned when constructing edge triplets
+ */
+class EdgeTripletIterator[VD: ClassManifest, ED: ClassManifest](
+  val vmap: VertexHashMap[VD],
+  val edgePartition: EdgePartition[ED]) extends Iterator[EdgeTriplet[VD, ED]] {
+
+  private var pos = 0
+  private val et = new EdgeTriplet[VD, ED]
+  
+  override def hasNext: Boolean = pos < edgePartition.size
+  override def next() = {
+    et.srcId = edgePartition.srcIds(pos)
+    // assert(vmap.containsKey(e.src.id))
+    et.srcAttr = vmap.get(et.srcId)
+    et.dstId = edgePartition.dstIds(pos)
+    // assert(vmap.containsKey(e.dst.id))
+    et.dstAttr = vmap.get(et.dstId)
+    //println("Iter called: " + pos)
+    et.attr = edgePartition.data(pos)
+    pos += 1
+    et
+  }
+
+  override def toList: List[EdgeTriplet[VD, ED]] = {
+    val lb = new mutable.ListBuffer[EdgeTriplet[VD,ED]]
+    val currentEdge = new EdgeTriplet[VD, ED]
+    for (i <- (0 until edgePartition.size)) {
+      currentEdge.srcId = edgePartition.srcIds(i)
+      // assert(vmap.containsKey(e.src.id))
+      currentEdge.srcAttr = vmap.get(currentEdge.srcId)
+      currentEdge.dstId = edgePartition.dstIds(i)
+      // assert(vmap.containsKey(e.dst.id))
+      currentEdge.dstAttr = vmap.get(currentEdge.dstId)
+      currentEdge.attr = edgePartition.data(i)
+      lb += currentEdge
+    }
+    lb.toList
+  }
+} // end of Edge Triplet Iterator
+
+
+
 
 /**
  * A Graph RDD that supports computation on graphs.
@@ -39,6 +82,39 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
 
 
+
+  /** Return a RDD of vertices. */
+  override val vertices: RDD[(Vid, VD)] = vTable
+
+
+  /** Return a RDD of edges. */
+  override val edges: RDD[Edge[ED]] = {
+    eTable.mapPartitions { iter => iter.next()._2.iterator }
+  }
+
+
+  /** Return a RDD that brings edges with its source and destination vertices together. */
+  override val triplets: RDD[EdgeTriplet[VD, ED]] = 
+    vTableReplicated.join(eTable).mapPartitions( iter => {
+      val (pid, (vmap, edgePartition)) = iter.next()
+      //assert(iter.hasNext == false)
+      // Return an iterator that looks up the hash map to find matching 
+      // vertices for each edge.
+      new EdgeTripletIterator(vmap, edgePartition)
+    }) // end of map partition
+
+
+
+  override def cache(): Graph[VD, ED] = {
+    eTable.cache()
+    vid2pid.cache()
+    vTable.cache()
+    /** @todo should we cache the replicated data? */
+    vTableReplicated.cache()
+    this
+  }
+
+
   override def statistics: Map[String, Any] = {
     val numVertices = this.numVertices
     val numEdges = this.numEdges
@@ -55,80 +131,11 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
 
-
-
-
-  override def cache(): Graph[VD, ED] = {
-    eTable.cache()
-    vid2pid.cache()
-    vTable.cache()
-    // @todo: should we cache the replicated data?
-    vTableReplicated.cache()
-    this
-  }
-
-
-
   override def reverse: Graph[VD, ED] = {
     val etable = eTable.mapValues( _.reverse ).asInstanceOf[IndexedRDD[Pid, EdgePartition[ED]]] 
     new GraphImpl(vTable, vid2pid, etable)
   }
 
-  /** Return a RDD of vertices. */
-  override def vertices: RDD[(Vid, VD)] = vTable
-
-
-  /** Return a RDD of edges. */
-  override def edges: RDD[Edge[ED]] = {
-    eTable.mapPartitions { iter => iter.next()._2.iterator }
-  }
-
-  /** Return a RDD that brings edges with its source and destination vertices together. */
-  override def triplets: RDD[EdgeTriplet[VD, ED]] = {
-    vTableReplicated.join(eTable)
-    .mapPartitions{ iter => 
-      val (pid, (vmap, edgePartition)) = iter.next()
-      assert(iter.hasNext == false)
-      // Return an iterator that looks up the hash map to find matching 
-      // vertices for each edge.
-      new Iterator[EdgeTriplet[VD, ED]] {
-        private var pos = 0
-        private val et = new EdgeTriplet[VD, ED]
-        
-        override def hasNext: Boolean = pos < edgePartition.size
-        override def next() = {
-          et.srcId = edgePartition.srcIds(pos)
-          // assert(vmap.containsKey(e.src.id))
-          et.srcAttr = vmap.get(et.srcId)
-          et.dstId = edgePartition.dstIds(pos)
-          // assert(vmap.containsKey(e.dst.id))
-          et.dstAttr = vmap.get(et.dstId)
-          //println("Iter called: " + pos)
-          et.attr = edgePartition.data(pos)
-          pos += 1
-          et
-        }
-
-        override def toList: List[EdgeTriplet[VD, ED]] = {
-          val lb = new mutable.ListBuffer[EdgeTriplet[VD,ED]]
-          for (i <- (0 until edgePartition.size)) {
-            val currentEdge = new EdgeTriplet[VD, ED]
-            currentEdge.srcId = edgePartition.srcIds(i)
-            // assert(vmap.containsKey(e.src.id))
-            currentEdge.srcAttr = vmap.get(currentEdge.srcId)
-
-            currentEdge.dstId = edgePartition.dstIds(i)
-            // assert(vmap.containsKey(e.dst.id))
-            currentEdge.dstAttr = vmap.get(currentEdge.dstId)
-
-            currentEdge.attr = edgePartition.data(i)
-            lb += currentEdge
-          }
-          lb.toList
-        }
-      } // end of iterator
-    } // end of map partition
-  } // end of triplets 
 
   override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] = {
     val newVTable = vTable.mapValuesWithKeys((vid, data) => f(vid, data))
@@ -169,9 +176,10 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   override def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true), 
     vpred: (Vid, VD) => Boolean = ((a,b) => true) ): Graph[VD, ED] = {
 
-    /// @todo: The following code behaves deterministically on each
-    /// vertex predicate but uses additional space.  Should we swithc to
-    /// this version
+    /** @todo The following code behaves deterministically on each
+     * vertex predicate but uses additional space.  Should we swithc to
+     * this version
+     */
     // val predGraph = mapVertices(v => (v.data, vpred(v)))
     // val newETable = predGraph.triplets.filter(t => 
     //   if(v.src.data._2 && v.dst.data._2) {
@@ -366,7 +374,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
 object GraphImpl {
 
-def apply[VD: ClassManifest, ED: ClassManifest](
+  def apply[VD: ClassManifest, ED: ClassManifest](
     vertices: RDD[(Vid, VD)], edges: RDD[Edge[ED]]): 
   GraphImpl[VD,ED] = {
 
