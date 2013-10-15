@@ -68,7 +68,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
-  def combineByKey[C](createCombiner: V => C,
+  def combineByKey[C: ClassManifest](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
@@ -102,7 +102,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
   /**
    * Simplified version of combineByKey that hash-partitions the output RDD.
    */
-  def combineByKey[C](createCombiner: V => C,
+  def combineByKey[C: ClassManifest](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       numPartitions: Int): RDD[(K, C)] = {
@@ -247,7 +247,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Uses the given Partitioner to partition the output RDD.
    */
-  def join[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
+  def join[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, W))] = {
     this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
       for (v <- vs.iterator; w <- ws.iterator) yield (v, w)
     }
@@ -259,7 +259,9 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
    * partition the output RDD.
    */
-  def leftOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
+
+  def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): 
+  RDD[(K, (V, Option[W]))] = {
     this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
       if (ws.isEmpty) {
         vs.iterator.map(v => (v, None))
@@ -275,7 +277,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair (k, (None, w)) if no elements in `this` have key k. Uses the given Partitioner to
    * partition the output RDD.
    */
-  def rightOuterJoin[W](other: RDD[(K, W)], partitioner: Partitioner)
+  def rightOuterJoin[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner)
       : RDD[(K, (Option[V], W))] = {
     this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
       if (vs.isEmpty) {
@@ -290,7 +292,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
-  def combineByKey[C](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
+  def combineByKey[C: ClassManifest](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
       : RDD[(K, C)] = {
     combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
   }
@@ -318,7 +320,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Performs a hash join across the cluster.
    */
-  def join[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
+  def join[W: ClassManifest](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
     join(other, defaultPartitioner(self, other))
   }
 
@@ -327,7 +329,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Performs a hash join across the cluster.
    */
-  def join[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, W))] = {
+  def join[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, W))] = {
     join(other, new HashPartitioner(numPartitions))
   }
 
@@ -337,7 +339,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
    * using the existing partitioner/parallelism level.
    */
-  def leftOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (V, Option[W]))] = {
+  def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)]): RDD[(K, (V, Option[W]))] = {
     leftOuterJoin(other, defaultPartitioner(self, other))
   }
 
@@ -347,7 +349,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair (k, (v, None)) if no elements in `other` have key k. Hash-partitions the output
    * into `numPartitions` partitions.
    */
-  def leftOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, Option[W]))] = {
+  def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (V, Option[W]))] = {
     leftOuterJoin(other, new HashPartitioner(numPartitions))
   }
 
@@ -357,7 +359,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
    * RDD using the existing partitioner/parallelism level.
    */
-  def rightOuterJoin[W](other: RDD[(K, W)]): RDD[(K, (Option[V], W))] = {
+  def rightOuterJoin[W: ClassManifest](other: RDD[(K, W)]): RDD[(K, (Option[V], W))] = {
     rightOuterJoin(other, defaultPartitioner(self, other))
   }
 
@@ -367,7 +369,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair (k, (None, w)) if no elements in `this` have key k. Hash-partitions the resulting
    * RDD into the given number of partitions.
    */
-  def rightOuterJoin[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Option[V], W))] = {
+  def rightOuterJoin[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Option[V], W))] = {
     rightOuterJoin(other, new HashPartitioner(numPartitions))
   }
 
@@ -386,16 +388,25 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
    */
-  def mapValues[U](f: V => U): RDD[(K, U)] = {
+  def mapValues[U: ClassManifest](f: V => U): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new MappedValuesRDD(self, cleanF)
+  }
+
+
+  /**
+   * Pass each value in the key-value pair RDD through a map function without changing the keys;
+   * this also retains the original RDD's partitioning.
+   */
+  def mapValuesWithKeys[U: ClassManifest](f: (K, V) => U): RDD[(K, U)] = {
+    self.map{ case (k,v) => (k, f(k,v)) }
   }
 
   /**
    * Pass each value in the key-value pair RDD through a flatMap function without changing the
    * keys; this also retains the original RDD's partitioning.
    */
-  def flatMapValues[U](f: V => TraversableOnce[U]): RDD[(K, U)] = {
+  def flatMapValues[U: ClassManifest](f: V => TraversableOnce[U]): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new FlatMappedValuesRDD(self, cleanF)
   }
@@ -404,7 +415,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (Seq[V], Seq[W]))] = {
+  def cogroup[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (Seq[V], Seq[W]))] = {
     if (partitioner.isInstanceOf[HashPartitioner] && getKeyClass().isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
@@ -419,7 +430,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
-  def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
+  def cogroup[W1: ClassManifest, W2: ClassManifest](other1: RDD[(K, W1)], other2: RDD[(K, W2)], partitioner: Partitioner)
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
     if (partitioner.isInstanceOf[HashPartitioner] && getKeyClass().isArray) {
       throw new SparkException("Default partitioner cannot partition array keys.")
@@ -435,7 +446,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
+  def cogroup[W: ClassManifest](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
     cogroup(other, defaultPartitioner(self, other))
   }
 
@@ -443,7 +454,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
-  def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
+  def cogroup[W1: ClassManifest, W2: ClassManifest](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
   }
@@ -452,7 +463,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Seq[V], Seq[W]))] = {
+  def cogroup[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): RDD[(K, (Seq[V], Seq[W]))] = {
     cogroup(other, new HashPartitioner(numPartitions))
   }
 
@@ -460,18 +471,18 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
-  def cogroup[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)], numPartitions: Int)
+  def cogroup[W1: ClassManifest, W2: ClassManifest](other1: RDD[(K, W1)], other2: RDD[(K, W2)], numPartitions: Int)
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
     cogroup(other1, other2, new HashPartitioner(numPartitions))
   }
 
   /** Alias for cogroup. */
-  def groupWith[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
+  def groupWith[W: ClassManifest](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
     cogroup(other, defaultPartitioner(self, other))
   }
 
   /** Alias for cogroup. */
-  def groupWith[W1, W2](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
+  def groupWith[W1: ClassManifest, W2: ClassManifest](other1: RDD[(K, W1)], other2: RDD[(K, W2)])
       : RDD[(K, (Seq[V], Seq[W1], Seq[W2]))] = {
     cogroup(other1, other2, defaultPartitioner(self, other1, other2))
   }
@@ -691,6 +702,17 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * Return an RDD with the values of each tuple.
    */
   def values: RDD[V] = self.map(_._2)
+
+
+  def indexed(numPartitions: Int): IndexedRDD[K,V] = 
+    IndexedRDD(self.partitionBy(new HashPartitioner(numPartitions)))
+
+  def indexed(partitioner: Partitioner): IndexedRDD[K,V] = 
+    IndexedRDD(self.partitionBy(partitioner))
+
+
+  def indexed(existingIndex: RDDIndex[K] = null): IndexedRDD[K,V] = 
+    IndexedRDD(self, existingIndex)
 
   private[spark] def getKeyClass() = implicitly[ClassManifest[K]].erasure
 

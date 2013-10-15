@@ -792,6 +792,23 @@ abstract class RDD[T: ClassManifest](
     return buf.toArray
   }
 
+
+
+  /**
+   * For RDD[(K,V)] this function returns a pair-functions object for this RDD
+   */ 
+  def pairRDDFunctions[K, V](
+      implicit t: T <:< (K, V), k: ClassManifest[K], v: ClassManifest[V]): 
+      PairRDDFunctions[K, V] = {
+    new PairRDDFunctions(this.asInstanceOf[RDD[(K,V)]])
+  }
+
+
+  def makeIndex(partitioner: Option[Partitioner] = None): RDDIndex[T] = 
+    IndexedRDD.makeIndex(this, partitioner)
+
+
+
   /**
    * Return the first element in this RDD.
    */
