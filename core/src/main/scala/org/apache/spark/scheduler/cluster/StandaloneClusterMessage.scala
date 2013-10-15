@@ -31,6 +31,8 @@ private[spark] object StandaloneClusterMessages {
   // Driver to executors
   case class LaunchTask(task: TaskDescription) extends StandaloneClusterMessage
 
+  case class KillTask(taskId: Long, executor: String) extends StandaloneClusterMessage
+
   case class RegisteredExecutor(sparkProperties: Seq[(String, String)])
     extends StandaloneClusterMessage
 

@@ -17,21 +17,30 @@
 
 package org.apache.spark
 
-import executor.TaskMetrics
 import scala.collection.mutable.ArrayBuffer
 
+import org.apache.spark.executor.TaskMetrics
+
 class TaskContext(
-  val stageId: Int,
-  val splitId: Int,
+  private[spark] val stageId: Int,
+  val partitionId: Int,
   val attemptId: Long,
   val runningLocally: Boolean = false,
-  val taskMetrics: TaskMetrics = TaskMetrics.empty()
+  @volatile var interrupted: Boolean = false,
+  private[spark] val taskMetrics: TaskMetrics = TaskMetrics.empty()
 ) extends Serializable {
 
-  @transient val onCompleteCallbacks = new ArrayBuffer[() => Unit]
+  @deprecated("use partitionId", "0.8.1")
+  def splitId = partitionId
 
-  // Add a callback function to be executed on task completion. An example use
-  // is for HadoopRDD to register a callback to close the input stream.
+  // List of callback functions to execute when the task completes.
+  @transient private val onCompleteCallbacks = new ArrayBuffer[() => Unit]
+
+  /**
+   * Add a callback function to be executed on task completion. An example use
+   * is for HadoopRDD to register a callback to close the input stream.
+   * @param f Callback function.
+   */
   def addOnCompleteCallback(f: () => Unit) {
     onCompleteCallbacks += f
   }

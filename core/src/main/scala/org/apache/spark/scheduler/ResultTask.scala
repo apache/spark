@@ -38,17 +38,17 @@ private[spark] object ResultTask {
     synchronized {
       val old = serializedInfoCache.get(stageId).orNull
       if (old != null) {
-        return old
+        old
       } else {
         val out = new ByteArrayOutputStream
-        val ser = SparkEnv.get.closureSerializer.newInstance
+        val ser = SparkEnv.get.closureSerializer.newInstance()
         val objOut = ser.serializeStream(new GZIPOutputStream(out))
         objOut.writeObject(rdd)
         objOut.writeObject(func)
         objOut.close()
         val bytes = out.toByteArray
         serializedInfoCache.put(stageId, bytes)
-        return bytes
+        bytes
       }
     }
   }
@@ -56,11 +56,11 @@ private[spark] object ResultTask {
   def deserializeInfo(stageId: Int, bytes: Array[Byte]): (RDD[_], (TaskContext, Iterator[_]) => _) = {
     val loader = Thread.currentThread.getContextClassLoader
     val in = new GZIPInputStream(new ByteArrayInputStream(bytes))
-    val ser = SparkEnv.get.closureSerializer.newInstance
+    val ser = SparkEnv.get.closureSerializer.newInstance()
     val objIn = ser.deserializeStream(in)
     val rdd = objIn.readObject().asInstanceOf[RDD[_]]
     val func = objIn.readObject().asInstanceOf[(TaskContext, Iterator[_]) => _]
-    return (rdd, func)
+    (rdd, func)
   }
 
   def clearCache() {
@@ -71,29 +71,37 @@ private[spark] object ResultTask {
 }
 
 
+/**
+ * A task that sends back the output to the driver application.
+ *
+ * See [[org.apache.spark.scheduler.Task]] for more information.
+ *
+ * @param stageId id of the stage this task belongs to
+ * @param rdd input to func
+ * @param func a function to apply on a partition of the RDD
+ * @param _partitionId index of the number in the RDD
+ * @param locs preferred task execution locations for locality scheduling
+ * @param outputId index of the task in this job (a job can launch tasks on only a subset of the
+ *                 input RDD's partitions).
+ */
 private[spark] class ResultTask[T, U](
     stageId: Int,
     var rdd: RDD[T],
     var func: (TaskContext, Iterator[T]) => U,
-    var partition: Int,
+    _partitionId: Int,
     @transient locs: Seq[TaskLocation],
     var outputId: Int)
-  extends Task[U](stageId) with Externalizable {
+  extends Task[U](stageId, _partitionId) with Externalizable {
 
   def this() = this(0, null, null, 0, null, 0)
 
-  var split = if (rdd == null) {
-    null
-  } else {
-    rdd.partitions(partition)
-  }
+  var split = if (rdd == null) null else rdd.partitions(partitionId)
 
   @transient private val preferredLocs: Seq[TaskLocation] = {
     if (locs == null) Nil else locs.toSet.toSeq
   }
 
-  override def run(attemptId: Long): U = {
-    val context = new TaskContext(stageId, partition, attemptId, runningLocally = false)
+  override def runTask(context: TaskContext): U = {
     metrics = Some(context.taskMetrics)
     try {
       func(context, rdd.iterator(split, context))
@@ -104,17 +112,17 @@ private[spark] class ResultTask[T, U](
 
   override def preferredLocations: Seq[TaskLocation] = preferredLocs
 
-  override def toString = "ResultTask(" + stageId + ", " + partition + ")"
+  override def toString = "ResultTask(" + stageId + ", " + partitionId + ")"
 
   override def writeExternal(out: ObjectOutput) {
     RDDCheckpointData.synchronized {
-      split = rdd.partitions(partition)
+      split = rdd.partitions(partitionId)
       out.writeInt(stageId)
       val bytes = ResultTask.serializeInfo(
         stageId, rdd, func.asInstanceOf[(TaskContext, Iterator[_]) => _])
       out.writeInt(bytes.length)
       out.write(bytes)
-      out.writeInt(partition)
+      out.writeInt(partitionId)
       out.writeInt(outputId)
       out.writeLong(epoch)
       out.writeObject(split)
@@ -129,7 +137,7 @@ private[spark] class ResultTask[T, U](
     val (rdd_, func_) = ResultTask.deserializeInfo(stageId, bytes)
     rdd = rdd_.asInstanceOf[RDD[T]]
     func = func_.asInstanceOf[(TaskContext, Iterator[T]) => U]
-    partition = in.readInt()
+    partitionId = in.readInt()
     outputId = in.readInt()
     epoch = in.readLong()
     split = in.readObject().asInstanceOf[Partition]

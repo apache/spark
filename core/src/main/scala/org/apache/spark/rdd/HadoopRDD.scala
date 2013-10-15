@@ -27,8 +27,7 @@ import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
 import org.apache.hadoop.util.ReflectionUtils
 
-import org.apache.spark.{Logging, Partition, SerializableWritable, SparkContext, SparkEnv,
-  TaskContext}
+import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.util.NextIterator
 import org.apache.hadoop.conf.{Configuration, Configurable}
@@ -39,7 +38,7 @@ import org.apache.hadoop.conf.{Configuration, Configurable}
  */
 private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSplit)
   extends Partition {
-  
+
   val inputSplit = new SerializableWritable[InputSplit](s)
 
   override def hashCode(): Int = (41 * (41 + rddId) + idx).toInt
@@ -144,38 +143,41 @@ class HadoopRDD[K, V](
     array
   }
 
-  override def compute(theSplit: Partition, context: TaskContext) = new NextIterator[(K, V)] {
-    val split = theSplit.asInstanceOf[HadoopPartition]
-    logInfo("Input split: " + split.inputSplit)
-    var reader: RecordReader[K, V] = null
+  override def compute(theSplit: Partition, context: TaskContext) = {
+    val iter = new NextIterator[(K, V)] {
+      val split = theSplit.asInstanceOf[HadoopPartition]
+      logInfo("Input split: " + split.inputSplit)
+      var reader: RecordReader[K, V] = null
 
-    val jobConf = getJobConf()
-    val inputFormat = getInputFormat(jobConf)
-    reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
+      val jobConf = getJobConf()
+      val inputFormat = getInputFormat(jobConf)
+      reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
-    // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback{ () => closeIfNeeded() }
+      // Register an on-task-completion callback to close the input stream.
+      context.addOnCompleteCallback{ () => closeIfNeeded() }
 
-    val key: K = reader.createKey()
-    val value: V = reader.createValue()
+      val key: K = reader.createKey()
+      val value: V = reader.createValue()
 
-    override def getNext() = {
-      try {
-        finished = !reader.next(key, value)
-      } catch {
-        case eof: EOFException =>
-          finished = true
+      override def getNext() = {
+        try {
+          finished = !reader.next(key, value)
+        } catch {
+          case eof: EOFException =>
+            finished = true
+        }
+        (key, value)
       }
-      (key, value)
-    }
 
-    override def close() {
-      try {
-        reader.close()
-      } catch {
-        case e: Exception => logWarning("Exception in RecordReader.close()", e)
+      override def close() {
+        try {
+          reader.close()
+        } catch {
+          case e: Exception => logWarning("Exception in RecordReader.close()", e)
+        }
       }
     }
+    new InterruptibleIterator[(K, V)](context, iter)
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {

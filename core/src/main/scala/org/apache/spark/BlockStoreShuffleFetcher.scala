@@ -28,7 +28,11 @@ import org.apache.spark.util.CompletionIterator
 
 private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Logging {
 
-  override def fetch[T](shuffleId: Int, reduceId: Int, metrics: TaskMetrics, serializer: Serializer)
+  override def fetch[T](
+      shuffleId: Int,
+      reduceId: Int,
+      context: TaskContext,
+      serializer: Serializer)
     : Iterator[T] =
   {
 
@@ -73,7 +77,7 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
     val blockFetcherItr = blockManager.getMultiple(blocksByAddress, serializer)
     val itr = blockFetcherItr.flatMap(unpackBlock)
 
-    CompletionIterator[T, Iterator[T]](itr, {
+    val completionIter = CompletionIterator[T, Iterator[T]](itr, {
       val shuffleMetrics = new ShuffleReadMetrics
       shuffleMetrics.shuffleFinishTime = System.currentTimeMillis
       shuffleMetrics.remoteFetchTime = blockFetcherItr.remoteFetchTime
@@ -82,7 +86,9 @@ private[spark] class BlockStoreShuffleFetcher extends ShuffleFetcher with Loggin
       shuffleMetrics.totalBlocksFetched = blockFetcherItr.totalBlocks
       shuffleMetrics.localBlocksFetched = blockFetcherItr.numLocalBlocks
       shuffleMetrics.remoteBlocksFetched = blockFetcherItr.numRemoteBlocks
-      metrics.shuffleReadMetrics = Some(shuffleMetrics)
+      context.taskMetrics.shuffleReadMetrics = Some(shuffleMetrics)
     })
+
+    new InterruptibleIterator[T](context, completionIter)
   }
 }
