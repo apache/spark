@@ -22,17 +22,16 @@ import scala.collection.mutable.{Map, HashMap}
 import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 
-import org.apache.spark.FetchFailed
 import org.apache.spark.LocalSparkContext
 import org.apache.spark.MapOutputTracker
-import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 import org.apache.spark.Partition
 import org.apache.spark.TaskContext
 import org.apache.spark.{Dependency, ShuffleDependency, OneToOneDependency}
-import org.apache.spark.{Success, TaskEndReason}
-import org.apache.spark.storage.{BlockManagerId, BlockManagerMaster}
+import org.apache.spark.{FetchFailed, Success, TaskEndReason}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 
 /**
  * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler
@@ -76,15 +75,10 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
   // stub out BlockManagerMaster.getLocations to use our cacheLocations
   val blockManagerMaster = new BlockManagerMaster(null) {
-      override def getLocations(blockIds: Array[String]): Seq[Seq[BlockManagerId]] = {
-        blockIds.map { name =>
-          val pieces = name.split("_")
-          if (pieces(0) == "rdd") {
-            val key = pieces(1).toInt -> pieces(2).toInt
-            cacheLocations.getOrElse(key, Seq())
-          } else {
-            Seq()
-          }
+      override def getLocations(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
+        blockIds.map {
+          _.asRDDId.map(id => (id.rddId -> id.splitIndex)).flatMap(key => cacheLocations.get(key)).
+            getOrElse(Seq())
         }.toSeq
       }
       override def removeExecutor(execId: String) {

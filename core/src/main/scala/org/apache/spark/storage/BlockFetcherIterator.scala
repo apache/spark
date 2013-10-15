@@ -47,7 +47,7 @@ import org.apache.spark.util.Utils
  */
 
 private[storage]
-trait BlockFetcherIterator extends Iterator[(String, Option[Iterator[Any]])]
+trait BlockFetcherIterator extends Iterator[(BlockId, Option[Iterator[Any]])]
   with Logging with BlockFetchTracker {
   def initialize()
 }
@@ -57,20 +57,20 @@ private[storage]
 object BlockFetcherIterator {
 
   // A request to fetch one or more blocks, complete with their sizes
-  class FetchRequest(val address: BlockManagerId, val blocks: Seq[(String, Long)]) {
+  class FetchRequest(val address: BlockManagerId, val blocks: Seq[(BlockId, Long)]) {
     val size = blocks.map(_._2).sum
   }
 
   // A result of a fetch. Includes the block ID, size in bytes, and a function to deserialize
   // the block (since we want all deserializaton to happen in the calling thread); can also
   // represent a fetch failure if size == -1.
-  class FetchResult(val blockId: String, val size: Long, val deserialize: () => Iterator[Any]) {
+  class FetchResult(val blockId: BlockId, val size: Long, val deserialize: () => Iterator[Any]) {
     def failed: Boolean = size == -1
   }
 
   class BasicBlockFetcherIterator(
       private val blockManager: BlockManager,
-      val blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])],
+      val blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
       serializer: Serializer)
     extends BlockFetcherIterator {
 
@@ -92,12 +92,12 @@ object BlockFetcherIterator {
     // This represents the number of local blocks, also counting zero-sized blocks
     private var numLocal = 0
     // BlockIds for local blocks that need to be fetched. Excludes zero-sized blocks
-    protected val localBlocksToFetch = new ArrayBuffer[String]()
+    protected val localBlocksToFetch = new ArrayBuffer[BlockId]()
 
     // This represents the number of remote blocks, also counting zero-sized blocks
     private var numRemote = 0
     // BlockIds for remote blocks that need to be fetched. Excludes zero-sized blocks
-    protected val remoteBlocksToFetch = new HashSet[String]()
+    protected val remoteBlocksToFetch = new HashSet[BlockId]()
 
     // A queue to hold our results.
     protected val results = new LinkedBlockingQueue[FetchResult]
@@ -167,7 +167,7 @@ object BlockFetcherIterator {
           logInfo("maxBytesInFlight: " + maxBytesInFlight + ", minRequest: " + minRequestSize)
           val iterator = blockInfos.iterator
           var curRequestSize = 0L
-          var curBlocks = new ArrayBuffer[(String, Long)]
+          var curBlocks = new ArrayBuffer[(BlockId, Long)]
           while (iterator.hasNext) {
             val (blockId, size) = iterator.next()
             // Skip empty blocks
@@ -183,7 +183,7 @@ object BlockFetcherIterator {
               // Add this FetchRequest
               remoteRequests += new FetchRequest(address, curBlocks)
               curRequestSize = 0
-              curBlocks = new ArrayBuffer[(String, Long)]
+              curBlocks = new ArrayBuffer[(BlockId, Long)]
             }
           }
           // Add in the final request
@@ -241,7 +241,7 @@ object BlockFetcherIterator {
 
     override def hasNext: Boolean = resultsGotten < _numBlocksToFetch
 
-    override def next(): (String, Option[Iterator[Any]]) = {
+    override def next(): (BlockId, Option[Iterator[Any]]) = {
       resultsGotten += 1
       val startFetchWait = System.currentTimeMillis()
       val result = results.take()
@@ -267,7 +267,7 @@ object BlockFetcherIterator {
 
   class NettyBlockFetcherIterator(
       blockManager: BlockManager,
-      blocksByAddress: Seq[(BlockManagerId, Seq[(String, Long)])],
+      blocksByAddress: Seq[(BlockManagerId, Seq[(BlockId, Long)])],
       serializer: Serializer)
     extends BasicBlockFetcherIterator(blockManager, blocksByAddress, serializer) {
 
@@ -303,7 +303,7 @@ object BlockFetcherIterator {
 
     override protected def sendRequest(req: FetchRequest) {
 
-      def putResult(blockId: String, blockSize: Long, blockData: ByteBuf) {
+      def putResult(blockId: BlockId, blockSize: Long, blockData: ByteBuf) {
         val fetchResult = new FetchResult(blockId, blockSize,
           () => dataDeserialize(blockId, blockData.nioBuffer, serializer))
         results.put(fetchResult)
@@ -337,7 +337,7 @@ object BlockFetcherIterator {
       logDebug("Got local blocks in " + Utils.getUsedTimeMs(startTime) + " ms")
     }
 
-    override def next(): (String, Option[Iterator[Any]]) = {
+    override def next(): (BlockId, Option[Iterator[Any]]) = {
       resultsGotten += 1
       val result = results.take()
       // If all the results has been retrieved, copiers will exit automatically

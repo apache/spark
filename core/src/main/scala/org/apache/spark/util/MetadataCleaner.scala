@@ -17,7 +17,6 @@
 
 package org.apache.spark.util
 
-import java.util.concurrent.{TimeUnit, ScheduledFuture, Executors}
 import java.util.{TimerTask, Timer}
 import org.apache.spark.Logging
 
@@ -25,10 +24,13 @@ import org.apache.spark.Logging
 /**
  * Runs a timer task to periodically clean up metadata (e.g. old files or hashtable entries)
  */
-class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging {
+class MetadataCleaner(cleanerType: MetadataCleanerType.MetadataCleanerType, cleanupFunc: (Long) => Unit) extends Logging {
+  val name = cleanerType.toString
+
   private val delaySeconds = MetadataCleaner.getDelaySeconds
   private val periodSeconds = math.max(10, delaySeconds / 10)
   private val timer = new Timer(name + " cleanup timer", true)
+
 
   private val task = new TimerTask {
     override def run() {
@@ -53,9 +55,37 @@ class MetadataCleaner(name: String, cleanupFunc: (Long) => Unit) extends Logging
   }
 }
 
+object MetadataCleanerType extends Enumeration("MapOutputTracker", "SparkContext", "HttpBroadcast", "DagScheduler", "ResultTask",
+  "ShuffleMapTask", "BlockManager", "BroadcastVars") {
+
+  val MAP_OUTPUT_TRACKER, SPARK_CONTEXT, HTTP_BROADCAST, DAG_SCHEDULER, RESULT_TASK, SHUFFLE_MAP_TASK, BLOCK_MANAGER, BROADCAST_VARS = Value
+
+  type MetadataCleanerType = Value
+
+  def systemProperty(which: MetadataCleanerType.MetadataCleanerType) = "spark.cleaner.ttl." + which.toString
+}
 
 object MetadataCleaner {
+
+  // using only sys props for now : so that workers can also get to it while preserving earlier behavior.
   def getDelaySeconds = System.getProperty("spark.cleaner.ttl", "-1").toInt
-  def setDelaySeconds(delay: Int) { System.setProperty("spark.cleaner.ttl", delay.toString) }
+
+  def getDelaySeconds(cleanerType: MetadataCleanerType.MetadataCleanerType): Int = {
+    System.getProperty(MetadataCleanerType.systemProperty(cleanerType), getDelaySeconds.toString).toInt
+  }
+
+  def setDelaySeconds(cleanerType: MetadataCleanerType.MetadataCleanerType, delay: Int) {
+    System.setProperty(MetadataCleanerType.systemProperty(cleanerType), delay.toString)
+  }
+
+  def setDelaySeconds(delay: Int, resetAll: Boolean = true) {
+    // override for all ?
+    System.setProperty("spark.cleaner.ttl", delay.toString)
+    if (resetAll) {
+      for (cleanerType <- MetadataCleanerType.values) {
+        System.clearProperty(MetadataCleanerType.systemProperty(cleanerType))
+      }
+    }
+  }
 }
 

@@ -32,7 +32,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   case class Entry(value: Any, size: Long, deserialized: Boolean)
 
-  private val entries = new LinkedHashMap[String, Entry](32, 0.75f, true)
+  private val entries = new LinkedHashMap[BlockId, Entry](32, 0.75f, true)
   @volatile private var currentMemory = 0L
   // Object used to ensure that only one thread is putting blocks and if necessary, dropping
   // blocks from the memory store.
@@ -42,13 +42,13 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   def freeMemory: Long = maxMemory - currentMemory
 
-  override def getSize(blockId: String): Long = {
+  override def getSize(blockId: BlockId): Long = {
     entries.synchronized {
       entries.get(blockId).size
     }
   }
 
-  override def putBytes(blockId: String, _bytes: ByteBuffer, level: StorageLevel) {
+  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel) {
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
     bytes.rewind()
@@ -64,7 +64,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   override def putValues(
-      blockId: String,
+      blockId: BlockId,
       values: ArrayBuffer[Any],
       level: StorageLevel,
       returnValues: Boolean)
@@ -81,7 +81,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def getBytes(blockId: String): Option[ByteBuffer] = {
+  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
@@ -94,7 +94,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def getValues(blockId: String): Option[Iterator[Any]] = {
+  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     val entry = entries.synchronized {
       entries.get(blockId)
     }
@@ -108,7 +108,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def remove(blockId: String): Boolean = {
+  override def remove(blockId: BlockId): Boolean = {
     entries.synchronized {
       val entry = entries.remove(blockId)
       if (entry != null) {
@@ -131,14 +131,10 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   /**
-   * Return the RDD ID that a given block ID is from, or null if it is not an RDD block.
+   * Return the RDD ID that a given block ID is from, or None if it is not an RDD block.
    */
-  private def getRddId(blockId: String): String = {
-    if (blockId.startsWith("rdd_")) {
-      blockId.split('_')(1)
-    } else {
-      null
-    }
+  private def getRddId(blockId: BlockId): Option[Int] = {
+    blockId.asRDDId.map(_.rddId)
   }
 
   /**
@@ -151,7 +147,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * blocks to free memory for one block, another thread may use up the freed space for
    * another block.
    */
-  private def tryToPut(blockId: String, value: Any, size: Long, deserialized: Boolean): Boolean = {
+  private def tryToPut(blockId: BlockId, value: Any, size: Long, deserialized: Boolean): Boolean = {
     // TODO: Its possible to optimize the locking by locking entries only when selecting blocks
     // to be dropped. Once the to-be-dropped blocks have been selected, and lock on entries has been
     // released, it must be ensured that those to-be-dropped blocks are not double counted for
@@ -195,7 +191,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    * Assumes that a lock is held by the caller to ensure only one thread is dropping blocks.
    * Otherwise, the freed space may fill up before the caller puts in their new value.
    */
-  private def ensureFreeSpace(blockIdToAdd: String, space: Long): Boolean = {
+  private def ensureFreeSpace(blockIdToAdd: BlockId, space: Long): Boolean = {
 
     logInfo("ensureFreeSpace(%d) called with curMem=%d, maxMem=%d".format(
       space, currentMemory, maxMemory))
@@ -207,7 +203,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
     if (maxMemory - currentMemory < space) {
       val rddToAdd = getRddId(blockIdToAdd)
-      val selectedBlocks = new ArrayBuffer[String]()
+      val selectedBlocks = new ArrayBuffer[BlockId]()
       var selectedMemory = 0L
 
       // This is synchronized to ensure that the set of entries is not changed
@@ -218,7 +214,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         while (maxMemory - (currentMemory - selectedMemory) < space && iterator.hasNext) {
           val pair = iterator.next()
           val blockId = pair.getKey
-          if (rddToAdd != null && rddToAdd == getRddId(blockId)) {
+          if (rddToAdd != None && rddToAdd == getRddId(blockId)) {
             logInfo("Will not store " + blockIdToAdd + " as it would require dropping another " +
               "block from the same RDD")
             return false
@@ -252,7 +248,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     return true
   }
 
-  override def contains(blockId: String): Boolean = {
+  override def contains(blockId: BlockId): Boolean = {
     entries.synchronized { entries.containsKey(blockId) }
   }
 }
