@@ -804,9 +804,12 @@ abstract class RDD[T: ClassManifest](
   }
 
 
+  /**
+   * Construct an index over the unique elements in this RDD.  The
+   * index can then be used to organize a RDD[(T,V)].
+   */
   def makeIndex(partitioner: Option[Partitioner] = None): RDDIndex[T] = 
     IndexedRDD.makeIndex(this, partitioner)
-
 
 
   /**
