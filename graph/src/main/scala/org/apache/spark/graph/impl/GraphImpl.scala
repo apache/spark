@@ -39,30 +39,22 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
 
 
+  override def statistics: Map[String, Any] = {
+    val numVertices = this.numVertices
+    val numEdges = this.numEdges
+    val replicationRatio = 
+      vid2pid.groupByKey().map(kv => kv._2.size).sum / vTable.count
+    val loadArray = 
+      eTable.map{ case (pid, epart) => epart.data.size }.collect.map(x => x / numEdges)
+    val minLoad = loadArray.min
+    val maxLoad = loadArray.max
+    Map(
+      "Num Vertices" -> numVertices, "Num Edges" -> numEdges,
+      "Replication" -> replicationRatio, "Load Array" -> loadArray, 
+      "Min Load" -> minLoad, "Max Load" -> maxLoad) 
+  }
 
 
-
-
-  // def this(vertices: RDD[Vertex[VD]], edges: RDD[Edge[ED]]) = {
-  //   this(vertices.partitions.size, edges.partitions.size, vertices, edges, null, null)
-  // }
-
-  // def withPartitioner(numVertexPartitions: Int, numEdgePartitions: Int): Graph[VD, ED] = {
-  //   if (_cached) {
-  //     new GraphImpl(numVertexPartitions, numEdgePartitions, null, null, _rawVTable, _rawETable)
-  //       .cache()
-  //   } else {
-  //     new GraphImpl(numVertexPartitions, numEdgePartitions, _rawVertices, _rawEdges, null, null)
-  //   }
-  // }
-
-  // def withVertexPartitioner(numVertexPartitions: Int) = {
-  //   withPartitioner(numVertexPartitions, numEdgePartitions)
-  // }
-
-  // def withEdgePartitioner(numEdgePartitions: Int) = {
-  //   withPartitioner(numVertexPartitions, numEdgePartitions)
-  // }
 
 
 
@@ -76,14 +68,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
 
-  override def replication(): Double = {
-    val rep = vid2pid.groupByKey().map(kv => kv._2.size).sum
-    rep / vTable.count
-  }
-
-  override def balance(): Array[Int] = {
-    eTable.map{ case (pid, epart) => epart.data.size }.collect
-  }
 
   override def reverse: Graph[VD, ED] = {
     val etable = eTable.mapValues( _.reverse ).asInstanceOf[IndexedRDD[Pid, EdgePartition[ED]]] 
@@ -109,46 +93,42 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       // vertices for each edge.
       new Iterator[EdgeTriplet[VD, ED]] {
         private var pos = 0
-        private val e = new EdgeTriplet[VD, ED]
-        e.src = new Vertex[VD]
-        e.dst = new Vertex[VD]
-
+        private val et = new EdgeTriplet[VD, ED]
+        
         override def hasNext: Boolean = pos < edgePartition.size
         override def next() = {
-          e.src.id = edgePartition.srcIds(pos)
+          et.srcId = edgePartition.srcIds(pos)
           // assert(vmap.containsKey(e.src.id))
-          e.src.data = vmap.get(e.src.id)
-          e.dst.id = edgePartition.dstIds(pos)
+          et.srcAttr = vmap.get(et.srcId)
+          et.dstId = edgePartition.dstIds(pos)
           // assert(vmap.containsKey(e.dst.id))
-          e.dst.data = vmap.get(e.dst.id)
+          et.dstAttr = vmap.get(et.dstId)
           //println("Iter called: " + pos)
-          e.data = edgePartition.data(pos)
+          et.attr = edgePartition.data(pos)
           pos += 1
-          e
+          et
         }
 
         override def toList: List[EdgeTriplet[VD, ED]] = {
           val lb = new mutable.ListBuffer[EdgeTriplet[VD,ED]]
           for (i <- (0 until edgePartition.size)) {
             val currentEdge = new EdgeTriplet[VD, ED]
-            currentEdge.src = new Vertex[VD]
-            currentEdge.dst = new Vertex[VD]
-            currentEdge.src.id = edgePartition.srcIds(i)
+            currentEdge.srcId = edgePartition.srcIds(i)
             // assert(vmap.containsKey(e.src.id))
-            currentEdge.src.data = vmap.get(currentEdge.src.id)
+            currentEdge.srcAttr = vmap.get(currentEdge.srcId)
 
-            currentEdge.dst.id = edgePartition.dstIds(i)
+            currentEdge.dstId = edgePartition.dstIds(i)
             // assert(vmap.containsKey(e.dst.id))
-            currentEdge.dst.data = vmap.get(currentEdge.dst.id)
+            currentEdge.dstAttr = vmap.get(currentEdge.dstId)
 
-            currentEdge.data = edgePartition.data(i)
+            currentEdge.attr = edgePartition.data(i)
             lb += currentEdge
           }
           lb.toList
         }
       } // end of iterator
     } // end of map partition
-  }
+  } // end of triplets 
 
   override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] = {
     val newVTable = vTable.mapValuesWithKeys((vid, data) => f(vid, data))
@@ -167,16 +147,11 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     Graph[VD, ED2] = {
     val newETable = eTable.join(vTableReplicated).mapValues{ 
       case (edgePartition, vmap) =>
-      val et = new EdgeTriplet[VD, ED]
-      et.src = new Vertex[VD]
-      et.dst = new Vertex[VD]
-      
+      val et = new EdgeTriplet[VD, ED]    
       edgePartition.map{e => 
-        et.data = e.data
-        et.src.id = e.src
-        et.src.data = vmap(e.src)
-        et.dst.id = e.dst
-        et.dst.data = vmap(e.dst)
+        et.set(e)
+        et.srcAttr = vmap(e.srcId)
+        et.dstAttr = vmap(e.dstId)
         f(et)
       }
     }.asInstanceOf[IndexedRDD[Pid, EdgePartition[ED2]]]
@@ -215,9 +190,9 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // Restrict the set of edges to those that satisfy the vertex and the edge predicate.
     val newETable = createETable(
       triplets.filter(
-        t => vpred( t.src.id, t.src.data ) && vpred( t.dst.id, t.dst.data ) && epred(t)
+        t => vpred( t.srcId, t.srcAttr ) && vpred( t.dstId, t.dstAttr ) && epred(t)
         )
-        .map( t => Edge(t.src.id, t.dst.id, t.data) ),
+        .map( t => Edge(t.srcId, t.dstId, t.attr) ),
       eTable.index.partitioner.numPartitions
       )
 
@@ -264,7 +239,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         // ET groups will be complete.
         .groupBy { t: EdgeTriplet[VD, ED] => 
             //println("(" + t.src.id + ", " + t.dst.id + ", " + t.data + ")")
-            (t.src.id, t.dst.id) }
+            (t.srcId, t.dstId) }
         //.groupBy { e => (e.src, e.dst) }
         // Apply the user supplied supplied edge group function to
         // each group of edges
@@ -305,8 +280,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       val newEdges: RDD[Edge[ED2]] = edges.mapPartitions { partIter =>
         partIter.toList
         .groupBy { e: Edge[ED] => 
-            println(e.src + " " + e.dst)
-            (e.src, e.dst) }
+            println(e.srcId + " " + e.dstId)
+            (e.srcId, e.dstId) }
         .mapValues { ts => f(ts.toIterator) }
         .toList
         .toIterator
@@ -333,25 +308,18 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
 
-    val mapfun = mapFunc
-    val redfun = reduceFunc
-
     val newVTable: RDD[(Vid, A)] =
       vTableReplicated.join(eTable).flatMap{
         case (pid, (vmap, edgePartition)) => 
         val aggMap = new VertexHashMap[A]
         val et = new EdgeTriplet[VD, ED]
-        et.src = new Vertex[VD]
-        et.dst = new Vertex[VD]
         edgePartition.foreach{e => 
-          et.data = e.data
-          et.src.id = e.src
-          et.src.data = vmap(e.src)
-          et.dst.id = e.dst
-          et.dst.data = vmap(e.dst)
-          mapfun(et).foreach{case (vid, a) => 
+          et.set(e)
+          et.srcAttr = vmap(e.srcId)
+          et.dstAttr = vmap(e.dstId)
+          mapFunc(et).foreach{case (vid, a) => 
             if(aggMap.containsKey(vid)) {
-              aggMap.put(vid, redfun(aggMap.get(vid), a))             
+              aggMap.put(vid, reduceFunc(aggMap.get(vid), a))             
             } else { aggMap.put(vid, a) }
           }
         }
@@ -360,46 +328,10 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
           entry => (entry.getLongKey(), entry.getValue())
         }
       }
-      .indexed(vTable.index).reduceByKey(redfun)
+      .indexed(vTable.index).reduceByKey(reduceFunc)
 
     newVTable
   }
-
- def aggregateNeighbors[A: ClassManifest](
-      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
-      reduceFunc: (A, A) => A,
-      dir: EdgeDirection)
-    : RDD[(Vid, A)] = {
-
-    ClosureCleaner.clean(mapFunc)
-    ClosureCleaner.clean(reduceFunc)
-
-    // Define a new map function over edge triplets 
-    def mf(et: EdgeTriplet[VD,ED]): Array[(Vid, A)] = {
-      // Compute the message to the dst vertex
-      val dstA = 
-        if (dir == EdgeDirection.In || dir == EdgeDirection.Both) {
-          mapFunc(et.dst.id, et)
-        } else { Option.empty[A] }
-      // Compute the message to the source vertex
-      val srcA = 
-        if (dir == EdgeDirection.Out || dir == EdgeDirection.Both) {
-          mapFunc(et.src.id, et)
-        } else { Option.empty[A] }
-      // construct the return array
-      (srcA, dstA) match {
-        case (None, None) => Array.empty[(Vid, A)]
-        case (Some(src),None) => Array((et.src.id, src))
-        case (None, Some(dst)) => Array((et.dst.id, dst))
-        case (Some(src), Some(dst)) => 
-          Array((et.src.id, src), (et.dst.id, dst))
-      }
-    }
-
-    mapReduceTriplets(mf, reduceFunc)
-  }
-
-
 
 
   override def outerJoinVertices[U: ClassManifest, VD2: ClassManifest]
@@ -415,49 +347,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
 
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-  // Internals hidden from callers
-  //////////////////////////////////////////////////////////////////////////////////////////////////
-
-
- 
-
-
-  // /** Create a new graph but keep the current partitioning scheme. */
-  // protected def newGraph[VD2: ClassManifest, ED2: ClassManifest](
-  //   vertices: RDD[Vertex[VD2]], edges: RDD[Edge[ED2]]): Graph[VD2, ED2] = {
-  //   (new GraphImpl[VD2, ED2](vertices, edges)).withPartitioner(numVertexPartitions, numEdgePartitions)
-  // }
-
-  // protected lazy val eTable: RDD[(Pid, EdgePartition[ED])] = {
-  //   if (_rawETable == null) {
-  //     createETable(_rawEdges, numEdgePartitions)
-  //   } else {
-  //     _rawETable
-  //   }
-  // }
-
-  // protected lazy val vTable: RDD[(Vid, (VD, Array[Pid]))] = {
-  //   if (_rawVTable == null) {
-  //     createVTable(_rawVertices, eTable, numVertexPartitions)
-  //   } else {
-  //     _rawVTable
-  //   }
-  // }
-
-  // protected lazy val vTableReplicated: RDD[(Vid, VD)] = {
-  //   // Join vid2pid and vTable, generate a shuffle dependency on the joined result, and get
-  //   // the shuffle id so we can use it on the slave.
-  //   vTable
-  //     .flatMap { case (vid, (vdata, pids)) =>
-  //       pids.iterator.map { pid => MessageToPartition(pid, (vid, vdata)) }
-  //     }
-  //     .partitionBy(edgePartitioner)
-  //     .mapPartitions({ part =>
-  //       part.map { message => (message.data._1, message.data._2) }
-  //     }, preservesPartitioning = true)
-  // }
-}
+} // end of class GraphImpl
 
 
 
@@ -513,13 +403,13 @@ def apply[VD: ClassManifest, ED: ClassManifest](
     edges
       .map { e =>
         // Random partitioning based on the source vertex id.
-        val part: Pid = edgePartitionFunction1D(e.src, e.dst, numPartitions)
-        // val part: Pid = edgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
-        // val part: Pid = randomVertexCut(e.src, e.dst, numPartitions)
-        //val part: Pid = canonicalEdgePartitionFunction2D(e.src, e.dst, numPartitions, ceilSqrt)
+        // val part: Pid = edgePartitionFunction1D(e.srcId, e.dstId, numPartitions)
+        // val part: Pid = edgePartitionFunction2D(e.srcId, e.dstId, numPartitions, ceilSqrt)
+        val part: Pid = randomVertexCut(e.srcId, e.dstId, numPartitions)
+        //val part: Pid = canonicalEdgePartitionFunction2D(e.srcId, e.dstId, numPartitions, ceilSqrt)
 
         // Should we be using 3-tuple or an optimized class
-        MessageToPartition(part, (e.src, e.dst, e.data))
+        MessageToPartition(part, (e.srcId, e.dstId, e.attr))
       }
       .partitionBy(new HashPartitioner(numPartitions))
       .mapPartitionsWithIndex({ (pid, iter) =>
@@ -539,7 +429,7 @@ def apply[VD: ClassManifest, ED: ClassManifest](
     eTable.mapPartitions { iter =>
       val (pid, edgePartition) = iter.next()
       val vSet = new VertexSet
-      edgePartition.foreach(e => {vSet.add(e.src); vSet.add(e.dst)})
+      edgePartition.foreach(e => {vSet.add(e.srcId); vSet.add(e.dstId)})
       vSet.iterator.map { vid => (vid.toLong, pid) }
     }.indexed(vTableIndex)
   }
@@ -651,44 +541,5 @@ def apply[VD: ClassManifest, ED: ClassManifest](
     (col * ceilSqrtNumParts + row) % numParts
   }
 
-
-
-
-  // protected def createVTable[VD: ClassManifest, ED: ClassManifest](
-  //     eTable: IndexedRDD[Pid, EdgePartition[ED]],
-  //     vid2pid: Index
-  //     vertices: RDD[Vertex[VD]],
-
-  //     default: VD) : IndexedRDD[Vid, VD] = {
-
-  //   // Compute all the vertices in the edge table.
-  //   val vid2pid = createVid2Pid(eTable)
-
-  //   // Compute all the 
-  //   vertices.map(v => (v.id, v.data)).cogroup(vids)
-
-  //   // A key-value RDD. The key is a vertex id, and the value is a list of
-  //   // partitions that contains edges referencing the vertex.
-  //   val vid2pid : RDD[(Vid, Seq[Pid])] = eTable.mapPartitions { iter =>
-  //     val (pid, edgePartition) = iter.next()
-  //     val vSet = new VertexSet
-  //     var i = 0
-  //     while (i < edgePartition.srcIds.size) {
-  //       vSet.add(edgePartition.srcIds.getLong(i))
-  //       vSet.add(edgePartition.dstIds.getLong(i))
-  //       i += 1
-  //     }
-  //     vSet.iterator.map { vid => (vid.toLong, pid) }
-  //   }.groupByKey(partitioner)
-
-  //   vertices
-  //     .map { v => (v.id, v.data) }
-  //     .partitionBy(partitioner)
-  //     .leftOuterJoin(vid2pid)
-  //     .mapValues {
-  //       case (vdata, None)       => (vdata, Array.empty[Pid])
-  //       case (vdata, Some(pids)) => (vdata, pids.toArray)
-  //     }
-  // }
-}
+} // end of object GraphImpl
 

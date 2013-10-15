@@ -26,9 +26,9 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
     val newData = new Array[ED2](data.size)
     val edge = new Edge[ED]()
     for(i <- 0 until data.size){
-      edge.src  = srcIds(i)
-      edge.dst  = dstIds(i)
-      edge.data = data(i)
+      edge.srcId  = srcIds(i)
+      edge.dstId  = dstIds(i)
+      edge.attr = data(i)
       newData(i) = f(edge) 
     }
     new EdgePartition(srcIds, dstIds, newData)
@@ -37,9 +37,9 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
   def foreach(f: Edge[ED] => Unit)  {
     val edge = new Edge[ED]
     for(i <- 0 until data.size){
-      edge.src  = srcIds(i)
-      edge.dst  = dstIds(i)
-      edge.data = data(i)
+      edge.srcId  = srcIds(i)
+      edge.dstId  = dstIds(i)
+      edge.attr = data(i)
       f(edge) 
     }
   }
@@ -54,9 +54,9 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
     override def hasNext: Boolean = pos < EdgePartition.this.size
 
     override def next(): Edge[ED] = {
-      edge.src = srcIds(pos)
-      edge.dst = dstIds(pos)
-      edge.data = data(pos)
+      edge.srcId = srcIds(pos)
+      edge.dstId = dstIds(pos)
+      edge.attr = data(pos)
       pos += 1
       edge
     }

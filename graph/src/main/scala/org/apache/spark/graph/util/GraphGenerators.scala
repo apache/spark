@@ -158,7 +158,7 @@ object GraphGenerators {
 
   def outDegreeFromEdges[ED: ClassManifest](edges: RDD[Edge[ED]]): GraphImpl[Int, ED] = {
     
-    val vertices = edges.flatMap { edge => List((edge.src, 1)) }
+    val vertices = edges.flatMap { edge => List((edge.srcId, 1)) }
       .reduceByKey(_ + _)
       .map{ case (vid, degree) => (vid, degree) }
     GraphImpl(vertices, edges)

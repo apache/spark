@@ -17,8 +17,7 @@ object Pregel {
     //var g = graph.cache()
     var i = 0
 
-    def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertex(vid).id, edge)
-
+    def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertexId(vid), edge)
 
     // Receive the first set of messages
     g.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))

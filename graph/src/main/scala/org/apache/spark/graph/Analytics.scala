@@ -17,23 +17,16 @@ object Analytics extends Logging {
       (vid, vdata, deg) => (deg.getOrElse(0), 1.0)
     }
 
-    println("Vertex Replication: " + pagerankGraph.replication)
+    println(pagerankGraph.statistics)
     
-    val edgeCounts = pagerankGraph.balance
-    
-    println("Edge Balance:       " + (edgeCounts.max.toDouble / edgeCounts.min ) )
-    println("Min edge block:     " + edgeCounts.min)
-    println("Max edge block:     " + edgeCounts.max) 
-
-
-
     Pregel.iterate[(Int, Double), ED, Double](pagerankGraph)(
       (vid, data, a: Double) => (data._1, (resetProb + (1.0 - resetProb) * a)), // apply
-      (me_id, edge) => Some(edge.src.data._2 / edge.src.data._1), // gather
+      (me_id, edge) => Some(edge.srcAttr._2 / edge.srcAttr._1), // gather
       (a: Double, b: Double) => a + b, // merge
       1.0,
       numIter).mapVertices{ case (id, (outDeg, r)) => r }
   }
+
 
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
@@ -47,14 +40,13 @@ object Analytics extends Logging {
       (id, data, degIter) => (degIter.sum, 1.0, 1.0)
     }
     
-
     // Run PageRank
     GraphLab.iterate(pagerankGraph)(
-      (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
+      (me_id, edge) => edge.srcAttr._2 / edge.srcAttr._1, // gather
       (a: Double, b: Double) => a + b,
       (id, data, a: Option[Double]) =>
         (data._1, (resetProb + (1.0 - resetProb) * a.getOrElse(0.0)), data._2), // apply
-      (me_id, edge) => math.abs(edge.src.data._3 - edge.src.data._2) > tol, // scatter
+      (me_id, edge) => math.abs(edge.srcAttr._3 - edge.srcAttr._2) > tol, // scatter
       maxIter).mapVertices { case (vid, data) => data._2 }
   }
 
@@ -68,10 +60,10 @@ object Analytics extends Logging {
   def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
     GraphLab.iterate(ccGraph)(
-      (me_id, edge) => edge.otherVertex(me_id).data, // gather
+      (me_id, edge) => edge.otherVertexAttr(me_id), // gather
       (a: Vid, b: Vid) => math.min(a, b), // merge
       (id, data, a: Option[Vid]) => math.min(data, a.getOrElse(Long.MaxValue)), // apply
-      (me_id, edge) => (edge.vertex(me_id).data < edge.otherVertex(me_id).data), // scatter
+      (me_id, edge) => (edge.vertexAttr(me_id) < edge.otherVertexAttr(me_id)), // scatter
       numIter,
       gatherDirection = EdgeDirection.Both, scatterDirection = EdgeDirection.Both
     )

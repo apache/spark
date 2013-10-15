@@ -9,7 +9,6 @@ import org.apache.spark.graph.impl._
 class GraphKryoRegistrator extends KryoRegistrator {
 
   def registerClasses(kryo: Kryo) {
-    kryo.register(classOf[Vertex[Object]])
     kryo.register(classOf[Edge[Object]])
     kryo.register(classOf[MutableTuple2[Object, Object]])
     kryo.register(classOf[MessageToPartition[Object]])

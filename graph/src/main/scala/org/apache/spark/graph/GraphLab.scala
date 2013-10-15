@@ -51,12 +51,12 @@ object GraphLab {
     // The gather function wrapper strips the active attribute and
     // only invokes the gather function on active vertices
     def gather(vid: Vid, e: EdgeTriplet[(Boolean, VD), ED]): Option[A] = {
-      if (e.vertex(vid).data._1) {
-        val edge = new EdgeTriplet[VD,ED]
-        edge.src = Vertex(e.src.id, e.src.data._2)
-        edge.dst = Vertex(e.dst.id, e.dst.data._2)
-        edge.data = e.data
-        Some(gatherFunc(vid, edge))
+      if (e.vertexAttr(vid)._1) {
+        val edgeTriplet = new EdgeTriplet[VD,ED]
+        edgeTriplet.set(e)
+        edgeTriplet.srcAttr = e.srcAttr._2
+        edgeTriplet.dstAttr = e.dstAttr._2
+        Some(gatherFunc(vid, edgeTriplet))
       } else {
         None
       }
@@ -73,16 +73,13 @@ object GraphLab {
     // The scatter function wrapper strips the vertex of the active attribute
     // and only invokes the scatter function on active vertices
     def scatter(rawVid: Vid, e: EdgeTriplet[(Boolean, VD), ED]): Option[Boolean] = {
-      val vid = e.otherVertex(rawVid).id
-      if (e.vertex(vid).data._1) {
-        val edge = new EdgeTriplet[VD,ED]
-        edge.src = Vertex(e.src.id, e.src.data._2)
-        edge.dst = Vertex(e.dst.id, e.dst.data._2)
-        edge.data = e.data
-//        val src = Vertex(e.src.id, e.src.data._2)
-//        val dst = Vertex(e.dst.id, e.dst.data._2)
-//        val edge = new EdgeTriplet[VD,ED](src, dst, e.data)
-        Some(scatterFunc(vid, edge))
+      val vid = e.otherVertexId(rawVid)
+      if (e.vertexAttr(vid)._1) {
+        val edgeTriplet = new EdgeTriplet[VD,ED]
+        edgeTriplet.set(e)
+        edgeTriplet.srcAttr = e.srcAttr._2
+        edgeTriplet.dstAttr = e.dstAttr._2
+        Some(scatterFunc(vid, edgeTriplet))
       } else {
         None
       }
