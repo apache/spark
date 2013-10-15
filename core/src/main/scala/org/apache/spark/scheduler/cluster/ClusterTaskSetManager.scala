@@ -456,13 +456,13 @@ private[spark] class ClusterTaskSetManager(
     val index = info.index
     info.markFailed()
     if (!successful(index)) {
-      logInfo("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
+      logWarning("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
       copiesRunning(index) -= 1
       // Check if the problem is a map output fetch failure. In that case, this
       // task will never succeed on any node, so tell the scheduler about it.
       reason.foreach {
         case fetchFailed: FetchFailed =>
-          logInfo("Loss was due to fetch failure from " + fetchFailed.bmAddress)
+          logWarning("Loss was due to fetch failure from " + fetchFailed.bmAddress)
           sched.listener.taskEnded(tasks(index), fetchFailed, null, null, info, null)
           successful(index) = true
           tasksSuccessful += 1
@@ -471,7 +471,7 @@ private[spark] class ClusterTaskSetManager(
           return
 
         case TaskKilled =>
-          logInfo("Task %d was killed.".format(tid))
+          logWarning("Task %d was killed.".format(tid))
           sched.listener.taskEnded(tasks(index), reason.get, null, null, info, null)
           return
 
@@ -496,14 +496,14 @@ private[spark] class ClusterTaskSetManager(
           }
           if (printFull) {
             val locs = ef.stackTrace.map(loc => "\tat %s".format(loc.toString))
-            logInfo("Loss was due to %s\n%s\n%s".format(
+            logWarning("Loss was due to %s\n%s\n%s".format(
               ef.className, ef.description, locs.mkString("\n")))
           } else {
             logInfo("Loss was due to %s [duplicate %d]".format(ef.description, dupCount))
           }
 
         case TaskResultLost =>
-          logInfo("Lost result for TID %s on host %s".format(tid, info.host))
+          logWarning("Lost result for TID %s on host %s".format(tid, info.host))
           sched.listener.taskEnded(tasks(index), TaskResultLost, null, null, info, null)
 
         case _ => {}
