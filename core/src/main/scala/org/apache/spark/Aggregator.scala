@@ -17,43 +17,42 @@
 
 package org.apache.spark
 
-import java.util.{HashMap => JHashMap}
+import org.apache.spark.util.AppendOnlyMap
 
-import scala.collection.JavaConversions._
-
-/** A set of functions used to aggregate data.
-  * 
-  * @param createCombiner function to create the initial value of the aggregation.
-  * @param mergeValue function to merge a new value into the aggregation result.
-  * @param mergeCombiners function to merge outputs from multiple mergeValue function.
-  */
+/**
+ * A set of functions used to aggregate data.
+ *
+ * @param createCombiner function to create the initial value of the aggregation.
+ * @param mergeValue function to merge a new value into the aggregation result.
+ * @param mergeCombiners function to merge outputs from multiple mergeValue function.
+ */
 case class Aggregator[K, V, C] (
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C) {
 
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
-    val combiners = new JHashMap[K, C]
-    for (kv <- iter) {
-      val oldC = combiners.get(kv._1)
-      if (oldC == null) {
-        combiners.put(kv._1, createCombiner(kv._2))
-      } else {
-        combiners.put(kv._1, mergeValue(oldC, kv._2))
-      }
+    val combiners = new AppendOnlyMap[K, C]
+    var kv: Product2[K, V] = null
+    val update = (hadValue: Boolean, oldValue: C) => {
+      if (hadValue) mergeValue(oldValue, kv._2) else createCombiner(kv._2)
+    }
+    while (iter.hasNext) {
+      kv = iter.next()
+      combiners.changeValue(kv._1, update)
     }
     combiners.iterator
   }
 
   def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] = {
-    val combiners = new JHashMap[K, C]
-    iter.foreach { case(k, c) =>
-      val oldC = combiners.get(k)
-      if (oldC == null) {
-        combiners.put(k, c)
-      } else {
-        combiners.put(k, mergeCombiners(oldC, c))
-      }
+    val combiners = new AppendOnlyMap[K, C]
+    var kc: (K, C) = null
+    val update = (hadValue: Boolean, oldValue: C) => {
+      if (hadValue) mergeCombiners(oldValue, kc._2) else kc._2
+    }
+    while (iter.hasNext) {
+      kc = iter.next()
+      combiners.changeValue(kc._1, update)
     }
     combiners.iterator
   }

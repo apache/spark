@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>11</version>
+    <version>13</version>
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
@@ -40,6 +40,7 @@
     <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
     <developerConnection>scm:git:https://git-wip-us.apache.org/repos/asf/incubator-spark.git</developerConnection>
     <url>scm:git:git@github.com:apache/incubator-spark.git</url>
+    <tag>HEAD</tag>
   </scm>
   <developers>
     <developer>
@@ -59,6 +60,29 @@
   <prerequisites>
     <maven>3.0.0</maven>
   </prerequisites>
+
+  <mailingLists>
+    <mailingList>
+      <name>Dev Mailing List</name>
+      <post>dev@spark.incubator.apache.org</post>
+      <subscribe>dev-subscribe@spark.incubator.apache.org</subscribe>
+      <unsubscribe>dev-unsubscribe@spark.incubator.apache.org</unsubscribe>
+    </mailingList>
+
+    <mailingList>
+      <name>User Mailing List</name>
+      <post>user@spark.incubator.apache.org</post>
+      <subscribe>user-subscribe@spark.incubator.apache.org</subscribe>
+      <unsubscribe>user-unsubscribe@spark.incubator.apache.org</unsubscribe>
+    </mailingList>
+
+    <mailingList>
+      <name>Commits Mailing List</name>
+      <post>commits@spark.incubator.apache.org</post>
+      <subscribe>commits-subscribe@spark.incubator.apache.org</subscribe>
+      <unsubscribe>commits-unsubscribe@spark.incubator.apache.org</unsubscribe>
+    </mailingList>
+  </mailingLists>
 
   <modules>
     <module>core</module>
@@ -322,7 +346,7 @@
 
       <dependency>
         <groupId>org.scalatest</groupId>
-        <artifactId>scalatest_${scala.version}</artifactId>
+        <artifactId>scalatest_2.9.3</artifactId>
         <version>1.9.1</version>
         <scope>test</scope>
       </dependency>
@@ -334,7 +358,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalacheck</groupId>
-        <artifactId>scalacheck_${scala.version}</artifactId>
+        <artifactId>scalacheck_2.9.3</artifactId>
         <version>1.10.0</version>
         <scope>test</scope>
       </dependency>
@@ -343,6 +367,17 @@
         <artifactId>junit-interface</artifactId>
         <version>0.9</version>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper</artifactId>
+        <version>3.4.5</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>org.apache.hadoop</groupId>
@@ -603,7 +638,7 @@
             <junitxml>.</junitxml>
             <filereports>${project.build.directory}/SparkTestSuite.txt</filereports>
             <argLine>-Xms64m -Xmx3g</argLine>
-            <stderr/>
+            <stderr />
           </configuration>
           <executions>
             <execution>

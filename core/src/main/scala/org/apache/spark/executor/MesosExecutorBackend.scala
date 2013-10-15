@@ -18,13 +18,17 @@
 package org.apache.spark.executor
 
 import java.nio.ByteBuffer
-import org.apache.mesos.{Executor => MesosExecutor, MesosExecutorDriver, MesosNativeLibrary, ExecutorDriver}
-import org.apache.mesos.Protos.{TaskState => MesosTaskState, TaskStatus => MesosTaskStatus, _}
-import org.apache.spark.TaskState.TaskState
+
 import com.google.protobuf.ByteString
-import org.apache.spark.{Logging}
+
+import org.apache.mesos.{Executor => MesosExecutor, MesosExecutorDriver, MesosNativeLibrary, ExecutorDriver}
+import org.apache.mesos.Protos.{TaskStatus => MesosTaskStatus, _}
+
+import org.apache.spark.Logging
 import org.apache.spark.TaskState
+import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.Utils
+
 
 private[spark] class MesosExecutorBackend
   extends MesosExecutor
@@ -71,7 +75,11 @@ private[spark] class MesosExecutorBackend
   }
 
   override def killTask(d: ExecutorDriver, t: TaskID) {
-    logWarning("Mesos asked us to kill task " + t.getValue + "; ignoring (not yet implemented)")
+    if (executor == null) {
+      logError("Received KillTask but executor was null")
+    } else {
+      executor.killTask(t.getValue.toLong)
+    }
   }
 
   override def reregistered(d: ExecutorDriver, p2: SlaveInfo) {}

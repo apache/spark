@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.deploy.ExecutorState
+import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 
 private[spark] class ExecutorInfo(
     val id: Int,
@@ -27,6 +27,11 @@ private[spark] class ExecutorInfo(
     val memory: Int) {
 
   var state = ExecutorState.LAUNCHING
+
+  /** Copy all state (non-val) variables from the given on-the-wire ExecutorDescription. */
+  def copyState(execDesc: ExecutorDescription) {
+    state = execDesc.state
+  }
 
   def fullId: String = application.id + "/" + id
 }

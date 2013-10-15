@@ -25,16 +25,15 @@ import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 
 import org.apache.spark.{HttpServer, Logging, SparkEnv}
 import org.apache.spark.io.CompressionCodec
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, MetadataCleaner, TimeStampedHashSet}
-
+import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
+import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashSet, Utils}
 
 private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id) with Logging with Serializable {
   
   def value = value_
 
-  def blockId: String = "broadcast_" + id
+  def blockId = BroadcastBlockId(id)
 
   HttpBroadcast.synchronized {
     SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
@@ -82,7 +81,7 @@ private object HttpBroadcast extends Logging {
   private var server: HttpServer = null
 
   private val files = new TimeStampedHashSet[String]
-  private val cleaner = new MetadataCleaner("HttpBroadcast", cleanup)
+  private val cleaner = new MetadataCleaner(MetadataCleanerType.HTTP_BROADCAST, cleanup)
 
   private lazy val compressionCodec = CompressionCodec.createCodec()
 
@@ -121,7 +120,7 @@ private object HttpBroadcast extends Logging {
   }
 
   def write(id: Long, value: Any) {
-    val file = new File(broadcastDir, "broadcast-" + id)
+    val file = new File(broadcastDir, BroadcastBlockId(id).name)
     val out: OutputStream = {
       if (compress) {
         compressionCodec.compressedOutputStream(new FileOutputStream(file))
@@ -137,7 +136,7 @@ private object HttpBroadcast extends Logging {
   }
 
   def read[T](id: Long): T = {
-    val url = serverUri + "/broadcast-" + id
+    val url = serverUri + "/" + BroadcastBlockId(id).name
     val in = {
       if (compress) {
         compressionCodec.compressedInputStream(new URL(url).openStream())

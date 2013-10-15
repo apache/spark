@@ -122,12 +122,12 @@ Spark Streaming features windowed computations, which allow you to apply transfo
 <table class="table">
 <tr><th style="width:30%">Transformation</th><th>Meaning</th></tr>
 <tr>
-  <td> <b>window</b>(<i>windowDuration</i>, </i>slideDuration</i>) </td>
+  <td> <b>window</b>(<i>windowDuration</i>, <i>slideDuration</i>) </td>
   <td> Return a new DStream which is computed based on windowed batches of the source DStream. <i>windowDuration</i> is the width of the window and <i>slideTime</i> is the frequency during which the window is calculated. Both times must be multiples of the batch interval.
   </td>
 </tr>
 <tr>
-  <td> <b>countByWindow</b>(<i>windowDuration</i>, </i>slideDuration</i>) </td>
+  <td> <b>countByWindow</b>(<i>windowDuration</i>, <i>slideDuration</i>) </td>
   <td> Return a sliding count of elements in the stream. <i>windowDuration</i> and <i>slideDuration</i> are exactly as defined in <code>window()</code>.
   </td>
 </tr>
@@ -161,7 +161,6 @@ Spark Streaming features windowed computations, which allow you to apply transfo
  <i>windowDuration</i> and <i>slideDuration</i> are exactly as defined in <code>window()</code>.
 </td>
 </tr>
-
 </table>
 
 A complete list of DStream operations is available in the API documentation of [DStream](api/streaming/index.html#org.apache.spark.streaming.DStream) and [PairDStreamFunctions](api/streaming/index.html#org.apache.spark.streaming.PairDStreamFunctions).

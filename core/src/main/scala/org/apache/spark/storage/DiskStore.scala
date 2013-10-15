@@ -42,7 +42,7 @@ import org.apache.spark.util.Utils
 private class DiskStore(blockManager: BlockManager, rootDirs: String)
   extends BlockStore(blockManager) with Logging {
 
-  class DiskBlockObjectWriter(blockId: String, serializer: Serializer, bufferSize: Int)
+  class DiskBlockObjectWriter(blockId: BlockId, serializer: Serializer, bufferSize: Int)
     extends BlockObjectWriter(blockId) {
 
     private val f: File = createFile(blockId /*, allowAppendExisting */)
@@ -124,16 +124,16 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   addShutdownHook()
 
-  def getBlockWriter(blockId: String, serializer: Serializer, bufferSize: Int)
+  def getBlockWriter(blockId: BlockId, serializer: Serializer, bufferSize: Int)
     : BlockObjectWriter = {
     new DiskBlockObjectWriter(blockId, serializer, bufferSize)
   }
 
-  override def getSize(blockId: String): Long = {
+  override def getSize(blockId: BlockId): Long = {
     getFile(blockId).length()
   }
 
-  override def putBytes(blockId: String, _bytes: ByteBuffer, level: StorageLevel) {
+  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel) {
     // So that we do not modify the input offsets !
     // duplicate does not copy buffer, so inexpensive
     val bytes = _bytes.duplicate()
@@ -163,7 +163,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   }
 
   override def putValues(
-      blockId: String,
+      blockId: BlockId,
       values: ArrayBuffer[Any],
       level: StorageLevel,
       returnValues: Boolean)
@@ -192,13 +192,13 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     }
   }
 
-  override def getBytes(blockId: String): Option[ByteBuffer] = {
+  override def getBytes(blockId: BlockId): Option[ByteBuffer] = {
     val file = getFile(blockId)
     val bytes = getFileBytes(file)
     Some(bytes)
   }
 
-  override def getValues(blockId: String): Option[Iterator[Any]] = {
+  override def getValues(blockId: BlockId): Option[Iterator[Any]] = {
     getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes))
   }
 
@@ -206,11 +206,11 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
    * A version of getValues that allows a custom serializer. This is used as part of the
    * shuffle short-circuit code.
    */
-  def getValues(blockId: String, serializer: Serializer): Option[Iterator[Any]] = {
+  def getValues(blockId: BlockId, serializer: Serializer): Option[Iterator[Any]] = {
     getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
   }
 
-  override def remove(blockId: String): Boolean = {
+  override def remove(blockId: BlockId): Boolean = {
     val file = getFile(blockId)
     if (file.exists()) {
       file.delete()
@@ -219,11 +219,11 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     }
   }
 
-  override def contains(blockId: String): Boolean = {
+  override def contains(blockId: BlockId): Boolean = {
     getFile(blockId).exists()
   }
 
-  private def createFile(blockId: String, allowAppendExisting: Boolean = false): File = {
+  private def createFile(blockId: BlockId, allowAppendExisting: Boolean = false): File = {
     val file = getFile(blockId)
     if (!allowAppendExisting && file.exists()) {
       // NOTE(shivaram): Delete the file if it exists. This might happen if a ShuffleMap task
@@ -234,7 +234,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     file
   }
 
-  private def getFile(blockId: String): File = {
+  private def getFile(blockId: BlockId): File = {
     logDebug("Getting file for block " + blockId)
 
     // Figure out which local directory it hashes to, and which subdirectory in that
@@ -258,7 +258,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
       }
     }
 
-    new File(subDir, blockId)
+    new File(subDir, blockId.name)
   }
 
   private def createLocalDirs(): Array[File] = {
@@ -307,7 +307,7 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
           }
         }
         if (shuffleSender != null) {
-          shuffleSender.stop
+          shuffleSender.stop()
         }
       }
     })
@@ -315,11 +315,10 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
   private[storage] def startShuffleBlockSender(port: Int): Int = {
     val pResolver = new PathResolver {
-      override def getAbsolutePath(blockId: String): String = {
-        if (!blockId.startsWith("shuffle_")) {
-          return null
-        }
-        DiskStore.this.getFile(blockId).getAbsolutePath()
+      override def getAbsolutePath(blockIdString: String): String = {
+        val blockId = BlockId(blockIdString)
+        if (!blockId.isShuffle) null
+        else DiskStore.this.getFile(blockId).getAbsolutePath
       }
     }
     shuffleSender = new ShuffleSender(port, pResolver)

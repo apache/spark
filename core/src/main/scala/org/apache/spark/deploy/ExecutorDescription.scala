@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd
-
-import org.apache.spark.{Partition, TaskContext}
-
+package org.apache.spark.deploy
 
 /**
- * A variant of the MapPartitionsRDD that passes the partition index into the
- * closure. This can be used to generate or collect partition specific
- * information such as the number of tuples in a partition.
+ * Used to send state on-the-wire about Executors from Worker to Master.
+ * This state is sufficient for the Master to reconstruct its internal data structures during
+ * failover.
  */
-private[spark]
-class MapPartitionsWithIndexRDD[U: ClassManifest, T: ClassManifest](
-    prev: RDD[T],
-    f: (Int, Iterator[T]) => Iterator[U],
-    preservesPartitioning: Boolean
-  ) extends RDD[U](prev) {
+private[spark] class ExecutorDescription(
+    val appId: String,
+    val execId: Int,
+    val cores: Int,
+    val state: ExecutorState.Value)
+  extends Serializable {
 
-  override def getPartitions: Array[Partition] = firstParent[T].partitions
-
-  override val partitioner = if (preservesPartitioning) prev.partitioner else None
-
-  override def compute(split: Partition, context: TaskContext) =
-    f(split.index, firstParent[T].iterator(split, context))
+  override def toString: String =
+    "ExecutorState(appId=%s, execId=%d, cores=%d, state=%s)".format(appId, execId, cores, state)
 }

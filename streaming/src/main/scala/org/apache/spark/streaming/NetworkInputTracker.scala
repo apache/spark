@@ -30,10 +30,11 @@ import akka.actor._
 import akka.pattern.ask
 import akka.util.duration._
 import akka.dispatch._
+import org.apache.spark.storage.BlockId
 
 private[streaming] sealed trait NetworkInputTrackerMessage
 private[streaming] case class RegisterReceiver(streamId: Int, receiverActor: ActorRef) extends NetworkInputTrackerMessage
-private[streaming] case class AddBlocks(streamId: Int, blockIds: Seq[String], metadata: Any) extends NetworkInputTrackerMessage
+private[streaming] case class AddBlocks(streamId: Int, blockIds: Seq[BlockId], metadata: Any) extends NetworkInputTrackerMessage
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String) extends NetworkInputTrackerMessage
 
 /**
@@ -48,7 +49,7 @@ class NetworkInputTracker(
   val networkInputStreamMap = Map(networkInputStreams.map(x => (x.id, x)): _*)
   val receiverExecutor = new ReceiverExecutor()
   val receiverInfo = new HashMap[Int, ActorRef]
-  val receivedBlockIds = new HashMap[Int, Queue[String]]
+  val receivedBlockIds = new HashMap[Int, Queue[BlockId]]
   val timeout = 5000.milliseconds
 
   var currentTime: Time = null
@@ -67,9 +68,9 @@ class NetworkInputTracker(
   }
 
   /** Return all the blocks received from a receiver. */
-  def getBlockIds(receiverId: Int, time: Time): Array[String] = synchronized {
+  def getBlockIds(receiverId: Int, time: Time): Array[BlockId] = synchronized {
     val queue =  receivedBlockIds.synchronized {
-      receivedBlockIds.getOrElse(receiverId, new Queue[String]())
+      receivedBlockIds.getOrElse(receiverId, new Queue[BlockId]())
     }
     val result = queue.synchronized {
       queue.dequeueAll(x => true)
@@ -92,7 +93,7 @@ class NetworkInputTracker(
       case AddBlocks(streamId, blockIds, metadata) => {
         val tmp = receivedBlockIds.synchronized {
           if (!receivedBlockIds.contains(streamId)) {
-            receivedBlockIds += ((streamId, new Queue[String]))
+            receivedBlockIds += ((streamId, new Queue[BlockId]))
           }
           receivedBlockIds(streamId)
         }
