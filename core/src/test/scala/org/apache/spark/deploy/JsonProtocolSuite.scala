@@ -25,7 +25,7 @@ import net.liftweb.json.JsonAST.JValue
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
-import org.apache.spark.deploy.master.{ApplicationInfo, WorkerInfo}
+import org.apache.spark.deploy.master.{ApplicationInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
 
 class JsonProtocolSuite extends FunSuite {
@@ -53,7 +53,8 @@ class JsonProtocolSuite extends FunSuite {
     val workers = Array[WorkerInfo](createWorkerInfo(), createWorkerInfo())
     val activeApps = Array[ApplicationInfo](createAppInfo())
     val completedApps = Array[ApplicationInfo]()
-    val stateResponse = new MasterStateResponse("host", 8080, workers, activeApps, completedApps)
+    val stateResponse = new MasterStateResponse("host", 8080, workers, activeApps, completedApps,
+      RecoveryState.ALIVE)
     val output = JsonProtocol.writeMasterState(stateResponse)
     assertValidJson(output)
   }
@@ -79,7 +80,7 @@ class JsonProtocolSuite extends FunSuite {
   }
   def createExecutorRunner() : ExecutorRunner = {
     new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
-      new File("sparkHome"), new File("workDir"))
+      new File("sparkHome"), new File("workDir"), ExecutorState.RUNNING)
   }
 
   def assertValidJson(json: JValue) {

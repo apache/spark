@@ -29,7 +29,7 @@ private[spark] class WorkerArguments(args: Array[String]) {
   var webUiPort = 8081
   var cores = inferDefaultCores()
   var memory = inferDefaultMemory()
-  var master: String = null
+  var masters: Array[String] = null
   var workDir: String = null
   
   // Check for settings in environment variables 
@@ -86,14 +86,14 @@ private[spark] class WorkerArguments(args: Array[String]) {
       printUsageAndExit(0)
 
     case value :: tail =>
-      if (master != null) {  // Two positional arguments were given
+      if (masters != null) {  // Two positional arguments were given
         printUsageAndExit(1)
       }
-      master = value
+      masters = value.stripPrefix("spark://").split(",").map("spark://" + _)
       parse(tail)
 
     case Nil =>
-      if (master == null) {  // No positional argument was given
+      if (masters == null) {  // No positional argument was given
         printUsageAndExit(1)
       }
 

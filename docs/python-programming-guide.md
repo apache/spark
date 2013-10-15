@@ -16,7 +16,7 @@ This guide will show how to use the Spark features described there in Python.
 There are a few key differences between the Python and Scala APIs:
 
 * Python is dynamically typed, so RDDs can hold objects of multiple types.
-* PySpark does not yet support a few API calls, such as `lookup`, `sort`, and non-text input files, though these will be added in future releases.
+* PySpark does not yet support a few API calls, such as `lookup` and non-text input files, though these will be added in future releases.
 
 In PySpark, RDDs support the same methods as their Scala counterparts but take Python functions and return Python collection types.
 Short functions can be passed to RDD methods using Python's [`lambda`](http://www.diveintopython.net/power_of_introspection/lambda_functions.html) syntax:

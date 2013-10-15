@@ -20,6 +20,7 @@ package org.apache.spark.util
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 import java.io.{ByteArrayOutputStream, ByteArrayInputStream, FileOutputStream, File}
+import java.nio.{ByteBuffer, ByteOrder}
 import org.scalatest.FunSuite
 import org.apache.commons.io.FileUtils
 import scala.util.Random
@@ -134,6 +135,16 @@ class UtilsSuite extends FunSuite {
     assert(Utils.offsetBytes(f1Path, -3, 25) === "1\n2\n3\n4\n5\n6\n7\n8\n9\n")
 
     FileUtils.deleteDirectory(tmpDir2)
+  }
+
+  test("deserialize long value") {
+    val testval : Long = 9730889947L
+    val bbuf = ByteBuffer.allocate(8)
+    assert(bbuf.hasArray)
+    bbuf.order(ByteOrder.BIG_ENDIAN)
+    bbuf.putLong(testval)
+    assert(bbuf.array.length === 8)
+    assert(Utils.deserializeLongValue(bbuf.array) === testval)
   }
 }
 

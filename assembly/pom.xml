@@ -21,12 +21,12 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>0.8.0-SNAPSHOT</version>
+    <version>0.9.0-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-assembly</artifactId>
+  <artifactId>spark-assembly_2.9.3</artifactId>
   <name>Spark Project Assembly</name>
   <url>http://spark.incubator.apache.org/</url>
 
@@ -41,27 +41,27 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core</artifactId>
+      <artifactId>spark-core_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel</artifactId>
+      <artifactId>spark-bagel_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib</artifactId>
+      <artifactId>spark-mllib_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-repl</artifactId>
+      <artifactId>spark-repl_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming</artifactId>
+      <artifactId>spark-streaming_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -104,13 +104,13 @@
             </goals>
             <configuration>
               <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>META-INF/services/org.apache.hadoop.fs.FileSystem</resource>
                 </transformer>
               </transformers>
               <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer"/>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>reference.conf</resource>
                 </transformer>
@@ -128,7 +128,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn</artifactId>
+          <artifactId>spark-yarn_2.9.3</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

@@ -18,11 +18,11 @@
 package org.apache.spark.deploy.master
 
 private[spark] object ApplicationState
-  extends Enumeration("WAITING", "RUNNING", "FINISHED", "FAILED") {
+  extends Enumeration("WAITING", "RUNNING", "FINISHED", "FAILED", "UNKNOWN") {
 
   type ApplicationState = Value
 
-  val WAITING, RUNNING, FINISHED, FAILED = Value
+  val WAITING, RUNNING, FINISHED, FAILED, UNKNOWN = Value
 
   val MAX_NUM_RETRY = 10
 }

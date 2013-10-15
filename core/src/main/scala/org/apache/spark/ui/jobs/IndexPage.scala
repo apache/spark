@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{NodeSeq, Node}
 
-import org.apache.spark.scheduler.cluster.SchedulingMode
+import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils._
 

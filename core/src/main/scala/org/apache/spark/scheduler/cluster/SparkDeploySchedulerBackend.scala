@@ -26,7 +26,7 @@ import org.apache.spark.util.Utils
 private[spark] class SparkDeploySchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
-    master: String,
+    masters: Array[String],
     appName: String)
   extends StandaloneSchedulerBackend(scheduler, sc.env.actorSystem)
   with ClientListener
@@ -52,7 +52,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome,
         "http://" + sc.ui.appUIAddress)
 
-    client = new Client(sc.env.actorSystem, master, appDesc, this)
+    client = new Client(sc.env.actorSystem, masters, appDesc, this)
     client.start()
   }
 
@@ -71,8 +71,14 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def disconnected() {
     if (!stopping) {
-      logError("Disconnected from Spark cluster!")
-      scheduler.error("Disconnected from Spark cluster")
+      logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
+    }
+  }
+
+  override def dead() {
+    if (!stopping) {
+      logError("Spark cluster looks dead, giving up.")
+      scheduler.error("Spark cluster looks down")
     }
   }
 

@@ -16,6 +16,9 @@
  */
 
 package org.apache.spark.deploy
+
+import com.google.common.collect.MapMaker
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.JobConf
 
@@ -24,11 +27,16 @@ import org.apache.hadoop.mapred.JobConf
  * Contains util methods to interact with Hadoop from spark.
  */
 class SparkHadoopUtil {
+  // A general, soft-reference map for metadata needed during HadoopRDD split computation
+  // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
+  private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
-  // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop subsystems
+  // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop
+  // subsystems
   def newConfiguration(): Configuration = new Configuration()
 
-  // add any user credentials to the job conf which are necessary for running on a secure Hadoop cluster
+  // Add any user credentials to the job conf which are necessary for running on a secure Hadoop
+  // cluster
   def addCredentials(conf: JobConf) {}
 
   def isYarnMode(): Boolean = { false }

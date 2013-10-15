@@ -28,9 +28,8 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
-import org.apache.spark.scheduler.cluster.TaskInfo
-import org.apache.spark.storage.{BlockManager, BlockManagerMaster}
-import org.apache.spark.util.{MetadataCleaner, TimeStampedHashMap}
+import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
+import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -115,7 +114,7 @@ class DAGScheduler(
 
   private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
-  private val listenerBus = new SparkListenerBus()
+  private[spark] val listenerBus = new SparkListenerBus()
 
   // Contains the locations that each RDD's partitions are cached on
   private val cacheLocs = new HashMap[Int, Array[Seq[TaskLocation]]]
@@ -139,7 +138,7 @@ class DAGScheduler(
   val activeJobs = new HashSet[ActiveJob]
   val resultStageToJob = new HashMap[Stage, ActiveJob]
 
-  val metadataCleaner = new MetadataCleaner("DAGScheduler", this.cleanup)
+  val metadataCleaner = new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup)
 
   // Start a thread to run the DAGScheduler event loop
   def start() {
@@ -157,7 +156,7 @@ class DAGScheduler(
 
   private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
     if (!cacheLocs.contains(rdd.id)) {
-      val blockIds = rdd.partitions.indices.map(index=> "rdd_%d_%d".format(rdd.id, index)).toArray
+      val blockIds = rdd.partitions.indices.map(index=> RDDBlockId(rdd.id, index)).toArray[BlockId]
       val locs = BlockManager.blockIdsToBlockManagers(blockIds, env, blockManagerMaster)
       cacheLocs(rdd.id) = blockIds.map { id =>
         locs.getOrElse(id, Nil).map(bm => TaskLocation(bm.host, bm.executorId))
@@ -553,7 +552,7 @@ class DAGScheduler(
         SparkEnv.get.closureSerializer.newInstance().serialize(tasks.head)
       } catch {
         case e: NotSerializableException =>
-          abortStage(stage, e.toString)
+          abortStage(stage, "Task not serializable: " + e.toString)
           running -= stage
           return
       }
@@ -704,6 +703,9 @@ class DAGScheduler(
 
       case ExceptionFailure(className, description, stackTrace, metrics) =>
         // Do nothing here, left up to the TaskScheduler to decide how to handle user failures
+
+      case TaskResultLost =>
+        // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
       case other =>
         // Unrecognized failure - abort all jobs depending on this stage
