@@ -18,24 +18,14 @@
 package org.apache.spark
 
 import network.ConnectionManagerId
-import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfter
 import org.scalatest.concurrent.Timeouts._
+import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-import org.scalatest.prop.Checkers
 import org.scalatest.time.{Span, Millis}
-import org.scalacheck.Arbitrary._
-import org.scalacheck.Gen
-import org.scalacheck.Prop._
-import org.eclipse.jetty.server.{Server, Request, Handler}
-
-import com.google.common.io.Files
-
-import scala.collection.mutable.ArrayBuffer
 
 import SparkContext._
-import storage.{GetBlock, BlockManagerWorker, StorageLevel}
-import ui.JettyUtils
+import org.apache.spark.storage.{BlockManagerWorker, GetBlock, RDDBlockId, StorageLevel}
 
 
 class NotSerializableClass
@@ -193,7 +183,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
 
     // Get all the locations of the first partition and try to fetch the partitions
     // from those locations.
-    val blockIds = data.partitions.indices.map(index => "rdd_%d_%d".format(data.id, index)).toArray
+    val blockIds = data.partitions.indices.map(index => RDDBlockId(data.id, index)).toArray
     val blockId = blockIds(0)
     val blockManager = SparkEnv.get.blockManager
     blockManager.master.getLocations(blockId).foreach(id => {
@@ -318,19 +308,6 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
           // is racing this thread to remove entries from the driver.
       }
     }
-  }
-
-  test("job should fail if TaskResult exceeds Akka frame size") {
-    // We must use local-cluster mode since results are returned differently
-    // when running under LocalScheduler:
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
-    val akkaFrameSize =
-      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size").toInt
-    val rdd = sc.parallelize(Seq(1)).map{x => new Array[Byte](akkaFrameSize)}
-    val exception = intercept[SparkException] {
-      rdd.reduce((x, y) => x)
-    }
-    exception.getMessage should endWith("result exceeded Akka frame size")
   }
 }
 

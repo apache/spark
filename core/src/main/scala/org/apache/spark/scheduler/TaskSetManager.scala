@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.scheduler.TaskSet
 
 /**
  * Tracks and schedules the tasks within a single TaskSet. This class keeps track of the status of
@@ -44,8 +43,6 @@ private[spark] trait TaskSetManager extends Schedulable {
       availableCpus: Int,
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription]
-
-  def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer)
 
   def error(message: String)
 }

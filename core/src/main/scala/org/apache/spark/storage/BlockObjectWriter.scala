@@ -25,7 +25,7 @@ package org.apache.spark.storage
  *
  * This interface does not support concurrent writes.
  */
-abstract class BlockObjectWriter(val blockId: String) {
+abstract class BlockObjectWriter(val blockId: BlockId) {
 
   var closeEventHandler: () => Unit = _
 

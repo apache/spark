@@ -29,7 +29,7 @@ from threading import Thread
 
 from pyspark import cloudpickle
 from pyspark.serializers import batched, Batch, dump_pickle, load_pickle, \
-    read_from_pickle_file
+    read_from_pickle_file, pack_long
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -70,6 +70,25 @@ class RDD(object):
         self._jrdd.cache()
         return self
 
+    def persist(self, storageLevel):
+        """
+        Set this RDD's storage level to persist its values across operations after the first time
+        it is computed. This can only be used to assign a new storage level if the RDD does not
+        have a storage level set yet.
+        """
+        self.is_cached = True
+        javaStorageLevel = self.ctx._getJavaStorageLevel(storageLevel)
+        self._jrdd.persist(javaStorageLevel)
+        return self
+
+    def unpersist(self):
+        """
+        Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+        """
+        self.is_cached = False
+        self._jrdd.unpersist()
+        return self
+
     def checkpoint(self):
         """
         Mark this RDD for checkpointing. It will be saved to a file inside the
@@ -97,8 +116,6 @@ class RDD(object):
             return checkpointFile.get()
         else:
             return None
-
-    # TODO persist(self, storageLevel)
 
     def map(self, f, preservesPartitioning=False):
         """
@@ -208,7 +225,7 @@ class RDD(object):
             total = num
 
         samples = self.sample(withReplacement, fraction, seed).collect()
-    
+
         # If the first sample didn't turn out large enough, keep trying to take samples;
         # this shouldn't happen often because we use a big multiplier for their initial size.
         # See: scala/spark/RDD.scala
@@ -244,7 +261,55 @@ class RDD(object):
             raise TypeError
         return self.union(other)
 
-    # TODO: sort
+    def sortByKey(self, ascending=True, numPartitions=None, keyfunc = lambda x: x):
+        """
+        Sorts this RDD, which is assumed to consist of (key, value) pairs.
+
+        >>> tmp = [('a', 1), ('b', 2), ('1', 3), ('d', 4), ('2', 5)]
+        >>> sc.parallelize(tmp).sortByKey(True, 2).collect()
+        [('1', 3), ('2', 5), ('a', 1), ('b', 2), ('d', 4)]
+        >>> tmp2 = [('Mary', 1), ('had', 2), ('a', 3), ('little', 4), ('lamb', 5)]
+        >>> tmp2.extend([('whose', 6), ('fleece', 7), ('was', 8), ('white', 9)])
+        >>> sc.parallelize(tmp2).sortByKey(True, 3, keyfunc=lambda k: k.lower()).collect()
+        [('a', 3), ('fleece', 7), ('had', 2), ('lamb', 5), ('little', 4), ('Mary', 1), ('was', 8), ('white', 9), ('whose', 6)]
+        """
+        if numPartitions is None:
+            numPartitions = self.ctx.defaultParallelism
+
+        bounds = list()
+
+        # first compute the boundary of each part via sampling: we want to partition
+        # the key-space into bins such that the bins have roughly the same
+        # number of (key, value) pairs falling into them
+        if numPartitions > 1:
+            rddSize = self.count()
+            maxSampleSize = numPartitions * 20.0 # constant from Spark's RangePartitioner
+            fraction = min(maxSampleSize / max(rddSize, 1), 1.0)
+
+            samples = self.sample(False, fraction, 1).map(lambda (k, v): k).collect()
+            samples = sorted(samples, reverse=(not ascending), key=keyfunc)
+
+            # we have numPartitions many parts but one of the them has
+            # an implicit boundary
+            for i in range(0, numPartitions - 1):
+                index = (len(samples) - 1) * (i + 1) / numPartitions
+                bounds.append(samples[index])
+
+        def rangePartitionFunc(k):
+            p = 0
+            while p < len(bounds) and keyfunc(k) > bounds[p]:
+                p += 1
+            if ascending:
+                return p
+            else:
+                return numPartitions-1-p
+
+        def mapFunc(iterator):
+            yield sorted(iterator, reverse=(not ascending), key=lambda (k, v): keyfunc(k))
+
+        return (self.partitionBy(numPartitions, partitionFunc=rangePartitionFunc)
+                    .mapPartitions(mapFunc,preservesPartitioning=True)
+                    .flatMap(lambda x: x, preservesPartitioning=True))
 
     def glom(self):
         """
@@ -406,7 +471,7 @@ class RDD(object):
         3
         """
         return self.mapPartitions(lambda i: [sum(1 for _ in i)]).sum()
-    
+
     def stats(self):
         """
         Return a L{StatCounter} object that captures the mean, variance
@@ -443,7 +508,7 @@ class RDD(object):
         0.816...
         """
         return self.stats().stdev()
-  
+
     def sampleStdev(self):
         """
         Compute the sample standard deviation of this RDD's elements (which corrects for bias in
@@ -671,11 +736,13 @@ class RDD(object):
         # form the hash buckets in Python, transferring O(numPartitions) objects
         # to Java.  Each object is a (splitNumber, [objects]) pair.
         def add_shuffle_key(split, iterator):
+
             buckets = defaultdict(list)
+
             for (k, v) in iterator:
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
             for (split, items) in buckets.iteritems():
-                yield str(split)
+                yield pack_long(split)
                 yield dump_pickle(Batch(items))
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
@@ -811,9 +878,9 @@ class RDD(object):
         >>> y = sc.parallelize([("a", 3), ("c", None)])
         >>> sorted(x.subtractByKey(y).collect())
         [('b', 4), ('b', 5)]
-        """ 
-        filter_func = lambda tpl: len(tpl[1][0]) > 0 and len(tpl[1][1]) == 0
-        map_func = lambda tpl: [(tpl[0], val) for val in tpl[1][0]]
+        """
+        filter_func = lambda (key, vals): len(vals[0]) > 0 and len(vals[1]) == 0
+        map_func = lambda (key, vals): [(key, val) for val in vals[0]]
         return self.cogroup(other, numPartitions).filter(filter_func).flatMap(map_func)
 
     def subtract(self, other, numPartitions=None):

@@ -21,7 +21,7 @@ import scala.util.Random
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import org.apache.spark.scheduler.cluster.SchedulingMode
+import org.apache.spark.scheduler.SchedulingMode
 
 
 /**
@@ -35,7 +35,7 @@ private[spark] object UIWorkloadGenerator {
 
   def main(args: Array[String]) {
     if (args.length < 2) {
-      println("usage: ./spark-class spark.ui.UIWorkloadGenerator [master] [FIFO|FAIR]")
+      println("usage: ./spark-class org.apache.spark.ui.UIWorkloadGenerator [master] [FIFO|FAIR]")
       System.exit(1)
     }
     val master = args(0)
@@ -43,13 +43,13 @@ private[spark] object UIWorkloadGenerator {
     val appName = "Spark UI Tester"
 
     if (schedulingMode == SchedulingMode.FAIR) {
-      System.setProperty("spark.cluster.schedulingmode", "FAIR")
+      System.setProperty("spark.scheduler.mode", "FAIR")
     }
     val sc = new SparkContext(master, appName)
 
     def setProperties(s: String) = {
       if(schedulingMode == SchedulingMode.FAIR) {
-        sc.setLocalProperty("spark.scheduler.cluster.fair.pool", s)
+        sc.setLocalProperty("spark.scheduler.pool", s)
       }
       sc.setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, s)
     }

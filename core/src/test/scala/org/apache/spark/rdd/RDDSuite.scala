@@ -25,7 +25,6 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
 import scala.collection.parallel.mutable
 import org.apache.spark._
-import org.apache.spark.rdd.CoalescedRDDPartition
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
@@ -140,7 +139,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(rdd.union(emptyKv).collect().size === 2)
   }
 
-  test("cogrouped RDDs") {
+  test("coalesced RDDs") {
     val data = sc.parallelize(1 to 10, 10)
 
     val coalesced1 = data.coalesce(2)
@@ -175,8 +174,14 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val coalesced5 = data.coalesce(1, shuffle = true)
     assert(coalesced5.dependencies.head.rdd.dependencies.head.rdd.asInstanceOf[ShuffledRDD[_, _, _]] !=
       null)
+
+    // when shuffling, we can increase the number of partitions
+    val coalesced6 = data.coalesce(20, shuffle = true)
+    assert(coalesced6.partitions.size === 20)
+    assert(coalesced6.collect().toSet === (1 to 10).toSet)
   }
-  test("cogrouped RDDs with locality") {
+
+  test("coalesced RDDs with locality") {
     val data3 = sc.makeRDD(List((1,List("a","c")), (2,List("a","b","c")), (3,List("b"))))
     val coal3 = data3.coalesce(3)
     val list3 = coal3.partitions.map(p => p.asInstanceOf[CoalescedRDDPartition].preferredLocation)
@@ -197,11 +202,11 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val coalesced4 = data.coalesce(20)
     val listOfLists = coalesced4.glom().collect().map(_.toList).toList
     val sortedList = listOfLists.sortWith{ (x, y) => !x.isEmpty && (y.isEmpty || (x(0) < y(0))) }
-    assert( sortedList === (1 to 9).
+    assert(sortedList === (1 to 9).
       map{x => List(x)}.toList, "Tried coalescing 9 partitions to 20 but didn't get 9 back")
   }
 
-  test("cogrouped RDDs with locality, large scale (10K partitions)") {
+  test("coalesced RDDs with locality, large scale (10K partitions)") {
     // large scale experiment
     import collection.mutable
     val rnd = scala.util.Random
@@ -313,6 +318,44 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
     assert(sample.size === checkSample.size)
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
+  }
+
+  test("take") {
+    var nums = sc.makeRDD(Range(1, 1000), 1)
+    assert(nums.take(0).size === 0)
+    assert(nums.take(1) === Array(1))
+    assert(nums.take(3) === Array(1, 2, 3))
+    assert(nums.take(500) === (1 to 500).toArray)
+    assert(nums.take(501) === (1 to 501).toArray)
+    assert(nums.take(999) === (1 to 999).toArray)
+    assert(nums.take(1000) === (1 to 999).toArray)
+
+    nums = sc.makeRDD(Range(1, 1000), 2)
+    assert(nums.take(0).size === 0)
+    assert(nums.take(1) === Array(1))
+    assert(nums.take(3) === Array(1, 2, 3))
+    assert(nums.take(500) === (1 to 500).toArray)
+    assert(nums.take(501) === (1 to 501).toArray)
+    assert(nums.take(999) === (1 to 999).toArray)
+    assert(nums.take(1000) === (1 to 999).toArray)
+
+    nums = sc.makeRDD(Range(1, 1000), 100)
+    assert(nums.take(0).size === 0)
+    assert(nums.take(1) === Array(1))
+    assert(nums.take(3) === Array(1, 2, 3))
+    assert(nums.take(500) === (1 to 500).toArray)
+    assert(nums.take(501) === (1 to 501).toArray)
+    assert(nums.take(999) === (1 to 999).toArray)
+    assert(nums.take(1000) === (1 to 999).toArray)
+
+    nums = sc.makeRDD(Range(1, 1000), 1000)
+    assert(nums.take(0).size === 0)
+    assert(nums.take(1) === Array(1))
+    assert(nums.take(3) === Array(1, 2, 3))
+    assert(nums.take(500) === (1 to 500).toArray)
+    assert(nums.take(501) === (1 to 501).toArray)
+    assert(nums.take(999) === (1 to 999).toArray)
+    assert(nums.take(1000) === (1 to 999).toArray)
   }
 
   test("top with predefined ordering") {

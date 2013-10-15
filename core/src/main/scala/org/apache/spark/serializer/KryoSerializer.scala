@@ -23,12 +23,11 @@ import java.io.{EOFException, InputStream, OutputStream}
 import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
 import com.esotericsoftware.kryo.{KryoException, Kryo}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
-import com.twitter.chill.ScalaKryoInstantiator
+import com.twitter.chill.{EmptyScalaKryoInstantiator, AllScalaRegistrar}
 
 import org.apache.spark.{SerializableWritable, Logging}
-import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock, StorageLevel}
-
 import org.apache.spark.broadcast.HttpBroadcast
+import org.apache.spark.storage.{GetBlock,GotBlock, PutBlock, StorageLevel, TestBlockId}
 
 /**
  * A Spark serializer that uses the [[http://code.google.com/p/kryo/wiki/V1Documentation Kryo 1.x library]].
@@ -38,20 +37,23 @@ class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging
 
   def newKryoOutput() = new KryoOutput(bufferSize)
 
-  def newKryoInput() = new KryoInput(bufferSize)
-
   def newKryo(): Kryo = {
-    val instantiator = new ScalaKryoInstantiator
+    val instantiator = new EmptyScalaKryoInstantiator
     val kryo = instantiator.newKryo()
     val classLoader = Thread.currentThread.getContextClassLoader
 
+    val blockId = TestBlockId("1")
     // Register some commonly used classes
     val toRegister: Seq[AnyRef] = Seq(
       ByteBuffer.allocate(1),
       StorageLevel.MEMORY_ONLY,
-      PutBlock("1", ByteBuffer.allocate(1), StorageLevel.MEMORY_ONLY),
-      GotBlock("1", ByteBuffer.allocate(1)),
-      GetBlock("1")
+      PutBlock(blockId, ByteBuffer.allocate(1), StorageLevel.MEMORY_ONLY),
+      GotBlock(blockId, ByteBuffer.allocate(1)),
+      GetBlock(blockId),
+      1 to 10,
+      1 until 10,
+      1L to 10L,
+      1L until 10L
     )
 
     for (obj <- toRegister) kryo.register(obj.getClass)
@@ -70,6 +72,10 @@ class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging
     } catch {
       case _: Exception => println("Failed to register spark.kryo.registrator")
     }
+
+    // Register Chill's classes; we do this after our ranges and the user's own classes to let
+    // our code override the generic serialziers in Chill for things like Seq
+    new AllScalaRegistrar().apply(kryo)
 
     kryo.setClassLoader(classLoader)
 
@@ -118,8 +124,10 @@ class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends Deser
 
 private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
   val kryo = ks.newKryo()
-  val output = ks.newKryoOutput()
-  val input = ks.newKryoInput()
+
+  // Make these lazy vals to avoid creating a buffer unless we use them
+  lazy val output = ks.newKryoOutput()
+  lazy val input = new KryoInput()
 
   def serialize[T](t: T): ByteBuffer = {
     output.clear()

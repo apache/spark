@@ -21,10 +21,8 @@ import scala.Seq
 import scala.collection.mutable.{ListBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExceptionFailure, SparkContext, Success}
-import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.TaskInfo
 import org.apache.spark.executor.TaskMetrics
-import collection.mutable
+import org.apache.spark.scheduler._
 
 /**
  * Tracks task-level information to be displayed in the UI.
@@ -95,7 +93,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     activeStages += stage
 
     val poolName = Option(stageSubmitted.properties).map {
-      p => p.getProperty("spark.scheduler.cluster.fair.pool", DEFAULT_POOL_NAME)
+      p => p.getProperty("spark.scheduler.pool", DEFAULT_POOL_NAME)
     }.getOrElse(DEFAULT_POOL_NAME)
     stageToPool(stage) = poolName
 

@@ -95,7 +95,7 @@ cp $FWDIR/assembly/target/scala*/*assembly*hadoop*.jar "$DISTDIR/jars/"
 
 # Copy other things
 mkdir "$DISTDIR"/conf
-cp -r "$FWDIR/conf/*.template" "$DISTDIR"
+cp "$FWDIR"/conf/*.template "$DISTDIR"/conf
 cp -r "$FWDIR/bin" "$DISTDIR"
 cp -r "$FWDIR/python" "$DISTDIR"
 cp "$FWDIR/spark-class" "$DISTDIR"

@@ -29,6 +29,7 @@ import akka.util.Duration
 import akka.util.duration._
 
 import org.apache.spark.{SparkException, Logging, TaskState}
+import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.scheduler.cluster.StandaloneClusterMessages._
 import org.apache.spark.util.Utils
 
@@ -89,6 +90,9 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
       case ReviveOffers =>
         makeOffers()
+
+      case KillTask(taskId, executorId) =>
+        executorActor(executorId) ! KillTask(taskId, executorId)
 
       case StopDriver =>
         sender ! true
@@ -177,6 +181,10 @@ class StandaloneSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Actor
 
   override def reviveOffers() {
     driverActor ! ReviveOffers
+  }
+
+  override def killTask(taskId: Long, executorId: String) {
+    driverActor ! KillTask(taskId, executorId)
   }
 
   override def defaultParallelism() = Option(System.getProperty("spark.default.parallelism"))

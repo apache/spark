@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
-import org.apache.spark.storage.{BlockManager, StorageLevel}
+import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, RDDBlockId}
 import org.apache.spark.rdd.RDD
 
 
@@ -26,28 +26,29 @@ import org.apache.spark.rdd.RDD
     sure a node doesn't load two copies of an RDD at once.
   */
 private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
-  private val loading = new HashSet[String]
+
+  /** Keys of RDD splits that are being computed/loaded. */
+  private val loading = new HashSet[RDDBlockId]()
 
   /** Gets or computes an RDD split. Used by RDD.iterator() when an RDD is cached. */
   def getOrCompute[T](rdd: RDD[T], split: Partition, context: TaskContext, storageLevel: StorageLevel)
       : Iterator[T] = {
-    val key = "rdd_%d_%d".format(rdd.id, split.index)
-    logInfo("Cache key is " + key)
+    val key = RDDBlockId(rdd.id, split.index)
+    logDebug("Looking for partition " + key)
     blockManager.get(key) match {
-      case Some(cachedValues) =>
-        // Partition is in cache, so just return its values
-        logInfo("Found partition in cache!")
-        return cachedValues.asInstanceOf[Iterator[T]]
+      case Some(values) =>
+        // Partition is already materialized, so just return its values
+        return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
 
       case None =>
         // Mark the split as loading (unless someone else marks it first)
         loading.synchronized {
           if (loading.contains(key)) {
-            logInfo("Loading contains " + key + ", waiting...")
+            logInfo("Another thread is loading %s, waiting for it to finish...".format(key))
             while (loading.contains(key)) {
               try {loading.wait()} catch {case _ : Throwable =>}
             }
-            logInfo("Loading no longer contains " + key + ", so returning cached result")
+            logInfo("Finished waiting for %s".format(key))
             // See whether someone else has successfully loaded it. The main way this would fail
             // is for the RDD-level cache eviction policy if someone else has loaded the same RDD
             // partition but we didn't want to make space for it. However, that case is unlikely
@@ -55,9 +56,9 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
             // downside of the current code is that threads wait serially if this does happen.
             blockManager.get(key) match {
               case Some(values) =>
-                return values.asInstanceOf[Iterator[T]]
+                return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
               case None =>
-                logInfo("Whoever was loading " + key + " failed; we'll try it ourselves")
+                logInfo("Whoever was loading %s failed; we'll try it ourselves".format(key))
                 loading.add(key)
             }
           } else {
@@ -66,11 +67,13 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
         }
         try {
           // If we got here, we have to load the split
+          logInfo("Partition %s not found, computing it".format(key))
+          val computedValues = rdd.computeOrReadCheckpoint(split, context)
+          // Persist the result, so long as the task is not running locally
+          if (context.runningLocally) { return computedValues }
           val elements = new ArrayBuffer[Any]
-          logInfo("Computing partition " + split)
-          elements ++= rdd.computeOrReadCheckpoint(split, context)
-          // Try to put this block in the blockManager
-          blockManager.put(key, elements, storageLevel, true)
+          elements ++= computedValues
+          blockManager.put(key, elements, storageLevel, tellMaster = true)
           return elements.iterator.asInstanceOf[Iterator[T]]
         } finally {
           loading.synchronized {

@@ -17,7 +17,9 @@
 
 package org.apache.spark.scheduler.cluster
 
-import java.lang.{Boolean => JBoolean}
+import java.nio.ByteBuffer
+import java.util.concurrent.atomic.AtomicLong
+import java.util.{TimerTask, Timer}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
@@ -26,10 +28,7 @@ import scala.collection.mutable.HashSet
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
-import java.nio.ByteBuffer
-import java.util.concurrent.atomic.AtomicLong
-import java.util.{TimerTask, Timer}
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
  * The main TaskScheduler implementation, for running tasks on a cluster. Clients should first call
@@ -55,7 +54,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT = System.getProperty("spark.starvation.timeout", "15000").toLong
 
-  val activeTaskSets = new HashMap[String, TaskSetManager]
+  // ClusterTaskSetManagers are not thread safe, so any access to one should be synchronized
+  // on this class.
+  val activeTaskSets = new HashMap[String, ClusterTaskSetManager]
 
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskIdToExecutorId = new HashMap[Long, String]
@@ -65,7 +66,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   @volatile private var hasLaunchedTask = false
   private val starvationTimer = new Timer(true)
 
-  // Incrementing Mesos task IDs
+  // Incrementing task IDs
   val nextTaskId = new AtomicLong(0)
 
   // Which executor IDs we have executors on
@@ -76,12 +77,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   private val executorsByHost = new HashMap[String, HashSet[String]]
 
   private val executorIdToHost = new HashMap[String, String]
-
-  // JAR server, if any JARs were added by the user to the SparkContext
-  var jarServer: HttpServer = null
-
-  // URIs of JARs to pass to executor
-  var jarUris: String = ""
 
   // Listener object to pass upcalls into
   var listener: TaskSchedulerListener = null
@@ -94,7 +89,10 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   var rootPool: Pool = null
   // default scheduler is FIFO
   val schedulingMode: SchedulingMode = SchedulingMode.withName(
-    System.getProperty("spark.cluster.schedulingmode", "FIFO"))
+    System.getProperty("spark.scheduler.mode", "FIFO"))
+
+  // This is a var so that we can reset it for testing purposes.
+  private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
   override def setListener(listener: TaskSchedulerListener) {
     this.listener = listener
@@ -166,8 +164,31 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     backend.reviveOffers()
   }
 
-  def taskSetFinished(manager: TaskSetManager) {
-    this.synchronized {
+  override def cancelTasks(stageId: Int): Unit = synchronized {
+    logInfo("Cancelling stage " + stageId)
+    activeTaskSets.find(_._2.stageId == stageId).foreach { case (_, tsm) =>
+      // There are two possible cases here:
+      // 1. The task set manager has been created and some tasks have been scheduled.
+      //    In this case, send a kill signal to the executors to kill the task and then abort
+      //    the stage.
+      // 2. The task set manager has been created but no tasks has been scheduled. In this case,
+      //    simply abort the stage.
+      val taskIds = taskSetTaskIds(tsm.taskSet.id)
+      if (taskIds.size > 0) {
+        taskIds.foreach { tid =>
+          val execId = taskIdToExecutorId(tid)
+          backend.killTask(tid, execId)
+        }
+      }
+      tsm.error("Stage %d was cancelled".format(stageId))
+    }
+  }
+
+  def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
+    // Check to see if the given task set has been removed. This is possible in the case of
+    // multiple unrecoverable task failures (e.g. if the entire task set is killed when it has
+    // more than one running tasks).
+    if (activeTaskSets.contains(manager.taskSet.id)) {
       activeTaskSets -= manager.taskSet.id
       manager.parent.removeSchedulable(manager)
       logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id, manager.parent.name))
@@ -234,7 +255,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   }
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
-    var taskSetToUpdate: Option[TaskSetManager] = None
     var failedExecutor: Option[String] = None
     var taskFailed = false
     synchronized {
@@ -249,9 +269,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
         }
         taskIdToTaskSetId.get(tid) match {
           case Some(taskSetId) =>
-            if (activeTaskSets.contains(taskSetId)) {
-              taskSetToUpdate = Some(activeTaskSets(taskSetId))
-            }
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetId.remove(tid)
               if (taskSetTaskIds.contains(taskSetId)) {
@@ -262,6 +279,15 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
             if (state == TaskState.FAILED) {
               taskFailed = true
             }
+            activeTaskSets.get(taskSetId).foreach { taskSet =>
+              if (state == TaskState.FINISHED) {
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueSuccessfulTask(taskSet, tid, serializedData)
+              } else if (Set(TaskState.FAILED, TaskState.KILLED, TaskState.LOST).contains(state)) {
+                taskSet.removeRunningTask(tid)
+                taskResultGetter.enqueueFailedTask(taskSet, tid, state, serializedData)
+              }
+            }
           case None =>
             logInfo("Ignoring update from TID " + tid + " because its task set is gone")
         }
@@ -269,16 +295,32 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
         case e: Exception => logError("Exception in statusUpdate", e)
       }
     }
-    // Update the task set and DAGScheduler without holding a lock on this, since that can deadlock
-    if (taskSetToUpdate != None) {
-      taskSetToUpdate.get.statusUpdate(tid, state, serializedData)
-    }
+    // Update the DAGScheduler without holding a lock on this, since that can deadlock
     if (failedExecutor != None) {
       listener.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
     if (taskFailed) {
       // Also revive offers if a task had failed for some reason other than host lost
+      backend.reviveOffers()
+    }
+  }
+
+  def handleSuccessfulTask(
+    taskSetManager: ClusterTaskSetManager,
+    tid: Long,
+    taskResult: DirectTaskResult[_]) = synchronized {
+    taskSetManager.handleSuccessfulTask(tid, taskResult)
+  }
+
+  def handleFailedTask(
+    taskSetManager: ClusterTaskSetManager,
+    tid: Long,
+    taskState: TaskState,
+    reason: Option[TaskEndReason]) = synchronized {
+    taskSetManager.handleFailedTask(tid, taskState, reason)
+    if (taskState == TaskState.FINISHED) {
+      // The task finished successfully but the result was lost, so we should revive offers.
       backend.reviveOffers()
     }
   }
@@ -308,8 +350,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     if (backend != null) {
       backend.stop()
     }
-    if (jarServer != null) {
-      jarServer.stop()
+    if (taskResultGetter != null) {
+      taskResultGetter.stop()
     }
 
     // sleeping for an arbitrary 5 seconds : to ensure that messages are sent out.

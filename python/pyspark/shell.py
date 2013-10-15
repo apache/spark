@@ -24,6 +24,7 @@ import os
 import platform
 import pyspark
 from pyspark.context import SparkContext
+from pyspark.storagelevel import StorageLevel
 
 # this is the equivalent of ADD_JARS
 add_files = os.environ.get("ADD_FILES").split(',') if os.environ.get("ADD_FILES") != None else None
@@ -34,7 +35,7 @@ print """Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /__ / .__/\_,_/_/ /_/\_\   version 0.8.0
+   /__ / .__/\_,_/_/ /_/\_\   version 0.9.0-SNAPSHOT
       /_/
 """
 print "Using Python version %s (%s, %s)" % (

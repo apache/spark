@@ -31,18 +31,21 @@ import org.eclipse.jetty.server.Handler
 import org.apache.spark.ui.JettyUtils
 
 class MetricsServlet(val property: Properties, val registry: MetricRegistry) extends Sink {
-  val SERVLET_KEY_URI = "uri"
+  val SERVLET_KEY_PATH = "path"
   val SERVLET_KEY_SAMPLE = "sample"
 
-  val servletURI = property.getProperty(SERVLET_KEY_URI)
+  val SERVLET_DEFAULT_SAMPLE = false
 
-  val servletShowSample = property.getProperty(SERVLET_KEY_SAMPLE).toBoolean
+  val servletPath = property.getProperty(SERVLET_KEY_PATH)
+
+  val servletShowSample = Option(property.getProperty(SERVLET_KEY_SAMPLE)).map(_.toBoolean)
+    .getOrElse(SERVLET_DEFAULT_SAMPLE)
 
   val mapper = new ObjectMapper().registerModule(
     new MetricsModule(TimeUnit.SECONDS, TimeUnit.MILLISECONDS, servletShowSample))
 
   def getHandlers = Array[(String, Handler)](
-    (servletURI, JettyUtils.createHandler(request => getMetricsSnapshot(request), "text/json"))
+    (servletPath, JettyUtils.createHandler(request => getMetricsSnapshot(request), "text/json"))
   )
 
   def getMetricsSnapshot(request: HttpServletRequest): String = {

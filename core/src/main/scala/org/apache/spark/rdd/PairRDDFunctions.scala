@@ -84,18 +84,24 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
     }
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     if (self.partitioner == Some(partitioner)) {
-      self.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
+      self.mapPartitionsWithContext((context, iter) => {
+        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter))
+      }, preservesPartitioning = true)
     } else if (mapSideCombine) {
       val combined = self.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
       val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
         .setSerializer(serializerClass)
-      partitioned.mapPartitions(aggregator.combineCombinersByKey, preservesPartitioning = true)
+      partitioned.mapPartitionsWithContext((context, iter) => {
+        new InterruptibleIterator(context, aggregator.combineCombinersByKey(iter))
+      }, preservesPartitioning = true)
     } else {
       // Don't apply map-side combiner.
       // A sanity check to make sure mergeCombiners is not defined.
       assert(mergeCombiners == null)
       val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializerClass)
-      values.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
+      values.mapPartitionsWithContext((context, iter) => {
+        new InterruptibleIterator(context, aggregator.combineValuesByKey(iter))
+      }, preservesPartitioning = true)
     }
   }
 
@@ -564,7 +570,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = newTaskAttemptID(jobtrackerID, stageId, false, context.splitId, attemptNumber)
+      val attemptId = newTaskAttemptID(jobtrackerID, stageId, false, context.partitionId, attemptNumber)
       val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = outputFormatClass.newInstance
       val committer = format.getOutputCommitter(hadoopContext)
@@ -663,7 +669,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
 
-      writer.setup(context.stageId, context.splitId, attemptNumber)
+      writer.setup(context.stageId, context.partitionId, attemptNumber)
       writer.open()
 
       var count = 0

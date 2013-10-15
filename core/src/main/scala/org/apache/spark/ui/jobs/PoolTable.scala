@@ -21,8 +21,8 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.xml.Node
 
-import org.apache.spark.scheduler.Stage
-import org.apache.spark.scheduler.cluster.Schedulable
+import org.apache.spark.scheduler.{Schedulable, Stage}
+import org.apache.spark.ui.UIUtils
 
 /** Table showing list of pools */
 private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressListener) {
@@ -60,7 +60,7 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
       case None => 0
     }
     <tr>
-      <td><a href={"/stages/pool?poolname=%s".format(p.name)}>{p.name}</a></td>
+      <td><a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),p.name)}>{p.name}</a></td>
       <td>{p.minShare}</td>
       <td>{p.weight}</td>
       <td>{activeStages}</td>

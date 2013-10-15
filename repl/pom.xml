@@ -21,12 +21,12 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>0.8.0-SNAPSHOT</version>
+    <version>0.9.0-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-repl</artifactId>
+  <artifactId>spark-repl_2.9.3</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project REPL</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -39,18 +39,18 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core</artifactId>
+      <artifactId>spark-core_2.9.3</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel</artifactId>
+      <artifactId>spark-bagel_2.9.3</artifactId>
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib</artifactId>
+      <artifactId>spark-mllib_2.9.3</artifactId>
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>
@@ -76,12 +76,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala.version}</artifactId>
+      <artifactId>scalatest_2.9.3</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala.version}</artifactId>
+      <artifactId>scalacheck_2.9.3</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
@@ -101,14 +101,14 @@
             <configuration>
               <exportAntProperties>true</exportAntProperties>
               <tasks>
-                <property name="spark.classpath" refid="maven.test.classpath"/>
-                <property environment="env"/>
+                <property name="spark.classpath" refid="maven.test.classpath" />
+                <property environment="env" />
                 <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">
                   <condition>
                     <not>
                       <or>
-                        <isset property="env.SCALA_HOME"/>
-                        <isset property="env.SCALA_LIBRARY_PATH"/>
+                        <isset property="env.SCALA_HOME" />
+                        <isset property="env.SCALA_LIBRARY_PATH" />
                       </or>
                     </not>
                   </condition>
@@ -131,16 +131,4 @@
       </plugin>
     </plugins>
   </build>
-  <profiles>
-    <profile>
-      <id>hadoop2-yarn</id>
-      <dependencies>
-        <dependency>
-          <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn</artifactId>
-          <version>${project.version}</version>
-        </dependency>
-      </dependencies>
-    </profile>
-  </profiles>
 </project>

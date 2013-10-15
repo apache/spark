@@ -41,10 +41,13 @@ private[spark] object JsonProtocol {
     ("starttime" -> obj.startTime) ~
     ("id" -> obj.id) ~
     ("name" -> obj.desc.name) ~
+    ("appuiurl" -> obj.appUiUrl) ~
     ("cores" -> obj.desc.maxCores) ~
     ("user" ->  obj.desc.user) ~
     ("memoryperslave" -> obj.desc.memoryPerSlave) ~
-    ("submitdate" -> obj.submitDate.toString)
+    ("submitdate" -> obj.submitDate.toString) ~
+    ("state" -> obj.state.toString) ~
+    ("duration" -> obj.duration)
   }
 
   def writeApplicationDescription(obj: ApplicationDescription) = {
@@ -62,14 +65,15 @@ private[spark] object JsonProtocol {
   }
 
   def writeMasterState(obj: MasterStateResponse) = {
-    ("url" -> ("spark://" + obj.uri)) ~
+    ("url" -> obj.uri) ~
     ("workers" -> obj.workers.toList.map(writeWorkerInfo)) ~
     ("cores" -> obj.workers.map(_.cores).sum) ~
     ("coresused" -> obj.workers.map(_.coresUsed).sum) ~
     ("memory" -> obj.workers.map(_.memory).sum) ~
     ("memoryused" -> obj.workers.map(_.memoryUsed).sum) ~
     ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
-    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo))
+    ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
+    ("status" -> obj.status.toString)
   }
 
   def writeWorkerState(obj: WorkerStateResponse) = {

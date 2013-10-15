@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
-import org.apache.spark.scheduler.cluster.TaskInfo
 import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.{Logging, SparkContext, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
@@ -55,7 +54,7 @@ trait SparkListener {
   /**
    * Called when a task starts
    */
-  def onTaskStart(taskEnd: SparkListenerTaskStart) { }
+  def onTaskStart(taskStart: SparkListenerTaskStart) { }
 
   /**
    * Called when a task ends
