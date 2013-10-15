@@ -326,7 +326,8 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
     private var blocksInRequestBitVector = new BitSet(totalBlocks)
 
     override def run() {
-      var threadPool = Utils.newDaemonFixedThreadPool(MultiTracker.MaxChatSlots)
+      var threadPool = Utils.newDaemonFixedThreadPool(
+        MultiTracker.MaxChatSlots, "Bit Torrent Chatter")
 
       while (hasBlocks.get < totalBlocks) {
         var numThreadsToCreate = 0
@@ -736,7 +737,7 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
     private var setOfCompletedSources = Set[SourceInfo]()
 
     override def run() {
-      var threadPool = Utils.newDaemonCachedThreadPool()
+      var threadPool = Utils.newDaemonCachedThreadPool("Bit torrent guide multiple requests")
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(0)
@@ -927,7 +928,8 @@ private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: 
   class ServeMultipleRequests
   extends Thread with Logging {
     // Server at most MultiTracker.MaxChatSlots peers
-    var threadPool = Utils.newDaemonFixedThreadPool(MultiTracker.MaxChatSlots)
+    var threadPool = Utils.newDaemonFixedThreadPool(
+      MultiTracker.MaxChatSlots, "Bit torrent serve multiple requests")
 
     override def run() {
       var serverSocket = new ServerSocket(0)

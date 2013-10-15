@@ -121,8 +121,7 @@ private[spark] class Executor(
   }
 
   // Start worker thread pool
-  val threadPool = new ThreadPoolExecutor(
-    1, 128, 600, TimeUnit.SECONDS, new SynchronousQueue[Runnable], Utils.daemonThreadFactory)
+  val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
