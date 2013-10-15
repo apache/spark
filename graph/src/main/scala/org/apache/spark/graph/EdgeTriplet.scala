@@ -10,7 +10,7 @@ package org.apache.spark.graph
  * specializing I got a warning about inherenting from a type that is not
  * a trait.
  */
-class EdgeTriplet[VD: ClassManifest, ED: ClassManifest] extends Edge[ED] {
+class EdgeTriplet[VD, ED] extends Edge[ED] {
 // class EdgeTriplet[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD: ClassManifest,
 //                   @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest] extends Edge[ED] {
  

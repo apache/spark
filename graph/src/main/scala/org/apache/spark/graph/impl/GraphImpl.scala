@@ -60,7 +60,22 @@ class EdgeTripletIterator[VD: ClassManifest, ED: ClassManifest](
   }
 } // end of Edge Triplet Iterator
 
+object EdgeTripletBuilder {
+  def makeTriplets[VD: ClassManifest, ED: ClassManifest]( 
+    vTableReplicated: IndexedRDD[Pid, VertexHashMap[VD]],
+    eTable: IndexedRDD[Pid, EdgePartition[ED]]): RDD[EdgeTriplet[VD, ED]] = {
+    val iterFun = (iter: Iterator[(Pid, (VertexHashMap[VD], EdgePartition[ED]))]) => {
+      val (pid, (vmap, edgePartition)) = iter.next()
+      //assert(iter.hasNext == false)
+      // Return an iterator that looks up the hash map to find matching 
+      // vertices for each edge.
+      new EdgeTripletIterator(vmap, edgePartition)
+    }
+    ClosureCleaner.clean(iterFun) 
+    vTableReplicated.join(eTable).mapPartitions( iterFun ) // end of map partition
+  }
 
+}
 
 
 /**
@@ -96,17 +111,21 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
 
   /** Return a RDD that brings edges with its source and destination vertices together. */
-  @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
-    val iterFun = (iter: Iterator[(Pid, (VertexHashMap[VD], EdgePartition[ED]))]) => {
-      val (pid, (vmap, edgePartition)) = iter.next()
-      //assert(iter.hasNext == false)
-      // Return an iterator that looks up the hash map to find matching 
-      // vertices for each edge.
-      new EdgeTripletIterator(vmap, edgePartition)
-    }
-    ClosureCleaner.clean(iterFun) 
-    vTableReplicated.join(eTable).mapPartitions( iterFun ) // end of map partition
-  }
+  @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = 
+    EdgeTripletBuilder.makeTriplets(vTableReplicated, eTable)
+
+
+  // {
+  //   val iterFun = (iter: Iterator[(Pid, (VertexHashMap[VD], EdgePartition[ED]))]) => {
+  //     val (pid, (vmap, edgePartition)) = iter.next()
+  //     //assert(iter.hasNext == false)
+  //     // Return an iterator that looks up the hash map to find matching 
+  //     // vertices for each edge.
+  //     new EdgeTripletIterator(vmap, edgePartition)
+  //   }
+  //   ClosureCleaner.clean(iterFun) 
+  //   vTableReplicated.join(eTable).mapPartitions( iterFun ) // end of map partition
+  // }
 
 
 
