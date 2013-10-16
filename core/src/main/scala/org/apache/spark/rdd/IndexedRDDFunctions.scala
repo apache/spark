@@ -22,6 +22,8 @@ import java.util.{HashMap => JHashMap, BitSet => JBitSet, HashSet => JHashSet}
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 
+import scala.collection.mutable.BitSet
+
 import org.apache.spark._
 
 
@@ -41,11 +43,15 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
    */
   override def mapValues[U: ClassManifest](f: V => U): RDD[(K, U)] = {
     val cleanF = self.index.rdd.context.clean(f)
-    val newValues = self.valuesRDD.mapPartitions(_.map(values => values.map{ 
-        case null => null 
-        case row => row.map(x => f(x))
-      }), true)
-    new IndexedRDD[K,U](self.index, newValues)
+    val newValuesRDD = self.valuesRDD.mapPartitions(iter => iter.map{ 
+      case (values, bs) => 
+        val newValues = new Array[U](values.size)
+        for ( ind <- bs ) {
+          newValues(ind) = f(values(ind))
+        }
+        (newValues, bs)
+      }, preservesPartitioning = true)
+    new IndexedRDD[K,U](self.index, newValuesRDD)
   }
 
 
@@ -55,20 +61,19 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
    */
   override def mapValuesWithKeys[U: ClassManifest](f: (K, V) => U): RDD[(K, U)] = {
     val cleanF = self.index.rdd.context.clean(f)
-    val newValues = self.index.rdd.zipPartitions(self.valuesRDD){ (keysIter, valuesIter) => 
+    val newValues = self.index.rdd.zipPartitions(self.valuesRDD){ 
+      (keysIter, valuesIter) => 
       val index = keysIter.next()
       assert(keysIter.hasNext() == false)
-      val oldValues = valuesIter.next()
+      val (oldValues, bs) = valuesIter.next()
       assert(valuesIter.hasNext() == false)
-      // Allocate the array to store the results into
-      val newValues: Array[Seq[U]] = new Array[Seq[U]](oldValues.size)
+       // Allocate the array to store the results into
+      val newValues: Array[U] = new Array[U](oldValues.size)
       // Populate the new Values
       for( (k,i) <- index ) {
-        if(oldValues(i) != null) {
-          newValues(i) = oldValues(i).map( v => f(k,v) )
-        }
+        if (bs(i)) { newValues(i) = f(k, oldValues(i)) }      
       }
-      Array(newValues.toSeq).iterator
+      Array((newValues, bs)).iterator
     }
     new IndexedRDD[K,U](self.index, newValues)
   }
@@ -81,11 +86,20 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
    */
   override def flatMapValues[U: ClassManifest](f: V => TraversableOnce[U]): RDD[(K,U)] = {
     val cleanF = self.index.rdd.context.clean(f)
-    val newValues = self.valuesRDD.mapPartitions(_.map(values => values.map{
-        case null => null 
-        case row => row.flatMap(x => f(x))
-      }), true)
-    new IndexedRDD[K,U](self.index, newValues)
+    val newValuesRDD = self.valuesRDD.mapPartitions(iter => iter.map{ 
+      case (values, bs) => 
+        val newValues = new Array[U](values.size)
+        val newBS = new BitSet(values.size)
+        for ( ind <- bs ) {
+          val res = f(values(ind))
+          if(!res.isEmpty) {
+            newValues(ind) = res.toIterator.next()
+            newBS(ind) = true
+          }
+        }
+        (newValues, newBS)
+      }, preservesPartitioning = true)
+    new IndexedRDD[K,U](self.index, newValuesRDD)
   }
 
 
@@ -105,31 +119,18 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
       serializerClass: String = null): RDD[(K, C)] = {
-    val newValues = self.valuesRDD.mapPartitions(
-      _.map{ groups: Seq[Seq[V]] => 
-        groups.map{ group: Seq[V] => 
-          if (group != null && !group.isEmpty) {
-            val c: C = createCombiner(group.head)
-            val sum: C = group.tail.foldLeft(c)(mergeValue)
-            Seq(sum)
-          } else {
-            null
-          }
-        }
-      }, true)
-    new IndexedRDD[K,C](self.index, newValues)
+    mapValues(createCombiner)
   }
 
  
-
-  /**
-   * Group the values for each key in the RDD into a single sequence. Hash-partitions the
-   * resulting RDD with the existing partitioner/parallelism level.
-   */
-  override def groupByKey(partitioner: Partitioner): RDD[(K, Seq[V])] = {
-    val newValues = self.valuesRDD.mapPartitions(_.map{ar => ar.map{s => Seq(s)} }, true)
-    new IndexedRDD[K, Seq[V]](self.index, newValues)
-  }
+  // /**
+  //  * Group the values for each key in the RDD into a single sequence. Hash-partitions the
+  //  * resulting RDD with the existing partitioner/parallelism level.
+  //  */
+  // override def groupByKey(partitioner: Partitioner): RDD[(K, Seq[V])] = {
+  //   val newValues = self.valuesRDD.mapPartitions(_.map{ar => ar.map{s => Seq(s)} }, true)
+  //   new IndexedRDD[K, Seq[V]](self.index, newValues)
+  // }
 
 
   /**
@@ -146,23 +147,24 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
         // However it is possible that both RDDs are missing a value for a given key in 
         // which case the returned RDD should have a null value
         val newValues = 
-          self.valuesRDD.zipPartitions(other.valuesRDD)(
-          (thisIter, otherIter) => {
-            val thisValues: Seq[Seq[V]] = thisIter.next()
+          self.valuesRDD.zipPartitions(other.valuesRDD){
+          (thisIter, otherIter) => 
+            val (thisValues, thisBS) = thisIter.next()
             assert(!thisIter.hasNext)
-            val otherValues: Seq[Seq[W]] = otherIter.next()
-            assert(!otherIter.hasNext)   
-            // Zip the values and if both arrays are null then the key is not present and 
-            // so the resulting value must be null (not a tuple of empty sequences)
-            val tmp: Seq[Seq[(Seq[V], Seq[W])]] = thisValues.view.zip(otherValues).map{               
-              case (null, null) => null // The key is not present in either RDD
-              case (a, null) => Seq((a, Seq.empty[W]))
-              case (null, b) => Seq((Seq.empty[V], b))
-              case (a, b) => Seq((a,b))
-            }.toSeq
-            List(tmp).iterator
-          })
-        new IndexedRDD[K, (Seq[V], Seq[W])](self.index, newValues) 
+            val (otherValues, otherBS) = otherIter.next()
+            assert(!otherIter.hasNext)
+
+            val newValues = new Array[(Seq[V], Seq[W])](thisValues.size)
+            val newBS = thisBS | otherBS
+
+            for( ind <- newBS ) {
+              val a = if (thisBS(ind)) Seq(thisValues(ind)) else Seq.empty[V]
+              val b = if (otherBS(ind)) Seq(otherValues(ind)) else Seq.empty[W]
+              newValues(ind) = (a, b)
+            }
+            List((newValues, newBS)).iterator
+        }
+        new IndexedRDD(self.index, newValues) 
       }
       case other: IndexedRDD[_, _] 
         if self.index.rdd.partitioner == other.index.rdd.partitioner => {
@@ -197,26 +199,33 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
               val newIndex = newIndexIter.next()
               assert(!newIndexIter.hasNext)
               // Get the corresponding indicies and values for this and the other IndexedRDD
-              val (thisIndex, thisValues) = thisTuplesIter.next()
+              val (thisIndex, (thisValues, thisBS)) = thisTuplesIter.next()
               assert(!thisTuplesIter.hasNext)
-              val (otherIndex, otherValues) = otherTuplesIter.next()
+              val (otherIndex, (otherValues, otherBS)) = otherTuplesIter.next()
               assert(!otherTuplesIter.hasNext)
               // Preallocate the new Values array
-              val newValues = new Array[Seq[(Seq[V],Seq[W])]](newIndex.size)
+              val newValues = new Array[(Seq[V], Seq[W])](newIndex.size)
+              val newBS = new BitSet(newIndex.size)
+
               // Lookup the sequences in both submaps
               for ((k,ind) <- newIndex) {
-                val thisSeq = if (thisIndex.contains(k)) thisValues(thisIndex.get(k)) else null
-                val otherSeq = if (otherIndex.contains(k)) otherValues(otherIndex.get(k)) else null
-                // if either of the sequences is not null then the key was in one of the two tables
-                // and so the value should appear in the returned table
-                newValues(ind) = (thisSeq, otherSeq) match {
-                  case (null, null) => null
-                  case (a, null) => Seq( (a, Seq.empty[W]) )
-                  case (null, b) => Seq( (Seq.empty[V], b) )
-                  case (a, b) => Seq( (a,b) ) 
+                // Get the left key
+                val a = if (thisIndex.contains(k)) {
+                  val ind = thisIndex.get(k)
+                  if(thisBS(ind)) Seq(thisValues(ind)) else Seq.empty[V]
+                } else Seq.empty[V]
+                // Get the right key
+                val b = if (otherIndex.contains(k)) {
+                  val ind = otherIndex.get(k)
+                  if (otherBS(ind)) Seq(otherValues(ind)) else Seq.empty[W]
+                } else Seq.empty[W]
+                // If at least one key was present then we generate a tuple.
+                if (!a.isEmpty || !b.isEmpty) {
+                  newValues(ind) = (a, b)
+                  newBS(ind) = true                  
                 }
               }
-              List(newValues.toSeq).iterator
+              List((newValues, newBS)).iterator
             })
         new IndexedRDD(new RDDIndex(newIndex), newValues)
       }
@@ -238,44 +247,48 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
           self.tuples.zipPartitions(otherShuffled)(
           (thisTuplesIter, otherTuplesIter) => {
             // Get the corresponding indicies and values for this IndexedRDD
-            val (thisIndex, thisValues) = thisTuplesIter.next()
+            val (thisIndex, (thisValues, thisBS)) = thisTuplesIter.next()
             assert(!thisTuplesIter.hasNext())
             // Construct a new index
             val newIndex = thisIndex.clone().asInstanceOf[BlockIndex[K]]
             // Construct a new array Buffer to store the values
-            val newValues = ArrayBuffer.fill[(Seq[V], Seq[W])](thisValues.size)(null)
+            val newValues = ArrayBuffer.fill[ (Seq[V], Seq[W]) ](thisValues.size)(null)
+            val newBS = new BitSet(thisValues.size)
             // populate the newValues with the values in this IndexedRDD
             for ((k,i) <- thisIndex) {
-              if (thisValues(i) != null) {
-                newValues(i) = (thisValues(i), ArrayBuffer.empty[W]) 
+              if (thisBS(i)) {
+                newValues(i) = (Seq(thisValues(i)), ArrayBuffer.empty[W]) 
+                newBS(i) = true
               }
             }
             // Now iterate through the other tuples updating the map
             for ((k,w) <- otherTuplesIter){
-              if (!newIndex.contains(k)) {
+              if (newIndex.contains(k)) {
+                val ind = newIndex.get(k)
+                if(newBS(ind)) {
+                  newValues(ind)._2.asInstanceOf[ArrayBuffer[W]].append(w)
+                } else {
+                  // If the other key was in the index but not in the values 
+                  // of this indexed RDD then create a new values entry for it 
+                  newBS(ind) = true
+                  newValues(ind) = (Seq.empty[V], ArrayBuffer(w))
+                }              
+              } else {
                 // update the index
                 val ind = newIndex.size
                 newIndex.put(k, ind)
+                newBS(ind) = true
                 // Update the values
-                newValues.append( (Seq.empty[V], ArrayBuffer(w) ) )               
-              } else {
-                val ind = newIndex.get(k)
-                if(newValues(ind) == null) {
-                  // If the other key was in the index but not in the values 
-                  // of this indexed RDD then create a new values entry for it 
-                  newValues(ind) = (Seq.empty[V], ArrayBuffer(w))
-                } else {
-                  newValues(ind)._2.asInstanceOf[ArrayBuffer[W]].append(w)
-                }
+                newValues.append( (Seq.empty[V], ArrayBuffer(w) ) ) 
               }
             }
-            // Finalize the new values array
-            val newValuesArray: Seq[Seq[(Seq[V],Seq[W])]] = 
-              newValues.view.map{ 
-                case null => null
-                case (s, ab) => Seq((s, ab.toSeq)) 
-                }.toSeq 
-            List( (newIndex, newValuesArray) ).iterator
+            // // Finalize the new values array
+            // val newValuesArray: Seq[Seq[(Seq[V],Seq[W])]] = 
+            //   newValues.view.map{ 
+            //     case null => null
+            //     case (s, ab) => Seq((s, ab.toSeq)) 
+            //     }.toSeq 
+            List( (newIndex, (newValues.toArray, newBS)) ).iterator
           }).cache()
 
         // Extract the index and values from the above RDD  

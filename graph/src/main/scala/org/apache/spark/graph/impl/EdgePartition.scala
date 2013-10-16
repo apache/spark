@@ -7,7 +7,6 @@ import org.apache.spark.graph._
 /**
  * A partition of edges in 3 large columnar arrays.
  */
-private[graph]
 class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest](
   val srcIds: Array[Vid],
   val dstIds: Array[Vid],

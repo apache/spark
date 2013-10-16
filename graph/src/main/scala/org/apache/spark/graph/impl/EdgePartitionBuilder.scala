@@ -4,7 +4,7 @@ import scala.collection.mutable.ArrayBuilder
 import org.apache.spark.graph._
 
 
-private[graph]
+//private[graph]
 class EdgePartitionBuilder[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
 ED: ClassManifest]{
   val srcIds = new VertexArrayList
@@ -20,7 +20,7 @@ ED: ClassManifest]{
   }
 
   def toEdgePartition: EdgePartition[ED] = {
-  	new EdgePartition(srcIds.toLongArray(), dstIds.toLongArray(), dataBuilder.result())
+    new EdgePartition(srcIds.toLongArray(), dstIds.toLongArray(), dataBuilder.result())
   }
   
 

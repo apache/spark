@@ -3,6 +3,7 @@ package org.apache.spark.graph.impl
 import scala.collection.JavaConversions._
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.Partitioner
@@ -72,7 +73,8 @@ object EdgeTripletBuilder {
       new EdgeTripletIterator(vmap, edgePartition)
     }
     ClosureCleaner.clean(iterFun) 
-    vTableReplicated.join(eTable).mapPartitions( iterFun ) // end of map partition
+    vTableReplicated.zipJoinRDD(eTable)
+      .mapPartitions( iterFun ) // end of map partition
   }
 
 }
@@ -83,7 +85,7 @@ object EdgeTripletBuilder {
  */
 class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     @transient val vTable: IndexedRDD[Vid, VD],
-    @transient val vid2pid: IndexedRDD[Vid, Pid],
+    @transient val vid2pid: IndexedRDD[Vid, Array[Pid]],
     @transient val eTable: IndexedRDD[Pid, EdgePartition[ED]])
   extends Graph[VD, ED] {
 
@@ -144,7 +146,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     val numVertices = this.numVertices
     val numEdges = this.numEdges
     val replicationRatio = 
-      vid2pid.groupByKey().map(kv => kv._2.size).sum / vTable.count
+      vid2pid.map(kv => kv._2.size).sum / vTable.count
     val loadArray = 
       eTable.map{ case (pid, epart) => epart.data.size }.collect.map(x => x.toDouble / numEdges)
     val minLoad = loadArray.min
@@ -342,7 +344,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     ClosureCleaner.clean(reduceFunc)
 
     // Map and preaggregate 
-    val preAgg = vTableReplicated.join(eTable).flatMap{
+    val preAgg = vTableReplicated.zipJoinRDD(eTable).flatMap{
       case (pid, (vmap, edgePartition)) => 
         val aggMap = new VertexHashMap[A]
         val et = new EdgeTriplet[VD, ED]
@@ -363,19 +365,15 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       }.partitionBy(vTable.index.rdd.partitioner.get)
 
     // do the final reduction reusing the index map
-    IndexedRDD.reduceByKey(preAgg, reduceFunc, vTable.index)
+    IndexedRDD(preAgg, vTable.index, reduceFunc)
   }
 
 
   override def outerJoinVertices[U: ClassManifest, VD2: ClassManifest]
     (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED] = {
-
     ClosureCleaner.clean(updateF)
-
-    val newVTable = vTable.leftOuterJoin(updates).mapValuesWithKeys{ 
-      case (vid, (data, other)) => updateF(vid, data, other)
-    }.asInstanceOf[IndexedRDD[Vid,VD2]]
+    val newVTable = vTable.zipJoinLeftWithKeys(updates)(updateF)
     new GraphImpl(newVTable, vid2pid, eTable)
   }
 
@@ -451,34 +449,38 @@ object GraphImpl {
           val data = message.data
           builder.add(data._1, data._2, data._3)
         }
-        Iterator((pid, builder.toEdgePartition))
+        val edgePartition = builder.toEdgePartition
+        Iterator((pid, edgePartition))
       }, preservesPartitioning = true).indexed()
   }
 
 
   protected def createVid2Pid[ED: ClassManifest](
     eTable: IndexedRDD[Pid, EdgePartition[ED]],
-    vTableIndex: RDDIndex[Vid]): IndexedRDD[Vid, Pid] = {
-    eTable.mapPartitions { iter =>
+    vTableIndex: RDDIndex[Vid]): IndexedRDD[Vid, Array[Pid]] = {
+    val preAgg = eTable.mapPartitions { iter =>
       val (pid, edgePartition) = iter.next()
       val vSet = new VertexSet
       edgePartition.foreach(e => {vSet.add(e.srcId); vSet.add(e.dstId)})
       vSet.iterator.map { vid => (vid.toLong, pid) }
-    }.indexed(vTableIndex)
+    }
+    IndexedRDD[Vid, Pid, ArrayBuffer[Pid]](preAgg, vTableIndex, 
+      (p: Pid) => ArrayBuffer(p),
+      (ab: ArrayBuffer[Pid], p:Pid) => {ab.append(p); ab},
+      (a: ArrayBuffer[Pid], b: ArrayBuffer[Pid]) => a ++ b)
+      .mapValues(a => a.toArray).asInstanceOf[IndexedRDD[Vid, Array[Pid]]]
   }
 
 
   protected def createVTableReplicated[VD: ClassManifest, ED: ClassManifest](
-    vTable: IndexedRDD[Vid, VD], vid2pid: IndexedRDD[Vid, Pid],
+    vTable: IndexedRDD[Vid, VD], vid2pid: IndexedRDD[Vid, Array[Pid]],
     eTable: IndexedRDD[Pid, EdgePartition[ED]]): 
     IndexedRDD[Pid, VertexHashMap[VD]] = {
     // Join vid2pid and vTable, generate a shuffle dependency on the joined 
     // result, and get the shuffle id so we can use it on the slave.
-    vTable.cogroup(vid2pid)
-      .flatMap { case (vid, (vdatas, pids)) => 
-        pids.iterator.map { 
-          pid => MessageToPartition(pid, (vid, vdatas.head)) 
-        }
+    vTable.zipJoinRDD(vid2pid)
+      .flatMap { case (vid, (vdata, pids)) => 
+        pids.iterator.map { pid => MessageToPartition(pid, (vid, vdata)) }
       }
       .partitionBy(eTable.partitioner.get) //@todo assert edge table has partitioner
       .mapPartitionsWithIndex( (pid, iter) => {
