@@ -22,7 +22,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.executor.TaskMetrics
 
 class TaskContext(
-  private[spark] val stageId: Int,
+  val stageId: Int,
   val partitionId: Int,
   val attemptId: Long,
   val runningLocally: Boolean = false,
