@@ -37,7 +37,9 @@ import org.apache.spark.SerializableWritable
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.
  */
 class SparkHadoopWriter(@transient jobConf: JobConf)
-  extends Logging with SparkHadoopMapRedUtil with Serializable {
+  extends Logging
+  with SparkHadoopMapRedUtil
+  with Serializable {
 
   private val now = new Date()
   private val conf = new SerializableWritable(jobConf)
