@@ -24,6 +24,7 @@ import java.util.{HashMap => JHashMap, BitSet => JBitSet, HashSet => JHashSet}
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.BitSet
 
 import org.apache.spark._
 import org.apache.spark.rdd._
@@ -69,7 +70,7 @@ class RDDIndex[@specialized K: ClassManifest](private[spark] val rdd: RDD[BlockI
  */
 class IndexedRDD[K: ClassManifest, V: ClassManifest](
     @transient val index:  RDDIndex[K],
-    @transient val valuesRDD: RDD[ Seq[Seq[V]] ])
+    @transient val valuesRDD: RDD[ (Array[V], BitSet) ])
   extends RDD[(K, V)](index.rdd.context, 
     List(new OneToOneDependency(index.rdd), new OneToOneDependency(valuesRDD)) ) {
 
@@ -120,19 +121,40 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   }
 
 
+  override def filter(f: Tuple2[K,V] => Boolean): RDD[(K,V)] = {
+    val cleanF = index.rdd.context.clean(f)
+    val newValues = index.rdd.zipPartitions(valuesRDD){ 
+      (keysIter, valuesIter) => 
+      val index = keysIter.next()
+      assert(keysIter.hasNext() == false)
+      val (oldValues, bs) = valuesIter.next()
+      assert(valuesIter.hasNext() == false)
+       // Allocate the array to store the results into
+      val newValues: Array[V] = oldValues.clone().asInstanceOf[Array[V]]
+      val newBS = new BitSet(oldValues.size)
+      // Populate the new Values
+      for( (k,i) <- index ) {
+        if ( bs(i) && f( (k, oldValues(i)) ) ) { newBS(i) = true }
+        else { newValues(i) = null.asInstanceOf[V] }
+      }
+      Array((newValues, newBS)).iterator
+    }
+    new IndexedRDD[K,V](index, newValues)
+  }
+
   /**
    * Provide the RDD[(K,V)] equivalent output. 
    */
   override def compute(part: Partition, context: TaskContext): Iterator[(K, V)] = {
-    tuples.compute(part, context).flatMap { case (indexMap, values) => 
+    tuples.compute(part, context).flatMap { case (indexMap, (values, bs) ) => 
       // Walk the index to construct the key, value pairs
-      indexMap.iterator
+      indexMap.iterator 
         // Extract rows with key value pairs and indicators
-        .map{ case (k, ind) => (k, values(ind))  }
+        .map{ case (k, ind) => (bs(ind), k, ind)  }
         // Remove tuples that aren't actually present in the array
-        .filter{ case (_, valar) => valar != null && !valar.isEmpty()}
+        .filter( _._1 )
         // Extract the pair (removing the indicator from the tuple)
-        .flatMap{ case (k, valar) =>  valar.map(v => (k,v))}
+        .map( x => (x._2, values(x._3) ) )
     }
   }
 
@@ -143,81 +165,49 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
 
 object IndexedRDD {
 
-  /**
-   * Construct an IndexedRDD from a regular RDD[(K,V)] using an existing index
-   * if one is provided.
-   */
+def apply[K: ClassManifest, V: ClassManifest](rdd: RDD[(K,V)]): IndexedRDD[K,V] = 
+  apply(rdd, (a:V, b:V) => a )
+
   def apply[K: ClassManifest, V: ClassManifest](
-    tbl: RDD[(K,V)],
-    existingIndex: RDDIndex[K] = null ): IndexedRDD[K, V] = {
+    rdd: RDD[(K,V)], reduceFunc: (V, V) => V): IndexedRDD[K,V] = {
+    // Preaggregate and shuffle if necessary
+    // Preaggregation.
+    val aggregator = new Aggregator[K, V, V](v => v, reduceFunc, reduceFunc)
+    val partitioner = new HashPartitioner(rdd.partitions.size)
+    val preAgg = rdd.mapPartitions(aggregator.combineValuesByKey).partitionBy(partitioner)
 
-    if (existingIndex == null) { // If no index was provided
-      // Shuffle the table (if necessary)
-      val shuffledTbl =
-        if (tbl.partitioner.isEmpty) {
-          new ShuffledRDD[K, V, (K,V)](tbl, Partitioner.defaultPartitioner(tbl))
-        } else { tbl }
-
-      val groups = shuffledTbl.mapPartitions( iter => {
-        val indexMap = new BlockIndex[K]()
-        val values = new ArrayBuffer[Seq[V]]()
-        for ((k,v) <- iter){
-          if(!indexMap.contains(k)) {
-            val ind = indexMap.size
-            indexMap.put(k, ind)
-            values.append(ArrayBuffer.empty[V])
-          }
-          val ind = indexMap.get(k)
-          values(ind).asInstanceOf[ArrayBuffer[V]].append(v)
-        }
-        List((indexMap, values.toSeq)).iterator
-        }, true).cache
-      // extract the index and the values
-      val index = groups.mapPartitions(_.map{ case (kMap,vAr) => kMap }, true)
-      val values = groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
-      new IndexedRDD[K,V](new RDDIndex(index), values)
-    } else {
-      val index = existingIndex
-      val partitioner = index.rdd.partitioner match {
-        case Some(p) => p
-        case None => throw new SparkException("An index must have a partitioner.")
-      }
-
-      // Shuffle the table according to the index (if necessary)
-      val shuffledTbl = 
-        if (tbl.partitioner == Some(partitioner)) {
-          tbl
+    val groups = preAgg.mapPartitions( iter => {
+      val indexMap = new BlockIndex[K]()
+      val values = new ArrayBuffer[V]()
+      val bs = new BitSet
+      for ((k,v) <- iter) {
+        if(!indexMap.contains(k)) {
+          val ind = indexMap.size
+          indexMap.put(k, ind)
+          values.append(v)
+          bs(ind) = true
         } else {
-          new ShuffledRDD[K, V, (K,V)](tbl, partitioner)
+          val ind = indexMap.get(k)
+          values(ind) = reduceFunc(values(ind), v)
         }
-
-      // Use the index to build the new values table
-      val values = index.rdd.zipPartitions(shuffledTbl)(
-        (indexIter, tblIter) => {
-          // There is only one map
-          val index = indexIter.next()
-          assert(!indexIter.hasNext())
-          val values = new Array[Seq[V]](index.size)
-          for ((k,v) <- tblIter) {
-            if (!index.contains(k)) {
-              throw new SparkException("Error: Trying to bind an external index " +
-                "to an RDD which contains keys that are not in the index.")
-            }
-            val ind = index(k)
-            if (values(ind) == null) {
-              values(ind) = ArrayBuffer.empty[V]
-            }
-            values(ind).asInstanceOf[ArrayBuffer[V]].append(v)
-          }
-          List(values.toSeq).iterator
-          })
-
-      new IndexedRDD[K,V](index, values)
-    }
+      }
+      List( (indexMap, (values.toArray, bs)) ).iterator
+      }, true).cache
+    // extract the index and the values
+    val index = groups.mapPartitions(_.map{ case (kMap, vAr) => kMap }, true)
+    val values = groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
+    new IndexedRDD[K,V](new RDDIndex(index), values)
   }
 
-  def reduceByKey[K: ClassManifest, V: ClassManifest](
-    rdd: RDD[(K,V)], reduceFun: (V, V) => V, index: RDDIndex[K]): IndexedRDD[K,V] = {
+
+
+  def apply[K: ClassManifest, V: ClassManifest](
+    rdd: RDD[(K,V)], index: RDDIndex[K]): IndexedRDD[K,V] = 
+  apply(rdd, index, (a:V,b:V) => a)
+
+  def apply[K: ClassManifest, V: ClassManifest](
+    rdd: RDD[(K,V)], index: RDDIndex[K], 
+    reduceFunc: (V, V) => V): IndexedRDD[K,V] = {
     // Get the index Partitioner
     val partitioner = index.rdd.partitioner match {
       case Some(p) => p
@@ -227,9 +217,8 @@ object IndexedRDD {
     val partitioned = 
       if (rdd.partitioner != Some(partitioner)) {
         // Preaggregation.
-        val aggregator = new Aggregator[K, V, V](v => v, reduceFun, reduceFun)
-        val combined = rdd.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
-        combined.partitionBy(partitioner) //new ShuffledRDD[K, V, (K, V)](combined, partitioner)
+        val aggregator = new Aggregator[K, V, V](v => v, reduceFunc, reduceFunc)
+        rdd.mapPartitions(aggregator.combineValuesByKey).partitionBy(partitioner)
       } else {
         rdd
       }
@@ -239,26 +228,27 @@ object IndexedRDD {
       // There is only one map
       val index = indexIter.next()
       assert(!indexIter.hasNext())
-      val values = new Array[Array[V]](index.size)
+      val values = new Array[V](index.size)
+      val bs = new BitSet(index.size)
       for ((k,v) <- tblIter) {
         if (!index.contains(k)) {
           throw new SparkException("Error: Trying to bind an external index " +
             "to an RDD which contains keys that are not in the index.")
         }
         val ind = index(k)
-        if (values(ind) == null) { 
-          values(ind) = Array(v)
+        if (bs(ind)) { 
+          values(ind) = reduceFunc(values(ind), v) 
         } else {
-          values(ind)(0) = reduceFun(values(ind).head, v)
+          values(ind) = v
+          bs(ind) = true
         }
       }
-      List(values.view.map(x => if (x != null) x.toSeq else null ).toSeq).iterator
+      List((values, bs)).iterator
     })
-
     new IndexedRDD[K,V](index, values)
+  } // end of apply
 
-  }
-
+ 
   /**
    * Construct and index of the unique values in a given RDD.
    */
@@ -277,9 +267,7 @@ object IndexedRDD {
       }
       case Some(partitioner) => 
         tbl.partitionBy(partitioner)
-//        new ShuffledRDD[K, Boolean](tbl, partitioner)
     }
-   
 
     val index = shuffledTbl.mapPartitions( iter => {
       val indexMap = new BlockIndex[K]()
