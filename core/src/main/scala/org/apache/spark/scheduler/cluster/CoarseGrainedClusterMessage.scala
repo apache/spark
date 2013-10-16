@@ -24,28 +24,28 @@ import org.apache.spark.scheduler.TaskDescription
 import org.apache.spark.util.{Utils, SerializableBuffer}
 
 
-private[spark] sealed trait StandaloneClusterMessage extends Serializable
+private[spark] sealed trait CoarseGrainedClusterMessage extends Serializable
 
-private[spark] object StandaloneClusterMessages {
+private[spark] object CoarseGrainedClusterMessages {
 
   // Driver to executors
-  case class LaunchTask(task: TaskDescription) extends StandaloneClusterMessage
+  case class LaunchTask(task: TaskDescription) extends CoarseGrainedClusterMessage
 
-  case class KillTask(taskId: Long, executor: String) extends StandaloneClusterMessage
+  case class KillTask(taskId: Long, executor: String) extends CoarseGrainedClusterMessage
 
   case class RegisteredExecutor(sparkProperties: Seq[(String, String)])
-    extends StandaloneClusterMessage
+    extends CoarseGrainedClusterMessage
 
-  case class RegisterExecutorFailed(message: String) extends StandaloneClusterMessage
+  case class RegisterExecutorFailed(message: String) extends CoarseGrainedClusterMessage
 
   // Executors to driver
   case class RegisterExecutor(executorId: String, hostPort: String, cores: Int)
-    extends StandaloneClusterMessage {
+    extends CoarseGrainedClusterMessage {
     Utils.checkHostPort(hostPort, "Expected host port")
   }
 
   case class StatusUpdate(executorId: String, taskId: Long, state: TaskState,
-    data: SerializableBuffer) extends StandaloneClusterMessage
+    data: SerializableBuffer) extends CoarseGrainedClusterMessage
 
   object StatusUpdate {
     /** Alternate factory method that takes a ByteBuffer directly for the data field */
@@ -56,10 +56,10 @@ private[spark] object StandaloneClusterMessages {
   }
 
   // Internal messages in driver
-  case object ReviveOffers extends StandaloneClusterMessage
+  case object ReviveOffers extends CoarseGrainedClusterMessage
 
-  case object StopDriver extends StandaloneClusterMessage
+  case object StopDriver extends CoarseGrainedClusterMessage
 
-  case class RemoveExecutor(executorId: String, reason: String) extends StandaloneClusterMessage
+  case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
 
 }
