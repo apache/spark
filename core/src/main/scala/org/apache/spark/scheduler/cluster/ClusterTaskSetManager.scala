@@ -415,11 +415,11 @@ private[spark] class ClusterTaskSetManager(
   }
 
   private def taskStarted(task: Task[_], info: TaskInfo) {
-    sched.listener.taskStarted(task, info)
+    sched.dagScheduler.taskStarted(task, info)
   }
 
   /**
-   * Marks the task as successful and notifies the listener that a task has ended.
+   * Marks the task as successful and notifies the DAGScheduler that a task has ended.
    */
   def handleSuccessfulTask(tid: Long, result: DirectTaskResult[_]) = {
     val info = taskInfos(tid)
@@ -429,7 +429,7 @@ private[spark] class ClusterTaskSetManager(
     if (!successful(index)) {
       logInfo("Finished TID %s in %d ms on %s (progress: %d/%d)".format(
         tid, info.duration, info.host, tasksSuccessful, numTasks))
-      sched.listener.taskEnded(
+      sched.dagScheduler.taskEnded(
         tasks(index), Success, result.value, result.accumUpdates, info, result.metrics)
 
       // Mark successful and stop if all the tasks have succeeded.
@@ -445,7 +445,8 @@ private[spark] class ClusterTaskSetManager(
   }
 
   /**
-   * Marks the task as failed, re-adds it to the list of pending tasks, and notifies the listener.
+   * Marks the task as failed, re-adds it to the list of pending tasks, and notifies the
+   * DAG Scheduler.
    */
   def handleFailedTask(tid: Long, state: TaskState, reason: Option[TaskEndReason]) {
     val info = taskInfos(tid)
@@ -463,7 +464,7 @@ private[spark] class ClusterTaskSetManager(
       reason.foreach {
         case fetchFailed: FetchFailed =>
           logWarning("Loss was due to fetch failure from " + fetchFailed.bmAddress)
-          sched.listener.taskEnded(tasks(index), fetchFailed, null, null, info, null)
+          sched.dagScheduler.taskEnded(tasks(index), fetchFailed, null, null, info, null)
           successful(index) = true
           tasksSuccessful += 1
           sched.taskSetFinished(this)
@@ -472,11 +473,11 @@ private[spark] class ClusterTaskSetManager(
 
         case TaskKilled =>
           logWarning("Task %d was killed.".format(tid))
-          sched.listener.taskEnded(tasks(index), reason.get, null, null, info, null)
+          sched.dagScheduler.taskEnded(tasks(index), reason.get, null, null, info, null)
           return
 
         case ef: ExceptionFailure =>
-          sched.listener.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
+          sched.dagScheduler.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
           val key = ef.description
           val now = clock.getTime()
           val (printFull, dupCount) = {
@@ -504,7 +505,7 @@ private[spark] class ClusterTaskSetManager(
 
         case TaskResultLost =>
           logWarning("Lost result for TID %s on host %s".format(tid, info.host))
-          sched.listener.taskEnded(tasks(index), TaskResultLost, null, null, info, null)
+          sched.dagScheduler.taskEnded(tasks(index), TaskResultLost, null, null, info, null)
 
         case _ => {}
       }
@@ -533,7 +534,7 @@ private[spark] class ClusterTaskSetManager(
     failed = true
     causeOfFailure = message
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
-    sched.listener.taskSetFailed(taskSet, message)
+    sched.dagScheduler.taskSetFailed(taskSet, message)
     removeAllRunningTasks()
     sched.taskSetFinished(this)
   }
@@ -606,7 +607,7 @@ private[spark] class ClusterTaskSetManager(
           addPendingTask(index)
           // Tell the DAGScheduler that this task was resubmitted so that it doesn't think our
           // stage finishes when a total of tasks.size tasks finish.
-          sched.listener.taskEnded(tasks(index), Resubmitted, null, null, info, null)
+          sched.dagScheduler.taskEnded(tasks(index), Resubmitted, null, null, info, null)
         }
       }
     }
