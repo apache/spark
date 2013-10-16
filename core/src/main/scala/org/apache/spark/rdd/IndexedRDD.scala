@@ -216,6 +216,50 @@ object IndexedRDD {
     }
   }
 
+
+  def reduceByKey[K: ClassManifest, V: ClassManifest](
+    rdd: RDD[(K,V)], reduceFun: (V, V) => V, index: RDDIndex[K]): IndexedRDD[K,V] = {
+    // Get the index Partitioner
+    val partitioner = index.rdd.partitioner match {
+      case Some(p) => p
+      case None => throw new SparkException("An index must have a partitioner.")
+    }
+    // Preaggregate and shuffle if necessary
+    val partitioned = 
+      if (rdd.partitioner != Some(partitioner)) {
+        // Preaggregation.
+        val aggregator = new Aggregator[K, V, V](v => v, reduceFun, reduceFun)
+        val combined = rdd.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
+        combined.partitionBy(partitioner) //new ShuffledRDD[K, V, (K, V)](combined, partitioner)
+      } else {
+        rdd
+      }
+
+    // Use the index to build the new values table
+    val values = index.rdd.zipPartitions(partitioned)( (indexIter, tblIter) => {
+      // There is only one map
+      val index = indexIter.next()
+      assert(!indexIter.hasNext())
+      val values = new Array[Array[V]](index.size)
+      for ((k,v) <- tblIter) {
+        if (!index.contains(k)) {
+          throw new SparkException("Error: Trying to bind an external index " +
+            "to an RDD which contains keys that are not in the index.")
+        }
+        val ind = index(k)
+        if (values(ind) == null) { 
+          values(ind) = Array(v)
+        } else {
+          values(ind)(0) = reduceFun(values(ind).head, v)
+        }
+      }
+      List(values.view.map(x => if (x != null) x.toSeq else null ).toSeq).iterator
+    })
+
+    new IndexedRDD[K,V](index, values)
+
+  }
+
   /**
    * Construct and index of the unique values in a given RDD.
    */

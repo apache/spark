@@ -341,9 +341,9 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
 
-    val newVTable: RDD[(Vid, A)] =
-      vTableReplicated.join(eTable).flatMap{
-        case (pid, (vmap, edgePartition)) => 
+    // Map and preaggregate 
+    val preAgg = vTableReplicated.join(eTable).flatMap{
+      case (pid, (vmap, edgePartition)) => 
         val aggMap = new VertexHashMap[A]
         val et = new EdgeTriplet[VD, ED]
         edgePartition.foreach{e => 
@@ -353,17 +353,17 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
           mapFunc(et).foreach{case (vid, a) => 
             if(aggMap.containsKey(vid)) {
               aggMap.put(vid, reduceFunc(aggMap.get(vid), a))             
-            } else { aggMap.put(vid, a) }
+              } else { aggMap.put(vid, a) }
+            }
           }
-        }
         // Return the aggregate map
         aggMap.long2ObjectEntrySet().fastIterator().map{ 
           entry => (entry.getLongKey(), entry.getValue())
         }
-      }
-      .indexed(vTable.index).reduceByKey(reduceFunc)
+      }.partitionBy(vTable.index.rdd.partitioner.get)
 
-    newVTable
+    // do the final reduction reusing the index map
+    IndexedRDD.reduceByKey(preAgg, reduceFunc, vTable.index)
   }
 
 
