@@ -146,7 +146,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     val replicationRatio = 
       vid2pid.groupByKey().map(kv => kv._2.size).sum / vTable.count
     val loadArray = 
-      eTable.map{ case (pid, epart) => epart.data.size }.collect.map(x => x / numEdges)
+      eTable.map{ case (pid, epart) => epart.data.size }.collect.map(x => x.toDouble / numEdges)
     val minLoad = loadArray.min
     val maxLoad = loadArray.max
     Map(
