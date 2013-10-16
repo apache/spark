@@ -31,6 +31,9 @@ case class StageCompleted(val stageInfo: StageInfo) extends SparkListenerEvents
 
 case class SparkListenerTaskStart(task: Task[_], taskInfo: TaskInfo) extends SparkListenerEvents
 
+case class SparkListenerTaskGettingResult(
+  task: Task[_], taskInfo: TaskInfo) extends SparkListenerEvents
+
 case class SparkListenerTaskEnd(task: Task[_], reason: TaskEndReason, taskInfo: TaskInfo,
      taskMetrics: TaskMetrics) extends SparkListenerEvents
 
@@ -55,6 +58,12 @@ trait SparkListener {
    * Called when a task starts
    */
   def onTaskStart(taskStart: SparkListenerTaskStart) { }
+
+  /**
+   * Called when a task begins remotely fetching its result (will not be called for tasks that do
+   * not need to fetch the result remotely).
+   */
+ def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult) { }
 
   /**
    * Called when a task ends

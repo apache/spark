@@ -115,7 +115,13 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     taskList += ((taskStart.taskInfo, None, None))
     stageToTaskInfos(sid) = taskList
   }
- 
+
+  override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult)
+      = synchronized {
+    // Do nothing: because we don't do a deep copy of the TaskInfo, the TaskInfo in
+    // stageToTaskInfos already has the updated status.
+  }
+
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val sid = taskEnd.task.stageId
     val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())

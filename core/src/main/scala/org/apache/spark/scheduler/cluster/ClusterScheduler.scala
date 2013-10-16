@@ -306,6 +306,10 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
   }
 
+  def handleTaskGettingResult(taskSetManager: ClusterTaskSetManager, tid: Long) {
+    taskSetManager.handleTaskGettingResult(tid)
+  }
+
   def handleSuccessfulTask(
     taskSetManager: ClusterTaskSetManager,
     tid: Long,
