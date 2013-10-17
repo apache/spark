@@ -179,21 +179,21 @@ extends Logging {
     initialized = false
   }
 
-  val BlockSize = System.getProperty("spark.broadcast.blockSize", "4096").toInt * 1024
+  val BLOCK_SIZE = System.getProperty("spark.broadcast.blockSize", "4096").toInt * 1024
   
-  def blockifyObject[IN](obj: IN): TorrentInfo = {
-    val byteArray = Utils.serialize[IN](obj)
+  def blockifyObject[T](obj: T): TorrentInfo = {
+    val byteArray = Utils.serialize[T](obj)
     val bais = new ByteArrayInputStream(byteArray)
 
-    var blockNum = (byteArray.length / BlockSize)
-    if (byteArray.length % BlockSize != 0)
+    var blockNum = (byteArray.length / BLOCK_SIZE)
+    if (byteArray.length % BLOCK_SIZE != 0)
       blockNum += 1
 
     var retVal = new Array[TorrentBlock](blockNum)
     var blockID = 0
 
-    for (i <- 0 until (byteArray.length, BlockSize)) {
-      val thisBlockSize = math.min(BlockSize, byteArray.length - i)
+    for (i <- 0 until (byteArray.length, BLOCK_SIZE)) {
+      val thisBlockSize = math.min(BLOCK_SIZE, byteArray.length - i)
       var tempByteArray = new Array[Byte](thisBlockSize)
       val hasRead = bais.read(tempByteArray, 0, thisBlockSize)
 
@@ -208,15 +208,15 @@ extends Logging {
     return tInfo
   }
 
-  def unBlockifyObject[OUT](arrayOfBlocks: Array[TorrentBlock],
+  def unBlockifyObject[T](arrayOfBlocks: Array[TorrentBlock],
                             totalBytes: Int, 
-                            totalBlocks: Int): OUT = {
+                            totalBlocks: Int): T = {
     var retByteArray = new Array[Byte](totalBytes)
     for (i <- 0 until totalBlocks) {
       System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
-        i * BlockSize, arrayOfBlocks(i).byteArray.length)
+        i * BLOCK_SIZE, arrayOfBlocks(i).byteArray.length)
     }
-    Utils.deserialize[OUT](retByteArray, Thread.currentThread.getContextClassLoader)
+    Utils.deserialize[T](retByteArray, Thread.currentThread.getContextClassLoader)
   }
 
 }
