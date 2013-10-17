@@ -10,6 +10,9 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
 //  val sc = new SparkContext("local[4]", "test")
 
+  System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+  System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
+
   test("Graph Creation") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rawEdges = (0L to 100L).zip((1L to 99L) :+ 0L)
