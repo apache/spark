@@ -47,7 +47,7 @@ bin=`cd "$bin"; pwd`
 HOSTLIST=$SPARK_SLAVES
 
 # Check if --config is passed as an argument. It is an optional parameter.
-# Exit if the argument is a directory.
+# Exit if the argument is not a directory.
 if [ "$1" == "--config" ]
 then
   shift

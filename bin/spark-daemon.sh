@@ -45,7 +45,7 @@ bin=`cd "$bin"; pwd`
 # get arguments
 
 # Check if --config is passed as an argument. It is an optional parameter.
-# Exit if the argument is a directory.
+# Exit if the argument is not a directory.
 
 if [ "$1" == "--config" ]
 then
