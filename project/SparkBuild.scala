@@ -231,8 +231,6 @@ object SparkBuild extends Build {
 
       "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm),
 
-      "org.eclipse.paho" % "mqtt-client" % "0.4.0",
-
       "org.apache.cassandra" % "cassandra-all" % "1.2.5"
         exclude("com.google.guava", "guava")
         exclude("com.googlecode.concurrentlinkedhashmap", "concurrentlinkedhashmap-lru")
