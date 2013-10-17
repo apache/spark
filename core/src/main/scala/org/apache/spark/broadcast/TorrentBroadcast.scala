@@ -84,7 +84,7 @@ extends Broadcast[T](id) with Logging with Serializable {
           val start = System.nanoTime
           logInfo("Started reading broadcast variable " + id)
           
-          // Master might send invalid values
+          // Initialize @transient variables that will receive garbage values from the master.
           resetWorkerVariables()
 
           if (receiveBroadcast(id)) {
@@ -135,8 +135,9 @@ extends Broadcast[T](id) with Logging with Serializable {
       }
       attemptId -= 1
     }
-    if (totalBlocks == -1)
+    if (totalBlocks == -1) {
       return false
+    }
 
     // Receive actual blocks
     val recvOrder = new Random().shuffle(Array.iterate(0, totalBlocks)(_ + 1).toList)
@@ -151,8 +152,7 @@ extends Broadcast[T](id) with Logging with Serializable {
               pieceId, arrayOfBlocks(pid), StorageLevel.MEMORY_AND_DISK, true)
           
           case None => 
-            throw new SparkException(
-              "Failed to get " + pieceId + " of " + broadcastId)
+            throw new SparkException("Failed to get " + pieceId + " of " + broadcastId)
         }
       }
     }
