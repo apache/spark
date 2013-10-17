@@ -4,6 +4,7 @@ import scala.collection.JavaConversions._
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.ArrayBuilder
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.Partitioner
@@ -501,11 +502,11 @@ object GraphImpl {
 
     val vTableReplicatedValues: IndexedRDD[Pid, Array[VD]] =
       msgsByPartition.mapPartitionsWithIndex( (pid, iter) => {
-        val vertexArray = new ArrayBuffer[VD]
+        val vertexArray = ArrayBuilder.make[VD]
         for (msg <- iter) {
           vertexArray += msg.data._2
         }
-        Array((pid, vertexArray.toArray)).iterator
+        Array((pid, vertexArray.result)).iterator
       }, preservesPartitioning = true).indexed(eTable.index)
 
     (vTableReplicationMap, vTableReplicatedValues)
