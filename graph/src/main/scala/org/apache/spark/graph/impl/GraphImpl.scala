@@ -486,7 +486,8 @@ object GraphImpl {
         .flatMap { case (vid, (vdata, pids)) =>
           pids.iterator.map { pid => MessageToPartition(pid, (vid, vdata)) }
         }
-        .partitionBy(eTable.partitioner.get) //@todo assert edge table has partitioner
+        .partitionBy(eTable.partitioner.get).cache()
+    // @todo assert edge table has partitioner
 
     val vTableReplicationMap: IndexedRDD[Pid, VertexIdToIndexMap] =
       msgsByPartition.mapPartitionsWithIndex( (pid, iter) => {
