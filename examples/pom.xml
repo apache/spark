@@ -125,11 +125,6 @@
         </exclusion>
       </exclusions>
     </dependency>
-    <dependency>
-      <groupId>org.eclipse.paho</groupId>
-      <artifactId>mqtt-client</artifactId>
-       <version>0.4.0</version>
-    </dependency>
   </dependencies>
 
   <profiles>
