@@ -28,7 +28,7 @@
 #   SPARK_SSH_OPTS Options passed to ssh when running remote commands.
 ##
 
-usage="Usage: slaves.sh [--config confdir] command..."
+usage="Usage: slaves.sh [--config <conf-dir>] command..."
 
 # if no args specified, show usage
 if [ $# -le 0 ]; then
@@ -46,14 +46,15 @@ bin=`cd "$bin"; pwd`
 # spark-env.sh. Save it here.
 HOSTLIST=$SPARK_SLAVES
 
-#check if conf dir passed as an argument
+# Check if --config is passed as an argument. It is an optional parameter.
+# Exit if the argument is a directory.
 if [ "$1" == "--config" ]
 then
   shift
   conf_dir=$1
   if [ ! -d "$conf_dir" ]
   then
-    echo "$conf_dir is not a valid directory"
+    echo "ERROR : $conf_dir is not a directory"
     echo $usage
     exit 1
   else
