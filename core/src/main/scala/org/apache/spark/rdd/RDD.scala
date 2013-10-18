@@ -30,6 +30,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.TextOutputFormat
 
 import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
 import org.apache.spark.Partitioner._
 import org.apache.spark.api.java.JavaRDD
@@ -38,7 +39,7 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, BoundedPriorityQueue}
+import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableHyperLogLog}
 
 import org.apache.spark.SparkContext._
 import org.apache.spark._
@@ -763,6 +764,29 @@ abstract class RDD[T: ClassManifest](
     }
     val evaluator = new GroupedCountEvaluator[T](partitions.size, confidence)
     sc.runApproximateJob(this, countPartition, evaluator, timeout)
+  }
+
+  /**
+   * Return approximate number of distinct elements in the RDD.
+   *
+   * The accuracy of approximation can be controlled through the relative standard diviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. The default value of
+   * relativeSD is 0.05.
+   */
+  def countDistinct(relativeSD: Double = 0.05): Long = {
+
+    def hllCountPartition(iter: Iterator[T]): Iterator[SerializableHyperLogLog] = {
+      val hllCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
+      while (iter.hasNext) {
+        val v = iter.next()
+        hllCounter.value.offer(v)
+      }
+      Iterator(hllCounter)
+    }
+    def mergeCounters(c1: SerializableHyperLogLog, c2: SerializableHyperLogLog): SerializableHyperLogLog = c1.merge(c2)
+
+    mapPartitions(hllCountPartition).reduce(mergeCounters).value.cardinality()
   }
 
   /**

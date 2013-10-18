@@ -63,6 +63,19 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("Approximate distinct count") {
+
+    def error(est: Long, size: Long) = math.abs(est - size)/size.toDouble
+
+    val size = 100
+    val uniformDistro = for (i <- 1 to 100000) yield i % size
+    val simpleRdd = sc.makeRDD(uniformDistro)
+    assert( error(simpleRdd.countDistinct(0.2), size) < 0.2)
+    assert( error(simpleRdd.countDistinct(0.05), size) < 0.05)
+    assert( error(simpleRdd.countDistinct(0.01), size) < 0.01)
+    assert( error(simpleRdd.countDistinct(0.001), size) < 0.001)
+  }
+
   test("SparkContext.union") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(sc.union(nums).collect().toList === List(1, 2, 3, 4))
