@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
  * instance of the serializer object has been created, the get method returns that instead of
  * creating a new one.
  */
-private[spark] class SerializerManager extends org.apache.spark.Logging {
+private[spark] class SerializerManager {
 
   private val serializers = new ConcurrentHashMap[String, Serializer]
   private var _default: Serializer = _

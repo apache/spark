@@ -63,10 +63,14 @@ class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging
     kryo.register(classOf[HttpBroadcast[_]], new KryoJavaSerializer())
 
     // Allow the user to register their own classes by setting spark.kryo.registrator
-    Option(System.getProperty("spark.kryo.registrator")).foreach { regCls =>
-      logDebug("Running user registrator: " + regCls)
-      val reg = Class.forName(regCls, true, classLoader).newInstance().asInstanceOf[KryoRegistrator]
-      reg.registerClasses(kryo)
+    try {
+      Option(System.getProperty("spark.kryo.registrator")).foreach { regCls =>
+        logDebug("Running user registrator: " + regCls)
+        val reg = Class.forName(regCls, true, classLoader).newInstance().asInstanceOf[KryoRegistrator]
+        reg.registerClasses(kryo)
+      }
+    } catch {
+      case _: Exception => println("Failed to register spark.kryo.registrator")
     }
 
     // Register Chill's classes; we do this after our ranges and the user's own classes to let
@@ -118,7 +122,7 @@ class KryoDeserializationStream(kryo: Kryo, inStream: InputStream) extends Deser
   }
 }
 
-private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance with Logging {
+private[spark] class KryoSerializerInstance(ks: KryoSerializer) extends SerializerInstance {
   val kryo = ks.newKryo()
 
   // Make these lazy vals to avoid creating a buffer unless we use them

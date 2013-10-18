@@ -245,7 +245,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
     if (getKeyClass().isArray && partitioner.isInstanceOf[HashPartitioner]) {
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
-    new ShuffledRDD[K, V, (K, V)](self, partitioner) 
+    new ShuffledRDD[K, V, (K, V)](self, partitioner)
   }
 
   /**
@@ -265,9 +265,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
    * partition the output RDD.
    */
-
-  def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): 
-  RDD[(K, (V, Option[W]))] = {
+  def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
     this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
       if (ws.isEmpty) {
         vs.iterator.map(v => (v, None))
