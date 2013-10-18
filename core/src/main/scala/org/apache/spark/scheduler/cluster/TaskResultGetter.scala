@@ -24,33 +24,16 @@ import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, TaskResult}
 import org.apache.spark.serializer.SerializerInstance
+import org.apache.spark.util.Utils
 
 /**
  * Runs a thread pool that deserializes and remotely fetches (if necessary) task results.
  */
 private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterScheduler)
   extends Logging {
-  private val MIN_THREADS = System.getProperty("spark.resultGetter.minThreads", "4").toInt
-  private val MAX_THREADS = System.getProperty("spark.resultGetter.maxThreads", "4").toInt
-  private val getTaskResultExecutor = new ThreadPoolExecutor(
-    MIN_THREADS,
-    MAX_THREADS,
-    0L,
-    TimeUnit.SECONDS,
-    new LinkedBlockingDeque[Runnable],
-    new ResultResolverThreadFactory)
-
-  class ResultResolverThreadFactory extends ThreadFactory {
-    private var counter = 0
-    private var PREFIX = "Result resolver thread"
-
-    override def newThread(r: Runnable): Thread = {
-      val thread = new Thread(r, "%s-%s".format(PREFIX, counter))
-      counter += 1
-      thread.setDaemon(true)
-      return thread
-    }
-  }
+  private val THREADS = System.getProperty("spark.resultGetter.threads", "4").toInt
+  private val getTaskResultExecutor = Utils.newDaemonFixedThreadPool(
+    THREADS, "Result resolver thread")
 
   protected val serializer = new ThreadLocal[SerializerInstance] {
     override def initialValue(): SerializerInstance = {

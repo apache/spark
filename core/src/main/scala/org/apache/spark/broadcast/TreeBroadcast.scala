@@ -291,7 +291,7 @@ extends Broadcast[T](id) with Logging with Serializable {
     private var setOfCompletedSources = Set[SourceInfo]()
 
     override def run() {
-      var threadPool = Utils.newDaemonCachedThreadPool()
+      var threadPool = Utils.newDaemonCachedThreadPool("Tree broadcast guide multiple requests")
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(0)
@@ -493,7 +493,7 @@ extends Broadcast[T](id) with Logging with Serializable {
   class ServeMultipleRequests
   extends Thread with Logging {
     
-    var threadPool = Utils.newDaemonCachedThreadPool()
+    var threadPool = Utils.newDaemonCachedThreadPool("Tree broadcast serve multiple requests")
     
     override def run() {      
       var serverSocket = new ServerSocket(0)

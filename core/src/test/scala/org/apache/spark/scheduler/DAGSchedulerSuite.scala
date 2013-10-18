@@ -60,7 +60,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
       taskSets += taskSet
     }
     override def cancelTasks(stageId: Int) {}
-    override def setListener(listener: TaskSchedulerListener) = {}
+    override def setDAGScheduler(dagScheduler: DAGScheduler) = {}
     override def defaultParallelism() = 2
   }
 
