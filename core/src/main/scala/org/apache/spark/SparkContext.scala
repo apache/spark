@@ -217,21 +217,20 @@ class SparkContext(
         scheduler.initialize(backend)
         scheduler
 
-      case _ =>
-        if (MESOS_REGEX.findFirstIn(master).isEmpty) {
-          logWarning("Master %s does not match expected format, parsing as Mesos URL".format(master))
-        }
+      case MESOS_REGEX(mesosUrl) =>
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
-        val masterWithoutProtocol = master.replaceFirst("^mesos://", "")  // Strip initial mesos://
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, this, masterWithoutProtocol, appName)
+          new CoarseMesosSchedulerBackend(scheduler, this, mesosUrl, appName)
         } else {
-          new MesosSchedulerBackend(scheduler, this, masterWithoutProtocol, appName)
+          new MesosSchedulerBackend(scheduler, this, mesosUrl, appName)
         }
         scheduler.initialize(backend)
         scheduler
+
+      case _ =>
+        throw new SparkException("Could not parse Master URL: '" + master + "'")
     }
   }
   taskScheduler.start()
