@@ -72,7 +72,7 @@ class RDDIndex[@specialized K: ClassManifest](private[spark] val rdd: RDD[BlockI
  */
 class IndexedRDD[K: ClassManifest, V: ClassManifest](
     @transient val index:  RDDIndex[K],
-    @transient val valuesRDD: RDD[ (Array[V], BitSet) ])
+    @transient val valuesRDD: RDD[ (Seq[V], BitSet) ])
   extends RDD[(K, V)](index.rdd.context, 
     List(new OneToOneDependency(index.rdd), new OneToOneDependency(valuesRDD)) ) {
 
@@ -113,46 +113,160 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   }
 
 
-
-
-  def zipJoinRDD[W: ClassManifest](other: IndexedRDD[K,W]): RDD[(K,(V,W))] = {
-    assert(index == other.index)
-    index.rdd.zipPartitions(valuesRDD, other.valuesRDD){
-      (thisIndexIter, thisIter, otherIter) => 
-      val index = thisIndexIter.next()
-      assert(!thisIndexIter.hasNext)
-      val (thisValues, thisBS) = thisIter.next()
-      assert(!thisIter.hasNext)
-      val (otherValues, otherBS) = otherIter.next()
-      assert(!otherIter.hasNext)
-      val newBS = thisBS & otherBS
-
-      index.iterator.flatMap{ case (k,i) => 
-        if(newBS(i)) List((k, (thisValues(i), otherValues(i))))
-        else List.empty
-      }
-    }
+  /**
+   * Pass each value in the key-value pair RDD through a map function without changing the keys;
+   * this also retains the original RDD's partitioning.
+   */
+  def mapValues[U: ClassManifest](f: V => U): IndexedRDD[K, U] = {
+    val cleanF = index.rdd.context.clean(f)
+    val newValuesRDD = valuesRDD.mapPartitions(iter => iter.map{ 
+      case (values, bs) => 
+        val newValues = new Array[U](values.size)
+        for ( ind <- bs ) {
+          newValues(ind) = f(values(ind))
+        }
+        (newValues.toSeq, bs)
+      }, preservesPartitioning = true)
+    new IndexedRDD[K,U](index, newValuesRDD)
   }
 
+
+  /**
+   * Pass each value in the key-value pair RDD through a map function without changing the keys;
+   * this also retains the original RDD's partitioning.
+   */
+  def mapValuesWithKeys[U: ClassManifest](f: (K, V) => U): IndexedRDD[K, U] = {
+    val cleanF = index.rdd.context.clean(f)
+    val newValues = index.rdd.zipPartitions(valuesRDD){ 
+      (keysIter, valuesIter) => 
+      val index = keysIter.next()
+      assert(keysIter.hasNext() == false)
+      val (oldValues, bs) = valuesIter.next()
+      assert(valuesIter.hasNext() == false)
+       // Allocate the array to store the results into
+      val newValues: Array[U] = new Array[U](oldValues.size)
+      // Populate the new Values
+      for( (k,i) <- index ) {
+        if (bs(i)) { newValues(i) = f(k, oldValues(i)) }      
+      }
+      Array((newValues.toSeq, bs)).iterator
+    }
+    new IndexedRDD[K,U](index, newValues)
+  }
+
+
   def zipJoin[W: ClassManifest](other: IndexedRDD[K,W]): IndexedRDD[K,(V,W)] = {
-    assert(index == other.index)
-    val newValuesRDD = valuesRDD.zipPartitions(other.valuesRDD){
+    if(index != other.index) {
+      throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
+    }
+    val newValuesRDD: RDD[ (Seq[(V,W)], BitSet) ] = valuesRDD.zipPartitions(other.valuesRDD){
       (thisIter, otherIter) => 
       val (thisValues, thisBS) = thisIter.next()
       assert(!thisIter.hasNext)
       val (otherValues, otherBS) = otherIter.next()
       assert(!otherIter.hasNext)
       val newBS = thisBS & otherBS
-      val newValues = new Array[(V,W)](thisValues.size)
-      for( i <- newBS ) {
-        newValues(i) = (thisValues(i), otherValues(i))
-      }
-      List((newValues, newBS)).iterator
+      val newValues = thisValues.view.zip(otherValues)
+      Iterator((newValues, newBS))
     }
     new IndexedRDD(index, newValuesRDD)
   }
 
 
+  def leftZipJoin[W: ClassManifest](other: IndexedRDD[K,W]): IndexedRDD[K,(V,Option[W])] = {
+    if(index != other.index) {
+      throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
+    }
+    val newValuesRDD: RDD[ (Seq[(V,Option[W])], BitSet) ] = valuesRDD.zipPartitions(other.valuesRDD){
+      (thisIter, otherIter) => 
+      val (thisValues, thisBS) = thisIter.next()
+      assert(!thisIter.hasNext)
+      val (otherValues, otherBS) = otherIter.next()
+      assert(!otherIter.hasNext)
+      val otherOption = otherValues.view.zipWithIndex
+        .map{ (x: (W, Int)) => if(otherBS(x._2)) Option(x._1) else None }
+      val newValues = thisValues.view.zip(otherOption)
+      Iterator((newValues, thisBS))
+    }
+    new IndexedRDD(index, newValuesRDD)
+  }
+
+
+
+  def leftJoin[W: ClassManifest](
+    other: RDD[(K,W)], merge: (W,W) => W = (a:W, b:W) => a):
+    IndexedRDD[K, (V, Option[W]) ] = {
+    val cleanMerge = index.rdd.context.clean(merge)
+    other match {
+      case other: IndexedRDD[_, _] if index == other.index => {
+        leftZipJoin(other)
+      }    
+      case _ => {
+        // Get the partitioner from the index
+        val partitioner = index.rdd.partitioner match {
+          case Some(p) => p
+          case None => throw new SparkException("An index must have a partitioner.")
+        }
+        // Shuffle the other RDD using the partitioner for this index
+        val otherShuffled = 
+          if (other.partitioner == Some(partitioner)) other 
+          else other.partitionBy(partitioner)
+        val newValues = index.rdd.zipPartitions(valuesRDD, other) {
+          (thisIndexIter, thisIter, tuplesIter) =>
+          val index = thisIndexIter.next()
+          assert(!thisIndexIter.hasNext)
+          val (thisValues, thisBS) = thisIter.next()
+          assert(!thisIter.hasNext)
+          val newW = new Array[W](thisValues.size)
+          // track which values are matched with values in other
+          val wBS = new BitSet(thisValues.size)
+          for( (k, w) <- tuplesIter if index.contains(k) ) {
+            val ind = index.get(k)
+            if(thisBS(ind)) {
+              if(wBS(ind)) {
+                newW(ind) = cleanMerge(newW(ind), w) 
+              } else {
+                newW(ind) = w
+                wBS(ind) = true
+              }
+            }
+          }
+
+          val otherOption = newW.view.zipWithIndex
+            .map{ (x: (W, Int)) => if(wBS(x._2)) Option(x._1) else None }
+          val newValues = thisValues.view.zip(otherOption)
+
+          Iterator((newValues.toSeq, thisBS))
+        } // end of newValues
+        new IndexedRDD(index, newValues) 
+      }
+    }
+  }
+
+
+
+  // 
+  // def zipJoinToRDD[W: ClassManifest](other: IndexedRDD[K,W]): RDD[(K,(V,W))] = {
+  //   if(index != other.index) {
+  //     throw new SparkException("ZipJoinRDD can only be applied to RDDs with the same index!")
+  //   }
+  //   index.rdd.zipPartitions(valuesRDD, other.valuesRDD){
+  //     (thisIndexIter, thisIter, otherIter) => 
+  //     val index = thisIndexIter.next()
+  //     assert(!thisIndexIter.hasNext)
+  //     val (thisValues, thisBS) = thisIter.next()
+  //     assert(!thisIter.hasNext)
+  //     val (otherValues, otherBS) = otherIter.next()
+  //     assert(!otherIter.hasNext)
+  //     val newBS = thisBS & otherBS
+  //     index.iterator.filter{ case (k,i) => newBS(i) }.map{ 
+  //       case (k,i) => (k, (thisValues(i), otherValues(i)))
+  //     }
+  //   }
+  // }
+
+
+/*  This is probably useful but we are not using it
   def zipJoinWithKeys[W: ClassManifest, Z: ClassManifest](
     other: RDD[(K,W)])(
     f: (K, V, W) => Z, 
@@ -222,9 +336,9 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
       }
     }
   }
+*/
 
-
-
+/*
   def zipJoinLeftWithKeys[W: ClassManifest, Z: ClassManifest](
     other: RDD[(K,W)])(
     f: (K, V, Option[W]) => Z, 
@@ -299,7 +413,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
     }
   }
 
-
+*/
 
 
   /**
@@ -320,15 +434,13 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
       assert(keysIter.hasNext() == false)
       val (oldValues, bs) = valuesIter.next()
       assert(valuesIter.hasNext() == false)
-       // Allocate the array to store the results into
-      val newValues: Array[V] = oldValues.clone().asInstanceOf[Array[V]]
+      // Allocate the array to store the results into
       val newBS = new BitSet(oldValues.size)
       // Populate the new Values
       for( (k,i) <- index ) {
-        if ( bs(i) && f( (k, oldValues(i)) ) ) { newBS(i) = true }
-        else { newValues(i) = null.asInstanceOf[V] }
+        newBS(i) = bs(i) && cleanF( (k, oldValues(i)) ) 
       }
-      Array((newValues, newBS)).iterator
+      Array((oldValues, newBS)).iterator
     }
     new IndexedRDD[K,V](index, newValues)
   }
@@ -371,7 +483,7 @@ object IndexedRDD {
 
     val groups = preAgg.mapPartitions( iter => {
       val indexMap = new BlockIndex[K]()
-      val values = new ArrayBuffer[V]()
+      val values = new ArrayBuffer[V]
       val bs = new BitSet
       for ((k,v) <- iter) {
         if(!indexMap.contains(k)) {
@@ -384,7 +496,7 @@ object IndexedRDD {
           values(ind) = reduceFunc(values(ind), v)
         }
       }
-      List( (indexMap, (values.toArray, bs)) ).iterator
+      Iterator( (indexMap, (values.toSeq, bs)) )
       }, true).cache
     // extract the index and the values
     val index = groups.mapPartitions(_.map{ case (kMap, vAr) => kMap }, true)
@@ -468,7 +580,7 @@ object IndexedRDD {
       }
 
     // Use the index to build the new values table
-    val values = index.rdd.zipPartitions(partitioned)( (indexIter, tblIter) => {
+    val values: RDD[ (Seq[C], BitSet) ] = index.rdd.zipPartitions(partitioned)( (indexIter, tblIter) => {
       // There is only one map
       val index = indexIter.next()
       assert(!indexIter.hasNext())
@@ -487,7 +599,7 @@ object IndexedRDD {
           bs(ind) = true
         }
       }
-      List((values, bs)).iterator
+      Iterator((values, bs))
     })
     new IndexedRDD(index, values)
   } // end of apply
@@ -521,7 +633,7 @@ object IndexedRDD {
           indexMap.put(k, ind)   
         }
       }
-      List(indexMap).iterator
+      Iterator(indexMap)
       }, true).cache
     new RDDIndex(index)
   }

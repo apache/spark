@@ -9,7 +9,7 @@ package object graph {
   type VertexSet = it.unimi.dsi.fastutil.longs.LongOpenHashSet
   type VertexArrayList = it.unimi.dsi.fastutil.longs.LongArrayList
   // @todo replace with rxin's fast hashmap
-  type VertexIdToIndexMap = scala.collection.mutable.HashMap[Vid, Int]
+  type VertexIdToIndexMap = it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap
 
   /**
    * Return the default null-like value for a data type T.

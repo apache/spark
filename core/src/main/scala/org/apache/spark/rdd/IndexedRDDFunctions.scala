@@ -37,48 +37,22 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
    def reindex(): IndexedRDD[K,V] = IndexedRDD(self)
 
 
-  /**
-   * Pass each value in the key-value pair RDD through a map function without changing the keys;
-   * this also retains the original RDD's partitioning.
-   */
-  override def mapValues[U: ClassManifest](f: V => U): RDD[(K, U)] = {
-    val cleanF = self.index.rdd.context.clean(f)
-    val newValuesRDD = self.valuesRDD.mapPartitions(iter => iter.map{ 
-      case (values, bs) => 
-        val newValues = new Array[U](values.size)
-        for ( ind <- bs ) {
-          newValues(ind) = f(values(ind))
-        }
-        (newValues, bs)
-      }, preservesPartitioning = true)
-    new IndexedRDD[K,U](self.index, newValuesRDD)
-  }
-
-
-  /**
-   * Pass each value in the key-value pair RDD through a map function without changing the keys;
-   * this also retains the original RDD's partitioning.
-   */
-  override def mapValuesWithKeys[U: ClassManifest](f: (K, V) => U): RDD[(K, U)] = {
-    val cleanF = self.index.rdd.context.clean(f)
-    val newValues = self.index.rdd.zipPartitions(self.valuesRDD){ 
-      (keysIter, valuesIter) => 
-      val index = keysIter.next()
-      assert(keysIter.hasNext() == false)
-      val (oldValues, bs) = valuesIter.next()
-      assert(valuesIter.hasNext() == false)
-       // Allocate the array to store the results into
-      val newValues: Array[U] = new Array[U](oldValues.size)
-      // Populate the new Values
-      for( (k,i) <- index ) {
-        if (bs(i)) { newValues(i) = f(k, oldValues(i)) }      
-      }
-      Array((newValues, bs)).iterator
-    }
-    new IndexedRDD[K,U](self.index, newValues)
-  }
-
-
+  // /**
+  //  * Pass each value in the key-value pair RDD through a map function without changing the keys;
+  //  * this also retains the original RDD's partitioning.
+  //  */
+  // override def mapValues[U: ClassManifest](f: V => U): RDD[(K, U)] = {
+  //   val cleanF = self.index.rdd.context.clean(f)
+  //   val newValuesRDD = self.valuesRDD.mapPartitions(iter => iter.map{ 
+  //     case (values, bs) => 
+  //       val newValues = new Array[U](values.size)
+  //       for ( ind <- bs ) {
+  //         newValues(ind) = f(values(ind))
+  //       }
+  //       (newValues.toSeq, bs)
+  //     }, preservesPartitioning = true)
+  //   new IndexedRDD[K,U](self.index, newValuesRDD)
+  // }
 
   /**
    * Pass each value in the key-value pair RDD through a flatMap function without changing the
@@ -97,7 +71,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
             newBS(ind) = true
           }
         }
-        (newValues, newBS)
+        (newValues.toSeq, newBS)
       }, preservesPartitioning = true)
     new IndexedRDD[K,U](self.index, newValuesRDD)
   }
@@ -162,7 +136,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
               val b = if (otherBS(ind)) Seq(otherValues(ind)) else Seq.empty[W]
               newValues(ind) = (a, b)
             }
-            List((newValues, newBS)).iterator
+            Iterator((newValues.toSeq, newBS))
         }
         new IndexedRDD(self.index, newValues) 
       }
@@ -225,7 +199,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
                   newBS(ind) = true                  
                 }
               }
-              List((newValues, newBS)).iterator
+              Iterator((newValues.toSeq, newBS))
             })
         new IndexedRDD(new RDDIndex(newIndex), newValues)
       }
@@ -288,7 +262,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
             //     case null => null
             //     case (s, ab) => Seq((s, ab.toSeq)) 
             //     }.toSeq 
-            List( (newIndex, (newValues.toArray, newBS)) ).iterator
+            Iterator( (newIndex, (newValues.toSeq, newBS)) )
           }).cache()
 
         // Extract the index and values from the above RDD  
