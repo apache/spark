@@ -17,26 +17,27 @@
 
 package org.apache.spark.util
 
-import java.io.{ObjectOutputStream, ObjectInputStream}
+import java.io.{Externalizable, ObjectOutput, ObjectInput}
 import com.clearspring.analytics.stream.cardinality.{ICardinality, HyperLogLog}
 
 /**
- * A wrapper around com.clearspring.analytics.stream.cardinality.HyperLogLog that is serializable.
+ * A wrapper around [[com.clearspring.analytics.stream.cardinality.HyperLogLog]] that is serializable.
  */
 private[spark]
-class SerializableHyperLogLog(@transient var value: ICardinality) extends Serializable {
+class SerializableHyperLogLog(var value: ICardinality) extends Externalizable {
 
+  def this() = this(null)  // For deserialization
 
   def merge(other: SerializableHyperLogLog) = new SerializableHyperLogLog(value.merge(other.value))
 
-  private def readObject(in: ObjectInputStream) {
+  def readExternal(in: ObjectInput) {
     val byteLength = in.readInt()
     val bytes = new Array[Byte](byteLength)
     in.readFully(bytes)
     value = HyperLogLog.Builder.build(bytes)
   }
 
-  private def writeObject(out: ObjectOutputStream) {
+  def writeExternal(out: ObjectOutput) {
     val bytes = value.getBytes()
     out.writeInt(bytes.length)
     out.write(bytes)
