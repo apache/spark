@@ -94,11 +94,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
   } // end of aggregateNeighbors
 
 
-
-
-
-
-
   def collectNeighborIds(edgeDirection: EdgeDirection) : RDD[(Vid, Array[Vid])] = {
     val nbrs = graph.aggregateNeighbors[Array[Vid]](
       (vid, edge) => Some(Array(edge.otherVertexId(vid))),

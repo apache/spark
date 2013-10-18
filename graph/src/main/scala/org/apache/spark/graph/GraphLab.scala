@@ -4,7 +4,7 @@ import scala.collection.JavaConversions._
 import org.apache.spark.rdd.RDD
 
 /**
- * This object implement the graphlab gather-apply-scatter api.
+ * This object implements the GraphLab gather-apply-scatter api.
  */
 object GraphLab {
 

@@ -16,9 +16,9 @@ import org.apache.spark.graph.Graph
 import org.apache.spark.graph.Edge
 import org.apache.spark.graph.impl.GraphImpl
 
-
-// TODO(crankshaw) I might want to pull at least RMAT out into a separate class.
-// Might simplify the code to have classwide variables and such.
+/**
+ * @todo(crankshaw) cleanup and modularize code
+ */
 object GraphGenerators {
 
   val RMATa = 0.45
@@ -235,8 +235,6 @@ object GraphGenerators {
       case _ => 3 // 3 corresponds to d
     }
   }
-
-
 
 }
 

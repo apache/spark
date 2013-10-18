@@ -184,13 +184,42 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
 
   /**
-   * @todo document function
+   * groupEdgeTriplets is used to merge multiple edges that have the
+   * same source and destination vertex into a single edge. The user
+   * supplied function is applied to each directed pair of vertices (u, v) and
+   * has access to all EdgeTriplets
+   *
+   * {e: for all e in E where e.src = u and e.dst = v}
+   *
+   * This function is identical to [[org.apache.spark.graph.Graph.groupEdges]]
+   * except that this function
+   * provides the user-supplied function with an iterator over EdgeTriplets,
+   * which contain the vertex data, whereas groupEdges provides the user-supplied
+   * function with an iterator over Edges, which only contain the vertex IDs.
+   *
+   * @tparam ED2 the type of the resulting edge data after grouping
+   *
+   * @param f the user supplied function to merge multiple EdgeTriplets
+   * into a single ED2 object
+   *
+   * @return Graph[VD,ED2] The resulting graph with a single Edge for each
+   * source, dest vertex pair.
+   *
    */
   def groupEdgeTriplets[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ): Graph[VD,ED2]
 
 
   /**
-   * @todo document function
+   * This function merges multiple edges between two vertices into a single
+   * Edge. See [[org.apache.spark.graph.Graph.groupEdgeTriplets]] for more detail.
+   *
+   * @tparam ED2 the type of the resulting edge data after grouping.
+   *
+   * @param f the user supplied function to merge multiple Edges
+   * into a single ED2 object.
+   *
+   * @return Graph[VD,ED2] The resulting graph with a single Edge for each
+   * source, dest vertex pair.
    */
   def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ): Graph[VD,ED2]
 
