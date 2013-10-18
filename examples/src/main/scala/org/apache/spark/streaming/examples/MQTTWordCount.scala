@@ -22,12 +22,12 @@ import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.dstream.MQTTReceiver
 import org.apache.spark.storage.StorageLevel
 
-import org.eclipse.paho.client.mqttv3.MqttClient;
-import org.eclipse.paho.client.mqttv3.MqttClientPersistence;
-import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence;
-import org.eclipse.paho.client.mqttv3.MqttException;
-import org.eclipse.paho.client.mqttv3.MqttMessage;
-import org.eclipse.paho.client.mqttv3.MqttTopic;
+import org.eclipse.paho.client.mqttv3.MqttClient
+import org.eclipse.paho.client.mqttv3.MqttClientPersistence
+import org.eclipse.paho.client.mqttv3.persist.MqttDefaultFilePersistence
+import org.eclipse.paho.client.mqttv3.MqttException
+import org.eclipse.paho.client.mqttv3.MqttMessage
+import org.eclipse.paho.client.mqttv3.MqttTopic
 
 /**
  * A simple Mqtt publisher for demonstration purposes, repeatedly publishes Space separated String Message "hello mqtt demo for spark streaming"
@@ -47,24 +47,24 @@ object MQTTPublisher {
     val Seq(brokerUrl, topic) = args.toSeq
 
     try {
-      var peristance:MqttClientPersistence =new MqttDefaultFilePersistence("/tmp");
-      client = new MqttClient(brokerUrl, MqttClient.generateClientId(), peristance);
+      var peristance:MqttClientPersistence =new MqttDefaultFilePersistence("/tmp")
+      client = new MqttClient(brokerUrl, MqttClient.generateClientId(), peristance)
     } catch {
-      case e: MqttException => println("Exception Caught: " + e);
+      case e: MqttException => println("Exception Caught: " + e)
 
     }
 
-    client.connect();
+    client.connect()
 
     val msgtopic: MqttTopic = client.getTopic(topic);
-    val msg: String = "hello mqtt demo for spark streaming";
+    val msg: String = "hello mqtt demo for spark streaming"
 
     while (true) {
-      val message: MqttMessage = new MqttMessage(String.valueOf(msg).getBytes());
+      val message: MqttMessage = new MqttMessage(String.valueOf(msg).getBytes())
       msgtopic.publish(message);
-      println("Published data. topic: " + msgtopic.getName() + " Message: " + message);
+      println("Published data. topic: " + msgtopic.getName() + " Message: " + message)
     }
-   client.disconnect();
+   client.disconnect()
 
   }
 }
@@ -109,4 +109,3 @@ object MQTTWordCount {
     ssc.start()
   }
 }
-
