@@ -19,13 +19,11 @@ package org.apache.spark.broadcast
 
 import java.io._
 import java.net._
-import java.util.{Comparator, Random, UUID}
 
-import scala.collection.mutable.{ListBuffer, Map, Set}
-import scala.math
+import scala.collection.mutable.{ListBuffer, Set}
 
 import org.apache.spark._
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 private[spark] class TreeBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
@@ -33,7 +31,7 @@ extends Broadcast[T](id) with Logging with Serializable {
 
   def value = value_
 
-  def blockId = "broadcast_" + id
+  def blockId = BroadcastBlockId(id)
 
   MultiTracker.synchronized {
     SparkEnv.get.blockManager.putSingle(blockId, value_, StorageLevel.MEMORY_AND_DISK, false)
@@ -293,7 +291,7 @@ extends Broadcast[T](id) with Logging with Serializable {
     private var setOfCompletedSources = Set[SourceInfo]()
 
     override def run() {
-      var threadPool = Utils.newDaemonCachedThreadPool()
+      var threadPool = Utils.newDaemonCachedThreadPool("Tree broadcast guide multiple requests")
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(0)
@@ -495,7 +493,7 @@ extends Broadcast[T](id) with Logging with Serializable {
   class ServeMultipleRequests
   extends Thread with Logging {
     
-    var threadPool = Utils.newDaemonCachedThreadPool()
+    var threadPool = Utils.newDaemonCachedThreadPool("Tree broadcast serve multiple requests")
     
     override def run() {      
       var serverSocket = new ServerSocket(0)

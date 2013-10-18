@@ -24,14 +24,20 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.{SparkEnv}
 import java.nio.ByteBuffer
 import org.apache.spark.util.Utils
+import org.apache.spark.storage.BlockId
 
 // Task result. Also contains updates to accumulator variables.
-// TODO: Use of distributed cache to return result is a hack to get around
-// what seems to be a bug with messages over 60KB in libprocess; fix it
+private[spark] sealed trait TaskResult[T]
+
+/** A reference to a DirectTaskResult that has been stored in the worker's BlockManager. */
 private[spark]
-class TaskResult[T](var value: T, var accumUpdates: Map[Long, Any], var metrics: TaskMetrics)
-  extends Externalizable
-{
+case class IndirectTaskResult[T](blockId: BlockId) extends TaskResult[T] with Serializable
+
+/** A TaskResult that contains the task's return value and accumulator updates. */
+private[spark]
+class DirectTaskResult[T](var value: T, var accumUpdates: Map[Long, Any], var metrics: TaskMetrics)
+  extends TaskResult[T] with Externalizable {
+
   def this() = this(null.asInstanceOf[T], null, null)
 
   override def writeExternal(out: ObjectOutput) {

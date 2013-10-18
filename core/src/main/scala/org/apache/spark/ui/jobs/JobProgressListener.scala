@@ -21,10 +21,8 @@ import scala.Seq
 import scala.collection.mutable.{ListBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExceptionFailure, SparkContext, Success}
-import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.TaskInfo
 import org.apache.spark.executor.TaskMetrics
-import collection.mutable
+import org.apache.spark.scheduler._
 
 /**
  * Tracks task-level information to be displayed in the UI.

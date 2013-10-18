@@ -21,16 +21,16 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{ExceptionFailure, Logging, SparkEnv, Success, TaskState}
+import org.apache.spark.{ExceptionFailure, Logging, SparkEnv, SparkException, Success, TaskState}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.scheduler.{Task, TaskResult, TaskSet}
-import org.apache.spark.scheduler.cluster.{Schedulable, TaskDescription, TaskInfo, TaskLocality, TaskSetManager}
+import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Pool, Schedulable, Task,
+  TaskDescription, TaskInfo, TaskLocality, TaskResult, TaskSet, TaskSetManager}
 
 
 private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: TaskSet)
   extends TaskSetManager with Logging {
 
-  var parent: Schedulable = null
+  var parent: Pool = null
   var weight: Int = 1
   var minShare: Int = 0
   var runningTasks: Int = 0
@@ -49,14 +49,14 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   val numFailures = new Array[Int](numTasks)
   val MAX_TASK_FAILURES = sched.maxFailures
 
-  override def increaseRunningTasks(taskNum: Int): Unit = {
+  def increaseRunningTasks(taskNum: Int): Unit = {
     runningTasks += taskNum
     if (parent != null) {
      parent.increaseRunningTasks(taskNum)
     }
   }
 
-  override def decreaseRunningTasks(taskNum: Int): Unit = {
+  def decreaseRunningTasks(taskNum: Int): Unit = {
     runningTasks -= taskNum
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)
@@ -132,19 +132,8 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     return None
   }
 
-  override def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
-    SparkEnv.set(env)
-    state match {
-      case TaskState.FINISHED =>
-        taskEnded(tid, state, serializedData)
-      case TaskState.FAILED =>
-        taskFailed(tid, state, serializedData)
-      case _ => {}
-    }
-  }
-
   def taskStarted(task: Task[_], info: TaskInfo) {
-    sched.listener.taskStarted(task, info)
+    sched.dagScheduler.taskStarted(task, info)
   }
 
   def taskEnded(tid: Long, state: TaskState, serializedData: ByteBuffer) {
@@ -152,9 +141,15 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     val index = info.index
     val task = taskSet.tasks(index)
     info.markSuccessful()
-    val result = ser.deserialize[TaskResult[_]](serializedData, getClass.getClassLoader)
+    val result = ser.deserialize[TaskResult[_]](serializedData, getClass.getClassLoader) match {
+      case directResult: DirectTaskResult[_] => directResult
+      case IndirectTaskResult(blockId) => {
+        throw new SparkException("Expect only DirectTaskResults when using LocalScheduler")
+      }
+    }
     result.metrics.resultSize = serializedData.limit()
-    sched.listener.taskEnded(task, Success, result.value, result.accumUpdates, info, result.metrics)
+    sched.dagScheduler.taskEnded(task, Success, result.value, result.accumUpdates, info,
+      result.metrics)
     numFinished += 1
     decreaseRunningTasks(1)
     finished(index) = true
@@ -171,7 +166,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     decreaseRunningTasks(1)
     val reason: ExceptionFailure = ser.deserialize[ExceptionFailure](
       serializedData, getClass.getClassLoader)
-    sched.listener.taskEnded(task, reason, null, null, info, reason.metrics.getOrElse(null))
+    sched.dagScheduler.taskEnded(task, reason, null, null, info, reason.metrics.getOrElse(null))
     if (!finished(index)) {
       copiesRunning(index) -= 1
       numFailures(index) += 1
@@ -182,7 +177,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
         val errorMessage = "Task %s:%d failed more than %d times; aborting job %s".format(
           taskSet.id, index, 4, reason.description)
         decreaseRunningTasks(runningTasks)
-        sched.listener.taskSetFailed(taskSet, errorMessage)
+        sched.dagScheduler.taskSetFailed(taskSet, errorMessage)
         // need to delete failed Taskset from schedule queue
         sched.taskSetFinished(this)
       }
@@ -190,5 +185,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
   }
 
   override def error(message: String) {
+    sched.dagScheduler.taskSetFailed(taskSet, message)
+    sched.taskSetFinished(this)
   }
 }

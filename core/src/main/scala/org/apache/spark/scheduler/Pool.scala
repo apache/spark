@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.Logging
-import org.apache.spark.scheduler.cluster.SchedulingMode.SchedulingMode
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
  * An Schedulable entity that represent collection of Pools or TaskSetManagers
@@ -43,9 +43,12 @@ private[spark] class Pool(
   var runningTasks = 0
 
   var priority = 0
-  var stageId = 0
+
+  // A pool's stage id is used to break the tie in scheduling.
+  var stageId = -1
+
   var name = poolName
-  var parent:Schedulable = null
+  var parent: Pool = null
 
   var taskSetSchedulingAlgorithm: SchedulingAlgorithm = {
     schedulingMode match {
@@ -101,14 +104,14 @@ private[spark] class Pool(
     return sortedTaskSetQueue
   }
 
-  override def increaseRunningTasks(taskNum: Int) {
+  def increaseRunningTasks(taskNum: Int) {
     runningTasks += taskNum
     if (parent != null) {
       parent.increaseRunningTasks(taskNum)
     }
   }
 
-  override def decreaseRunningTasks(taskNum: Int) {
+  def decreaseRunningTasks(taskNum: Int) {
     runningTasks -= taskNum
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)

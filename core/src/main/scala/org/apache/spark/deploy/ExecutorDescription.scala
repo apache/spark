@@ -15,15 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.deploy
 
 /**
- *  "FAIR" and "FIFO" determines which policy is used
- *    to order tasks amongst a Schedulable's sub-queues
- *  "NONE" is used when the a Schedulable has no sub-queues.
+ * Used to send state on-the-wire about Executors from Worker to Master.
+ * This state is sufficient for the Master to reconstruct its internal data structures during
+ * failover.
  */
-object SchedulingMode extends Enumeration("FAIR", "FIFO", "NONE") {
+private[spark] class ExecutorDescription(
+    val appId: String,
+    val execId: Int,
+    val cores: Int,
+    val state: ExecutorState.Value)
+  extends Serializable {
 
-  type SchedulingMode = Value
-  val FAIR,FIFO,NONE = Value
+  override def toString: String =
+    "ExecutorState(appId=%s, execId=%d, cores=%d, state=%s)".format(appId, execId, cores, state)
 }

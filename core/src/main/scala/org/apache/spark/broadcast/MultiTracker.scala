@@ -137,7 +137,7 @@ extends Logging {
   class TrackMultipleValues
   extends Thread with Logging {
     override def run() {
-      var threadPool = Utils.newDaemonCachedThreadPool()
+      var threadPool = Utils.newDaemonCachedThreadPool("Track multiple values")
       var serverSocket: ServerSocket = null
 
       serverSocket = new ServerSocket(DriverTrackerPort)

@@ -85,7 +85,7 @@ private[spark] object CheckpointRDD extends Logging {
     val outputDir = new Path(path)
     val fs = outputDir.getFileSystem(env.hadoop.newConfiguration())
 
-    val finalOutputName = splitIdToFile(ctx.splitId)
+    val finalOutputName = splitIdToFile(ctx.partitionId)
     val finalOutputPath = new Path(outputDir, finalOutputName)
     val tempOutputPath = new Path(outputDir, "." + finalOutputName + "-attempt-" + ctx.attemptId)
 

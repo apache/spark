@@ -26,9 +26,9 @@ import org.apache.spark.util.Utils
 private[spark] class SparkDeploySchedulerBackend(
     scheduler: ClusterScheduler,
     sc: SparkContext,
-    master: String,
+    masters: Array[String],
     appName: String)
-  extends StandaloneSchedulerBackend(scheduler, sc.env.actorSystem)
+  extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with ClientListener
   with Logging {
 
@@ -44,15 +44,15 @@ private[spark] class SparkDeploySchedulerBackend(
     // The endpoint for executors to talk to us
     val driverUrl = "akka://spark@%s:%s/user/%s".format(
       System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
-      StandaloneSchedulerBackend.ACTOR_NAME)
+      CoarseGrainedSchedulerBackend.ACTOR_NAME)
     val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}")
     val command = Command(
-      "org.apache.spark.executor.StandaloneExecutorBackend", args, sc.executorEnvs)
+      "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs)
     val sparkHome = sc.getSparkHome().getOrElse(null)
     val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome,
         "http://" + sc.ui.appUIAddress)
 
-    client = new Client(sc.env.actorSystem, master, appDesc, this)
+    client = new Client(sc.env.actorSystem, masters, appDesc, this)
     client.start()
   }
 
@@ -71,8 +71,14 @@ private[spark] class SparkDeploySchedulerBackend(
 
   override def disconnected() {
     if (!stopping) {
-      logError("Disconnected from Spark cluster!")
-      scheduler.error("Disconnected from Spark cluster")
+      logWarning("Disconnected from Spark cluster! Waiting for reconnection...")
+    }
+  }
+
+  override def dead() {
+    if (!stopping) {
+      logError("Spark cluster looks dead, giving up.")
+      scheduler.error("Spark cluster looks down")
     }
   }
 

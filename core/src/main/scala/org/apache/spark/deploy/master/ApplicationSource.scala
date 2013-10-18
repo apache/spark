@@ -34,7 +34,7 @@ class ApplicationSource(val application: ApplicationInfo) extends Source {
     override def getValue: Long = application.duration
   })
 
-  metricRegistry.register(MetricRegistry.name("cores", "number"), new Gauge[Int] {
+  metricRegistry.register(MetricRegistry.name("cores"), new Gauge[Int] {
     override def getValue: Int = application.coresGranted
   })
 
