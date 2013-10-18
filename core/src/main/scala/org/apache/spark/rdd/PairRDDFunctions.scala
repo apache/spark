@@ -211,7 +211,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
 
   /**
    * Return approximate number of distinct values for each key in this RDD.
-   * The accuracy of approximation can be controlled through the relative standard diviation
+   * The accuracy of approximation can be controlled through the relative standard deviation
    * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
    * more accurate counts but increase the memory footprint and vise versa. Uses the provided
    * Partitioner to partition the output RDD.
@@ -235,7 +235,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
 
   /**
    * Return approximate number of distinct values for each key in this RDD. 
-   * The accuracy of approximation can be controlled through the relative standard diviation
+   * The accuracy of approximation can be controlled through the relative standard deviation
    * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
    * more accurate counts but increase the memory footprint and vise versa. HashPartitions the
    * output RDD into numPartitions.
@@ -247,7 +247,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
 
   /**
    * Return approximate number of distinct values for each key this RDD.
-   * The accuracy of approximation can be controlled through the relative standard diviation
+   * The accuracy of approximation can be controlled through the relative standard deviation
    * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
    * more accurate counts but increase the memory footprint and vise versa. The default value of
    * relativeSD is 0.05. Hash-partitions the output RDD using the existing partitioner/parallelism

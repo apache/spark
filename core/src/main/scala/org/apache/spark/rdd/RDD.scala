@@ -769,7 +769,7 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return approximate number of distinct elements in the RDD.
    *
-   * The accuracy of approximation can be controlled through the relative standard diviation
+   * The accuracy of approximation can be controlled through the relative standard deviation
    * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
    * more accurate counts but increase the memory footprint and vise versa. The default value of
    * relativeSD is 0.05.
