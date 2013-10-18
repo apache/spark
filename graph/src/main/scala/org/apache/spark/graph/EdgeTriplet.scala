@@ -5,49 +5,52 @@ package org.apache.spark.graph
  *
  * @tparam VD the type of the vertex attribute.
  * @tparam ED the type of the edge attribute
+ * 
+ * @todo specialize edge triplet for basic types, though when I last tried
+ * specializing I got a warning about inherenting from a type that is not
+ * a trait.
  */
-class EdgeTriplet[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD,
-                  @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] {
-  /**
-   * The vertex (id and attribute) corresponding to the source vertex.
-   */
-  var src: Vertex[VD] = _
+class EdgeTriplet[VD, ED] extends Edge[ED] {
+// class EdgeTriplet[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD: ClassManifest,
+//                   @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest] extends Edge[ED] {
+ 
 
   /**
-   * The vertex (id and attribute) corresponding to the target vertex.
+   * The source vertex attribute
    */
-  var dst: Vertex[VD] = _
+   var srcAttr: VD = _ //nullValue[VD] 
 
   /**
-   * The attribute associated with the edge.
+   * The destination vertex attribute
    */
-  var data: ED = _
+   var dstAttr: VD = _ //nullValue[VD]
+
+  /**
+   * Set the edge properties of this triplet.  
+   */
+  protected[spark] def set(other: Edge[ED]): EdgeTriplet[VD,ED] = {
+    srcId = other.srcId
+    dstId = other.dstId
+    attr = other.attr
+    this
+  }
 
   /**
    * Given one vertex in the edge return the other vertex.
    *
    * @param vid the id one of the two vertices on the edge.
-   * @return the other vertex on the edge.
+   * @return the attribute for the other vertex on the edge.
    */
-  def otherVertex(vid: Vid): Vertex[VD] =
-    if (src.id == vid) dst else { assert(dst.id == vid); src }
+  def otherVertexAttr(vid: Vid): VD =
+    if (srcId == vid) dstAttr else { assert(dstId == vid); srcAttr }
 
   /**
    * Get the vertex object for the given vertex in the edge.
    *
    * @param vid the id of one of the two vertices on the edge
-   * @return the vertex object with that id.
+   * @return the attr for the vertex with that id.
    */
-  def vertex(vid: Vid): Vertex[VD] =
-    if (src.id == vid) src else { assert(dst.id == vid); dst }
-
-  /**
-   * Return the relative direction of the edge to the corresponding vertex.
-   *
-   * @param vid the id of one of the two vertices in the edge.
-   * @return the relative direction of the edge to the corresponding vertex.
-   */
-  def relativeDirection(vid: Vid): EdgeDirection =
-    if (vid == src.id) EdgeDirection.Out else { assert(vid == dst.id); EdgeDirection.In }
+  def vertexAttr(vid: Vid): VD =
+    if (srcId == vid) srcAttr else { assert(dstId == vid); dstAttr }
 
 }

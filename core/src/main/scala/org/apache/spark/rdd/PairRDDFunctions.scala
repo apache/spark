@@ -265,9 +265,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * pair (k, (v, None)) if no elements in `other` have key k. Uses the given Partitioner to
    * partition the output RDD.
    */
-
-  def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): 
-  RDD[(K, (V, Option[W]))] = {
+  def leftOuterJoin[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): RDD[(K, (V, Option[W]))] = {
     this.cogroup(other, partitioner).flatMapValues { case (vs, ws) =>
       if (ws.isEmpty) {
         vs.iterator.map(v => (v, None))
@@ -397,6 +395,15 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
   def mapValues[U: ClassManifest](f: V => U): RDD[(K, U)] = {
     val cleanF = self.context.clean(f)
     new MappedValuesRDD(self, cleanF)
+  }
+
+
+  /**
+   * Pass each value in the key-value pair RDD through a map function without changing the keys;
+   * this also retains the original RDD's partitioning.
+   */
+  def mapValuesWithKeys[U: ClassManifest](f: (K, V) => U): RDD[(K, U)] = {
+    self.map{ case (k,v) => (k, f(k,v)) }
   }
 
   /**
@@ -701,15 +708,18 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
   def values: RDD[V] = self.map(_._2)
 
 
+
+  def indexed(): IndexedRDD[K,V] = IndexedRDD(self)
+
   def indexed(numPartitions: Int): IndexedRDD[K,V] = 
     IndexedRDD(self.partitionBy(new HashPartitioner(numPartitions)))
 
   def indexed(partitioner: Partitioner): IndexedRDD[K,V] = 
     IndexedRDD(self.partitionBy(partitioner))
 
-
-  def indexed(existingIndex: RDDIndex[K] = null): IndexedRDD[K,V] = 
+  def indexed(existingIndex: RDDIndex[K]): IndexedRDD[K,V] = 
     IndexedRDD(self, existingIndex)
+
 
   private[spark] def getKeyClass() = implicitly[ClassManifest[K]].erasure
 

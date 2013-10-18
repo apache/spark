@@ -1,38 +1,48 @@
 package org.apache.spark.graph.impl
 
 import scala.collection.mutable.ArrayBuilder
-
-import it.unimi.dsi.fastutil.ints.IntArrayList
-
 import org.apache.spark.graph._
 
 
 /**
  * A partition of edges in 3 large columnar arrays.
  */
-private[graph]
-class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest] {
+class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest](
+  val srcIds: Array[Vid],
+  val dstIds: Array[Vid],
+  val data: Array[ED]
+  ){
 
-  private var _data: Array[ED] = _
-  private var _dataBuilder = ArrayBuilder.make[ED]
+  // private var _data: Array[ED] = _
+  // private var _dataBuilder = ArrayBuilder.make[ED]
 
-  val srcIds = new VertexArrayList
-  val dstIds = new VertexArrayList
+  // var srcIds = new VertexArrayList
+  // var dstIds = new VertexArrayList
 
-  def data: Array[ED] = _data
+  def reverse: EdgePartition[ED] = new EdgePartition(dstIds, srcIds, data)
 
-  /** Add a new edge to the partition. */
-  def add(src: Vid, dst: Vid, d: ED) {
-    srcIds.add(src)
-    dstIds.add(dst)
-    _dataBuilder += d
+  def map[ED2: ClassManifest](f: Edge[ED] => ED2): EdgePartition[ED2] = {
+    val newData = new Array[ED2](data.size)
+    val edge = new Edge[ED]()
+    for(i <- 0 until data.size){
+      edge.srcId  = srcIds(i)
+      edge.dstId  = dstIds(i)
+      edge.attr = data(i)
+      newData(i) = f(edge) 
+    }
+    new EdgePartition(srcIds, dstIds, newData)
   }
 
-  def trim() {
-    srcIds.trim()
-    dstIds.trim()
-    _data = _dataBuilder.result()
+  def foreach(f: Edge[ED] => Unit)  {
+    val edge = new Edge[ED]
+    for(i <- 0 until data.size){
+      edge.srcId  = srcIds(i)
+      edge.dstId  = dstIds(i)
+      edge.attr = data(i)
+      f(edge) 
+    }
   }
+
 
   def size: Int = srcIds.size
 
@@ -43,11 +53,13 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
     override def hasNext: Boolean = pos < EdgePartition.this.size
 
     override def next(): Edge[ED] = {
-      edge.src = srcIds.get(pos)
-      edge.dst = dstIds.get(pos)
-      edge.data = _data(pos)
+      edge.srcId = srcIds(pos)
+      edge.dstId = dstIds(pos)
+      edge.attr = data(pos)
       pos += 1
       edge
     }
   }
 }
+
+

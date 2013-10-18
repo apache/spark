@@ -9,7 +9,18 @@ import org.apache.spark.graph.impl.GraphImpl
 object GraphLoader {
 
   /**
-   * Load an edge list from file initializing the Graph RDD
+   * Load an edge list from file initializing the Graph
+   *
+   * @tparam ED the type of the edge data of the resulting Graph
+   *
+   * @param sc the SparkContext used to construct RDDs
+   * @param path the path to the text file containing the edge list
+   * @param edgeParser a function that takes an array of strings and
+   * returns an ED object
+   * @param minEdgePartitions the number of partitions for the
+   * the Edge RDD
+   *
+   * @todo remove minVertexPartitions arg
    */
   def textFile[ED: ClassManifest](
       sc: SparkContext,
@@ -20,7 +31,7 @@ object GraphLoader {
     : GraphImpl[Int, ED] = {
 
     // Parse the edge data table
-    val edges = sc.textFile(path).flatMap { line =>
+    val edges = sc.textFile(path, minEdgePartitions).flatMap { line =>
       if (!line.isEmpty && line(0) != '#') {
         val lineArray = line.split("\\s+")
         if(lineArray.length < 2) {
@@ -38,17 +49,13 @@ object GraphLoader {
     }.cache()
 
     val graph = fromEdges(edges)
-    // println("Loaded graph:" +
-    //   "\n\t#edges:    " + graph.numEdges +
-    //   "\n\t#vertices: " + graph.numVertices)
-
     graph
   }
 
-  def fromEdges[ED: ClassManifest](edges: RDD[Edge[ED]]): GraphImpl[Int, ED] = {
-    val vertices = edges.flatMap { edge => List((edge.src, 1), (edge.dst, 1)) }
+  private def fromEdges[ED: ClassManifest](edges: RDD[Edge[ED]]): GraphImpl[Int, ED] = {
+    val vertices = edges.flatMap { edge => List((edge.srcId, 1), (edge.dstId, 1)) }
       .reduceByKey(_ + _)
-      .map{ case (vid, degree) => Vertex(vid, degree) }
-    new GraphImpl[Int, ED](vertices, edges)
+      .map{ case (vid, degree) => (vid, degree) }
+    GraphImpl(vertices, edges)
   }
 }

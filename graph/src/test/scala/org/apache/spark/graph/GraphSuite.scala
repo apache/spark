@@ -10,6 +10,9 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
 //  val sc = new SparkContext("local[4]", "test")
 
+  System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+  System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
+
   test("Graph Creation") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rawEdges = (0L to 100L).zip((1L to 99L) :+ 0L)
@@ -26,20 +29,20 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val indegrees = star.aggregateNeighbors(
         (vid, edge) => Some(1),
         (a: Int, b: Int) => a + b,
-        EdgeDirection.In).vertices.map(v => (v.id, v.data._2.getOrElse(0)))
-      assert(indegrees.collect().toSet === Set((0, 0), (1, 1), (2, 1), (3, 1)))
+        EdgeDirection.In)// .map((vid, attr) => (vid, attr._2.getOrElse(0)))
+      assert(indegrees.collect().toSet === Set((1, 1), (2, 1), (3, 1))) // (0, 0),
 
       val outdegrees = star.aggregateNeighbors(
         (vid, edge) => Some(1),
         (a: Int, b: Int) => a + b,
-        EdgeDirection.Out).vertices.map(v => (v.id, v.data._2.getOrElse(0)))
-      assert(outdegrees.collect().toSet === Set((0, 3), (1, 0), (2, 0), (3, 0)))
+        EdgeDirection.Out) //.map((vid, attr) => (vid, attr._2.getOrElse(0)))
+      assert(outdegrees.collect().toSet === Set((0, 3))) //, (1, 0), (2, 0), (3, 0)))
 
       val noVertexValues = star.aggregateNeighbors[Int](
         (vid: Vid, edge: EdgeTriplet[Int, Int]) => None,
         (a: Int, b: Int) => throw new Exception("reduceFunc called unexpectedly"),
-        EdgeDirection.In).vertices.map(v => (v.id, v.data._2))
-      assert(noVertexValues.collect().toSet === Set((0, None), (1, None), (2, None), (3, None)))
+        EdgeDirection.In)//.map((vid, attr) => (vid, attr))
+      assert(noVertexValues.collect().toSet === Set.empty[(Vid, Int)] ) // ((0, None), (1, None), (2, None), (3, None)))
     }
   }
 
