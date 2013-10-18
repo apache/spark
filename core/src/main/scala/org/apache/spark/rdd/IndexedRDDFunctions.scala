@@ -60,7 +60,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
    */
   override def flatMapValues[U: ClassManifest](f: V => TraversableOnce[U]): RDD[(K,U)] = {
     val cleanF = self.index.rdd.context.clean(f)
-    val newValuesRDD = self.valuesRDD.mapPartitions(iter => iter.map{ 
+    val newValuesRDD: RDD[(IndexedSeq[U], BitSet)] = self.valuesRDD.mapPartitions(iter => iter.map{ 
       case (values, bs) => 
         val newValues = new Array[U](values.size)
         val newBS = new BitSet(values.size)
@@ -71,7 +71,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
             newBS(ind) = true
           }
         }
-        (newValues.toSeq, newBS)
+        (newValues.toIndexedSeq, newBS)
       }, preservesPartitioning = true)
     new IndexedRDD[K,U](self.index, newValuesRDD)
   }
@@ -120,7 +120,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
         // then we simply merge the value RDDs. 
         // However it is possible that both RDDs are missing a value for a given key in 
         // which case the returned RDD should have a null value
-        val newValues = 
+        val newValues: RDD[(IndexedSeq[(Seq[V], Seq[W])], BitSet)] = 
           self.valuesRDD.zipPartitions(other.valuesRDD){
           (thisIter, otherIter) => 
             val (thisValues, thisBS) = thisIter.next()
@@ -136,7 +136,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
               val b = if (otherBS(ind)) Seq(otherValues(ind)) else Seq.empty[W]
               newValues(ind) = (a, b)
             }
-            Iterator((newValues.toSeq, newBS))
+            Iterator((newValues.toIndexedSeq, newBS))
         }
         new IndexedRDD(self.index, newValues) 
       }
@@ -166,7 +166,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
             List(newIndex).iterator
           }).cache()
         // Use the new index along with the this and the other indices to merge the values
-        val newValues = 
+        val newValues: RDD[(IndexedSeq[(Seq[V], Seq[W])], BitSet)] = 
           newIndex.zipPartitions(self.tuples, other.tuples)(
             (newIndexIter, thisTuplesIter, otherTuplesIter) => {
               // Get the new index for this partition
@@ -199,7 +199,7 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
                   newBS(ind) = true                  
                 }
               }
-              Iterator((newValues.toSeq, newBS))
+              Iterator((newValues.toIndexedSeq, newBS))
             })
         new IndexedRDD(new RDDIndex(newIndex), newValues)
       }
@@ -262,12 +262,13 @@ class IndexedRDDFunctions[K: ClassManifest, V: ClassManifest](self: IndexedRDD[K
             //     case null => null
             //     case (s, ab) => Seq((s, ab.toSeq)) 
             //     }.toSeq 
-            Iterator( (newIndex, (newValues.toSeq, newBS)) )
+            Iterator( (newIndex, (newValues.toIndexedSeq, newBS)) )
           }).cache()
 
         // Extract the index and values from the above RDD  
         val newIndex = groups.mapPartitions(_.map{ case (kMap,vAr) => kMap }, true)
-        val newValues = groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
+        val newValues: RDD[(IndexedSeq[(Seq[V], Seq[W])], BitSet)] = 
+          groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
           
         new IndexedRDD[K, (Seq[V], Seq[W])](new RDDIndex(newIndex), newValues)
       }

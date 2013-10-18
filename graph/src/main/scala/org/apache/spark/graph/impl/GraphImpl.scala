@@ -545,7 +545,7 @@ object GraphImpl {
    
     val newValuesRDD = replicationMap.valuesRDD.zipPartitions(msgsByPartition){ 
       (mapIter, msgsIter) =>
-      val (Seq(vidToIndex), bs) = mapIter.next()
+      val (IndexedSeq(vidToIndex), bs) = mapIter.next()
       assert(!mapIter.hasNext)
       // Populate the vertex array using the vidToIndex map
       val vertexArray = new Array[VD](vidToIndex.size)
@@ -553,7 +553,7 @@ object GraphImpl {
         val ind = vidToIndex(msg.data._1)
         vertexArray(ind) = msg.data._2
       }
-      Iterator((Seq(vertexArray), bs))
+      Iterator((IndexedSeq(vertexArray), bs))
     }
 
     new IndexedRDD(replicationMap.index, newValuesRDD)
