@@ -21,6 +21,10 @@ import org.scalatest.FunSuite
 
 class BroadcastSuite extends FunSuite with LocalSparkContext {
 
+  after {
+    System.clearProperty("spark.broadcast.factory")
+  }
+
   test("Using HttpBroadcast locally") {
     System.setProperty("spark.broadcast.factory", "org.apache.spark.broadcast.HttpBroadcastFactory")
     sc = new SparkContext("local", "test")
