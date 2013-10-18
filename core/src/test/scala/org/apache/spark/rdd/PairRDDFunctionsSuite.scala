@@ -109,6 +109,36 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
     assert(deps.size === 2) // ShuffledRDD, ParallelCollection.
   }
 
+  test("countDistinctByKey") {
+    def error(est: Long, size: Long) = math.abs(est - size)/size.toDouble
+
+    /* Since HyperLogLog unique counting is approximate, and the relative standard deviation is
+    only a statistical bound, the tests can fail for large values of relativeSD. We will be using
+     relatively tight error bounds to check correctness of functionality rather than checking
+     whether the approximation conforms with the requested bound.
+     */
+    val relativeSD = 0.001
+
+    val stacked = (1 to 100).flatMap(i => (1 to i).map(j => (i, j)))
+    val rdd1 = sc.parallelize(stacked)
+    val counted1 = rdd1.countDistinctByKey(relativeSD).collect()
+    counted1.foreach{
+      case(k, count) => assert(math.abs(error(count, k)) < relativeSD)
+    }
+
+    import scala.util.Random
+    val rnd = new Random()
+    val randStacked = (1 to 100).flatMap{i =>
+      val num = rnd.nextInt%500
+      (1 to num).map(j => (num, j))
+    }
+    val rdd2 = sc.parallelize(randStacked)
+    val counted2 = rdd2.countDistinctByKey(relativeSD, 4).collect()
+    counted2.foreach{
+      case(k, count) => assert(math.abs(error(count, k)) < relativeSD)
+    }
+  }
+
   test("join") {
     val rdd1 = sc.parallelize(Array((1, 1), (1, 2), (2, 1), (3, 1)))
     val rdd2 = sc.parallelize(Array((1, 'x'), (2, 'y'), (2, 'z'), (4, 'w')))

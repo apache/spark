@@ -39,12 +39,15 @@ import org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
 import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
+
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.Aggregator
 import org.apache.spark.Partitioner
 import org.apache.spark.Partitioner.defaultPartitioner
+import org.apache.spark.util.SerializableHyperLogLog
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
@@ -204,6 +207,54 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
       : PartialResult[Map[K, BoundedDouble]] = {
     self.map(_._1).countByValueApprox(timeout, confidence)
+  }
+
+  /**
+   * Return approximate number of distinct values for each key in this RDD.
+   * The accuracy of approximation can be controlled through the relative standard diviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. Uses the provided
+   * Partitioner to partition the output RDD.
+   */
+  def countDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
+    val createHLL = (v: V) => {
+      val hll = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
+      val bres = hll.value.offer(v)
+      hll
+    }
+    val mergeValueHLL = (hll: SerializableHyperLogLog, v: V) => {
+      hll.value.offer(v)
+      hll
+    }
+    val mergeHLL = (h1: SerializableHyperLogLog, h2: SerializableHyperLogLog) => h1.merge(h2)
+
+    combineByKey(createHLL, mergeValueHLL, mergeHLL, partitioner).map {
+      case (k, v) => (k, v.value.cardinality())
+    }
+  }
+
+  /**
+   * Return approximate number of distinct values for each key in this RDD. 
+   * The accuracy of approximation can be controlled through the relative standard diviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. HashPartitions the
+   * output RDD into numPartitions.
+   *
+   */
+  def countDistinctByKey(relativeSD: Double, numPartitions: Int): RDD[(K, Long)] = {
+    countDistinctByKey(relativeSD, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * Return approximate number of distinct values for each key this RDD.
+   * The accuracy of approximation can be controlled through the relative standard diviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. The default value of
+   * relativeSD is 0.05. Hash-partitions the output RDD using the existing partitioner/parallelism
+   * level.
+   */
+  def countDistinctByKey(relativeSD: Double = 0.05): RDD[(K, Long)] = {
+    countDistinctByKey(relativeSD, defaultPartitioner(self))
   }
 
   /**
