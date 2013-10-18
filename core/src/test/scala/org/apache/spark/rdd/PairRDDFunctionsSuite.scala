@@ -19,6 +19,7 @@ package org.apache.spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashSet
+import scala.util.Random
 
 import org.scalatest.FunSuite
 
@@ -110,15 +111,17 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   }
 
   test("countDistinctByKey") {
-    def error(est: Long, size: Long) = math.abs(est - size)/size.toDouble
+    def error(est: Long, size: Long) = math.abs(est - size) / size.toDouble
 
     /* Since HyperLogLog unique counting is approximate, and the relative standard deviation is
-    only a statistical bound, the tests can fail for large values of relativeSD. We will be using
-     relatively tight error bounds to check correctness of functionality rather than checking
-     whether the approximation conforms with the requested bound.
+     * only a statistical bound, the tests can fail for large values of relativeSD. We will be using
+     * relatively tight error bounds to check correctness of functionality rather than checking
+     * whether the approximation conforms with the requested bound.
      */
     val relativeSD = 0.001
 
+    // For each value i, there are i tuples with first element equal to i.
+    // Therefore, the expected count for key i would be i.
     val stacked = (1 to 100).flatMap(i => (1 to i).map(j => (i, j)))
     val rdd1 = sc.parallelize(stacked)
     val counted1 = rdd1.countDistinctByKey(relativeSD).collect()
@@ -126,10 +129,11 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       case(k, count) => assert(math.abs(error(count, k)) < relativeSD)
     }
 
-    import scala.util.Random
     val rnd = new Random()
-    val randStacked = (1 to 100).flatMap{i =>
-      val num = rnd.nextInt%500
+
+    // The expected count for key num would be num
+    val randStacked = (1 to 100).flatMap { i =>
+      val num = rnd.nextInt % 500
       (1 to num).map(j => (num, j))
     }
     val rdd2 = sc.parallelize(randStacked)

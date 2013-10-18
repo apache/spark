@@ -219,7 +219,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
   def countDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
     val createHLL = (v: V) => {
       val hll = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
-      val bres = hll.value.offer(v)
+      hll.value.offer(v)
       hll
     }
     val mergeValueHLL = (hll: SerializableHyperLogLog, v: V) => {

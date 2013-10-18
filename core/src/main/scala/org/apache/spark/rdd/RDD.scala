@@ -784,7 +784,7 @@ abstract class RDD[T: ClassManifest](
       }
       Iterator(hllCounter)
     }
-    def mergeCounters(c1: SerializableHyperLogLog, c2: SerializableHyperLogLog): SerializableHyperLogLog = c1.merge(c2)
+    def mergeCounters(c1: SerializableHyperLogLog, c2: SerializableHyperLogLog) = c1.merge(c2)
 
     mapPartitions(hllCountPartition).reduce(mergeCounters).value.cardinality()
   }
