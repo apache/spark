@@ -275,6 +275,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         .groupBy { t: EdgeTriplet[VD, ED] =>  (t.srcId, t.dstId) }
         .mapValues { ts: List[EdgeTriplet[VD, ED]] => f(ts.toIterator) }
         .toList
+        .toIterator
         .map { case ((src, dst), data) => Edge(src, dst, data) }
       }
 
