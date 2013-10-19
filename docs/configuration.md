@@ -319,6 +319,14 @@ Apart from these, the following properties are also available, and may be useful
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
+<tr>
+  <td>spark.broadcast.blockSize</td>
+  <td>4096</td>
+  <td>
+    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>. 
+    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
+  </td>
+</tr>
 
 </table>
 
