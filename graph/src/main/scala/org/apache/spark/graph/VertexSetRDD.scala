@@ -219,7 +219,7 @@ class VertexSetRDD[V: ClassManifest](
           if (other.partitioner == Some(partitioner)) other 
           else other.partitionBy(partitioner)
         val newValues: RDD[ (IndexedSeq[(V,Option[W])], BitSet) ] = 
-          index.rdd.zipPartitions(valuesRDD, other) {
+          index.rdd.zipPartitions(valuesRDD, otherShuffled) {
           (thisIndexIter, thisIter, tuplesIter) =>
           val index = thisIndexIter.next()
           assert(!thisIndexIter.hasNext)
