@@ -40,7 +40,7 @@ class ShuffleBlockManager(blockManager: BlockManager) {
         val bufferSize = System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
         val writers = Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          blockManager.getDiskBlockWriter(blockId, serializer, bufferSize)
+          blockManager.getDiskWriter(blockId, blockId.name, serializer, bufferSize)
         }
         new ShuffleWriterGroup(mapId, writers)
       }

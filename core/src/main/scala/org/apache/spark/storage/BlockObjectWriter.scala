@@ -17,6 +17,13 @@
 
 package org.apache.spark.storage
 
+import java.io.{FileOutputStream, File, OutputStream}
+import java.nio.channels.FileChannel
+
+import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
+
+import org.apache.spark.Logging
+import org.apache.spark.serializer.{SerializationStream, Serializer}
 
 /**
  * An interface for writing JVM objects to some underlying storage. This interface allows
@@ -59,7 +66,86 @@ abstract class BlockObjectWriter(val blockId: BlockId) {
   def write(value: Any)
 
   /**
-   * Size of the valid writes, in bytes.
+   * Returns the file segment of committed data that this Writer has written.
    */
-  def size(): Long
+  def fileSegment(): FileSegment
+}
+
+/** BlockObjectWriter which writes directly to a file on disk. Appends to the given file. */
+class DiskBlockObjectWriter(
+    blockId: BlockId,
+    file: File,
+    serializer: Serializer,
+    bufferSize: Int,
+    compressStream: OutputStream => OutputStream)
+  extends BlockObjectWriter(blockId)
+  with Logging
+{
+
+  /** The file channel, used for repositioning / truncating the file. */
+  private var channel: FileChannel = null
+  private var bs: OutputStream = null
+  private var objOut: SerializationStream = null
+  private var initialPosition = 0L
+  private var lastValidPosition = 0L
+  private var initialized = false
+
+  override def open(): BlockObjectWriter = {
+    val fos = new FileOutputStream(file, true)
+    channel = fos.getChannel()
+    initialPosition = channel.position
+    lastValidPosition = initialPosition
+    bs = compressStream(new FastBufferedOutputStream(fos, bufferSize))
+    objOut = serializer.newInstance().serializeStream(bs)
+    initialized = true
+    this
+  }
+
+  override def close() {
+    if (initialized) {
+      objOut.close()
+      channel = null
+      bs = null
+      objOut = null
+    }
+    super.close()
+  }
+
+  override def isOpen: Boolean = objOut != null
+
+  override def commit(): Long = {
+    if (initialized) {
+      // NOTE: Flush the serializer first and then the compressed/buffered output stream
+      objOut.flush()
+      bs.flush()
+      val prevPos = lastValidPosition
+      lastValidPosition = channel.position()
+      lastValidPosition - prevPos
+    } else {
+      // lastValidPosition is zero if stream is uninitialized
+      lastValidPosition
+    }
+  }
+
+  override def revertPartialWrites() {
+    if (initialized) {
+      // Discard current writes. We do this by flushing the outstanding writes and
+      // truncate the file to the last valid position.
+      objOut.flush()
+      bs.flush()
+      channel.truncate(lastValidPosition)
+    }
+  }
+
+  override def write(value: Any) {
+    if (!initialized) {
+      open()
+    }
+    objOut.writeObject(value)
+  }
+
+  override def fileSegment(): FileSegment = {
+    val bytesWritten = lastValidPosition - initialPosition
+    new FileSegment(file, initialPosition, bytesWritten)
+  }
 }

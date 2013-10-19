@@ -167,7 +167,7 @@ private[spark] class ShuffleMapTask(
       val compressedSizes: Array[Byte] = buckets.writers.map { writer: BlockObjectWriter =>
         writer.commit()
         writer.close()
-        val size = writer.size()
+        val size = writer.fileSegment().length
         totalBytes += size
         MapOutputTracker.compressSize(size)
       }
