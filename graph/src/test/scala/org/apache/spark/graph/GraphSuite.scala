@@ -58,24 +58,19 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
- /* test("joinVertices") {
-    sc = new SparkContext("local", "test")
-    val vertices = sc.parallelize(Seq(Vertex(1, "one"), Vertex(2, "two"), Vertex(3, "three")), 2)
-    val edges = sc.parallelize((Seq(Edge(1, 2, "onetwo"))))
-    val g: Graph[String, String] = new GraphImpl(vertices, edges)
+  test("joinVertices") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val vertices = sc.parallelize(Seq[(Vid, String)]((1, "one"), (2, "two"), (3, "three")), 2)
+      val edges = sc.parallelize((Seq(Edge(1, 2, "onetwo"))))
+      val g: Graph[String, String] = Graph(vertices, edges)
 
-    val tbl = sc.parallelize(Seq((1, 10), (2, 20)))
-    val g1 = g.joinVertices(tbl, (v: Vertex[String], u: Int) => v.data + u)
+      val tbl = sc.parallelize(Seq[(Vid, Int)]((1, 10), (2, 20)))
+      val g1 = g.joinVertices(tbl) { (vid: Vid, attr: String, u: Int) => attr + u }
 
-    val v = g1.vertices.collect().sortBy(_.id)
-    assert(v(0).data === "one10")
-    assert(v(1).data === "two20")
-    assert(v(2).data === "three")
-
-    val e = g1.edges.collect()
-    assert(e(0).data === "onetwo")
+      val v = g1.vertices.collect().toSet
+      assert(v === Set((1, "one10"), (2, "two20"), (3, "three")))
+    }
   }
-  */
 
 //  test("graph partitioner") {
 //    sc = new SparkContext("local", "test")
