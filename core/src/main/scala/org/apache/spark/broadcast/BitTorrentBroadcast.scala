@@ -29,10 +29,13 @@ import org.apache.spark._
 import org.apache.spark.storage.{BroadcastBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
+@deprecated("Use TorrentBroadcast", "0.8.1")
 private[spark] class BitTorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
   extends Broadcast[T](id)
   with Logging
   with Serializable {
+
+  logWarning("BitTorrentBroadcast is deprecated. Use TorrentBroadcast.")
 
   def value = value_
 
