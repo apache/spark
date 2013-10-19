@@ -306,6 +306,9 @@ object Graph {
   import org.apache.spark.graph.impl._
   import org.apache.spark.SparkContext._
 
+  def apply(rawEdges: RDD[(Vid, Vid)]): Graph[Int, Int] = { Graph(rawEdges, true) }
+
+
   /**
    * Construct a graph from a list of Edges. 
    *
@@ -316,7 +319,7 @@ object Graph {
    *
    * 
    */
-  def apply(rawEdges: RDD[(Vid, Vid)], uniqueEdges: Boolean = true): Graph[Int, Int] = {
+  def apply(rawEdges: RDD[(Vid, Vid)], uniqueEdges: Boolean): Graph[Int, Int] = {
     // Reduce to unique edges.
     val edges: RDD[Edge[Int]] =
       if (uniqueEdges) {
@@ -330,13 +333,29 @@ object Graph {
       edges.flatMap{ case Edge(s, t, cnt) => Array((s, 1), (t, 1)) }.reduceByKey(_ + _)
  
     // Return graph
-    GraphImpl(vertices, edges)
+    GraphImpl(vertices, edges, 0)
   }
 
+
   def apply[VD: ClassManifest, ED: ClassManifest](
-      vertices: RDD[(Vid,VD)], edges: RDD[Edge[ED]]): Graph[VD, ED] = {
-    GraphImpl(vertices, edges)
+      vertices: RDD[(Vid,VD)], 
+      edges: RDD[Edge[ED]]): Graph[VD, ED] = {
+    val defaultAttr: VD = null.asInstanceOf[VD]
+    Graph(vertices, edges, defaultAttr, (a:VD,b:VD) => a)
+  }
+
+
+
+  /**
+   * Construct a new graph from a set of edges and vertices
+   */
+  def apply[VD: ClassManifest, ED: ClassManifest](
+      vertices: RDD[(Vid,VD)], 
+      edges: RDD[Edge[ED]],
+      defaultVertexAttr: VD,
+      mergeFunc: (VD, VD) => VD): Graph[VD, ED] = {
+    GraphImpl(vertices, edges, defaultVertexAttr, mergeFunc)
   }
 
   implicit def graphToGraphOps[VD: ClassManifest, ED: ClassManifest](g: Graph[VD, ED]) = g.ops
-}
+} // end of Graph object

@@ -264,11 +264,8 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * the merging locally on each mapper before sending results to a reducer, similarly to a
    * "combiner" in MapReduce.
    */
-  def join[W](other: JavaPairRDD[K, W], partitioner: Partitioner): JavaPairRDD[K, (V, W)] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+  def join[W](other: JavaPairRDD[K, W], partitioner: Partitioner): JavaPairRDD[K, (V, W)] =
     fromRDD(rdd.join(other, partitioner))
-  }
 
   /**
    * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
@@ -278,8 +275,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    */
   def leftOuterJoin[W](other: JavaPairRDD[K, W], partitioner: Partitioner)
   : JavaPairRDD[K, (V, Optional[W])] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
     val joinResult = rdd.leftOuterJoin(other, partitioner)
     fromRDD(joinResult.mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))})
   }
@@ -292,8 +287,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    */
   def rightOuterJoin[W](other: JavaPairRDD[K, W], partitioner: Partitioner)
   : JavaPairRDD[K, (Optional[V], W)] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
     val joinResult = rdd.rightOuterJoin(other, partitioner)
     fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
   }
@@ -332,22 +325,16 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Performs a hash join across the cluster.
    */
-  def join[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, W)] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+  def join[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, W)] =
     fromRDD(rdd.join(other))
-  }
 
   /**
    * Return an RDD containing all pairs of elements with matching keys in `this` and `other`. Each
    * pair of elements will be returned as a (k, (v1, v2)) tuple, where (k, v1) is in `this` and
    * (k, v2) is in `other`. Performs a hash join across the cluster.
    */
-  def join[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (V, W)] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+  def join[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (V, W)] =
     fromRDD(rdd.join(other, numPartitions))
-  }
 
   /**
    * Perform a left outer join of `this` and `other`. For each element (k, v) in `this`, the
@@ -356,8 +343,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * using the existing partitioner/parallelism level.
    */
   def leftOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (V, Optional[W])] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
     val joinResult = rdd.leftOuterJoin(other)
     fromRDD(joinResult.mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))})
   }
@@ -369,8 +354,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * into `numPartitions` partitions.
    */
   def leftOuterJoin[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (V, Optional[W])] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
     val joinResult = rdd.leftOuterJoin(other, numPartitions)
     fromRDD(joinResult.mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))})
   }
@@ -382,8 +365,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * RDD using the existing partitioner/parallelism level.
    */
   def rightOuterJoin[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (Optional[V], W)] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
     val joinResult = rdd.rightOuterJoin(other)
     fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
   }
@@ -395,8 +376,6 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * RDD into the given number of partitions.
    */
   def rightOuterJoin[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (Optional[V], W)] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
     val joinResult = rdd.rightOuterJoin(other, numPartitions)
     fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
   }
@@ -433,86 +412,55 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * list of values for that key in `this` as well as `other`.
    */
   def cogroup[W](other: JavaPairRDD[K, W], partitioner: Partitioner)
-  : JavaPairRDD[K, (JList[V], JList[W])] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+  : JavaPairRDD[K, (JList[V], JList[W])] =
     fromRDD(cogroupResultToJava(rdd.cogroup(other, partitioner)))
-  }
 
   /**
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2], partitioner: Partitioner)
-  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
-    implicit val w1m: ClassManifest[W1] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W1]]
-    implicit val w2m: ClassManifest[W2] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W2]]
+  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, partitioner)))
-  }
 
   /**
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JList[V], JList[W])] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
+  def cogroup[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JList[V], JList[W])] =
     fromRDD(cogroupResultToJava(rdd.cogroup(other)))
-  }
 
   /**
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2])
-  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
-    implicit val w1m: ClassManifest[W1] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W1]]
-    implicit val w2m: ClassManifest[W2] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W2]]
+  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2)))
-  }
 
   /**
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (JList[V], JList[W])] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]]
-    fromRDD(cogroupResultToJava(rdd.cogroup(other, numPartitions)))
-  }
+  def cogroup[W](other: JavaPairRDD[K, W], numPartitions: Int): JavaPairRDD[K, (JList[V], JList[W])]
+  = fromRDD(cogroupResultToJava(rdd.cogroup(other, numPartitions)))
+
   /**
    * For each key k in `this` or `other1` or `other2`, return a resulting RDD that contains a
    * tuple with the list of values for that key in `this`, `other1` and `other2`.
    */
   def cogroup[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2], numPartitions: Int)
-  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
-    implicit val w1m: ClassManifest[W1] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W1]]
-    implicit val w2m: ClassManifest[W2] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W2]]
+  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.cogroup(other1, other2, numPartitions)))
-  }
 
   /** Alias for cogroup. */
-  def groupWith[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JList[V], JList[W])] = {
-    implicit val wm: ClassManifest[W] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W]] 
+  def groupWith[W](other: JavaPairRDD[K, W]): JavaPairRDD[K, (JList[V], JList[W])] =
     fromRDD(cogroupResultToJava(rdd.groupWith(other)))
-  }
 
   /** Alias for cogroup. */
   def groupWith[W1, W2](other1: JavaPairRDD[K, W1], other2: JavaPairRDD[K, W2])
-  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] = {
-    implicit val w1m: ClassManifest[W1] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W1]]
-    implicit val w2m: ClassManifest[W2] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[W2]]
+  : JavaPairRDD[K, (JList[V], JList[W1], JList[W2])] =
     fromRDD(cogroupResult2ToJava(rdd.groupWith(other1, other2)))
-  }
 
   /**
    * Return the list of values in the RDD for key `key`. This operation is done efficiently if the

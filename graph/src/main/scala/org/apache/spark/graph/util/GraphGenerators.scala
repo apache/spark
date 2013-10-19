@@ -79,7 +79,7 @@ object GraphGenerators {
       v => generateRandomEdges(v._1.toInt, v._2, numVertices) 
     }
     
-    GraphImpl(vertices, edges)
+    GraphImpl(vertices, edges, 0)
     //println("Vertices:")
     //for (v <- vertices) {
     //  println(v.id)
@@ -160,7 +160,7 @@ object GraphGenerators {
     val vertices = edges.flatMap { edge => List((edge.srcId, 1)) }
       .reduceByKey(_ + _)
       .map{ case (vid, degree) => (vid, degree) }
-    GraphImpl(vertices, edges)
+    GraphImpl(vertices, edges, 0)
   }
 
   /**

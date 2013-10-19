@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd
+package org.apache.spark.graph
 
 import java.nio.ByteBuffer
 
@@ -74,6 +74,12 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
     @transient val valuesRDD: RDD[ (IndexedSeq[V], BitSet) ])
   extends RDD[(K, V)](index.rdd.context, 
     List(new OneToOneDependency(index.rdd), new OneToOneDependency(valuesRDD)) ) {
+
+
+  /**
+   * Construct a new IndexedRDD that is indexed by only the keys in the RDD
+   */
+   def reindex(): IndexedRDD[K,V] = IndexedRDD(this)
 
 
   /**
@@ -247,6 +253,173 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
   }
 
 
+/**
+   * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
+   * list of values for that key in `this` as well as `other`.
+   */
+  def cogroup[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): 
+  IndexedRDD[K, (Seq[V], Seq[W])] = {
+    //RDD[(K, (Seq[V], Seq[W]))] = {
+    other match {
+      case other: IndexedRDD[_, _] if index == other.index => {
+        // if both RDDs share exactly the same index and therefore the same super set of keys
+        // then we simply merge the value RDDs. 
+        // However it is possible that both RDDs are missing a value for a given key in 
+        // which case the returned RDD should have a null value
+        val newValues: RDD[(IndexedSeq[(Seq[V], Seq[W])], BitSet)] = 
+          valuesRDD.zipPartitions(other.valuesRDD){
+          (thisIter, otherIter) => 
+            val (thisValues, thisBS) = thisIter.next()
+            assert(!thisIter.hasNext)
+            val (otherValues, otherBS) = otherIter.next()
+            assert(!otherIter.hasNext)
+
+            val newValues = new Array[(Seq[V], Seq[W])](thisValues.size)
+            val newBS = thisBS | otherBS
+
+            for( ind <- newBS ) {
+              val a = if (thisBS(ind)) Seq(thisValues(ind)) else Seq.empty[V]
+              val b = if (otherBS(ind)) Seq(otherValues(ind)) else Seq.empty[W]
+              newValues(ind) = (a, b)
+            }
+            Iterator((newValues.toIndexedSeq, newBS))
+        }
+        new IndexedRDD(index, newValues) 
+      }
+      case other: IndexedRDD[_, _] 
+        if index.rdd.partitioner == other.index.rdd.partitioner => {
+        // If both RDDs are indexed using different indices but with the same partitioners
+        // then we we need to first merge the indicies and then use the merged index to
+        // merge the values.
+        val newIndex = 
+          index.rdd.zipPartitions(other.index.rdd)(
+            (thisIter, otherIter) => {
+            val thisIndex = thisIter.next()
+            assert(!thisIter.hasNext)
+            val otherIndex = otherIter.next()
+            assert(!otherIter.hasNext)
+            val newIndex = new BlockIndex[K]()
+            // @todo Merge only the keys that correspond to non-null values
+            // Merge the keys
+            newIndex.putAll(thisIndex)
+            newIndex.putAll(otherIndex)
+            // We need to rekey the index
+            var ctr = 0
+            for (e <- newIndex.entrySet) {
+              e.setValue(ctr)
+              ctr += 1
+            }
+            List(newIndex).iterator
+          }).cache()
+        // Use the new index along with the this and the other indices to merge the values
+        val newValues: RDD[(IndexedSeq[(Seq[V], Seq[W])], BitSet)] = 
+          newIndex.zipPartitions(tuples, other.tuples)(
+            (newIndexIter, thisTuplesIter, otherTuplesIter) => {
+              // Get the new index for this partition
+              val newIndex = newIndexIter.next()
+              assert(!newIndexIter.hasNext)
+              // Get the corresponding indicies and values for this and the other IndexedRDD
+              val (thisIndex, (thisValues, thisBS)) = thisTuplesIter.next()
+              assert(!thisTuplesIter.hasNext)
+              val (otherIndex, (otherValues, otherBS)) = otherTuplesIter.next()
+              assert(!otherTuplesIter.hasNext)
+              // Preallocate the new Values array
+              val newValues = new Array[(Seq[V], Seq[W])](newIndex.size)
+              val newBS = new BitSet(newIndex.size)
+
+              // Lookup the sequences in both submaps
+              for ((k,ind) <- newIndex) {
+                // Get the left key
+                val a = if (thisIndex.contains(k)) {
+                  val ind = thisIndex.get(k)
+                  if(thisBS(ind)) Seq(thisValues(ind)) else Seq.empty[V]
+                } else Seq.empty[V]
+                // Get the right key
+                val b = if (otherIndex.contains(k)) {
+                  val ind = otherIndex.get(k)
+                  if (otherBS(ind)) Seq(otherValues(ind)) else Seq.empty[W]
+                } else Seq.empty[W]
+                // If at least one key was present then we generate a tuple.
+                if (!a.isEmpty || !b.isEmpty) {
+                  newValues(ind) = (a, b)
+                  newBS(ind) = true                  
+                }
+              }
+              Iterator((newValues.toIndexedSeq, newBS))
+            })
+        new IndexedRDD(new RDDIndex(newIndex), newValues)
+      }
+      case _ => {
+        // Get the partitioner from the index
+        val partitioner = index.rdd.partitioner match {
+          case Some(p) => p
+          case None => throw new SparkException("An index must have a partitioner.")
+        }
+        // Shuffle the other RDD using the partitioner for this index
+        val otherShuffled = 
+          if (other.partitioner == Some(partitioner)) {
+            other
+          } else {
+            new ShuffledRDD[K, W, (K,W)](other, partitioner)
+          }
+        // Join the other RDD with this RDD building a new valueset and new index on the fly
+        val groups = tuples.zipPartitions(otherShuffled)(
+          (thisTuplesIter, otherTuplesIter) => {
+            // Get the corresponding indicies and values for this IndexedRDD
+            val (thisIndex, (thisValues, thisBS)) = thisTuplesIter.next()
+            assert(!thisTuplesIter.hasNext())
+            // Construct a new index
+            val newIndex = thisIndex.clone().asInstanceOf[BlockIndex[K]]
+            // Construct a new array Buffer to store the values
+            val newValues = ArrayBuffer.fill[ (Seq[V], Seq[W]) ](thisValues.size)(null)
+            val newBS = new BitSet(thisValues.size)
+            // populate the newValues with the values in this IndexedRDD
+            for ((k,i) <- thisIndex) {
+              if (thisBS(i)) {
+                newValues(i) = (Seq(thisValues(i)), ArrayBuffer.empty[W]) 
+                newBS(i) = true
+              }
+            }
+            // Now iterate through the other tuples updating the map
+            for ((k,w) <- otherTuplesIter){
+              if (newIndex.contains(k)) {
+                val ind = newIndex.get(k)
+                if(newBS(ind)) {
+                  newValues(ind)._2.asInstanceOf[ArrayBuffer[W]].append(w)
+                } else {
+                  // If the other key was in the index but not in the values 
+                  // of this indexed RDD then create a new values entry for it 
+                  newBS(ind) = true
+                  newValues(ind) = (Seq.empty[V], ArrayBuffer(w))
+                }              
+              } else {
+                // update the index
+                val ind = newIndex.size
+                newIndex.put(k, ind)
+                newBS(ind) = true
+                // Update the values
+                newValues.append( (Seq.empty[V], ArrayBuffer(w) ) ) 
+              }
+            }
+            // // Finalize the new values array
+            // val newValuesArray: Seq[Seq[(Seq[V],Seq[W])]] = 
+            //   newValues.view.map{ 
+            //     case null => null
+            //     case (s, ab) => Seq((s, ab.toSeq)) 
+            //     }.toSeq 
+            Iterator( (newIndex, (newValues.toIndexedSeq, newBS)) )
+          }).cache()
+
+        // Extract the index and values from the above RDD  
+        val newIndex = groups.mapPartitions(_.map{ case (kMap,vAr) => kMap }, true)
+        val newValues: RDD[(IndexedSeq[(Seq[V], Seq[W])], BitSet)] = 
+          groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
+          
+        new IndexedRDD[K, (Seq[V], Seq[W])](new RDDIndex(newIndex), newValues)
+      }
+    }
+  }
+
 
   // 
   // def zipJoinToRDD[W: ClassManifest](other: IndexedRDD[K,W]): RDD[(K,(V,W))] = {
@@ -418,15 +591,6 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
 
 */
 
-
-  /**
-   * The IndexedRDD has its own optimized version of the pairRDDFunctions.  
-   */
-  override def pairRDDFunctions[K1, V1](
-      implicit t: (K, V) <:< (K1,V1), k: ClassManifest[K1], v: ClassManifest[V1]): 
-    PairRDDFunctions[K1, V1] = {
-    new IndexedRDDFunctions[K1,V1](this.asInstanceOf[IndexedRDD[K1,V1]])
-  }
 
 
   override def filter(f: Tuple2[K,V] => Boolean): RDD[(K,V)] = {

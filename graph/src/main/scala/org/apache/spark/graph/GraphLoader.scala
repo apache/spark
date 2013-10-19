@@ -56,6 +56,6 @@ object GraphLoader {
     val vertices = edges.flatMap { edge => List((edge.srcId, 1), (edge.dstId, 1)) }
       .reduceByKey(_ + _)
       .map{ case (vid, degree) => (vid, degree) }
-    GraphImpl(vertices, edges)
+    GraphImpl(vertices, edges, 0)
   }
 }

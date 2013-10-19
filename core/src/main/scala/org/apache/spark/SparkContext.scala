@@ -959,7 +959,7 @@ object SparkContext {
   // TODO: Add AccumulatorParams for other types, e.g. lists and strings
 
   implicit def rddToPairRDDFunctions[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]) =
-    rdd.pairRDDFunctions
+    new PairRDDFunctions(rdd)
 
   implicit def rddToAsyncRDDActions[T: ClassManifest](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
