@@ -20,6 +20,19 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("mapEdges") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val n = 3
+      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))))
+      val starWithEdgeAttrs = star.mapEdges(e => e.dstId)
+
+      // map(_.copy()) is a workaround for https://github.com/amplab/graphx/issues/25
+      val edges = starWithEdgeAttrs.edges.map(_.copy()).collect()
+      assert(edges.size === n)
+      assert(edges.toSet === (1 to n).map(x => Edge(0, x, x)).toSet)
+    }
+  }
+
   test("aggregateNeighbors") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
