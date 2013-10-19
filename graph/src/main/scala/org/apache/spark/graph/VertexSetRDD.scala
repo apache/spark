@@ -39,47 +39,40 @@ import org.apache.spark.storage.StorageLevel
 
 
 
-/**
- * The BlockIndex is the internal map structure used inside the index 
- * of the IndexedRDD.
- */
-class BlockIndex[@specialized K: ClassManifest] extends JHashMap[K,Int]
-
 
 /**
- * The RDDIndex is an opaque type used to represent the organization 
+ * The VertexSetIndex is an opaque type used to represent the organization 
  * of values in an RDD
  */
-class RDDIndex[@specialized K: ClassManifest](private[spark] val rdd: RDD[BlockIndex[K]]) {
-  def persist(newLevel: StorageLevel): RDDIndex[K] = {
+class VertexSetIndex(private[spark] val rdd: RDD[VertexIdToIndexMap]) {
+  def persist(newLevel: StorageLevel): VertexSetIndex = {
     rdd.persist(newLevel)
     return this
   }
-
   def partitioner: Partitioner = rdd.partitioner.get
 }
 
 
 
 /**
- * An IndexedRDD[K,V] extends the RDD[(K,V)] by pre-indexing the keys and 
+ * An VertexSetRDD[V] extends the RDD[(Vid,V)] by pre-indexing the keys and 
  * organizing the values to enable faster join operations.
  *
- * In addition to providing the basic RDD[(K,V)] functionality the IndexedRDD
- * exposes an index member which can be used to "key" other IndexedRDDs
+ * In addition to providing the basic RDD[(Vid,V)] functionality the VertexSetRDD
+ * exposes an index member which can be used to "key" other VertexSetRDDs
  * 
  */
-class IndexedRDD[K: ClassManifest, V: ClassManifest](
-    @transient val index:  RDDIndex[K],
+class VertexSetRDD[V: ClassManifest](
+    @transient val index:  VertexSetIndex,
     @transient val valuesRDD: RDD[ (IndexedSeq[V], BitSet) ])
-  extends RDD[(K, V)](index.rdd.context, 
+  extends RDD[(Vid, V)](index.rdd.context, 
     List(new OneToOneDependency(index.rdd), new OneToOneDependency(valuesRDD)) ) {
 
 
   /**
-   * Construct a new IndexedRDD that is indexed by only the keys in the RDD
+   * Construct a new VertexSetRDD that is indexed by only the keys in the RDD
    */
-   def reindex(): IndexedRDD[K,V] = IndexedRDD(this)
+   def reindex(): VertexSetRDD[V] = VertexSetRDD(this)
 
 
   /**
@@ -109,20 +102,26 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
 
 
   /**
-   * Caching an IndexedRDD causes the index and values to be cached separately. 
+   * Caching an VertexSetRDD causes the index and values to be cached separately. 
    */
-  override def persist(newLevel: StorageLevel): RDD[(K,V)] = {
+  override def persist(newLevel: StorageLevel): VertexSetRDD[V] = {
     index.persist(newLevel)
     valuesRDD.persist(newLevel)
     return this
   }
+
+  override def persist(): VertexSetRDD[V] = persist(StorageLevel.MEMORY_ONLY)
+
+  /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
+  override def cache(): VertexSetRDD[V] = persist()
+
 
 
   /**
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
    */
-  def mapValues[U: ClassManifest](f: V => U): IndexedRDD[K, U] = {
+  def mapValues[U: ClassManifest](f: V => U): VertexSetRDD[U] = {
     val cleanF = index.rdd.context.clean(f)
     val newValuesRDD: RDD[ (IndexedSeq[U], BitSet) ] = 
     valuesRDD.mapPartitions(iter => iter.map{ 
@@ -133,7 +132,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
         }
         (newValues.toIndexedSeq, bs)
       }, preservesPartitioning = true)
-    new IndexedRDD[K,U](index, newValuesRDD)
+    new VertexSetRDD[U](index, newValuesRDD)
   }
 
 
@@ -141,7 +140,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
    * Pass each value in the key-value pair RDD through a map function without changing the keys;
    * this also retains the original RDD's partitioning.
    */
-  def mapValuesWithKeys[U: ClassManifest](f: (K, V) => U): IndexedRDD[K, U] = {
+  def mapValuesWithKeys[U: ClassManifest](f: (Vid, V) => U): VertexSetRDD[U] = {
     val cleanF = index.rdd.context.clean(f)
     val newValues: RDD[ (IndexedSeq[U], BitSet) ] = 
       index.rdd.zipPartitions(valuesRDD){ 
@@ -158,11 +157,11 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
       }
       Array((newValues.toIndexedSeq, bs)).iterator
     }
-    new IndexedRDD[K,U](index, newValues)
+    new VertexSetRDD[U](index, newValues)
   }
 
 
-  def zipJoin[W: ClassManifest](other: IndexedRDD[K,W]): IndexedRDD[K,(V,W)] = {
+  def zipJoin[W: ClassManifest](other: VertexSetRDD[W]): VertexSetRDD[(V,W)] = {
     if(index != other.index) {
       throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
     }
@@ -176,11 +175,11 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
       val newValues = thisValues.view.zip(otherValues)
       Iterator((newValues.toIndexedSeq, newBS))
     }
-    new IndexedRDD(index, newValuesRDD)
+    new VertexSetRDD(index, newValuesRDD)
   }
 
 
-  def leftZipJoin[W: ClassManifest](other: IndexedRDD[K,W]): IndexedRDD[K,(V,Option[W])] = {
+  def leftZipJoin[W: ClassManifest](other: VertexSetRDD[W]): VertexSetRDD[(V,Option[W])] = {
     if(index != other.index) {
       throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
     }
@@ -195,18 +194,18 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
       val newValues = thisValues.view.zip(otherOption)
       Iterator((newValues.toIndexedSeq, thisBS))
     }
-    new IndexedRDD(index, newValuesRDD)
+    new VertexSetRDD(index, newValuesRDD)
   }
 
 
 
   def leftJoin[W: ClassManifest](
-    other: RDD[(K,W)], merge: (W,W) => W = (a:W, b:W) => a):
-    IndexedRDD[K, (V, Option[W]) ] = {
+    other: RDD[(Vid,W)], merge: (W,W) => W = (a:W, b:W) => a):
+    VertexSetRDD[(V, Option[W]) ] = {
     val cleanMerge = index.rdd.context.clean(merge)
 
     other match {
-      case other: IndexedRDD[_, _] if index == other.index => {
+      case other: VertexSetRDD[_] if index == other.index => {
         leftZipJoin(other)
       }    
       case _ => {
@@ -247,21 +246,21 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
 
           Iterator((newValues.toIndexedSeq, thisBS))
         } // end of newValues
-        new IndexedRDD(index, newValues) 
+        new VertexSetRDD(index, newValues) 
       }
     }
   }
 
 
-/**
+  /**
    * For each key k in `this` or `other`, return a resulting RDD that contains a tuple with the
    * list of values for that key in `this` as well as `other`.
    */
-  def cogroup[W: ClassManifest](other: RDD[(K, W)], partitioner: Partitioner): 
-  IndexedRDD[K, (Seq[V], Seq[W])] = {
+  def cogroup[W: ClassManifest](other: RDD[(Vid, W)], partitioner: Partitioner): 
+  VertexSetRDD[(Seq[V], Seq[W])] = {
     //RDD[(K, (Seq[V], Seq[W]))] = {
     other match {
-      case other: IndexedRDD[_, _] if index == other.index => {
+      case other: VertexSetRDD[_] if index == other.index => {
         // if both RDDs share exactly the same index and therefore the same super set of keys
         // then we simply merge the value RDDs. 
         // However it is possible that both RDDs are missing a value for a given key in 
@@ -284,9 +283,9 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
             }
             Iterator((newValues.toIndexedSeq, newBS))
         }
-        new IndexedRDD(index, newValues) 
+        new VertexSetRDD(index, newValues) 
       }
-      case other: IndexedRDD[_, _] 
+      case other: VertexSetRDD[_] 
         if index.rdd.partitioner == other.index.rdd.partitioner => {
         // If both RDDs are indexed using different indices but with the same partitioners
         // then we we need to first merge the indicies and then use the merged index to
@@ -298,7 +297,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
             assert(!thisIter.hasNext)
             val otherIndex = otherIter.next()
             assert(!otherIter.hasNext)
-            val newIndex = new BlockIndex[K]()
+            val newIndex = new VertexIdToIndexMap()
             // @todo Merge only the keys that correspond to non-null values
             // Merge the keys
             newIndex.putAll(thisIndex)
@@ -318,7 +317,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
               // Get the new index for this partition
               val newIndex = newIndexIter.next()
               assert(!newIndexIter.hasNext)
-              // Get the corresponding indicies and values for this and the other IndexedRDD
+              // Get the corresponding indicies and values for this and the other VertexSetRDD
               val (thisIndex, (thisValues, thisBS)) = thisTuplesIter.next()
               assert(!thisTuplesIter.hasNext)
               val (otherIndex, (otherValues, otherBS)) = otherTuplesIter.next()
@@ -347,7 +346,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
               }
               Iterator((newValues.toIndexedSeq, newBS))
             })
-        new IndexedRDD(new RDDIndex(newIndex), newValues)
+        new VertexSetRDD(new VertexSetIndex(newIndex), newValues)
       }
       case _ => {
         // Get the partitioner from the index
@@ -360,20 +359,20 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
           if (other.partitioner == Some(partitioner)) {
             other
           } else {
-            new ShuffledRDD[K, W, (K,W)](other, partitioner)
+            other.partitionBy(partitioner)
           }
         // Join the other RDD with this RDD building a new valueset and new index on the fly
         val groups = tuples.zipPartitions(otherShuffled)(
           (thisTuplesIter, otherTuplesIter) => {
-            // Get the corresponding indicies and values for this IndexedRDD
+            // Get the corresponding indicies and values for this VertexSetRDD
             val (thisIndex, (thisValues, thisBS)) = thisTuplesIter.next()
             assert(!thisTuplesIter.hasNext())
             // Construct a new index
-            val newIndex = thisIndex.clone().asInstanceOf[BlockIndex[K]]
+            val newIndex = thisIndex.clone().asInstanceOf[VertexIdToIndexMap]
             // Construct a new array Buffer to store the values
             val newValues = ArrayBuffer.fill[ (Seq[V], Seq[W]) ](thisValues.size)(null)
             val newBS = new BitSet(thisValues.size)
-            // populate the newValues with the values in this IndexedRDD
+            // populate the newValues with the values in this VertexSetRDD
             for ((k,i) <- thisIndex) {
               if (thisBS(i)) {
                 newValues(i) = (Seq(thisValues(i)), ArrayBuffer.empty[W]) 
@@ -415,14 +414,14 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
         val newValues: RDD[(IndexedSeq[(Seq[V], Seq[W])], BitSet)] = 
           groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
           
-        new IndexedRDD[K, (Seq[V], Seq[W])](new RDDIndex(newIndex), newValues)
+        new VertexSetRDD[(Seq[V], Seq[W])](new VertexSetIndex(newIndex), newValues)
       }
     }
   }
 
 
   // 
-  // def zipJoinToRDD[W: ClassManifest](other: IndexedRDD[K,W]): RDD[(K,(V,W))] = {
+  // def zipJoinToRDD[W: ClassManifest](other: VertexSetRDD[K,W]): RDD[(K,(V,W))] = {
   //   if(index != other.index) {
   //     throw new SparkException("ZipJoinRDD can only be applied to RDDs with the same index!")
   //   }
@@ -447,11 +446,11 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
     other: RDD[(K,W)])(
     f: (K, V, W) => Z, 
     merge: (Z,Z) => Z = (a:Z, b:Z) => a):
-    IndexedRDD[K,Z] = {
+    VertexSetRDD[K,Z] = {
     val cleanF = index.rdd.context.clean(f)
     val cleanMerge = index.rdd.context.clean(merge)
     other match {
-      case other: IndexedRDD[_, _] if index == other.index => {
+      case other: VertexSetRDD[_, _] if index == other.index => {
         val newValues = index.rdd.zipPartitions(valuesRDD, other.valuesRDD){
           (thisIndexIter, thisIter, otherIter) => 
           val index = thisIndexIter.next()
@@ -469,7 +468,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
           }
           List((newValues, newBS)).iterator
         }
-        new IndexedRDD(index, newValues) 
+        new VertexSetRDD(index, newValues) 
       }
     
       case _ => {
@@ -508,7 +507,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
           } 
           List((newValues, tempBS)).iterator
         } // end of newValues
-        new IndexedRDD(index, newValues) 
+        new VertexSetRDD(index, newValues) 
       }
     }
   }
@@ -519,11 +518,11 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
     other: RDD[(K,W)])(
     f: (K, V, Option[W]) => Z, 
     merge: (Z,Z) => Z = (a:Z, b:Z) => a):
-    IndexedRDD[K,Z] = {
+    VertexSetRDD[K,Z] = {
     val cleanF = index.rdd.context.clean(f)
     val cleanMerge = index.rdd.context.clean(merge)
     other match {
-      case other: IndexedRDD[_, _] if index == other.index => {
+      case other: VertexSetRDD[_, _] if index == other.index => {
         val newValues = index.rdd.zipPartitions(valuesRDD, other.valuesRDD){
           (thisIndexIter, thisIter, otherIter) => 
           val index = thisIndexIter.next()
@@ -541,7 +540,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
           }
           List((newValues, thisBS)).iterator
         }
-        new IndexedRDD(index, newValues) 
+        new VertexSetRDD(index, newValues) 
       }
     
       case _ => {
@@ -584,7 +583,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
           }
           List((newValues, thisBS)).iterator
         } // end of newValues
-        new IndexedRDD(index, newValues) 
+        new VertexSetRDD(index, newValues) 
       }
     }
   }
@@ -593,7 +592,7 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
 
 
 
-  override def filter(f: Tuple2[K,V] => Boolean): RDD[(K,V)] = {
+  override def filter(f: Tuple2[Vid,V] => Boolean): VertexSetRDD[V] = {
     val cleanF = index.rdd.context.clean(f)
     val newValues = index.rdd.zipPartitions(valuesRDD){ 
       (keysIter, valuesIter) => 
@@ -609,14 +608,14 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
       }
       Array((oldValues, newBS)).iterator
     }
-    new IndexedRDD[K,V](index, newValues)
+    new VertexSetRDD[V](index, newValues)
   }
 
 
   /**
    * Provide the RDD[(K,V)] equivalent output. 
    */
-  override def compute(part: Partition, context: TaskContext): Iterator[(K, V)] = {
+  override def compute(part: Partition, context: TaskContext): Iterator[(Vid, V)] = {
     tuples.compute(part, context).flatMap { case (indexMap, (values, bs) ) => 
       // Walk the index to construct the key, value pairs
       indexMap.iterator 
@@ -629,27 +628,27 @@ class IndexedRDD[K: ClassManifest, V: ClassManifest](
     }
   }
 
-} // End of IndexedRDD
+} // End of VertexSetRDD
 
 
 
 
-object IndexedRDD {
+object VertexSetRDD {
 
 
-  def apply[K: ClassManifest, V: ClassManifest](rdd: RDD[(K,V)]): IndexedRDD[K,V] = 
+  def apply[V: ClassManifest](rdd: RDD[(Vid,V)]): VertexSetRDD[V] = 
     apply(rdd, (a:V, b:V) => a )
 
-  def apply[K: ClassManifest, V: ClassManifest](
-    rdd: RDD[(K,V)], reduceFunc: (V, V) => V): IndexedRDD[K,V] = {
+  def apply[V: ClassManifest](
+    rdd: RDD[(Vid,V)], reduceFunc: (V, V) => V): VertexSetRDD[V] = {
     // Preaggregate and shuffle if necessary
     // Preaggregation.
-    val aggregator = new Aggregator[K, V, V](v => v, reduceFunc, reduceFunc)
+    val aggregator = new Aggregator[Vid, V, V](v => v, reduceFunc, reduceFunc)
     val partitioner = new HashPartitioner(rdd.partitions.size)
     val preAgg = rdd.mapPartitions(aggregator.combineValuesByKey).partitionBy(partitioner)
 
     val groups = preAgg.mapPartitions( iter => {
-      val indexMap = new BlockIndex[K]()
+      val indexMap = new VertexIdToIndexMap()
       val values = new ArrayBuffer[V]
       val bs = new BitSet
       for ((k,v) <- iter) {
@@ -669,19 +668,19 @@ object IndexedRDD {
     val index = groups.mapPartitions(_.map{ case (kMap, vAr) => kMap }, true)
     val values: RDD[(IndexedSeq[V], BitSet)] = 
       groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
-    new IndexedRDD[K,V](new RDDIndex(index), values)
+    new VertexSetRDD[V](new VertexSetIndex(index), values)
   }
 
 
 
-  def apply[K: ClassManifest, V: ClassManifest](
-    rdd: RDD[(K,V)], index: RDDIndex[K]): IndexedRDD[K,V] = 
+  def apply[V: ClassManifest](
+    rdd: RDD[(Vid,V)], index: VertexSetIndex): VertexSetRDD[V] = 
     apply(rdd, index, (a:V,b:V) => a)
 
 
-  def apply[K: ClassManifest, V: ClassManifest](
-    rdd: RDD[(K,V)], index: RDDIndex[K], 
-    reduceFunc: (V, V) => V): IndexedRDD[K,V] = 
+  def apply[V: ClassManifest](
+    rdd: RDD[(Vid,V)], index: VertexSetIndex,
+    reduceFunc: (V, V) => V): VertexSetRDD[V] = 
     apply(rdd,index, (v:V) => v, reduceFunc, reduceFunc)
   // {
   //   // Get the index Partitioner
@@ -721,16 +720,16 @@ object IndexedRDD {
   //     }
   //     List((values, bs)).iterator
   //   })
-  //   new IndexedRDD[K,V](index, values)
+  //   new VertexSetRDD[K,V](index, values)
   // } // end of apply
 
 
-  def apply[K: ClassManifest, V: ClassManifest, C: ClassManifest](
-    rdd: RDD[(K,V)], 
-    index: RDDIndex[K],
+  def apply[V: ClassManifest, C: ClassManifest](
+    rdd: RDD[(Vid,V)], 
+    index: VertexSetIndex,
     createCombiner: V => C,
     mergeValue: (C, V) => C,
-    mergeCombiners: (C, C) => C): IndexedRDD[K,C] = {
+    mergeCombiners: (C, C) => C): VertexSetRDD[C] = {
     // Get the index Partitioner
     val partitioner = index.rdd.partitioner match {
       case Some(p) => p
@@ -740,7 +739,7 @@ object IndexedRDD {
     val partitioned = 
       if (rdd.partitioner != Some(partitioner)) {
         // Preaggregation.
-        val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, 
+        val aggregator = new Aggregator[Vid, V, C](createCombiner, mergeValue, 
           mergeCombiners)
         rdd.mapPartitions(aggregator.combineValuesByKey).partitionBy(partitioner)
       } else {
@@ -769,15 +768,15 @@ object IndexedRDD {
       }
       Iterator((values, bs))
     })
-    new IndexedRDD(index, values)
+    new VertexSetRDD(index, values)
   } // end of apply
 
 
   /**
    * Construct and index of the unique values in a given RDD.
    */
-  def makeIndex[K: ClassManifest](keys: RDD[K], 
-    partitioner: Option[Partitioner] = None): RDDIndex[K] = {
+  def makeIndex(keys: RDD[Vid], 
+    partitioner: Option[Partitioner] = None): VertexSetIndex = {
     // @todo: I don't need the boolean its only there to be the second type since I want to shuffle a single RDD
     // Ugly hack :-(.  In order to partition the keys they must have values. 
     val tbl = keys.mapPartitions(_.map(k => (k, false)), true)
@@ -786,7 +785,7 @@ object IndexedRDD {
       case None =>  {
         if (tbl.partitioner.isEmpty) {
           // @todo: I don't need the boolean its only there to be the second type of the shuffle. 
-          new ShuffledRDD[K, Boolean, (K, Boolean)](tbl, Partitioner.defaultPartitioner(tbl))
+          new ShuffledRDD[Vid, Boolean, (Vid, Boolean)](tbl, Partitioner.defaultPartitioner(tbl))
         } else { tbl }
       }
       case Some(partitioner) => 
@@ -794,7 +793,7 @@ object IndexedRDD {
     }
 
     val index = shuffledTbl.mapPartitions( iter => {
-      val indexMap = new BlockIndex[K]()
+      val indexMap = new VertexIdToIndexMap()
       for ( (k,_) <- iter ){
         if(!indexMap.contains(k)){
           val ind = indexMap.size
@@ -803,10 +802,10 @@ object IndexedRDD {
       }
       Iterator(indexMap)
       }, true).cache
-    new RDDIndex(index)
+    new VertexSetIndex(index)
   }
 
-} // end of object IndexedRDD
+} // end of object VertexSetRDD
 
 
 

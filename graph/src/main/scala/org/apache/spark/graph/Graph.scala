@@ -28,7 +28,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @see Vertex for the vertex type.
    *
    */
-  val vertices: RDD[(Vid,VD)]
+  val vertices: VertexSetRDD[VD]
 
   /**
    * Get the Edges and their data as an RDD.  The entries in the RDD contain
@@ -257,7 +257,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def mapReduceTriplets[A: ClassManifest](
       mapFunc: EdgeTriplet[VD, ED] => Array[(Vid, A)],
       reduceFunc: (A, A) => A)
-    : RDD[(Vid, A)] 
+    : VertexSetRDD[A] 
 
 
   /**

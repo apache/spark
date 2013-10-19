@@ -13,11 +13,11 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
   lazy val numVertices: Long = graph.vertices.count()
 
-  lazy val inDegrees: RDD[(Vid, Int)] = degreesRDD(EdgeDirection.In)
+  lazy val inDegrees: VertexSetRDD[Int] = degreesRDD(EdgeDirection.In)
 
-  lazy val outDegrees: RDD[(Vid, Int)] = degreesRDD(EdgeDirection.Out)
+  lazy val outDegrees: VertexSetRDD[Int] = degreesRDD(EdgeDirection.Out)
 
-  lazy val degrees: RDD[(Vid, Int)] = degreesRDD(EdgeDirection.Both)
+  lazy val degrees: VertexSetRDD[Int] = degreesRDD(EdgeDirection.Both)
 
 
   /**
@@ -62,7 +62,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
       reduceFunc: (A, A) => A,
       dir: EdgeDirection)
-    : RDD[(Vid, A)] = {
+    : VertexSetRDD[A] = {
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
@@ -94,20 +94,20 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
   } // end of aggregateNeighbors
 
 
-  def collectNeighborIds(edgeDirection: EdgeDirection) : RDD[(Vid, Array[Vid])] = {
+  def collectNeighborIds(edgeDirection: EdgeDirection) : VertexSetRDD[Array[Vid]] = {
     val nbrs = graph.aggregateNeighbors[Array[Vid]](
       (vid, edge) => Some(Array(edge.otherVertexId(vid))),
       (a, b) => a ++ b,
       edgeDirection)
 
-    graph.vertices.leftOuterJoin(nbrs).mapValues{
+    graph.vertices.leftZipJoin(nbrs).mapValues{
       case (_, Some(nbrs)) => nbrs
       case (_, None) => Array.empty[Vid]
     }
   }
 
 
-  private def degreesRDD(edgeDirection: EdgeDirection): RDD[(Vid, Int)] = {
+  private def degreesRDD(edgeDirection: EdgeDirection): VertexSetRDD[Int] = {
     graph.aggregateNeighbors((vid, edge) => Some(1), _+_, edgeDirection)
   }
 
