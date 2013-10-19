@@ -52,13 +52,14 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
 private[spark]
 class DAGScheduler(
     taskSched: TaskScheduler,
-    mapOutputTracker: MapOutputTracker,
+    mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv)
   extends Logging {
 
   def this(taskSched: TaskScheduler) {
-    this(taskSched, SparkEnv.get.mapOutputTracker, SparkEnv.get.blockManager.master, SparkEnv.get)
+    this(taskSched, SparkEnv.get.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
+      SparkEnv.get.blockManager.master, SparkEnv.get)
   }
   taskSched.setDAGScheduler(this)
 
