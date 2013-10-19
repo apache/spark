@@ -288,8 +288,19 @@ class SparkContext(
     Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
 
   /** Set a human readable description of the current job. */
+  @deprecated("use setJobGroup", "0.8.1")
   def setJobDescription(value: String) {
-    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
+    setJobGroup("", value)
+  }
+
+  def setJobGroup(groupId: String, description: String) {
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, description)
+    setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
+  }
+
+  def clearJobGroup() {
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
+    setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
   }
 
   // Post init
@@ -867,8 +878,12 @@ class SparkContext(
       callSite,
       allowLocal = false,
       resultHandler,
-      null)
+      localProperties.get)
     new SimpleFutureAction(waiter, resultFunc)
+  }
+
+  def cancelJobGroup(groupId: String) {
+    dagScheduler.cancelJobGroup(groupId)
   }
 
   /**
@@ -934,7 +949,10 @@ class SparkContext(
  * various Spark features.
  */
 object SparkContext {
+
   val SPARK_JOB_DESCRIPTION = "spark.job.description"
+
+  val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
 
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2

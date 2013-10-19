@@ -46,6 +46,8 @@ private[scheduler] case class JobSubmitted(
 
 private[scheduler] case class JobCancelled(jobId: Int) extends DAGSchedulerEvent
 
+private[scheduler] case class JobGroupCancelled(groupId: String) extends DAGSchedulerEvent
+
 private[scheduler] case object AllJobsCancelled extends DAGSchedulerEvent
 
 private[scheduler]
