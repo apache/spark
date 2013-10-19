@@ -220,6 +220,8 @@ class SparkContext(
       case _ =>
         if (MESOS_REGEX.findFirstIn(master).isEmpty) {
           logWarning("Master %s does not match expected format, parsing as Mesos URL".format(master))
+          logWarning("Deprecation warning: Mesos URLs not preceded by mesos:// are deprecated " +
+            "and will no longer be supported in Spark 0.9.")
         }
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)
