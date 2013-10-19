@@ -277,17 +277,17 @@ class DAGScheduler(
       resultHandler: (Int, U) => Unit,
       properties: Properties = null): JobWaiter[U] =
   {
-    val jobId = nextJobId.getAndIncrement()
-    if (partitions.size == 0) {
-      return new JobWaiter[U](this, jobId, 0, resultHandler)
-    }
-
     // Check to make sure we are not launching a task on a partition that does not exist.
     val maxPartitions = rdd.partitions.length
     partitions.find(p => p >= maxPartitions).foreach { p =>
       throw new IllegalArgumentException(
         "Attempting to access a non-existent partition: " + p + ". " +
           "Total number of partitions: " + maxPartitions)
+    }
+
+    val jobId = nextJobId.getAndIncrement()
+    if (partitions.size == 0) {
+      return new JobWaiter[U](this, jobId, 0, resultHandler)
     }
 
     assert(partitions.size > 0)
@@ -342,6 +342,11 @@ class DAGScheduler(
     eventQueue.put(JobCancelled(jobId))
   }
 
+  def cancelJobGroup(groupId: String) {
+    logInfo("Asked to cancel job group " + groupId)
+    eventQueue.put(JobGroupCancelled(groupId))
+  }
+
   /**
    * Cancel all jobs that are running or waiting in the queue.
    */
@@ -379,6 +384,17 @@ class DAGScheduler(
         // Cancel a job: find all the running stages that are linked to this job, and cancel them.
         running.filter(_.jobId == jobId).foreach { stage =>
           taskSched.cancelTasks(stage.id)
+        }
+
+      case JobGroupCancelled(groupId) =>
+        // Cancel all jobs belonging to this job group.
+        // First finds all active jobs with this group id, and then kill stages for them.
+        val jobIds = activeJobs.filter(groupId == _.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
+          .map(_.jobId)
+        if (!jobIds.isEmpty) {
+          running.filter(stage => jobIds.contains(stage.jobId)).foreach { stage =>
+            taskSched.cancelTasks(stage.id)
+          }
         }
 
       case AllJobsCancelled =>
