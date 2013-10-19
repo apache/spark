@@ -21,6 +21,7 @@ import java.io.{InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
 import scala.collection.mutable.{HashMap, ArrayBuffer, HashSet}
+import scala.util.Random
 
 import akka.actor.{ActorSystem, Cancellable, Props}
 import akka.dispatch.{Await, Future}
@@ -269,7 +270,7 @@ private[spark] class BlockManager(
   }
 
   /**
-   * Actually send a UpdateBlockInfo message. Returns the mater's response,
+   * Actually send a UpdateBlockInfo message. Returns the master's response,
    * which will be true if the block was successfully recorded and false if
    * the slave needs to re-register.
    */
@@ -478,7 +479,7 @@ private[spark] class BlockManager(
     }
     logDebug("Getting remote block " + blockId)
     // Get locations of block
-    val locations = master.getLocations(blockId)
+    val locations = Random.shuffle(master.getLocations(blockId))
 
     // Get block from remote locations
     for (loc <- locations) {
