@@ -39,6 +39,7 @@ import org.apache.spark.storage.BlockManagerId
 private[spark] class Stage(
     val id: Int,
     val rdd: RDD[_],
+    val numTasks: Int,
     val shuffleDep: Option[ShuffleDependency[_,_]],  // Output shuffle if stage is a map stage
     val parents: List[Stage],
     val jobId: Int,

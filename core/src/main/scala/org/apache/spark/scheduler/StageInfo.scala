@@ -30,9 +30,8 @@ case class StageInfo(
   var completionTime: Option[Long] = None
   val rddName = stage.rdd.toString
   val name = stage.name
-  // TODO: We should also track the number of tasks associated with this stage, which may not
-  //       be equal to numPartitions.
   val numPartitions = stage.numPartitions
+  val numTasks = stage.numTasks
 
   override def toString = rddName
 }

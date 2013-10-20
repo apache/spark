@@ -94,7 +94,7 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
         case f if f > 0 => "(%s failed)".format(f)
         case _ => ""
     }
-    val totalTasks = s.numPartitions
+    val totalTasks = s.numTasks
 
     val poolName = listener.stageToPool.get(s.stageId)
 

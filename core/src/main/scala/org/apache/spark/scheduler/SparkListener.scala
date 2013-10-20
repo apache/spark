@@ -24,7 +24,7 @@ import org.apache.spark.executor.TaskMetrics
 
 sealed trait SparkListenerEvents
 
-case class SparkListenerStageSubmitted(stage: StageInfo, taskSize: Int, properties: Properties)
+case class SparkListenerStageSubmitted(stage: StageInfo, properties: Properties)
      extends SparkListenerEvents
 
 case class StageCompleted(val stage: StageInfo) extends SparkListenerEvents
