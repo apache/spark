@@ -152,7 +152,8 @@ private[spark] class ShuffleMapTask(
     try {
       // Obtain all the block writers for shuffle blocks.
       val ser = SparkEnv.get.serializerManager.get(dep.serializerClass)
-      shuffle = blockManager.shuffleBlockManager.forShuffle(dep.shuffleId, numOutputSplits, ser)
+      shuffle = blockManager.shuffleBlockManager.forShuffle(
+        dep.shuffleId, context.executorId, numOutputSplits, ser)
       buckets = shuffle.acquireWriters(partitionId)
 
       // Write the map output to its associated buckets.

@@ -206,7 +206,7 @@ private[spark] class Executor(
 
         // Run the actual task and measure its runtime.
         taskStart = System.currentTimeMillis()
-        val value = task.run(taskId.toInt)
+        val value = task.run(taskId.toInt, executorId)
         val taskFinish = System.currentTimeMillis()
 
         // If the task has been killed, let's fail it.

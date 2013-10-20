@@ -45,8 +45,8 @@ import org.apache.spark.util.ByteBufferInputStream
  */
 private[spark] abstract class Task[T](val stageId: Int, var partitionId: Int) extends Serializable {
 
-  def run(attemptId: Long): T = {
-    context = new TaskContext(stageId, partitionId, attemptId, runningLocally = false)
+  final def run(attemptId: Long, executorId: String): T = {
+    context = new TaskContext(stageId, partitionId, attemptId, executorId, runningLocally = false)
     if (_killed) {
       kill()
     }

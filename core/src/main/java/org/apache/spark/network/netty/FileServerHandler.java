@@ -51,7 +51,7 @@ class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
         ctx.flush();
         return;
       }
-      long length = file.length();
+      long length = fileSegment.length();
       if (length > Integer.MAX_VALUE || length <= 0) {
         ctx.write(new FileHeader(0, blockId).buffer());
         ctx.flush();
