@@ -292,8 +292,8 @@ class SparkContext(
    * different value or cleared.
    *
    * Often, a unit of execution in an application consists of multiple Spark actions or jobs.
-   * Application programmers can use this method to group all those jobs together and give the
-   * group a description. Once set, the Spark web UI will associate such jobs with this group.
+   * Application programmers can use this method to group all those jobs together and give a
+   * group description. Once set, the Spark web UI will associate such jobs with this group.
    *
    * The application can also use [[org.apache.spark.SparkContext.cancelJobGroup]] to cancel all
    * running jobs in this group. For example,
@@ -320,8 +320,8 @@ class SparkContext(
   // Post init
   taskScheduler.postStartHook()
 
-  val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
-  val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
+  private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
+  private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
 
   def initDriverMetrics() {
     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
