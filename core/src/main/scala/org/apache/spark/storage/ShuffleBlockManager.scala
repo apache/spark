@@ -36,7 +36,7 @@ trait ShuffleBlocks {
  * per reducer.
  *
  * As an optimization to reduce the number of physical shuffle files produced, multiple shuffle
- * Blocks are aggregated into the same file. There is one "combined shuffle file" per reducer
+ * blocks are aggregated into the same file. There is one "combined shuffle file" per reducer
  * per concurrently executing shuffle task. As soon as a task finishes writing to its shuffle files,
  * it releases them for another task.
  * Regarding the implementation of this feature, shuffle files are identified by a 4-tuple:
@@ -49,7 +49,8 @@ trait ShuffleBlocks {
  */
 private[spark]
 class ShuffleBlockManager(blockManager: BlockManager) {
-  /** Turning off shuffle file consolidation causes all shuffle Blocks to get their own file. */
+  // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
+  // TODO: Remove this once the shuffle file consolidation feature is stable.
   val consolidateShuffleFiles =
     System.getProperty("spark.storage.consolidateShuffleFiles", "true").toBoolean
 
@@ -78,8 +79,7 @@ class ShuffleBlockManager(blockManager: BlockManager) {
 
   private def getUnusedFileId(): Int = {
     val fileId = unusedFileIds.poll()
-    if (fileId == null) nextFileId.getAndIncrement()
-    else fileId
+    if (fileId == null) nextFileId.getAndIncrement() else fileId
   }
 
   private def recycleFileId(fileId: Int) {

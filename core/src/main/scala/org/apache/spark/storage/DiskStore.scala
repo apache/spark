@@ -86,7 +86,6 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     val segment = diskManager.getBlockLocation(blockId)
     val channel = new RandomAccessFile(segment.file, "r").getChannel()
     val buffer = try {
-      logWarning("<READ: " + segment.offset + ", " + segment.length + ">")
       channel.map(MapMode.READ_ONLY, segment.offset, segment.length)
     } finally {
       channel.close()
@@ -106,13 +105,13 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     getBytes(blockId).map(bytes => blockManager.dataDeserialize(blockId, bytes, serializer))
   }
 
-  override def remove(blockId: BlockId) = {
+  override def remove(blockId: BlockId): Boolean = {
     val fileSegment = diskManager.getBlockLocation(blockId)
     val file = fileSegment.file
     if (file.exists() && file.length() == fileSegment.length) {
       file.delete()
     } else {
-      if (file.length() < fileSegment.length) {
+      if (fileSegment.length < file.length()) {
         logWarning("Could not delete block associated with only a part of a file: " + blockId)
       }
       false

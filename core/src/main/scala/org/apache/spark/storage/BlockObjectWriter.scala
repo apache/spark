@@ -32,7 +32,7 @@ import org.apache.spark.serializer.{SerializationStream, Serializer}
  *
  * This interface does not support concurrent writes.
  */
-abstract class BlockObjectWriter(val blockId: BlockId) {
+private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 
   var closeEventHandler: () => Unit = _
 
@@ -72,7 +72,7 @@ abstract class BlockObjectWriter(val blockId: BlockId) {
 }
 
 /** BlockObjectWriter which writes directly to a file on disk. Appends to the given file. */
-class DiskBlockObjectWriter(
+private[spark] class DiskBlockObjectWriter(
     blockId: BlockId,
     file: File,
     serializer: Serializer,

@@ -22,20 +22,20 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Random}
 import java.util.concurrent.ConcurrentHashMap
 
-import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.Logging
+import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
 import org.apache.spark.util.Utils
 
 /**
- * Creates an maintains the logical mapping between logical Blocks and physical on-disk
- * locations. By default, one Block is mapped to one file with a name given by its BlockId.
- * However, it is also possible to have a Block map to only a segment of a file, by calling
+ * Creates and maintains the logical mapping between logical blocks and physical on-disk
+ * locations. By default, one block is mapped to one file with a name given by its BlockId.
+ * However, it is also possible to have a block map to only a segment of a file, by calling
  * mapBlockToFileSegment().
  *
- * @param rootDirs The directories to use for storing Block files. Data will be hashed among these.
+ * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
  */
-class DiskBlockManager(rootDirs: String) extends PathResolver with Logging {
+private[spark] class DiskBlockManager(rootDirs: String) extends PathResolver with Logging {
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   private val subDirsPerLocalDir = System.getProperty("spark.diskStore.subDirectories", "64").toInt
