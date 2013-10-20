@@ -203,8 +203,7 @@ private[spark] class MapOutputTrackerMaster extends MapOutputTracker {
     }
   }
 
-  def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus],
-                         changeEpoch: Boolean = false) {
+  def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false) {
     mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
     if (changeEpoch) {
       incrementEpoch()
