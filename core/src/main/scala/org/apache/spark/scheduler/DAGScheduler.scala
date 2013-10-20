@@ -585,7 +585,7 @@ class DAGScheduler(
 
     // must be run listener before possible NotSerializableException
     // should be "StageSubmitted" first and then "JobEnded"
-    listenerBus.post(SparkListenerStageSubmitted(stage, tasks.size, properties))
+    listenerBus.post(SparkListenerStageSubmitted(stageToInfos(stage), tasks.size, properties))
 
     if (tasks.size > 0) {
       // Preemptively serialize a task to make sure it can be serialized. We are catching this
@@ -606,9 +606,9 @@ class DAGScheduler(
       logDebug("New pending tasks: " + myPending)
       taskSched.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
-      if (!stage.submissionTime.isDefined) {
-        stage.submissionTime = Some(System.currentTimeMillis())
-      }
+      stage.submissionTime = Some(System.currentTimeMillis())
+      stageToInfos(stage).submissionTime = Some(System.currentTimeMillis())
+
     } else {
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
         stage.isAvailable, stage.numAvailableOutputs, stage.numPartitions))
@@ -636,6 +636,7 @@ class DAGScheduler(
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stage.completionTime = Some(System.currentTimeMillis)
+      stageToInfos(stage).completionTime = Some(System.currentTimeMillis())
       listenerBus.post(StageCompleted(stageToInfos(stage)))
       running -= stage
     }

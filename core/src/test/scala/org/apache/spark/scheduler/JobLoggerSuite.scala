@@ -60,8 +60,9 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     val rootRdd = makeRdd(4, List(shuffleDep))
     val shuffleMapStage = new Stage(1, parentRdd, Some(shuffleDep), Nil, jobID, None)
     val rootStage = new Stage(0, rootRdd, None, List(shuffleMapStage), jobID, None)
-    
-    joblogger.onStageSubmitted(SparkListenerStageSubmitted(rootStage, 4, null))
+    val rootStageInfo = new StageInfo(rootStage)
+
+    joblogger.onStageSubmitted(SparkListenerStageSubmitted(rootStageInfo, 4, null))
     joblogger.getRddNameTest(parentRdd) should be (parentRdd.getClass.getName)
     parentRdd.setName("MyRDD")
     joblogger.getRddNameTest(parentRdd) should be ("MyRDD")

@@ -22,8 +22,17 @@ import scala.collection._
 import org.apache.spark.executor.TaskMetrics
 
 case class StageInfo(
-    val stage: Stage,
+    stage: Stage,
     val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] = mutable.Buffer[(TaskInfo, TaskMetrics)]()
 ) {
-  override def toString = stage.rdd.toString
+  val stageId = stage.id
+  var submissionTime: Option[Long] = None
+  var completionTime: Option[Long] = None
+  val rddName = stage.rdd.toString
+  val name = stage.name
+  // TODO: We should also track the number of tasks associated with this stage, which may not
+  //       be equal to numPartitions.
+  val numPartitions = stage.numPartitions
+
+  override def toString = rddName
 }

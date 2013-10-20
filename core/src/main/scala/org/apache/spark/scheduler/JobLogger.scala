@@ -207,13 +207,13 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
   }
   
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
-    stageLogInfo(stageSubmitted.stage.id, "STAGE_ID=%d STATUS=SUBMITTED TASK_SIZE=%d".format(
-      stageSubmitted.stage.id, stageSubmitted.taskSize))
+    stageLogInfo(stageSubmitted.stage.stageId, "STAGE_ID=%d STATUS=SUBMITTED TASK_SIZE=%d".format(
+        stageSubmitted.stage.stageId, stageSubmitted.taskSize))
   }
   
   override def onStageCompleted(stageCompleted: StageCompleted) {
-    stageLogInfo(stageCompleted.stageInfo.stage.id,
-      "STAGE_ID=%d STATUS=COMPLETED".format(stageCompleted.stageInfo.stage.id))
+    stageLogInfo(stageCompleted.stage.stage.id, "STAGE_ID=%d STATUS=COMPLETED".format(
+        stageCompleted.stage.stage.id))
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) { }
