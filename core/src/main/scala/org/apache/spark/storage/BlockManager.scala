@@ -394,7 +394,7 @@ private[spark] class BlockManager(
             // Otherwise, we also have to store something in the memory store:
             if (!level.deserialized || !asValues) {
               // We'll store the bytes in memory if the block's storage level includes
-              // "memory serialized", or if it should cached as objects in memory
+              // "memory serialized", or if it should be cached as objects in memory
               // but we only requested its serialized bytes:
               val copyForMemory = ByteBuffer.allocate(bytes.limit)
               copyForMemory.put(bytes)
@@ -626,16 +626,10 @@ private[spark] class BlockManager(
             }
           }
           case Right(bytes) => {
-            if (level.useMemory) {
-              // Store it only in memory at first, even if useDisk is also set to true
-              bytes.rewind()
-              memoryStore.putBytes(blockId, bytes, level)
-              size = bytes.limit
-            } else {
-              bytes.rewind()
-              diskStore.putBytes(blockId, bytes, level)
-              size = bytes.limit
-            }
+            bytes.rewind()
+            // Store it only in memory at first, even if useDisk is also set to true
+            (if (level.useMemory) memoryStore else diskStore).putBytes(blockId, bytes, level)
+            size = bytes.limit
           }
         }
 
