@@ -24,8 +24,7 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable.{Map, HashMap, ListBuffer}
-import scala.io.Source
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -34,12 +33,15 @@ import org.apache.spark.executor.TaskMetrics
 // Used to record runtime information for each job, including RDD graph 
 // tasks' start/stop shuffle information and information from outside
 
+private[spark]
 class JobLogger(val logDirName: String) extends SparkListener with Logging {
-  private val logDir =  
-    if (System.getenv("SPARK_LOG_DIR") != null)  
-      System.getenv("SPARK_LOG_DIR")
-    else 
-      "/tmp/spark"
+
+  private val logDir = if (System.getenv("SPARK_LOG_DIR") != null) {
+    System.getenv("SPARK_LOG_DIR")
+  } else {
+    "/tmp/spark"
+  }
+
   private val jobIDToPrintWriter = new HashMap[Int, PrintWriter] 
   private val stageIDToJobID = new HashMap[Int, Int]
   private val jobIDToStages = new HashMap[Int, ListBuffer[Stage]]
