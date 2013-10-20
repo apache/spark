@@ -273,10 +273,7 @@ private[spark] class MapOutputTrackerMaster extends MapOutputTracker {
   }
 
   override def updateEpoch(newEpoch: Long) {
-    // This might be called on the MapOutputTrackerMaster if we're running in local mode:
-    epochLock.synchronized {
-      assert (newEpoch == epoch)
-    }
+    // This might be called on the MapOutputTrackerMaster if we're running in local mode.
   }
 }
 
