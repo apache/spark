@@ -42,6 +42,13 @@
 >>> a.value
 13
 
+>>> b = sc.accumulator(0)
+>>> def g(x):
+...     b.add(x)
+>>> rdd.foreach(g)
+>>> b.value
+6
+
 >>> from pyspark.accumulators import AccumulatorParam
 >>> class VectorAccumulatorParam(AccumulatorParam):
 ...     def zero(self, value):
@@ -139,9 +146,13 @@ class Accumulator(object):
             raise Exception("Accumulator.value cannot be accessed inside tasks")
         self._value = value
 
+    def add(self, term):
+        """Adds a term to this accumulator's value"""
+        self._value = self.accum_param.addInPlace(self._value, term)
+
     def __iadd__(self, term):
         """The += operator; adds a term to this accumulator's value"""
-        self._value = self.accum_param.addInPlace(self._value, term)
+        self.add(term)
         return self
 
     def __str__(self):
