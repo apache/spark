@@ -35,7 +35,7 @@ close(depsFile)
 load(depsFileName, envir=environment(execFunction))
 unlink(depsFileName)
 
-# Redirect stdout to stderr to prevent print statements from 
+# Redirect stdout to stderr to prevent print statements from
 # interfering with outputStream
 sink(stderr())
 

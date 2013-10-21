@@ -101,3 +101,23 @@ setMethod("reduce",
                                      flatten=FALSE)
             Reduce(func, partitionList)
           })
+
+# Take the first NUM elements in the RRDD. NULL if there is nothing to take.
+# (Not naming it as the more idiomatic `head' since SparkR uses S4 whereas the
+# head generic function in R is defined in S3 style. Mixing will cause
+# troubles.)
+setGeneric("take", function(rrdd, num) { standardGeneric("take") })
+setMethod("take",
+          signature(rrdd = "RRDD", num = "numeric"),
+          function(rrdd, num) {
+
+            # TODO: use iterators package (R does not have native ones)?
+            takeUpToNum <- function(partition) {
+              head(unlist(partition, recursive = FALSE, use.names = FALSE), n = num)
+            }
+
+            partitionHeads <- lapplyPartition(rrdd, takeUpToNum)
+            vals <- collect(partitionHeads)
+
+            head(unlist(vals, recursive = FALSE, use.names = FALSE), n = num)
+          })
