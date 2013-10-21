@@ -99,13 +99,13 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       throw new UnsupportedOperationException(
         "Histogram on either an empty RDD or RDD containing +/-infinity or NaN")
     }
-    val increment: Double = (max-min)/bucketCount.toDouble
+    val increment = (max-min)/bucketCount.toDouble
     val range = if (increment != 0) {
       Range.Double.inclusive(min, max, increment)
     } else {
       List(min, min)
     }
-    val buckets: Array[Double] = range.toArray
+    val buckets = range.toArray
     (buckets, histogram(buckets, true))
   }
 
