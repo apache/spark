@@ -25,7 +25,6 @@ class TaskContext(
   val stageId: Int,
   val partitionId: Int,
   val attemptId: Long,
-  val executorId: String,
   val runningLocally: Boolean = false,
   @volatile var interrupted: Boolean = false,
   private[spark] val taskMetrics: TaskMetrics = TaskMetrics.empty()

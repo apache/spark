@@ -52,12 +52,12 @@ class ShuffleBlockManager(blockManager: BlockManager) {
   // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
   // TODO: Remove this once the shuffle file consolidation feature is stable.
   val consolidateShuffleFiles =
-    System.getProperty("spark.storage.consolidateShuffleFiles", "true").toBoolean
+    System.getProperty("spark.shuffle.consolidateFiles", "true").toBoolean
 
   var nextFileId = new AtomicInteger(0)
   val unusedFileIds = new ConcurrentLinkedQueue[java.lang.Integer]()
 
-  def forShuffle(shuffleId: Int, executorId: String, numBuckets: Int, serializer: Serializer) = {
+  def forShuffle(shuffleId: Int, numBuckets: Int, serializer: Serializer) = {
     new ShuffleBlocks {
       // Get a group of writers for a map task.
       override def acquireWriters(mapId: Int): ShuffleWriterGroup = {
@@ -65,7 +65,7 @@ class ShuffleBlockManager(blockManager: BlockManager) {
         val fileId = getUnusedFileId()
         val writers = Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          val filename = physicalFileName(shuffleId, executorId, bucketId, fileId)
+          val filename = physicalFileName(shuffleId, bucketId, fileId)
           blockManager.getDiskWriter(blockId, filename, serializer, bufferSize)
         }
         new ShuffleWriterGroup(mapId, fileId, writers)
@@ -87,7 +87,7 @@ class ShuffleBlockManager(blockManager: BlockManager) {
     unusedFileIds.add(fileId)
   }
 
-  private def physicalFileName(shuffleId: Int, executorId: String, bucketId: Int, fileId: Int) = {
-    "merged_shuffle_%d_%s_%d_%d".format(shuffleId, executorId, bucketId, fileId)
+  private def physicalFileName(shuffleId: Int, bucketId: Int, fileId: Int) = {
+    "merged_shuffle_%d_%d_%d".format(shuffleId, bucketId, fileId)
   }
 }

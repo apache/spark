@@ -152,8 +152,7 @@ private[spark] class ShuffleMapTask(
     try {
       // Obtain all the block writers for shuffle blocks.
       val ser = SparkEnv.get.serializerManager.get(dep.serializerClass)
-      shuffle = blockManager.shuffleBlockManager.forShuffle(
-        dep.shuffleId, context.executorId, numOutputSplits, ser)
+      shuffle = blockManager.shuffleBlockManager.forShuffle(dep.shuffleId, numOutputSplits, ser)
       buckets = shuffle.acquireWriters(partitionId)
 
       // Write the map output to its associated buckets.
@@ -167,7 +166,6 @@ private[spark] class ShuffleMapTask(
       var totalBytes = 0L
       val compressedSizes: Array[Byte] = buckets.writers.map { writer: BlockObjectWriter =>
         writer.commit()
-        writer.close()
         val size = writer.fileSegment().length
         totalBytes += size
         MapOutputTracker.compressSize(size)
@@ -189,6 +187,7 @@ private[spark] class ShuffleMapTask(
     } finally {
       // Release the writers back to the shuffle block manager.
       if (shuffle != null && buckets != null) {
+        buckets.writers.foreach(_.close())
         shuffle.releaseWriters(buckets)
       }
       // Execute the callbacks on task completion.
