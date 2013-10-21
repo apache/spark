@@ -83,44 +83,50 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * Compute a histogram of the data using bucketCount number of buckets evenly
    *  spaced between the minimum and maximum of the RDD. For example if the min
    *  value is 0 and the max is 100 and there are two buckets the resulting
-   *  buckets will be [0,50) [50,100]. bucketCount must be at least 1
+   *  buckets will be [0, 50) [50, 100]. bucketCount must be at least 1
    * If the RDD contains infinity, NaN throws an exception
-   * If the elements in RDD do not vary (max == min) throws an exception
+   * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
   def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = {
     // Compute the minimum and the maxium
     val (max: Double, min: Double) = self.mapPartitions { items =>
       Iterator(items.foldRight(-1/0.0, Double.NaN)((e: Double, x: Pair[Double, Double]) =>
-        (x._1.max(e),x._2.min(e))))
+        (x._1.max(e), x._2.min(e))))
     }.reduce { (maxmin1, maxmin2) =>
       (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))
     }
     if (max.isNaN() || max.isInfinity || min.isInfinity ) {
-      throw new UnsupportedOperationException("Histogram on either an empty RDD or RDD containing +-infinity or NaN")
-    }
-    if (max == min) {
-      throw new UnsupportedOperationException("Histogram with no range in elements")
+      throw new UnsupportedOperationException(
+        "Histogram on either an empty RDD or RDD containing +/-infinity or NaN")
     }
     val increment: Double = (max-min)/bucketCount.toDouble
-    val range = Range.Double.inclusive(min, max, increment)
+    val range = if (increment != 0) {
+      Range.Double.inclusive(min, max, increment)
+    } else {
+      List(min, min)
+    }
     val buckets: Array[Double] = range.toArray
-    (buckets,histogram(buckets))
+    (buckets, histogram(buckets, true))
   }
+
   /**
    * Compute a histogram using the provided buckets. The buckets are all open
    * to the left except for the last which is closed
    *  e.g. for the array
-   *  [1,10,20,50] the buckets are [1,10) [10,20) [20,50]
+   *  [1, 10, 20, 50] the buckets are [1, 10) [10, 20) [20, 50]
    *  e.g 1<=x<10 , 10<=x<20, 20<=x<50
-   *  And on the input of 1 and 50 we would have a histogram of 1,0,0 
+   *  And on the input of 1 and 50 we would have a histogram of 1, 0, 0 
    * 
-   * Note: if your histogram is evenly spaced (e.g. [0,10,20,30]) this switches
-   * from an O(log n) inseration to O(1) per element. (where n = # buckets)
+   * Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
+   * from an O(log n) inseration to O(1) per element. (where n = # buckets) if you set evenBuckets
+   * to true.
    * buckets must be sorted and not contain any duplicates.
    * buckets array must be at least two elements 
-   * All NaN entries are treated the same.
+   * All NaN entries are treated the same. If you have a NaN bucket it must be
+   * the maximum value of the last position and all NaN entries will be counted
+   * in that bucket.
    */
-  def histogram(buckets: Array[Double]): Array[Long] = {
+  def histogram(buckets: Array[Double], evenBuckets: Boolean = false): Array[Long] = {
     if (buckets.length < 2) {
       throw new IllegalArgumentException("buckets array must have at least two elements")
     }
@@ -129,11 +135,12 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
     // to increment or returns None if there is no bucket. This is done so we can
     // specialize for uniformly distributed buckets and save the O(log n) binary
     // search cost.
-    def histogramPartition(bucketFunction: (Double) => Option[Int])(iter: Iterator[Double]): Iterator[Array[Long]] = {
-      val counters = new Array[Long](buckets.length-1)
+    def histogramPartition(bucketFunction: (Double) => Option[Int])(iter: Iterator[Double]):
+        Iterator[Array[Long]] = {
+      val counters = new Array[Long](buckets.length - 1)
       while (iter.hasNext) {
         bucketFunction(iter.next()) match {
-          case Some(x: Int) => {counters(x)+=1}
+          case Some(x: Int) => {counters(x) += 1}
           case _ => {}
         }
       }
@@ -161,12 +168,12 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
         } else {
           None
         }
-      } else if (location < buckets.length-1) {
+      } else if (location < buckets.length - 1) {
         // Exact match, just insert here
         Some(location)
       } else {
         // Exact match to the last element
-        Some(location-1)
+        Some(location - 1)
       }
     }
     // Determine the bucket function in constant time. Requires that buckets are evenly spaced
@@ -175,34 +182,19 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
       if (e.isNaN()) {
         return None
       }
-      val bucketNumber = (e-min)/(increment)
+      val bucketNumber = (e - min)/(increment)
       // We do this rather than buckets.lengthCompare(bucketNumber)
       // because Array[Double] fails to override it (for now).
       if (bucketNumber > count || bucketNumber < 0) {
         None
       } else {
-        Some(bucketNumber.toInt.min(count-1))
+        Some(bucketNumber.toInt.min(count - 1))
       }
-    }
-    def evenlySpaced(buckets: Array[Double]): Boolean = {
-      val delta = buckets(1)-buckets(0)
-      // Technically you could have an evenly spaced bucket with NaN
-      // increments but then its a single bucket and this makes the
-      // fastBucketFunction simpler.
-      if (delta.isNaN() || delta.isInfinite()) {
-        return false
-      }
-      for (i <- 1 to buckets.length-1) {
-        if (buckets(i)-buckets(i-1) != delta) {
-          return false
-        }
-      }
-      true
     }
     // Decide which bucket function to pass to histogramPartition. We decide here
     // rather than having a general function so that the decission need only be made
     // once rather than once per shard
-    val bucketFunction = if (evenlySpaced(buckets)) {
+    val bucketFunction = if (evenBuckets) {
       fastBucketFunction(buckets(0), buckets(1)-buckets(0), buckets.length-1) _
     } else {
       basicBucketFunction _
