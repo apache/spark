@@ -19,7 +19,7 @@ package org.apache.spark.streaming.api.java
 
 import java.lang.{Long => JLong, Integer => JInt}
 import java.io.InputStream
-import java.util.{Map => JMap}
+import java.util.{Map => JMap, List => JList}
 
 import scala.collection.JavaConversions._
 
@@ -582,6 +582,29 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
     sQueue.enqueue(queue.map(_.rdd).toSeq: _*)
     ssc.queueStream(sQueue, oneAtATime, defaultRDD.rdd)
+  }
+
+  /**
+   * Create a unified DStream from multiple DStreams of the same type and same slide duration.
+   */
+  def union[T](first: JavaDStream[T], rest: JList[JavaDStream[T]]): JavaDStream[T] = {
+    val dstreams: Seq[DStream[T]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.dstream)
+    implicit val cm: ClassManifest[T] = first.classManifest
+    ssc.union(dstreams)(cm)
+  }
+
+  /**
+   * Create a unified DStream from multiple DStreams of the same type and same slide duration.
+   */
+  def union[K, V](
+      first: JavaPairDStream[K, V],
+      rest: JList[JavaPairDStream[K, V]]
+    ): JavaPairDStream[K, V] = {
+    val dstreams: Seq[DStream[(K, V)]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.dstream)
+    implicit val cm: ClassManifest[(K, V)] = first.classManifest
+    implicit val kcm: ClassManifest[K] = first.kManifest
+    implicit val vcm: ClassManifest[V] = first.vManifest
+    new JavaPairDStream[K, V](ssc.union(dstreams)(cm))(kcm, vcm)
   }
 
   /**
