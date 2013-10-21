@@ -45,19 +45,40 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
   class DiskBlockObjectWriter(blockId: BlockId, serializer: Serializer, bufferSize: Int)
     extends BlockObjectWriter(blockId) {
 
+    /** Intercepts write calls and tracks total time spent writing. Not thread safe. */
+    private class TimeTrackingOutputStream(out: OutputStream) extends OutputStream {
+      def timeWriting = _timeWriting
+      private var _timeWriting = 0L
+
+      private def callWithTiming(f: => Unit) = {
+        val start = System.nanoTime()
+        f
+        _timeWriting += (System.nanoTime() - start)
+      }
+
+      def write(i: Int): Unit = callWithTiming(out.write(i))
+      override def write(b: Array[Byte]) = callWithTiming(out.write(b))
+      override def write(b: Array[Byte], off: Int, len: Int) = callWithTiming(out.write(b, off, len))
+    }
+
     private val f: File = createFile(blockId /*, allowAppendExisting */)
+    private val syncWrites = System.getProperty("spark.shuffle.sync", "false").toBoolean
 
     // The file channel, used for repositioning / truncating the file.
     private var channel: FileChannel = null
     private var bs: OutputStream = null
+    private var fos: FileOutputStream = null
+    private var ts: TimeTrackingOutputStream = null
     private var objOut: SerializationStream = null
     private var lastValidPosition = 0L
     private var initialized = false
+    private var _timeWriting = 0L
 
     override def open(): DiskBlockObjectWriter = {
-      val fos = new FileOutputStream(f, true)
+      fos = new FileOutputStream(f, true)
+      ts = new TimeTrackingOutputStream(fos)
       channel = fos.getChannel()
-      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(fos, bufferSize))
+      bs = blockManager.wrapForCompression(blockId, new FastBufferedOutputStream(ts, bufferSize))
       objOut = serializer.newInstance().serializeStream(bs)
       initialized = true
       this
@@ -65,9 +86,23 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
 
     override def close() {
       if (initialized) {
-        objOut.close()
+        if (syncWrites) {
+          // Force outstanding writes to disk and track how long it takes
+          objOut.flush()
+          val start = System.nanoTime()
+          fos.getFD.sync()
+          _timeWriting += System.nanoTime() - start
+          objOut.close()
+        } else {
+          objOut.close()
+        }
+
+        _timeWriting += ts.timeWriting
+
         channel = null
         bs = null
+        fos = null
+        ts = null
         objOut = null
       }
       // Invoke the close callback handler.
@@ -110,6 +145,9 @@ private class DiskStore(blockManager: BlockManager, rootDirs: String)
     }
 
     override def size(): Long = lastValidPosition
+
+    // Only valid if called after close()
+    override def timeWriting = _timeWriting
   }
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
