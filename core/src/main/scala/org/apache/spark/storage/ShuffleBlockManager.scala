@@ -39,10 +39,8 @@ trait ShuffleBlocks {
  * blocks are aggregated into the same file. There is one "combined shuffle file" per reducer
  * per concurrently executing shuffle task. As soon as a task finishes writing to its shuffle files,
  * it releases them for another task.
- * Regarding the implementation of this feature, shuffle files are identified by a 4-tuple:
+ * Regarding the implementation of this feature, shuffle files are identified by a 3-tuple:
  *   - shuffleId: The unique id given to the entire shuffle stage.
- *   - executorId: The id of the executor running the task. Required in order to ensure that
- *       multiple executors running on the same node do not collide.
  *   - bucketId: The id of the output partition (i.e., reducer id)
  *   - fileId: The unique id identifying a group of "combined shuffle files." Only one task at a
  *       time owns a particular fileId, and this id is returned to a pool when the task finishes.
