@@ -25,7 +25,7 @@ import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -50,8 +50,9 @@ private[spark] class DiskBlockManager(rootDirs: String) extends PathResolver wit
   // Stores only Blocks which have been specifically mapped to segments of files
   // (rather than the default, which maps a Block to a whole file).
   // This keeps our bookkeeping down, since the file system itself tracks the standalone Blocks. 
-  // ConcurrentHashMap does not take a lock on read operations, which makes it very efficient here.
-  private val blockToFileSegmentMap = new ConcurrentHashMap[BlockId, FileSegment]
+  private val blockToFileSegmentMap = new TimeStampedHashMap[BlockId, FileSegment]
+
+  val metadataCleaner = new MetadataCleaner(MetadataCleanerType.DISK_BLOCK_MANAGER, this.cleanup)
 
   addShutdownHook()
 
@@ -70,8 +71,8 @@ private[spark] class DiskBlockManager(rootDirs: String) extends PathResolver wit
    * Otherwise, we assume the Block is mapped to a whole file identified by the BlockId directly.
    */
   def getBlockLocation(blockId: BlockId): FileSegment = {
-    if (blockToFileSegmentMap.containsKey(blockId)) {
-      blockToFileSegmentMap.get(blockId)
+    if (blockToFileSegmentMap.internalMap.containsKey(blockId)) {
+      blockToFileSegmentMap.get(blockId).get
     } else {
       val file = getFile(blockId.name)
       new FileSegment(file, 0, file.length())
@@ -148,6 +149,10 @@ private[spark] class DiskBlockManager(rootDirs: String) extends PathResolver wit
       logInfo("Created local directory at " + localDir)
       localDir
     }
+  }
+
+  private def cleanup(cleanupTime: Long) {
+    blockToFileSegmentMap.clearOldValues(cleanupTime)
   }
 
   private def addShutdownHook() {
