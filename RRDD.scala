@@ -28,7 +28,10 @@ class RRDD[T: ClassManifest](
 
     val rCommand = "Rscript"
     val rOptions = "--vanilla"
-    val sparkHome = new ProcessBuilder().environment().get("SPARK_HOME")
+    val sparkHome = Option(new ProcessBuilder().environment().get("SPARK_HOME")) match {
+      case Some(path) => path
+      case None => sys.error("SPARK_HOME not set as an environment variable.")
+    }
     val rExecScript = sparkHome + "/R/pkg/inst/worker/worker.R"
     val pb = new ProcessBuilder(List(rCommand, rOptions, rExecScript))
 
@@ -143,4 +146,5 @@ object RRDD {
   def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Byte]]): JavaRDD[Array[Byte]] = {
     JavaRDD.fromRDD(jsc.sc.parallelize(arr, arr.length))
   }
+
 }
