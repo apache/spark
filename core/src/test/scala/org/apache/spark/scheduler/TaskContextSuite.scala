@@ -40,7 +40,7 @@ class TaskContextSuite extends FunSuite with BeforeAndAfter with LocalSparkConte
     val func = (c: TaskContext, i: Iterator[String]) => i.next
     val task = new ResultTask[String, String](0, rdd, func, 0, Seq(), 0)
     intercept[RuntimeException] {
-      task.run(0, "test")
+      task.run(0)
     }
     assert(completed === true)
   }
