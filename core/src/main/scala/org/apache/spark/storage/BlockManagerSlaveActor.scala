@@ -26,6 +26,7 @@ import org.apache.spark.storage.BlockManagerMessages._
  * An actor to take commands from the master to execute options. For example,
  * this is used to remove blocks from the slave's BlockManager.
  */
+private[storage]
 class BlockManagerSlaveActor(blockManager: BlockManager) extends Actor {
   override def receive = {
 
