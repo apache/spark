@@ -40,7 +40,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
       val stageId = request.getParameter("id").toInt
       val now = System.currentTimeMillis()
 
-      if (!listener.stageToTaskInfos.contains(stageId)) {
+      if (!listener.stageIdToTaskInfos.contains(stageId)) {
         val content =
           <div>
             <h4>Summary Metrics</h4> No tasks have started yet
@@ -49,23 +49,23 @@ private[spark] class StagePage(parent: JobProgressUI) {
         return headerSparkPage(content, parent.sc, "Details for Stage %s".format(stageId), Stages)
       }
 
-      val tasks = listener.stageToTaskInfos(stageId).toSeq.sortBy(_._1.launchTime)
+      val tasks = listener.stageIdToTaskInfos(stageId).toSeq.sortBy(_._1.launchTime)
 
       val numCompleted = tasks.count(_._1.finished)
-      val shuffleReadBytes = listener.stageToShuffleRead.getOrElse(stageId, 0L)
+      val shuffleReadBytes = listener.stageIdToShuffleRead.getOrElse(stageId, 0L)
       val hasShuffleRead = shuffleReadBytes > 0
-      val shuffleWriteBytes = listener.stageToShuffleWrite.getOrElse(stageId, 0L)
+      val shuffleWriteBytes = listener.stageIdToShuffleWrite.getOrElse(stageId, 0L)
       val hasShuffleWrite = shuffleWriteBytes > 0
 
       var activeTime = 0L
-      listener.stageToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
+      listener.stageIdToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
 
       val summary =
         <div>
           <ul class="unstyled">
             <li>
               <strong>CPU time: </strong>
-              {parent.formatDuration(listener.stageToTime.getOrElse(stageId, 0L) + activeTime)}
+              {parent.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
             </li>
             {if (hasShuffleRead)
               <li>
