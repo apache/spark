@@ -38,7 +38,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       val now = System.currentTimeMillis()
 
       var activeTime = 0L
-      for (tasks <- listener.stageToTasksActive.values; t <- tasks) {
+      for (tasks <- listener.stageIdToTasksActive.values; t <- tasks) {
         activeTime += t.timeRunning(now)
       }
 
