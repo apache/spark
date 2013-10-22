@@ -49,6 +49,7 @@ class SparkContext(object):
     _lock = Lock()
     _python_includes = None # zip and egg files that need to be added to PYTHONPATH
 
+
     def __init__(self, master, jobName, sparkHome=None, pyFiles=None,
         environment=None, batchSize=1024):
         """
@@ -67,18 +68,8 @@ class SparkContext(object):
                Java object.  Set 1 to disable batching or -1 to use an
                unlimited batch size.
         """
-        with SparkContext._lock:
-            if SparkContext._active_spark_context:
-                raise ValueError("Cannot run multiple SparkContexts at once")
-            else:
-                SparkContext._active_spark_context = self
-                if not SparkContext._gateway:
-                    SparkContext._gateway = launch_gateway()
-                    SparkContext._jvm = SparkContext._gateway.jvm
-                    SparkContext._writeIteratorToPickleFile = \
-                        SparkContext._jvm.PythonRDD.writeIteratorToPickleFile
-                    SparkContext._takePartition = \
-                        SparkContext._jvm.PythonRDD.takePartition
+        SparkContext._ensure_initialized()
+
         self.master = master
         self.jobName = jobName
         self.sparkHome = sparkHome or None # None becomes null in Py4J
@@ -118,6 +109,32 @@ class SparkContext(object):
         local_dir = self._jvm.org.apache.spark.util.Utils.getLocalDir()
         self._temp_dir = \
             self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
+
+    @classmethod
+    def _ensure_initialized(cls, instance=None):
+        with SparkContext._lock:
+            if not SparkContext._gateway:
+                SparkContext._gateway = launch_gateway()
+                SparkContext._jvm = SparkContext._gateway.jvm
+                SparkContext._writeIteratorToPickleFile = \
+                    SparkContext._jvm.PythonRDD.writeIteratorToPickleFile
+                SparkContext._takePartition = \
+                    SparkContext._jvm.PythonRDD.takePartition
+
+            if instance:
+                if SparkContext._active_spark_context and SparkContext._active_spark_context != instance:
+                    raise ValueError("Cannot run multiple SparkContexts at once")
+                else:
+                    SparkContext._active_spark_context = instance
+
+    @classmethod
+    def setSystemProperty(cls, key, value):
+        """
+        Set a system property, such as spark.executor.memory. This must be
+        invoked before instantiating SparkContext.
+        """
+        SparkContext._ensure_initialized()
+        SparkContext._jvm.java.lang.System.setProperty(key, value)
 
     @property
     def defaultParallelism(self):
