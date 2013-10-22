@@ -51,9 +51,8 @@ private[spark] class Stage(
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
 
-  /** When first task was submitted to scheduler. */
+  /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
-  var completionTime: Option[Long] = None
 
   private var nextAttemptId = 0
 

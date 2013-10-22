@@ -79,28 +79,28 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
       case None => "Unknown"
     }
 
-    val shuffleRead = listener.stageToShuffleRead.getOrElse(s.stageId, 0L) match {
+    val shuffleRead = listener.stageIdToShuffleRead.getOrElse(s.stageId, 0L) match {
       case 0 => ""
       case b => Utils.bytesToString(b)
     }
-    val shuffleWrite = listener.stageToShuffleWrite.getOrElse(s.stageId, 0L) match {
+    val shuffleWrite = listener.stageIdToShuffleWrite.getOrElse(s.stageId, 0L) match {
       case 0 => ""
       case b => Utils.bytesToString(b)
     }
 
-    val startedTasks = listener.stageToTasksActive.getOrElse(s.stageId, HashSet[TaskInfo]()).size
-    val completedTasks = listener.stageToTasksComplete.getOrElse(s.stageId, 0)
-    val failedTasks = listener.stageToTasksFailed.getOrElse(s.stageId, 0) match {
+    val startedTasks = listener.stageIdToTasksActive.getOrElse(s.stageId, HashSet[TaskInfo]()).size
+    val completedTasks = listener.stageIdToTasksComplete.getOrElse(s.stageId, 0)
+    val failedTasks = listener.stageIdToTasksFailed.getOrElse(s.stageId, 0) match {
         case f if f > 0 => "(%s failed)".format(f)
         case _ => ""
     }
     val totalTasks = s.numTasks
 
-    val poolName = listener.stageToPool.get(s.stageId)
+    val poolName = listener.stageIdToPool.get(s.stageId)
 
     val nameLink =
       <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(),s.stageId)}>{s.toString}</a>
-    val description = listener.stageToDescription.get(s.stageId)
+    val description = listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
     val duration =  s.submissionTime.map(t => finishTime - t)

@@ -212,7 +212,7 @@ class DAGScheduler(
     val stage =
       new Stage(id, rdd, numTasks, shuffleDep, getParentStages(rdd, jobId), jobId, callSite)
     stageIdToStage(id) = stage
-    stageToInfos(stage) = StageInfo(stage)
+    stageToInfos(stage) = new StageInfo(stage)
     stage
   }
 
@@ -610,7 +610,6 @@ class DAGScheduler(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
       stage.submissionTime = Some(System.currentTimeMillis())
       stageToInfos(stage).submissionTime = Some(System.currentTimeMillis())
-
     } else {
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
         stage.isAvailable, stage.numAvailableOutputs, stage.numPartitions))
@@ -637,7 +636,6 @@ class DAGScheduler(
         case _ => "Unkown"
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
-      stage.completionTime = Some(System.currentTimeMillis)
       stageToInfos(stage).completionTime = Some(System.currentTimeMillis())
       listenerBus.post(StageCompleted(stageToInfos(stage)))
       running -= stage
@@ -808,7 +806,7 @@ class DAGScheduler(
    */
   private def abortStage(failedStage: Stage, reason: String) {
     val dependentStages = resultStageToJob.keys.filter(x => stageDependsOn(x, failedStage)).toSeq
-    failedStage.completionTime = Some(System.currentTimeMillis())
+    stageToInfos(failedStage).completionTime = Some(System.currentTimeMillis())
     for (resultStage <- dependentStages) {
       val job = resultStageToJob(resultStage)
       val error = new SparkException("Job aborted: " + reason)

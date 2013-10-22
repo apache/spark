@@ -111,7 +111,7 @@ object StatsReportListener extends Logging {
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
 
   def extractDoubleDistribution(stage:StageCompleted, getMetric: (TaskInfo,TaskMetrics) => Option[Double]): Option[Distribution] = {
-    Distribution(stage.stage.taskInfos.flatMap{
+    Distribution(stage.stage.taskInfos.flatMap {
       case ((info,metric)) => getMetric(info, metric)})
   }
 

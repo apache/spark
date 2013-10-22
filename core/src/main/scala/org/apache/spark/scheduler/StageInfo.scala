@@ -21,14 +21,15 @@ import scala.collection._
 
 import org.apache.spark.executor.TaskMetrics
 
-case class StageInfo(
+class StageInfo(
     stage: Stage,
     val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] = mutable.Buffer[(TaskInfo, TaskMetrics)]()
 ) {
   val stageId = stage.id
+  /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   var completionTime: Option[Long] = None
-  val rddName = stage.rdd.toString
+  val rddName = stage.rdd.name
   val name = stage.name
   val numPartitions = stage.numPartitions
   val numTasks = stage.numTasks
