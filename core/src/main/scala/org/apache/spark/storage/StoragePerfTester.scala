@@ -7,9 +7,11 @@ import org.apache.spark.serializer.KryoSerializer
 import org.apache.spark.SparkContext
 import org.apache.spark.util.Utils
 
-/** Utility for micro-benchmarking shuffle write performance.
-  *
-  * Writes simulated shuffle output from several threads and records the observed throughput*/
+/**
+ * Utility for micro-benchmarking shuffle write performance.
+ *
+ * Writes simulated shuffle output from several threads and records the observed throughput.
+ */
 object StoragePerfTester {
   def main(args: Array[String]) = {
     /** Total amount of data to generate. Distributed evenly amongst maps and reduce splits. */
