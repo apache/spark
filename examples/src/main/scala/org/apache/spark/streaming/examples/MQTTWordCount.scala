@@ -33,15 +33,13 @@ import org.eclipse.paho.client.mqttv3.MqttTopic
  * A simple Mqtt publisher for demonstration purposes, repeatedly publishes 
  * Space separated String Message "hello mqtt demo for spark streaming"
  */
-
 object MQTTPublisher {
 
   var client: MqttClient = _
 
   def main(args: Array[String]) {
     if (args.length < 2) {
-      System.err.println(
-        "Usage: MQTTPublisher <MqttBrokerUrl> <topic>")
+      System.err.println("Usage: MQTTPublisher <MqttBrokerUrl> <topic>")
       System.exit(1)
     }
 
@@ -52,7 +50,6 @@ object MQTTPublisher {
       client = new MqttClient(brokerUrl, MqttClient.generateClientId(), peristance)
     } catch {
       case e: MqttException => println("Exception Caught: " + e)
-
     }
 
     client.connect()
@@ -66,7 +63,6 @@ object MQTTPublisher {
       println("Published data. topic: " + msgtopic.getName() + " Message: " + message)
     }
    client.disconnect()
-
   }
 }
 
@@ -87,7 +83,6 @@ object MQTTPublisher {
  * and run the example as
  *    `$ ./run-example org.apache.spark.streaming.examples.MQTTWordCount local[2] tcp://localhost:1883 foo`
  */
-
 object MQTTWordCount {
 
   def main(args: Array[String]) {
