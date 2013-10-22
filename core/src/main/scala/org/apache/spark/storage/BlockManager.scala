@@ -28,7 +28,7 @@ import akka.dispatch.{Await, Future}
 import akka.util.Duration
 import akka.util.duration._
 
-import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+import it.unimi.dsi.fastutil.io.{FastBufferedOutputStream, FastByteArrayOutputStream}
 
 import org.apache.spark.{Logging, SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
@@ -102,18 +102,19 @@ private[spark] class BlockManager(
   }
 
   val shuffleBlockManager = new ShuffleBlockManager(this)
+  val diskBlockManager = new DiskBlockManager(
+    System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
 
   private val blockInfo = new TimeStampedHashMap[BlockId, BlockInfo]
 
   private[storage] val memoryStore: BlockStore = new MemoryStore(this, maxMemory)
-  private[storage] val diskStore: DiskStore =
-    new DiskStore(this, System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
+  private[storage] val diskStore = new DiskStore(this, diskBlockManager)
 
   // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
   private val nettyPort: Int = {
     val useNetty = System.getProperty("spark.shuffle.use.netty", "false").toBoolean
     val nettyPortConfig = System.getProperty("spark.shuffle.sender.port", "0").toInt
-    if (useNetty) diskStore.startShuffleBlockSender(nettyPortConfig) else 0
+    if (useNetty) diskBlockManager.startShuffleBlockSender(nettyPortConfig) else 0
   }
 
   val connectionManager = new ConnectionManager(0)
@@ -512,16 +513,20 @@ private[spark] class BlockManager(
 
   /**
    * A short circuited method to get a block writer that can write data directly to disk.
+   * The Block will be appended to the File specified by filename.
    * This is currently used for writing shuffle files out. Callers should handle error
    * cases.
    */
-  def getDiskBlockWriter(blockId: BlockId, serializer: Serializer, bufferSize: Int)
+  def getDiskWriter(blockId: BlockId, filename: String, serializer: Serializer, bufferSize: Int)
     : BlockObjectWriter = {
-    val writer = diskStore.getBlockWriter(blockId, serializer, bufferSize)
+    val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
+    val file = diskBlockManager.createBlockFile(blockId, filename, allowAppending =  true)
+    val writer = new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream)
     writer.registerCloseEventHandler(() => {
+      diskBlockManager.mapBlockToFileSegment(blockId, writer.fileSegment())
       val myInfo = new BlockInfo(StorageLevel.DISK_ONLY, false)
       blockInfo.put(blockId, myInfo)
-      myInfo.markReady(writer.size())
+      myInfo.markReady(writer.fileSegment().length)
     })
     writer
   }
@@ -862,13 +867,24 @@ private[spark] class BlockManager(
     if (shouldCompress(blockId)) compressionCodec.compressedInputStream(s) else s
   }
 
+  /** Serializes into a stream. */
+  def dataSerializeStream(
+      blockId: BlockId,
+      outputStream: OutputStream,
+      values: Iterator[Any],
+      serializer: Serializer = defaultSerializer) {
+    val byteStream = new FastBufferedOutputStream(outputStream)
+    val ser = serializer.newInstance()
+    ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
+  }
+
+  /** Serializes into a byte buffer. */
   def dataSerialize(
       blockId: BlockId,
       values: Iterator[Any],
       serializer: Serializer = defaultSerializer): ByteBuffer = {
     val byteStream = new FastByteArrayOutputStream(4096)
-    val ser = serializer.newInstance()
-    ser.serializeStream(wrapForCompression(blockId, byteStream)).writeAll(values).close()
+    dataSerializeStream(blockId, byteStream, values, serializer)
     byteStream.trim()
     ByteBuffer.wrap(byteStream.array)
   }
