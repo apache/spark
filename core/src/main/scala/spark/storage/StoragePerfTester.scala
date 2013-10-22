@@ -44,7 +44,7 @@ object StoragePerfTester {
       }
       buckets.writers.map {w =>
         w.commit()
-        total.addAndGet(w.size())
+        total.addAndGet(w.fileSegment().length)
         w.close()
       }
 
