@@ -121,7 +121,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       // TODO: If the OOM is not recoverable by rescheduling it on different node, then do 'something' to fail job ... akin to blacklisting trackers in mapred ?
       " -XX:OnOutOfMemoryError='kill %p' " +
       JAVA_OPTS +
-      " org.apache.spark.executor.StandaloneExecutorBackend " +
+      " org.apache.spark.executor.CoarseGrainedExecutorBackend " +
       masterAddress + " " +
       slaveId + " " +
       hostname + " " +
@@ -216,10 +216,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
   def prepareEnvironment: HashMap[String, String] = {
     val env = new HashMap[String, String]()
 
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$())
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, 
-      Environment.PWD.$() + Path.SEPARATOR + "*")
-    Client.populateHadoopClasspath(yarnConf, env)
+    Client.populateClasspath(yarnConf, System.getenv("SPARK_YARN_LOG4J_PATH") != null, env)
 
     // allow users to specify some environment variables
     Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
