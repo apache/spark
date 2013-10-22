@@ -608,7 +608,6 @@ class DAGScheduler(
       logDebug("New pending tasks: " + myPending)
       taskSched.submitTasks(
         new TaskSet(tasks.toArray, stage.id, stage.newAttemptId(), stage.jobId, properties))
-      stage.submissionTime = Some(System.currentTimeMillis())
       stageToInfos(stage).submissionTime = Some(System.currentTimeMillis())
     } else {
       logDebug("Stage " + stage + " is actually done; %b %d %d".format(
@@ -631,9 +630,9 @@ class DAGScheduler(
     val stage = stageIdToStage(task.stageId)
 
     def markStageAsFinished(stage: Stage) = {
-      val serviceTime = stage.submissionTime match {
+      val serviceTime = stageToInfos(stage).submissionTime match {
         case Some(t) => "%.03f".format((System.currentTimeMillis() - t) / 1000.0)
-        case _ => "Unkown"
+        case _ => "Unknown"
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stageToInfos(stage).completionTime = Some(System.currentTimeMillis())

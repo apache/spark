@@ -18,7 +18,7 @@
 package org.apache.spark.scheduler
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.apache.spark.{TaskContext, SparkContext, LocalSparkContext}
+import org.apache.spark.{LocalSparkContext, SparkContext}
 import scala.collection.mutable
 import org.scalatest.matchers.ShouldMatchers
 import org.apache.spark.SparkContext._

@@ -50,10 +50,6 @@ private[spark] class Stage(
   val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
-
-  /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
-  var submissionTime: Option[Long] = None
-
   private var nextAttemptId = 0
 
   def isAvailable: Boolean = {
