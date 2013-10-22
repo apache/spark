@@ -67,8 +67,17 @@ class SparkContext(object):
         @param batchSize: The number of Python objects represented as a single
                Java object.  Set 1 to disable batching or -1 to use an
                unlimited batch size.
+
+
+        >>> from pyspark.context import SparkContext
+        >>> sc = SparkContext('local', 'test')
+
+        >>> sc2 = SparkContext('local', 'test2') # doctest: +IGNORE_EXCEPTION_DETAIL
+        Traceback (most recent call last):
+            ...
+        ValueError:...
         """
-        SparkContext._ensure_initialized()
+        SparkContext._ensure_initialized(self)
 
         self.master = master
         self.jobName = jobName
