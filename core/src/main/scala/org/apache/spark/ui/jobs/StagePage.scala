@@ -86,7 +86,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         Seq("Task ID", "Status", "Locality Level", "Executor", "Launch Time", "Duration") ++
         Seq("GC Time") ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
-        {if (hasShuffleWrite) Seq("Shuffle Write") else Nil} ++
+        {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
         Seq("Errors")
 
       val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite), tasks)
@@ -169,6 +169,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
           Utils.bytesToString(s.remoteBytesRead)}.getOrElse("")}</td>
       }}
       {if (shuffleWrite) {
+      <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
+        parent.formatDuration(s.shuffleWriteTime / (1000 * 1000))}.getOrElse("")}</td>
         <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
           Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")}</td>
       }}

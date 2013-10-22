@@ -137,6 +137,14 @@
           <groupId>org.apache.cassandra.deps</groupId>
           <artifactId>avro</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.sonatype.sisu.inject</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.xerial.snappy</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
   </dependencies>

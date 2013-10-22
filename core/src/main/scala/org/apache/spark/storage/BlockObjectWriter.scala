@@ -32,7 +32,7 @@ import org.apache.spark.serializer.{SerializationStream, Serializer}
  *
  * This interface does not support concurrent writes.
  */
-private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
+abstract class BlockObjectWriter(val blockId: BlockId) {
 
   var closeEventHandler: () => Unit = _
 
@@ -69,33 +69,60 @@ private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
    * Returns the file segment of committed data that this Writer has written.
    */
   def fileSegment(): FileSegment
+
+  /**
+   * Cumulative time spent performing blocking writes, in ns.
+   */
+  def timeWriting(): Long
 }
 
 /** BlockObjectWriter which writes directly to a file on disk. Appends to the given file. */
-private[spark] class DiskBlockObjectWriter(
-    blockId: BlockId,
-    file: File,
-    serializer: Serializer,
-    bufferSize: Int,
-    compressStream: OutputStream => OutputStream)
+class DiskBlockObjectWriter(
+                             blockId: BlockId,
+                             file: File,
+                             serializer: Serializer,
+                             bufferSize: Int,
+                             compressStream: OutputStream => OutputStream)
   extends BlockObjectWriter(blockId)
   with Logging
 {
 
+  /** Intercepts write calls and tracks total time spent writing. Not thread safe. */
+  private class TimeTrackingOutputStream(out: OutputStream) extends OutputStream {
+    def timeWriting = _timeWriting
+    private var _timeWriting = 0L
+
+    private def callWithTiming(f: => Unit) = {
+      val start = System.nanoTime()
+      f
+      _timeWriting += (System.nanoTime() - start)
+    }
+
+    def write(i: Int): Unit = callWithTiming(out.write(i))
+    override def write(b: Array[Byte]) = callWithTiming(out.write(b))
+    override def write(b: Array[Byte], off: Int, len: Int) = callWithTiming(out.write(b, off, len))
+  }
+
+  private val syncWrites = System.getProperty("spark.shuffle.sync", "false").toBoolean
+
   /** The file channel, used for repositioning / truncating the file. */
   private var channel: FileChannel = null
   private var bs: OutputStream = null
+  private var fos: FileOutputStream = null
+  private var ts: TimeTrackingOutputStream = null
   private var objOut: SerializationStream = null
   private var initialPosition = 0L
   private var lastValidPosition = 0L
   private var initialized = false
+  private var _timeWriting = 0L
 
   override def open(): BlockObjectWriter = {
-    val fos = new FileOutputStream(file, true)
+    fos = new FileOutputStream(file, true)
+    ts = new TimeTrackingOutputStream(fos)
     channel = fos.getChannel()
     initialPosition = channel.position
     lastValidPosition = initialPosition
-    bs = compressStream(new FastBufferedOutputStream(fos, bufferSize))
+    bs = compressStream(new FastBufferedOutputStream(ts, bufferSize))
     objOut = serializer.newInstance().serializeStream(bs)
     initialized = true
     this
@@ -103,11 +130,24 @@ private[spark] class DiskBlockObjectWriter(
 
   override def close() {
     if (initialized) {
+      if (syncWrites) {
+        // Force outstanding writes to disk and track how long it takes
+        objOut.flush()
+        val start = System.nanoTime()
+        fos.getFD.sync()
+        _timeWriting += System.nanoTime() - start
+      }
       objOut.close()
+
+      _timeWriting += ts.timeWriting
+
       channel = null
       bs = null
+      fos = null
+      ts = null
       objOut = null
     }
+    // Invoke the close callback handler.
     super.close()
   }
 
@@ -148,4 +188,7 @@ private[spark] class DiskBlockObjectWriter(
     val bytesWritten = lastValidPosition - initialPosition
     new FileSegment(file, initialPosition, bytesWritten)
   }
+
+  // Only valid if called after close()
+  override def timeWriting() = _timeWriting
 }
