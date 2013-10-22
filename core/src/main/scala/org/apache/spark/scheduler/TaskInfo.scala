@@ -71,7 +71,7 @@ class TaskInfo(
     if (running)
       "RUNNING"
     else if (gettingResult)
-      "GETTING RESULT"
+      "GET RESULT"
     else if (failed)
       "FAILED"
     else if (successful)
