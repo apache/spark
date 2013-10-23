@@ -29,8 +29,6 @@ import java.io.Serializable;
 public abstract class Function3<T1, T2, T3, R> extends WrappedFunction3<T1, T2, T3, R>
         implements Serializable {
 
-    public abstract R call(T1 t1, T2 t2, T3 t3) throws Exception;
-
     public ClassManifest<R> returnType() {
         return (ClassManifest<R>) ClassManifest$.MODULE$.fromClass(Object.class);
     }
