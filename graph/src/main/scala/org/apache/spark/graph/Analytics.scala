@@ -35,10 +35,10 @@ object Analytics extends Logging {
     def vertexProgram(id: Vid, attr: Double, msgSum: Double): Double =
       resetProb + (1.0 - resetProb) * msgSum
     def sendMessage(id: Vid, edge: EdgeTriplet[Double, Double]): Option[Double] =
-      Some(edge.srcAttr / edge.attr)
+      Some(edge.srcAttr * edge.attr)
     def messageCombiner(a: Double, b: Double): Double = a + b
     // The initial message received by all vertices in PageRank
-    val initialMessage = 1.0
+    val initialMessage = 0.0 
 
     // Execute pregel for a fixed number of iterations.      
     Pregel(pagerankGraph, initialMessage, numIter)(
@@ -49,8 +49,8 @@ object Analytics extends Logging {
   /**
    * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
    */
-  def dynamicPagerank[VD: Manifest, ED: Manifest](
-    graph: Graph[VD, ED], tol: Float, resetProb: Double = 0.15): Graph[Double, Double] = {
+  def deltaPagerank[VD: Manifest, ED: Manifest](
+    graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15): Graph[Double, Double] = {
 
     /**
      * Initialize the pagerankGraph with each edge attribute 
@@ -64,7 +64,7 @@ object Analytics extends Logging {
       // Set the weight on the edges based on the degree 
       .mapTriplets( e => 1.0 / e.srcAttr )
       // Set the vertex attributes to (initalPR, delta = 0)
-      .mapVertices( (id, attr) => (resetProb, 0.0) )
+      .mapVertices( (id, attr) => (0.0, 0.0) )
 
     // Display statistics about pagerank
     println(pagerankGraph.statistics)
@@ -78,12 +78,12 @@ object Analytics extends Logging {
     }
     def sendMessage(id: Vid, edge: EdgeTriplet[(Double, Double), Double]): Option[Double] = {
       if (edge.srcAttr._2 > tol) {
-        Some(edge.srcAttr._2 / edge.attr)
+        Some(edge.srcAttr._2 * edge.attr)
       } else { None }
     } 
     def messageCombiner(a: Double, b: Double): Double = a + b
     // The initial message received by all vertices in PageRank
-    val initialMessage = 1.0 / (1.0 - resetProb)
+    val initialMessage = resetProb / (1.0 - resetProb)
 
     // Execute a dynamic version of Pregel.       
     Pregel(pagerankGraph, initialMessage)(

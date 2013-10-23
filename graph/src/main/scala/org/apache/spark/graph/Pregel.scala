@@ -43,15 +43,12 @@ object Pregel {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 
-    var g = graph
-    //var g = graph.cache()
-    var i = 0
-
     def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertexId(vid), edge)
 
     // Receive the first set of messages
-    g = g.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))
-
+    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))
+    
+    var i = 0
     while (i < numIter) {
       // compute the messages
       val messages = g.aggregateNeighbors(mapF, mergeMsg, EdgeDirection.In)
@@ -96,27 +93,45 @@ object Pregel {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 
-    var g = graph
-    //var g = graph.cache()
+    def vprogFun(id: Vid, attr: (VD, Boolean), msgOpt: Option[A]): (VD, Boolean) = {
+      msgOpt match {
+        case Some(msg) => (vprog(id, attr._1, msg), true)
+        case None => (attr._1, false)
+      }
+    }
+
+    def sendMsgFun(vid: Vid, edge: EdgeTriplet[(VD,Boolean), ED]): Option[A] = {
+      if(edge.srcAttr._2) {
+        val et = new EdgeTriplet[VD, ED]
+        et.srcId = edge.srcId
+        et.srcAttr = edge.srcAttr._1
+        et.dstId = edge.dstId
+        et.dstAttr = edge.dstAttr._1
+        et.attr = edge.attr
+        sendMsg(edge.otherVertexId(vid), et)
+      } else { None }
+    }
+
+    var g = graph.mapVertices( (vid, vdata) => (vprog(vid, vdata, initialMsg), true) ) 
+    // compute the messages
+    var messages = g.aggregateNeighbors(sendMsgFun, mergeMsg, EdgeDirection.In).cache
+    var activeMessages = messages.count
+    // Loop 
     var i = 0
-
-    def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertexId(vid), edge)
-
-    // Receive the first set of messages
-    g.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))
-
-    var activeMessages = g.numEdges
     while (activeMessages > 0) {
-      // compute the messages
-      val messages = g.aggregateNeighbors(mapF, mergeMsg, EdgeDirection.In).cache
-      activeMessages = messages.count
       // receive the messages
-      g = g.joinVertices(messages)(vprog)
+      g = g.outerJoinVertices(messages)(vprogFun)
+      val oldMessages = messages
+      // compute the messages
+      messages = g.aggregateNeighbors(sendMsgFun, mergeMsg, EdgeDirection.In).cache
+      activeMessages = messages.count
+      // after counting we can unpersist the old messages
+      oldMessages.unpersist(blocking=false)
       // count the iteration
       i += 1
     }
     // Return the final graph
-    g
+    g.mapVertices((id, attr) => attr._1)
   } // end of apply
 
 } // end of class Pregel
