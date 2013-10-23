@@ -74,30 +74,33 @@ private[spark] class Executor(
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
   Thread.currentThread.setContextClassLoader(replClassLoader)
 
-  // Make any thread terminations due to uncaught exceptions kill the entire
-  // executor process to avoid surprising stalls.
-  Thread.setDefaultUncaughtExceptionHandler(
-    new Thread.UncaughtExceptionHandler {
-      override def uncaughtException(thread: Thread, exception: Throwable) {
-        try {
-          logError("Uncaught exception in thread " + thread, exception)
+  if (!isLocal) {
+    // Setup an uncaught exception handler for non-local mode.
+    // Make any thread terminations due to uncaught exceptions kill the entire
+    // executor process to avoid surprising stalls.
+    Thread.setDefaultUncaughtExceptionHandler(
+      new Thread.UncaughtExceptionHandler {
+        override def uncaughtException(thread: Thread, exception: Throwable) {
+          try {
+            logError("Uncaught exception in thread " + thread, exception)
 
-          // We may have been called from a shutdown hook. If so, we must not call System.exit().
-          // (If we do, we will deadlock.)
-          if (!Utils.inShutdown()) {
-            if (exception.isInstanceOf[OutOfMemoryError]) {
-              System.exit(ExecutorExitCode.OOM)
-            } else {
-              System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
+            // We may have been called from a shutdown hook. If so, we must not call System.exit().
+            // (If we do, we will deadlock.)
+            if (!Utils.inShutdown()) {
+              if (exception.isInstanceOf[OutOfMemoryError]) {
+                System.exit(ExecutorExitCode.OOM)
+              } else {
+                System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
+              }
             }
+          } catch {
+            case oom: OutOfMemoryError => Runtime.getRuntime.halt(ExecutorExitCode.OOM)
+            case t: Throwable => Runtime.getRuntime.halt(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
           }
-        } catch {
-          case oom: OutOfMemoryError => Runtime.getRuntime.halt(ExecutorExitCode.OOM)
-          case t: Throwable => Runtime.getRuntime.halt(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
         }
       }
-    }
-  )
+    )
+  }
 
   val executorSource = new ExecutorSource(this, executorId)
 
