@@ -24,7 +24,7 @@ import scala.runtime.AbstractFunction2;
 import java.io.Serializable;
 
 /**
- * A two-argument function that takes arguments of type T1 and T2 and returns an R.
+ * A three-argument function that takes arguments of type T1, T2 and T3 and returns an R.
  */
 public abstract class Function3<T1, T2, T3, R> extends WrappedFunction3<T1, T2, T3, R>
         implements Serializable {

@@ -20,8 +20,8 @@ package org.apache.spark.api.java.function
 import scala.runtime.AbstractFunction3
 
 /**
- * Subclass of Function2 for ease of calling from Java. The main thing it does is re-expose the
- * apply() method as call() and declare that it can throw Exception (since AbstractFunction2.apply
+ * Subclass of Function3 for ease of calling from Java. The main thing it does is re-expose the
+ * apply() method as call() and declare that it can throw Exception (since AbstractFunction3.apply
  * isn't marked to allow that).
  */
 private[spark] abstract class WrappedFunction3[T1, T2, T3, R]

@@ -19,7 +19,7 @@ package org.apache.spark.streaming
 
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.dstream.{ReducedWindowedDStream, StateDStream}
-import org.apache.spark.streaming.dstream.{CoGroupedDStream, ShuffledDStream}
+import org.apache.spark.streaming.dstream.{ShuffledDStream}
 import org.apache.spark.streaming.dstream.{MapValuedDStream, FlatMapValuedDStream}
 
 import org.apache.spark.{Partitioner, HashPartitioner}
@@ -359,7 +359,7 @@ extends Serializable {
   }
 
   /**
-   * Create a new "state" DStream where the state for each key is updated by applying
+   * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of the key.
    * [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
    * @param updateFunc State update function. If `this` function returns None, then
@@ -398,11 +398,18 @@ extends Serializable {
      new StateDStream(self, ssc.sc.clean(updateFunc), partitioner, rememberPartitioner)
   }
 
-
+  /**
+   * Return a new DStream by applying a map function to the value of each key-value pairs in
+   * 'this' DStream without changing the key.
+   */
   def mapValues[U: ClassManifest](mapValuesFunc: V => U): DStream[(K, U)] = {
     new MapValuedDStream[K, V, U](self, mapValuesFunc)
   }
 
+  /**
+   * Return a new DStream by applying a flatmap function to the value of each key-value pairs in
+   * 'this' DStream without changing the key.
+   */
   def flatMapValues[U: ClassManifest](
       flatMapValuesFunc: V => TraversableOnce[U]
     ): DStream[(K, U)] = {
@@ -410,9 +417,8 @@ extends Serializable {
   }
 
   /**
-   * Cogroup `this` DStream with `other` DStream. For each key k in corresponding RDDs of `this`
-   * or `other` DStreams, the generated RDD will contains a tuple with the list of values for that
-   * key in both RDDs. HashPartitioner is used to partition each generated RDD into default number
+   * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
+   * Hash partitioning is used to generate the RDDs with Spark's default number
    * of partitions.
    */
   def cogroup[W: ClassManifest](other: DStream[(K, W)]): DStream[(K, (Seq[V], Seq[W]))] = {
@@ -420,31 +426,29 @@ extends Serializable {
   }
 
   /**
-   * Cogroup `this` DStream with `other` DStream using a partitioner. For each key k in corresponding RDDs of `this`
-   * or `other` DStreams, the generated RDD will contains a tuple with the list of values for that
-   * key in both RDDs. Partitioner is used to partition each generated RDD.
+   * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
+   * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
+   */
+  def cogroup[W: ClassManifest](other: DStream[(K, W)], numPartitions: Int): DStream[(K, (Seq[V], Seq[W]))] = {
+    cogroup(other, defaultPartitioner(numPartitions))
+  }
+
+  /**
+   * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
+   * The supplied [[org.apache.spark.Partitioner]] is used to partition the generated RDDs.
    */
   def cogroup[W: ClassManifest](
       other: DStream[(K, W)],
       partitioner: Partitioner
     ): DStream[(K, (Seq[V], Seq[W]))] = {
-
-    val cgd = new CoGroupedDStream[K](
-      Seq(self.asInstanceOf[DStream[(K, _)]], other.asInstanceOf[DStream[(K, _)]]),
-      partitioner
+    self.transformWith(
+      other,
+      (rdd1: RDD[(K, V)], rdd2: RDD[(K, W)]) => rdd1.cogroup(rdd2, partitioner)
     )
-    val pdfs = new PairDStreamFunctions[K, Seq[Seq[_]]](cgd)(
-      classManifest[K],
-      Manifests.seqSeqManifest
-    )
-    pdfs.mapValues {
-      case Seq(vs, ws) =>
-        (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
-    }
   }
 
   /**
-   * Return new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream..
+   * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
    */
   def join[W: ClassManifest](other: DStream[(K, W)]): DStream[(K, (V, W))] = {
@@ -452,7 +456,15 @@ extends Serializable {
   }
 
   /**
-   * Return new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
+   * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
+   * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
+   */
+  def join[W: ClassManifest](other: DStream[(K, W)], numPartitions: Int): DStream[(K, (V, W))] = {
+    join[W](other, defaultPartitioner(numPartitions))
+  }
+
+  /**
+   * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
    * The supplied [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
    */
   def join[W: ClassManifest](
@@ -466,7 +478,7 @@ extends Serializable {
   }
 
   /**
-   * Return new DStream by applying 'left outer join' between RDDs of `this` DStream and
+   * Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
    * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
    * number of partitions.
    */
@@ -475,7 +487,19 @@ extends Serializable {
   }
 
   /**
-   * Return new DStream by applying 'left outer join' between RDDs of `this` DStream and
+   * Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
+   * partitions.
+   */
+  def leftOuterJoin[W: ClassManifest](
+      other: DStream[(K, W)],
+      numPartitions: Int
+    ): DStream[(K, (V, Option[W]))] = {
+    leftOuterJoin[W](other, defaultPartitioner(numPartitions))
+  }
+
+  /**
+   * Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
    * `other` DStream. The supplied [[org.apache.spark.Partitioner]] is used to control
    * the partitioning of each RDD.
    */
@@ -490,7 +514,7 @@ extends Serializable {
   }
 
   /**
-   * Return new DStream by applying 'right outer join' between RDDs of `this` DStream and
+   * Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
    * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
    * number of partitions.
    */
@@ -499,7 +523,19 @@ extends Serializable {
   }
 
   /**
-   * Return new DStream by applying 'right outer join' between RDDs of `this` DStream and
+   * Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
+   * partitions.
+   */
+  def rightOuterJoin[W: ClassManifest](
+      other: DStream[(K, W)],
+      numPartitions: Int
+    ): DStream[(K, (Option[V], W))] = {
+    rightOuterJoin[W](other, defaultPartitioner(numPartitions))
+  }
+
+  /**
+   * Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
    * `other` DStream. The supplied [[org.apache.spark.Partitioner]] is used to control
    * the partitioning of each RDD.
    */
@@ -514,8 +550,8 @@ extends Serializable {
   }
 
   /**
-   * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is generated
-   * based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix"
+   * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval
+   * is generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix"
    */
   def saveAsHadoopFiles[F <: OutputFormat[K, V]](
       prefix: String,
@@ -525,8 +561,8 @@ extends Serializable {
   }
 
   /**
-   * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval is generated
-   * based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix"
+   * Save each RDD in `this` DStream as a Hadoop file. The file name at each batch interval
+   * is generated based on `prefix` and `suffix`: "prefix-TIME_IN_MS.suffix"
    */
   def saveAsHadoopFiles(
       prefix: String,
