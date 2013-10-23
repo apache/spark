@@ -2,6 +2,7 @@ package org.apache.spark.api.r
 
 import java.io._
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import org.apache.spark.util.Utils
 
 import scala.io.Source
 import scala.collection.JavaConversions._
@@ -34,6 +35,10 @@ class RRDD[T: ClassManifest](
     val proc = pb.start()
     val env = SparkEnv.get
 
+    val tempDir = Utils.getLocalDir
+    val tempFile =  File.createTempFile("rSpark", "out", new File(tempDir))
+    val tempFileName = tempFile.getAbsolutePath
+
     // Start a thread to print the process's stderr to ours
     new Thread("stderr reader for R") {
       override def run() {
@@ -50,6 +55,8 @@ class RRDD[T: ClassManifest](
         val stream = new BufferedOutputStream(proc.getOutputStream, bufferSize)
         val printOut = new PrintStream(stream)
         val dataOut = new DataOutputStream(stream)
+
+        printOut.println(tempFileName)
 
         dataOut.writeInt(func.length)
         dataOut.write(func, 0, func.length)
@@ -78,8 +85,9 @@ class RRDD[T: ClassManifest](
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
     val stdOutFileName = inputStream.readLine().trim()
-    //val reader = new BufferedReader(new InputStreamReader(inputStream))
+
     val dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
+
     return new Iterator[Array[Byte]] {
       def next(): Array[Byte] = {
         val obj = _nextObj
@@ -111,7 +119,7 @@ class RRDD[T: ClassManifest](
           }
         } catch {
           case eof: EOFException => {
-            throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
+            throw new SparkException("R worker exited unexpectedly (crashed)", eof)
           }
           case e => throw e
         }
