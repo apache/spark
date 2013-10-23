@@ -19,17 +19,57 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.{Buffer, HashSet}
 
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.matchers.ShouldMatchers
 
-import org.apache.spark.{SparkContext, LocalSparkContext}
+import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.SparkContext._
 
-class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
+    with BeforeAndAfter {
+  /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
+  before {
+    sc = new SparkContext("local", "DAGSchedulerSuite")
+  }
+
+  test("basic creation of StageInfo") {
+    val listener = new SaveStageInfo
+    sc.addSparkListener(listener)
+    val rdd1 = sc.parallelize(1 to 100, 4)
+    val rdd2 = rdd1.map(x => x.toString)
+    rdd2.setName("Target RDD")
+    rdd2.count
+
+    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+
+    listener.stageInfos.size should be {1}
+    val first = listener.stageInfos.head
+    first.rddName should be {"Target RDD"}
+    first.numTasks should be {4}
+    first.numPartitions should be {4}
+    first.submissionTime should be ('defined)
+    first.completionTime should be ('defined)
+    first.taskInfos.length should be {4}
+  }
+
+  test("StageInfo with fewer tasks than partitions") {
+    val listener = new SaveStageInfo
+    sc.addSparkListener(listener)
+    val rdd1 = sc.parallelize(1 to 100, 4)
+    val rdd2 = rdd1.map(x => x.toString)
+    sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1), true)
+
+    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+
+    listener.stageInfos.size should be {1}
+    val first = listener.stageInfos.head
+    first.numTasks should be {2}
+    first.numPartitions should be {4}
+  }
+
   test("local metrics") {
-    sc = new SparkContext("local[4]", "test")
     val listener = new SaveStageInfo
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
@@ -66,7 +106,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       checkNonZeroAvg(
         stageInfo.taskInfos.map{_._2.executorDeserializeTime.toLong},
         stageInfo + " executorDeserializeTime")
-      if (stageInfo.stage.rdd.name == d4.name) {
+      if (stageInfo.rddName == d4.name) {
         checkNonZeroAvg(
           stageInfo.taskInfos.map{_._2.shuffleReadMetrics.get.fetchWaitTime},
           stageInfo + " fetchWaitTime")
@@ -74,11 +114,11 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
       stageInfo.taskInfos.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
-        if (isStage(stageInfo, Set(d2.name, d3.name), Set(d4.name))) {
+        if (stageInfo.rddName == d2.name || stageInfo.rddName == d3.name) {
           taskMetrics.shuffleWriteMetrics should be ('defined)
           taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0l)
         }
-        if (stageInfo.stage.rdd.name == d4.name) {
+        if (stageInfo.rddName == d4.name) {
           taskMetrics.shuffleReadMetrics should be ('defined)
           val sm = taskMetrics.shuffleReadMetrics.get
           sm.totalBlocksFetched should be > (0)
@@ -136,15 +176,10 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     assert(m.sum / m.size.toDouble > 0.0, msg)
   }
 
-  def isStage(stageInfo: StageInfo, rddNames: Set[String], excludedNames: Set[String]) = {
-    val names = Set(stageInfo.stage.rdd.name) ++ stageInfo.stage.rdd.dependencies.map{_.rdd.name}
-    !names.intersect(rddNames).isEmpty && names.intersect(excludedNames).isEmpty
-  }
-
   class SaveStageInfo extends SparkListener {
     val stageInfos = Buffer[StageInfo]()
     override def onStageCompleted(stage: StageCompleted) {
-      stageInfos += stage.stageInfo
+      stageInfos += stage.stage
     }
   }
 

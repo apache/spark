@@ -24,56 +24,54 @@ import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable.{Map, HashMap, ListBuffer}
-import scala.io.Source
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
 
-// Used to record runtime information for each job, including RDD graph 
-// tasks' start/stop shuffle information and information from outside
-
+/**
+ * A logger class to record runtime information for jobs in Spark. This class outputs one log file
+ * per Spark job with information such as RDD graph, tasks start/stop, shuffle information.
+ *
+ * @param logDirName The base directory for the log files.
+ */
 class JobLogger(val logDirName: String) extends SparkListener with Logging {
-  private val logDir =  
-    if (System.getenv("SPARK_LOG_DIR") != null)  
-      System.getenv("SPARK_LOG_DIR")
-    else 
-      "/tmp/spark"
+
+  private val logDir = Option(System.getenv("SPARK_LOG_DIR")).getOrElse("/tmp/spark")
+
   private val jobIDToPrintWriter = new HashMap[Int, PrintWriter] 
   private val stageIDToJobID = new HashMap[Int, Int]
   private val jobIDToStages = new HashMap[Int, ListBuffer[Stage]]
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvents]
-  
+
   createLogDir()
   def this() = this(String.valueOf(System.currentTimeMillis()))
-  
-  def getLogDir = logDir
-  def getJobIDtoPrintWriter = jobIDToPrintWriter
-  def getStageIDToJobID = stageIDToJobID
-  def getJobIDToStages = jobIDToStages
-  def getEventQueue = eventQueue
-  
+
+  // The following 5 functions are used only in testing.
+  private[scheduler] def getLogDir = logDir
+  private[scheduler] def getJobIDtoPrintWriter = jobIDToPrintWriter
+  private[scheduler] def getStageIDToJobID = stageIDToJobID
+  private[scheduler] def getJobIDToStages = jobIDToStages
+  private[scheduler] def getEventQueue = eventQueue
+
   // Create a folder for log files, the folder's name is the creation time of the jobLogger
   protected def createLogDir() {
     val dir = new File(logDir + "/" + logDirName + "/")
-    if (dir.exists()) {
-      return
-    }
-    if (dir.mkdirs() == false) {
-      logError("create log directory error:" + logDir + "/" + logDirName + "/")
+    if (!dir.exists() && !dir.mkdirs()) {
+      logError("Error creating log directory: " + logDir + "/" + logDirName + "/")
     }
   }
   
   // Create a log file for one job, the file name is the jobID
   protected def createLogWriter(jobID: Int) {
-    try{
+    try {
       val fileWriter = new PrintWriter(logDir + "/" + logDirName + "/" + jobID)
       jobIDToPrintWriter += (jobID -> fileWriter)
-      } catch {
-        case e: FileNotFoundException => e.printStackTrace()
-      }
+    } catch {
+      case e: FileNotFoundException => e.printStackTrace()
+    }
   }
   
   // Close log file, and clean the stage relationship in stageIDToJobID 
@@ -118,10 +116,9 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
     def getRddsInStage(rdd: RDD[_]): ListBuffer[RDD[_]] = {
       var rddList = new ListBuffer[RDD[_]]
       rddList += rdd
-      rdd.dependencies.foreach{ dep => dep match {
-          case shufDep: ShuffleDependency[_,_] =>
-          case _ => rddList ++= getRddsInStage(dep.rdd)
-        }
+      rdd.dependencies.foreach {
+        case shufDep: ShuffleDependency[_, _] =>
+        case dep: Dependency[_] => rddList ++= getRddsInStage(dep.rdd)
       }
       rddList
     }
@@ -161,29 +158,27 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
   protected def recordRddInStageGraph(jobID: Int, rdd: RDD[_], indent: Int) {
     val rddInfo = "RDD_ID=" + rdd.id + "(" + getRddName(rdd) + "," + rdd.generator + ")"
     jobLogInfo(jobID, indentString(indent) + rddInfo, false)
-    rdd.dependencies.foreach{ dep => dep match {
-        case shufDep: ShuffleDependency[_,_] => 
-          val depInfo = "SHUFFLE_ID=" + shufDep.shuffleId
-          jobLogInfo(jobID, indentString(indent + 1) + depInfo, false)
-        case _ => recordRddInStageGraph(jobID, dep.rdd, indent + 1)
-      }
+    rdd.dependencies.foreach {
+      case shufDep: ShuffleDependency[_, _] =>
+        val depInfo = "SHUFFLE_ID=" + shufDep.shuffleId
+        jobLogInfo(jobID, indentString(indent + 1) + depInfo, false)
+      case dep: Dependency[_] => recordRddInStageGraph(jobID, dep.rdd, indent + 1)
     }
   }
   
   protected def recordStageDepGraph(jobID: Int, stage: Stage, indent: Int = 0) {
-    var stageInfo: String = ""
-    if (stage.isShuffleMap) {
-      stageInfo = "STAGE_ID=" + stage.id + " MAP_STAGE SHUFFLE_ID=" + 
-                  stage.shuffleDep.get.shuffleId
-    }else{
-      stageInfo = "STAGE_ID=" + stage.id + " RESULT_STAGE"
+    val stageInfo = if (stage.isShuffleMap) {
+      "STAGE_ID=" + stage.id + " MAP_STAGE SHUFFLE_ID=" + stage.shuffleDep.get.shuffleId
+    } else {
+      "STAGE_ID=" + stage.id + " RESULT_STAGE"
     }
     if (stage.jobId == jobID) {
       jobLogInfo(jobID, indentString(indent) + stageInfo, false)
       recordRddInStageGraph(jobID, stage.rdd, indent)
       stage.parents.foreach(recordStageDepGraph(jobID, _, indent + 2))
-    } else
+    } else {
       jobLogInfo(jobID, indentString(indent) + stageInfo + " JOB_ID=" + stage.jobId, false)
+    }
   }
   
   // Record task metrics into job log files
@@ -193,39 +188,32 @@ class JobLogger(val logDirName: String) extends SparkListener with Logging {
                " START_TIME=" + taskInfo.launchTime + " FINISH_TIME=" + taskInfo.finishTime + 
                " EXECUTOR_ID=" + taskInfo.executorId +  " HOST=" + taskMetrics.hostname
     val executorRunTime = " EXECUTOR_RUN_TIME=" + taskMetrics.executorRunTime
-    val readMetrics = 
-      taskMetrics.shuffleReadMetrics match {
-        case Some(metrics) => 
-          " SHUFFLE_FINISH_TIME=" + metrics.shuffleFinishTime + 
-          " BLOCK_FETCHED_TOTAL=" + metrics.totalBlocksFetched + 
-          " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched + 
-          " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched + 
-          " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime + 
-          " REMOTE_FETCH_TIME=" + metrics.remoteFetchTime + 
-          " REMOTE_BYTES_READ=" + metrics.remoteBytesRead
-        case None => ""
-      }
-    val writeMetrics = 
-      taskMetrics.shuffleWriteMetrics match {
-        case Some(metrics) => 
-          " SHUFFLE_BYTES_WRITTEN=" + metrics.shuffleBytesWritten
-        case None => ""
-      }
+    val readMetrics = taskMetrics.shuffleReadMetrics match {
+      case Some(metrics) =>
+        " SHUFFLE_FINISH_TIME=" + metrics.shuffleFinishTime +
+        " BLOCK_FETCHED_TOTAL=" + metrics.totalBlocksFetched +
+        " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
+        " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
+        " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime +
+        " REMOTE_FETCH_TIME=" + metrics.remoteFetchTime +
+        " REMOTE_BYTES_READ=" + metrics.remoteBytesRead
+      case None => ""
+    }
+    val writeMetrics = taskMetrics.shuffleWriteMetrics match {
+      case Some(metrics) => " SHUFFLE_BYTES_WRITTEN=" + metrics.shuffleBytesWritten
+      case None => ""
+    }
     stageLogInfo(stageID, status + info + executorRunTime + readMetrics + writeMetrics)
   }
   
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
-    stageLogInfo(
-      stageSubmitted.stage.id,
-      "STAGE_ID=%d STATUS=SUBMITTED TASK_SIZE=%d".format(
-        stageSubmitted.stage.id, stageSubmitted.taskSize))
+    stageLogInfo(stageSubmitted.stage.stageId,"STAGE_ID=%d STATUS=SUBMITTED TASK_SIZE=%d".format(
+        stageSubmitted.stage.stageId, stageSubmitted.stage.numTasks))
   }
   
   override def onStageCompleted(stageCompleted: StageCompleted) {
-    stageLogInfo(
-      stageCompleted.stageInfo.stage.id,
-      "STAGE_ID=%d STATUS=COMPLETED".format(stageCompleted.stageInfo.stage.id))
-    
+    stageLogInfo(stageCompleted.stage.stageId, "STAGE_ID=%d STATUS=COMPLETED".format(
+        stageCompleted.stage.stageId))
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) { }

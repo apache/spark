@@ -167,8 +167,7 @@ private[spark] class ShuffleMapTask(
       var totalTime = 0L
       val compressedSizes: Array[Byte] = buckets.writers.map { writer: BlockObjectWriter =>
         writer.commit()
-        writer.close()
-        val size = writer.size()
+        val size = writer.fileSegment().length
         totalBytes += size
         totalTime += writer.timeWriting()
         MapOutputTracker.compressSize(size)
@@ -191,6 +190,7 @@ private[spark] class ShuffleMapTask(
     } finally {
       // Release the writers back to the shuffle block manager.
       if (shuffle != null && buckets != null) {
+        buckets.writers.foreach(_.close())
         shuffle.releaseWriters(buckets)
       }
       // Execute the callbacks on task completion.

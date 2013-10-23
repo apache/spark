@@ -15,11 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.storage
+
+import java.io.File
 
 /**
- * A function that returns zero or more output records from each input record.
+ * References a particular segment of a file (potentially the entire file),
+ * based off an offset and a length.
  */
-abstract class FlatMapFunction[T, R] extends Function[T, java.lang.Iterable[R]] {
-  def elementType() : ClassManifest[R] = ClassManifest.Any.asInstanceOf[ClassManifest[R]]
+private[spark] class FileSegment(val file: File, val offset: Long, val length : Long) {
+  override def toString = "(name=%s, offset=%d, length=%d)".format(file.getName, offset, length)
 }

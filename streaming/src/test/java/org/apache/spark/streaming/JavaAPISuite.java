@@ -1220,14 +1220,20 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testKafkaStream() {
     HashMap<String, Integer> topics = Maps.newHashMap();
-    JavaDStream test1 = ssc.kafkaStream("localhost:12345", "group", topics);
-    JavaDStream test2 = ssc.kafkaStream("localhost:12345", "group", topics,
+    JavaPairDStream<String, String> test1 = ssc.kafkaStream("localhost:12345", "group", topics);
+    JavaPairDStream<String, String> test2 = ssc.kafkaStream("localhost:12345", "group", topics,
       StorageLevel.MEMORY_AND_DISK());
 
     HashMap<String, String> kafkaParams = Maps.newHashMap();
-    kafkaParams.put("zk.connect","localhost:12345");
-    kafkaParams.put("groupid","consumer-group");
-    JavaDStream test3 = ssc.kafkaStream(String.class, StringDecoder.class, kafkaParams, topics,
+    kafkaParams.put("zookeeper.connect","localhost:12345");
+    kafkaParams.put("group.id","consumer-group");
+    JavaPairDStream<String, String> test3 = ssc.kafkaStream(
+      String.class,
+      String.class,
+      StringDecoder.class,
+      StringDecoder.class,
+      kafkaParams,
+      topics,
       StorageLevel.MEMORY_AND_DISK());
   }
 
