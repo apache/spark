@@ -50,7 +50,7 @@ object Pregel {
     def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertexId(vid), edge)
 
     // Receive the first set of messages
-    g.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))
+    g = g.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))
 
     while (i < numIter) {
       // compute the messages
