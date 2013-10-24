@@ -332,7 +332,7 @@ public class JavaAPISuite implements Serializable {
             }
           });
         }
-    );
+      });
 
     JavaTestUtils.attachTestOutputStream(transformed);
     List<List<Integer>> result = JavaTestUtils.runStreams(ssc, 3, 3);
