@@ -17,22 +17,25 @@
 
 package org.apache.spark.scheduler
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.apache.spark.{LocalSparkContext, SparkContext}
-import scala.collection.mutable
+import scala.collection.mutable.{Buffer, HashSet}
+
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import org.scalatest.matchers.ShouldMatchers
+
+import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.SparkContext._
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
-    with BeforeAndAfter {
+    with BeforeAndAfterAll {
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
 
-  before {
-    sc = new SparkContext("local", "DAGSchedulerSuite")
+  override def afterAll {
+    System.clearProperty("spark.akka.frameSize")
   }
 
   test("basic creation of StageInfo") {
+    sc = new SparkContext("local", "DAGSchedulerSuite")
     val listener = new SaveStageInfo
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
@@ -53,6 +56,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   }
 
   test("StageInfo with fewer tasks than partitions") {
+    sc = new SparkContext("local", "DAGSchedulerSuite")
     val listener = new SaveStageInfo
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
@@ -68,6 +72,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   }
 
   test("local metrics") {
+    sc = new SparkContext("local", "DAGSchedulerSuite")
     val listener = new SaveStageInfo
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
@@ -129,15 +134,73 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     }
   }
 
+  test("onTaskGettingResult() called when result fetched remotely") {
+    // Need to use local cluster mode here, because results are not ever returned through the
+    // block manager when using the LocalScheduler.
+    sc = new SparkContext("local-cluster[1,1,512]", "test")
+
+    val listener = new SaveTaskEvents
+    sc.addSparkListener(listener)
+ 
+    // Make a task whose result is larger than the akka frame size
+    System.setProperty("spark.akka.frameSize", "1")
+    val akkaFrameSize =
+      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size").toInt
+    val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x,y) => x)
+    assert(result === 1.to(akkaFrameSize).toArray)
+
+    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    val TASK_INDEX = 0
+    assert(listener.startedTasks.contains(TASK_INDEX))
+    assert(listener.startedGettingResultTasks.contains(TASK_INDEX))
+    assert(listener.endedTasks.contains(TASK_INDEX))
+  }
+
+  test("onTaskGettingResult() not called when result sent directly") {
+    // Need to use local cluster mode here, because results are not ever returned through the
+    // block manager when using the LocalScheduler.
+    sc = new SparkContext("local-cluster[1,1,512]", "test")
+
+    val listener = new SaveTaskEvents
+    sc.addSparkListener(listener)
+ 
+    // Make a task whose result is larger than the akka frame size
+    val result = sc.parallelize(Seq(1), 1).map(x => 2 * x).reduce((x, y) => x)
+    assert(result === 2)
+
+    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    val TASK_INDEX = 0
+    assert(listener.startedTasks.contains(TASK_INDEX))
+    assert(listener.startedGettingResultTasks.isEmpty == true)
+    assert(listener.endedTasks.contains(TASK_INDEX))
+  }
+
   def checkNonZeroAvg(m: Traversable[Long], msg: String) {
     assert(m.sum / m.size.toDouble > 0.0, msg)
   }
 
   class SaveStageInfo extends SparkListener {
-    val stageInfos = mutable.Buffer[StageInfo]()
+    val stageInfos = Buffer[StageInfo]()
     override def onStageCompleted(stage: StageCompleted) {
       stageInfos += stage.stage
     }
   }
 
+  class SaveTaskEvents extends SparkListener {
+    val startedTasks = new HashSet[Int]()
+    val startedGettingResultTasks = new HashSet[Int]()
+    val endedTasks = new HashSet[Int]()
+
+    override def onTaskStart(taskStart: SparkListenerTaskStart) {
+      startedTasks += taskStart.taskInfo.index
+    }
+
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+        endedTasks += taskEnd.taskInfo.index
+    }
+
+    override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult) {
+      startedGettingResultTasks += taskGettingResult.taskInfo.index
+    }
+  }
 }

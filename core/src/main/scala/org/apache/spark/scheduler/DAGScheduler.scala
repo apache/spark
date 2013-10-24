@@ -68,6 +68,11 @@ class DAGScheduler(
     eventQueue.put(BeginEvent(task, taskInfo))
   }
 
+  // Called to report that a task has completed and results are being fetched remotely.
+  def taskGettingResult(task: Task[_], taskInfo: TaskInfo) {
+    eventQueue.put(GettingResultEvent(task, taskInfo))
+  }
+
   // Called by TaskScheduler to report task completions or failures.
   def taskEnded(
       task: Task[_],
@@ -414,6 +419,9 @@ class DAGScheduler(
 
       case begin: BeginEvent =>
         listenerBus.post(SparkListenerTaskStart(begin.task, begin.taskInfo))
+
+      case gettingResult: GettingResultEvent =>
+        listenerBus.post(SparkListenerTaskGettingResult(gettingResult.task, gettingResult.taskInfo))
 
       case completion: CompletionEvent =>
         listenerBus.post(SparkListenerTaskEnd(
