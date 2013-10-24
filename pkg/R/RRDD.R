@@ -102,22 +102,27 @@ setMethod("reduce",
             Reduce(func, partitionList)
           })
 
-# Take the first NUM elements in the RRDD. NULL if there is nothing to take.
-# (Not naming it as the more idiomatic `head' since SparkR uses S4 whereas the
-# head generic function in R is defined in S3 style. Mixing will cause
-# troubles.)
+# Take the first NUM elements in the RRDD and returns them in a list.
 setGeneric("take", function(rrdd, num) { standardGeneric("take") })
 setMethod("take",
           signature(rrdd = "RRDD", num = "numeric"),
           function(rrdd, num) {
+            resList <- list()
+            index <- -1
+            numPartitions <- .jcall(rrdd@jrdd, "I", "numPartitions")
+            while (TRUE) {
+              index <- index + 1
 
-            # TODO: use iterators package (R does not have native ones)?
-            takeUpToNum <- function(partition) {
-              head(unlist(partition, recursive = FALSE, use.names = FALSE), n = num)
+              if (length(resList) >= num || index >= numPartitions)
+                break
+
+              # a JList of byte arrays
+              partition <- .jcall(rrdd@jrdd,
+                                  "Ljava/util/List;",
+                                  "collectPartition",
+                                  as.integer(index))
+              elems <- JavaListToRList(partition, flatten = TRUE)
+              resList <- append(resList, head(elems, n = num - length(resList))) # O(n^2)?
             }
-
-            partitionHeads <- lapplyPartition(rrdd, takeUpToNum)
-            vals <- collect(partitionHeads)
-
-            head(unlist(vals, recursive = FALSE, use.names = FALSE), n = num)
+            resList
           })
