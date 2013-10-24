@@ -19,16 +19,20 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.{Buffer, HashSet}
 
-import org.scalatest.{BeforeAndAfter, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.SparkContext._
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
-    with BeforeAndAfter {
+    with BeforeAndAfterAll {
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
+
+  override def afterAll {
+    System.clearProperty("spark.akka.frameSize")
+  }
 
   test("basic creation of StageInfo") {
     sc = new SparkContext("local", "DAGSchedulerSuite")
