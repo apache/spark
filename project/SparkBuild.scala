@@ -164,7 +164,7 @@ object SparkBuild extends Build {
         "commons-io"        % "commons-io"      % "2.4"    % "test"
     ),
 
-    parallelExecution := false,
+    parallelExecution := true,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
       const(std.TaskExtra.constant(Nil)), aggregate = true, includeRoot = true) apply { _.join.map(_.flatten) },
@@ -204,8 +204,8 @@ object SparkBuild extends Build {
         "commons-daemon"           % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
         "org.ow2.asm"              % "asm"              % "4.0",
         "com.google.protobuf"      % "protobuf-java"    % "2.4.1",
-        "com.typesafe.akka"       %% "akka-remote"      % "2.2.1"  excludeAll(excludeNetty), 
-        "com.typesafe.akka"       %% "akka-slf4j"       % "2.2.1"  excludeAll(excludeNetty),
+        "com.typesafe.akka"       %% "akka-remote"      % "2.2.3"  excludeAll(excludeNetty), 
+        "com.typesafe.akka"       %% "akka-slf4j"       % "2.2.3"  excludeAll(excludeNetty),
         "net.liftweb"             %% "lift-json"        % "2.5.1"  excludeAll(excludeNetty),
         "it.unimi.dsi"             % "fastutil"         % "6.4.4",
         "colt"                     % "colt"             % "1.2.0",
@@ -276,7 +276,7 @@ object SparkBuild extends Build {
       "org.apache.flume"      % "flume-ng-sdk"     % "1.2.0" % "compile"  excludeAll(excludeNetty, excludeSnappy),
       "com.github.sgroschupf" % "zkclient"         % "0.1"                excludeAll(excludeNetty),
       "org.twitter4j"         % "twitter4j-stream" % "3.0.3"              excludeAll(excludeNetty),
-      "com.typesafe.akka"    %%  "akka-zeromq"     % "2.2.1"              excludeAll(excludeNetty)
+      "com.typesafe.akka"    %%  "akka-zeromq"     % "2.2.3"              excludeAll(excludeNetty)
     )
   )
 
