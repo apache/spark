@@ -418,6 +418,12 @@ private[spark] class ClusterTaskSetManager(
     sched.dagScheduler.taskStarted(task, info)
   }
 
+  def handleTaskGettingResult(tid: Long) = {
+    val info = taskInfos(tid)
+    info.markGettingResult()
+    sched.dagScheduler.taskGettingResult(tasks(info.index), info)
+  }
+
   /**
    * Marks the task as successful and notifies the DAGScheduler that a task has ended.
    */
