@@ -123,6 +123,13 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   def glom(): JavaDStream[JList[T]] =
     new JavaDStream(dstream.glom().map(x => new java.util.ArrayList[T](x.toSeq)))
 
+  /**
+   * Return a new DStream with an increased or decreased level of parallelism. Each RDD in the
+   * returned DStream has exactly numPartitions partitions.
+   */
+  def repartition(numPartitions: Int): JavaDStream[T] =
+    new JavaDStream(dstream.repartition(numPartitions))
+
   /** Return the StreamingContext associated with this DStream */
   def context(): StreamingContext = dstream.context()
 

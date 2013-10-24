@@ -266,6 +266,27 @@ abstract class RDD[T: ClassManifest](
   def distinct(): RDD[T] = distinct(partitions.size)
 
   /**
+   * Return a new RDD that has exactly numPartitions partitions.
+   *
+   * Used to increase or decrease the level of parallelism in this RDD. By default, this will use
+   * a shuffle to redistribute data. If you are shrinking the RDD into fewer partitions, you can
+   * set skipShuffle = false to avoid a shuffle. Skipping shuffles is not supported when
+   * increasing the number of partitions.
+   *
+   * Similar to `coalesce`, but shuffles by default, allowing you to call this safely even
+   * if you don't know the number of partitions.
+   */
+  def repartition(numPartitions: Int, skipShuffle: Boolean = false): RDD[T] = {
+    if (skipShuffle && numPartitions > this.partitions.size) {
+      val msg = "repartition must grow %s from %s to %s partitions, cannot skip shuffle.".format(
+        this.name, this.partitions.size, numPartitions
+      )
+      throw new IllegalArgumentException(msg)
+    }
+    coalesce(numPartitions, !skipShuffle)
+  }
+
+  /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
    *
    * This results in a narrow dependency, e.g. if you go from 1000 partitions
