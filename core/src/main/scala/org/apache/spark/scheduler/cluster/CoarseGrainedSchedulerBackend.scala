@@ -182,7 +182,7 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
       if (driverActor != null) {
         logInfo("Shutting down all executors")
         val future = driverActor.ask(StopExecutors)(timeout)
-        Await.result(future, timeout)
+        Await.ready(future, timeout)
       }
     } catch {
       case e: Exception =>
@@ -194,7 +194,7 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
     try {
       if (driverActor != null) {
         val future = driverActor.ask(StopDriver)(timeout)
-        Await.result(future, timeout)
+        Await.ready(future, timeout)
       }
     } catch {
       case e: Exception =>
@@ -217,7 +217,7 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
   def removeExecutor(executorId: String, reason: String) {
     try {
       val future = driverActor.ask(RemoveExecutor(executorId, reason))(timeout)
-      Await.result(future, timeout)
+      Await.ready(future, timeout)
     } catch {
       case e: Exception =>
         throw new SparkException("Error notifying standalone scheduler's driver actor", e)

@@ -57,20 +57,13 @@ import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
   SparkDeploySchedulerBackend, ClusterScheduler, SimrSchedulerBackend}
-import org.apache.spark.scheduler.local.LocalScheduler
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalScheduler
+import org.apache.spark.scheduler.StageInfo
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType,
   TimeStampedHashMap, Utils}
-import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.storage.RDDInfo
-import org.apache.spark.storage.StorageStatus
-import scala.Some
-import org.apache.spark.scheduler.StageInfo
-import org.apache.spark.storage.RDDInfo
-import org.apache.spark.storage.StorageStatus
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -133,7 +126,7 @@ class SparkContext(
   val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
-  if (jars != null && jars != Seq(null)) {
+  if (jars != null) {
     jars.foreach { addJar(_) }
   }
 
@@ -164,7 +157,7 @@ class SparkContext(
     val SPARK_REGEX = """spark://(.*)""".r
     // Regular expression for connection to Mesos cluster
     val MESOS_REGEX = """mesos://(.*)""".r
-    //Regular expression for connection to Simr cluster
+    // Regular expression for connection to Simr cluster
     val SIMR_REGEX = """simr://(.*)""".r
 
     master match {
@@ -694,8 +687,7 @@ class SparkContext(
    */
   def addJar(path: String) {
     if (path == null) {
-      logWarning("null specified as parameter to addJar",
-        new SparkException("null specified as parameter to addJar"))
+      logWarning("null specified as parameter to addJar")
     } else {
       var key = ""
       if (path.contains("\\")) {

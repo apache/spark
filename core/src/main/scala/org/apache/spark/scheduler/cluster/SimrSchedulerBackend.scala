@@ -1,5 +1,3 @@
-package org.apache.spark.scheduler.cluster
-
 /*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
@@ -17,20 +15,21 @@ package org.apache.spark.scheduler.cluster
  * limitations under the License.
  */
 
+package org.apache.spark.scheduler.cluster
 
-import org.apache.spark.{Logging, SparkContext}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.spark.{Logging, SparkContext}
 
 private[spark] class SimrSchedulerBackend(
-                                           scheduler: ClusterScheduler,
-                                           sc: SparkContext,
-                                           driverFilePath: String)
+    scheduler: ClusterScheduler,
+    sc: SparkContext,
+    driverFilePath: String)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
   with Logging {
 
-  val tmpPath = new Path(driverFilePath + "_tmp");
-  val filePath = new Path(driverFilePath);
+  val tmpPath = new Path(driverFilePath + "_tmp")
+  val filePath = new Path(driverFilePath)
 
   val maxCores = System.getProperty("spark.simr.executor.cores", "1").toInt
 
@@ -44,8 +43,8 @@ private[spark] class SimrSchedulerBackend(
     val conf = new Configuration()
     val fs = FileSystem.get(conf)
 
-    logInfo("Writing to HDFS file: "  + driverFilePath);
-    logInfo("Writing AKKA address: "  + driverUrl);
+    logInfo("Writing to HDFS file: "  + driverFilePath)
+    logInfo("Writing Akka address: "  + driverUrl)
 
     // Create temporary file to prevent race condition where executors get empty driverUrl file
     val temp = fs.create(tmpPath, true)
@@ -54,16 +53,14 @@ private[spark] class SimrSchedulerBackend(
     temp.close()
 
     // "Atomic" rename
-    fs.rename(tmpPath, filePath);
+    fs.rename(tmpPath, filePath)
   }
 
   override def stop() {
     val conf = new Configuration()
     val fs = FileSystem.get(conf)
-    fs.delete(new Path(driverFilePath), false);
+    fs.delete(new Path(driverFilePath), false)
     super.stopExecutors()
     super.stop()
   }
 }
-
-
