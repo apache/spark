@@ -474,10 +474,10 @@ class StreamingContext private (
    * the DStreams.
    */
   def transform[T: ClassManifest](
-      streams: Seq[DStream[_]],
+      dstreams: Seq[DStream[_]],
       transformFunc: (Seq[RDD[_]], Time) => RDD[T]
     ): DStream[T] = {
-    new TransformedDStream[T](streams, sparkContext.clean(transformFunc))
+    new TransformedDStream[T](dstreams, sparkContext.clean(transformFunc))
   }
 
   /**

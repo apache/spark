@@ -711,6 +711,11 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
 
+  /** Convert to a JavaDStream */
+  def toJavaDStream(): JavaDStream[(K, V)] = {
+    new JavaDStream[(K, V)](dstream)
+  }
+
   override val classManifest: ClassManifest[(K, V)] =
     implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[Tuple2[K, V]]]
 }

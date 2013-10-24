@@ -23,6 +23,7 @@ import com.google.common.collect.Maps;
 import com.google.common.io.Files;
 import kafka.serializer.StringDecoder;
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
+import org.apache.spark.streaming.api.java.JavaDStreamLike;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -292,8 +293,8 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(7,8,9));
 
     JavaSparkContext jsc = new JavaSparkContext(ssc.ssc().sc());
-    JavaRDD<Integer> rdd1 = ssc.sc().parallelize(Arrays.asList(1,2,3));
-    JavaRDD<Integer> rdd2 = ssc.sc().parallelize(Arrays.asList(4,5,6));
+    JavaRDD<Integer> rdd1 = ssc.sc().parallelize(Arrays.asList(1, 2, 3));
+    JavaRDD<Integer> rdd2 = ssc.sc().parallelize(Arrays.asList(4, 5, 6));
     JavaRDD<Integer> rdd3 = ssc.sc().parallelize(Arrays.asList(7,8,9));
 
     LinkedList<JavaRDD<Integer>> rdds = Lists.newLinkedList();
@@ -331,7 +332,6 @@ public class JavaAPISuite implements Serializable {
             }
           });
         }
-      }
     );
 
     JavaTestUtils.attachTestOutputStream(transformed);
@@ -354,7 +354,8 @@ public class JavaAPISuite implements Serializable {
 
     JavaDStream<Integer> transformed1 = stream.transform(
         new Function<JavaRDD<Integer>, JavaRDD<Integer>>() {
-          @Override public JavaRDD<Integer> call(JavaRDD<Integer> in) throws Exception {
+          @Override
+          public JavaRDD<Integer> call(JavaRDD<Integer> in) throws Exception {
             return null;
           }
         }
@@ -421,51 +422,56 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testTransformWith() {
     List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
-          Arrays.asList(new Tuple2<String, String>("california", "dodgers"),
-                  new Tuple2<String, String>("new york", "yankees")),
-          Arrays.asList(new Tuple2<String, String>("california", "sharks"),
-                  new Tuple2<String, String>("new york", "rangers")));
+        Arrays.asList(
+            new Tuple2<String, String>("california", "dodgers"),
+            new Tuple2<String, String>("new york", "yankees")),
+        Arrays.asList(
+            new Tuple2<String, String>("california", "sharks"),
+            new Tuple2<String, String>("new york", "rangers")));
 
     List<List<Tuple2<String, String>>> stringStringKVStream2 = Arrays.asList(
-            Arrays.asList(new Tuple2<String, String>("california", "giants"),
-                    new Tuple2<String, String>("new york", "mets")),
-            Arrays.asList(new Tuple2<String, String>("california", "ducks"),
-                    new Tuple2<String, String>("new york", "islanders")));
+        Arrays.asList(
+            new Tuple2<String, String>("california", "giants"),
+            new Tuple2<String, String>("new york", "mets")),
+        Arrays.asList(
+            new Tuple2<String, String>("california", "ducks"),
+            new Tuple2<String, String>("new york", "islanders")));
 
 
     List<List<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
-            Arrays.asList(
-                    new Tuple2<String, Tuple2<String, String>>("california",
-                            new Tuple2<String, String>("dodgers", "giants")),
-                    new Tuple2<String, Tuple2<String, String>>("new york",
-                            new Tuple2<String, String>("yankees", "mets"))),
-            Arrays.asList(
-                    new Tuple2<String, Tuple2<String, String>>("california",
-                            new Tuple2<String, String>("sharks", "ducks")),
-                    new Tuple2<String, Tuple2<String, String>>("new york",
-                            new Tuple2<String, String>("rangers", "islanders"))));
+        Arrays.asList(
+            new Tuple2<String, Tuple2<String, String>>("california",
+                new Tuple2<String, String>("dodgers", "giants")),
+            new Tuple2<String, Tuple2<String, String>>("new york",
+                    new Tuple2<String, String>("yankees", "mets"))),
+        Arrays.asList(
+            new Tuple2<String, Tuple2<String, String>>("california",
+                new Tuple2<String, String>("sharks", "ducks")),
+            new Tuple2<String, Tuple2<String, String>>("new york",
+                new Tuple2<String, String>("rangers", "islanders"))));
 
     JavaDStream<Tuple2<String, String>> stream1 = JavaTestUtils.attachTestInputStream(
-            ssc, stringStringKVStream1, 1);
+        ssc, stringStringKVStream1, 1);
     JavaPairDStream<String, String> pairStream1 = JavaPairDStream.fromJavaDStream(stream1);
 
     JavaDStream<Tuple2<String, String>> stream2 = JavaTestUtils.attachTestInputStream(
-            ssc, stringStringKVStream2, 1);
+        ssc, stringStringKVStream2, 1);
     JavaPairDStream<String, String> pairStream2 = JavaPairDStream.fromJavaDStream(stream2);
 
     JavaPairDStream<String, Tuple2<String, String>> joined = pairStream1.transformWith(
         pairStream2,
-        new Function3 <
+        new Function3<
             JavaPairRDD<String, String>,
             JavaPairRDD<String, String>,
             Time,
             JavaPairRDD<String, Tuple2<String, String>>
           >() {
-          @Override public JavaPairRDD<String, Tuple2<String, String>> call(
+          @Override
+          public JavaPairRDD<String, Tuple2<String, String>> call(
               JavaPairRDD<String, String> rdd1,
               JavaPairRDD<String, String> rdd2,
               Time time
-            ) throws Exception {
+          ) throws Exception {
             return rdd1.join(rdd2);
           }
         }
@@ -475,8 +481,8 @@ public class JavaAPISuite implements Serializable {
     List<List<Tuple2<String, Tuple2<String, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
-
   }
+
 
   @Test
   public void testVariousTransformWith() {
@@ -566,7 +572,6 @@ public class JavaAPISuite implements Serializable {
         }
     );
 
-
     JavaPairDStream<Double, Double> pairTransformed4 = pairStream1.transformWith(
         pairStream2,
         new Function3<JavaPairRDD<String, Integer>, JavaPairRDD<Double, Character>, Time, JavaPairRDD<Double, Double>>() {
@@ -578,7 +583,74 @@ public class JavaAPISuite implements Serializable {
     );
   }
 
-    @Test
+  @Test
+  public void testStreamingContextTransform(){
+    List<List<Integer>> stream1input = Arrays.asList(
+        Arrays.asList(1),
+        Arrays.asList(2)
+    );
+
+    List<List<Integer>> stream2input = Arrays.asList(
+        Arrays.asList(3),
+        Arrays.asList(4)
+    );
+
+    List<List<Tuple2<Integer, String>>> pairStream1input = Arrays.asList(
+        Arrays.asList(new Tuple2<Integer, String>(1, "x")),
+        Arrays.asList(new Tuple2<Integer, String>(2, "y"))
+    );
+
+    List<List<Tuple2<Integer, Tuple2<Integer, String>>>> expected = Arrays.asList(
+        Arrays.asList(new Tuple2<Integer, Tuple2<Integer, String>>(1, new Tuple2<Integer, String>(1, "x"))),
+        Arrays.asList(new Tuple2<Integer, Tuple2<Integer, String>>(2, new Tuple2<Integer, String>(2, "y")))
+    );
+
+    JavaDStream<Integer> stream1 = JavaTestUtils.attachTestInputStream(ssc, stream1input, 1);
+    JavaDStream<Integer> stream2 = JavaTestUtils.attachTestInputStream(ssc, stream2input, 1);
+    JavaPairDStream<Integer, String> pairStream1 = JavaPairDStream.fromJavaDStream(
+        JavaTestUtils.attachTestInputStream(ssc, pairStream1input, 1));
+
+    List<JavaDStream<?>> listOfDStreams1 = Arrays.<JavaDStream<?>>asList(stream1, stream2);
+
+    // This is just to test whether this transform to JavaStream compiles
+    JavaDStream<Long> transformed1 = ssc.transform(
+      listOfDStreams1,
+      new Function2<List<JavaRDD<?>>, Time, JavaRDD<Long>>() {
+        public JavaRDD<Long> call(List<JavaRDD<?>> listOfRDDs, Time time) {
+          assert(listOfRDDs.size() == 2);
+          return null;
+        }
+      }
+    );
+
+    List<JavaDStream<?>> listOfDStreams2 =
+        Arrays.<JavaDStream<?>>asList(stream1, stream2, pairStream1.toJavaDStream());
+
+    JavaPairDStream<Integer, Tuple2<Integer, String>> transformed2 = ssc.transform(
+      listOfDStreams2,
+      new Function2<List<JavaRDD<?>>, Time, JavaPairRDD<Integer, Tuple2<Integer, String>>>() {
+        public JavaPairRDD<Integer, Tuple2<Integer, String>> call(List<JavaRDD<?>> listOfRDDs, Time time) {
+          assert(listOfRDDs.size() == 3);
+          JavaRDD<Integer> rdd1 = (JavaRDD<Integer>)listOfRDDs.get(0);
+          JavaRDD<Integer> rdd2 = (JavaRDD<Integer>)listOfRDDs.get(1);
+          JavaRDD<Tuple2<Integer, String>> rdd3 = (JavaRDD<Tuple2<Integer, String>>)listOfRDDs.get(2);
+          JavaPairRDD<Integer, String> prdd3 = JavaPairRDD.fromJavaRDD(rdd3);
+          PairFunction<Integer, Integer, Integer> mapToTuple = new PairFunction<Integer, Integer, Integer>() {
+            @Override
+            public Tuple2<Integer, Integer> call(Integer i) throws Exception {
+              return new Tuple2<Integer, Integer>(i, i);
+            }
+          };
+          return rdd1.union(rdd2).map(mapToTuple).join(prdd3);
+        }
+      }
+    );
+    JavaTestUtils.attachTestOutputStream(transformed2);
+    List<List<Tuple2<Integer, Tuple2<Integer, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    Assert.assertEquals(expected, result);
+  }
+
+  @Test
   public void testFlatMap() {
     List<List<String>> inputData = Arrays.asList(
         Arrays.asList("go", "giants"),
