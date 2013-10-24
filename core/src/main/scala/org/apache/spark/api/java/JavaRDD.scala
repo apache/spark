@@ -41,8 +41,16 @@ JavaRDDLike[T, JavaRDD[T]] {
 
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+   * This method blocks until all blocks are deleted.
    */
   def unpersist(): JavaRDD[T] = wrapRDD(rdd.unpersist())
+
+  /**
+   * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+   *
+   * @param blocking Whether to block until all blocks are deleted.
+   */
+  def unpersist(blocking: Boolean): JavaRDD[T] = wrapRDD(rdd.unpersist(blocking))
 
   // Transformations (return a new RDD)
 
