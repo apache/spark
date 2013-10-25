@@ -99,7 +99,7 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
     val poolName = listener.stageIdToPool.get(s.stageId)
 
     val nameLink =
-      <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(),s.stageId)}>{s.toString}</a>
+      <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(),s.stageId)}>{s.name}</a>
     val description = listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
