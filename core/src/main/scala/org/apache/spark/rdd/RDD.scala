@@ -266,6 +266,19 @@ abstract class RDD[T: ClassManifest](
   def distinct(): RDD[T] = distinct(partitions.size)
 
   /**
+   * Return a new RDD that has exactly numPartitions partitions.
+   *
+   * Can increase or decrease the level of parallelism in this RDD. Internally, this uses
+   * a shuffle to redistribute data.
+   *
+   * If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
+   * which can avoid performing a shuffle.
+   */
+  def repartition(numPartitions: Int): RDD[T] = {
+    coalesce(numPartitions, true)
+  }
+
+  /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
    *
    * This results in a narrow dependency, e.g. if you go from 1000 partitions
