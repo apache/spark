@@ -268,7 +268,7 @@ abstract class RDD[T: ClassManifest](
   /**
    * Return a new RDD that has exactly numPartitions partitions.
    *
-   * Used to increase or decrease the level of parallelism in this RDD. This will use
+   * Can increase or decrease the level of parallelism in this RDD. Internally, this uses
    * a shuffle to redistribute data.
    *
    * If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
