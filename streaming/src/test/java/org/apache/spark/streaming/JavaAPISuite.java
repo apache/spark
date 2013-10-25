@@ -186,8 +186,8 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testRepartitionMorePartitions() {
     List<List<Integer>> inputData = Arrays.asList(
-      Arrays.asList(1,2,3,4,5,6,7,8,9,10),
-      Arrays.asList(1,2,3,4,5,6,7,8,9,10));
+      Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+      Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
     JavaDStream stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 2);
     JavaDStream repartitioned = stream.repartition(4);
     JavaTestUtils.attachTestOutputStream(repartitioned);
@@ -203,8 +203,8 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testRepartitionFewerPartitions() {
     List<List<Integer>> inputData = Arrays.asList(
-      Arrays.asList(1,2,3,4,5,6,7,8,9,10),
-      Arrays.asList(1,2,3,4,5,6,7,8,9,10));
+      Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
+      Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
     JavaDStream stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 4);
     JavaDStream repartitioned = stream.repartition(2);
     JavaTestUtils.attachTestOutputStream(repartitioned);
