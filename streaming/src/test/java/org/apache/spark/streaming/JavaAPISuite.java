@@ -193,7 +193,7 @@ public class JavaAPISuite implements Serializable {
     JavaTestUtils.attachTestOutputStream(repartitioned);
     List<List<List<Integer>>> result = JavaTestUtils.runStreamsWithPartitions(ssc, 2, 2);
     Assert.assertEquals(2, result.size());
-    for ( List<List<Integer>> rdd : result) {
+    for (List<List<Integer>> rdd : result) {
       Assert.assertEquals(4, rdd.size());
       Assert.assertEquals(
         10, rdd.get(0).size() + rdd.get(1).size() + rdd.get(2).size() + rdd.get(3).size());
@@ -210,7 +210,7 @@ public class JavaAPISuite implements Serializable {
     JavaTestUtils.attachTestOutputStream(repartitioned);
     List<List<List<Integer>>> result = JavaTestUtils.runStreamsWithPartitions(ssc, 2, 2);
     Assert.assertEquals(2, result.size());
-    for ( List<List<Integer>> rdd : result) {
+    for (List<List<Integer>> rdd : result) {
       Assert.assertEquals(2, rdd.size());
       Assert.assertEquals(10, rdd.get(0).size() + rdd.get(1).size());
     }
