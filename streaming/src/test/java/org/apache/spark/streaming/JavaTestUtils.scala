@@ -54,8 +54,7 @@ trait JavaTestBase extends TestSuiteBase {
   {
     implicit val cm: ClassManifest[T] =
       implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
-    val ostream = new TestOutputStream(dstream.dstream,
-      new ArrayBuffer[Seq[T]] with SynchronizedBuffer[Seq[T]])
+    val ostream = new TestOutputStreamWithPartitions(dstream.dstream)
     dstream.dstream.ssc.registerOutputStream(ostream)
   }
 
