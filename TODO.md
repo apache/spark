@@ -11,9 +11,11 @@
 2. Allow R packages to be loaded into the run time. Also consider if we need to extend
 this for any given R file to be sourced in the worker.
 3. Use long-running R worker daemons to avoid forking a process each time.
+4. Memoizations of frequently queried vals in RDD, such as numPartitions.
 
 ## Longer term wishlist
 
 1. RRDDs are distributed lists. Extend them to create a distributed data frame.
 2. Integration with ML Lib to run ML algorithms from R.
 3. Profile serialization overhead and see if there is anything better we can do.
+4. Reduce code duplication between SparkR and PySpark3. 4. .

@@ -127,6 +127,23 @@ setMethod("take",
             resList
           })
 
+############ Shuffle Functions ############
+
+# TODO: add bypass_serializer: collect() shoudln't unserialize data, waste of work
+hashPairwiseRRDDToEnvir <- function(rrdd, hashFunc) {
+  res <- new.env()
+  collected <- collect(rrdd)
+  for (tuple in collected) {
+    hashVal = as.character(hashFunc(tuple[[1]]))
+    acc <- res[[hashVal]]
+    acc[[length(acc) + 1]] <- tuple
+    res[[hashVal]] <- acc
+  }
+  res # res[[bucket]] = list(list(key1, val1), ...)
+}
+serializedHashFunc <- serialize(hashPairwiseRRDDToEnvir, connection = NULL, ascii = TRUE)
+serializedHashFuncBytes <- .jarray(serializedFunc)
+
 setGeneric("partitionBy",
            function(rrdd, numPartitions, partitionFunc) {
              standardGeneric("partitionBy")
@@ -134,8 +151,13 @@ setGeneric("partitionBy",
 setMethod("partitionBy",
           signature(rrdd = "RRDD", numPartitions = "integer", partitionFunc = "function"),
           function(rrdd, numPartitions, partitionFunc) {
-            // TODO: implement me:
-            // create a new environment, add each key-val to the environment
-            // serialize the :qa
+            # TODO: implement me
 
+            pairwiseRRDD <- new(J("org.apache.spark.api.r.PairwiseRRDD"),
+                                rrdd@jrdd$rdd(), # RDD[(Array[Byte], Array[Byte])]
+                                serializedHashFuncBytes,
+                                rrdd@serialized)
+
+            # TODO: next step: call partitionBy on its jrdd
+            # .jcall(pairwiseRRDD, )
           })
