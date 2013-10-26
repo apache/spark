@@ -1,33 +1,132 @@
 package org.apache.spark.api.r
 
 import java.io._
-import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
-import org.apache.spark.util.Utils
-
 import scala.io.Source
 import scala.collection.JavaConversions._
-
 import org.apache.spark._
+import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.PipedRDD
+import org.apache.spark.util.Utils
 
-//class PairwiseRRDD[T: ClassManifest](
-//    parent: RDD[T],
-//    func: Array[Byte],
-//    dataSerialized: Boolean,
-//    functionDependencies: Array[Byte])
-//  extends RDD[(Int, Array[Byte])](parent) with Logging {
-//
-//  override def getPartitions = parent.partitions
-//
-//  override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
-//
-//    Nil.asInstanceOf[Iterator[Array[Byte]] // FIXME
-//
-//  }
-//
-//}
 
+/**
+ * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from R.
+ * This is used by SparkR's shuffle operations.
+ */
+private class PairwiseRRDD(
+    parent: RDD[(Array[Byte], Array[Byte])],
+    hashFunc: Array[Byte],
+    dataSerialized: Boolean)
+  extends RDD[(Array[Byte], Array[Byte])](parent) {
+
+  override def getPartitions = parent.partitions
+
+  override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
+    // TODO: implement me
+//    parent.iterator(split, context).grouped(2).map {
+//      case Seq(keyBytes, valBytes) => (keyBytes, valBytes)
+//      case x => throw new SparkContext("PairwiseRRDD: un")
+//    }
+
+    val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+
+    val pb = SparkRHelper.rPairwiseWorkerProcessBuilder
+
+    val proc = pb.start()
+    val env = SparkEnv.get
+
+    val tempDir = Utils.getLocalDir
+    val tempFile =  File.createTempFile("rSpark", "out", new File(tempDir))
+    val tempFileName = tempFile.getAbsolutePath
+
+    // Start a thread to print the process's stderr to ours
+    new Thread("stderr reader for R") {
+      override def run() {
+        for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
+          System.err.println(line)
+        }
+      }
+    }.start()
+
+    // Start a thread to feed the process input from our parent's iterator
+    new Thread("stdin writer for R") {
+      override def run() {
+        SparkEnv.set(env)
+        val stream = new BufferedOutputStream(proc.getOutputStream, bufferSize)
+        val printOut = new PrintStream(stream)
+        val dataOut = new DataOutputStream(stream)
+
+        printOut.println(tempFileName)
+
+        dataOut.writeInt(hashFunc.length)
+        dataOut.write(hashFunc, 0, hashFunc.length)
+
+        dataOut.writeInt(if(dataSerialized) 1 else 0)
+
+        for (elem <- firstParent[(Array[Byte], Array[Byte])].iterator(split, context)) {
+          if (dataSerialized) {
+            val elemArr = elem.asInstanceOf[Array[Byte]]
+            dataOut.writeInt(elemArr.length)
+            dataOut.write(elemArr, 0, elemArr.length)
+          } else {
+            printOut.println(elem)
+          }
+        }
+        stream.close()
+      }
+    }.start()
+
+    // Return an iterator that read lines from the process's stdout
+    val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
+    val stdOutFileName = inputStream.readLine().trim()
+
+    val dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
+
+    return new Iterator[Array[Byte]] {
+      def next(): Array[Byte] = {
+        val obj = _nextObj
+        if (hasNext) {
+          _nextObj = read()
+        }
+        obj
+      }
+
+      private def read(): Array[Byte] = {
+        try {
+          val length = dataStream.readInt()
+          // logError("READ length " + length)
+          // val lengthStr = Option(dataStream.readLine()).getOrElse("0").trim()
+          // var length = 0
+          // try {
+          //   length = lengthStr.toInt
+          // } catch {
+          //   case nfe: NumberFormatException =>
+          // }
+
+          length match {
+            case length if length > 0 =>
+              val obj = new Array[Byte](length)
+              dataStream.read(obj, 0, length)
+              obj
+            case _ =>
+              new Array[Byte](0)
+          }
+        } catch {
+          case eof: EOFException => {
+            throw new SparkException("R worker exited unexpectedly (crashed)", eof)
+          }
+          case e => throw e
+        }
+      }
+      var _nextObj = read()
+
+      def hasNext = _nextObj.length != 0
+    }
+  }
+
+  lazy val asJavaPairRDD : JavaPairRDD[Array[Byte], Array[Byte]] = JavaPairRDD.fromRDD(this)
+
+}
 
 class RRDD[T: ClassManifest](
     parent: RDD[T],
@@ -44,14 +143,7 @@ class RRDD[T: ClassManifest](
     // val depsFileName = new File(depsFile).getName
     // val localDepsFile = SparkFiles.get(depsFileName)
 
-    val rCommand = "Rscript"
-    val rOptions = "--vanilla"
-    val sparkHome = Option(new ProcessBuilder().environment().get("SPARK_HOME")) match {
-      case Some(path) => path
-      case None => sys.error("SPARK_HOME not set as an environment variable.")
-    }
-    val rExecScript = sparkHome + "/R/pkg/inst/worker/worker.R"
-    val pb = new ProcessBuilder(List(rCommand, rOptions, rExecScript))
+    val pb = SparkRHelper.rWorkerProcessBuilder
 
     val proc = pb.start()
     val env = SparkEnv.get
@@ -172,6 +264,35 @@ object RRDD {
   def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Array[Byte]]]): JavaRDD[(Array[Byte], Array[Byte])] = {
     val keyValPairs: Seq[(Array[Byte], Array[Byte])] = arr.map(tuple => (tuple(0), tuple(1)))
     JavaRDD.fromRDD(jsc.sc.parallelize(keyValPairs, keyValPairs.length))
+  }
+
+}
+
+object SparkRHelper {
+
+  // FIXME: my eyes bleed...
+
+  lazy val rWorkerProcessBuilder = {
+    val rCommand = "Rscript"
+    val rOptions = "--vanilla"
+    val sparkHome = Option(new ProcessBuilder().environment().get("SPARK_HOME")) match {
+      case Some(path) => path
+      case None => sys.error("SPARK_HOME not set as an environment variable.")
+    }
+    val rExecScript = sparkHome + "/R/pkg/inst/worker/worker.R"
+    new ProcessBuilder(List(rCommand, rOptions, rExecScript))
+  }
+
+
+  lazy val rPairwiseWorkerProcessBuilder = {
+    val rCommand = "Rscript"
+    val rOptions = "--vanilla"
+    val sparkHome = Option(new ProcessBuilder().environment().get("SPARK_HOME")) match {
+      case Some(path) => path
+      case None => sys.error("SPARK_HOME not set as an environment variable.")
+    }
+    val rExecScript = sparkHome + "/R/pkg/inst/worker/pairwiseWorker.R"
+    new ProcessBuilder(List(rCommand, rOptions, rExecScript))
   }
 
 }
