@@ -6,9 +6,13 @@ package org.apache.spark.graph
  * the set of adjacent neighbors when running a neighborhood query.
  */
 sealed abstract class EdgeDirection {
+  /**
+   * Reverse the direction of an edge.  An in becomes out, 
+   * out becomes in and both remains both.
+   */
   def reverse: EdgeDirection = this match {
-    case EdgeDirection.In   => EdgeDirection.In
-    case EdgeDirection.Out  => EdgeDirection.Out
+    case EdgeDirection.In   => EdgeDirection.Out
+    case EdgeDirection.Out  => EdgeDirection.In
     case EdgeDirection.Both => EdgeDirection.Both
   }
 }
