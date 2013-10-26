@@ -2,9 +2,8 @@
 
 ## Functions to support in RDD
 
-1. `head` which is called `take` in Spark.
-2. `reduceByKey` and `groupByKey` -- Depends on implementing partitioner and PairRDD
-3. Similar to `stats.py` in Python, add support for mean, median, stdev etc.
+1. `reduceByKey` and `groupByKey` -- Depends on implementing partitioner and PairRDD
+2. Similar to `stats.py` in Python, add support for mean, median, stdev etc.
 
 ## Other features to support
 
