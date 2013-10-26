@@ -633,6 +633,20 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     Result(true, shouldReplay)
   }
 
+  def addAllClasspath(args: Seq[String]): Unit = {
+    var added = false
+    var totalClasspath = ""
+    for (arg <- args) {
+      val f = File(arg).normalize
+      if (f.exists) {
+        added = true
+        addedClasspath = ClassPath.join(addedClasspath, f.path)
+        totalClasspath = ClassPath.join(settings.classpath.value, addedClasspath)
+      }
+    }
+    if (added) replay()
+  }
+
   def addClasspath(arg: String): Unit = {
     val f = File(arg).normalize
     if (f.exists) {

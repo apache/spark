@@ -60,6 +60,10 @@ private[spark] object CoarseGrainedClusterMessages {
 
   case object StopDriver extends CoarseGrainedClusterMessage
 
+  case object StopExecutor extends CoarseGrainedClusterMessage
+
+  case object StopExecutors extends CoarseGrainedClusterMessage
+
   case class RemoveExecutor(executorId: String, reason: String) extends CoarseGrainedClusterMessage
 
 }

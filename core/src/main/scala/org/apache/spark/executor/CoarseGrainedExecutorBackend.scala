@@ -80,6 +80,11 @@ private[spark] class CoarseGrainedExecutorBackend(
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       logError("Driver terminated or disconnected! Shutting down.")
       System.exit(1)
+
+    case StopExecutor =>
+      logInfo("Driver commanded a shutdown")
+      context.stop(self)
+      context.system.shutdown()
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
