@@ -19,7 +19,6 @@ package org.apache.spark.api.java.function;
 
 import scala.reflect.ClassManifest;
 import scala.reflect.ClassManifest$;
-import scala.runtime.AbstractFunction3;
 
 import java.io.Serializable;
 
@@ -35,4 +34,3 @@ public abstract class Function3<T1, T2, T3, R> extends WrappedFunction3<T1, T2, 
     return (ClassManifest<R>) ClassManifest$.MODULE$.fromClass(Object.class);
   }
 }
-

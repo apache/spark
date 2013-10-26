@@ -24,7 +24,8 @@ import scala.runtime.AbstractFunction3
  * apply() method as call() and declare that it can throw Exception (since AbstractFunction3.apply
  * isn't marked to allow that).
  */
-private[spark] abstract class WrappedFunction3[T1, T2, T3, R] extends AbstractFunction3[T1, T2, T3, R] {
+private[spark] abstract class WrappedFunction3[T1, T2, T3, R]
+  extends AbstractFunction3[T1, T2, T3, R] {
   @throws(classOf[Exception])
   def call(t1: T1, t2: T2, t3: T3): R
 
