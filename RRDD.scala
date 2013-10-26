@@ -11,6 +11,24 @@ import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PipedRDD
 
+//class PairwiseRRDD[T: ClassManifest](
+//    parent: RDD[T],
+//    func: Array[Byte],
+//    dataSerialized: Boolean,
+//    functionDependencies: Array[Byte])
+//  extends RDD[(Int, Array[Byte])](parent) with Logging {
+//
+//  override def getPartitions = parent.partitions
+//
+//  override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
+//
+//    Nil.asInstanceOf[Iterator[Array[Byte]] // FIXME
+//
+//  }
+//
+//}
+
+
 class RRDD[T: ClassManifest](
     parent: RDD[T],
     func: Array[Byte],
@@ -145,6 +163,15 @@ object RRDD {
    */
   def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Byte]]): JavaRDD[Array[Byte]] = {
     JavaRDD.fromRDD(jsc.sc.parallelize(arr, arr.length))
+  }
+
+  /**
+   * Create an RRDD given a sequence of 2-tuples of byte arrays (key-val collections). Used to create RRDD when
+   * `parallelize` is called from R.
+   */
+  def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Array[Byte]]]): JavaRDD[(Array[Byte], Array[Byte])] = {
+    val keyValPairs: Seq[(Array[Byte], Array[Byte])] = arr.map(tuple => (tuple(0), tuple(1)))
+    JavaRDD.fromRDD(jsc.sc.parallelize(keyValPairs, keyValPairs.length))
   }
 
 }
