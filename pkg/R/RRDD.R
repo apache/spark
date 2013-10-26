@@ -126,3 +126,16 @@ setMethod("take",
             }
             resList
           })
+
+setGeneric("partitionBy",
+           function(rrdd, numPartitions, partitionFunc) {
+             standardGeneric("partitionBy")
+           })
+setMethod("partitionBy",
+          signature(rrdd = "RRDD", numPartitions = "integer", partitionFunc = "function"),
+          function(rrdd, numPartitions, partitionFunc) {
+            // TODO: implement me:
+            // create a new environment, add each key-val to the environment
+            // serialize the :qa
+
+          })

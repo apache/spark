@@ -18,33 +18,51 @@ textFile <- function(jsc, name, minSplits=NULL) {
 
 # Distribute a local R homogeneous list to form an RRDD[Array[Byte]]. If a
 # vector is passed as `coll', as.list() will be called on it to convert it to a
-# list.
-# TODO: bound/safeguard numSlices
-# TODO: unit tests for if the split works for all primitives
-# TODO: support matrix, data frame, etc
-parallelize <- function(jsc, coll, numSlices = 1) {
+# list. Use pairwise == TRUE if coll is a collection of homogeneous key-val
+# pairs.
+parallelize <- function(jsc, coll, numSlices = 1, pairwise = FALSE) {
+  # TODO: bound/safeguard numSlices
+  # TODO: unit tests for if the split works for all primitives
+  # TODO: support matrix, data frame, etc
   if (!is.list(coll)) {
     if (!is.vector(coll)) {
       message(paste("context.R: parallelize() currently only supports lists and vectors.",
                     "Calling as.list() to coerce coll into a list."))
     }
-    coll = as.list(coll)
+    coll <- as.list(coll)
   }
 
-  if (numSlices > length(coll)) {
-    message(paste("context.R: parallelize: numSlices larger than coll's length",
-                  "; defaulting numSlices to the length.", sep=""))
-    numSlices = length(coll)
-  }
+  if (numSlices > length(coll))
+    numSlices <- length(coll)
 
   sliceLen <- length(coll) %/% numSlices
   slices <- split(coll, rep(1:(numSlices + 1), each = sliceLen)[1:length(coll)])
 
-  # vector of raws
-  serializedSlices <- lapply(slices, serialize, connection = NULL)
-  # a java array of byte[]; in Scala, viewed as Array[Array[Byte]]
-  javaSerializedSlices <- .jarray(lapply(serializedSlices, .jarray), contents.class = "[B")
-  # JavaRDD[Array[Byte]]
+  # serialize each slice; obtain a list of raws, or a list of lists (2-tuples) of raws
+  serializedSlices <- if (!pairwise) {
+    lapply(slices, serialize, connection = NULL)
+  } else {
+    nestedSerialize <- function(tuple) {
+      keyRaw <- serialize(tuple[[1]], NULL)
+      valRaw <- serialize(tuple[[2]], NULL)
+      list(keyRaw, valRaw)
+    }
+    lapply(slices, nestedSerialize)
+  }
+
+  # if !pairwise, Array[Array[Byte]]; otherwise, one more nested layer
+  javaSerializedSlices <- if (!pairwise) {
+    .jarray(lapply(serializedSlices, .jarray), contents.class = "[B")
+  } else {
+    nestedJArray <- function(tuple) {
+      keyByteJArray <- .jarray(tuple[[1]], contents.class = "B")
+      valByteJArray <- .jarray(tuple[[2]], contents.class = "B")
+      .jarray(list(keyByteJArray, valByteJArray), contents.class = "[B")
+    }
+    .jarray(lapply(serializedSlices, nestedJArray), contents.class = "[[B")
+  }
+
+  # JavaRDD[Array[Byte]], or JavaRDD[(Array[Byte], Array[Byte])]
   jrdd <- .jcall("org/apache/spark/api/r/RRDD",
                  "Lorg/apache/spark/api/java/JavaRDD;",
                  "createRDDFromArray",
