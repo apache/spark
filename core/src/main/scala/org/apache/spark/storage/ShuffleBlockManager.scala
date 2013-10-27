@@ -63,8 +63,12 @@ class ShuffleBlockManager(blockManager: BlockManager) {
         val fileId = getUnusedFileId()
         val writers = Array.tabulate[BlockObjectWriter](numBuckets) { bucketId =>
           val blockId = ShuffleBlockId(shuffleId, mapId, bucketId)
-          val filename = physicalFileName(shuffleId, bucketId, fileId)
-          blockManager.getDiskWriter(blockId, filename, serializer, bufferSize)
+          if (consolidateShuffleFiles) {
+            val filename = physicalFileName(shuffleId, bucketId, fileId)
+            blockManager.getDiskWriter(blockId, filename, serializer, bufferSize)
+          } else {
+            blockManager.getDiskWriter(blockId, blockId.name, serializer, bufferSize)
+          }
         }
         new ShuffleWriterGroup(mapId, fileId, writers)
       }
@@ -81,8 +85,9 @@ class ShuffleBlockManager(blockManager: BlockManager) {
   }
 
   private def recycleFileId(fileId: Int) {
-    if (!consolidateShuffleFiles) { return } // ensures we always generate new file id
-    unusedFileIds.add(fileId)
+    if (consolidateShuffleFiles) {
+      unusedFileIds.add(fileId)
+    }
   }
 
   private def physicalFileName(shuffleId: Int, bucketId: Int, fileId: Int) = {
