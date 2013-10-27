@@ -37,6 +37,7 @@ import org.apache.spark.serializer.{DeserializationStream, SerializationStream, 
 import org.apache.spark.deploy.SparkHadoopUtil
 import java.nio.ByteBuffer
 import org.apache.spark.{SparkEnv, SparkException, Logging}
+import java.util.ConcurrentModificationException
 
 
 /**
@@ -818,5 +819,14 @@ private[spark] object Utils extends Logging {
 
     // Nothing else to guard against ?
     hashAbs
+  }
+
+  /** Returns a copy of the system properties that is thread-safe to iterator over. */
+  def getSystemProperties(): Map[String, String] = {
+    try {
+      return System.getProperties().toMap[String, String]
+    } catch {
+      case e: ConcurrentModificationException => getSystemProperties()
+    }
   }
 }
