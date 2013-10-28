@@ -167,8 +167,17 @@ object Analytics extends Logging {
    * and return an RDD with the vertex value containing the
    * lowest vertex id in the connected component containing
    * that vertex.
+   *
+   * @tparam VD the vertex attribute type (discarded in the computation)
+   * @tparam ED the edge attribute type (preserved in the computation)
+   *
+   * @param graph the graph for which to compute the connected components 
+   *
+   * @return a graph with vertex attributes containing the smallest vertex
+   * in each connected component
    */
-  def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]) = {
+  def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]): 
+    Graph[Vid, ED] = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
 
     def sendMessage(id: Vid, edge: EdgeTriplet[Vid, ED]): Option[Vid] = {
@@ -179,21 +188,27 @@ object Analytics extends Logging {
     }
 
     val initialMessage = Long.MaxValue
-    Pregel(ccGraph, initialMessage)(
+    Pregel(ccGraph, initialMessage, EdgeDirection.Both)(
       (id, attr, msg) => math.min(attr, msg),
       sendMessage, 
       (a,b) => math.min(a,b)
       )
 
+    /**
+     * Originally this was implemented using the GraphLab abstraction but with
+     * support for message computation along all edge directions the pregel
+     * abstraction is sufficient 
+     */
     // GraphLab(ccGraph, gatherDirection = EdgeDirection.Both, scatterDirection = EdgeDirection.Both)(
     //   (me_id, edge) => edge.otherVertexAttr(me_id), // gather
     //   (a: Vid, b: Vid) => math.min(a, b), // merge
     //   (id, data, a: Option[Vid]) => math.min(data, a.getOrElse(Long.MaxValue)), // apply
     //   (me_id, edge) => (edge.vertexAttr(me_id) < edge.otherVertexAttr(me_id))
     // )
+  } // end of connectedComponents 
 
-  }
   
+
   def main(args: Array[String]) = {
     val host = args(0)
     val taskType = args(1)
