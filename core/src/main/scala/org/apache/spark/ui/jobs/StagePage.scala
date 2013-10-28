@@ -83,8 +83,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
         </div>
 
       val taskHeaders: Seq[String] =
-        Seq("Task ID", "Status", "Locality Level", "Executor", "Launch Time", "Duration") ++
-        Seq("GC Time") ++
+        Seq("Task Index", "Task ID", "Status", "Locality Level", "Executor", "Launch Time") ++
+        Seq("Duration", "GC Time") ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
         Seq("Errors")
@@ -153,6 +153,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
 
     <tr>
+      <td>{info.index}</td>
       <td>{info.taskId}</td>
       <td>{info.status}</td>
       <td>{info.taskLocality}</td>
