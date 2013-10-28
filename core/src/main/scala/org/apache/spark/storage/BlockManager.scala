@@ -523,7 +523,9 @@ private[spark] class BlockManager(
     val file = diskBlockManager.createBlockFile(blockId, filename, allowAppending =  true)
     val writer = new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream)
     writer.registerCloseEventHandler(() => {
-      diskBlockManager.mapBlockToFileSegment(blockId, writer.fileSegment())
+      if (shuffleBlockManager.consolidateShuffleFiles) {
+        diskBlockManager.mapBlockToFileSegment(blockId, writer.fileSegment())
+      }
       val myInfo = new BlockInfo(StorageLevel.DISK_ONLY, false)
       blockInfo.put(blockId, myInfo)
       myInfo.markReady(writer.fileSegment().length)
