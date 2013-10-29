@@ -12,10 +12,11 @@ import org.apache.spark.util.ClosureCleaner
  * manipulate the data associated with vertices and edges as well as the
  * underlying structure.  Like Spark RDDs, the graph is a functional
  * data-structure in which mutating operations return new graphs.
+ * 
+ * @note The majority of the graph operations are implemented in `GraphOps`.
  *
- * @tparam VD The type of object associated with each vertex.
- *
- * @tparam ED The type of object associated with each edge
+ * @tparam VD the vertex attribute type
+ * @tparam ED the edge attribute type 
  */
 abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
