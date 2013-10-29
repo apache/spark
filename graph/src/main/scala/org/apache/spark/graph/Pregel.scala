@@ -8,7 +8,7 @@ import org.apache.spark.rdd.RDD
  * message-passing API.  However, unlike the original Pregel API the
  * GraphX pregel API factors the sendMessage computation over edges,
  * enables the message sending computation to read both vertex
- * attributes, and finally contrains messages to the graph structure.
+ * attributes, and finally constrains messages to the graph structure.
  * These changes allow for substantially more efficient distributed
  * execution while also exposing greater flexibility for graph based
  * computation.
