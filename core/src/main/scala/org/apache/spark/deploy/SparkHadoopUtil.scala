@@ -22,6 +22,8 @@ import org.apache.hadoop.mapred.JobConf
 
 import com.google.common.collect.MapMaker
 
+import org.apache.spark.SparkException
+
 
 /**
  * Contains util methods to interact with Hadoop from Spark.
@@ -46,4 +48,23 @@ class SparkHadoopUtil {
 
   def isYarnMode(): Boolean = { false }
 
+}
+  
+object SparkHadoopUtil {
+  private val hadoop = { 
+    val yarnMode = java.lang.Boolean.valueOf(System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
+    if (yarnMode) {
+      try {
+        Class.forName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil").newInstance.asInstanceOf[SparkHadoopUtil]
+      } catch {
+       case th: Throwable => throw new SparkException("Unable to load YARN support", th)
+      }
+    } else {
+      new SparkHadoopUtil
+    }
+  }
+  
+  def get: SparkHadoopUtil = {
+    hadoop
+  }
 }
