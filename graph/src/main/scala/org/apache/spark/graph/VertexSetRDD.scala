@@ -744,8 +744,9 @@ object VertexSetRDD {
 
 
   /**
-   * Construct and index of the unique vertex ids.  This can be used
-   * as an index when building a vertex set.
+   * Construct an index of the unique vertices.  The resulting index
+   * can be used to build VertexSets over subsets of the vertices in 
+   * the input.
    */
   def makeIndex(keys: RDD[Vid], 
     partitioner: Option[Partitioner] = None): VertexSetIndex = {
