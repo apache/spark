@@ -8,8 +8,17 @@ package org.apache.spark.graph
  * @tparam ED type of the edge attribute
  */
 case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] (
+  /**
+   * The vertex id of the source vertex
+   */
   var srcId: Vid = 0,
+  /**
+   * The vertex id of the target vertex.
+   */
   var dstId: Vid = 0,
+  /**
+   * The attribute associated with the edge.
+   */ 
   var attr: ED = nullValue[ED]) {
 
   /**
@@ -23,10 +32,12 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
 
 
   /**
-   * Return the relative direction of the edge to the corresponding vertex.
+   * Return the relative direction of the edge to the corresponding
+   * vertex.
    *
    * @param vid the id of one of the two vertices in the edge.
-   * @return the relative direction of the edge to the corresponding vertex.
+   * @return the relative direction of the edge to the corresponding
+   * vertex.
    */
   def relativeDirection(vid: Vid): EdgeDirection =
     if (vid == srcId) EdgeDirection.Out else { assert(vid == dstId); EdgeDirection.In }

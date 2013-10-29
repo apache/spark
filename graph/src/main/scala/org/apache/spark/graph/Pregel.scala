@@ -5,18 +5,17 @@ import org.apache.spark.rdd.RDD
 
 /**
  * This object implements a Pregel-like bulk-synchronous
- * message-passing API.  However, unlike the original Pregel API
- * the GraphX pregel API factors the sendMessage computation over
- * edges, enables the message sending computation to read both
- * vertex attributes, and finally contrains messages to the graph
- * structure.  These changes allow for substantially more efficient
- * distributed execution while also exposing greater flexibility
- * for graph based computation.  
+ * message-passing API.  However, unlike the original Pregel API the
+ * GraphX pregel API factors the sendMessage computation over edges,
+ * enables the message sending computation to read both vertex
+ * attributes, and finally contrains messages to the graph structure.
+ * These changes allow for substantially more efficient distributed
+ * execution while also exposing greater flexibility for graph based
+ * computation.
  *
  * This object present several variants of the bulk synchronous
  * execution that differ only in the edge direction along which
- * messages are sent and whether a fixed number of iterations 
- * is used. 
+ * messages are sent and whether a fixed number of iterations is used.
  *
  * @example We can use the Pregel abstraction to implement PageRank
  * {{{
@@ -46,18 +45,18 @@ object Pregel {
 
 
   /**
-   * Execute a Pregel-like iterative vertex-parallel abstraction.  
-   * The user-defined vertex-program `vprog` is executed in parallel
-   * on each vertex receiving any inbound messages and computing a new
+   * Execute a Pregel-like iterative vertex-parallel abstraction.  The
+   * user-defined vertex-program `vprog` is executed in parallel on
+   * each vertex receiving any inbound messages and computing a new
    * value for the vertex.  The `sendMsg` function is then invoked on
-   * all out-edges and is used to compute an optional message to the 
-   * destination vertex. The `mergeMsg` function is a commutative 
+   * all out-edges and is used to compute an optional message to the
+   * destination vertex. The `mergeMsg` function is a commutative
    * associative function used to combine messages destined to the
-   * same vertex. 
+   * same vertex.
    *
    * On the first iteration all vertices receive the `initialMsg` and
-   * on subsequent iterations if a vertex does not receive a message then
-   * the vertex-program is not invoked. 
+   * on subsequent iterations if a vertex does not receive a message
+   * then the vertex-program is not invoked.
    *
    * This function iterates a fixed number (`numIter`) of iterations.
    *
@@ -67,24 +66,26 @@ object Pregel {
    *
    * @param graph the input graph. 
    *
-   * @param initialMsg the message each vertex will receive at the 
-   * on the first iteration.
+   * @param initialMsg the message each vertex will receive at the on
+   * the first iteration.
    *
    * @param numIter the number of iterations to run this computation.
    *
-   * @param vprog the user-defined vertex program which runs on each vertex
-   * and receives the inbound message and computes a new vertex value. 
-   * On the first iteration the vertex program is invoked on all vertices
-   * and is passed the default message.  On subsequent iterations the 
-   * vertex program is only invoked on those vertices that receive messages.
+   * @param vprog the user-defined vertex program which runs on each
+   * vertex and receives the inbound message and computes a new vertex
+   * value.  On the first iteration the vertex program is invoked on
+   * all vertices and is passed the default message.  On subsequent
+   * iterations the vertex program is only invoked on those vertices
+   * that receive messages.
    *
-   * @param sendMsg a user supplied function that is applied to out edges
-   * of vertices that received messages in the current iteration. 
+   * @param sendMsg a user supplied function that is applied to out
+   * edges of vertices that received messages in the current
+   * iteration.
    *
-   * @param mergeMsg a user supplied function that takes two incoming messages 
-   * of type A and merges them into a single message of type A. 
-   * ''This function must be commutative and associative and ideally the 
-   * size of A should not increase.''
+   * @param mergeMsg a user supplied function that takes two incoming
+   * messages of type A and merges them into a single message of type
+   * A.  ''This function must be commutative and associative and
+   * ideally the size of A should not increase.''
    *
    * @return the resulting graph at the end of the computation
    *
@@ -100,18 +101,18 @@ object Pregel {
     
 
   /**
-   * Execute a Pregel-like iterative vertex-parallel abstraction.  
-   * The user-defined vertex-program `vprog` is executed in parallel
-   * on each vertex receiving any inbound messages and computing a new
+   * Execute a Pregel-like iterative vertex-parallel abstraction.  The
+   * user-defined vertex-program `vprog` is executed in parallel on
+   * each vertex receiving any inbound messages and computing a new
    * value for the vertex.  The `sendMsg` function is then invoked on
-   * all out-edges and is used to compute an optional message to the 
-   * destination vertex. The `mergeMsg` function is a commutative 
+   * all out-edges and is used to compute an optional message to the
+   * destination vertex. The `mergeMsg` function is a commutative
    * associative function used to combine messages destined to the
-   * same vertex. 
+   * same vertex.
    *
    * On the first iteration all vertices receive the `initialMsg` and
-   * on subsequent iterations if a vertex does not receive a message then
-   * the vertex-program is not invoked. 
+   * on subsequent iterations if a vertex does not receive a message
+   * then the vertex-program is not invoked.
    *
    * This function iterates a fixed number (`numIter`) of iterations.
    *
@@ -121,28 +122,29 @@ object Pregel {
    *
    * @param graph the input graph. 
    *
-   * @param initialMsg the message each vertex will receive at the 
-   * on the first iteration.
+   * @param initialMsg the message each vertex will receive at the on
+   * the first iteration.
    *
    * @param numIter the number of iterations to run this computation.
    * 
-   * @param sendDir the edge direction along which the `sendMsg` function
-   * is invoked.
+   * @param sendDir the edge direction along which the `sendMsg`
+   * function is invoked.
    *
-   * @param vprog the user-defined vertex program which runs on each vertex
-   * and receives the inbound message and computes a new vertex value. 
-   * On the first iteration the vertex program is invoked on all vertices
-   * and is passed the default message.  On subsequent iterations the 
-   * vertex program is only invoked on those vertices that receive messages.
+   * @param vprog the user-defined vertex program which runs on each
+   * vertex and receives the inbound message and computes a new vertex
+   * value.  On the first iteration the vertex program is invoked on
+   * all vertices and is passed the default message.  On subsequent
+   * iterations the vertex program is only invoked on those vertices
+   * that receive messages.
    *
-   * @param sendMsg a user supplied function that is applied to each edge
-   * in the direction `sendDir` adjacent to vertices that received messages
-   * in the current iteration. 
+   * @param sendMsg a user supplied function that is applied to each
+   * edge in the direction `sendDir` adjacent to vertices that
+   * received messages in the current iteration.
    *
-   * @param mergeMsg a user supplied function that takes two incoming messages 
-   * of type A and merges them into a single message of type A. 
-   * ''This function must be commutative and associative and ideally the 
-   * size of A should not increase.''
+   * @param mergeMsg a user supplied function that takes two incoming
+   * messages of type A and merges them into a single message of type
+   * A.  ''This function must be commutative and associative and
+   * ideally the size of A should not increase.''
    *
    * @return the resulting graph at the end of the computation
    *
@@ -174,18 +176,18 @@ object Pregel {
 
 
   /**
-   * Execute a Pregel-like iterative vertex-parallel abstraction.  
-   * The user-defined vertex-program `vprog` is executed in parallel
-   * on each vertex receiving any inbound messages and computing a new
+   * Execute a Pregel-like iterative vertex-parallel abstraction.  The
+   * user-defined vertex-program `vprog` is executed in parallel on
+   * each vertex receiving any inbound messages and computing a new
    * value for the vertex.  The `sendMsg` function is then invoked on
-   * all out-edges and is used to compute an optional message to the 
-   * destination vertex. The `mergeMsg` function is a commutative 
+   * all out-edges and is used to compute an optional message to the
+   * destination vertex. The `mergeMsg` function is a commutative
    * associative function used to combine messages destined to the
-   * same vertex. 
+   * same vertex.
    *
    * On the first iteration all vertices receive the `initialMsg` and
-   * on subsequent iterations if a vertex does not receive a message then
-   * the vertex-program is not invoked. 
+   * on subsequent iterations if a vertex does not receive a message
+   * then the vertex-program is not invoked.
    *
    * This function iterates until there are no remaining messages.
    *
@@ -195,24 +197,26 @@ object Pregel {
    *
    * @param graph the input graph. 
    *
-   * @param initialMsg the message each vertex will receive at the 
-   * on the first iteration.
+   * @param initialMsg the message each vertex will receive at the on
+   * the first iteration.
    *
    * @param numIter the number of iterations to run this computation.
    *
-   * @param vprog the user-defined vertex program which runs on each vertex
-   * and receives the inbound message and computes a new vertex value. 
-   * On the first iteration the vertex program is invoked on all vertices
-   * and is passed the default message.  On subsequent iterations the 
-   * vertex program is only invoked on those vertices that receive messages.
+   * @param vprog the user-defined vertex program which runs on each
+   * vertex and receives the inbound message and computes a new vertex
+   * value.  On the first iteration the vertex program is invoked on
+   * all vertices and is passed the default message.  On subsequent
+   * iterations the vertex program is only invoked on those vertices
+   * that receive messages.
    *
-   * @param sendMsg a user supplied function that is applied to out edges
-   * of vertices that received messages in the current iteration. 
+   * @param sendMsg a user supplied function that is applied to out
+   * edges of vertices that received messages in the current
+   * iteration.
    *
-   * @param mergeMsg a user supplied function that takes two incoming messages 
-   * of type A and merges them into a single message of type A. 
-   * ''This function must be commutative and associative and ideally the 
-   * size of A should not increase.''
+   * @param mergeMsg a user supplied function that takes two incoming
+   * messages of type A and merges them into a single message of type
+   * A.  ''This function must be commutative and associative and
+   * ideally the size of A should not increase.''
    *
    * @return the resulting graph at the end of the computation
    *
@@ -228,18 +232,18 @@ object Pregel {
 
 
   /**
-   * Execute a Pregel-like iterative vertex-parallel abstraction.  
-   * The user-defined vertex-program `vprog` is executed in parallel
-   * on each vertex receiving any inbound messages and computing a new
+   * Execute a Pregel-like iterative vertex-parallel abstraction.  The
+   * user-defined vertex-program `vprog` is executed in parallel on
+   * each vertex receiving any inbound messages and computing a new
    * value for the vertex.  The `sendMsg` function is then invoked on
-   * all out-edges and is used to compute an optional message to the 
-   * destination vertex. The `mergeMsg` function is a commutative 
+   * all out-edges and is used to compute an optional message to the
+   * destination vertex. The `mergeMsg` function is a commutative
    * associative function used to combine messages destined to the
-   * same vertex. 
+   * same vertex.
    *
    * On the first iteration all vertices receive the `initialMsg` and
-   * on subsequent iterations if a vertex does not receive a message then
-   * the vertex-program is not invoked. 
+   * on subsequent iterations if a vertex does not receive a message
+   * then the vertex-program is not invoked.
    *
    * This function iterates until there are no remaining messages.
    *
@@ -249,28 +253,29 @@ object Pregel {
    *
    * @param graph the input graph. 
    *
-   * @param initialMsg the message each vertex will receive at the 
-   * on the first iteration.
+   * @param initialMsg the message each vertex will receive at the on
+   * the first iteration.
    *
    * @param numIter the number of iterations to run this computation.
    * 
-   * @param sendDir the edge direction along which the `sendMsg` function
-   * is invoked.
+   * @param sendDir the edge direction along which the `sendMsg`
+   * function is invoked.
    *
-   * @param vprog the user-defined vertex program which runs on each vertex
-   * and receives the inbound message and computes a new vertex value. 
-   * On the first iteration the vertex program is invoked on all vertices
-   * and is passed the default message.  On subsequent iterations the 
-   * vertex program is only invoked on those vertices that receive messages.
+   * @param vprog the user-defined vertex program which runs on each
+   * vertex and receives the inbound message and computes a new vertex
+   * value.  On the first iteration the vertex program is invoked on
+   * all vertices and is passed the default message.  On subsequent
+   * iterations the vertex program is only invoked on those vertices
+   * that receive messages.
    *
-   * @param sendMsg a user supplied function that is applied to each edge
-   * in the direction `sendDir` adjacent to vertices that received messages
-   * in the current iteration. 
+   * @param sendMsg a user supplied function that is applied to each
+   * edge in the direction `sendDir` adjacent to vertices that
+   * received messages in the current iteration.
    *
-   * @param mergeMsg a user supplied function that takes two incoming messages 
-   * of type A and merges them into a single message of type A. 
-   * ''This function must be commutative and associative and ideally the 
-   * size of A should not increase.''
+   * @param mergeMsg a user supplied function that takes two incoming
+   * messages of type A and merges them into a single message of type
+   * A.  ''This function must be commutative and associative and
+   * ideally the size of A should not increase.''
    *
    * @return the resulting graph at the end of the computation
    *
