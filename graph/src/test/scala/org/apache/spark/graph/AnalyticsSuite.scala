@@ -79,6 +79,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   } // end of test Star PageRank
 
 
+
   test("Grid PageRank") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val gridGraph = GraphGenerators.gridGraph(sc, 10, 10)
@@ -102,6 +103,70 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       assert(error2 < 1.0e-5)
     }
   } // end of Grid PageRank
+
+
+  test("Grid Connected Components") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10)
+      val ccGraph = Analytics.connectedComponents(gridGraph).cache()
+      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
+      assert(maxCCid === 0)
+    }
+  } // end of Grid connected components
+
+
+  test("Reverse Grid Connected Components") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).reverse
+      val ccGraph = Analytics.connectedComponents(gridGraph).cache()
+      val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
+      assert(maxCCid === 0)
+    }
+  } // end of Grid connected components
+
+
+  test("Chain Connected Components") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val chain1 = (0 until 9).map(x => (x, x+1) )
+      val chain2 = (10 until 20).map(x => (x, x+1) )
+      val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
+      val twoChains = Graph(rawEdges)
+      val ccGraph = Analytics.connectedComponents(twoChains).cache()
+      val vertices = ccGraph.vertices.collect
+      for ( (id, cc) <- vertices ) {
+        if(id < 10) { assert(cc === 0) }
+        else { assert(cc === 10) }
+      }
+      val ccMap = vertices.toMap
+      println(ccMap)
+      for( id <- 0 until 20 ) {
+        if(id < 10) { assert(ccMap(id) === 0) }
+        else { assert(ccMap(id) === 10) }
+      }
+    }
+  } // end of chain connected components
+
+  test("Reverse Chain Connected Components") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val chain1 = (0 until 9).map(x => (x, x+1) )
+      val chain2 = (10 until 20).map(x => (x, x+1) )
+      val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
+      val twoChains = Graph(rawEdges).reverse
+      val ccGraph = Analytics.connectedComponents(twoChains).cache()
+      val vertices = ccGraph.vertices.collect
+      for ( (id, cc) <- vertices ) {
+        if(id < 10) { assert(cc === 0) }
+        else { assert(cc === 10) }
+      }
+      val ccMap = vertices.toMap
+      println(ccMap)
+      for( id <- 0 until 20 ) {
+        if(id < 10) { assert(ccMap(id) === 0) }
+        else { assert(ccMap(id) === 10) }
+      }
+    }
+  } // end of chain connected components
+
 
 
 } // end of AnalyticsSuite
