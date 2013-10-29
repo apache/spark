@@ -26,7 +26,7 @@ object Analytics extends Logging {
    * for( iter <- 0 until numIter ) {
    *   swap(oldPR, PR)
    *   for( i <- 0 until n ) {
-   *     PR[i] = alpha + (1 - \alpha) * inNbrs[i].map(j => oldPR[j] / outDeg[j]).sum
+   *     PR[i] = alpha + (1 - alpha) * inNbrs[i].map(j => oldPR[j] / outDeg[j]).sum
    *   }
    * }
    * }}}
@@ -193,18 +193,6 @@ object Analytics extends Logging {
       sendMessage, 
       (a,b) => math.min(a,b)
       )
-
-    /**
-     * Originally this was implemented using the GraphLab abstraction but with
-     * support for message computation along all edge directions the pregel
-     * abstraction is sufficient 
-     */
-    // GraphLab(ccGraph, gatherDirection = EdgeDirection.Both, scatterDirection = EdgeDirection.Both)(
-    //   (me_id, edge) => edge.otherVertexAttr(me_id), // gather
-    //   (a: Vid, b: Vid) => math.min(a, b), // merge
-    //   (id, data, a: Option[Vid]) => math.min(data, a.getOrElse(Long.MaxValue)), // apply
-    //   (me_id, edge) => (edge.vertexAttr(me_id) < edge.otherVertexAttr(me_id))
-    // )
   } // end of connectedComponents 
 
   
