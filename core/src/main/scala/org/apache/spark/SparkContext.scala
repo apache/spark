@@ -248,8 +248,10 @@ class SparkContext(
       conf.set("fs.s3n.awsSecretAccessKey", System.getenv("AWS_SECRET_ACCESS_KEY"))
     }
     // Copy any "spark.hadoop.foo=bar" system properties into conf as "foo=bar"
-    Utils.getSystemProperties.foreach { case (key, value) if key.startsWith("spark.hadoop.") =>
-      conf.set(key.substring("spark.hadoop.".length), value)
+    Utils.getSystemProperties.foreach { case (key, value) =>
+      if (key.startsWith("spark.hadoop.")) {
+        conf.set(key.substring("spark.hadoop.".length), value)
+      }
     }
     val bufferSize = System.getProperty("spark.buffer.size", "65536")
     conf.set("io.file.buffer.size", bufferSize)
