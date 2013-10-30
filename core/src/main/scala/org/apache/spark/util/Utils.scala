@@ -823,10 +823,7 @@ private[spark] object Utils extends Logging {
 
   /** Returns a copy of the system properties that is thread-safe to iterator over. */
   def getSystemProperties(): Map[String, String] = {
-    try {
-      return System.getProperties().toMap[String, String]
-    } catch {
-      case e: ConcurrentModificationException => getSystemProperties()
-    }
+    return System.getProperties().clone()
+      .asInstanceOf[java.util.Properties].toMap[String, String]
   }
 }
