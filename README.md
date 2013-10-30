@@ -26,7 +26,10 @@ execute graph algorithms.  Unfortunately, these systems do not address
 the challenges of graph construction and transformation and provide
 limited fault-tolerance and support for interactive analysis.
 
-![image](http://docs/data_parllel_vs_graph_parallel.png)
+<p align="center">
+  <img src="https://raw.github.com/jegonzal/graphx/Documentation/docs/img/data_parallel_vs_graph_parallel.png" />
+</p>
+
 
 
 ## Solution
@@ -43,6 +46,9 @@ the PowerGraph and Pregel abstractions in less than 20 lines of code.
 Finally, by exploiting the Scala foundation of Spark, we enable users
 to interactively load, transform, and compute on massive graphs.
 
+<p align="center">
+  <img src="https://raw.github.com/jegonzal/graphx/Documentation/docs/img/tables_and_graphs.png" />
+</p>
 
 
 ## Online Documentation
