@@ -683,7 +683,7 @@ class SparkContext(
   /**
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
-   * filesystems), or an HTTP, HTTPS or FTP URI.
+   * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
   def addJar(path: String) {
     if (path == null) {
@@ -696,6 +696,7 @@ class SparkContext(
       } else {
         val uri = new URI(path)
         key = uri.getScheme match {
+          // A JAR file which exists only on the driver node
           case null | "file" =>
             if (env.hadoop.isYarnMode()) {
               // In order for this to work on yarn the user must specify the --addjars option to
@@ -713,6 +714,9 @@ class SparkContext(
             } else {
               env.httpFileServer.addJar(new File(uri.getPath))
             }
+          // A JAR file which exists locally on every worker node
+          case "local" =>
+            "file:" + uri.getPath
           case _ =>
             path
         }
