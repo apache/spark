@@ -49,6 +49,8 @@ private[spark] class SparkListenerBus() extends Logging {
             sparkListeners.foreach(_.onJobEnd(jobEnd))
           case taskStart: SparkListenerTaskStart =>
             sparkListeners.foreach(_.onTaskStart(taskStart))
+          case taskGettingResult: SparkListenerTaskGettingResult =>
+            sparkListeners.foreach(_.onTaskGettingResult(taskGettingResult))
           case taskEnd: SparkListenerTaskEnd =>
             sparkListeners.foreach(_.onTaskEnd(taskEnd))
           case _ =>

@@ -19,22 +19,18 @@ package org.apache.spark.streaming.dstream
 
 import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Time, DStreamCheckpointData, StreamingContext}
+import org.apache.spark.streaming.StreamingContext
 
 import java.util.Properties
 import java.util.concurrent.Executors
 
 import kafka.consumer._
-import kafka.message.{Message, MessageSet, MessageAndMetadata}
 import kafka.serializer.Decoder
-import kafka.utils.{Utils, ZKGroupTopicDirs}
-import kafka.utils.ZkUtils._
+import kafka.utils.VerifiableProperties
 import kafka.utils.ZKStringSerializer
 import org.I0Itec.zkclient._
 
 import scala.collection.Map
-import scala.collection.mutable.HashMap
-import scala.collection.JavaConversions._
 
 
 /**
@@ -46,25 +42,32 @@ import scala.collection.JavaConversions._
  * @param storageLevel RDD storage level.
  */
 private[streaming]
-class KafkaInputDStream[T: ClassManifest, D <: Decoder[_]: Manifest](
+class KafkaInputDStream[
+  K: ClassManifest,
+  V: ClassManifest,
+  U <: Decoder[_]: Manifest,
+  T <: Decoder[_]: Manifest](
     @transient ssc_ : StreamingContext,
     kafkaParams: Map[String, String],
     topics: Map[String, Int],
     storageLevel: StorageLevel
-  ) extends NetworkInputDStream[T](ssc_ ) with Logging {
+  ) extends NetworkInputDStream[(K, V)](ssc_) with Logging {
 
-
-  def getReceiver(): NetworkReceiver[T] = {
-    new KafkaReceiver[T, D](kafkaParams, topics, storageLevel)
-        .asInstanceOf[NetworkReceiver[T]]
+  def getReceiver(): NetworkReceiver[(K, V)] = {
+    new KafkaReceiver[K, V, U, T](kafkaParams, topics, storageLevel)
+        .asInstanceOf[NetworkReceiver[(K, V)]]
   }
 }
 
 private[streaming]
-class KafkaReceiver[T: ClassManifest, D <: Decoder[_]: Manifest](
-  kafkaParams: Map[String, String],
-  topics: Map[String, Int],
-  storageLevel: StorageLevel
+class KafkaReceiver[
+  K: ClassManifest,
+  V: ClassManifest,
+  U <: Decoder[_]: Manifest,
+  T <: Decoder[_]: Manifest](
+    kafkaParams: Map[String, String],
+    topics: Map[String, Int],
+    storageLevel: StorageLevel
   ) extends NetworkReceiver[Any] {
 
   // Handles pushing data into the BlockManager
@@ -83,27 +86,34 @@ class KafkaReceiver[T: ClassManifest, D <: Decoder[_]: Manifest](
     // In case we are using multiple Threads to handle Kafka Messages
     val executorPool = Executors.newFixedThreadPool(topics.values.reduce(_ + _))
 
-    logInfo("Starting Kafka Consumer Stream with group: " + kafkaParams("groupid"))
+    logInfo("Starting Kafka Consumer Stream with group: " + kafkaParams("group.id"))
 
     // Kafka connection properties
     val props = new Properties()
     kafkaParams.foreach(param => props.put(param._1, param._2))
 
     // Create the connection to the cluster
-    logInfo("Connecting to Zookeper: " + kafkaParams("zk.connect"))
+    logInfo("Connecting to Zookeper: " + kafkaParams("zookeeper.connect"))
     val consumerConfig = new ConsumerConfig(props)
     consumerConnector = Consumer.create(consumerConfig)
-    logInfo("Connected to " + kafkaParams("zk.connect"))
+    logInfo("Connected to " + kafkaParams("zookeeper.connect"))
 
     // When autooffset.reset is defined, it is our responsibility to try and whack the
     // consumer group zk node.
-    if (kafkaParams.contains("autooffset.reset")) {
-      tryZookeeperConsumerGroupCleanup(kafkaParams("zk.connect"), kafkaParams("groupid"))
+    if (kafkaParams.contains("auto.offset.reset")) {
+      tryZookeeperConsumerGroupCleanup(kafkaParams("zookeeper.connect"), kafkaParams("group.id"))
     }
 
     // Create Threads for each Topic/Message Stream we are listening
-    val decoder = manifest[D].erasure.newInstance.asInstanceOf[Decoder[T]]
-    val topicMessageStreams = consumerConnector.createMessageStreams(topics, decoder)
+    val keyDecoder = manifest[U].erasure.getConstructor(classOf[VerifiableProperties])
+      .newInstance(consumerConfig.props)
+      .asInstanceOf[Decoder[K]]
+    val valueDecoder = manifest[T].erasure.getConstructor(classOf[VerifiableProperties])
+      .newInstance(consumerConfig.props)
+      .asInstanceOf[Decoder[V]]
+
+    val topicMessageStreams = consumerConnector.createMessageStreams(
+      topics, keyDecoder, valueDecoder)
 
     // Start the messages handler for each partition
     topicMessageStreams.values.foreach { streams =>
@@ -112,11 +122,12 @@ class KafkaReceiver[T: ClassManifest, D <: Decoder[_]: Manifest](
   }
 
   // Handles Kafka Messages
-  private class MessageHandler[T: ClassManifest](stream: KafkaStream[T]) extends Runnable {
+  private class MessageHandler[K: ClassManifest, V: ClassManifest](stream: KafkaStream[K, V])
+    extends Runnable {
     def run() {
       logInfo("Starting MessageHandler.")
       for (msgAndMetadata <- stream) {
-        blockGenerator += msgAndMetadata.message
+        blockGenerator += (msgAndMetadata.key, msgAndMetadata.message)
       }
     }
   }

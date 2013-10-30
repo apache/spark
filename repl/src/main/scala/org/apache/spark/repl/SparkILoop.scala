@@ -633,6 +633,20 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     Result(true, shouldReplay)
   }
 
+  def addAllClasspath(args: Seq[String]): Unit = {
+    var added = false
+    var totalClasspath = ""
+    for (arg <- args) {
+      val f = File(arg).normalize
+      if (f.exists) {
+        added = true
+        addedClasspath = ClassPath.join(addedClasspath, f.path)
+        totalClasspath = ClassPath.join(settings.classpath.value, addedClasspath)
+      }
+    }
+    if (added) replay()
+  }
+
   def addClasspath(arg: String): Unit = {
     val f = File(arg).normalize
     if (f.exists) {
@@ -845,7 +859,14 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     val jars = Option(System.getenv("ADD_JARS")).map(_.split(','))
                                                 .getOrElse(new Array[String](0))
                                                 .map(new java.io.File(_).getAbsolutePath)
-    sparkContext = new SparkContext(master, "Spark shell", System.getenv("SPARK_HOME"), jars)
+    try {
+      sparkContext = new SparkContext(master, "Spark shell", System.getenv("SPARK_HOME"), jars)
+    } catch {
+      case e: Exception =>
+        e.printStackTrace()
+        echo("Failed to create SparkContext, exiting...")
+        sys.exit(1)
+    }
     sparkContext
   }
 

@@ -101,6 +101,13 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
         sender ! true
         context.stop(self)
 
+      case StopExecutors =>
+        logInfo("Asking each executor to shut down")
+        for (executor <- executorActor.values) {
+          executor ! StopExecutor
+        }
+        sender ! true
+
       case RemoveExecutor(executorId, reason) =>
         removeExecutor(executorId, reason)
         sender ! true
@@ -170,11 +177,24 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
 
   private val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
 
+  def stopExecutors() {
+    try {
+      if (driverActor != null) {
+        logInfo("Shutting down all executors")
+        val future = driverActor.ask(StopExecutors)(timeout)
+        Await.ready(future, timeout)
+      }
+    } catch {
+      case e: Exception =>
+        throw new SparkException("Error asking standalone scheduler to shut down executors", e)
+    }
+  }
+
   override def stop() {
     try {
       if (driverActor != null) {
         val future = driverActor.ask(StopDriver)(timeout)
-        Await.result(future, timeout)
+        Await.ready(future, timeout)
       }
     } catch {
       case e: Exception =>
@@ -197,7 +217,7 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
   def removeExecutor(executorId: String, reason: String) {
     try {
       val future = driverActor.ask(RemoveExecutor(executorId, reason))(timeout)
-      Await.result(future, timeout)
+      Await.ready(future, timeout)
     } catch {
       case e: Exception =>
         throw new SparkException("Error notifying standalone scheduler's driver actor", e)

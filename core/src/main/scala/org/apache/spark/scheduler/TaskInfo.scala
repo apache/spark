@@ -31,8 +31,24 @@ class TaskInfo(
     val host: String,
     val taskLocality: TaskLocality.TaskLocality) {
 
+  /**
+   * The time when the task started remotely getting the result. Will not be set if the
+   * task result was sent immediately when the task finished (as opposed to sending an
+   * IndirectTaskResult and later fetching the result from the block manager).
+   */
+  var gettingResultTime: Long = 0
+
+  /**
+   * The time when the task has completed successfully (including the time to remotely fetch
+   * results, if necessary).
+   */
   var finishTime: Long = 0
+
   var failed = false
+
+  def markGettingResult(time: Long = System.currentTimeMillis) {
+    gettingResultTime = time
+  }
 
   def markSuccessful(time: Long = System.currentTimeMillis) {
     finishTime = time
@@ -43,6 +59,8 @@ class TaskInfo(
     failed = true
   }
 
+  def gettingResult: Boolean = gettingResultTime != 0
+
   def finished: Boolean = finishTime != 0
 
   def successful: Boolean = finished && !failed
@@ -52,6 +70,8 @@ class TaskInfo(
   def status: String = {
     if (running)
       "RUNNING"
+    else if (gettingResult)
+      "GET RESULT"
     else if (failed)
       "FAILED"
     else if (successful)

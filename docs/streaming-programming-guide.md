@@ -73,6 +73,10 @@ DStreams support many of the transformations available on normal Spark RDD's:
     Iterator[T] => Iterator[U] when running on an DStream of type T. </td>
 </tr>
 <tr>
+  <td> <b>repartition</b>(<i>numPartitions</i>) </td>
+  <td> Changes the level of parallelism in this DStream by creating more or fewer partitions. </td>
+</tr>
+<tr>
   <td> <b>union</b>(<i>otherStream</i>) </td>
   <td> Return a new DStream that contains the union of the elements in the source DStream and the argument DStream. </td>
 </tr>

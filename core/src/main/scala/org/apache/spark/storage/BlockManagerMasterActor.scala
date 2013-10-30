@@ -227,9 +227,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   }
 
   private def register(id: BlockManagerId, maxMemSize: Long, slaveActor: ActorRef) {
-    if (id.executorId == "<driver>" && !isLocal) {
-      // Got a register message from the master node; don't register it
-    } else if (!blockManagerInfo.contains(id)) {
+    if (!blockManagerInfo.contains(id)) {
       blockManagerIdByExecutor.get(id.executorId) match {
         case Some(manager) =>
           // A block manager of the same executor already exists.
