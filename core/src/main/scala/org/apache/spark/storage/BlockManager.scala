@@ -19,7 +19,6 @@ package org.apache.spark.storage
 
 import java.io.{InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
-import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.{HashMap, ArrayBuffer}
 import scala.util.Random
@@ -46,80 +45,6 @@ private[spark] class BlockManager(
     val defaultSerializer: Serializer,
     maxMemory: Long)
   extends Logging {
-
-
-  // initThread is logically a BlockInfo field, but we store it here because
-  // it's only needed while this block is in the 'pending' state and we want
-  // to minimize BlockInfo's memory footprint.
-  private val blockInfoInitThreads = new ConcurrentHashMap[BlockInfo, Thread]
-
-  private val BLOCK_PENDING: Long = -1L
-  private val BLOCK_FAILED: Long = -2L
-
-  private trait BlockInfo {
-    def level: StorageLevel
-    def tellMaster: Boolean
-    @volatile var size: Long = BLOCK_PENDING  // also encodes 'pending' and 'failed' to save space
-    private def pending: Boolean = size == BLOCK_PENDING
-    private def failed: Boolean = size == BLOCK_FAILED
-    private def initThread: Thread = blockInfoInitThreads.get(this)
-
-    setInitThread()
-
-    private def setInitThread() {
-      // Set current thread as init thread - waitForReady will not block this thread
-      // (in case there is non trivial initialization which ends up calling waitForReady as part of
-      // initialization itself)
-      blockInfoInitThreads.put(this, Thread.currentThread())
-    }
-
-    /**
-     * Wait for this BlockInfo to be marked as ready (i.e. block is finished writing).
-     * Return true if the block is available, false otherwise.
-     */
-    def waitForReady(): Boolean = {
-      if (pending && initThread != Thread.currentThread()) {
-        synchronized {
-          while (pending) this.wait()
-        }
-      }
-      !failed
-    }
-
-    /** Mark this BlockInfo as ready (i.e. block is finished writing) */
-    def markReady(sizeInBytes: Long) {
-      require (sizeInBytes >= 0, "sizeInBytes was negative: " + sizeInBytes)
-      assert (pending)
-      size = sizeInBytes
-      blockInfoInitThreads.remove(this)
-      synchronized {
-        this.notifyAll()
-      }
-    }
-
-    /** Mark this BlockInfo as ready but failed */
-    def markFailure() {
-      assert (pending)
-      size = BLOCK_FAILED
-      blockInfoInitThreads.remove(this)
-      synchronized {
-        this.notifyAll()
-      }
-    }
-  }
-
-  // All shuffle blocks have the same `level` and `tellMaster` properties,
-  // so we can save space by not storing them in each instance:
-  private class ShuffleBlockInfo extends BlockInfo {
-    // These need to be defined using 'def' instead of 'val' in order for
-    // the compiler to eliminate the fields:
-    def level: StorageLevel = StorageLevel.DISK_ONLY
-    def tellMaster: Boolean = false
-  }
-
-  private class BlockInfoImpl(val level: StorageLevel, val tellMaster: Boolean) extends BlockInfo {
-    // Intentionally left blank
-  }
 
   val shuffleBlockManager = new ShuffleBlockManager(this)
   val diskBlockManager = new DiskBlockManager(
