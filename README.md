@@ -1,4 +1,4 @@
-# GraphX: Unifying Graph and Tables
+# GraphX: Unifying Graphs and Tables
 
 
 GraphX extends the distributed fault-tolerant collections API and
@@ -49,6 +49,47 @@ to interactively load, transform, and compute on massive graphs.
 <p align="center">
   <img src="https://raw.github.com/jegonzal/graphx/Documentation/docs/img/tables_and_graphs.png" />
 </p>
+
+## Examples
+
+Suppose I want to build a graph from some text files, restrict the graph 
+to important relationships and users, run page-rank on the sub-graph, and
+then finally return attributes associated with the top users.  I can do 
+all of this in just a few lines with GraphX:
+
+```scala
+// Connect to the Spark cluster
+val sc = new SparkContext("spark://master.amplab.org", "research")
+
+// Load my user data and prase into tuples of user id and attribute list
+val users = sc.textFile("hdfs://user_attributes.tsv")
+  .map(line => line.split).map( parts => (parts.head, parts.tail) )
+
+// Parse the edge data which is already in userId -> userId format
+val followerGraph = Graph.textFile(sc, "hdfs://followers.tsv")
+
+// Attach the user attributes
+val graph = followerGraph.outerJoinVertices(users){ 
+  case (uid, deg, Some(attrList)) => attrList
+  // Some users may not have attributes so we set them as empty
+  case (uid, deg, None) => Array.empty[String] 
+  }
+
+// Restrict the graph to users which have exactly two attributes
+val subgraph = graph.subgraph((vid, attr) => attr.size == 2)
+
+// Compute the PageRank 
+val pagerankGraph = Analytics.pagerank(subgraph)
+
+// Get the attributes of the top pagerank users
+val userInfoWithPageRank = subgraph.outerJoinVertices(pagerankGraph.vertices){
+  case (uid, attrList, Some(pr)) => (pr, attrList)
+  case (uid, attrList, None) => (pr, attrList)
+  }
+  
+println(userInfoWithPageRank.top(5))
+
+```
 
 
 ## Online Documentation
