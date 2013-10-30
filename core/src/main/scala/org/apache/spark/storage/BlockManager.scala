@@ -46,61 +46,6 @@ private[spark] class BlockManager(
     maxMemory: Long)
   extends Logging {
 
-  private class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
-    @volatile var pending: Boolean = true
-    @volatile var size: Long = -1L
-    @volatile var initThread: Thread = null
-    @volatile var failed = false
-
-    setInitThread()
-
-    private def setInitThread() {
-      // Set current thread as init thread - waitForReady will not block this thread
-      // (in case there is non trivial initialization which ends up calling waitForReady as part of
-      // initialization itself)
-      this.initThread = Thread.currentThread()
-    }
-
-    /**
-     * Wait for this BlockInfo to be marked as ready (i.e. block is finished writing).
-     * Return true if the block is available, false otherwise.
-     */
-    def waitForReady(): Boolean = {
-      if (initThread != Thread.currentThread() && pending) {
-        synchronized {
-          while (pending) this.wait()
-        }
-      }
-      !failed
-    }
-
-    /** Mark this BlockInfo as ready (i.e. block is finished writing) */
-    def markReady(sizeInBytes: Long) {
-      assert (pending)
-      size = sizeInBytes
-      initThread = null
-      failed = false
-      initThread = null
-      pending = false
-      synchronized {
-        this.notifyAll()
-      }
-    }
-
-    /** Mark this BlockInfo as ready but failed */
-    def markFailure() {
-      assert (pending)
-      size = 0
-      initThread = null
-      failed = true
-      initThread = null
-      pending = false
-      synchronized {
-        this.notifyAll()
-      }
-    }
-  }
-
   val shuffleBlockManager = new ShuffleBlockManager(this)
   val diskBlockManager = new DiskBlockManager(
     System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")))
@@ -526,7 +471,7 @@ private[spark] class BlockManager(
       if (shuffleBlockManager.consolidateShuffleFiles) {
         diskBlockManager.mapBlockToFileSegment(blockId, writer.fileSegment())
       }
-      val myInfo = new BlockInfo(StorageLevel.DISK_ONLY, false)
+      val myInfo = new ShuffleBlockInfo()
       blockInfo.put(blockId, myInfo)
       myInfo.markReady(writer.fileSegment().length)
     })
@@ -560,7 +505,7 @@ private[spark] class BlockManager(
     // to be dropped right after it got put into memory. Note, however, that other threads will
     // not be able to get() this block until we call markReady on its BlockInfo.
     val myInfo = {
-      val tinfo = new BlockInfo(level, tellMaster)
+      val tinfo = new BlockInfoImpl(level, tellMaster)
       // Do atomically !
       val oldBlockOpt = blockInfo.putIfAbsent(blockId, tinfo)
 
