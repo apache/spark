@@ -17,7 +17,7 @@ import org.apache.spark.graph.Edge
 import org.apache.spark.graph.impl.GraphImpl
 
 /**
- * @todo(crankshaw) cleanup and modularize code
+ * @todo cleanup and modularize code
  */
 object GraphGenerators {
 

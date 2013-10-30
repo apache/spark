@@ -1,14 +1,15 @@
 package org.apache.spark.graph
 
 /**
- * An edge triplet represents two vertices and edge along with their attributes.
+ * An edge triplet represents two vertices and edge along with their
+ * attributes.
  *
  * @tparam VD the type of the vertex attribute.
  * @tparam ED the type of the edge attribute
  * 
- * @todo specialize edge triplet for basic types, though when I last tried
- * specializing I got a warning about inherenting from a type that is not
- * a trait.
+ * @todo specialize edge triplet for basic types, though when I last
+ * tried specializing I got a warning about inherenting from a type
+ * that is not a trait.
  */
 class EdgeTriplet[VD, ED] extends Edge[ED] {
 // class EdgeTriplet[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD: ClassManifest,

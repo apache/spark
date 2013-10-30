@@ -6,19 +6,20 @@ import org.apache.spark._
 
 /**
  * The Analytics object contains a collection of basic graph analytics
- * algorithms that operate largely on the graph structure. 
+ * algorithms that operate largely on the graph structure.
  *
- * In addition the Analytics object contains a driver `main` which can 
- * be used to apply the various functions to graphs in standard formats.
+ * In addition the Analytics object contains a driver `main` which can
+ * be used to apply the various functions to graphs in standard
+ * formats.
  */
 object Analytics extends Logging {
 
   /**
-   * Run PageRank for a fixed number of iterations returning a graph 
-   * with vertex attributes containing the PageRank and edge attributes
-   * the normalized edge weight.
+   * Run PageRank for a fixed number of iterations returning a graph
+   * with vertex attributes containing the PageRank and edge
+   * attributes the normalized edge weight.
    * 
-   * The following PageRank fixed point is computed for each vertex. 
+   * The following PageRank fixed point is computed for each vertex.
    *
    * {{{
    * var PR = Array.fill(n)( 1.0 )
@@ -31,12 +32,13 @@ object Analytics extends Logging {
    * }
    * }}}
    *
-   * where `alpha` is the random reset probability (typically 0.15), 
-   * `inNbrs[i]` is the set of neighbors whick link to `i` and `outDeg[j]`
-   * is the out degree of vertex `j`.
+   * where `alpha` is the random reset probability (typically 0.15),
+   * `inNbrs[i]` is the set of neighbors whick link to `i` and
+   * `outDeg[j]` is the out degree of vertex `j`.
    * 
-   * Note that this is not the "normalized" PageRank and as a consequence
-   * pages that have no inlinks will have a PageRank of alpha.  
+   * Note that this is not the "normalized" PageRank and as a
+   * consequence pages that have no inlinks will have a PageRank of
+   * alpha.
    *
    * @tparam VD the original vertex attribute (not used)
    * @tparam ED the original edge attribute (not used)
@@ -45,8 +47,8 @@ object Analytics extends Logging {
    * @param numIter the number of iterations of PageRank to run
    * @param resetProb the random reset probability (alpha)
    *
-   * @return the graph containing with each vertex containing the PageRank and
-   * each edge containing the normalized weight.
+   * @return the graph containing with each vertex containing the
+   * PageRank and each edge containing the normalized weight.
    *
    */
   def pagerank[VD: Manifest, ED: Manifest](
@@ -54,8 +56,8 @@ object Analytics extends Logging {
     Graph[Double, Double] = {
 
     /**
-     * Initialize the pagerankGraph with each edge attribute 
-     * having weight 1/outDegree and each vertex with attribute 1.0.
+     * Initialize the pagerankGraph with each edge attribute having
+     * weight 1/outDegree and each vertex with attribute 1.0.
      */
     val pagerankGraph: Graph[Double, Double] = graph
       // Associate the degree with each vertex
@@ -85,10 +87,11 @@ object Analytics extends Logging {
       vertexProgram, sendMessage, messageCombiner)
   }
 
+
   /**
-   * Run a dynamic version of PageRank returning a graph with vertex attributes 
-   * containing the PageRank and edge attributes containing the normalized 
-   * edge weight.
+   * Run a dynamic version of PageRank returning a graph with vertex
+   * attributes containing the PageRank and edge attributes containing
+   * the normalized edge weight.
    *
    * {{{
    * var PR = Array.fill(n)( 1.0 )
@@ -101,22 +104,24 @@ object Analytics extends Logging {
    * }
    * }}}
    *
-   * where `alpha` is the random reset probability (typically 0.15), 
-   * `inNbrs[i]` is the set of neighbors whick link to `i` and `outDeg[j]`
-   * is the out degree of vertex `j`.
+   * where `alpha` is the random reset probability (typically 0.15),
+   * `inNbrs[i]` is the set of neighbors whick link to `i` and
+   * `outDeg[j]` is the out degree of vertex `j`.
    * 
-   * Note that this is not the "normalized" PageRank and as a consequence
-   * pages that have no inlinks will have a PageRank of alpha.  
+   * Note that this is not the "normalized" PageRank and as a
+   * consequence pages that have no inlinks will have a PageRank of
+   * alpha.
    *
    * @tparam VD the original vertex attribute (not used)
    * @tparam ED the original edge attribute (not used)
    *
    * @param graph the graph on which to compute PageRank
-   * @param tol the tolerance allowed at convergence (smaller => more accurate). 
+   * @param tol the tolerance allowed at convergence (smaller => more
+   * accurate).
    * @param resetProb the random reset probability (alpha)
    *
-   * @return the graph containing with each vertex containing the PageRank and
-   * each edge containing the normalized weight.
+   * @return the graph containing with each vertex containing the
+   * PageRank and each edge containing the normalized weight.
    */
   def deltaPagerank[VD: Manifest, ED: Manifest](
     graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15): 
@@ -163,18 +168,19 @@ object Analytics extends Logging {
 
 
   /**
-   * Compute the connected component membership of each vertex
-   * and return an RDD with the vertex value containing the
-   * lowest vertex id in the connected component containing
-   * that vertex.
+   * Compute the connected component membership of each vertex and
+   * return an RDD with the vertex value containing the lowest vertex
+   * id in the connected component containing that vertex.
    *
-   * @tparam VD the vertex attribute type (discarded in the computation)
+   * @tparam VD the vertex attribute type (discarded in the
+   * computation)
    * @tparam ED the edge attribute type (preserved in the computation)
    *
-   * @param graph the graph for which to compute the connected components 
+   * @param graph the graph for which to compute the connected
+   * components
    *
-   * @return a graph with vertex attributes containing the smallest vertex
-   * in each connected component
+   * @return a graph with vertex attributes containing the smallest
+   * vertex in each connected component
    */
   def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]): 
     Graph[Vid, ED] = {
