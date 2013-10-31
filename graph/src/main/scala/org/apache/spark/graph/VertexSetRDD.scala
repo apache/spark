@@ -190,7 +190,8 @@ class VertexSetRDD[@specialized V: ClassManifest](
   override def filter(pred: Tuple2[Vid,V] => Boolean): VertexSetRDD[V] = {
     val cleanF = index.rdd.context.clean(pred)
     val newValues = index.rdd.zipPartitions(valuesRDD){ 
-      (keysIter, valuesIter) => 
+      (keysIter: Iterator[VertexIdToIndexMap], 
+       valuesIter: Iterator[(IndexedSeq[V], BitSet)]) => 
       val index = keysIter.next()
       assert(keysIter.hasNext() == false)
       val (oldValues, bs) = valuesIter.next()
@@ -222,7 +223,7 @@ class VertexSetRDD[@specialized V: ClassManifest](
     val cleanF = index.rdd.context.clean(f)
     val newValuesRDD: RDD[ (IndexedSeq[U], BitSet) ] = 
       valuesRDD.mapPartitions(iter => iter.map{ 
-        case (values, bs) => 
+        case (values, bs: BitSet) => 
           /** 
            * @todo Consider using a view rather than creating a new
            * array.  This is already being done for join operations.
@@ -255,10 +256,11 @@ class VertexSetRDD[@specialized V: ClassManifest](
     val cleanF = index.rdd.context.clean(f)
     val newValues: RDD[ (IndexedSeq[U], BitSet) ] = 
       index.rdd.zipPartitions(valuesRDD){ 
-        (keysIter, valuesIter) => 
+        (keysIter: Iterator[VertexIdToIndexMap], 
+         valuesIter: Iterator[(IndexedSeq[V], BitSet)]) => 
         val index = keysIter.next()
         assert(keysIter.hasNext() == false)
-        val (oldValues, bs) = valuesIter.next()
+        val (oldValues, bs: BitSet) = valuesIter.next()
         assert(valuesIter.hasNext() == false)
         /** 
          * @todo Consider using a view rather than creating a new array. 
@@ -296,10 +298,11 @@ class VertexSetRDD[@specialized V: ClassManifest](
     }
     val newValuesRDD: RDD[ (IndexedSeq[(V,W)], BitSet) ] = 
       valuesRDD.zipPartitions(other.valuesRDD){
-        (thisIter, otherIter) => 
-        val (thisValues, thisBS) = thisIter.next()
+        (thisIter: Iterator[(IndexedSeq[V], BitSet)], 
+          otherIter: Iterator[(IndexedSeq[W], BitSet)]) => 
+        val (thisValues, thisBS: BitSet) = thisIter.next()
         assert(!thisIter.hasNext)
-        val (otherValues, otherBS) = otherIter.next()
+        val (otherValues, otherBS: BitSet) = otherIter.next()
         assert(!otherIter.hasNext)
         val newBS = thisBS & otherBS
         val newValues = thisValues.view.zip(otherValues)
@@ -328,11 +331,13 @@ class VertexSetRDD[@specialized V: ClassManifest](
     if(index != other.index) {
       throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
     }
-    val newValuesRDD: RDD[ (IndexedSeq[(V,Option[W])], BitSet) ] = valuesRDD.zipPartitions(other.valuesRDD){
-      (thisIter, otherIter) => 
-      val (thisValues, thisBS) = thisIter.next()
+    val newValuesRDD: RDD[ (IndexedSeq[(V,Option[W])], BitSet) ] = 
+      valuesRDD.zipPartitions(other.valuesRDD){
+      (thisIter: Iterator[(IndexedSeq[V], BitSet)], 
+        otherIter: Iterator[(IndexedSeq[W], BitSet)]) => 
+      val (thisValues, thisBS: BitSet) = thisIter.next()
       assert(!thisIter.hasNext)
-      val (otherValues, otherBS) = otherIter.next()
+      val (otherValues, otherBS: BitSet) = otherIter.next()
       assert(!otherIter.hasNext)
       val otherOption = otherValues.view.zipWithIndex
         .map{ (x: (W, Int)) => if(otherBS(x._2)) Option(x._1) else None }
@@ -384,7 +389,9 @@ class VertexSetRDD[@specialized V: ClassManifest](
         // Compute the new values RDD
         val newValues: RDD[ (IndexedSeq[(V,Option[W])], BitSet) ] = 
           index.rdd.zipPartitions(valuesRDD, otherShuffled) {
-          (thisIndexIter, thisIter, tuplesIter) =>
+          (thisIndexIter: Iterator[VertexIdToIndexMap], 
+            thisIter: Iterator[(IndexedSeq[V], BitSet)], 
+            tuplesIter: Iterator[(Vid,W)]) =>
           // Get the Index and values for this RDD
           val index = thisIndexIter.next()
           assert(!thisIndexIter.hasNext)
