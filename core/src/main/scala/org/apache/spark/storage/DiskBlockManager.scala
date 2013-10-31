@@ -20,12 +20,11 @@ package org.apache.spark.storage
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.{Date, Random}
-import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
 import org.apache.spark.network.netty.{PathResolver, ShuffleSender}
-import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
+import org.apache.spark.util.Utils
 
 /**
  * Creates and maintains the logical mapping between logical blocks and physical on-disk
@@ -35,7 +34,7 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
  *
  * @param rootDirs The directories to use for storing block files. Data will be hashed among these.
  */
-private[spark] class DiskBlockManager(rootDirs: String) extends PathResolver with Logging {
+private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootDirs: String) extends PathResolver with Logging {
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
   private val subDirsPerLocalDir = System.getProperty("spark.diskStore.subDirectories", "64").toInt
@@ -47,23 +46,7 @@ private[spark] class DiskBlockManager(rootDirs: String) extends PathResolver wit
   private val subDirs = Array.fill(localDirs.length)(new Array[File](subDirsPerLocalDir))
   private var shuffleSender : ShuffleSender = null
 
-  // Stores only Blocks which have been specifically mapped to segments of files
-  // (rather than the default, which maps a Block to a whole file).
-  // This keeps our bookkeeping down, since the file system itself tracks the standalone Blocks. 
-  private val blockToFileSegmentMap = new TimeStampedHashMap[BlockId, FileSegment]
-
-  val metadataCleaner = new MetadataCleaner(MetadataCleanerType.DISK_BLOCK_MANAGER, this.cleanup)
-
   addShutdownHook()
-
-  /**
-   * Creates a logical mapping from the given BlockId to a segment of a file.
-   * This will cause any accesses of the logical BlockId to be directed to the specified
-   * physical location.
-   */
-  def mapBlockToFileSegment(blockId: BlockId, fileSegment: FileSegment) {
-    blockToFileSegmentMap.put(blockId, fileSegment)
-  }
 
   /**
    * Returns the phyiscal file segment in which the given BlockId is located.
@@ -71,30 +54,17 @@ private[spark] class DiskBlockManager(rootDirs: String) extends PathResolver wit
    * Otherwise, we assume the Block is mapped to a whole file identified by the BlockId directly.
    */
   def getBlockLocation(blockId: BlockId): FileSegment = {
-    if (blockToFileSegmentMap.internalMap.containsKey(blockId)) {
-      blockToFileSegmentMap.get(blockId).get
-    } else {
-      val file = getFile(blockId.name)
-      new FileSegment(file, 0, file.length())
+    if (blockId.isShuffle) {
+      val segment = shuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
+      if (segment.isDefined) { return segment.get }
+      // If no special mapping found, assume standard block -> file mapping...
     }
+
+    val file = getFile(blockId.name)
+    new FileSegment(file, 0, file.length())
   }
 
-  /**
-   * Simply returns a File to place the given Block into. This does not physically create the file.
-   * If filename is given, that file will be used. Otherwise, we will use the BlockId to get
-   * a unique filename.
-   */
-  def createBlockFile(blockId: BlockId, filename: String = "", allowAppending: Boolean): File = {
-    val actualFilename = if (filename == "") blockId.name else filename
-    val file = getFile(actualFilename)
-    if (!allowAppending && file.exists()) {
-      throw new IllegalStateException(
-        "Attempted to create file that already exists: " + actualFilename)
-    }
-    file
-  }
-
-  private def getFile(filename: String): File = {
+  def getFile(filename: String): File = {
     // Figure out which local directory it hashes to, and which subdirectory in that
     val hash = Utils.nonNegativeHash(filename)
     val dirId = hash % localDirs.length
@@ -118,6 +88,8 @@ private[spark] class DiskBlockManager(rootDirs: String) extends PathResolver wit
 
     new File(subDir, filename)
   }
+
+  def getFile(blockId: BlockId): File = getFile(blockId.name)
 
   private def createLocalDirs(): Array[File] = {
     logDebug("Creating local directories at root dirs '" + rootDirs + "'")
@@ -149,10 +121,6 @@ private[spark] class DiskBlockManager(rootDirs: String) extends PathResolver wit
       logInfo("Created local directory at " + localDir)
       localDir
     }
-  }
-
-  private def cleanup(cleanupTime: Long) {
-    blockToFileSegmentMap.clearOldValues(cleanupTime)
   }
 
   private def addShutdownHook() {
