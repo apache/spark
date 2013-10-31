@@ -28,6 +28,70 @@ class BitSet(numBits: Int) {
   private val numWords = words.length
 
   /**
+   * Compute the capacity (number of bits) that can be represented
+   * by this bitset.
+   */
+  def capacity: Int = numWords * 64
+
+
+  /**
+   * Set all the bits up to a given index
+   */
+  def setUntil(bitIndex: Int) {
+    val wordIndex = bitIndex >> 6 // divide by 64
+    var i = 0
+    while(i < wordIndex) { words(i) = -1; i += 1 }
+    // Set the remaining bits
+    val mask = ~(-1L << (bitIndex & 0x3f))
+    words(wordIndex) |= mask
+  }
+
+
+  /**
+   * Compute the bit-wise AND of the two sets returning the
+   * result.
+   */
+  def &(other: BitSet): BitSet = {
+    val newBS = new BitSet(math.max(capacity, other.capacity))
+    val smaller = math.min(numWords, other.numWords)
+    assert(newBS.numWords >= numWords)
+    assert(newBS.numWords >= other.numWords)
+    var ind = 0
+    while( ind < smaller ) { 
+      newBS.words(ind) = words(ind) & other.words(ind)
+      ind += 1
+    } 
+    newBS
+  }
+
+
+  /**
+   * Compute the bit-wise OR of the two sets returning the
+   * result.
+   */
+  def |(other: BitSet): BitSet = {
+    val newBS = new BitSet(math.max(capacity, other.capacity))
+    assert(newBS.numWords >= numWords)
+    assert(newBS.numWords >= other.numWords)
+    val smaller = math.min(numWords, other.numWords)
+    var ind = 0
+    while( ind < smaller ) { 
+      newBS.words(ind) = words(ind) | other.words(ind)
+      ind += 1
+    }
+    while( ind < numWords ) { 
+      newBS.words(ind) = words(ind)
+      ind += 1
+    } 
+    while( ind < other.numWords ) { 
+      newBS.words(ind) = other.words(ind)
+      ind += 1
+    } 
+    newBS
+  }
+
+
+  /**
    * Sets the bit at the specified index to true.
    * @param index the bit index
    */
@@ -35,6 +99,7 @@ class BitSet(numBits: Int) {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) |= bitmask        // div by 64 and mask
   }
+
 
   /**
    * Return the value of the bit with the specified index. The value is true if the bit with
@@ -48,6 +113,21 @@ class BitSet(numBits: Int) {
     (words(index >>> 6) & bitmask) != 0  // div by 64 and mask
   }
 
+
+  /**
+   * Get an iterator over the set bits.
+   */
+  def iterator = new Iterator[Int] {
+    var ind = nextSetBit(0)
+    override def hasNext: Boolean = ind >= 0
+    override def next() = {
+      val tmp = ind
+      ind  = nextSetBit(ind+1)
+      tmp
+    }
+  }
+
+
   /** Return the number of bits set to true in this BitSet. */
   def cardinality(): Int = {
     var sum = 0
@@ -58,6 +138,7 @@ class BitSet(numBits: Int) {
     }
     sum
   }
+
 
   /**
    * Returns the index of the first bit that is set to true that occurs on or after the
@@ -97,6 +178,7 @@ class BitSet(numBits: Int) {
 
     -1
   }
+
 
   /** Return the number of longs it would take to hold numBits. */
   private def bit2words(numBits: Int) = ((numBits - 1) >>> 6) + 1
