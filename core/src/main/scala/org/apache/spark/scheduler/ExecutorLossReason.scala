@@ -15,23 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler
 
-import org.apache.spark.SparkContext
+import org.apache.spark.executor.ExecutorExitCode
 
 /**
- * A backend interface for cluster scheduling systems that allows plugging in different ones under
- * ClusterScheduler. We assume a Mesos-like model where the application gets resource offers as
- * machines become available and can launch tasks on them.
+ * Represents an explanation for a executor or whole slave failing or exiting.
  */
-private[spark] trait SchedulerBackend {
-  def start(): Unit
-  def stop(): Unit
-  def reviveOffers(): Unit
-  def defaultParallelism(): Int
+private[spark]
+class ExecutorLossReason(val message: String) {
+  override def toString: String = message
+}
 
-  def killTask(taskId: Long, executorId: String): Unit = throw new UnsupportedOperationException
+private[spark]
+case class ExecutorExited(val exitCode: Int)
+  extends ExecutorLossReason(ExecutorExitCode.explainExitCode(exitCode)) {
+}
 
-  // Memory used by each executor (in megabytes)
-  protected val executorMemory: Int = SparkContext.executorMemoryRequested
+private[spark]
+case class SlaveLost(_message: String = "Slave lost")
+  extends ExecutorLossReason(_message) {
 }

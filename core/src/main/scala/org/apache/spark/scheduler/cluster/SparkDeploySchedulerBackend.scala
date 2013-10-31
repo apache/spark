@@ -17,14 +17,16 @@
 
 package org.apache.spark.scheduler.cluster
 
+import scala.collection.mutable.HashMap
+
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.deploy.client.{Client, ClientListener}
 import org.apache.spark.deploy.{Command, ApplicationDescription}
-import scala.collection.mutable.HashMap
+import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskScheduler}
 import org.apache.spark.util.Utils
 
 private[spark] class SparkDeploySchedulerBackend(
-    scheduler: ClusterScheduler,
+    scheduler: TaskScheduler,
     sc: SparkContext,
     masters: Array[String],
     appName: String)

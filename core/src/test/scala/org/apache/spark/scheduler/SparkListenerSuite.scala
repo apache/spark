@@ -19,23 +19,26 @@ package org.apache.spark.scheduler
 
 import scala.collection.mutable.{Buffer, HashSet}
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.SparkContext._
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
-    with BeforeAndAfterAll {
+    with BeforeAndAfter with BeforeAndAfterAll {
   /** Length of time to wait while draining listener events. */
   val WAIT_TIMEOUT_MILLIS = 10000
+
+  before {
+    sc = new SparkContext("local", "SparkListenerSuite")
+  }
 
   override def afterAll {
     System.clearProperty("spark.akka.frameSize")
   }
 
   test("basic creation of StageInfo") {
-    sc = new SparkContext("local", "DAGSchedulerSuite")
     val listener = new SaveStageInfo
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
@@ -56,7 +59,6 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   }
 
   test("StageInfo with fewer tasks than partitions") {
-    sc = new SparkContext("local", "DAGSchedulerSuite")
     val listener = new SaveStageInfo
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
@@ -72,7 +74,6 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   }
 
   test("local metrics") {
-    sc = new SparkContext("local", "DAGSchedulerSuite")
     val listener = new SaveStageInfo
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
@@ -135,10 +136,6 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   }
 
   test("onTaskGettingResult() called when result fetched remotely") {
-    // Need to use local cluster mode here, because results are not ever returned through the
-    // block manager when using the LocalScheduler.
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
-
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
  
@@ -157,10 +154,6 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   }
 
   test("onTaskGettingResult() not called when result sent directly") {
-    // Need to use local cluster mode here, because results are not ever returned through the
-    // block manager when using the LocalScheduler.
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
-
     val listener = new SaveTaskEvents
     sc.addSparkListener(listener)
  

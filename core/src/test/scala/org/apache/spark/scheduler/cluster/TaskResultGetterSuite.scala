@@ -66,9 +66,7 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
   }
 
   before {
-    // Use local-cluster mode because results are returned differently when running with the
-    // LocalScheduler.
-    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    sc = new SparkContext("local", "test")
   }
 
   override def afterAll {
