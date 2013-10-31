@@ -639,10 +639,14 @@ object VertexSetRDD {
   def apply[V: ClassManifest](
     rdd: RDD[(Vid,V)], reduceFunc: (V, V) => V): VertexSetRDD[V] = {
     // Preaggregate and shuffle if necessary
-    // Preaggregation.
-    val aggregator = new Aggregator[Vid, V, V](v => v, reduceFunc, reduceFunc)
-    val partitioner = new HashPartitioner(rdd.partitions.size)
-    val preAgg = rdd.mapPartitions(aggregator.combineValuesByKey).partitionBy(partitioner)
+    val preAgg = rdd.partitioner match {
+      case Some(p) => rdd
+      case None => 
+        val partitioner = new HashPartitioner(rdd.partitions.size)
+        // Preaggregation.
+        val aggregator = new Aggregator[Vid, V, V](v => v, reduceFunc, reduceFunc)
+        rdd.mapPartitions(aggregator.combineValuesByKey, true).partitionBy(partitioner)
+    } 
 
     val groups = preAgg.mapPartitions( iter => {
       val indexMap = new VertexIdToIndexMap()
