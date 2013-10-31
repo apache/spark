@@ -1,5 +1,8 @@
 package org.apache.spark.graph
 
+import org.apache.spark.util.hash.BitSet
+
+
 import com.esotericsoftware.kryo.Kryo
 
 import org.apache.spark.graph.impl.MessageToPartition
@@ -14,7 +17,8 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[MessageToPartition[Object]])
     kryo.register(classOf[(Vid, Object)])
     kryo.register(classOf[EdgePartition[Object]])
-
+    kryo.register(classOf[BitSet])
+    kryo.register(classOf[VertexIdToIndexMap])
     // This avoids a large number of hash table lookups.
     kryo.setReferences(false)
   }
