@@ -28,7 +28,7 @@ package org.apache.spark.util.hash
 private[spark]
 class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
                               @specialized(Long, Int, Double) V: ClassManifest](
-    var keySet: OpenHashSet[K], var _values: Array[V])
+    val keySet: OpenHashSet[K], var _values: Array[V])
   extends Iterable[(K, V)]
   with Serializable {
 
