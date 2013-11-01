@@ -65,7 +65,7 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
 
 
   /** Set the value for a key */
-  def update(k: K, v: V, mergeF: (V,V) => V) {
+  def setMerge(k: K, v: V, mergeF: (V,V) => V) {
     val pos = keySet.fastAdd(k)
     val ind = pos & OpenHashSet.POSITION_MASK
     if ((pos & OpenHashSet.EXISTENCE_MASK) != 0) { // if first add

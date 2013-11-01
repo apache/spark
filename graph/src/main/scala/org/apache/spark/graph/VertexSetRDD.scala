@@ -641,7 +641,7 @@ object VertexSetRDD {
     val groups = preAgg.mapPartitions( iter => {
       val hashMap = new PrimitiveKeyOpenHashMap[Vid, V]
       for ((k,v) <- iter) {
-        hashMap.update(k, v, reduceFunc)
+        hashMap.setMerge(k, v, reduceFunc)
       }
       val index = hashMap.keySet
       val values: IndexedSeq[V] = hashMap._values

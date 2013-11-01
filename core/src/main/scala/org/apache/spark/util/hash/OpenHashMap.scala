@@ -79,7 +79,7 @@ class OpenHashMap[K >: Null : ClassManifest, @specialized(Long, Int, Double) V: 
   }
 
   /** Set the value for a key */
-  def update(k: K, v: V, mergeF: (V,V) => V) {
+  def setMerge(k: K, v: V, mergeF: (V,V) => V) {
     if (k == null) {
       if(haveNullValue) {
         nullValue = mergeF(nullValue, v)
