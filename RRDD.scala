@@ -14,30 +14,37 @@ import org.apache.spark.util.Utils
  * This is used by SparkR's shuffle operations.
  */
 private class PairwiseRRDD(
-    parent: RDD[(Array[Byte], Array[Byte])],
+    parent: JavaRDD[(Array[Byte], Array[Byte])],
+    numPartitions: Int,
     hashFunc: Array[Byte],
-    dataSerialized: Boolean)
-  extends RDD[(Array[Byte], Array[Byte])](parent) {
+    dataSerialized: Boolean,
+    functionDependencies: Array[Byte])
+  extends RDD[(Array[Byte], Array[Byte])](parent.rdd) {
 
   override def getPartitions = parent.partitions
 
-  override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[(Array[Byte], Array[Byte])] = {
     // TODO: implement me
+
 //    parent.iterator(split, context).grouped(2).map {
 //      case Seq(keyBytes, valBytes) => (keyBytes, valBytes)
 //      case x => throw new SparkContext("PairwiseRRDD: un")
 //    }
 
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-
     val pb = SparkRHelper.rPairwiseWorkerProcessBuilder
 
     val proc = pb.start()
     val env = SparkEnv.get
 
     val tempDir = Utils.getLocalDir
-    val tempFile =  File.createTempFile("rSpark", "out", new File(tempDir))
+    val tempFile =  File.createTempFile("rSpark", "out2", new File(tempDir))    // FIXME: "out" causes problem?
     val tempFileName = tempFile.getAbsolutePath
+//
+//    val tempDir = Utils.getLocalDir
+//    val tempFile =  File.createTempFile("rSpark", "out", new File(tempDir))
+//    val tempFileName = tempFile.getAbsolutePath
+
 
     // Start a thread to print the process's stderr to ours
     new Thread("stderr reader for R") {
@@ -61,19 +68,47 @@ private class PairwiseRRDD(
         dataOut.writeInt(hashFunc.length)
         dataOut.write(hashFunc, 0, hashFunc.length)
 
-        dataOut.writeInt(if(dataSerialized) 1 else 0)
+        dataOut.writeInt(if (dataSerialized) 1 else 0)
 
-        for (elem <- firstParent[(Array[Byte], Array[Byte])].iterator(split, context)) {
-          if (dataSerialized) {
-            val elemArr = elem.asInstanceOf[Array[Byte]]
-            dataOut.writeInt(elemArr.length)
-            dataOut.write(elemArr, 0, elemArr.length)
-          } else {
-            printOut.println(elem)
-          }
+        dataOut.writeInt(functionDependencies.length)
+        dataOut.write(functionDependencies, 0, functionDependencies.length)
+
+//        implicit val cm : ClassManifest[(Array[Byte], Array[Byte])] =
+//          implicitly[ClassManifest[(Array[Byte], Array[Byte])]]
+
+//        val iter = parent.iterator(split, context)
+
+//        println("***********iter.length = " + iter.length)
+
+//        dataOut.writeInt(iter.length)   // TODO: is length of iterator necessary?
+
+        // TODO: is it okay to use parent as opposed to firstParent?
+        parent.iterator(split, context).grouped(2).foreach {
+          case Seq(a, b) =>
+//          val a = x.asInstanceOf[Tuple2[Array[Byte], Array[Byte]]]._1
+//          val b = x.asInstanceOf[Tuple2[Array[Byte], Array[Byte]]]._2
+//          elem match { case (keyBytes, valBytes) =>
+//        iter.foreach { case (keyBytes, valBytes) =>
+            val keyBytes: Array[Byte] = a.asInstanceOf[Array[Byte]]
+            val valBytes: Array[Byte] = b.asInstanceOf[Array[Byte]]
+
+            if (dataSerialized) {
+              dataOut.writeInt(keyBytes.length)
+              dataOut.write(keyBytes, 0, keyBytes.length)
+              dataOut.writeInt(valBytes.length)
+              dataOut.write(valBytes, 0, valBytes.length)
+            } else {
+              // FIXME: is it possible / do we allow that an RDD[(Array[Byte], Array[Byte])] has dataSerialized == false?
+              printOut.println(keyBytes)
+              printOut.println(valBytes)
+            }
+//          case _ =>
+          case _ => sys.error("*** elem is not 2-tuple")
         }
+        dataOut.writeInt(0) // End of output
         stream.close()
       }
+//      }
     }.start()
 
     // Return an iterator that read lines from the process's stdout
@@ -82,8 +117,8 @@ private class PairwiseRRDD(
 
     val dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
 
-    return new Iterator[Array[Byte]] {
-      def next(): Array[Byte] = {
+    return new Iterator[(Array[Byte], Array[Byte])] {
+      def next(): (Array[Byte], Array[Byte]) = {
         val obj = _nextObj
         if (hasNext) {
           _nextObj = read()
@@ -91,7 +126,7 @@ private class PairwiseRRDD(
         obj
       }
 
-      private def read(): Array[Byte] = {
+      private def read(): (Array[Byte], Array[Byte]) = {
         try {
           val length = dataStream.readInt()
           // logError("READ length " + length)
@@ -104,12 +139,15 @@ private class PairwiseRRDD(
           // }
 
           length match {
-            case length if length > 0 =>
-              val obj = new Array[Byte](length)
-              dataStream.read(obj, 0, length)
-              obj
-            case _ =>
-              new Array[Byte](0)
+            case length if length == 2 =>
+              val hashedKeyLength = dataStream.readInt()
+              val hashedKey = new Array[Byte](hashedKeyLength)
+              dataStream.read(hashedKey, 0, hashedKeyLength)
+              val contentPairsLength = dataStream.readInt()
+              val contentPairs = new Array[Byte](contentPairsLength)
+              dataStream.read(contentPairs, 0, contentPairsLength)
+              (hashedKey, contentPairs)
+            case _ => (new Array[Byte](0), new Array[Byte](0))   // End of input
           }
         } catch {
           case eof: EOFException => {
@@ -120,7 +158,7 @@ private class PairwiseRRDD(
       }
       var _nextObj = read()
 
-      def hasNext = _nextObj.length != 0
+      def hasNext = !(_nextObj._1.length == 0 && _nextObj._2.length == 0)
     }
   }
 
@@ -128,6 +166,7 @@ private class PairwiseRRDD(
 
 }
 
+/** An RDD that stores serialized R objects as Array[Byte]. */
 class RRDD[T: ClassManifest](
     parent: RDD[T],
     func: Array[Byte],
@@ -260,6 +299,7 @@ object RRDD {
   /**
    * Create an RRDD given a sequence of 2-tuples of byte arrays (key-val collections). Used to create RRDD when
    * `parallelize` is called from R.
+   * TODO?: change return type into JavaPairRDD[Array[Byte], Array[Byte]]?
    */
   def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Array[Byte]]]): JavaRDD[(Array[Byte], Array[Byte])] = {
     val keyValPairs: Seq[(Array[Byte], Array[Byte])] = arr.map(tuple => (tuple(0), tuple(1)))
