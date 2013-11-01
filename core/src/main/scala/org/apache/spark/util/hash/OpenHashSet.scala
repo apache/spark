@@ -81,6 +81,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
   protected var _data = classManifest[T].newArray(_capacity)
   protected var _bitset = new BitSet(_capacity)
 
+  def getBitSet = _bitset
+
   /** Number of elements in the set. */
   def size: Int = _size
 
@@ -146,6 +148,13 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
 
   /** Return the value at the specified position. */
   def getValue(pos: Int): T = _data(pos)
+
+  /** Return the value at the specified position. */
+  def getValueSafe(pos: Int): T = {
+    assert(_bitset.get(pos))
+    _data(pos)
+  }
+
 
   /**
    * Return the next position with an element stored, starting from the given position inclusively.
