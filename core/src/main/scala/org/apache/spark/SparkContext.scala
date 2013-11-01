@@ -591,7 +591,8 @@ class SparkContext(
     val uri = new URI(path)
     val key = uri.getScheme match {
       case null | "file" => env.httpFileServer.addFile(new File(uri.getPath))
-      case _ => path
+      case "local"       => "file:" + uri.getPath
+      case _             => path
     }
     addedFiles(key) = System.currentTimeMillis
 
