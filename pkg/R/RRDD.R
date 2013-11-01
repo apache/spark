@@ -128,21 +128,15 @@ setMethod("take",
           })
 
 ############ Shuffle Functions ############
-
-# TODO: add bypass_serializer: collect() shoudln't unserialize data, waste of work
-hashPairwiseRRDDToEnvir <- function(rrdd, hashFunc) {
-  res <- new.env()
-  collected <- collect(rrdd)
-  for (tuple in collected) {
-    hashVal = as.character(hashFunc(tuple[[1]]))
-    acc <- res[[hashVal]]
-    acc[[length(acc) + 1]] <- tuple
-    res[[hashVal]] <- acc
-  }
-  res # res[[bucket]] = list(list(key1, val1), ...)
+ source("R/pkg/R/utils.R")
+.address <- function(x) {
+  # http://stackoverflow.com/questions/10912729/r-object-identity
+  substring(capture.output(.Internal(inspect(x)))[1], 2, 10)
 }
-serializedHashFunc <- serialize(hashPairwiseRRDDToEnvir, connection = NULL, ascii = TRUE)
-serializedHashFuncBytes <- .jarray(serializedFunc)
+
+rrdd <- parallelize(sc, list(list(1, 2), list(3, 3), list(4, 4)), 2)
+partitionFunc <- function(key) { if (key >= 3) 1 else 0 }
+numPartitions <- 2
 
 setGeneric("partitionBy",
            function(rrdd, numPartitions, partitionFunc) {
@@ -151,13 +145,52 @@ setGeneric("partitionBy",
 setMethod("partitionBy",
           signature(rrdd = "RRDD", numPartitions = "integer", partitionFunc = "function"),
           function(rrdd, numPartitions, partitionFunc) {
-            # TODO: implement me
+
+            hashPairsToEnvir <- function(pairs) {
+              # pairs: list(list(_, _), ..)
+              res <- new.env()
+              for (tuple in pairs) {
+                hashVal = partitionFunc(tuple[[1]])
+                bucket = as.character(hashVal %% numPartitions)
+                acc <- res[[bucket]]
+                # TODO?: http://stackoverflow.com/questions/2436688/append-an-object-to-a-list-in-r-in-amortized-constant-time
+                acc[[length(acc) + 1]] <- tuple
+                res[[bucket]] <- acc
+              }
+              res
+            }
+
+            serializedHashFunc <- serialize(hashPairsToEnvir,
+                                            connection = NULL,
+                                            ascii = TRUE)
+            serializedHashFuncBytes <- .jarray(serializedHashFunc)
+            depsBin <- getDependencies(hashPairsToEnvir)
+            depsBinArr <- .jarray(depsBin)
+
+            # At this point, we have RDD[(Array[Byte], Array[Byte])],
+            # which contains the actual content, in unknown partitions order.
+            # We create a PairwiseRRDD that extends RDD[(Array[Byte],
+            # Array[Byte])], where the key is the hashed split, the value is
+            # the content (key-val pairs). It does not matter how the data are
+            # stored in what partitions at this point.
 
             pairwiseRRDD <- new(J("org.apache.spark.api.r.PairwiseRRDD"),
-                                rrdd@jrdd$rdd(), # RDD[(Array[Byte], Array[Byte])]
+                                rrdd@jrdd, # JavaRDD[(Array[Byte], Array[Byte])]
+                                as.integer(numPartitions),
                                 serializedHashFuncBytes,
-                                rrdd@serialized)
+                                rrdd@serialized,
+                                depsBinArr)
 
-            # TODO: next step: call partitionBy on its jrdd
-            # .jcall(pairwiseRRDD, )
+            # Create a corresponding RPartitioner.
+            rPartitioner <- new(J("org.apache.spark.api.r.RPartitioner"),
+                                as.integer(numPartitions),
+                                .address(partitionFunc)) # TODO: does this work?
+
+            # Call partitionBy on the obtained PairwiseRDD.
+            javaPairRDD <- pairwiseRRDD$asJavaPairRDD()$partitionBy(rPartitioner)
+
+            # Call .values() on the result to get back the final result, the
+            # shuffled acutal content key-val pairs.
+            r <- javaPairRDD$values()
+            r$collect()
           })

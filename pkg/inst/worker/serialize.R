@@ -1,12 +1,22 @@
 # Utility functions to serialize, deserialize etc.
 
 readInt <- function(con) {
-  readBin(con, integer(), n = 1, endian="big")
+  r <- readBin(con, integer(), n = 1, endian="big")
+  write("** in readInt: ", stderr())
+  write(r, stderr())
+  write("**", stderr())
+  r
 }
 
 readRaw <- function(con) {
   dataLen <- readInt(con)
-  data <- readBin(con, raw(), dataLen, endian="big")
+
+  write("**in readRaw, dataLen: ", stderr())
+  write(dataLen, stderr())
+  write("**", stderr())
+  write(as.character(mode(dataLen)), stderr())
+
+  data <- readBin(con, raw(), as.integer(dataLen), endian="big")
 }
 
 readString <- function(con) {
