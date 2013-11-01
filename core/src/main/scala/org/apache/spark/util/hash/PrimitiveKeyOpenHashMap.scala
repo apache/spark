@@ -28,34 +28,55 @@ package org.apache.spark.util.hash
 private[spark]
 class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
                               @specialized(Long, Int, Double) V: ClassManifest](
-    initialCapacity: Int)
+    val keySet: OpenHashSet[K], var _values: Array[V])
   extends Iterable[(K, V)]
   with Serializable {
 
-  def this() = this(64)
+  /**
+   * Allocate an OpenHashMap with a fixed initial capacity
+   */
+  def this(initialCapacity: Int = 64) = 
+    this(new OpenHashSet[K](initialCapacity), new Array[V](initialCapacity))
+
+  /**
+   * Allocate an OpenHashMap with a fixed initial capacity
+   */
+  def this(keySet: OpenHashSet[K]) = this(keySet, new Array[V](keySet.capacity))
 
   require(classManifest[K] == classManifest[Long] || classManifest[K] == classManifest[Int])
 
-  protected var _keySet = new OpenHashSet[K](initialCapacity)
-  private var _values = new Array[V](_keySet.capacity)
-
   private var _oldValues: Array[V] = null
 
-  override def size = _keySet.size
+  override def size = keySet.size
 
   /** Get the value for a given key */
   def apply(k: K): V = {
-    val pos = _keySet.getPos(k)
+    val pos = keySet.getPos(k)
     _values(pos)
   }
 
   /** Set the value for a key */
   def update(k: K, v: V) {
-    val pos = _keySet.fastAdd(k) & OpenHashSet.POSITION_MASK
+    val pos = keySet.fastAdd(k) & OpenHashSet.POSITION_MASK
     _values(pos) = v
-    _keySet.rehashIfNeeded(k, grow, move)
+    keySet.rehashIfNeeded(k, grow, move)
     _oldValues = null
   }
+
+
+  /** Set the value for a key */
+  def setMerge(k: K, v: V, mergeF: (V,V) => V) {
+    val pos = keySet.fastAdd(k)
+    val ind = pos & OpenHashSet.POSITION_MASK
+    if ((pos & OpenHashSet.EXISTENCE_MASK) != 0) { // if first add
+      _values(ind) = v
+    } else {
+      _values(ind) = mergeF(_values(ind), v)
+    }
+    keySet.rehashIfNeeded(k, grow, move)
+    _oldValues = null
+  }
+
 
   /**
    * If the key doesn't exist yet in the hash map, set its value to defaultValue; otherwise,
@@ -64,11 +85,11 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
    * @return the newly updated value.
    */
   def changeValue(k: K, defaultValue: => V, mergeValue: (V) => V): V = {
-    val pos = _keySet.fastAdd(k)
+    val pos = keySet.fastAdd(k)
     if ((pos & OpenHashSet.EXISTENCE_MASK) != 0) {
       val newValue = defaultValue
       _values(pos & OpenHashSet.POSITION_MASK) = newValue
-      _keySet.rehashIfNeeded(k, grow, move)
+      keySet.rehashIfNeeded(k, grow, move)
       newValue
     } else {
       _values(pos) = mergeValue(_values(pos))
@@ -82,9 +103,9 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
 
     /** Get the next value we should return from next(), or null if we're finished iterating */
     def computeNextPair(): (K, V) = {
-      pos = _keySet.nextPos(pos)
+      pos = keySet.nextPos(pos)
       if (pos >= 0) {
-        val ret = (_keySet.getValue(pos), _values(pos))
+        val ret = (keySet.getValue(pos), _values(pos))
         pos += 1
         ret
       } else {
