@@ -28,7 +28,6 @@ import scala.math.min
 import org.apache.spark.{ExceptionFailure, FetchFailed, Logging, Resubmitted, SparkEnv,
   Success, TaskEndReason, TaskKilled, TaskResultLost, TaskState}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.scheduler._
 import org.apache.spark.util.{SystemClock, Clock}
 
 

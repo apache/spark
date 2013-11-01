@@ -27,7 +27,6 @@ import scala.collection.mutable.HashSet
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
@@ -449,7 +448,7 @@ private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = fals
 }
 
 
-object TaskScheduler {
+private[spark] object TaskScheduler {
   /**
    * Used to balance containers across hosts.
    *

@@ -36,14 +36,15 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
 /**
  * TaskScheduler that records the task sets that the DAGScheduler requested executed.
  */
-class TaskSetRecordingTaskScheduler(sc: SparkContext) extends TaskScheduler(sc) {
+class TaskSetRecordingTaskScheduler(sc: SparkContext,
+  mapOutputTrackerMaster: MapOutputTrackerMaster) extends TaskScheduler(sc) {
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
   override def start() = {}
   override def stop() = {}
   override def submitTasks(taskSet: TaskSet) = {
     // normally done by TaskSetManager
-    taskSet.tasks.foreach(_.epoch = mapOutputTracker.getEpoch)
+    taskSet.tasks.foreach(_.epoch = mapOutputTrackerMaster.getEpoch)
     taskSets += taskSet
   }
   override def cancelTasks(stageId: Int) {}
@@ -97,11 +98,11 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
 
   before {
     sc = new SparkContext("local", "DAGSchedulerSuite")
-    taskScheduler = new TaskSetRecordingTaskScheduler(sc)
+    mapOutputTracker = new MapOutputTrackerMaster()
+    taskScheduler = new TaskSetRecordingTaskScheduler(sc, mapOutputTracker)
     taskScheduler.taskSets.clear()
     cacheLocations.clear()
     results.clear()
-    mapOutputTracker = new MapOutputTrackerMaster()
     scheduler = new DAGScheduler(taskScheduler, mapOutputTracker, blockManagerMaster, null) {
       override def runLocally(job: ActiveJob) {
         // don't bother with the thread while unit testing
