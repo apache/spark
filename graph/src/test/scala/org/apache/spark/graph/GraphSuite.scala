@@ -77,16 +77,15 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)
       val b = VertexSetRDD(a).mapValues(x => -x)
-      assert(b.leftJoin(a)
-        .mapValues(x => x._1 + x._2.get).map(x=> x._2).reduce(_+_) === 0)
+      assert(b.count === 101)
+      assert(b.leftJoin(a).mapValues(x => x._1 + x._2.get).map(x=> x._2).reduce(_+_) === 0)
       val c = VertexSetRDD(a, b.index)
-      assert(b.leftJoin(c)
-        .mapValues(x => x._1 + x._2.get).map(x=> x._2).reduce(_+_) === 0)
+      assert(b.leftJoin(c).mapValues(x => x._1 + x._2.get).map(x=> x._2).reduce(_+_) === 0)
       val d = c.filter(q => ((q._2 % 2) == 0))
       val e = a.filter(q => ((q._2 % 2) == 0))
       assert(d.count === e.count)
-      assert(b.zipJoin(c).mapValues(x => x._1 + x._2)
-        .map(x => x._2).reduce(_+_) === 0)
+      assert(b.zipJoin(c).mapValues(x => x._1 + x._2).map(x => x._2).reduce(_+_) === 0)
+
     }
   } 
   
