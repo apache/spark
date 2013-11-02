@@ -14,7 +14,7 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
 
   val shuffleBlockManager = new ShuffleBlockManager(null) {
     var idToSegmentMap = mutable.Map[ShuffleBlockId, FileSegment]()
-    override def getBlockLocation(id: ShuffleBlockId) = idToSegmentMap.get(id)
+    override def getBlockLocation(id: ShuffleBlockId) = idToSegmentMap(id)
   }
 
   var diskBlockManager: DiskBlockManager = _
