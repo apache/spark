@@ -69,7 +69,7 @@ described below.
 
 When developing a Spark application, specify the Hadoop version by adding the
 "hadoop-client" artifact to your project's dependencies. For example, if you're
-using Hadoop 1.0.1 and build your application using SBT, add this entry to
+using Hadoop 1.2.1 and build your application using SBT, add this entry to
 `libraryDependencies`:
 
     "org.apache.hadoop" % "hadoop-client" % "1.2.1"
