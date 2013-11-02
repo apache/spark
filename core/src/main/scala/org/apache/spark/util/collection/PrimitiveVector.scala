@@ -21,7 +21,11 @@ package org.apache.spark.util.collection
 private[spark]
 class PrimitiveVector[@specialized(Long, Int, Double) V: ClassManifest](initialSize: Int = 64) {
   private var numElements = 0
-  private var array = new Array[V](initialSize)
+  private var array: Array[V] = _
+
+  // NB: This must be separate from the declaration, otherwise the specialized parent class
+  // will get its own array with the same initial size. TODO: Figure out why...
+  array = new Array[V](initialSize)
 
   def apply(index: Int): V = {
     require(index < numElements)
