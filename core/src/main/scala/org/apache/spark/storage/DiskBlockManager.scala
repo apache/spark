@@ -55,14 +55,12 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
    * Otherwise, we assume the Block is mapped to a whole file identified by the BlockId directly.
    */
   def getBlockLocation(blockId: BlockId): FileSegment = {
-    if (blockId.isShuffle) {
-      val segment = shuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
-      if (segment.isDefined) { return segment.get }
-      // If no special mapping found, assume standard block -> file mapping...
+    if (blockId.isShuffle && shuffleManager.consolidateShuffleFiles) {
+      shuffleManager.getBlockLocation(blockId.asInstanceOf[ShuffleBlockId])
+    } else {
+      val file = getFile(blockId.name)
+      new FileSegment(file, 0, file.length())
     }
-
-    val file = getFile(blockId.name)
-    new FileSegment(file, 0, file.length())
   }
 
   def getFile(filename: String): File = {
