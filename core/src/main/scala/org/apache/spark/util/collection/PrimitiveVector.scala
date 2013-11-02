@@ -15,12 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.util.collection
 
 /** Provides a simple, non-threadsafe, array-backed vector that can store primitives. */
-class AGodDamnPrimitiveVector[@specialized(Long, Int, Double) V: ClassManifest]
-    (initialSize: Int = 64)
-{
+private[spark]
+class PrimitiveVector[@specialized(Long, Int, Double) V: ClassManifest](initialSize: Int = 64) {
   private var numElements = 0
   private var array = new Array[V](initialSize)
 

@@ -27,7 +27,8 @@ import scala.collection.mutable
 
 import org.apache.spark.Logging
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.{MetadataCleanerType, MetadataCleaner, AGodDamnPrimitiveVector, TimeStampedHashMap}
+import org.apache.spark.util.{MetadataCleanerType, MetadataCleaner, TimeStampedHashMap}
+import org.apache.spark.util.collection.PrimitiveVector
 
 private[spark]
 class ShuffleWriterGroup(
@@ -203,7 +204,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
  */
 private[spark]
 class ShuffleFileGroup(val shuffleId: Int, val fileId: Int, val files: Array[ShuffleFile]) {
-  private val mapIds = new AGodDamnPrimitiveVector[Int]()
+  private val mapIds = new PrimitiveVector[Int]()
 
   files.foreach(_.setShuffleFileGroup(this))
 
@@ -238,7 +239,7 @@ class ShuffleFile(val file: File) {
    * Consecutive offsets of blocks into the file, ordered by position in the file.
    * This ordering allows us to compute block lengths by examining the following block offset.
    */
-  val blockOffsets = new AGodDamnPrimitiveVector[Long]()
+  val blockOffsets = new PrimitiveVector[Long]()
 
   /** Back pointer to whichever ShuffleFileGroup this file is a part of. */
   private var shuffleFileGroup : ShuffleFileGroup = _
