@@ -19,6 +19,12 @@ import struct
 import cPickle
 
 
+class SpecialLengths(object):
+    END_OF_DATA_SECTION = -1
+    PYTHON_EXCEPTION_THROWN = -2
+    TIMING_DATA = -3
+
+
 class Batch(object):
     """
     Used to store multiple RDD entries as a single Java object.
