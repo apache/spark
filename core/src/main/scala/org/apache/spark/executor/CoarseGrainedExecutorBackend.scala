@@ -24,11 +24,11 @@ import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClie
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.scheduler.cluster.StandaloneClusterMessages._
+import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{Utils, AkkaUtils}
 
 
-private[spark] class StandaloneExecutorBackend(
+private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
     executorId: String,
     hostPort: String,
@@ -80,6 +80,11 @@ private[spark] class StandaloneExecutorBackend(
     case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
       logError("Driver terminated or disconnected! Shutting down.")
       System.exit(1)
+
+    case StopExecutor =>
+      logInfo("Driver commanded a shutdown")
+      context.stop(self)
+      context.system.shutdown()
   }
 
   override def statusUpdate(taskId: Long, state: TaskState, data: ByteBuffer) {
@@ -87,7 +92,7 @@ private[spark] class StandaloneExecutorBackend(
   }
 }
 
-private[spark] object StandaloneExecutorBackend {
+private[spark] object CoarseGrainedExecutorBackend {
   def run(driverUrl: String, executorId: String, hostname: String, cores: Int) {
     // Debug code
     Utils.checkHost(hostname)
@@ -99,7 +104,7 @@ private[spark] object StandaloneExecutorBackend {
     val sparkHostPort = hostname + ":" + boundPort
     System.setProperty("spark.hostPort", sparkHostPort)
     val actor = actorSystem.actorOf(
-      Props(new StandaloneExecutorBackend(driverUrl, executorId, sparkHostPort, cores)),
+      Props(new CoarseGrainedExecutorBackend(driverUrl, executorId, sparkHostPort, cores)),
       name = "Executor")
     actorSystem.awaitTermination()
   }
@@ -107,7 +112,9 @@ private[spark] object StandaloneExecutorBackend {
   def main(args: Array[String]) {
     if (args.length < 4) {
       //the reason we allow the last frameworkId argument is to make it easy to kill rogue executors
-      System.err.println("Usage: StandaloneExecutorBackend <driverUrl> <executorId> <hostname> <cores> [<appid>]")
+      System.err.println(
+        "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> <cores> " +
+        "[<appid>]")
       System.exit(1)
     }
     run(args(0), args(1), args(2), args(3).toInt)

@@ -17,28 +17,47 @@
 
 package org.apache.spark.deploy
 
-import com.google.common.collect.MapMaker
-
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.JobConf
 
+import org.apache.spark.SparkException
 
 /**
- * Contains util methods to interact with Hadoop from spark.
+ * Contains util methods to interact with Hadoop from Spark.
  */
+private[spark]
 class SparkHadoopUtil {
-  // A general, soft-reference map for metadata needed during HadoopRDD split computation
-  // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
-  private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
-  // Return an appropriate (subclass) of Configuration. Creating config can initializes some hadoop
-  // subsystems
+  /**
+   * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
+   * subsystems.
+   */
   def newConfiguration(): Configuration = new Configuration()
 
-  // Add any user credentials to the job conf which are necessary for running on a secure Hadoop
-  // cluster
+  /**
+   * Add any user credentials to the job conf which are necessary for running on a secure Hadoop
+   * cluster.
+   */
   def addCredentials(conf: JobConf) {}
 
   def isYarnMode(): Boolean = { false }
-
+}
+  
+object SparkHadoopUtil {
+  private val hadoop = { 
+    val yarnMode = java.lang.Boolean.valueOf(System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
+    if (yarnMode) {
+      try {
+        Class.forName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil").newInstance.asInstanceOf[SparkHadoopUtil]
+      } catch {
+       case th: Throwable => throw new SparkException("Unable to load YARN support", th)
+      }
+    } else {
+      new SparkHadoopUtil
+    }
+  }
+  
+  def get: SparkHadoopUtil = {
+    hadoop
+  }
 }

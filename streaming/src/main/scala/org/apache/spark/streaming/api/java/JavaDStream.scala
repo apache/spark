@@ -94,6 +94,12 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classManifest: ClassM
    */
   def union(that: JavaDStream[T]): JavaDStream[T] =
     dstream.union(that.dstream)
+
+  /**
+   * Return a new DStream with an increased or decreased level of parallelism. Each RDD in the
+   * returned DStream has exactly numPartitions partitions.
+   */
+  def repartition(numPartitions: Int): JavaDStream[T] = dstream.repartition(numPartitions)
 }
 
 object JavaDStream {

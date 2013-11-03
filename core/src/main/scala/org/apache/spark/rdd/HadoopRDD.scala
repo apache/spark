@@ -29,6 +29,7 @@ import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.NextIterator
 import org.apache.hadoop.conf.{Configuration, Configurable}
 
@@ -198,10 +199,10 @@ private[spark] object HadoopRDD {
    * The three methods below are helpers for accessing the local map, a property of the SparkEnv of
    * the local process.
    */
-  def getCachedMetadata(key: String) = SparkEnv.get.hadoop.hadoopJobMetadata.get(key)
+  def getCachedMetadata(key: String) = SparkEnv.get.hadoopJobMetadata.get(key)
 
-  def containsCachedMetadata(key: String) = SparkEnv.get.hadoop.hadoopJobMetadata.containsKey(key)
+  def containsCachedMetadata(key: String) = SparkEnv.get.hadoopJobMetadata.containsKey(key)
 
   def putCachedMetadata(key: String, value: Any) =
-    SparkEnv.get.hadoop.hadoopJobMetadata.put(key, value)
+    SparkEnv.get.hadoopJobMetadata.put(key, value)
 }

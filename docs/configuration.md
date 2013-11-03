@@ -149,7 +149,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.io.compression.codec</td>
   <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
   <td>
-    The compression codec class to use for various compressions. By default, Spark provides two
+    The codec used to compress internal data such as RDD partitions and shuffle outputs. By default, Spark provides two
     codecs: <code>org.apache.spark.io.LZFCompressionCodec</code> and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
 </tr>
@@ -317,6 +317,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Number of individual task failures before giving up on the job.
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
+  </td>
+</tr>
+<tr>
+  <td>spark.broadcast.blockSize</td>
+  <td>4096</td>
+  <td>
+    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>. 
+    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>
 

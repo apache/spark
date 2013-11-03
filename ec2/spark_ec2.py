@@ -73,7 +73,7 @@ def parse_args():
   parser.add_option("-v", "--spark-version", default="0.8.0",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
   parser.add_option("--spark-git-repo", 
-      default="https://github.com/mesos/spark", 
+      default="https://github.com/apache/incubator-spark",
       help="Github repo from which to checkout supplied commit hash")
   parser.add_option("--hadoop-major-version", default="1",
       help="Major version of Hadoop (default: 1)")

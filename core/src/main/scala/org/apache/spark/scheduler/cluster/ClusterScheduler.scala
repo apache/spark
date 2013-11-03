@@ -79,7 +79,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   private val executorIdToHost = new HashMap[String, String]
 
   // Listener object to pass upcalls into
-  var listener: TaskSchedulerListener = null
+  var dagScheduler: DAGScheduler = null
 
   var backend: SchedulerBackend = null
 
@@ -94,8 +94,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
-  override def setListener(listener: TaskSchedulerListener) {
-    this.listener = listener
+  override def setDAGScheduler(dagScheduler: DAGScheduler) {
+    this.dagScheduler = dagScheduler
   }
 
   def initialize(context: SchedulerBackend) {
@@ -297,13 +297,17 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
     // Update the DAGScheduler without holding a lock on this, since that can deadlock
     if (failedExecutor != None) {
-      listener.executorLost(failedExecutor.get)
+      dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
     if (taskFailed) {
       // Also revive offers if a task had failed for some reason other than host lost
       backend.reviveOffers()
     }
+  }
+
+  def handleTaskGettingResult(taskSetManager: ClusterTaskSetManager, tid: Long) {
+    taskSetManager.handleTaskGettingResult(tid)
   }
 
   def handleSuccessfulTask(
@@ -397,9 +401,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
          logError("Lost an executor " + executorId + " (already removed): " + reason)
       }
     }
-    // Call listener.executorLost without holding the lock on this to prevent deadlock
+    // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
     if (failedExecutor != None) {
-      listener.executorLost(failedExecutor.get)
+      dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
   }
@@ -418,7 +422,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   }
 
   def executorGained(execId: String, host: String) {
-    listener.executorGained(execId, host)
+    dagScheduler.executorGained(execId, host)
   }
 
   def getExecutorsAliveOnHost(host: String): Option[Set[String]] = synchronized {
