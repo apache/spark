@@ -93,6 +93,14 @@ def write_with_length(obj, stream):
     stream.write(obj)
 
 
+def read_mutf8(stream):
+    """
+    Read a string written with Java's DataOutputStream.writeUTF() method.
+    """
+    length = struct.unpack('>H', stream.read(2))[0]
+    return stream.read(length).decode('utf8')
+
+
 def read_with_length(stream):
     length = read_int(stream)
     obj = stream.read(length)
@@ -110,5 +118,15 @@ def read_from_pickle_file(stream):
                     yield item
             else:
                 yield obj
+    except EOFError:
+        return
+
+
+def read_pairs_from_pickle_file(stream):
+    try:
+        while True:
+            a = load_pickle(read_with_length(stream))
+            b = load_pickle(read_with_length(stream))
+            yield (a, b)
     except EOFError:
         return
