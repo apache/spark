@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.hash
+package org.apache.spark.util.collection
 
 
 /**
@@ -24,8 +24,8 @@ package org.apache.spark.util.hash
  */
 class BitSet(numBits: Int) {
 
-  private val words = new Array[Long](bit2words(numBits))
-  private val numWords = words.length
+  private[this] val words = new Array[Long](bit2words(numBits))
+  private[this] val numWords = words.length
 
   /**
    * Sets the bit at the specified index to true.

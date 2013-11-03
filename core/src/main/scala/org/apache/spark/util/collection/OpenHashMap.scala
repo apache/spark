@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.hash
+package org.apache.spark.util.collection
 
 
 /**
@@ -34,7 +34,11 @@ class OpenHashMap[K >: Null : ClassManifest, @specialized(Long, Int, Double) V: 
   def this() = this(64)
 
   protected var _keySet = new OpenHashSet[K](initialCapacity)
-  private var _values = new Array[V](_keySet.capacity)
+
+  // Init in constructor (instead of in declaration) to work around a Scala compiler specialization
+  // bug that would generate two arrays (one for Object and one for specialized T).
+  private var _values: Array[V] = _
+  _values = new Array[V](_keySet.capacity)
 
   @transient private var _oldValues: Array[V] = null
 
@@ -64,7 +68,7 @@ class OpenHashMap[K >: Null : ClassManifest, @specialized(Long, Int, Double) V: 
       haveNullValue = true
       nullValue = v
     } else {
-      val pos = _keySet.fastAdd(k) & OpenHashSet.POSITION_MASK
+      val pos = _keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
       _values(pos) = v
       _keySet.rehashIfNeeded(k, grow, move)
       _oldValues = null
@@ -87,7 +91,7 @@ class OpenHashMap[K >: Null : ClassManifest, @specialized(Long, Int, Double) V: 
       }
       nullValue
     } else {
-      val pos = _keySet.fastAdd(k)
+      val pos = _keySet.addWithoutResize(k)
       if ((pos & OpenHashSet.EXISTENCE_MASK) != 0) {
         val newValue = defaultValue
         _values(pos & OpenHashSet.POSITION_MASK) = newValue

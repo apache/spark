@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.hash
+package org.apache.spark.util.collection
 
 
 /**
@@ -36,8 +36,12 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
 
   require(classManifest[K] == classManifest[Long] || classManifest[K] == classManifest[Int])
 
-  protected var _keySet = new OpenHashSet[K](initialCapacity)
-  private var _values = new Array[V](_keySet.capacity)
+  // Init in constructor (instead of in declaration) to work around a Scala compiler specialization
+  // bug that would generate two arrays (one for Object and one for specialized T).
+  protected var _keySet: OpenHashSet[K] = _
+  private var _values: Array[V] = _
+  _keySet = new OpenHashSet[K](initialCapacity)
+  _values = new Array[V](_keySet.capacity)
 
   private var _oldValues: Array[V] = null
 
@@ -51,7 +55,7 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
 
   /** Set the value for a key */
   def update(k: K, v: V) {
-    val pos = _keySet.fastAdd(k) & OpenHashSet.POSITION_MASK
+    val pos = _keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
     _values(pos) = v
     _keySet.rehashIfNeeded(k, grow, move)
     _oldValues = null
@@ -64,7 +68,7 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
    * @return the newly updated value.
    */
   def changeValue(k: K, defaultValue: => V, mergeValue: (V) => V): V = {
-    val pos = _keySet.fastAdd(k)
+    val pos = _keySet.addWithoutResize(k)
     if ((pos & OpenHashSet.EXISTENCE_MASK) != 0) {
       val newValue = defaultValue
       _values(pos & OpenHashSet.POSITION_MASK) = newValue

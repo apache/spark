@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.hash
+package org.apache.spark.util.collection
 
 
 /**
@@ -78,8 +78,12 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
   protected var _mask = _capacity - 1
   protected var _size = 0
 
-  protected var _data = classManifest[T].newArray(_capacity)
   protected var _bitset = new BitSet(_capacity)
+
+  // Init of the array in constructor (instead of in declaration) to work around a Scala compiler
+  // specialization bug that would generate two arrays (one for Object and one for specialized T).
+  protected var _data: Array[T] = _
+  _data = new Array[T](_capacity)
 
   /** Number of elements in the set. */
   def size: Int = _size
@@ -95,7 +99,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
    * and rehash all elements.
    */
   def add(k: T) {
-    fastAdd(k)
+    addWithoutResize(k)
     rehashIfNeeded(k, grow, move)
   }
 
@@ -109,7 +113,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
    * @return The position where the key is placed, plus the highest order bit is set if the key
    *         exists previously.
    */
-  def fastAdd(k: T): Int = putInto(_bitset, _data, k)
+  def addWithoutResize(k: T): Int = putInto(_bitset, _data, k)
 
   /**
    * Rehash the set if it is overloaded.
@@ -154,7 +158,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
 
   /**
    * Put an entry into the set. Return the position where the key is placed. In addition, the
-   * highest bid in the returned position is set if the key exists prior to this put.
+   * highest bit in the returned position is set if the key exists prior to this put.
    *
    * This function assumes the data array has at least one empty slot.
    */
@@ -236,9 +240,7 @@ private[spark]
 object OpenHashSet {
 
   val INVALID_POS = -1
-
   val EXISTENCE_MASK = 0x80000000
-
   val POSITION_MASK = 0xEFFFFFF
 
   /**
