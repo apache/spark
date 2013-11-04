@@ -92,7 +92,7 @@ class OpenHashMap[K >: Null : ClassManifest, @specialized(Long, Int, Double) V: 
       nullValue
     } else {
       val pos = _keySet.addWithoutResize(k)
-      if ((pos & OpenHashSet.EXISTENCE_MASK) != 0) {
+      if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) {
         val newValue = defaultValue
         _values(pos & OpenHashSet.POSITION_MASK) = newValue
         _keySet.rehashIfNeeded(k, grow, move)

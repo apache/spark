@@ -43,6 +43,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
 
   require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
+  require(loadFactor < 1.0, "Load factor must be less than 1.0")
+  require(loadFactor > 0.0, "Load factor must be greater than 0.0")
 
   import OpenHashSet._
 
@@ -119,8 +121,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
    * Rehash the set if it is overloaded.
    * @param k A parameter unused in the function, but to force the Scala compiler to specialize
    *          this method.
-   * @param allocateFunc Closure invoked when we are allocating a new, larger array.
-   * @param moveFunc Closure invoked when we move the key from one position (in the old data array)
+   * @param allocateFunc Callback invoked when we are allocating a new, larger array.
+   * @param moveFunc Callback invoked when we move the key from one position (in the old data array)
    *                 to a new position (in the new data array).
    */
   def rehashIfNeeded(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
@@ -129,7 +131,9 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
     }
   }
 
-  /** Return the position of the element in the underlying array. */
+  /**
+   * Return the position of the element in the underlying array, or INVALID_POS if it is not found.
+   */
   def getPos(k: T): Int = {
     var pos = hashcode(hasher.hash(k)) & _mask
     var i = 1
@@ -172,7 +176,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
         data(pos) = k
         bitset.set(pos)
         _size += 1
-        return pos | EXISTENCE_MASK
+        return pos | NONEXISTENCE_MASK
       } else if (data(pos) == k) {
         // Found an existing key.
         return pos
@@ -194,8 +198,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
    *
    * @param k A parameter unused in the function, but to force the Scala compiler to specialize
    *          this method.
-   * @param allocateFunc Closure invoked when we are allocating a new, larger array.
-   * @param moveFunc Closure invoked when we move the key from one position (in the old data array)
+   * @param allocateFunc Callback invoked when we are allocating a new, larger array.
+   * @param moveFunc Callback invoked when we move the key from one position (in the old data array)
    *                 to a new position (in the new data array).
    */
   private def rehash(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
@@ -203,7 +207,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
     require(newCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
 
     allocateFunc(newCapacity)
-    val newData = classManifest[T].newArray(newCapacity)
+    val newData = new Array[T](newCapacity)
     val newBitset = new BitSet(newCapacity)
     var pos = 0
     _size = 0
@@ -240,7 +244,7 @@ private[spark]
 object OpenHashSet {
 
   val INVALID_POS = -1
-  val EXISTENCE_MASK = 0x80000000
+  val NONEXISTENCE_MASK = 0x80000000
   val POSITION_MASK = 0xEFFFFFF
 
   /**
