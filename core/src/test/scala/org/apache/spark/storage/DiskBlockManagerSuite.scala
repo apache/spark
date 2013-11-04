@@ -1,15 +1,19 @@
 package org.apache.spark.storage
 
-import org.scalatest.{BeforeAndAfterEach, FunSuite}
 import java.io.{FileWriter, File}
-import java.nio.file.Files
+
 import scala.collection.mutable
+
+import com.google.common.io.Files
+import org.scalatest.{BeforeAndAfterEach, FunSuite}
 
 class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
 
-  val rootDir0 = Files.createTempDirectory("disk-block-manager-suite-0")
-  val rootDir1 = Files.createTempDirectory("disk-block-manager-suite-1")
-  val rootDirs = rootDir0.getFileName + "," + rootDir1.getFileName
+  val rootDir0 = Files.createTempDir()
+  rootDir0.deleteOnExit()
+  val rootDir1 = Files.createTempDir()
+  rootDir1.deleteOnExit()
+  val rootDirs = rootDir0.getName + "," + rootDir1.getName
   println("Created root dirs: " + rootDirs)
 
   val shuffleBlockManager = new ShuffleBlockManager(null) {
