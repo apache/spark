@@ -85,7 +85,6 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
     def getNextFileId() = nextFileId.getAndIncrement()
     def getUnusedFileGroup() = unusedFileGroups.poll()
     def returnFileGroup(group: ShuffleFileGroup) = unusedFileGroups.add(group)
-    def returnFileGroups(groups: Seq[ShuffleFileGroup]) = unusedFileGroups.addAll(groups)
   }
 
   type ShuffleId = Int
