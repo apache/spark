@@ -148,6 +148,7 @@ private[spark] class ShuffleMapTask(
     val blockManager = SparkEnv.get.blockManager
     var shuffle: ShuffleBlocks = null
     var buckets: ShuffleWriterGroup = null
+    var success = false
 
     try {
       // Obtain all the block writers for shuffle blocks.
@@ -179,6 +180,7 @@ private[spark] class ShuffleMapTask(
       shuffleMetrics.shuffleWriteTime = totalTime
       metrics.get.shuffleWriteMetrics = Some(shuffleMetrics)
 
+      success = true
       new MapStatus(blockManager.blockManagerId, compressedSizes)
     } catch { case e: Exception =>
       // If there is an exception from running the task, revert the partial writes
@@ -191,7 +193,7 @@ private[spark] class ShuffleMapTask(
       // Release the writers back to the shuffle block manager.
       if (shuffle != null && buckets != null) {
         buckets.writers.foreach(_.close())
-        shuffle.releaseWriters(buckets)
+        shuffle.releaseWriters(buckets, success)
       }
       // Execute the callbacks on task completion.
       context.executeOnCompleteCallbacks()

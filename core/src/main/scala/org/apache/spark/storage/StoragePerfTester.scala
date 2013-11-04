@@ -50,7 +50,7 @@ object StoragePerfTester {
         w.close()
       }
 
-      shuffle.releaseWriters(buckets)
+      shuffle.releaseWriters(buckets, true)
     }
 
     val start = System.currentTimeMillis()
