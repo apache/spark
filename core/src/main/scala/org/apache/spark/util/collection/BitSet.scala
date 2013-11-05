@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.hash
+package org.apache.spark.util.collection
 
 
 /**
@@ -57,10 +57,10 @@ class BitSet(numBits: Int) {
     assert(newBS.numWords >= numWords)
     assert(newBS.numWords >= other.numWords)
     var ind = 0
-    while( ind < smaller ) { 
+    while( ind < smaller ) {
       newBS.words(ind) = words(ind) & other.words(ind)
       ind += 1
-    } 
+    }
     newBS
   }
 
@@ -75,18 +75,18 @@ class BitSet(numBits: Int) {
     assert(newBS.numWords >= other.numWords)
     val smaller = math.min(numWords, other.numWords)
     var ind = 0
-    while( ind < smaller ) { 
+    while( ind < smaller ) {
       newBS.words(ind) = words(ind) | other.words(ind)
       ind += 1
     }
-    while( ind < numWords ) { 
+    while( ind < numWords ) {
       newBS.words(ind) = words(ind)
       ind += 1
-    } 
-    while( ind < other.numWords ) { 
+    }
+    while( ind < other.numWords ) {
       newBS.words(ind) = other.words(ind)
       ind += 1
-    } 
+    }
     newBS
   }
 
@@ -110,7 +110,7 @@ class BitSet(numBits: Int) {
    */
   def get(index: Int): Boolean = {
     val bitmask = 1L << (index & 0x3f)   // mod 64 and shift
-    (words(index >>> 6) & bitmask) != 0  // div by 64 and mask
+    (words(index >> 6) & bitmask) != 0  // div by 64 and mask
   }
 
 
@@ -181,5 +181,5 @@ class BitSet(numBits: Int) {
 
 
   /** Return the number of longs it would take to hold numBits. */
-  private def bit2words(numBits: Int) = ((numBits - 1) >>> 6) + 1
+  private def bit2words(numBits: Int) = ((numBits - 1) >> 6) + 1
 }

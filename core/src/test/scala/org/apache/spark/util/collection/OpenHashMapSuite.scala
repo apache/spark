@@ -1,4 +1,4 @@
-package org.apache.spark.util.hash
+package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 import org.scalatest.FunSuite
@@ -82,7 +82,7 @@ class OpenHashMapSuite extends FunSuite {
   test("null keys") {
     val map = new OpenHashMap[String, String]()
     for (i <- 1 to 100) {
-      map("" + i) = "" + i
+      map(i.toString) = i.toString
     }
     assert(map.size === 100)
     assert(map(null) === null)
@@ -94,7 +94,7 @@ class OpenHashMapSuite extends FunSuite {
   test("null values") {
     val map = new OpenHashMap[String, String]()
     for (i <- 1 to 100) {
-      map("" + i) = null
+      map(i.toString) = null
     }
     assert(map.size === 100)
     assert(map("1") === null)
@@ -108,12 +108,12 @@ class OpenHashMapSuite extends FunSuite {
   test("changeValue") {
     val map = new OpenHashMap[String, String]()
     for (i <- 1 to 100) {
-      map("" + i) = "" + i
+      map(i.toString) = i.toString
     }
     assert(map.size === 100)
     for (i <- 1 to 100) {
-      val res = map.changeValue("" + i, { assert(false); "" }, v => {
-        assert(v === "" + i)
+      val res = map.changeValue(i.toString, { assert(false); "" }, v => {
+        assert(v === i.toString)
         v + "!"
       })
       assert(res === i + "!")
@@ -121,7 +121,7 @@ class OpenHashMapSuite extends FunSuite {
     // Iterate from 101 to 400 to make sure the map grows a couple of times, because we had a
     // bug where changeValue would return the wrong result when the map grew on that insert
     for (i <- 101 to 400) {
-      val res = map.changeValue("" + i, { i + "!" }, v => { assert(false); v })
+      val res = map.changeValue(i.toString, { i + "!" }, v => { assert(false); v })
       assert(res === i + "!")
     }
     assert(map.size === 400)
@@ -138,11 +138,11 @@ class OpenHashMapSuite extends FunSuite {
   test("inserting in capacity-1 map") {
     val map = new OpenHashMap[String, String](1)
     for (i <- 1 to 100) {
-      map("" + i) = "" + i
+      map(i.toString) = i.toString
     }
     assert(map.size === 100)
     for (i <- 1 to 100) {
-      assert(map("" + i) === "" + i)
+      assert(map(i.toString) === i.toString)
     }
   }
 }
