@@ -65,7 +65,7 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     val rootStageInfo = new StageInfo(rootStage)
 
     joblogger.onStageSubmitted(SparkListenerStageSubmitted(rootStageInfo, null))
-    joblogger.getRddNameTest(parentRdd) should be (parentRdd.getClass.getName)
+    joblogger.getRddNameTest(parentRdd) should be (parentRdd.getClass.getSimpleName)
     parentRdd.setName("MyRDD")
     joblogger.getRddNameTest(parentRdd) should be ("MyRDD")
     joblogger.createLogWriterTest(jobID)
