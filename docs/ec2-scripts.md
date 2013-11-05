@@ -98,7 +98,7 @@ permissions on your private key file, you can run `launch` with the
     `bin/hadoop` script in that directory. Note that the data in this
     HDFS goes away when you stop and restart a machine.
 -   There is also a *persistent HDFS* instance in
-    `/root/presistent-hdfs` that will keep data across cluster restarts.
+    `/root/persistent-hdfs` that will keep data across cluster restarts.
     Typically each node has relatively little space of persistent data
     (about 3 GB), but you can use the `--ebs-vol-size` option to
     `spark-ec2` to attach a persistent EBS volume to each node for

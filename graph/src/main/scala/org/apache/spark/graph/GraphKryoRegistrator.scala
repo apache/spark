@@ -2,10 +2,9 @@ package org.apache.spark.graph
 
 import com.esotericsoftware.kryo.Kryo
 
-import org.apache.spark.graph.impl.MessageToPartition
+import org.apache.spark.graph.impl.{EdgePartition, MessageToPartition}
 import org.apache.spark.serializer.KryoRegistrator
-import org.apache.spark.graph.impl._
-import org.apache.spark.util.hash.BitSet
+import org.apache.spark.util.collection.BitSet
 
 class GraphKryoRegistrator extends KryoRegistrator {
 

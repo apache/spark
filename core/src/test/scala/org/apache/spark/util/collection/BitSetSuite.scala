@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util.hash
+package org.apache.spark.util.collection
 
 import org.scalatest.FunSuite
 
