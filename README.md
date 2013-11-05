@@ -52,9 +52,9 @@ to interactively load, transform, and compute on massive graphs.
 
 ## Examples
 
-Suppose I want to build a graph from some text files, restrict the graph 
+Suppose I want to build a graph from some text files, restrict the graph
 to important relationships and users, run page-rank on the sub-graph, and
-then finally return attributes associated with the top users.  I can do 
+then finally return attributes associated with the top users.  I can do
 all of this in just a few lines with GraphX:
 
 ```scala
@@ -69,16 +69,16 @@ val users = sc.textFile("hdfs://user_attributes.tsv")
 val followerGraph = Graph.textFile(sc, "hdfs://followers.tsv")
 
 // Attach the user attributes
-val graph = followerGraph.outerJoinVertices(users){ 
+val graph = followerGraph.outerJoinVertices(users){
   case (uid, deg, Some(attrList)) => attrList
   // Some users may not have attributes so we set them as empty
-  case (uid, deg, None) => Array.empty[String] 
+  case (uid, deg, None) => Array.empty[String]
   }
 
 // Restrict the graph to users which have exactly two attributes
 val subgraph = graph.subgraph((vid, attr) => attr.size == 2)
 
-// Compute the PageRank 
+// Compute the PageRank
 val pagerankGraph = Analytics.pagerank(subgraph)
 
 // Get the attributes of the top pagerank users
@@ -86,7 +86,7 @@ val userInfoWithPageRank = subgraph.outerJoinVertices(pagerankGraph.vertices){
   case (uid, attrList, Some(pr)) => (pr, attrList)
   case (uid, attrList, None) => (pr, attrList)
   }
-  
+
 println(userInfoWithPageRank.top(5))
 
 ```
@@ -160,10 +160,10 @@ with YARN, also set `SPARK_YARN=true`:
 For convenience, these variables may also be set through the
 `conf/spark-env.sh` file described below.
 
-When developing a Spark application, specify the Hadoop version by
-adding the "hadoop-client" artifact to your project's
-dependencies. For example, if you're using Hadoop 1.0.1 and build your
-application using SBT, add this entry to `libraryDependencies`:
+When developing a Spark application, specify the Hadoop version by adding the
+"hadoop-client" artifact to your project's dependencies. For example, if you're
+using Hadoop 1.2.1 and build your application using SBT, add this entry to
+`libraryDependencies`:
 
     "org.apache.hadoop" % "hadoop-client" % "1.2.1"
 
