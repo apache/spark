@@ -34,19 +34,11 @@ import org.apache.spark.serializer.{SerializationStream, Serializer}
  */
 abstract class BlockObjectWriter(val blockId: BlockId) {
 
-  var closeEventHandler: () => Unit = _
-
   def open(): BlockObjectWriter
 
-  def close() {
-    closeEventHandler()
-  }
+  def close()
 
   def isOpen: Boolean
-
-  def registerCloseEventHandler(handler: () => Unit) {
-    closeEventHandler = handler
-  }
 
   /**
    * Flush the partial writes and commit them as a single atomic block. Return the
@@ -146,8 +138,6 @@ class DiskBlockObjectWriter(
       ts = null
       objOut = null
     }
-    // Invoke the close callback handler.
-    super.close()
   }
 
   override def isOpen: Boolean = objOut != null
