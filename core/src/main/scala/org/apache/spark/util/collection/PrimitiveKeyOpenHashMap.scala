@@ -53,6 +53,12 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
     _values(pos)
   }
 
+  /** Get the value for a given key, or returns elseValue if it doesn't exist. */
+  def getOrElse(k: K, elseValue: V): V = {
+    val pos = _keySet.getPos(k)
+    if (pos >= 0) _values(pos) else elseValue
+  }
+
   /** Set the value for a key */
   def update(k: K, v: V) {
     val pos = _keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
