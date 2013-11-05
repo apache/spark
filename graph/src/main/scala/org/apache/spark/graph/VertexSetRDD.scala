@@ -17,26 +17,11 @@
 
 package org.apache.spark.graph
 
-import java.nio.ByteBuffer
-
-
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable.ArrayBuffer
-
 import org.apache.spark._
-import org.apache.spark.rdd._
 import org.apache.spark.SparkContext._
-import org.apache.spark.Partitioner._
-
+import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.hash.BitSet
-import org.apache.spark.util.hash.OpenHashSet
-import org.apache.spark.util.hash.PrimitiveKeyOpenHashMap
-
-
-
-
+import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
 
 
 /**
@@ -184,9 +169,9 @@ class VertexSetRDD[@specialized V: ClassManifest](
       (keysIter: Iterator[VertexIdToIndexMap], 
        valuesIter: Iterator[(Int => V, BitSet)]) => 
       val index = keysIter.next()
-      assert(keysIter.hasNext() == false)
+      assert(keysIter.hasNext == false)
       val (oldValues, bs) = valuesIter.next()
-      assert(valuesIter.hasNext() == false)
+      assert(valuesIter.hasNext == false)
       // Allocate the array to store the results into
       val newBS = new BitSet(index.capacity)
       // Iterate over the active bits in the old bitset and 
@@ -246,9 +231,9 @@ class VertexSetRDD[@specialized V: ClassManifest](
         (keysIter: Iterator[VertexIdToIndexMap], 
          valuesIter: Iterator[(Int => V, BitSet)]) => 
         val index = keysIter.next()
-        assert(keysIter.hasNext() == false)
+        assert(keysIter.hasNext == false)
         val (oldValues, bs: BitSet) = valuesIter.next()
-        assert(valuesIter.hasNext() == false)
+        assert(valuesIter.hasNext == false)
         // Cosntruct a view of the map transformation
         val newValues: (Int => U) = (ind: Int) => {
           if (bs.get(ind)) { f(index.getValueSafe(ind), oldValues(ind)) }
@@ -384,7 +369,7 @@ class VertexSetRDD[@specialized V: ClassManifest](
             // Get the location of the key in the index
             val pos = index.getPos(k)
             // Only if the key is already in the index
-            if ((pos & OpenHashSet.EXISTENCE_MASK) == 0) {
+            if ((pos & OpenHashSet.NONEXISTENCE_MASK) == 0) {
               // Get the actual index
               val ind = pos & OpenHashSet.POSITION_MASK
               // If this value has already been seen then merge
@@ -642,7 +627,7 @@ object VertexSetRDD {
    * 
    * @note duplicate vertices are discarded arbitrarily 
    *
-   * @tparam the vertex attribute type
+   * @tparam V the vertex attribute type
    * @param rdd the rdd containing vertices
    * @param index the index which must be a superset of the vertices
    * in RDD
@@ -656,7 +641,7 @@ object VertexSetRDD {
    * Construct a vertex set from an RDD using an existing index and a
    * user defined `combiner` to merge duplicate vertices. 
    *
-   * @tparam the vertex attribute type
+   * @tparam V the vertex attribute type
    * @param rdd the rdd containing vertices
    * @param index the index which must be a superset of the vertices
    * in RDD
@@ -673,7 +658,7 @@ object VertexSetRDD {
    * Construct a vertex set from an RDD using an existing index and a
    * user defined `combiner` to merge duplicate vertices. 
    *
-   * @tparam the vertex attribute type
+   * @tparam V the vertex attribute type
    * @param rdd the rdd containing vertices
    * @param index the index which must be a superset of the vertices
    * in RDD
@@ -710,13 +695,13 @@ object VertexSetRDD {
     val values: RDD[ (Int => C, BitSet) ] = index.rdd.zipPartitions(partitioned)( (indexIter, tblIter) => {
       // There is only one map
       val index = indexIter.next()
-      assert(!indexIter.hasNext())
+      assert(!indexIter.hasNext)
       val values = new Array[C](index.capacity)
       val bs = new BitSet(index.capacity)
       for ((k,c) <- tblIter) {
         // Get the location of the key in the index
         val pos = index.getPos(k)
-        if ((pos & OpenHashSet.EXISTENCE_MASK) != 0) {
+        if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) {
           throw new SparkException("Error: Trying to bind an external index " +
             "to an RDD which contains keys that are not in the index.")
         } else {

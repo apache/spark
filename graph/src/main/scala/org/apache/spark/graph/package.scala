@@ -1,8 +1,6 @@
 package org.apache.spark
 
-import org.apache.spark.util.hash.BitSet
-import org.apache.spark.util.hash.OpenHashSet
-import org.apache.spark.util.hash.PrimitiveKeyOpenHashMap
+import org.apache.spark.util.collection.OpenHashSet
 
 
 package object graph {

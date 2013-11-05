@@ -1,4 +1,4 @@
-package org.apache.spark.util.hash
+package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 import org.scalatest.FunSuite
@@ -58,12 +58,12 @@ class PrimitiveKeyOpenHashSetSuite extends FunSuite {
   test("changeValue") {
     val map = new PrimitiveKeyOpenHashMap[Long, String]()
     for (i <- 1 to 100) {
-      map(i.toLong) = "" + i
+      map(i.toLong) = i.toString
     }
     assert(map.size === 100)
     for (i <- 1 to 100) {
       val res = map.changeValue(i.toLong, { assert(false); "" }, v => {
-        assert(v === "" + i)
+        assert(v === i.toString)
         v + "!"
       })
       assert(res === i + "!")
@@ -80,11 +80,11 @@ class PrimitiveKeyOpenHashSetSuite extends FunSuite {
   test("inserting in capacity-1 map") {
     val map = new PrimitiveKeyOpenHashMap[Long, String](1)
     for (i <- 1 to 100) {
-      map(i.toLong) = "" + i
+      map(i.toLong) = i.toString
     }
     assert(map.size === 100)
     for (i <- 1 to 100) {
-      assert(map(i.toLong) === "" + i)
+      assert(map(i.toLong) === i.toString)
     }
   }
 }
