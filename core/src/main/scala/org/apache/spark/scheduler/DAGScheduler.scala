@@ -417,15 +417,14 @@ class DAGScheduler(
       case ExecutorLost(execId) =>
         handleExecutorLost(execId)
 
-      case begin: BeginEvent =>
-        listenerBus.post(SparkListenerTaskStart(begin.task, begin.taskInfo))
+      case BeginEvent(task, taskInfo) =>
+        listenerBus.post(SparkListenerTaskStart(task, taskInfo))
 
-      case gettingResult: GettingResultEvent =>
-        listenerBus.post(SparkListenerTaskGettingResult(gettingResult.task, gettingResult.taskInfo))
+      case GettingResultEvent(task, taskInfo) =>
+        listenerBus.post(SparkListenerTaskGettingResult(task, taskInfo))
 
-      case completion: CompletionEvent =>
-        listenerBus.post(SparkListenerTaskEnd(
-          completion.task, completion.reason, completion.taskInfo, completion.taskMetrics))
+      case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
+        listenerBus.post(SparkListenerTaskEnd(task, reason, taskInfo, taskMetrics))
         handleTaskCompletion(completion)
 
       case TaskSetFailed(taskSet, reason) =>
