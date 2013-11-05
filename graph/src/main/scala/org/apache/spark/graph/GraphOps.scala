@@ -154,11 +154,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       (vid, edge) => Some(Array(edge.otherVertexId(vid))),
       (a, b) => a ++ b,
       edgeDirection)
-
-    graph.vertices.leftZipJoin(nbrs).mapValues{
-      case (_, Some(nbrs)) => nbrs
-      case (_, None) => Array.empty[Vid]
-    }
+    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) => nbrsOpt.getOrElse(Array.empty[Vid]) }
   } // end of collectNeighborIds
 
 
@@ -183,10 +179,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       (a, b) => a ++ b,
       edgeDirection)
 
-    graph.vertices.leftZipJoin(nbrs).mapValues{
-      case (_, Some(nbrs)) => nbrs
-      case (_, None) => Array.empty[(Vid, VD)]
-    }
+    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) => nbrsOpt.getOrElse(Array.empty[(Vid, VD)]) }
   } // end of collectNeighbor
 
 

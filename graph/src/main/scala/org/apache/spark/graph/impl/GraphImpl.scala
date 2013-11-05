@@ -315,8 +315,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED] = {
     ClosureCleaner.clean(updateF)
-    val newVTable = vTable.leftJoin(updates).mapValuesWithKeys(
-      (vid, vu) => updateF(vid, vu._1, vu._2) )
+    val newVTable = vTable.leftJoin(updates)(updateF)
     new GraphImpl(newVTable, vid2pid, localVidMap, eTable)
   }
 
@@ -437,11 +436,9 @@ object GraphImpl {
     RDD[(Pid, Array[VD])] = {
     // Join vid2pid and vTable, generate a shuffle dependency on the joined 
     // result, and get the shuffle id so we can use it on the slave.
-    val msgsByPartition = vTable.zipJoin(vid2pid)
-      .flatMap { case (vid, (vdata, pids)) =>
-        pids.iterator.map { pid => MessageToPartition(pid, (vid, vdata)) }
-      }
-      .partitionBy(replicationMap.partitioner.get).cache()
+    val msgsByPartition = vTable.zipJoinFlatMap(vid2pid) { (vid, vdata, pids) =>
+      pids.iterator.map { pid => MessageToPartition(pid, (vid, vdata)) }
+    }.partitionBy(replicationMap.partitioner.get).cache()
    
     replicationMap.zipPartitions(msgsByPartition){ 
       (mapIter, msgsIter) =>
