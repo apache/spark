@@ -8,7 +8,8 @@ exportMethods(
               "lapply",
               "lapplyPartition",
               "reduce",
-              "take"
+              "take",
+              "partitionBy"
              )
 
 # S3 methods exported

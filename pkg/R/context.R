@@ -13,7 +13,7 @@ textFile <- function(jsc, name, minSplits=NULL) {
   }
   jrdd <- .jcall(jsc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", name,
                  as.integer(minSplits))
-  RRDD(jrdd, FALSE)
+  RRDD(jrdd, FALSE, FALSE)
 }
 
 # Distribute a local R homogeneous list to form an RRDD[Array[Byte]]. If a
@@ -35,39 +35,46 @@ parallelize <- function(jsc, coll, numSlices = 1, pairwise = FALSE) {
   if (numSlices > length(coll))
     numSlices <- length(coll)
 
-  sliceLen <- length(coll) %% numSlices
+  sliceLen <- length(coll) %/% numSlices
   slices <- split(coll, rep(1:(numSlices + 1), each = sliceLen)[1:length(coll)])
 
-  # serialize each slice; obtain a list of raws, or a list of lists (2-tuples) of raws
+  # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
+  # 2-tuples of raws
   serializedSlices <- if (!pairwise) {
     lapply(slices, serialize, connection = NULL)
   } else {
-    nestedSerialize <- function(tuple) {
+    tupleSerialize <- function(tuple) {
       keyRaw <- serialize(tuple[[1]], NULL)
       valRaw <- serialize(tuple[[2]], NULL)
       list(keyRaw, valRaw)
     }
-    lapply(slices, nestedSerialize)
+    sliceSerialize <- function(slice) {
+      lapply(slice, tupleSerialize)
+    }
+    lapply(slices, sliceSerialize)
   }
 
-  # if !pairwise, Array[Array[Byte]]; otherwise, one more nested layer
+  # If !pairwise, Array[Array[Byte]]; otherwise, _two_ more nested layers.
   javaSerializedSlices <- if (!pairwise) {
     .jarray(lapply(serializedSlices, .jarray), contents.class = "[B")
   } else {
-    nestedJArray <- function(tuple) {
+    tupleJArray <- function(tuple) {
       keyByteJArray <- .jarray(tuple[[1]], contents.class = "B")
       valByteJArray <- .jarray(tuple[[2]], contents.class = "B")
       .jarray(list(keyByteJArray, valByteJArray), contents.class = "[B")
     }
-    .jarray(lapply(serializedSlices, nestedJArray), contents.class = "[[B")
+    sliceJArray <- function(slice) {
+      .jarray(lapply(slice, tupleJArray), contents.class = "[[B")
+    }
+    .jarray(lapply(serializedSlices, sliceJArray), contents.class = "[[[B")
   }
 
-  # JavaRDD[Array[Byte]] if pairwise, else JavaRDD[(Array[Byte], Array[Byte])]
+  # JavaRDD[Array[Byte]] if pairwise, else JavaPairRDD[Array[Byte], Array[Byte]].
   jrdd <- .jcall("org/apache/spark/api/r/RRDD",
-                 "Lorg/apache/spark/api/java/JavaRDD;",
+                 "Lorg/apache/spark/api/java/JavaPairRDD;",
                  "createRDDFromArray",
                  jsc,
                  javaSerializedSlices)
 
-  RRDD(jrdd, TRUE)
+  RRDD(jrdd, TRUE, pairwise)
 }

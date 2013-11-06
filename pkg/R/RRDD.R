@@ -2,7 +2,9 @@
 
 #setOldClass("jobjRef")
 
-setClass("RRDD", slots = list(jrdd = "jobjRef", serialized = "logical"))
+setClass("RRDD", slots = list(jrdd = "jobjRef",
+                              serialized = "logical",
+                              pairwise = "logical"))
 
 setValidity("RRDD",
             function(object) {
@@ -16,9 +18,10 @@ setValidity("RRDD",
             })
 
 # Constructor of the RRDD class.
-RRDD <- function(jrdd, serialized = TRUE) {
-  new("RRDD", jrdd = jrdd, serialized = serialized)
+RRDD <- function(jrdd, serialized = TRUE, pairwise = FALSE) {
+  new("RRDD", jrdd = jrdd, serialized = serialized, pairwise = pairwise)
 }
+
 
 setGeneric("cache", function(rrdd) { standardGeneric("cache") })
 setMethod("cache",
@@ -28,6 +31,7 @@ setMethod("cache",
             rrdd
           })
 
+
 # collect(): Return a list that contains all of the elements in this RRDD.
 # NOTE: supports only RRDD[Array[Byte]] and RRDD[primitive java type] for now.
 setGeneric("collect", function(rrdd, ...) { standardGeneric("collect") })
@@ -35,7 +39,12 @@ setMethod("collect",
           signature(rrdd = "RRDD"),
           function(rrdd, flatten = TRUE) {
             collected <- .jcall(rrdd@jrdd, "Ljava/util/List;", "collect")
-            JavaListToRList(collected, flatten)
+            convertJListToRList(collected, if (rrdd@pairwise) FALSE else flatten)
+            # if (rrdd@pairwise) {
+              # convertJListToRList(collected, FALSE)
+            # } else {
+              # convertJListToRList(collected, flatten)
+            # }
           })
 
 
@@ -85,7 +94,7 @@ setMethod("lapplyPartition",
                            depsBinArr,
                            X@jrdd$classManifest())
             jrdd <- rrddRef$asJavaRDD()
-            RRDD(jrdd, TRUE)
+            RRDD(jrdd, TRUE, X@pairwise)
           })
 
 setGeneric("reduce", function(rrdd, func) { standardGeneric("reduce") })
@@ -121,20 +130,25 @@ setMethod("take",
                                   "Ljava/util/List;",
                                   "collectPartition",
                                   as.integer(index))
-              elems <- JavaListToRList(partition, flatten = TRUE)
+              elems <- convertJListToRList(partition, flatten = TRUE)
               resList <- append(resList, head(elems, n = num - length(resList))) # O(n^2)?
             }
             resList
           })
 
 ############ Shuffle Functions ############
- source("R/pkg/R/utils.R")
+source("R/pkg/R/utils.R")
+source("R/pkg/R/context.R")
+
 .address <- function(x) {
   # http://stackoverflow.com/questions/10912729/r-object-identity
   substring(capture.output(.Internal(inspect(x)))[1], 2, 10)
 }
 
-rrdd <- parallelize(sc, list(list(1, 2), list(3, 3), list(4, 4)), 2)
+rrdd <- parallelize(sc,
+                  # list(list(1, 2), list(3, 3), list(4, 4)),
+                  # numSlices = 2,
+                  # pairwise = TRUE)
 partitionFunc <- function(key) { if (key >= 3) 1 else 0 }
 numPartitions <- 2
 
@@ -175,7 +189,7 @@ setMethod("partitionBy",
             # stored in what partitions at this point.
 
             pairwiseRRDD <- new(J("org.apache.spark.api.r.PairwiseRRDD"),
-                                rrdd@jrdd, # JavaRDD[(Array[Byte], Array[Byte])]
+                                rrdd@jrdd,
                                 as.integer(numPartitions),
                                 serializedHashFuncBytes,
                                 rrdd@serialized,
@@ -192,5 +206,7 @@ setMethod("partitionBy",
             # Call .values() on the result to get back the final result, the
             # shuffled acutal content key-val pairs.
             r <- javaPairRDD$values()
-            r$collect()
+            # r$collect()
+            r
           })
+

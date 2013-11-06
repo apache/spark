@@ -1,40 +1,55 @@
 # Utilities and Helpers
 
-# TODO: test with RRDD[T] where T is not String
-# Given a List<T>, returns an R list.
-JavaListToRList <- function(jList, flatten) {
+# Given a JList<T>, returns an R list containing the same elements.  Takes care
+# of deserializations and type conversions.
+convertJListToRList <- function(jList, flatten) {
   size <- .jcall(jList, "I", "size")
   results <-
     lapply(0:(size - 1),
            function(index) {
-             jElem <- .jcall(jList, "Ljava/lang/Object;", "get", as.integer(index))
+             jElem <- .jcall(jList,
+                             "Ljava/lang/Object;",
+                             "get",
+                             as.integer(index))
 
-             # Either an R object or a Java obj ref
+             # Assume it is either an R object or a Java obj ref.
              obj <- .jsimplify(jElem)
 
-             # RRDD[Array[Byte]]: call unserialize() and be sure to flatten
              if (class(obj) == "jobjRef" && .jinstanceof(obj, "[B")) {
+               # RRDD[Array[Byte]].
+
                rRaw <- .jevalArray(.jcastToArray(jElem))
                res <- unserialize(rRaw)
+
+             } else if (class(obj) == "jobjRef" &&
+                        .jinstanceof(obj, "scala.Tuple2")) {
+               # JavaPairRDD[Array[Byte], Array[Byte]].
+
+               keyBytes = .jcall(obj, "Ljava/lang/Object;", "_1")
+               valBytes = .jcall(obj, "Ljava/lang/Object;", "_2")
+               res <- list(unserialize(.jevalArray(keyBytes)),
+                           unserialize(.jevalArray(valBytes)))
+
+             } else if (class(obj) == "jobjRef" && !.jinstanceof(obj, "[B")) {
+               stop(paste("utils.R: convertJListToRList only supports",
+                          "RRDD[Array[Byte]] and",
+                          "JavaPairRDD[Array[Byte], Array[Byte]] for now"))
              }
 
-             # FIXME?
-             if (class(obj) == "jobjRef" && !.jinstanceof(obj, "[B")) {
-               stop(paste("utils.R: JavaListToRList: does not support any",
-                          "RRDD[Array[T]] where T != Byte, for now"))
-             }
-
-             # jElem is of a primitive Java type, is simplified to R's corresponding type
+             # jElem is of a primitive Java type, is simplified to R's
+             # corresponding type.
              if (class(obj) != "jobjRef")
                res <- obj
 
              res
            })
+
   if (flatten) {
     as.list(unlist(results, recursive = FALSE))
   } else {
     as.list(results)
   }
+
 }
 
 isRRDD <- function(name, env) {
@@ -55,3 +70,4 @@ getDependencies <- function(name) {
   unlink(fileName)
   binData
 }
+
