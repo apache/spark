@@ -221,18 +221,6 @@ private[spark] object PythonRDD {
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
 
-  def writeStringAsPickle(elem: String, dOut: DataOutputStream) {
-    val s = elem.getBytes("UTF-8")
-    val length = 2 + 1 + 4 + s.length + 1
-    dOut.writeInt(length)
-    dOut.writeByte(Pickle.PROTO)
-    dOut.writeByte(Pickle.TWO)
-    dOut.write(Pickle.BINUNICODE)
-    dOut.writeInt(Integer.reverseBytes(s.length))
-    dOut.write(s)
-    dOut.writeByte(Pickle.STOP)
-  }
-
   def writeToStream(elem: Any, dataOut: DataOutputStream) {
     elem match {
       case bytes: Array[Byte] =>
@@ -244,9 +232,7 @@ private[spark] object PythonRDD {
         dataOut.writeInt(pair._2.length)
         dataOut.write(pair._2)
       case str: String =>
-        // Until we've implemented full custom serializer support, we need to return
-        // strings as Pickles to properly support union() and cartesian():
-        writeStringAsPickle(str, dataOut)
+        dataOut.writeUTF(str)
       case other =>
         throw new SparkException("Unexpected element type " + other.getClass)
     }
@@ -269,13 +255,6 @@ private[spark] object PythonRDD {
     implicit val cm : ClassManifest[T] = rdd.elementClassManifest
     rdd.context.runJob(rdd, ((x: Iterator[T]) => x.toArray), Seq(partition), true).head.iterator
   }
-}
-
-private object Pickle {
-  val PROTO: Byte = 0x80.toByte
-  val TWO: Byte = 0x02.toByte
-  val BINUNICODE: Byte = 'X'
-  val STOP: Byte = '.'
 }
 
 private class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
