@@ -14,7 +14,7 @@ import org.apache.spark.util.Utils
  * This is used by SparkR's shuffle operations.
  */
 private class PairwiseRRDD(
-    parent: JavaRDD[(Array[Byte], Array[Byte])],
+    parent: JavaPairRDD[Array[Byte], Array[Byte]  ],
     numPartitions: Int,
     hashFunc: Array[Byte],
     dataSerialized: Boolean,
@@ -38,13 +38,8 @@ private class PairwiseRRDD(
     val env = SparkEnv.get
 
     val tempDir = Utils.getLocalDir
-    val tempFile =  File.createTempFile("rSpark", "out2", new File(tempDir))    // FIXME: "out" causes problem?
+    val tempFile = File.createTempFile("rSpark", "out", new File(tempDir))
     val tempFileName = tempFile.getAbsolutePath
-//
-//    val tempDir = Utils.getLocalDir
-//    val tempFile =  File.createTempFile("rSpark", "out", new File(tempDir))
-//    val tempFileName = tempFile.getAbsolutePath
-
 
     // Start a thread to print the process's stderr to ours
     new Thread("stderr reader for R") {
@@ -73,9 +68,6 @@ private class PairwiseRRDD(
         dataOut.writeInt(functionDependencies.length)
         dataOut.write(functionDependencies, 0, functionDependencies.length)
 
-//        implicit val cm : ClassManifest[(Array[Byte], Array[Byte])] =
-//          implicitly[ClassManifest[(Array[Byte], Array[Byte])]]
-
 //        val iter = parent.iterator(split, context)
 
 //        println("***********iter.length = " + iter.length)
@@ -83,15 +75,8 @@ private class PairwiseRRDD(
 //        dataOut.writeInt(iter.length)   // TODO: is length of iterator necessary?
 
         // TODO: is it okay to use parent as opposed to firstParent?
-        parent.iterator(split, context).grouped(2).foreach {
-          case Seq(a, b) =>
-//          val a = x.asInstanceOf[Tuple2[Array[Byte], Array[Byte]]]._1
-//          val b = x.asInstanceOf[Tuple2[Array[Byte], Array[Byte]]]._2
-//          elem match { case (keyBytes, valBytes) =>
-//        iter.foreach { case (keyBytes, valBytes) =>
-            val keyBytes: Array[Byte] = a.asInstanceOf[Array[Byte]]
-            val valBytes: Array[Byte] = b.asInstanceOf[Array[Byte]]
-
+        parent.iterator(split, context).foreach {
+          case (keyBytes: Array[Byte], valBytes: Array[Byte]) =>
             if (dataSerialized) {
               dataOut.writeInt(keyBytes.length)
               dataOut.write(keyBytes, 0, keyBytes.length)
@@ -102,13 +87,11 @@ private class PairwiseRRDD(
               printOut.println(keyBytes)
               printOut.println(valBytes)
             }
-//          case _ =>
-          case _ => sys.error("*** elem is not 2-tuple")
+          case _ => throw new SparkException("PairwiseRRDD: unexpected element (not (Array[Byte], Array[Bytes]))")
         }
         dataOut.writeInt(0) // End of output
         stream.close()
       }
-//      }
     }.start()
 
     // Return an iterator that read lines from the process's stdout
@@ -301,9 +284,17 @@ object RRDD {
    * `parallelize` is called from R.
    * TODO?: change return type into JavaPairRDD[Array[Byte], Array[Byte]]?
    */
-  def createRDDFromArray(jsc: JavaSparkContext, arr: Array[Array[Array[Byte]]]): JavaRDD[(Array[Byte], Array[Byte])] = {
-    val keyValPairs: Seq[(Array[Byte], Array[Byte])] = arr.map(tuple => (tuple(0), tuple(1)))
-    JavaRDD.fromRDD(jsc.sc.parallelize(keyValPairs, keyValPairs.length))
+  def createRDDFromArray(jsc: JavaSparkContext,
+                         arr: Array[Array[Array[Array[Byte]]]]): JavaPairRDD[Array[Byte], Array[Byte]] = {
+
+    val keyValPairs: Seq[(Array[Byte], Array[Byte])] =
+      for (
+        slice <- arr;
+        tup <- slice
+      ) yield (tup(0), tup(1))
+
+    JavaPairRDD.fromRDD(jsc.sc.parallelize(keyValPairs, arr.length))
+
   }
 
 }
