@@ -87,8 +87,14 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
       case StatusUpdate(executorId, taskId, state, data) =>
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
-          freeCores(executorId) += 1
-          makeOffers(executorId)
+          if (executorActor.contains(executorId)) {
+            freeCores(executorId) += 1
+            makeOffers(executorId)
+          } else {
+            // Ignoring the update since we don't know about the executor.
+            val msg = "Ignored task status update (%d state %s) from unknown executor %s with ID %s"
+            logWarning(msg.format(taskId, state, sender, executorId))
+          }
         }
 
       case ReviveOffers =>
@@ -175,7 +181,9 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
       Props(new DriverActor(properties)), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
   }
 
-  private val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
+  private val timeout = {
+    Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
+  }
 
   def stopExecutors() {
     try {
