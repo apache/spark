@@ -1,5 +1,3 @@
-# run in REPL with 'test_dir(path/to/inst/tests)'
-
 context("parallelize() and collect()")
 
 # Mock data
@@ -14,8 +12,13 @@ strList <- list("Dexter Morgan: Blood. Sometimes it sets my teeth on edge, ",
                 "Dexter Morgan: Harry and Dorris Morgan did a wonderful job ",
                 "raising me. But they're both dead now. I didn't kill them. Honest.")
 
+numPairs <- list(list(1, 1), list(1, 2), list(2, 2), list(2, 3))
+strPairs <- list(list(strList, strList), list(strList, strList))
+
 # JavaSparkContext handle
 jsc <- sparkR.init()
+
+# Tests
 
 test_that("parallelize() on simple vectors and lists returns an RRDD", {
   numVectorRRDD <- parallelize(jsc, numVector, 1)
@@ -64,3 +67,17 @@ test_that("collect(), following a parallelize(), gives back the original collect
   expect_equal(collect(strListRRDD2), as.list(strList))
 })
 
+test_that("parallelize() and collect() work for lists of pairs (pairwise data)", {
+  # use the pairwise logical to indicate pairwise data
+  numPairsRDDD1 <- parallelize(jsc, numPairs, 1, pairwise = TRUE)
+  numPairsRDDD2 <- parallelize(jsc, numPairs, 2, pairwise = TRUE)
+  numPairsRDDD3 <- parallelize(jsc, numPairs, 3, pairwise = TRUE)
+  expect_equal(collect(numPairsRDDD1), numPairs)
+  expect_equal(collect(numPairsRDDD2), numPairs)
+  expect_equal(collect(numPairsRDDD3), numPairs)
+  # can also leave out the parameter name, if the params are supplied in order
+  strPairsRDDD1 <- parallelize(jsc, strPairs, 1, TRUE)
+  strPairsRDDD2 <- parallelize(jsc, strPairs, 2, TRUE)
+  expect_equal(collect(strPairsRDDD1), strPairs)
+  expect_equal(collect(strPairsRDDD2), strPairs)
+})

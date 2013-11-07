@@ -69,9 +69,13 @@ parallelize <- function(jsc, coll, numSlices = 1, pairwise = FALSE) {
     .jarray(lapply(serializedSlices, sliceJArray), contents.class = "[[[B")
   }
 
-  # JavaRDD[Array[Byte]] if pairwise, else JavaPairRDD[Array[Byte], Array[Byte]].
+  jrddType = if (!pairwise)
+    "Lorg/apache/spark/api/java/JavaRDD;"
+  else
+    "Lorg/apache/spark/api/java/JavaPairRDD;"
+
   jrdd <- .jcall("org/apache/spark/api/r/RRDD",
-                 "Lorg/apache/spark/api/java/JavaPairRDD;",
+                 jrddType,
                  "createRDDFromArray",
                  jsc,
                  javaSerializedSlices)

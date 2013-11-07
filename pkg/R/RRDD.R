@@ -137,20 +137,20 @@ setMethod("take",
           })
 
 ############ Shuffle Functions ############
-source("R/pkg/R/utils.R")
-source("R/pkg/R/context.R")
+# source("R/pkg/R/utils.R")
+# source("R/pkg/R/context.R")
 
 .address <- function(x) {
   # http://stackoverflow.com/questions/10912729/r-object-identity
   substring(capture.output(.Internal(inspect(x)))[1], 2, 10)
 }
 
-rrdd <- parallelize(sc,
-                  # list(list(1, 2), list(3, 3), list(4, 4)),
-                  # numSlices = 2,
-                  # pairwise = TRUE)
-partitionFunc <- function(key) { if (key >= 3) 1 else 0 }
-numPartitions <- 2
+# rrdd <- parallelize(sc,
+#                   # list(list(1, 2), list(3, 3), list(4, 4)),
+#                   # numSlices = 2,
+#                   # pairwise = TRUE)
+# partitionFunc <- function(key) { if (key >= 3) 1 else 0 }
+# numPartitions <- 2
 
 setGeneric("partitionBy",
            function(rrdd, numPartitions, partitionFunc) {
