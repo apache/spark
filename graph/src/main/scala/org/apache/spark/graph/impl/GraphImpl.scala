@@ -12,6 +12,7 @@ import org.apache.spark.util.ClosureCleaner
 import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
 import org.apache.spark.graph.impl.MsgRDDFunctions._
+import org.apache.spark.graph.util.BytecodeUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
@@ -384,6 +385,22 @@ object GraphImpl {
       .mapValues(a => a.toArray).cache()
   }
 
+  protected def createVid2PidSourceAttrOnly[ED: ClassManifest](
+    eTable: RDD[(Pid, EdgePartition[ED])],
+    vTableIndex: VertexSetIndex): VertexSetRDD[Array[Pid]] = {
+    val preAgg = eTable.mapPartitions { iter =>
+      val (pid, edgePartition) = iter.next()
+      val vSet = new VertexSet
+      edgePartition.foreach(e => {vSet.add(e.srcId)})
+      vSet.iterator.map { vid => (vid.toLong, pid) }
+    }
+    VertexSetRDD[Pid, ArrayBuffer[Pid]](preAgg, vTableIndex,
+      (p: Pid) => ArrayBuffer(p),
+      (ab: ArrayBuffer[Pid], p:Pid) => {ab.append(p); ab},
+      (a: ArrayBuffer[Pid], b: ArrayBuffer[Pid]) => a ++ b)
+      .mapValues(a => a.toArray).cache()
+  }
+
   protected def createLocalVidMap[ED: ClassManifest](eTable: RDD[(Pid, EdgePartition[ED])]):
     RDD[(Pid, VertexIdToIndexMap)] = {
     eTable.mapPartitions( _.map{ case (pid, epart) =>
@@ -468,8 +485,22 @@ object GraphImpl {
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
 
+    // For each vertex, replicate its attribute only to partitions where it is
+    // in the relevant position in an edge.
+    val mapFuncUsesSrcAttr =
+      BytecodeUtils.invokedMethod(mapFunc, classOf[EdgeTriplet[VD, ED]], "srcAttr")
+    val mapFuncUsesDstAttr =
+      BytecodeUtils.invokedMethod(mapFunc, classOf[EdgeTriplet[VD, ED]], "dstAttr")
+    val vTableReplicatedValues =
+      if (mapFuncUsesSrcAttr && !mapFuncUsesDstAttr) {
+        val vid2pidSourceAttrOnly = createVid2PidSourceAttrOnly(g.eTable, g.vTable.index)
+        createVTableReplicated(g.vTable, vid2pidSourceAttrOnly, g.localVidMap)
+      } else {
+        g.vTableReplicatedValues
+      }
+
     // Map and preaggregate
-    val preAgg = g.eTable.zipPartitions(g.localVidMap, g.vTableReplicatedValues){
+    val preAgg = g.eTable.zipPartitions(g.localVidMap, vTableReplicatedValues){
       (edgePartitionIter, vidToIndexIter, vertexArrayIter) =>
       val (_, edgePartition) = edgePartitionIter.next()
       val (_, vidToIndex) = vidToIndexIter.next()
@@ -488,8 +519,12 @@ object GraphImpl {
 
       edgePartition.foreach { e =>
         et.set(e)
-        et.srcAttr = vmap(e.srcId)
-        et.dstAttr = vmap(e.dstId)
+        if (mapFuncUsesSrcAttr) {
+          et.srcAttr = vmap(e.srcId)
+        }
+        if (mapFuncUsesDstAttr) {
+          et.dstAttr = vmap(e.dstId)
+        }
         // TODO(rxin): rewrite the foreach using a simple while loop to speed things up.
         // Also given we are only allowing zero, one, or two messages, we can completely unroll
         // the for loop.

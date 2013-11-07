@@ -58,6 +58,26 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("aggregateNeighborsSourceAttrOnly") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val n = 3
+      // Create a star graph where the degree of each vertex is its attribute
+      val star = Graph(sc.parallelize((1 to n).map(x => ((n + 1): Vid, x: Vid))))
+
+      val totalOfInNeighborDegrees = star.aggregateNeighbors(
+        (vid, edge) => {
+          // All edges have the center vertex as the source, which has degree n
+          if (edge.srcAttr != n) {
+            throw new Exception("edge.srcAttr is %d, expected %d".format(edge.srcAttr, n))
+          }
+          Some(edge.srcAttr)
+        },
+        (a: Int, b: Int) => a + b,
+        EdgeDirection.In)
+      assert(totalOfInNeighborDegrees.collect().toSet === (1 to n).map(x => (x, n)).toSet)
+    }
+  }
+
   test("joinVertices") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val vertices = sc.parallelize(Seq[(Vid, String)]((1, "one"), (2, "two"), (3, "three")), 2)
@@ -87,6 +107,6 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       assert(b.zipJoin(c)((id, b, c) => b + c).map(x => x._2).reduce(_+_) === 0)
 
     }
-  } 
-  
+  }
+
 }
