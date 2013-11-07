@@ -91,8 +91,10 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     sc.addSparkListener(joblogger)
     val rdd = sc.parallelize(1 to 1e2.toInt, 4).map{ i => (i % 12, 2 * i) }
     rdd.reduceByKey(_+_).collect()
+
+    val user = System.getProperty("user.name", SparkContext.SPARK_UNKNOWN_USER)
     
-    joblogger.getLogDir should be ("/tmp/spark")
+    joblogger.getLogDir should be ("/tmp/spark-%s".format(user))
     joblogger.getJobIDtoPrintWriter.size should be (1)
     joblogger.getStageIDToJobID.size should be (2)
     joblogger.getStageIDToJobID.get(0) should be (Some(0))
