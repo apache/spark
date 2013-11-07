@@ -1,9 +1,11 @@
 package catalyst
 package frontend
 
+import catalyst.analysis.UnresolvedRelation
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 
+import analysis._
 import expressions._
 import plans.logical._
 
@@ -30,22 +32,34 @@ object Hive {
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     case Token("TOK_QUERY",
            fromClause ::
-           insertClause :: Nil) =>
-      dumpTree(fromClause)
-      nodeToPlan(fromClause)
+           Token("TOK_INSERT",
+             Token("TOK_DESTINATION",
+               Token("TOK_DIR",                                // For now only support queries with no INSERT clause.
+                 Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) ::
+             Token("TOK_SELECT",
+                selectExprs) :: Nil) :: Nil) =>
+      Project(selectExprs.map(nodeToExpr), nodeToPlan(fromClause))
+    case Token("TOK_FROM",
+           Token("TOK_TABREF",
+             Token("TOK_TABNAME",
+               Token(name, Nil) :: Nil) :: Nil) :: Nil) =>
+      UnresolvedRelation(name, None)
     case a: ASTNode =>
       println("FAILURE")
       dumpTree(a)
       ???
   }
 
-  protected def nodeToExpr(node: Node): Expression = node match {
-    case other => Literal(1) // WRONG
+  protected def nodeToExpr(node: Node): NamedExpression = node match {
+    case Token("TOK_SELEXPR",
+           Token("TOK_TABLE_OR_COL",
+             Token(name, Nil) :: Nil) :: Nil) =>
+      UnresolvedAttribute(name)
   }
 
   protected def dumpTree(node: Node, indent: Int = 0) {
     node match {
-      case a: ASTNode => println(("  " * indent) + a.getText + " " + a.getClass.getName)
+      case a: ASTNode => println(("  " * indent) + a.getText)
       case other => sys.error(s"Non ASTNode encountered: $other")
     }
 
