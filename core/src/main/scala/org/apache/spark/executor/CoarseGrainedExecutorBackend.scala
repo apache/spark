@@ -111,7 +111,7 @@ private[spark] object CoarseGrainedExecutorBackend {
 
   def main(args: Array[String]) {
     if (args.length < 4) {
-      //the reason we allow the last frameworkId argument is to make it easy to kill rogue executors
+      //the reason we allow the last appid argument is to make it easy to kill rogue executors
       System.err.println(
         "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> <cores> " +
         "[<appid>]")
