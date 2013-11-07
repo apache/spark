@@ -3,4 +3,14 @@ package expressions
 
 import trees._
 
-class Expression extends TreeNode
+abstract class Expression extends TreeNode[Expression] {
+  self: Product =>
+}
+
+abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
+  self: Product =>
+}
+
+abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
+  self: Product =>
+}

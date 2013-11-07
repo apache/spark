@@ -4,4 +4,14 @@ package logical
 
 import trees._
 
-class LogicalPlan extends QueryPlan[LogicalPlan]
+abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
+  self: Product =>
+}
+
+abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
+  self: Product =>
+}
+
+abstract class UnaryNode extends LogicalPlan with trees.UnaryNode[LogicalPlan] {
+  self: Product =>
+}

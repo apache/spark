@@ -5,9 +5,9 @@ import types._
 
 object Literal {
   def apply(v: Any): Literal = v match {
-    // TODO(marmbrus): Use bigInt type?
+    // TODO(marmbrus): Use bigInt type for value?
     case i: Int => Literal(v, IntegerType)
   }
 }
 
-case class Literal(value: Any, dataType: DataType) extends Expression
+case class Literal(value: Any, dataType: DataType) extends LeafExpression

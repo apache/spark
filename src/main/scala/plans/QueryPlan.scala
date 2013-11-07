@@ -3,4 +3,6 @@ package plans
 
 import trees._
 
-class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType]
+abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
+  self: PlanType with Product =>
+}

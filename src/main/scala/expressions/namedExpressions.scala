@@ -1,6 +1,10 @@
 package catalyst
 package expressions
 
-class NamedExpression extends Expression
+abstract class NamedExpression extends Expression {
+  self: Product =>
+}
 
-class Attribute extends NamedExpression
+abstract class Attribute extends NamedExpression {
+  self: Product =>
+}
