@@ -1,4 +1,6 @@
 package catalyst
 package trees
 
-class TreeNode
+class TreeNode[BaseType <: TreeNode[BaseType]] {
+  def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = ???
+}

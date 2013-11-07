@@ -4,4 +4,4 @@ package logical
 
 import trees._
 
-class LogicalPlan extends TreeNode
+class LogicalPlan extends QueryPlan[LogicalPlan]
