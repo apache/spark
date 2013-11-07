@@ -14,7 +14,7 @@ import org.apache.spark.util.Utils
  * This is used by SparkR's shuffle operations.
  */
 private class PairwiseRRDD(
-    parent: JavaPairRDD[Array[Byte], Array[Byte]  ],
+    parent: JavaPairRDD[Array[Byte], Array[Byte]],
     numPartitions: Int,
     hashFunc: Array[Byte],
     dataSerialized: Boolean,
@@ -72,7 +72,7 @@ private class PairwiseRRDD(
 
 //        println("***********iter.length = " + iter.length)
 
-//        dataOut.writeInt(iter.length)   // TODO: is length of iterator necessary?
+        dataOut.writeInt(parent.iterator(split, context).length)
 
         // TODO: is it okay to use parent as opposed to firstParent?
         parent.iterator(split, context).foreach {
@@ -89,7 +89,7 @@ private class PairwiseRRDD(
             }
           case _ => throw new SparkException("PairwiseRRDD: unexpected element (not (Array[Byte], Array[Bytes]))")
         }
-        dataOut.writeInt(0) // End of output
+//        dataOut.writeInt(0) // End of output
         stream.close()
       }
     }.start()
