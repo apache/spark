@@ -19,4 +19,12 @@ class TransformSuite extends FunSuite {
 
     assert(after === Add(Literal(1), Literal(1)))
   }
+
+  test("no change") {
+    val before = Add(Literal(1), Add(Literal(2), Add(Literal(3), Literal(4))))
+    val after = before transform { case Literal(5, _) => Literal(1)}
+
+    assert(before === after)
+    assert(before.map(_.id) === after.map(_.id))
+  }
 }
