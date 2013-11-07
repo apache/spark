@@ -137,20 +137,11 @@ setMethod("take",
           })
 
 ############ Shuffle Functions ############
-# source("R/pkg/R/utils.R")
-# source("R/pkg/R/context.R")
 
 .address <- function(x) {
   # http://stackoverflow.com/questions/10912729/r-object-identity
   substring(capture.output(.Internal(inspect(x)))[1], 2, 10)
 }
-
-# rrdd <- parallelize(sc,
-#                   # list(list(1, 2), list(3, 3), list(4, 4)),
-#                   # numSlices = 2,
-#                   # pairwise = TRUE)
-# partitionFunc <- function(key) { if (key >= 3) 1 else 0 }
-# numPartitions <- 2
 
 setGeneric("partitionBy",
            function(rrdd, numPartitions, partitionFunc) {
@@ -163,6 +154,7 @@ setMethod("partitionBy",
             hashPairsToEnvir <- function(pairs) {
               # pairs: list(list(_, _), ..)
               res <- new.env()
+              HACK <- environment(partitionFunc) # FIXME
               for (tuple in pairs) {
                 hashVal = partitionFunc(tuple[[1]])
                 bucket = as.character(hashVal %% numPartitions)
@@ -206,7 +198,22 @@ setMethod("partitionBy",
             # Call .values() on the result to get back the final result, the
             # shuffled acutal content key-val pairs.
             r <- javaPairRDD$values()
-            # r$collect()
-            r
+
+            RRDD(r, rrdd@serialized, TRUE)
+          })
+
+
+setGeneric("collectPartition",
+           function(rrdd, partitionId) {
+             standardGeneric("collectPartition")
+           })
+setMethod("collectPartition",
+          signature(rrdd = "RRDD", partitionId = "integer"),
+          function(rrdd, partitionId) {
+            jList <- .jcall(rrdd@jrdd,
+                            "Ljava/util/List;",
+                            "collectPartition",
+                            as.integer(partitionId))
+            convertJListToRList(jList, flatten = TRUE)
           })
 

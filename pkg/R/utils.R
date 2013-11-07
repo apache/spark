@@ -4,7 +4,7 @@
 # of deserializations and type conversions.
 convertJListToRList <- function(jList, flatten) {
   size <- .jcall(jList, "I", "size")
-  results <-
+  results <- if (size > 0) {
     lapply(0:(size - 1),
            function(index) {
              jElem <- .jcall(jList,
@@ -43,6 +43,9 @@ convertJListToRList <- function(jList, flatten) {
 
              res
            })
+  } else {
+    list()
+  }
 
   if (flatten) {
     as.list(unlist(results, recursive = FALSE))

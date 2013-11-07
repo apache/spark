@@ -3,13 +3,14 @@ exportClasses("RRDD")
 exportMethods(
               "cache",
               "collect",
+              "collectPartition",
               "count",
               "length",
               "lapply",
               "lapplyPartition",
+              "partitionBy",
               "reduce",
-              "take",
-              "partitionBy"
+              "take"
              )
 
 # S3 methods exported
