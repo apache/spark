@@ -175,7 +175,7 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
         reason.className, reason.description, locs.mkString("\n")))
       if (numFailures(index) > MAX_TASK_FAILURES) {
         val errorMessage = "Task %s:%d failed more than %d times; aborting job %s".format(
-          taskSet.id, index, 4, reason.description)
+          taskSet.id, index, MAX_TASK_FAILURES, reason.description)
         decreaseRunningTasks(runningTasks)
         sched.dagScheduler.taskSetFailed(taskSet, errorMessage)
         // need to delete failed Taskset from schedule queue

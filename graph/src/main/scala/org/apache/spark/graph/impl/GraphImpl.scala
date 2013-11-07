@@ -4,26 +4,17 @@ import scala.collection.JavaConversions._
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.ArrayBuilder
 
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.Partitioner
 import org.apache.spark.HashPartitioner 
 import org.apache.spark.util.ClosureCleaner
-
-import org.apache.spark.rdd
-import org.apache.spark.rdd.RDD
-
 
 import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
 import org.apache.spark.graph.impl.MessageToPartitionRDDFunctions._
-
-import org.apache.spark.util.hash.BitSet
-import org.apache.spark.util.hash.OpenHashSet
-import org.apache.spark.util.hash.PrimitiveKeyOpenHashMap
-
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
 
 
 /**
