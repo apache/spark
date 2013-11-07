@@ -17,8 +17,11 @@
 
 package org.apache.spark.deploy
 
+import java.security.PrivilegedExceptionAction
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.SparkException
 
@@ -27,6 +30,15 @@ import org.apache.spark.SparkException
  */
 private[spark]
 class SparkHadoopUtil {
+  val conf = newConfiguration()
+  UserGroupInformation.setConfiguration(conf)
+
+  def runAsUser(user: String)(func: () => Unit) {
+    val ugi = UserGroupInformation.createRemoteUser(user)
+    ugi.doAs(new PrivilegedExceptionAction[Unit] {
+      def run: Unit = func()
+    })
+  }
 
   /**
    * Return an appropriate (subclass) of Configuration. Creating config can initializes some Hadoop
@@ -42,9 +54,9 @@ class SparkHadoopUtil {
 
   def isYarnMode(): Boolean = { false }
 }
-  
+
 object SparkHadoopUtil {
-  private val hadoop = { 
+  private val hadoop = {
     val yarnMode = java.lang.Boolean.valueOf(System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {
       try {
@@ -56,7 +68,7 @@ object SparkHadoopUtil {
       new SparkHadoopUtil
     }
   }
-  
+
   def get: SparkHadoopUtil = {
     hadoop
   }

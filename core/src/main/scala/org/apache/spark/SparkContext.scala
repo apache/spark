@@ -145,6 +145,14 @@ class SparkContext(
     executorEnvs ++= environment
   }
 
+  // Set SPARK_USER for user who is running SparkContext.
+  val sparkUser = Option {
+    Option(System.getProperty("user.name")).getOrElse(System.getenv("SPARK_USER"))
+  }.getOrElse {
+    SparkContext.SPARK_UNKNOWN_USER
+  }
+  executorEnvs("SPARK_USER") = sparkUser
+
   // Create and start the scheduler
   private[spark] var taskScheduler: TaskScheduler = {
     // Regular expression used for local[N] master format
@@ -980,6 +988,8 @@ object SparkContext {
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
   private[spark] val SPARK_JOB_GROUP_ID = "spark.jobGroup.id"
+
+  private[spark] val SPARK_UNKNOWN_USER = "<unknown>"
 
   implicit object DoubleAccumulatorParam extends AccumulatorParam[Double] {
     def addInPlace(t1: Double, t2: Double): Double = t1 + t2
