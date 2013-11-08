@@ -22,7 +22,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
-
+import org.apache.spark.graph.impl.AggregationMsg
 
 /**
  * The `VertexSetIndex` maintains the per-partition mapping from
@@ -659,6 +659,43 @@ object VertexSetRDD {
     apply(rdd,index, (v:V) => v, reduceFunc, reduceFunc)
 
 
+  def aggregate[V: ClassManifest](
+    rdd: RDD[AggregationMsg[V]], index: VertexSetIndex,
+    reduceFunc: (V, V) => V): VertexSetRDD[V] = {
+
+    val cReduceFunc = index.rdd.context.clean(reduceFunc)
+    assert(rdd.partitioner == index.rdd.partitioner)
+    // Use the index to build the new values table
+    val values: RDD[ (Array[V], BitSet) ] = index.rdd.zipPartitions(rdd)( (indexIter, tblIter) => {
+      // There is only one map
+      val index = indexIter.next()
+      assert(!indexIter.hasNext)
+      val values = new Array[V](index.capacity)
+      val bs = new BitSet(index.capacity)
+      for (msg <- tblIter) {
+        // Get the location of the key in the index
+        val pos = index.getPos(msg.vid)
+        if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) {
+          throw new SparkException("Error: Trying to bind an external index " +
+            "to an RDD which contains keys that are not in the index.")
+        } else {
+          // Get the actual index
+          val ind = pos & OpenHashSet.POSITION_MASK
+          // If this value has already been seen then merge
+          if (bs.get(ind)) {
+            values(ind) = cReduceFunc(values(ind), msg.data)
+          } else { // otherwise just store the new value
+            bs.set(ind)
+            values(ind) = msg.data
+          }
+        }
+      }
+      Iterator((values, bs))
+    })
+    new VertexSetRDD(index, values)
+  }
+
+
   /**
    * Construct a vertex set from an RDD using an existing index and a
    * user defined `combiner` to merge duplicate vertices.
@@ -675,11 +712,11 @@ object VertexSetRDD {
    *
    */
   def apply[V: ClassManifest, C: ClassManifest](
-    rdd: RDD[(Vid,V)],
-    index: VertexSetIndex,
-    createCombiner: V => C,
-    mergeValue: (C, V) => C,
-    mergeCombiners: (C, C) => C): VertexSetRDD[C] = {
+      rdd: RDD[(Vid,V)],
+      index: VertexSetIndex,
+      createCombiner: V => C,
+      mergeValue: (C, V) => C,
+      mergeCombiners: (C, C) => C): VertexSetRDD[C] = {
     val cCreateCombiner = index.rdd.context.clean(createCombiner)
     val cMergeValue = index.rdd.context.clean(mergeValue)
     val cMergeCombiners = index.rdd.context.clean(mergeCombiners)
