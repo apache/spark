@@ -84,6 +84,29 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    */
   protected def makeCopy(newArgs: Array[AnyRef]): this.type =
     getClass.getConstructors.head.newInstance(newArgs: _*).asInstanceOf[this.type]
+
+  /** Returns the name of this type of TreeNode.  Defaults to the class name */
+  def nodeName = getClass.getSimpleName
+
+  /** Returns a string representing the arguments to this node, minus any children */
+  def argString = productIterator.flatMap {
+    case tn: TreeNode[_] if children contains tn => Nil
+    case seq: Seq[_] => seq.mkString("{", ",", "}") :: Nil
+    case other => other :: Nil
+  }.mkString(", ")
+
+  /** String representation of this node without any children */
+  def simpleString = s"$nodeName $argString"
+
+  override def toString(): String = generateTreeString(0, new StringBuilder).toString
+
+  protected def generateTreeString(depth: Int, builder: StringBuilder): StringBuilder = {
+    builder.append(" " * depth)
+    builder.append(simpleString)
+    builder.append("\n")
+    children.foreach(_.generateTreeString(depth + 1, builder))
+    builder
+  }
 }
 
 /**

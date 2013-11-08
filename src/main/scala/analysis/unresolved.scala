@@ -16,4 +16,6 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   def exprId = throw new UnresolvedException(this, "exprId")
   def dataType = throw new UnresolvedException(this, "dataType")
   def nullable = throw new UnresolvedException(this, "nullable")
+
+  override def toString(): String = s"'$name"
 }

@@ -43,4 +43,5 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
                              (val exprId: ExprId = NamedExpression.newExprId)
   extends Attribute with trees.LeafNode[Expression] {
 
+  override def toString(): String = s"$name#${exprId.id}"
 }
