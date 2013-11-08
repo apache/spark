@@ -6,13 +6,13 @@ import java.nio.ByteBuffer
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance, Serializer}
 
 
-/** A special shuffle serializer for VertexMessage[Int]. */
-class IntVertexMessageSerializer extends Serializer {
+/** A special shuffle serializer for VertexBroadcastMessage[Int]. */
+class IntVertexBroadcastMsgSerializer extends Serializer {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[VertexMessage[Int]]
+        val msg = t.asInstanceOf[VertexBroadcastMsg[Int]]
         writeLong(msg.vid)
         writeInt(msg.data)
         this
@@ -21,20 +21,20 @@ class IntVertexMessageSerializer extends Serializer {
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
       override def readObject[T](): T = {
-        new VertexMessage[Int](0, readLong(), readInt()).asInstanceOf[T]
+        new VertexBroadcastMsg[Int](0, readLong(), readInt()).asInstanceOf[T]
       }
     }
   }
 }
 
 
-/** A special shuffle serializer for VertexMessage[Double]. */
-class DoubleVertexMessageSerializer extends Serializer {
+/** A special shuffle serializer for VertexBroadcastMessage[Double]. */
+class DoubleVertexBroadcastMsgSerializer extends Serializer {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[VertexMessage[Double]]
+        val msg = t.asInstanceOf[VertexBroadcastMsg[Double]]
         writeLong(msg.vid)
         writeDouble(msg.data)
         this
@@ -43,7 +43,51 @@ class DoubleVertexMessageSerializer extends Serializer {
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
       def readObject[T](): T = {
-        new VertexMessage[Double](0, readLong(), readDouble()).asInstanceOf[T]
+        new VertexBroadcastMsg[Double](0, readLong(), readDouble()).asInstanceOf[T]
+      }
+    }
+  }
+}
+
+
+/** A special shuffle serializer for AggregationMessage[Int]. */
+class IntAggMsgSerializer extends Serializer {
+  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
+
+    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
+      def writeObject[T](t: T) = {
+        val msg = t.asInstanceOf[AggregationMsg[Int]]
+        writeLong(msg.vid)
+        writeInt(msg.data)
+        this
+      }
+    }
+
+    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
+      override def readObject[T](): T = {
+        new AggregationMsg[Int](readLong(), readInt()).asInstanceOf[T]
+      }
+    }
+  }
+}
+
+
+/** A special shuffle serializer for AggregationMessage[Double]. */
+class DoubleAggMsgSerializer extends Serializer {
+  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
+
+    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
+      def writeObject[T](t: T) = {
+        val msg = t.asInstanceOf[AggregationMsg[Double]]
+        writeLong(msg.vid)
+        writeDouble(msg.data)
+        this
+      }
+    }
+
+    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
+      def readObject[T](): T = {
+        new AggregationMsg[Double](readLong(), readDouble()).asInstanceOf[T]
       }
     }
   }

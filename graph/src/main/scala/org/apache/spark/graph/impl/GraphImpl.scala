@@ -11,7 +11,7 @@ import org.apache.spark.util.ClosureCleaner
 
 import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
-import org.apache.spark.graph.impl.MessageToPartitionRDDFunctions._
+import org.apache.spark.graph.impl.MsgRDDFunctions._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
 
@@ -349,7 +349,7 @@ object GraphImpl {
       //val part: Pid = canonicalEdgePartitionFunction2D(e.srcId, e.dstId, numPartitions, ceilSqrt)
 
       // Should we be using 3-tuple or an optimized class
-      MessageToPartition(part, (e.srcId, e.dstId, e.attr))
+      new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
     }
     .partitionBy(new HashPartitioner(numPartitions))
     .mapPartitionsWithIndex( (pid, iter) => {
@@ -399,7 +399,10 @@ object GraphImpl {
     // Join vid2pid and vTable, generate a shuffle dependency on the joined
     // result, and get the shuffle id so we can use it on the slave.
     val msgsByPartition = vTable.zipJoinFlatMap(vid2pid) { (vid, vdata, pids) =>
-      pids.iterator.map { pid => new VertexMessage[VD](pid, vid, vdata) }
+      // TODO(rxin): reuse VertexBroadcastMessage
+      pids.iterator.map { pid =>
+        new VertexBroadcastMsg[VD](pid, vid, vdata)
+      }
     }.partitionBy(replicationMap.partitioner.get).cache()
 
     replicationMap.zipPartitions(msgsByPartition){
@@ -500,7 +503,9 @@ object GraphImpl {
         }
       }
       // construct an iterator of tuples Iterator[(Vid, A)]
-      msgBS.iterator.map( ind => (vidToIndex.getValue(ind), msgArray(ind)) )
+      msgBS.iterator.map { ind =>
+        new AggregationMsg[A](vidToIndex.getValue(ind), msgArray(ind))
+      }
     }.partitionBy(g.vTable.index.rdd.partitioner.get)
     // do the final reduction reusing the index map
     VertexSetRDD(preAgg, g.vTable.index, reduceFunc)
