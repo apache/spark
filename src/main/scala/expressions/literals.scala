@@ -10,4 +10,6 @@ object Literal {
   }
 }
 
-case class Literal(value: Any, dataType: DataType) extends LeafExpression
+case class Literal(value: Any, dataType: DataType) extends LeafExpression {
+  final def nullable = false
+}
