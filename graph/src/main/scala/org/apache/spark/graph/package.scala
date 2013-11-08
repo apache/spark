@@ -8,10 +8,9 @@ package object graph {
   type Vid = Long
   type Pid = Int
 
-  type VertexHashMap[T] = it.unimi.dsi.fastutil.longs.Long2ObjectOpenHashMap[T]
-  type VertexSet = it.unimi.dsi.fastutil.longs.LongOpenHashSet
+  type VertexSet = OpenHashSet[Vid]
   type VertexArrayList = it.unimi.dsi.fastutil.longs.LongArrayList
-  
+
   //  type VertexIdToIndexMap = it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap
   type VertexIdToIndexMap = OpenHashSet[Vid]
 

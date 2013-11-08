@@ -14,6 +14,7 @@ import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
 import org.apache.spark.graph.impl.MessageToPartitionRDDFunctions._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
 
 
@@ -102,13 +103,16 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     makeTriplets(localVidMap, vTableReplicatedValues, eTable)
 
 
-  override def cache(): Graph[VD, ED] = {
-    eTable.cache()
-    vid2pid.cache()
-    vTable.cache()
+  override def persist(newLevel: StorageLevel): Graph[VD, ED] = {
+    eTable.persist(newLevel)
+    vid2pid.persist(newLevel)
+    vTable.persist(newLevel)
+    localVidMap.persist(newLevel)
+    // vTableReplicatedValues.persist(newLevel)
     this
   }
 
+  override def cache(): Graph[VD, ED] = persist(StorageLevel.MEMORY_ONLY)
 
   override def statistics: Map[String, Any] = {
     val numVertices = this.numVertices
@@ -398,7 +402,7 @@ object GraphImpl {
       val vSet = new VertexSet
       edgePartition.foreach(e => {vSet.add(e.srcId); vSet.add(e.dstId)})
       vSet.iterator.map { vid => (vid.toLong, pid) }
-    }
+    }.partitionBy(vTableIndex.rdd.partitioner.get)
     VertexSetRDD[Pid, ArrayBuffer[Pid]](preAgg, vTableIndex,
       (p: Pid) => ArrayBuffer(p),
       (ab: ArrayBuffer[Pid], p:Pid) => {ab.append(p); ab},
