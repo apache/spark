@@ -23,6 +23,7 @@ import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
 import org.apache.spark.graph.impl.AggregationMsg
+import org.apache.spark.graph.impl.MsgRDDFunctions._
 
 /**
  * The `VertexSetIndex` maintains the per-partition mapping from
