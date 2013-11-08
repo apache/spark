@@ -5,12 +5,15 @@ import shark.SharkContext
 import shark.SharkEnv
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import util.TestShark
 
 class SQLSuite extends FunSuite with BeforeAndAfterAll {
   var sc: SharkContext = _
 
   override def beforeAll() {
-    sc = TestUtils.getTestContext
+    val testShark = new TestShark
+    testShark.loadKv1
+    sc = testShark.sc
   }
 
   test("trivial select query") {
