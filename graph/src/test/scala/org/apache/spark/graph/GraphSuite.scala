@@ -58,7 +58,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("aggregateNeighborsSourceAttrOnly") {
+  test("aggregateNeighbors - source attribute replication only") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
       // Create a star graph where the degree of each vertex is its attribute
@@ -75,6 +75,24 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         (a: Int, b: Int) => a + b,
         EdgeDirection.In)
       assert(totalOfInNeighborDegrees.collect().toSet === (1 to n).map(x => (x, n)).toSet)
+    }
+  }
+
+  test("aggregateNeighbors - no vertex attribute replication") {
+    withSpark(new SparkContext("local[2]", "test")) { sc =>
+      val n = 3
+      // Not serializable because it captures org.scalatest.Engine
+      class UnserializableAttribute {}
+      // Create a star graph where vertex attributes are not serializable
+      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))))
+        .mapVertices { (id, attr) => new UnserializableAttribute }
+
+      // Should not serialize any vertex attributes
+      val ignoreAttributes = star.aggregateNeighbors(
+        (vid, edge) => Some(0),
+        (a: Int, b: Int) => a + b,
+        EdgeDirection.In)
+      assert(ignoreAttributes.collect().toSet === (1 to n).map(x => (x, 0)).toSet)
     }
   }
 
