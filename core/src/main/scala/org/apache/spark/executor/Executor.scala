@@ -179,10 +179,7 @@ private[spark] class Executor(
       }
     }
 
-    // the runAsUser breaks secure HDFS access. It needs to add the credentials
-    // for the user if running as a user. Comment out for now. 
-    //override def run(): Unit = SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
-    override def run(): Unit = {
+    override def run(): Unit = SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
       val startTime = System.currentTimeMillis()
       SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(replClassLoader)
