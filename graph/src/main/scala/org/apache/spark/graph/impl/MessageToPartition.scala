@@ -55,6 +55,8 @@ class VertexBroadcastMsgRDDFunctions[T: ClassManifest](self: RDD[VertexBroadcast
     // Set a custom serializer if the data is of int or double type.
     if (classManifest[T] == ClassManifest.Int) {
       rdd.setSerializer(classOf[IntVertexBroadcastMsgSerializer].getName)
+    } else if (classManifest[T] == ClassManifest.Long) {
+      rdd.setSerializer(classOf[LongVertexBroadcastMsgSerializer].getName)
     } else if (classManifest[T] == ClassManifest.Double) {
       rdd.setSerializer(classOf[DoubleVertexBroadcastMsgSerializer].getName)
     }
@@ -70,6 +72,8 @@ class AggregationMessageRDDFunctions[T: ClassManifest](self: RDD[AggregationMsg[
     // Set a custom serializer if the data is of int or double type.
     if (classManifest[T] == ClassManifest.Int) {
       rdd.setSerializer(classOf[IntAggMsgSerializer].getName)
+    } else if (classManifest[T] == ClassManifest.Long) {
+      rdd.setSerializer(classOf[LongAggMsgSerializer].getName)
     } else if (classManifest[T] == ClassManifest.Double) {
       rdd.setSerializer(classOf[DoubleAggMsgSerializer].getName)
     }
