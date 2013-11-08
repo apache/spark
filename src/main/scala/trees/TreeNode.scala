@@ -21,7 +21,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
 
   /**
    * Runs [[f]] on this node and then recursively on [[children]].
-   * @param f the function to be applied.
+   * @param f the function to be applied to each node in the tree.
    */
   def foreach(f: BaseType => Unit): Unit = {
     f(this)
@@ -47,7 +47,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    */
   def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRule = rule.applyOrElse(this, identity[BaseType])
-    if(this == afterRule)
+    // Check if unchanged and then possibly return old copy to avoid gc churn.
+    if(this.id == afterRule.id || this == afterRule)
       transformChildren(rule)
     else
       afterRule.transformChildren(rule)
@@ -62,9 +63,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def transformChildren(rule: PartialFunction[BaseType, BaseType]): this.type = {
     var changed = false
     val newArgs = productIterator.map {
-      case arg: AnyRef if(children contains arg) =>
+      case arg: TreeNode[_] if(children contains arg) =>
           val newChild = arg.asInstanceOf[BaseType].transform(rule)
-          if(newChild != arg) {
+          if(newChild.id != arg.id && newChild != arg) {
             changed = true
             newChild
           } else {
