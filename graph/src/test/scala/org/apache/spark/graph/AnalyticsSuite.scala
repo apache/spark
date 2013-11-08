@@ -4,6 +4,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
+import org.apache.spark.rdd._
 
 import org.apache.spark.graph.LocalSparkContext._
 
@@ -58,8 +59,9 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val prGraph1 = Analytics.pagerank(starGraph, 1, resetProb)
       val prGraph2 = Analytics.pagerank(starGraph, 2, resetProb)
     
-      val notMatching = prGraph1.vertices.zipJoin(prGraph2.vertices)
-        .map{ case (vid, (pr1, pr2)) => if (pr1 != pr2) { 1 } else { 0 } }.sum
+      val notMatching = prGraph1.vertices.zipJoin(prGraph2.vertices) { (vid, pr1, pr2) =>
+        if (pr1 != pr2) { 1 } else { 0 }
+      }.map { case (vid, test) => test }.sum
       assert(notMatching === 0)
       prGraph2.vertices.foreach(println(_))
       val errors = prGraph2.vertices.map{ case (vid, pr) =>
@@ -70,10 +72,12 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       assert(errors.sum === 0)
 
       val prGraph3 = Analytics.deltaPagerank(starGraph, 0, resetProb)
-      val errors2 = prGraph2.vertices.leftJoin(prGraph3.vertices).map{
-        case (_, (pr1, Some(pr2))) if(pr1 == pr2) => 0
-        case _ => 1
-      }.sum
+      val errors2 = prGraph2.vertices.leftJoin(prGraph3.vertices){ (vid, pr1, pr2Opt) =>
+        pr2Opt match {
+          case Some(pr2) if(pr1 == pr2) => 0
+          case _ => 1
+        }
+      }.map { case (vid, test) => test }.sum
       assert(errors2 === 0)
     }
   } // end of test Star PageRank
@@ -86,19 +90,17 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val resetProb = 0.15
       val prGraph1 = Analytics.pagerank(gridGraph, 50, resetProb).cache()
       val prGraph2 = Analytics.deltaPagerank(gridGraph, 0.0001, resetProb).cache()
-      val error = prGraph1.vertices.zipJoin(prGraph2.vertices).map {
-        case (id, (a, b)) => (a - b) * (a - b)
-      }.sum
-      prGraph1.vertices.zipJoin(prGraph2.vertices)
-        .map{ case (id, (a,b)) => (id, (a,b, a-b))}.foreach(println(_))
+      val error = prGraph1.vertices.zipJoin(prGraph2.vertices) { case (id, a, b) => (a - b) * (a - b) }
+        .map { case (id, error) => error }.sum
+      prGraph1.vertices.zipJoin(prGraph2.vertices) { (id, a, b) => (a, b, a-b) }.foreach(println(_))
       println(error)
       assert(error < 1.0e-5)
-      val pr3 = sc.parallelize(GridPageRank(10,10, 50, resetProb))
-      val error2 = prGraph1.vertices.leftJoin(pr3).map {
-        case (id, (a, Some(b))) => (a - b) * (a - b)
-        case _ => 0 
-      }.sum
-      prGraph1.vertices.leftJoin(pr3).foreach(println( _ ))
+      val pr3: RDD[(Vid, Double)] = sc.parallelize(GridPageRank(10,10, 50, resetProb))
+      val error2 = prGraph1.vertices.leftJoin(pr3) { (id, a, bOpt) =>
+        val b: Double  = bOpt.get
+        (a - b) * (a - b)
+      }.map { case (id, error) => error }.sum
+      prGraph1.vertices.leftJoin(pr3) { (id, a, b) => (a, b) }.foreach( println(_) )
       println(error2)
       assert(error2 < 1.0e-5)
     }

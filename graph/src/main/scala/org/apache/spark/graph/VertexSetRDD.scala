@@ -83,7 +83,7 @@ class VertexSetIndex(private[spark] val rdd: RDD[VertexIdToIndexMap]) {
  */
 class VertexSetRDD[@specialized V: ClassManifest](
     @transient val index:  VertexSetIndex,
-    @transient val valuesRDD: RDD[ ( (Int => V), BitSet) ])
+    @transient val valuesRDD: RDD[ ( Array[V], BitSet) ])
   extends RDD[(Vid, V)](index.rdd.context, 
     List(new OneToOneDependency(index.rdd), new OneToOneDependency(valuesRDD)) ) {
 
@@ -167,7 +167,7 @@ class VertexSetRDD[@specialized V: ClassManifest](
     val cleanPred = index.rdd.context.clean(pred)
     val newValues = index.rdd.zipPartitions(valuesRDD){ 
       (keysIter: Iterator[VertexIdToIndexMap], 
-       valuesIter: Iterator[(Int => V, BitSet)]) => 
+       valuesIter: Iterator[(Array[V], BitSet)]) =>
       val index = keysIter.next()
       assert(keysIter.hasNext == false)
       val (oldValues, bs) = valuesIter.next()
@@ -202,11 +202,12 @@ class VertexSetRDD[@specialized V: ClassManifest](
    * VertexSetRDD retains the same index.
    */
   def mapValues[U: ClassManifest](f: V => U): VertexSetRDD[U] = {
-    val newValuesRDD: RDD[ (Int => U, BitSet) ] = 
+    val cleanF = index.rdd.context.clean(f)
+    val newValuesRDD: RDD[ (Array[U], BitSet) ] =
       valuesRDD.mapPartitions(iter => iter.map{ 
-        case (values, bs: BitSet) => 
-          val newValues: (Int => U) = 
-            (ind: Int) => if (bs.get(ind)) f(values(ind)) else null.asInstanceOf[U]
+        case (values, bs: BitSet) =>
+          val newValues = new Array[U](values.size)
+          bs.iterator.foreach { ind => newValues(ind) = cleanF(values(ind)) }
           (newValues, bs)
       }, preservesPartitioning = true)   
     new VertexSetRDD[U](index, newValuesRDD)
@@ -226,19 +227,18 @@ class VertexSetRDD[@specialized V: ClassManifest](
    * VertexSetRDD retains the same index.
    */
   def mapValuesWithKeys[U: ClassManifest](f: (Vid, V) => U): VertexSetRDD[U] = {
-    val newValues: RDD[ (Int => U, BitSet) ] = 
+    val cleanF = index.rdd.context.clean(f)
+    val newValues: RDD[ (Array[U], BitSet) ] =
       index.rdd.zipPartitions(valuesRDD){ 
         (keysIter: Iterator[VertexIdToIndexMap], 
-         valuesIter: Iterator[(Int => V, BitSet)]) => 
+         valuesIter: Iterator[(Array[V], BitSet)]) =>
         val index = keysIter.next()
         assert(keysIter.hasNext == false)
-        val (oldValues, bs: BitSet) = valuesIter.next()
+        val (values, bs: BitSet) = valuesIter.next()
         assert(valuesIter.hasNext == false)
         // Cosntruct a view of the map transformation
-        val newValues: (Int => U) = (ind: Int) => {
-          if (bs.get(ind)) { f(index.getValueSafe(ind), oldValues(ind)) }
-          else { null.asInstanceOf[U] }
-        }
+        val newValues = new Array[U](index.capacity)
+        bs.iterator.foreach { ind => newValues(ind) = cleanF(index.getValueSafe(ind), values(ind)) }
         Iterator((newValues, bs))
       }
     new VertexSetRDD[U](index, newValues)
@@ -246,6 +246,8 @@ class VertexSetRDD[@specialized V: ClassManifest](
 
 
   /**
+   * @todo update docs to reflect function argument
+   *
    * Inner join this VertexSet with another VertexSet which has the
    * same Index.  This function will fail if both VertexSets do not
    * share the same index.  The resulting vertex set will only contain
@@ -258,20 +260,25 @@ class VertexSetRDD[@specialized V: ClassManifest](
    * and the other VertexSet and with tuple attributes.
    *
    */
-  def zipJoin[W: ClassManifest](other: VertexSetRDD[W]): VertexSetRDD[(V,W)] = {
+  def zipJoin[W: ClassManifest, Z: ClassManifest](other: VertexSetRDD[W])(f: (Vid, V, W) => Z):
+    VertexSetRDD[Z] = {
+    val cleanF = index.rdd.context.clean(f)
     if(index != other.index) {
       throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
     }
-    val newValuesRDD: RDD[ (Int => (V,W), BitSet) ] = 
-      valuesRDD.zipPartitions(other.valuesRDD){
-        (thisIter: Iterator[(Int => V, BitSet)], 
-          otherIter: Iterator[(Int => W, BitSet)]) => 
+    val newValuesRDD: RDD[ (Array[Z], BitSet) ] =
+      index.rdd.zipPartitions(valuesRDD, other.valuesRDD) { (indexIter, thisIter, otherIter) =>
+        val index = indexIter.next()
+        assert(!indexIter.hasNext)
         val (thisValues, thisBS: BitSet) = thisIter.next()
         assert(!thisIter.hasNext)
         val (otherValues, otherBS: BitSet) = otherIter.next()
         assert(!otherIter.hasNext)
         val newBS: BitSet = thisBS & otherBS
-        val newValues: Int => (V,W) = (ind: Int) => (thisValues(ind), otherValues(ind)) 
+        val newValues = new Array[Z](index.capacity)
+        newBS.iterator.foreach { ind =>
+          newValues(ind) = cleanF(index.getValueSafe(ind), thisValues(ind), otherValues(ind))
+        }
         Iterator((newValues, newBS))
       }
     new VertexSetRDD(index, newValuesRDD)
@@ -279,6 +286,37 @@ class VertexSetRDD[@specialized V: ClassManifest](
 
 
   /**
+   * @todo document
+   *
+   * @param other
+   * @param f
+   * @tparam W
+   * @tparam Z
+   * @return
+   */
+  def zipJoinFlatMap[W: ClassManifest, Z: ClassManifest](other: VertexSetRDD[W])(f: (Vid, V,W) => Iterator[Z]):
+  RDD[Z] = {
+    val cleanF = index.rdd.context.clean(f)
+    if(index != other.index) {
+      throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
+    }
+    index.rdd.zipPartitions(valuesRDD, other.valuesRDD) { (indexIter, thisIter, otherIter) =>
+      val index = indexIter.next()
+      assert(!indexIter.hasNext)
+      val (thisValues, thisBS: BitSet) = thisIter.next()
+      assert(!thisIter.hasNext)
+      val (otherValues, otherBS: BitSet) = otherIter.next()
+      assert(!otherIter.hasNext)
+      val newBS: BitSet = thisBS & otherBS
+      val newValues = new Array[Z](index.capacity)
+      newBS.iterator.flatMap { ind => cleanF(index.getValueSafe(ind), thisValues(ind), otherValues(ind)) }
+    }
+  }
+
+
+  /**
+   * @todo update docs to reflect function argument
+
    * Left join this VertexSet with another VertexSet which has the
    * same Index.  This function will fail if both VertexSets do not
    * share the same index.  The resulting vertex set contains an entry
@@ -293,20 +331,25 @@ class VertexSetRDD[@specialized V: ClassManifest](
    * other VertexSet.
    *
    */
-  def leftZipJoin[W: ClassManifest](other: VertexSetRDD[W]): VertexSetRDD[(V,Option[W])] = {
+  def leftZipJoin[W: ClassManifest, Z: ClassManifest](other: VertexSetRDD[W])(f: (Vid, V, Option[W]) => Z):
+    VertexSetRDD[Z] = {
     if(index != other.index) {
       throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
     }
-    val newValuesRDD: RDD[ (Int => (V,Option[W]), BitSet) ] = 
-      valuesRDD.zipPartitions(other.valuesRDD){
-      (thisIter: Iterator[(Int => V, BitSet)], 
-        otherIter: Iterator[(Int => W, BitSet)]) => 
+    val cleanF = index.rdd.context.clean(f)
+    val newValuesRDD: RDD[(Array[Z], BitSet)] =
+      index.rdd.zipPartitions(valuesRDD, other.valuesRDD) { (indexIter, thisIter, otherIter) =>
+      val index = indexIter.next()
+      assert(!indexIter.hasNext)
       val (thisValues, thisBS: BitSet) = thisIter.next()
       assert(!thisIter.hasNext)
       val (otherValues, otherBS: BitSet) = otherIter.next()
       assert(!otherIter.hasNext)
-      val newValues: Int => (V, Option[W]) = (ind: Int) => 
-        (thisValues(ind), if (otherBS.get(ind)) Option(otherValues(ind)) else None)
+      val newValues = new Array[Z](index.capacity)
+      thisBS.iterator.foreach { ind =>
+        val otherV = if (otherBS.get(ind)) Option(otherValues(ind)) else None
+        newValues(ind) = cleanF(index.getValueSafe(ind), thisValues(ind), otherV)
+      }
       Iterator((newValues, thisBS))
     }
     new VertexSetRDD(index, newValuesRDD)
@@ -331,66 +374,27 @@ class VertexSetRDD[@specialized V: ClassManifest](
    * other VertexSet.
    *
    */
-  def leftJoin[W: ClassManifest](
-    other: RDD[(Vid,W)], merge: (W,W) => W = (a:W, b:W) => a):
-    VertexSetRDD[(V, Option[W]) ] = {
+  def leftJoin[W: ClassManifest, Z: ClassManifest](other: RDD[(Vid,W)])
+    (f: (Vid, V, Option[W]) => Z, merge: (W,W) => W = (a:W, b:W) => a ):
+    VertexSetRDD[Z] = {
+    val cleanF = index.rdd.context.clean(f)
+    val cleanMerge = index.rdd.context.clean(merge)
     // Test if the other vertex is a VertexSetRDD to choose the optimal
     // join strategy
     other match {
       // If the other set is a VertexSetRDD and shares the same index as
       // this vertex set then we use the much more efficient leftZipJoin
       case other: VertexSetRDD[_] if index == other.index => {
-        leftZipJoin(other)
-      }    
+        leftZipJoin(other)(cleanF)
+        // @todo handle case where other is a VertexSetRDD with a different index
+      }
       case _ => {
-        // Otherwise we treat the other RDD as a collectiong of 
-        // vertex-attribute pairs.  
-        // If necessary shuffle the other RDD using the partitioner 
-        // for this VertexSet
-        val otherShuffled = 
-          if (other.partitioner == partitioner) other 
-          else other.partitionBy(partitioner.get)
-        // Compute the new values RDD
-        val newValuesRDD: RDD[ (Int => (V,Option[W]), BitSet) ] = 
-          index.rdd.zipPartitions(valuesRDD, otherShuffled) {
-          (thisIndexIter: Iterator[VertexIdToIndexMap], 
-            thisIter: Iterator[(Int => V, BitSet)], 
-            tuplesIter: Iterator[(Vid,W)]) =>
-          // Get the Index and values for this RDD
-          val index = thisIndexIter.next()
-          assert(!thisIndexIter.hasNext)
-          val (thisValues, thisBS) = thisIter.next()
-          assert(!thisIter.hasNext)
-          // Create a new array to store the values in the resulting VertexSet
-          val otherValues = new Array[W](index.capacity)
-          // track which values are matched with values in other
-          val otherBS = new BitSet(index.capacity)
-          for ((k,w) <- tuplesIter) {
-            // Get the location of the key in the index
-            val pos = index.getPos(k)
-            // Only if the key is already in the index
-            if ((pos & OpenHashSet.NONEXISTENCE_MASK) == 0) {
-              // Get the actual index
-              val ind = pos & OpenHashSet.POSITION_MASK
-              // If this value has already been seen then merge
-              if (otherBS.get(ind)) {
-                otherValues(ind) = merge(otherValues(ind), w)
-              } else { // otherwise just store the new value
-                otherBS.set(ind)
-                otherValues(ind) = w
-              }
-            }
-          }
-          // Some vertices in this vertex set may not have a corresponding
-          // tuple in the join and so a None value should be returned. 
-          val newValues: Int => (V, Option[W]) = (ind: Int) => 
-            (thisValues(ind), if (otherBS.get(ind)) Option(otherValues(ind)) else None)
-          Iterator((newValues, thisBS))
-        } // end of newValues
-        new VertexSetRDD(index, newValuesRDD) 
+        val indexedOther: VertexSetRDD[W] = VertexSetRDD(other, index, cleanMerge)
+        leftZipJoin(indexedOther)(cleanF)
       }
     }
   } // end of leftJoin
+
 
 
   /**
@@ -594,29 +598,30 @@ object VertexSetRDD {
    */
   def apply[V: ClassManifest](
     rdd: RDD[(Vid,V)], reduceFunc: (V, V) => V): VertexSetRDD[V] = {
+    val cReduceFunc = rdd.context.clean(reduceFunc)
     // Preaggregate and shuffle if necessary
     val preAgg = rdd.partitioner match {
       case Some(p) => rdd
       case None => 
         val partitioner = new HashPartitioner(rdd.partitions.size)
         // Preaggregation.
-        val aggregator = new Aggregator[Vid, V, V](v => v, reduceFunc, reduceFunc)
+        val aggregator = new Aggregator[Vid, V, V](v => v, cReduceFunc, cReduceFunc)
         rdd.mapPartitions(aggregator.combineValuesByKey, true).partitionBy(partitioner)
     } 
 
     val groups = preAgg.mapPartitions( iter => {
       val hashMap = new PrimitiveKeyOpenHashMap[Vid, V]
       for ((k,v) <- iter) {
-        hashMap.setMerge(k, v, reduceFunc)
+        hashMap.setMerge(k, v, cReduceFunc)
       }
       val index = hashMap.keySet
-      val values: Int => V = (ind: Int) => hashMap._values(ind)
+      val values = hashMap._values
       val bs = index.getBitSet
       Iterator( (index, (values, bs)) )
       }, true).cache
     // extract the index and the values
     val index = groups.mapPartitions(_.map{ case (kMap, vAr) => kMap }, true)
-    val values: RDD[(Int => V, BitSet)] = 
+    val values: RDD[(Array[V], BitSet)] =
       groups.mapPartitions(_.map{ case (kMap,vAr) => vAr }, true)
     new VertexSetRDD[V](new VertexSetIndex(index), values)
   } // end of apply
@@ -675,6 +680,9 @@ object VertexSetRDD {
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C): VertexSetRDD[C] = {
+    val cCreateCombiner = index.rdd.context.clean(createCombiner)
+    val cMergeValue = index.rdd.context.clean(mergeValue)
+    val cMergeCombiners = index.rdd.context.clean(mergeCombiners)
     // Get the index Partitioner
     val partitioner = index.rdd.partitioner match {
       case Some(p) => p
@@ -684,15 +692,15 @@ object VertexSetRDD {
     val partitioned = 
       if (rdd.partitioner != Some(partitioner)) {
         // Preaggregation.
-        val aggregator = new Aggregator[Vid, V, C](createCombiner, mergeValue, 
-          mergeCombiners)
+        val aggregator = new Aggregator[Vid, V, C](cCreateCombiner, cMergeValue,
+          cMergeCombiners)
         rdd.mapPartitions(aggregator.combineValuesByKey).partitionBy(partitioner)
       } else {
         rdd.mapValues(x => createCombiner(x))
       }
 
     // Use the index to build the new values table
-    val values: RDD[ (Int => C, BitSet) ] = index.rdd.zipPartitions(partitioned)( (indexIter, tblIter) => {
+    val values: RDD[ (Array[C], BitSet) ] = index.rdd.zipPartitions(partitioned)( (indexIter, tblIter) => {
       // There is only one map
       val index = indexIter.next()
       assert(!indexIter.hasNext)
@@ -709,14 +717,14 @@ object VertexSetRDD {
           val ind = pos & OpenHashSet.POSITION_MASK
           // If this value has already been seen then merge
           if (bs.get(ind)) {
-            values(ind) = mergeCombiners(values(ind), c)
+            values(ind) = cMergeCombiners(values(ind), c)
           } else { // otherwise just store the new value
             bs.set(ind)
             values(ind) = c
           }
         }
       }
-      Iterator(((ind: Int) => values(ind), bs))
+      Iterator((values, bs))
     })
     new VertexSetRDD(index, values)
   } // end of apply
