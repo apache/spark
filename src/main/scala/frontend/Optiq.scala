@@ -78,6 +78,10 @@ object Optiq {
 
   def sqlNodeToExpr(node: SqlNode): Expression = node match {
     case Call(EQUALS, Seq(left,right)) => Equals(sqlNodeToExpr(left), sqlNodeToExpr(right))
+    case Call(GREATER_THAN, Seq(left,right)) => GreaterThan(sqlNodeToExpr(left), sqlNodeToExpr(right))
+    case Call(GREATER_THAN_OR_EQUAL, Seq(left,right)) => GreaterThanOrEqual(sqlNodeToExpr(left), sqlNodeToExpr(right))
+    case Call(LESS_THAN, Seq(left,right)) => LessThan(sqlNodeToExpr(left), sqlNodeToExpr(right))
+    case Call(LESS_THAN_OR_EQUAL, Seq(left,right)) => LessThanOrEqual(sqlNodeToExpr(left), sqlNodeToExpr(right))
     case named => sqlNodeToNamedExpr(named)
   }
 }
