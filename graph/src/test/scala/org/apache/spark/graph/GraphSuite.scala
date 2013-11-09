@@ -33,6 +33,18 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("mapReduceTriplets") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val n = 3
+      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))))
+
+      val neighborDegreeSums = star.mapReduceTriplets(
+        edge => Array((edge.srcId, edge.dstAttr), (edge.dstId, edge.srcAttr)),
+        (a: Int, b: Int) => a + b)
+      assert(neighborDegreeSums.collect().toSet === (0 to n).map(x => (x, n)).toSet)
+    }
+  }
+
   test("aggregateNeighbors") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
