@@ -9,13 +9,16 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
   def output: Seq[Attribute]
 
+  /**
+   * Runs [[transform]] with [[rule]] on all expressions present in this query operator.
+   * @param rule the rule to be applied to every expression in this operator.
+   * @return
+   */
   def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
-
     @inline def transformExpression(e: Expression) = {
       val newE = e.transform(rule)
-      println("te")
       if(newE.id != e.id && newE != e) {
         changed = true
         newE
