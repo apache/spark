@@ -117,9 +117,7 @@ class DAGScheduler(
      */
     def receive = {
       case event: DAGSchedulerEvent =>
-        if (event != null) {
-          logDebug("Got event of type " + event.getClass.getName)
-        }
+        logDebug("Got event of type " + event.getClass.getName)
 
         if (!processEvent(event)) {
           val time = System.currentTimeMillis() // TODO: use a pluggable clock for testability
