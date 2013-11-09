@@ -1,8 +1,11 @@
+resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
+
 libraryDependencies += "edu.berkeley.cs.amplab" %% "shark" % "0.8.0"
 
 libraryDependencies ++= Seq(
  "org.apache.hadoop" % "hadoop-client" % "1.0.4",
- "org.scalatest" %% "scalatest" % "1.9.1" % "test")
+ "org.scalatest" %% "scalatest" % "1.9.1" % "test",
+ "net.hydromatic" % "optiq-core" % "0.4.16-SNAPSHOT")
 
 scalaVersion := "2.10.3"
 
