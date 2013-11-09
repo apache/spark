@@ -30,8 +30,10 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     val newArgs = productIterator.map {
       case e: Expression => transformExpression(e)
       case Some(e: Expression) => Some(transformExpression(e))
-      case seqE: Seq[Expression] if !seqE.isEmpty && classOf[Expression].isAssignableFrom(seqE.head.getClass) =>
-        seqE.map(transformExpression)
+      case seq: Seq[_] => seq.map {
+        case e: Expression => transformExpression(e)
+        case other => other
+      }
       case other: AnyRef => other
     }.toArray
 
