@@ -30,7 +30,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
     val options = children.flatMap(_.output).filter(_.name == name)
     options match {
       case a :: Nil => Some(a) // One match, use it.
-      case Nil => None   // No matches.
+      case Nil => None         // No matches.
       case ambiguousReferences =>
         throw new OptimizationException(
           this, s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
