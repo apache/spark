@@ -7,12 +7,25 @@ import rules._
 class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
   val batches = Seq(
     Batch("Resolution",
-      ResolveRelations)
+      ResolveRelations,
+      ResolveReferences)
   )
 
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case UnresolvedRelation(name, alias) => catalog.lookupRelation(name, alias)
+    }
+  }
+
+  object ResolveReferences extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case q: LogicalPlan =>
+        // logger.fine(s"resolving ${plan.simpleString}")
+        q transformExpressions {
+        case u @ UnresolvedAttribute(name) =>
+          // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
+          q.resolve(name).getOrElse(u)
+      }
     }
   }
 }
