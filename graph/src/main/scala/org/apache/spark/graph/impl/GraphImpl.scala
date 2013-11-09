@@ -170,7 +170,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     println("\n\nvid2pid.bothAttrs -------------------------------")
     traverseLineage(vid2pid.bothAttrs, "  ", visited)
     visited += (vid2pid.bothAttrs.id -> "vid2pid")
-    visited += (vid2pid.bothAttrs.valuesRDD.id -> "vid2pid.values")
+    visited += (vid2pid.bothAttrs.valuesRDD.id -> "vid2pid.bothAttrs")
 
     println("\n\nlocalVidMap -------------------------------------")
     traverseLineage(localVidMap, "  ", visited)
