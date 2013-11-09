@@ -46,6 +46,8 @@ case class Alias(child: Expression, name: String)
   def nullable = child.nullable
 
   def toAttribute = AttributeReference(name, child.dataType, child.nullable)(exprId)
+
+  override def toString(): String = s"$child AS $name"
 }
 
 /**
