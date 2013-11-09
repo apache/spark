@@ -307,7 +307,7 @@ class SparkContext(
   /** Set a human readable description of the current job. */
   @deprecated("use setJobGroup", "0.8.1")
   def setJobDescription(value: String) {
-    setJobGroup("", value)
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
   }
 
   /**
