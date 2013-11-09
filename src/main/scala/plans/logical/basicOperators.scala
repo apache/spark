@@ -8,6 +8,10 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
   def output = projectList.map(_.toAttribute)
 }
 
+case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
+  def output = child.output
+}
+
 case class Join(
   left: LogicalPlan,
   right: LogicalPlan,
