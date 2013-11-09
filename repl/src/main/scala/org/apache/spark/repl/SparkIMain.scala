@@ -878,14 +878,21 @@ class SparkIMain(val settings: Settings, protected val out: PrintWriter) extends
           (message, false)
         }
       }
+
+      // Get a copy of the local properties from SparkContext, and set it later in the thread
+      // that triggers the execution. This is to make sure the caller of this function can pass
+      // the right thread local (inheritable) properties down into Spark.
+      val sc = org.apache.spark.repl.Main.interp.sparkContext
+      val props = if (sc != null) sc.getLocalProperties() else null
       
       try {
         val execution = lineManager.set(originalLine) {
           // MATEI: set the right SparkEnv for our SparkContext, because
           // this execution will happen in a separate thread
-          val sc = org.apache.spark.repl.Main.interp.sparkContext
-          if (sc != null && sc.env != null)
+          if (sc != null && sc.env != null) {
             SparkEnv.set(sc.env)
+            sc.setLocalProperties(props)
+          }
           // Execute the line
           lineRep call "$export"
         }
