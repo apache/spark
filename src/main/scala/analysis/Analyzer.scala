@@ -7,8 +7,8 @@ import rules._
 class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
   val batches = Seq(
     Batch("Resolution",
-      ResolveRelations,
-      ResolveReferences)
+      ResolveReferences,
+      ResolveRelations)
   )
 
   object ResolveRelations extends Rule[LogicalPlan] {
