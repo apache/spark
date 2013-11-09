@@ -60,5 +60,14 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
                              (val exprId: ExprId = NamedExpression.newExprId)
   extends Attribute with trees.LeafNode[Expression] {
 
+  /**
+   * Returns a copy of this [[AttributeReference]] with changed nullability.
+   */
+  def withNullability(newNullability: Boolean) =
+    if(nullable == newNullability)
+      this
+    else
+      AttributeReference(name, dataType, newNullability)(exprId)
+
   override def toString(): String = s"$name#${exprId.id}"
 }
