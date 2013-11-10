@@ -23,7 +23,6 @@ import sys
 import time
 import socket
 import traceback
-from base64 import standard_b64decode
 # CloudPickler needs to be imported so that depicklers are registered using the
 # copy_reg module.
 from pyspark.accumulators import _accumulatorRegistry
@@ -36,11 +35,6 @@ from pyspark.serializers import write_with_length, write_int, read_long, \
 
 pickleSer = PickleSerializer()
 mutf8_deserializer = MUTF8Deserializer()
-
-
-def load_obj(infile):
-    decoded = standard_b64decode(infile.readline().strip())
-    return pickleSer._loads(decoded)
 
 
 def report_times(outfile, boot, init, finish):
@@ -75,10 +69,8 @@ def main(infile, outfile):
         filename = mutf8_deserializer._loads(infile)
         sys.path.append(os.path.join(spark_files_dir, filename))
 
-    # Load this stage's function and serializer:
-    func = load_obj(infile)
-    deserializer = load_obj(infile)
-    serializer = load_obj(infile)
+    command = pickleSer._read_with_length(infile)
+    (func, deserializer, serializer) = command
     init_time = time.time()
     try:
         iterator = deserializer.load_stream(infile)

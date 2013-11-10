@@ -64,6 +64,7 @@ import cPickle
 from itertools import chain, izip, product
 import marshal
 import struct
+from pyspark import cloudpickle
 
 
 __all__ = ["PickleSerializer", "MarshalSerializer"]
@@ -243,6 +244,10 @@ class PickleSerializer(FramedSerializer):
 
     def _dumps(self, obj): return cPickle.dumps(obj, 2)
     _loads = cPickle.loads
+
+class CloudPickleSerializer(PickleSerializer):
+
+    def _dumps(self, obj): return cloudpickle.dumps(obj, 2)
 
 
 class MarshalSerializer(FramedSerializer):
