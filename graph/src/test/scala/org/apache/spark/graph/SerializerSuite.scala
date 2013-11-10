@@ -4,8 +4,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graph.LocalSparkContext._
-import java.io.ByteArrayInputStream
-import java.io.ByteArrayOutputStream
+import java.io.{EOFException, ByteArrayInputStream, ByteArrayOutputStream}
 import org.apache.spark.graph.impl._
 import org.apache.spark.graph.impl.MsgRDDFunctions._
 import org.apache.spark._
@@ -31,6 +30,10 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     assert(outMsg.vid === inMsg2.vid)
     assert(outMsg.data === inMsg1.data)
     assert(outMsg.data === inMsg2.data)
+
+    intercept[EOFException] {
+      inStrm.readObject()
+    }
   }
 
   test("TestVertexBroadcastMessageLong") {
@@ -48,6 +51,10 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     assert(outMsg.vid === inMsg2.vid)
     assert(outMsg.data === inMsg1.data)
     assert(outMsg.data === inMsg2.data)
+
+    intercept[EOFException] {
+      inStrm.readObject()
+    }
   }
 
   test("TestVertexBroadcastMessageDouble") {
@@ -65,6 +72,10 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     assert(outMsg.vid === inMsg2.vid)
     assert(outMsg.data === inMsg1.data)
     assert(outMsg.data === inMsg2.data)
+
+    intercept[EOFException] {
+      inStrm.readObject()
+    }
   }
 
   test("TestAggregationMessageInt") {
@@ -82,6 +93,10 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     assert(outMsg.vid === inMsg2.vid)
     assert(outMsg.data === inMsg1.data)
     assert(outMsg.data === inMsg2.data)
+
+    intercept[EOFException] {
+      inStrm.readObject()
+    }
   }
 
   test("TestAggregationMessageLong") {
@@ -99,6 +114,10 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     assert(outMsg.vid === inMsg2.vid)
     assert(outMsg.data === inMsg1.data)
     assert(outMsg.data === inMsg2.data)
+
+    intercept[EOFException] {
+      inStrm.readObject()
+    }
   }
 
   test("TestAggregationMessageDouble") {
@@ -116,23 +135,25 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     assert(outMsg.vid === inMsg2.vid)
     assert(outMsg.data === inMsg1.data)
     assert(outMsg.data === inMsg2.data)
+
+    intercept[EOFException] {
+      inStrm.readObject()
+    }
   }
 
   test("TestShuffleVertexBroadcastMsg") {
     withSpark(new SparkContext("local[2]", "test")) { sc =>
-      val bmsgs = sc.parallelize(
-        (0 until 100).map(pid => new VertexBroadcastMsg[Int](pid, pid, pid)), 10)
-      val partitioner = new HashPartitioner(3)
-      val bmsgsArray = bmsgs.partitionBy(partitioner).collect
+      val bmsgs = sc.parallelize(0 until 100, 10).map { pid =>
+        new VertexBroadcastMsg[Int](pid, pid, pid)
+      }
+      bmsgs.partitionBy(new HashPartitioner(3)).collect()
     }
   }
 
   test("TestShuffleAggregationMsg") {
     withSpark(new SparkContext("local[2]", "test")) { sc =>
-      val bmsgs = sc.parallelize(
-        (0 until 100).map(pid => new AggregationMsg[Int](pid, pid)), 10)
-      val partitioner = new HashPartitioner(3)
-      val bmsgsArray = bmsgs.partitionBy(partitioner).collect
+      val bmsgs = sc.parallelize(0 until 100, 10).map(pid => new AggregationMsg[Int](pid, pid))
+      bmsgs.partitionBy(new HashPartitioner(3)).collect()
     }
   }
 

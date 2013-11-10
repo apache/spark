@@ -1,9 +1,9 @@
 package org.apache.spark.graph.impl
 
-import java.io.{InputStream, OutputStream}
+import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance, Serializer}
+import org.apache.spark.serializer._
 
 
 /** A special shuffle serializer for VertexBroadcastMessage[Int]. */
@@ -185,11 +185,15 @@ sealed abstract class ShuffleDeserializationStream(s: InputStream) extends Deser
   def readObject[T](): T
 
   def readInt(): Int = {
-    (s.read() & 0xFF) << 24 | (s.read() & 0xFF) << 16 | (s.read() & 0xFF) << 8 | (s.read() & 0xFF)
+    val first = s.read()
+    if (first < 0) throw new EOFException
+    (first & 0xFF) << 24 | (s.read() & 0xFF) << 16 | (s.read() & 0xFF) << 8 | (s.read() & 0xFF)
   }
 
   def readLong(): Long = {
-    (s.read().toLong << 56) |
+    val first = s.read()
+    if (first < 0) throw new EOFException()
+    (first.toLong << 56) |
       (s.read() & 0xFF).toLong << 48 |
       (s.read() & 0xFF).toLong << 40 |
       (s.read() & 0xFF).toLong << 32 |
