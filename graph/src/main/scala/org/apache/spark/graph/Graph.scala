@@ -1,11 +1,9 @@
 package org.apache.spark.graph
 
-
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.ClosureCleaner
 import org.apache.spark.Logging
-
-
+import org.apache.spark.storage.StorageLevel
 
 /**
  * The Graph abstractly represents a graph with arbitrary objects
@@ -16,21 +14,21 @@ import org.apache.spark.Logging
  * operations return new graphs.
  *
  * @see GraphOps for additional graph member functions.
- * 
+ *
  * @note The majority of the graph operations are implemented in
  * `GraphOps`.  All the convenience operations are defined in the
  * `GraphOps` class which may be shared across multiple graph
  * implementations.
  *
  * @tparam VD the vertex attribute type
- * @tparam ED the edge attribute type 
+ * @tparam ED the edge attribute type
  */
 abstract class Graph[VD: ClassManifest, ED: ClassManifest] extends Logging {
 
   /**
    * Get the vertices and their data.
    *
-   * @note vertex ids are unique. 
+   * @note vertex ids are unique.
    * @return An RDD containing the vertices in this graph
    *
    * @see Vertex for the vertex type.
@@ -74,6 +72,11 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] extends Logging {
    */
   val triplets: RDD[EdgeTriplet[VD, ED]]
 
+
+
+  def persist(newLevel: StorageLevel): Graph[VD, ED]
+
+
   /**
    * Return a graph that is cached when first created. This is used to
    * pin a graph in memory enabling multiple queries to reuse the same
@@ -104,7 +107,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] extends Logging {
    * @tparam VD2 the new vertex data type
    *
    * @example We might use this operation to change the vertex values
-   * from one type to another to initialize an algorithm.   
+   * from one type to another to initialize an algorithm.
    * {{{
    * val rawGraph: Graph[(), ()] = Graph.textFile("hdfs://file")
    * val root = 42
@@ -194,7 +197,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] extends Logging {
    * @return the subgraph containing only the vertices and edges that
    * satisfy the predicates.
    */
-  def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true), 
+  def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
     vpred: (Vid, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
 
 
@@ -259,12 +262,12 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] extends Logging {
    * @param reduceFunc the user defined reduce function which should
    * be commutative and assosciative and is used to combine the output
    * of the map phase.
-   * 
+   *
    * @example We can use this function to compute the inDegree of each
    * vertex
    * {{{
    * val rawGraph: Graph[(),()] = Graph.textFile("twittergraph")
-   * val inDeg: RDD[(Vid, Int)] = 
+   * val inDeg: RDD[(Vid, Int)] =
    *   mapReduceTriplets[Int](et => Array((et.dst.id, 1)), _ + _)
    * }}}
    *
@@ -273,12 +276,12 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] extends Logging {
    * Graph API in that enables neighborhood level computation. For
    * example this function can be used to count neighbors satisfying a
    * predicate or implement PageRank.
-   * 
+   *
    */
   def mapReduceTriplets[A: ClassManifest](
       mapFunc: EdgeTriplet[VD, ED] => Array[(Vid, A)],
       reduceFunc: (A, A) => A)
-    : VertexSetRDD[A] 
+    : VertexSetRDD[A]
 
 
   /**
@@ -300,11 +303,11 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] extends Logging {
    * @example This function is used to update the vertices with new
    * values based on external data.  For example we could add the out
    * degree to each vertex record
-   * 
+   *
    * {{{
    * val rawGraph: Graph[(),()] = Graph.textFile("webgraph")
    * val outDeg: RDD[(Vid, Int)] = rawGraph.outDegrees()
-   * val graph = rawGraph.outerJoinVertices(outDeg) { 
+   * val graph = rawGraph.outerJoinVertices(outDeg) {
    *   (vid, data, optDeg) => optDeg.getOrElse(0)
    * }
    * }}}
@@ -341,7 +344,7 @@ object Graph {
    * (i.e., the undirected degree).
    *
    * @param rawEdges the RDD containing the set of edges in the graph
-   * 
+   *
    * @return a graph with edge attributes containing the count of
    * duplicate edges and vertex attributes containing the total degree
    * of each vertex.
@@ -372,10 +375,10 @@ object Graph {
         rawEdges.map { case (s, t) => Edge(s, t, 1) }
       }
     // Determine unique vertices
-    /** @todo Should this reduceByKey operation be indexed? */ 
-    val vertices: RDD[(Vid, Int)] = 
+    /** @todo Should this reduceByKey operation be indexed? */
+    val vertices: RDD[(Vid, Int)] =
       edges.flatMap{ case Edge(s, t, cnt) => Array((s, 1), (t, 1)) }.reduceByKey(_ + _)
- 
+
     // Return graph
     GraphImpl(vertices, edges, 0)
   }
@@ -396,7 +399,7 @@ object Graph {
    *
    */
   def apply[VD: ClassManifest, ED: ClassManifest](
-      vertices: RDD[(Vid,VD)], 
+      vertices: RDD[(Vid,VD)],
       edges: RDD[Edge[ED]]): Graph[VD, ED] = {
     val defaultAttr: VD = null.asInstanceOf[VD]
     Graph(vertices, edges, defaultAttr, (a:VD,b:VD) => a)
@@ -420,7 +423,7 @@ object Graph {
    *
    */
   def apply[VD: ClassManifest, ED: ClassManifest](
-      vertices: RDD[(Vid,VD)], 
+      vertices: RDD[(Vid,VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD,
       mergeFunc: (VD, VD) => VD): Graph[VD, ED] = {

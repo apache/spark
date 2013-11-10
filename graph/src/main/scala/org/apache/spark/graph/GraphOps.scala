@@ -11,21 +11,21 @@ import org.apache.spark.util.ClosureCleaner
  * the graph type and is implicitly constructed for each Graph object.
  * All operations in `GraphOps` are expressed in terms of the
  * efficient GraphX API.
- * 
+ *
  * @tparam VD the vertex attribute type
- * @tparam ED the edge attribute type 
+ * @tparam ED the edge attribute type
  *
  */
 class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
   /**
-   * Compute the number of edges in the graph.  
+   * Compute the number of edges in the graph.
    */
   lazy val numEdges: Long = graph.edges.count()
 
 
   /**
-   * Compute the number of vertices in the graph.  
+   * Compute the number of vertices in the graph.
    */
   lazy val numVertices: Long = graph.vertices.count()
 
@@ -39,7 +39,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
 
   /**
-   * Compute the out-degree of each vertex in the Graph returning an RDD. 
+   * Compute the out-degree of each vertex in the Graph returning an RDD.
    * @note Vertices with no out edges are not returned in the resulting RDD.
    */
   lazy val outDegrees: VertexSetRDD[Int] = degreesRDD(EdgeDirection.Out)
@@ -60,7 +60,13 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * neighboring vertex attributes.
    */
   private def degreesRDD(edgeDirection: EdgeDirection): VertexSetRDD[Int] = {
-    graph.aggregateNeighbors((vid, edge) => Some(1), _+_, edgeDirection)
+    if (edgeDirection == EdgeDirection.In) {
+      graph.mapReduceTriplets(et => Array((et.dstId,1)), _+_)
+    } else if (edgeDirection == EdgeDirection.Out) {
+      graph.mapReduceTriplets(et => Array((et.srcId,1)), _+_)
+    } else { // EdgeDirection.both
+      graph.mapReduceTriplets(et => Array((et.srcId,1), (et.dstId,1)), _+_)
+    }
   }
 
 
@@ -89,7 +95,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    *
    * @example We can use this function to compute the average follower
    * age for each user
-   * 
+   *
    * {{{
    * val graph: Graph[Int,Int] = loadGraph()
    * val averageFollowerAge: RDD[(Int, Int)] =
@@ -113,15 +119,15 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
 
-    // Define a new map function over edge triplets 
+    // Define a new map function over edge triplets
     val mf = (et: EdgeTriplet[VD,ED]) => {
       // Compute the message to the dst vertex
-      val dst = 
+      val dst =
         if (dir == EdgeDirection.In || dir == EdgeDirection.Both) {
           mapFunc(et.dstId, et)
         } else { Option.empty[A] }
       // Compute the message to the source vertex
-      val src = 
+      val src =
         if (dir == EdgeDirection.Out || dir == EdgeDirection.Both) {
           mapFunc(et.srcId, et)
         } else { Option.empty[A] }
@@ -130,7 +136,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
         case (None, None) => Array.empty[(Vid, A)]
         case (Some(srcA),None) => Array((et.srcId, srcA))
         case (None, Some(dstA)) => Array((et.dstId, dstA))
-        case (Some(srcA), Some(dstA)) => 
+        case (Some(srcA), Some(dstA)) =>
           Array((et.srcId, srcA), (et.dstId, dstA))
       }
     }
@@ -141,24 +147,20 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
 
 
   /**
-   * Return the Ids of the neighboring vertices. 
+   * Return the Ids of the neighboring vertices.
    *
    * @param edgeDirection the direction along which to collect
    * neighboring vertices
    *
    * @return the vertex set of neighboring ids for each vertex.
    */
-  def collectNeighborIds(edgeDirection: EdgeDirection) : 
+  def collectNeighborIds(edgeDirection: EdgeDirection) :
     VertexSetRDD[Array[Vid]] = {
     val nbrs = graph.aggregateNeighbors[Array[Vid]](
       (vid, edge) => Some(Array(edge.otherVertexId(vid))),
       (a, b) => a ++ b,
       edgeDirection)
-
-    graph.vertices.leftZipJoin(nbrs).mapValues{
-      case (_, Some(nbrs)) => nbrs
-      case (_, None) => Array.empty[Vid]
-    }
+    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) => nbrsOpt.getOrElse(Array.empty[Vid]) }
   } // end of collectNeighborIds
 
 
@@ -175,18 +177,15 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * @return the vertex set of neighboring vertex attributes for each
    * vertex.
    */
-  def collectNeighbors(edgeDirection: EdgeDirection) : 
+  def collectNeighbors(edgeDirection: EdgeDirection) :
     VertexSetRDD[ Array[(Vid, VD)] ] = {
     val nbrs = graph.aggregateNeighbors[Array[(Vid,VD)]](
-      (vid, edge) => 
+      (vid, edge) =>
         Some(Array( (edge.otherVertexId(vid), edge.otherVertexAttr(vid)) )),
       (a, b) => a ++ b,
       edgeDirection)
 
-    graph.vertices.leftZipJoin(nbrs).mapValues{
-      case (_, Some(nbrs)) => nbrs
-      case (_, None) => Array.empty[(Vid, VD)]
-    }
+    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) => nbrsOpt.getOrElse(Array.empty[(Vid, VD)]) }
   } // end of collectNeighbor
 
 

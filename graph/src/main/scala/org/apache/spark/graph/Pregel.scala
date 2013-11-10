@@ -35,8 +35,8 @@ import org.apache.spark.Logging
  * def sendMessage(id: Vid, edge: EdgeTriplet[Double, Double]): Option[Double] =
  *   Some(edge.srcAttr * edge.attr)
  * def messageCombiner(a: Double, b: Double): Double = a + b
- * val initialMessage = 0.0 
- * // Execute pregel for a fixed number of iterations.      
+ * val initialMessage = 0.0
+ * // Execute pregel for a fixed number of iterations.
  * Pregel(pagerankGraph, initialMessage, numIter)(
  *   vertexProgram, sendMessage, messageCombiner)
  * }}}
@@ -65,7 +65,7 @@ object Pregel extends Logging {
    * @tparam ED the edge data type
    * @tparam A the Pregel message type
    *
-   * @param graph the input graph. 
+   * @param graph the input graph.
    *
    * @param initialMsg the message each vertex will receive at the on
    * the first iteration.
@@ -94,80 +94,19 @@ object Pregel extends Logging {
   def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest]
     (graph: Graph[VD, ED], initialMsg: A, numIter: Int)(
       vprog: (Vid, VD, A) => VD,
-      sendMsg: (Vid, EdgeTriplet[VD, ED]) => Option[A],
+      sendMsg: EdgeTriplet[VD, ED] => Array[(Vid,A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
-    apply(graph, initialMsg, numIter, EdgeDirection.Out)(vprog, sendMsg, mergeMsg)
-  } // end of Apply
-    
-
-  /**
-   * Execute a Pregel-like iterative vertex-parallel abstraction.  The
-   * user-defined vertex-program `vprog` is executed in parallel on
-   * each vertex receiving any inbound messages and computing a new
-   * value for the vertex.  The `sendMsg` function is then invoked on
-   * all out-edges and is used to compute an optional message to the
-   * destination vertex. The `mergeMsg` function is a commutative
-   * associative function used to combine messages destined to the
-   * same vertex.
-   *
-   * On the first iteration all vertices receive the `initialMsg` and
-   * on subsequent iterations if a vertex does not receive a message
-   * then the vertex-program is not invoked.
-   *
-   * This function iterates a fixed number (`numIter`) of iterations.
-   *
-   * @tparam VD the vertex data type
-   * @tparam ED the edge data type
-   * @tparam A the Pregel message type
-   *
-   * @param graph the input graph. 
-   *
-   * @param initialMsg the message each vertex will receive at the on
-   * the first iteration.
-   *
-   * @param numIter the number of iterations to run this computation.
-   * 
-   * @param sendDir the edge direction along which the `sendMsg`
-   * function is invoked.
-   *
-   * @param vprog the user-defined vertex program which runs on each
-   * vertex and receives the inbound message and computes a new vertex
-   * value.  On the first iteration the vertex program is invoked on
-   * all vertices and is passed the default message.  On subsequent
-   * iterations the vertex program is only invoked on those vertices
-   * that receive messages.
-   *
-   * @param sendMsg a user supplied function that is applied to each
-   * edge in the direction `sendDir` adjacent to vertices that
-   * received messages in the current iteration.
-   *
-   * @param mergeMsg a user supplied function that takes two incoming
-   * messages of type A and merges them into a single message of type
-   * A.  ''This function must be commutative and associative and
-   * ideally the size of A should not increase.''
-   *
-   * @return the resulting graph at the end of the computation
-   *
-   */
-  def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest]
-    (graph: Graph[VD, ED], initialMsg: A, numIter: Int, sendDir: EdgeDirection)(
-      vprog: (Vid, VD, A) => VD,
-      sendMsg: (Vid, EdgeTriplet[VD, ED]) => Option[A],
-      mergeMsg: (A, A) => A)
-    : Graph[VD, ED] = {
-
-    def mapF(vid: Vid, edge: EdgeTriplet[VD,ED]) = sendMsg(edge.otherVertexId(vid), edge)
 
     // Receive the first set of messages
-    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))
-    
+    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg)).cache
+
     var i = 0
     while (i < numIter) {
       // compute the messages
-      val messages = g.aggregateNeighbors(mapF, mergeMsg, sendDir.reverse)
+      val messages = g.mapReduceTriplets(sendMsg, mergeMsg)
       // receive the messages
-      g = g.joinVertices(messages)(vprog)
+      g = g.joinVertices(messages)(vprog).cache
       // count the iteration
       i += 1
     }
@@ -196,7 +135,7 @@ object Pregel extends Logging {
    * @tparam ED the edge data type
    * @tparam A the Pregel message type
    *
-   * @param graph the input graph. 
+   * @param graph the input graph.
    *
    * @param initialMsg the message each vertex will receive at the on
    * the first iteration.
@@ -225,66 +164,7 @@ object Pregel extends Logging {
   def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest]
     (graph: Graph[VD, ED], initialMsg: A)(
       vprog: (Vid, VD, A) => VD,
-      sendMsg: (Vid, EdgeTriplet[VD, ED]) => Option[A],
-      mergeMsg: (A, A) => A)
-    : Graph[VD, ED] = {
-    apply(graph, initialMsg, EdgeDirection.Out)(vprog, sendMsg, mergeMsg)
-  } // end of apply
-
-
-  /**
-   * Execute a Pregel-like iterative vertex-parallel abstraction.  The
-   * user-defined vertex-program `vprog` is executed in parallel on
-   * each vertex receiving any inbound messages and computing a new
-   * value for the vertex.  The `sendMsg` function is then invoked on
-   * all out-edges and is used to compute an optional message to the
-   * destination vertex. The `mergeMsg` function is a commutative
-   * associative function used to combine messages destined to the
-   * same vertex.
-   *
-   * On the first iteration all vertices receive the `initialMsg` and
-   * on subsequent iterations if a vertex does not receive a message
-   * then the vertex-program is not invoked.
-   *
-   * This function iterates until there are no remaining messages.
-   *
-   * @tparam VD the vertex data type
-   * @tparam ED the edge data type
-   * @tparam A the Pregel message type
-   *
-   * @param graph the input graph. 
-   *
-   * @param initialMsg the message each vertex will receive at the on
-   * the first iteration.
-   *
-   * @param numIter the number of iterations to run this computation.
-   * 
-   * @param sendDir the edge direction along which the `sendMsg`
-   * function is invoked.
-   *
-   * @param vprog the user-defined vertex program which runs on each
-   * vertex and receives the inbound message and computes a new vertex
-   * value.  On the first iteration the vertex program is invoked on
-   * all vertices and is passed the default message.  On subsequent
-   * iterations the vertex program is only invoked on those vertices
-   * that receive messages.
-   *
-   * @param sendMsg a user supplied function that is applied to each
-   * edge in the direction `sendDir` adjacent to vertices that
-   * received messages in the current iteration.
-   *
-   * @param mergeMsg a user supplied function that takes two incoming
-   * messages of type A and merges them into a single message of type
-   * A.  ''This function must be commutative and associative and
-   * ideally the size of A should not increase.''
-   *
-   * @return the resulting graph at the end of the computation
-   *
-   */
-  def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest]
-    (graph: Graph[VD, ED], initialMsg: A, sendDir: EdgeDirection)(
-      vprog: (Vid, VD, A) => VD,
-      sendMsg: (Vid, EdgeTriplet[VD, ED]) => Option[A],
+      sendMsg: EdgeTriplet[VD, ED] => Array[(Vid,A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 
@@ -295,7 +175,7 @@ object Pregel extends Logging {
       }
     }
 
-    def sendMsgFun(vid: Vid, edge: EdgeTriplet[(VD,Boolean), ED]): Option[A] = {
+    def sendMsgFun(edge: EdgeTriplet[(VD,Boolean), ED]): Array[(Vid, A)] = {
       if(edge.srcAttr._2) {
         val et = new EdgeTriplet[VD, ED]
         et.srcId = edge.srcId
@@ -303,22 +183,22 @@ object Pregel extends Logging {
         et.dstId = edge.dstId
         et.dstAttr = edge.dstAttr._1
         et.attr = edge.attr
-        sendMsg(edge.otherVertexId(vid), et)
-      } else { None }
+        sendMsg(et)
+      } else { Array.empty[(Vid,A)] }
     }
 
-    var g = graph.mapVertices( (vid, vdata) => (vprog(vid, vdata, initialMsg), true) ) 
+    var g = graph.mapVertices( (vid, vdata) => (vprog(vid, vdata, initialMsg), true) )
     // compute the messages
-    var messages = g.aggregateNeighbors(sendMsgFun, mergeMsg, sendDir.reverse).cache
+    var messages = g.mapReduceTriplets(sendMsgFun, mergeMsg).cache
     var activeMessages = messages.count
-    // Loop 
+    // Loop
     var i = 0
     while (activeMessages > 0) {
       // receive the messages
       g = g.outerJoinVertices(messages)(vprogFun)
       val oldMessages = messages
       // compute the messages
-      messages = g.aggregateNeighbors(sendMsgFun, mergeMsg, sendDir.reverse).cache
+      messages = g.mapReduceTriplets(sendMsgFun, mergeMsg).cache
       activeMessages = messages.count
       // after counting we can unpersist the old messages
       oldMessages.unpersist(blocking=false)
