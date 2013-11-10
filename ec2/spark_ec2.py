@@ -72,12 +72,12 @@ def parse_args():
   parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
   parser.add_option("-v", "--spark-version", default="0.8.0",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
-  parser.add_option("--spark-git-repo", 
+  parser.add_option("--spark-git-repo",
       default="https://github.com/apache/incubator-spark",
       help="Github repo from which to checkout supplied commit hash")
   parser.add_option("--hadoop-major-version", default="1",
       help="Major version of Hadoop (default: 1)")
-  parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port", 
+  parser.add_option("-D", metavar="[ADDRESS:]PORT", dest="proxy_port",
       help="Use SSH dynamic port forwarding to create a SOCKS proxy at " +
             "the given local address (for use with login)")
   parser.add_option("--resume", action="store_true", default=False,
@@ -191,7 +191,7 @@ def get_spark_ami(opts):
     instance_type = "pvm"
     print >> stderr,\
         "Don't recognize %s, assuming type is pvm" % opts.instance_type
-  
+
   ami_path = "%s/%s/%s" % (AMI_PREFIX, opts.region, instance_type)
   try:
     ami = urllib2.urlopen(ami_path).read().strip()
@@ -215,6 +215,7 @@ def launch_cluster(conn, opts, cluster_name):
     master_group.authorize(src_group=slave_group)
     master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
     master_group.authorize('tcp', 8080, 8081, '0.0.0.0/0')
+    master_group.authorize('tcp', 19998, 19999, '0.0.0.0/0')
     master_group.authorize('tcp', 50030, 50030, '0.0.0.0/0')
     master_group.authorize('tcp', 50070, 50070, '0.0.0.0/0')
     master_group.authorize('tcp', 60070, 60070, '0.0.0.0/0')
@@ -403,8 +404,8 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
       print slave.public_dns_name
       ssh_write(slave.public_dns_name, opts, ['tar', 'x'], dot_ssh_tar)
 
-  modules = ['spark', 'shark', 'ephemeral-hdfs', 'persistent-hdfs', 
-             'mapreduce', 'spark-standalone']
+  modules = ['spark', 'shark', 'ephemeral-hdfs', 'persistent-hdfs',
+             'mapreduce', 'spark-standalone', 'tachyon']
 
   if opts.hadoop_major_version == "1":
     modules = filter(lambda x: x != "mapreduce", modules)
@@ -668,12 +669,12 @@ def real_main():
       print "Terminating slaves..."
       for inst in slave_nodes:
         inst.terminate()
-      
+
       # Delete security groups as well
       if opts.delete_groups:
         print "Deleting security groups (this will take some time)..."
         group_names = [cluster_name + "-master", cluster_name + "-slaves"]
-        
+
         attempt = 1;
         while attempt <= 3:
           print "Attempt %d" % attempt
