@@ -1,7 +1,5 @@
 package org.apache.spark.graph.impl
 
-import scala.collection.mutable.ArrayBuilder
-
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.collection.{OpenHashSet, PrimitiveKeyOpenHashMap}
@@ -47,15 +45,7 @@ object VTableReplicatedValues {
       includeSrcAttr: Boolean,
       includeDstAttr: Boolean): RDD[(Pid, Array[VD])] = {
 
-    // Within each partition of vid2pid, construct a pid2vid mapping
-    val numPartitions = vTable.partitions.size
-    val pid2vid = vid2pid.get(includeSrcAttr, includeDstAttr).mapPartitions { iter =>
-      val pid2vidLocal = Array.fill[ArrayBuilder[Vid]](numPartitions)(ArrayBuilder.make[Vid])
-      for ((vid, pids) <- iter) {
-        pids.foreach { pid => pid2vidLocal(pid) += vid }
-      }
-      Iterator(pid2vidLocal.map(_.result))
-    }
+    val pid2vid = vid2pid.getPid2Vid(includeSrcAttr, includeDstAttr)
 
     val msgsByPartition = pid2vid.zipPartitions(vTable.index.rdd, vTable.valuesRDD) {
       (pid2vidIter, indexIter, valuesIter) =>
