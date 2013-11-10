@@ -5,15 +5,15 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-
 import org.apache.spark.SparkContext._
 import org.apache.spark.HashPartitioner
 import org.apache.spark.util.ClosureCleaner
 
 import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
-import org.apache.spark.graph.impl.MessageToPartitionRDDFunctions._
+import org.apache.spark.graph.impl.MsgRDDFunctions._
 import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
 
 
@@ -72,8 +72,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   def this() = this(null, null, null, null)
 
-
-
   /**
    * (localVidMap: VertexSetRDD[Pid, VertexIdToIndexMap]) is a version of the
    * vertex data after it is replicated. Within each partition, it holds a map
@@ -86,29 +84,28 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   @transient val vTableReplicatedValues: RDD[(Pid, Array[VD])] =
     createVTableReplicated(vTable, vid2pid, localVidMap)
 
-
   /** Return a RDD of vertices. */
   @transient override val vertices = vTable
-
 
   /** Return a RDD of edges. */
   @transient override val edges: RDD[Edge[ED]] = {
     eTable.mapPartitions( iter => iter.next()._2.iterator , true )
   }
 
-
   /** Return a RDD that brings edges with its source and destination vertices together. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] =
     makeTriplets(localVidMap, vTableReplicatedValues, eTable)
 
-
-  override def cache(): Graph[VD, ED] = {
-    eTable.cache()
-    vid2pid.cache()
-    vTable.cache()
+  override def persist(newLevel: StorageLevel): Graph[VD, ED] = {
+    eTable.persist(newLevel)
+    vid2pid.persist(newLevel)
+    vTable.persist(newLevel)
+    localVidMap.persist(newLevel)
+    // vTableReplicatedValues.persist(newLevel)
     this
   }
 
+  override def cache(): Graph[VD, ED] = persist(StorageLevel.MEMORY_ONLY)
 
   override def statistics: Map[String, Any] = {
     val numVertices = this.numVertices
@@ -124,7 +121,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       "Replication" -> replicationRatio, "Load Array" -> loadArray,
       "Min Load" -> minLoad, "Max Load" -> maxLoad)
   }
-
 
   /**
    * Display the lineage information for this graph.
@@ -183,13 +179,11 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     println(visited)
   } // end of print lineage
 
-
   override def reverse: Graph[VD, ED] = {
     val newEtable = eTable.mapPartitions( _.map{ case (pid, epart) => (pid, epart.reverse) },
       preservesPartitioning = true)
     new GraphImpl(vTable, vid2pid, localVidMap, newEtable)
   }
-
 
   override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] = {
     val newVTable = vTable.mapValuesWithKeys((vid, data) => f(vid, data))
@@ -202,10 +196,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     new GraphImpl(vTable, vid2pid, localVidMap, newETable)
   }
 
-
   override def mapTriplets[ED2: ClassManifest](f: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] =
     GraphImpl.mapTriplets(this, f)
-
 
   override def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
     vpred: (Vid, VD) => Boolean = ((a,b) => true) ): Graph[VD, ED] = {
@@ -246,7 +238,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     new GraphImpl(newVTable, newVid2Pid, localVidMap, newETable)
   }
 
-
   override def groupEdgeTriplets[ED2: ClassManifest](
     f: Iterator[EdgeTriplet[VD,ED]] => ED2 ): Graph[VD,ED2] = {
       val newEdges: RDD[Edge[ED2]] = triplets.mapPartitions { partIter =>
@@ -271,7 +262,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       new GraphImpl(vTable, vid2pid, localVidMap, newETable)
   }
 
-
   override def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ):
     Graph[VD,ED2] = {
 
@@ -289,8 +279,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       new GraphImpl(vTable, vid2pid, localVidMap, newETable)
   }
 
-
-
   //////////////////////////////////////////////////////////////////////////////////////////////////
   // Lower level transformation methods
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -301,7 +289,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     : VertexSetRDD[A] =
     GraphImpl.mapReduceTriplets(this, mapFunc, reduceFunc)
 
-
   override def outerJoinVertices[U: ClassManifest, VD2: ClassManifest]
     (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED] = {
@@ -309,13 +296,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     val newVTable = vTable.leftJoin(updates)(updateF)
     new GraphImpl(newVTable, vid2pid, localVidMap, eTable)
   }
-
-
 } // end of class GraphImpl
-
-
-
-
 
 
 object GraphImpl {
@@ -326,7 +307,6 @@ object GraphImpl {
   GraphImpl[VD,ED] = {
     apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a)
   }
-
 
   def apply[VD: ClassManifest, ED: ClassManifest](
     vertices: RDD[(Vid, VD)],
@@ -353,7 +333,6 @@ object GraphImpl {
     new GraphImpl(vtable, vid2pid, localVidMap, etable)
   }
 
-
   /**
    * Create the edge table RDD, which is much more efficient for Java heap storage than the
    * normal edges data structure (RDD[(Vid, Vid, ED)]).
@@ -375,7 +354,7 @@ object GraphImpl {
       //val part: Pid = canonicalEdgePartitionFunction2D(e.srcId, e.dstId, numPartitions, ceilSqrt)
 
       // Should we be using 3-tuple or an optimized class
-      MessageToPartition(part, (e.srcId, e.dstId, e.attr))
+      new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
     }
     .partitionBy(new HashPartitioner(numPartitions))
     .mapPartitionsWithIndex( (pid, iter) => {
@@ -389,7 +368,6 @@ object GraphImpl {
     }, preservesPartitioning = true).cache()
   }
 
-
   protected def createVid2Pid[ED: ClassManifest](
     eTable: RDD[(Pid, EdgePartition[ED])],
     vTableIndex: VertexSetIndex): VertexSetRDD[Array[Pid]] = {
@@ -398,14 +376,13 @@ object GraphImpl {
       val vSet = new VertexSet
       edgePartition.foreach(e => {vSet.add(e.srcId); vSet.add(e.dstId)})
       vSet.iterator.map { vid => (vid.toLong, pid) }
-    }
+    }.partitionBy(vTableIndex.rdd.partitioner.get)
     VertexSetRDD[Pid, ArrayBuffer[Pid]](preAgg, vTableIndex,
       (p: Pid) => ArrayBuffer(p),
       (ab: ArrayBuffer[Pid], p:Pid) => {ab.append(p); ab},
       (a: ArrayBuffer[Pid], b: ArrayBuffer[Pid]) => a ++ b)
       .mapValues(a => a.toArray).cache()
   }
-
 
   protected def createLocalVidMap[ED: ClassManifest](eTable: RDD[(Pid, EdgePartition[ED])]):
     RDD[(Pid, VertexIdToIndexMap)] = {
@@ -419,7 +396,6 @@ object GraphImpl {
     }, preservesPartitioning = true).cache()
   }
 
-
   protected def createVTableReplicated[VD: ClassManifest](
       vTable: VertexSetRDD[VD],
       vid2pid: VertexSetRDD[Array[Pid]],
@@ -428,7 +404,10 @@ object GraphImpl {
     // Join vid2pid and vTable, generate a shuffle dependency on the joined
     // result, and get the shuffle id so we can use it on the slave.
     val msgsByPartition = vTable.zipJoinFlatMap(vid2pid) { (vid, vdata, pids) =>
-      pids.iterator.map { pid => MessageToPartition(pid, (vid, vdata)) }
+      // TODO(rxin): reuse VertexBroadcastMessage
+      pids.iterator.map { pid =>
+        new VertexBroadcastMsg[VD](pid, vid, vdata)
+      }
     }.partitionBy(replicationMap.partitioner.get).cache()
 
     replicationMap.zipPartitions(msgsByPartition){
@@ -438,15 +417,14 @@ object GraphImpl {
       // Populate the vertex array using the vidToIndex map
       val vertexArray = new Array[VD](vidToIndex.capacity)
       for (msg <- msgsIter) {
-        val ind = vidToIndex.getPos(msg.data._1) & OpenHashSet.POSITION_MASK
-        vertexArray(ind) = msg.data._2
+        val ind = vidToIndex.getPos(msg.vid) & OpenHashSet.POSITION_MASK
+        vertexArray(ind) = msg.data
       }
       Iterator((pid, vertexArray))
     }.cache()
 
     // @todo assert edge table has partitioner
   }
-
 
   def makeTriplets[VD: ClassManifest, ED: ClassManifest](
     localVidMap: RDD[(Pid, VertexIdToIndexMap)],
@@ -460,7 +438,6 @@ object GraphImpl {
       new EdgeTripletIterator(vidToIndex, vertexArray, edgePartition)
     }
   }
-
 
   def mapTriplets[VD: ClassManifest, ED: ClassManifest, ED2: ClassManifest](
     g: GraphImpl[VD, ED],
@@ -483,7 +460,6 @@ object GraphImpl {
     new GraphImpl(g.vTable, g.vid2pid, g.localVidMap, newETable)
   }
 
-
   def mapReduceTriplets[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](
     g: GraphImpl[VD, ED],
     mapFunc: EdgeTriplet[VD, ED] => Array[(Vid, A)],
@@ -495,33 +471,35 @@ object GraphImpl {
     // Map and preaggregate
     val preAgg = g.eTable.zipPartitions(g.localVidMap, g.vTableReplicatedValues){
       (edgePartitionIter, vidToIndexIter, vertexArrayIter) =>
-      val (pid, edgePartition) = edgePartitionIter.next()
+      val (_, edgePartition) = edgePartitionIter.next()
       val (_, vidToIndex) = vidToIndexIter.next()
       val (_, vertexArray) = vertexArrayIter.next()
       assert(!edgePartitionIter.hasNext)
       assert(!vidToIndexIter.hasNext)
       assert(!vertexArrayIter.hasNext)
       assert(vidToIndex.capacity == vertexArray.size)
+      // Reuse the vidToIndex map to run aggregation.
       val vmap = new PrimitiveKeyOpenHashMap[Vid, VD](vidToIndex, vertexArray)
-      // We can reuse the vidToIndex map for aggregation here as well.
-      /** @todo Since this has the downside of not allowing "messages" to arbitrary
-       * vertices we should consider just using a fresh map.
-       */
+      // TODO(jegonzal): This doesn't allow users to send messages to arbitrary vertices.
       val msgArray = new Array[A](vertexArray.size)
       val msgBS = new BitSet(vertexArray.size)
       // Iterate over the partition
       val et = new EdgeTriplet[VD, ED]
-      edgePartition.foreach{e =>
+
+      edgePartition.foreach { e =>
         et.set(e)
         et.srcAttr = vmap(e.srcId)
         et.dstAttr = vmap(e.dstId)
-        mapFunc(et).foreach{ case (vid, msg) =>
+        // TODO(rxin): rewrite the foreach using a simple while loop to speed things up.
+        // Also given we are only allowing zero, one, or two messages, we can completely unroll
+        // the for loop.
+        mapFunc(et).foreach { case (vid, msg) =>
           // verify that the vid is valid
           assert(vid == et.srcId || vid == et.dstId)
           // Get the index of the key
           val ind = vidToIndex.getPos(vid) & OpenHashSet.POSITION_MASK
           // Populate the aggregator map
-          if(msgBS.get(ind)) {
+          if (msgBS.get(ind)) {
             msgArray(ind) = reduceFunc(msgArray(ind), msg)
           } else {
             msgArray(ind) = msg
@@ -530,19 +508,18 @@ object GraphImpl {
         }
       }
       // construct an iterator of tuples Iterator[(Vid, A)]
-      msgBS.iterator.map( ind => (vidToIndex.getValue(ind), msgArray(ind)) )
+      msgBS.iterator.map { ind =>
+        new AggregationMsg[A](vidToIndex.getValue(ind), msgArray(ind))
+      }
     }.partitionBy(g.vTable.index.rdd.partitioner.get)
     // do the final reduction reusing the index map
-    VertexSetRDD(preAgg, g.vTable.index, reduceFunc)
+    VertexSetRDD.aggregate(preAgg, g.vTable.index, reduceFunc)
   }
-
 
   protected def edgePartitionFunction1D(src: Vid, dst: Vid, numParts: Pid): Pid = {
     val mixingPrime: Vid = 1125899906842597L
     (math.abs(src) * mixingPrime).toInt % numParts
   }
-
-
 
   /**
    * This function implements a classic 2D-Partitioning of a sparse matrix.
@@ -596,7 +573,6 @@ object GraphImpl {
     (col * ceilSqrtNumParts + row) % numParts
   }
 
-
   /**
    * Assign edges to an aribtrary machine corresponding to a
    * random vertex cut.
@@ -604,7 +580,6 @@ object GraphImpl {
   protected def randomVertexCut(src: Vid, dst: Vid, numParts: Pid): Pid = {
     math.abs((src, dst).hashCode()) % numParts
   }
-
 
   /**
    * @todo This will only partition edges to the upper diagonal
@@ -622,4 +597,3 @@ object GraphImpl {
   }
 
 } // end of object GraphImpl
-

@@ -98,14 +98,14 @@ object Pregel {
     : Graph[VD, ED] = {
 
     // Receive the first set of messages
-    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg))
+    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg)).cache
 
     var i = 0
     while (i < numIter) {
       // compute the messages
       val messages = g.mapReduceTriplets(sendMsg, mergeMsg)
       // receive the messages
-      g = g.joinVertices(messages)(vprog)
+      g = g.joinVertices(messages)(vprog).cache
       // count the iteration
       i += 1
     }
