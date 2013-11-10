@@ -30,10 +30,14 @@ import org.apache.spark.broadcast.HttpBroadcast
 import org.apache.spark.storage.{GetBlock,GotBlock, PutBlock, StorageLevel, TestBlockId}
 
 /**
- * A Spark serializer that uses the [[http://code.google.com/p/kryo/wiki/V1Documentation Kryo 1.x library]].
+ * A Spark serializer that uses the
+ * [[http://code.google.com/p/kryo/wiki/V1Documentation Kryo 1.x library]].
  */
 class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging {
-  private val bufferSize = System.getProperty("spark.kryoserializer.buffer.mb", "2").toInt * 1024 * 1024
+
+  private val bufferSize = {
+    System.getProperty("spark.kryoserializer.buffer.mb", "2").toInt * 1024 * 1024
+  }
 
   def newKryoOutput() = new KryoOutput(bufferSize)
 
@@ -41,6 +45,10 @@ class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging
     val instantiator = new EmptyScalaKryoInstantiator
     val kryo = instantiator.newKryo()
     val classLoader = Thread.currentThread.getContextClassLoader
+
+    // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops.
+    // Do this before we invoke the user registrator so the user registrator can override this.
+    kryo.setReferences(System.getProperty("spark.kryo.referenceTracking", "true").toBoolean)
 
     val blockId = TestBlockId("1")
     // Register some commonly used classes
@@ -78,10 +86,6 @@ class KryoSerializer extends org.apache.spark.serializer.Serializer with Logging
     new AllScalaRegistrar().apply(kryo)
 
     kryo.setClassLoader(classLoader)
-
-    // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops
-    kryo.setReferences(System.getProperty("spark.kryo.referenceTracking", "true").toBoolean)
-
     kryo
   }
 
