@@ -156,14 +156,16 @@ private[spark] class StagePage(parent: JobProgressUI) {
     var shuffleReadReadable: String = ""
     if (shuffleRead) {
       shuffleReadSortable = metrics.flatMap{m => m.shuffleReadMetrics}.map{s => s.remoteBytesRead}.toString()
-      shuffleReadReadable = metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>Utils.bytesToString(s.remoteBytesRead)}.getOrElse("")
+      shuffleReadReadable = metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>
+        Utils.bytesToString(s.remoteBytesRead)}.getOrElse("")
     }
 
     var shuffleWriteSortable: String = ""
     var shuffleWriteReadable: String = ""
     if (shuffleWrite) {
       shuffleWriteSortable = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleBytesWritten}.toString()
-      shuffleWriteReadable = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")
+      shuffleWriteReadable = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
+        Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")
     }
 
     <tr>
