@@ -125,7 +125,7 @@ class FramedSerializer(Serializer):
                 return
 
     def _write_with_length(self, obj, stream):
-        serialized = self._dumps(obj)
+        serialized = self.dumps(obj)
         write_int(len(serialized), stream)
         stream.write(serialized)
 
@@ -134,16 +134,16 @@ class FramedSerializer(Serializer):
         obj = stream.read(length)
         if obj == "":
             raise EOFError
-        return self._loads(obj)
+        return self.loads(obj)
 
-    def _dumps(self, obj):
+    def dumps(self, obj):
         """
         Serialize an object into a byte array.
         When batching is used, this will be called with an array of objects.
         """
         raise NotImplementedError
 
-    def _loads(self, obj):
+    def loads(self, obj):
         """
         Deserialize an object from a byte array.
         """
@@ -228,8 +228,8 @@ class CartesianDeserializer(FramedSerializer):
 
 class NoOpSerializer(FramedSerializer):
 
-    def _loads(self, obj): return obj
-    def _dumps(self, obj): return obj
+    def loads(self, obj): return obj
+    def dumps(self, obj): return obj
 
 
 class PickleSerializer(FramedSerializer):
@@ -242,12 +242,12 @@ class PickleSerializer(FramedSerializer):
     not be as fast as more specialized serializers.
     """
 
-    def _dumps(self, obj): return cPickle.dumps(obj, 2)
-    _loads = cPickle.loads
+    def dumps(self, obj): return cPickle.dumps(obj, 2)
+    loads = cPickle.loads
 
 class CloudPickleSerializer(PickleSerializer):
 
-    def _dumps(self, obj): return cloudpickle.dumps(obj, 2)
+    def dumps(self, obj): return cloudpickle.dumps(obj, 2)
 
 
 class MarshalSerializer(FramedSerializer):
@@ -259,8 +259,8 @@ class MarshalSerializer(FramedSerializer):
     This serializer is faster than PickleSerializer but supports fewer datatypes.
     """
 
-    _dumps = marshal.dumps
-    _loads = marshal.loads
+    dumps = marshal.dumps
+    loads = marshal.loads
 
 
 class MUTF8Deserializer(Serializer):
@@ -268,14 +268,14 @@ class MUTF8Deserializer(Serializer):
     Deserializes streams written by Java's DataOutputStream.writeUTF().
     """
 
-    def _loads(self, stream):
+    def loads(self, stream):
         length = struct.unpack('>H', stream.read(2))[0]
         return stream.read(length).decode('utf8')
 
     def load_stream(self, stream):
         while True:
             try:
-                yield self._loads(stream)
+                yield self.loads(stream)
             except struct.error:
                 return
             except EOFError:

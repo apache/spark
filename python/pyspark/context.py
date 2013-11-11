@@ -251,7 +251,7 @@ class SparkContext(object):
         sent to each cluster only once.
         """
         pickleSer = PickleSerializer()
-        pickled = pickleSer._dumps(value)
+        pickled = pickleSer.dumps(value)
         jbroadcast = self._jsc.broadcast(bytearray(pickled))
         return Broadcast(jbroadcast.id(), value, jbroadcast,
                          self._pickled_broadcast_vars)

@@ -751,7 +751,7 @@ class RDD(object):
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
             for (split, items) in buckets.iteritems():
                 yield pack_long(split)
-                yield outputSerializer._dumps(items)
+                yield outputSerializer.dumps(items)
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
         pairRDD = self.ctx._jvm.PairwiseRDD(keyed._jrdd.rdd()).asJavaPairRDD()
@@ -970,7 +970,7 @@ class PipelinedRDD(RDD):
         else:
             serializer = self.ctx.serializer
         command = (self.func, self._prev_jrdd_deserializer, serializer)
-        pickled_command = CloudPickleSerializer()._dumps(command)
+        pickled_command = CloudPickleSerializer().dumps(command)
         broadcast_vars = ListConverter().convert(
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)
