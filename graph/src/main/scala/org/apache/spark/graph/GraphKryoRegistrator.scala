@@ -5,6 +5,7 @@ import com.esotericsoftware.kryo.Kryo
 import org.apache.spark.graph.impl._
 import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.util.collection.BitSet
+import org.apache.spark.graph._
 
 class GraphKryoRegistrator extends KryoRegistrator {
 
@@ -19,6 +20,8 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[BitSet])
     kryo.register(classOf[VertexIdToIndexMap])
     kryo.register(classOf[VertexAttributeBlock[Object]])
+    kryo.register(classOf[PartitionStrategy])
+
     // This avoids a large number of hash table lookups.
     kryo.setReferences(false)
   }

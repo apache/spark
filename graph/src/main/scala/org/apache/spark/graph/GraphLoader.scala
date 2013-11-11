@@ -27,8 +27,8 @@ object GraphLoader {
       path: String,
       edgeParser: Array[String] => ED,
       minEdgePartitions: Int = 1,
-      minVertexPartitions: Int = 1)
-    : GraphImpl[Int, ED] = {
+      minVertexPartitions: Int = 1,
+      partitionStrategy: PartitionStrategy = RandomVertexCut): GraphImpl[Int, ED] = {
 
     // Parse the edge data table
     val edges = sc.textFile(path, minEdgePartitions).flatMap { line =>
@@ -48,13 +48,15 @@ object GraphLoader {
       }
     }.cache()
 
-    val graph = fromEdges(edges)
+    val graph = fromEdges(edges, partitionStrategy)
     graph
   }
 
-  private def fromEdges[ED: ClassManifest](edges: RDD[Edge[ED]]): GraphImpl[Int, ED] = {
+  private def fromEdges[ED: ClassManifest](
+    edges: RDD[Edge[ED]],
+    partitionStrategy: PartitionStrategy): GraphImpl[Int, ED] = {
     val vertices = edges.flatMap { edge => List((edge.srcId, 1), (edge.dstId, 1)) }
       .reduceByKey(_ + _)
-    GraphImpl(vertices, edges, 0)
+      GraphImpl(vertices, edges, 0, (a: Int, b: Int) => a, partitionStrategy)
   }
 }
