@@ -152,6 +152,20 @@ private[spark] class StagePage(parent: JobProgressUI) {
       else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
     val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
 
+    var shuffleReadSortable: String = ""
+    var shuffleReadReadable: String = ""
+    if (shuffleRead) {
+      shuffleReadSortable = metrics.flatMap{m => m.shuffleReadMetrics}.map{s => s.remoteBytesRead}.toString()
+      shuffleReadReadable = metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>Utils.bytesToString(s.remoteBytesRead)}.getOrElse("")
+    }
+
+    var shuffleWriteSortable: String = ""
+    var shuffleWriteReadable: String = ""
+    if (shuffleWrite) {
+      shuffleWriteSortable = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleBytesWritten}.toString()
+      shuffleWriteReadable = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")
+    }
+
     <tr>
       <td>{info.taskId}</td>
       <td>{info.status}</td>
@@ -165,12 +179,14 @@ private[spark] class StagePage(parent: JobProgressUI) {
         {if (gcTime > 0) parent.formatDuration(gcTime) else ""}
       </td>
       {if (shuffleRead) {
-        <td>{metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>
-          Utils.bytesToString(s.remoteBytesRead)}.getOrElse("")}</td>
+        <td sorttable_customkey={shuffleReadSortable}>
+          {shuffleReadReadable}
+        </td>
       }}
       {if (shuffleWrite) {
-        <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
-          Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")}</td>
+        <td sorttable_customkey={shuffleWriteSortable}>
+        {shuffleWriteReadable}
+        </td>
       }}
       <td>{exception.map(e =>
         <span>

@@ -79,11 +79,14 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
       case None => "Unknown"
     }
 
-    val shuffleRead = listener.stageToShuffleRead.getOrElse(s.id, 0L) match {
+    val shuffleReadSortable = listener.stageToShuffleRead.getOrElse(s.id, 0L)
+    val shuffleRead = shuffleReadSortable match {
       case 0 => ""
       case b => Utils.bytesToString(b)
     }
-    val shuffleWrite = listener.stageToShuffleWrite.getOrElse(s.id, 0L) match {
+
+    val shuffleWriteSortable = listener.stageToShuffleWrite.getOrElse(s.id, 0L)
+    val shuffleWrite = shuffleWriteSortable match {
       case 0 => ""
       case b => Utils.bytesToString(b)
     }
@@ -119,8 +122,8 @@ private[spark] class StageTable(val stages: Seq[Stage], val parent: JobProgressU
       <td class="progress-cell">
         {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
       </td>
-      <td>{shuffleRead}</td>
-      <td>{shuffleWrite}</td>
+      <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
+      <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
     </tr>
   }
 }
