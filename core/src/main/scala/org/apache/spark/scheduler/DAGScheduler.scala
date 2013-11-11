@@ -112,9 +112,10 @@ class DAGScheduler(
 
   private val eventProcessActor: ActorRef = env.actorSystem.actorOf(Props(new Actor {
     override def preStart() {
-      env.actorSystem.scheduler.schedule(RESUBMIT_TIMEOUT milliseconds, RESUBMIT_TIMEOUT milliseconds) {
-        if (failed.size > 0)
+      context.system.scheduler.schedule(RESUBMIT_TIMEOUT milliseconds, RESUBMIT_TIMEOUT milliseconds) {
+        if (failed.size > 0) {
           resubmitFailedStages()
+        }
       }
     }
 
@@ -853,7 +854,7 @@ class DAGScheduler(
     // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
     // that has any placement preferences. Ideally we would choose based on transfer sizes,
     // but this will do for now.
-    rdd.dependencies.foreach(_ match {
+    rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocs(n.rdd, inPart)
@@ -861,7 +862,7 @@ class DAGScheduler(
             return locs
         }
       case _ =>
-    })
+    }
     Nil
   }
 

@@ -891,7 +891,7 @@ private[spark] object BlockManager extends Logging {
       blockManagerMaster: BlockManagerMaster = null)
   : Map[BlockId, Seq[BlockManagerId]] =
   {
-    // env == null and blockManagerMaster != null is used in tests
+    // blockManagerMaster != null is used in tests
     assert (env != null || blockManagerMaster != null)
     val blockLocations: Seq[Seq[BlockManagerId]] = if (blockManagerMaster == null) {
       env.blockManager.getLocationBlockIds(blockIds)
