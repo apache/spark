@@ -181,14 +181,14 @@ private[spark] class StagePage(parent: JobProgressUI) {
         {if (gcTime > 0) parent.formatDuration(gcTime) else ""}
       </td>
       {if (shuffleRead) {
-        <td sorttable_customkey={shuffleReadSortable}>
-          {shuffleReadReadable}
-        </td>
+         <td sorttable_customkey={shuffleReadSortable}>
+           {shuffleReadReadable}
+         </td>
       }}
       {if (shuffleWrite) {
-        <td sorttable_customkey={shuffleWriteSortable}>
-        {shuffleWriteReadable}
-        </td>
+         <td sorttable_customkey={shuffleWriteSortable}>
+           {shuffleWriteReadable}
+         </td>
       }}
       <td>{exception.map(e =>
         <span>
