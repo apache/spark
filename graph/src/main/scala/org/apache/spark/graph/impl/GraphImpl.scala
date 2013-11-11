@@ -431,10 +431,8 @@ object GraphImpl {
 
     // For each vertex, replicate its attribute only to partitions where it is
     // in the relevant position in an edge.
-    val mapFuncUsesSrcAttr =
-      BytecodeUtils.invokedMethod(mapFunc, classOf[EdgeTriplet[VD, ED]], "srcAttr")
-    val mapFuncUsesDstAttr =
-      BytecodeUtils.invokedMethod(mapFunc, classOf[EdgeTriplet[VD, ED]], "dstAttr")
+    val mapFuncUsesSrcAttr = accessesVertexAttr[VD, ED](mapFunc, "srcAttr")
+    val mapFuncUsesDstAttr = accessesVertexAttr[VD, ED](mapFunc, "dstAttr")
 
     // Map and preaggregate
     val preAgg = g.eTable.zipPartitions(
@@ -569,6 +567,15 @@ object GraphImpl {
     val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
     val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
     (col * ceilSqrtNumParts + row) % numParts
+  }
+
+  private def accessesVertexAttr[VD: ClassManifest, ED: ClassManifest](
+      closure: AnyRef, attrName: String): Boolean = {
+    try {
+      BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
+    } catch {
+      case _: ClassNotFoundException => true // if we don't know, be conservative
+    }
   }
 
 } // end of object GraphImpl
