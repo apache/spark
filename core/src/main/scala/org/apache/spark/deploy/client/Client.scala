@@ -49,18 +49,14 @@ private[spark] class Client(
   var appId: String = null
 
   class ClientActor extends Actor with Logging {
-    var master: ActorRef = null
-    var masterAddress: Address = null
+    var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
 
     override def preStart() {
       logInfo("Connecting to master " + masterUrl)
       try {
-        master = context.actorFor(Master.toAkkaUrl(masterUrl))
-        masterAddress = master.path.address
+        master = context.actorSelection(Master.toAkkaUrl(masterUrl))
         master ! RegisterApplication(appDescription)
-        context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-        context.watch(master)  // Doesn't work with remote actors, but useful for testing
       } catch {
         case e: Exception =>
           logError("Failed to connect to master", e)
@@ -71,6 +67,7 @@ private[spark] class Client(
 
     override def receive = {
       case RegisteredApplication(appId_) =>
+        context.watch(sender)
         appId = appId_
         listener.connected(appId)
 
@@ -92,18 +89,8 @@ private[spark] class Client(
           listener.executorRemoved(fullId, message.getOrElse(""), exitStatus)
         }
 
-      case Terminated(actor_) if actor_ == master =>
-        logError("Connection to master failed; stopping client")
-        markDisconnected()
-        context.stop(self)
-
-      case DisassociatedEvent(_, address, _) if address == masterAddress =>
-        logError("Connection to master failed; stopping client")
-        markDisconnected()
-        context.stop(self)
-
-      case AssociationErrorEvent(_, _, address, _) if address == masterAddress =>
-        logError("Connection to master failed; stopping client")
+      case Terminated(actor_) =>
+        logError(s"Connection to $actor_ dropped, stopping client")
         markDisconnected()
         context.stop(self)
 

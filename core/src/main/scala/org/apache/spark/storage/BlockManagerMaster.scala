@@ -17,14 +17,7 @@
 
 package org.apache.spark.storage
 
-import java.io._
-import java.util.{HashMap => JHashMap}
-
-import scala.collection.JavaConverters._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
-import scala.util.Random
-
-import akka.actor.{Actor, ActorRef, ActorSystem, Props}
+import akka.actor._
 import scala.concurrent.Await
 import scala.concurrent.Future
 import scala.concurrent.ExecutionContext.Implicits.global
@@ -34,8 +27,16 @@ import scala.concurrent.duration._
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
+import org.apache.spark.storage.BlockManagerMessages.GetLocations
+import org.apache.spark.storage.BlockManagerMessages.GetLocationsMultipleBlockIds
+import org.apache.spark.storage.BlockManagerMessages.RegisterBlockManager
+import org.apache.spark.storage.BlockManagerMessages.HeartBeat
+import org.apache.spark.storage.BlockManagerMessages.RemoveExecutor
+import org.apache.spark.storage.BlockManagerMessages.GetPeers
+import org.apache.spark.storage.BlockManagerMessages.RemoveBlock
+import org.apache.spark.storage.BlockManagerMessages.RemoveRdd
 
-private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Logging {
+private[spark] class BlockManagerMaster(var driverActor : Either[ActorRef, ActorSelection]) extends Logging {
 
   val AKKA_RETRY_ATTEMPTS: Int = System.getProperty("spark.akka.num.retries", "3").toInt
   val AKKA_RETRY_INTERVAL_MS: Int = System.getProperty("spark.akka.retry.wait", "3000").toInt
@@ -165,7 +166,11 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
     while (attempts < AKKA_RETRY_ATTEMPTS) {
       attempts += 1
       try {
-        val future = driverActor.ask(message)(timeout)
+        val future = if (driverActor.isLeft ) {
+          driverActor.left.get.ask(message)(timeout)
+        } else {
+          driverActor.right.get.ask(message)(timeout)
+        }
         val result = Await.result(future, timeout)
         if (result == null) {
           throw new SparkException("BlockManagerMaster returned null")

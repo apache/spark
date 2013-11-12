@@ -178,7 +178,7 @@ abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging 
     val ip = System.getProperty("spark.driver.host", "localhost")
     val port = System.getProperty("spark.driver.port", "7077").toInt
     val url = "akka.tcp://spark@%s:%s/user/NetworkInputTracker".format(ip, port)
-    val tracker = env.actorSystem.actorFor(url)
+    val tracker = env.actorSystem.actorSelection(url)
     val timeout = 5.seconds
 
     override def preStart() {

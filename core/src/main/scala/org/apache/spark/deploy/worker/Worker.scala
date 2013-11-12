@@ -24,7 +24,7 @@ import java.io.File
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 
-import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
+import akka.actor._
 import akka.remote.{RemotingLifecycleEvent, AssociationErrorEvent, DisassociatedEvent}
 
 import org.apache.spark.Logging
@@ -34,6 +34,16 @@ import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{Utils, AkkaUtils}
+import org.apache.spark.deploy.DeployMessages.WorkerStateResponse
+import org.apache.spark.deploy.DeployMessages.RegisterWorkerFailed
+import org.apache.spark.deploy.DeployMessages.KillExecutor
+import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
+import scala.Some
+import org.apache.spark.deploy.DeployMessages.Heartbeat
+import org.apache.spark.deploy.DeployMessages.RegisteredWorker
+import akka.remote.DisassociatedEvent
+import org.apache.spark.deploy.DeployMessages.LaunchExecutor
+import org.apache.spark.deploy.DeployMessages.RegisterWorker
 
 
 private[spark] class Worker(
@@ -54,7 +64,7 @@ private[spark] class Worker(
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
   val HEARTBEAT_MILLIS = System.getProperty("spark.worker.timeout", "60").toLong * 1000 / 4
 
-  var master: ActorRef = null
+  var master: ActorSelection = null
   var masterWebUiUrl : String = ""
   val workerId = generateWorkerId()
   var sparkHome: File = null
@@ -111,10 +121,8 @@ private[spark] class Worker(
 
   def connectToMaster() {
     logInfo("Connecting to master " + masterUrl)
-    master = context.actorFor(Master.toAkkaUrl(masterUrl))
+    master = context.actorSelection(Master.toAkkaUrl(masterUrl))
     master ! RegisterWorker(workerId, host, port, cores, memory, webUi.boundPort.get, publicAddress)
-    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-    context.watch(master) // Doesn't work with remote actors, but useful for testing
   }
 
   import context.dispatcher
@@ -123,6 +131,8 @@ private[spark] class Worker(
     case RegisteredWorker(url) =>
       masterWebUiUrl = url
       logInfo("Successfully registered with master")
+      context.watch(sender) // remote death watch for master
+      //TODO: Is heartbeat really necessary akka does it anyway !
         context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis) {
         master ! Heartbeat(workerId)
       }
@@ -165,7 +175,8 @@ private[spark] class Worker(
           logInfo("Asked to kill unknown executor " + fullId)
       }
 
-    case DisassociatedEvent(_, _, _) =>
+    case Terminated(actor_) =>
+      logInfo(s"$actor_ terminated !")
       masterDisconnected()
 
     case RequestWorkerState => {

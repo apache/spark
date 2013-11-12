@@ -60,7 +60,7 @@ private[spark] class MapOutputTracker extends Logging {
   private val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
 
   // Set to the MapOutputTrackerActor living on the driver
-  var trackerActor: ActorRef = _
+  var trackerActor: Either[ActorRef, ActorSelection] = _
 
   private var mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]
 
@@ -79,7 +79,11 @@ private[spark] class MapOutputTracker extends Logging {
   // throw a SparkException if this fails.
   def askTracker(message: Any): Any = {
     try {
-      val future = trackerActor.ask(message)(timeout)
+      val future = if (trackerActor.isLeft ) {
+        trackerActor.left.get.ask(message)(timeout)
+      } else {
+        trackerActor.right.get.ask(message)(timeout)
+      }
       return Await.result(future, timeout)
     } catch {
       case e: Exception =>

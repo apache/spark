@@ -86,7 +86,7 @@ class FeederActor extends Actor {
 class SampleActorReceiver[T: ClassTag](urlOfPublisher: String)
 extends Actor with Receiver {
 
-  lazy private val remotePublisher = context.actorFor(urlOfPublisher)
+  lazy private val remotePublisher = context.actorSelection(urlOfPublisher)
 
   override def preStart = remotePublisher ! SubscribeReceiver(context.self)
 

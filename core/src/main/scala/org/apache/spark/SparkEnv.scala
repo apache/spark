@@ -20,7 +20,7 @@ package org.apache.spark
 import collection.mutable
 import serializer.Serializer
 
-import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
+import akka.actor._
 import akka.remote.RemoteActorRefProvider
 
 import org.apache.spark.broadcast.BroadcastManager
@@ -161,17 +161,17 @@ object SparkEnv extends Logging {
     val closureSerializer = serializerManager.get(
       System.getProperty("spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer"))
 
-    def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
+    def registerOrLookup(name: String, newActor: => Actor): Either[ActorRef, ActorSelection] = {
       if (isDriver) {
         logInfo("Registering " + name)
-        actorSystem.actorOf(Props(newActor), name = name)
+        Left(actorSystem.actorOf(Props(newActor), name = name))
       } else {
         val driverHost: String = System.getProperty("spark.driver.host", "localhost")
         val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
         Utils.checkHost(driverHost, "Expected hostname")
         val url = "akka.tcp://spark@%s:%s/user/%s".format(driverHost, driverPort, name)
         logInfo("Connecting to " + name + ": " + url)
-        actorSystem.actorFor(url)
+        Right(actorSystem.actorSelection(url))
       }
     }
 
