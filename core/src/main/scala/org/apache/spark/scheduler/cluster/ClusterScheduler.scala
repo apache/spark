@@ -173,7 +173,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           backend.killTask(tid, execId)
         }
       }
-      tsm.error("Stage %d was cancelled".format(stageId))
+      logInfo("Stage %d was cancelled".format(stageId))
+      tsm.removeAllRunningTasks()
+      taskSetFinished(tsm)
     }
   }
 
