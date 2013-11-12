@@ -27,7 +27,7 @@ import org.apache.spark.Logging
  */
 private[spark]
 abstract class BlockStore(val blockManager: BlockManager) extends Logging {
-  def putBytes(blockId: String, bytes: ByteBuffer, level: StorageLevel)
+  def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel)
 
   /**
    * Put in a block and, possibly, also return its content as either bytes or another Iterator.
@@ -36,26 +36,26 @@ abstract class BlockStore(val blockManager: BlockManager) extends Logging {
    * @return a PutResult that contains the size of the data, as well as the values put if
    *         returnValues is true (if not, the result's data field can be null)
    */
-  def putValues(blockId: String, values: ArrayBuffer[Any], level: StorageLevel, 
+  def putValues(blockId: BlockId, values: ArrayBuffer[Any], level: StorageLevel,
     returnValues: Boolean) : PutResult
 
   /**
    * Return the size of a block in bytes.
    */
-  def getSize(blockId: String): Long
+  def getSize(blockId: BlockId): Long
 
-  def getBytes(blockId: String): Option[ByteBuffer]
+  def getBytes(blockId: BlockId): Option[ByteBuffer]
 
-  def getValues(blockId: String): Option[Iterator[Any]]
+  def getValues(blockId: BlockId): Option[Iterator[Any]]
 
   /**
    * Remove a block, if it exists.
    * @param blockId the block to remove.
    * @return True if the block was found and removed, False otherwise.
    */
-  def remove(blockId: String): Boolean
+  def remove(blockId: BlockId): Boolean
 
-  def contains(blockId: String): Boolean
+  def contains(blockId: BlockId): Boolean
 
   def clear() { }
 }

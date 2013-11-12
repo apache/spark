@@ -29,7 +29,7 @@
 #   SPARK_NICENESS The scheduling priority for daemons. Defaults to 0.
 ##
 
-usage="Usage: spark-daemon.sh [--config <conf-dir>] [--hosts hostlistfile] (start|stop) <spark-command> <spark-instance-number> <args...>"
+usage="Usage: spark-daemon.sh [--config <conf-dir>] (start|stop) <spark-command> <spark-instance-number> <args...>"
 
 # if no args specified, show usage
 if [ $# -le 1 ]; then
@@ -43,6 +43,25 @@ bin=`cd "$bin"; pwd`
 . "$bin/spark-config.sh"
 
 # get arguments
+
+# Check if --config is passed as an argument. It is an optional parameter.
+# Exit if the argument is not a directory.
+
+if [ "$1" == "--config" ]
+then
+  shift
+  conf_dir=$1
+  if [ ! -d "$conf_dir" ]
+  then
+    echo "ERROR : $conf_dir is not a directory"
+    echo $usage
+    exit 1
+  else
+    export SPARK_CONF_DIR=$conf_dir
+  fi
+  shift
+fi
+
 startStop=$1
 shift
 command=$1

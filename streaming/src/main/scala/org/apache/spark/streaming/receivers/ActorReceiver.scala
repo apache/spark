@@ -25,7 +25,7 @@ import akka.actor.SupervisorStrategy._
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.dstream.NetworkReceiver
 
 import java.util.concurrent.atomic.AtomicInteger
@@ -160,7 +160,7 @@ private[streaming] class ActorReceiver[T: ClassTag](
   protected def pushBlock(iter: Iterator[T]) {
     val buffer = new ArrayBuffer[T]
     buffer ++= iter
-    pushBlock("block-" + streamId + "-" + System.nanoTime(), buffer, null, storageLevel)
+    pushBlock(StreamBlockId(streamId, System.nanoTime()), buffer, null, storageLevel)
   }
 
   protected def onStart() = {

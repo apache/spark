@@ -22,7 +22,7 @@ private[spark] object ApplicationState
 
   type ApplicationState = Value
 
-  val WAITING, RUNNING, FINISHED, FAILED = Value
+  val WAITING, RUNNING, FINISHED, FAILED, UNKNOWN = Value
 
   val MAX_NUM_RETRY = 10
 }

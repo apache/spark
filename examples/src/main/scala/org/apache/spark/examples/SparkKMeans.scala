@@ -21,8 +21,6 @@ import java.util.Random
 import org.apache.spark.SparkContext
 import org.apache.spark.util.Vector
 import org.apache.spark.SparkContext._
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
 
 /**
  * K-means clustering.

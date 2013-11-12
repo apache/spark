@@ -32,7 +32,7 @@ public abstract class Function<T, R> extends WrappedFunction1<T, R> implements S
   public abstract R call(T t) throws Exception;
 
   public ClassTag<R> returnType() {
-    return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
+    return ClassTag$.MODULE$.apply(Object.class);
   }
 }
 

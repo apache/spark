@@ -25,7 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, Function3 => JFunction3}
 import org.apache.spark.Partitioner
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
@@ -37,8 +37,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PairRDDFunctions
 
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
-    implicit val kTag: ClassTag[K],
-    implicit val vTag: ClassTag[V])
+    implicit val kManifest: ClassTag[K],
+    implicit val vManifest: ClassTag[V])
     extends JavaDStreamLike[(K, V), JavaPairDStream[K, V], JavaPairRDD[K, V]] {
 
   override def wrapRDD(rdd: RDD[(K, V)]): JavaPairRDD[K, V] = JavaPairRDD.fromRDD(rdd)
@@ -59,6 +59,12 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
 
   /** Persist the RDDs of this DStream with the given storage level */
   def persist(storageLevel: StorageLevel): JavaPairDStream[K, V] = dstream.persist(storageLevel)
+
+  /**
+   * Return a new DStream with an increased or decreased level of parallelism. Each RDD in the
+   * returned DStream has exactly numPartitions partitions.
+   */
+  def repartition(numPartitions: Int): JavaPairDStream[K, V] = dstream.repartition(numPartitions)
 
   /** Method that generates a RDD for the given Duration */
   def compute(validTime: Time): JavaPairRDD[K, V] = {
@@ -149,7 +155,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
 
   /**
    * Combine elements of each key in DStream's RDDs using custom function. This is similar to the
-   * combineByKey for RDDs. Please refer to combineByKey in [[PairRDDFunctions]] for more
+   * combineByKey for RDDs. Please refer to combineByKey in [[org.apache.spark.PairRDDFunctions]] for more
    * information.
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
@@ -414,7 +420,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new "state" DStream where the state for each key is updated by applying
+   * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
    * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
    * @param updateFunc State update function. If `this` function returns None, then
@@ -429,7 +435,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Create a new "state" DStream where the state for each key is updated by applying
+   * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    * @param updateFunc State update function. If `this` function returns None, then
@@ -437,15 +443,17 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * @param numPartitions Number of partitions of each RDD in the new DStream.
    * @tparam S State type
    */
-  def updateStateByKey[S: ClassTag](
+  def updateStateByKey[S](
       updateFunc: JFunction2[JList[V], Optional[S], Optional[S]],
       numPartitions: Int)
   : JavaPairDStream[K, S] = {
+    implicit val cm: ClassTag[S] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[S]]
     dstream.updateStateByKey(convertUpdateStateFunction(updateFunc), numPartitions)
   }
 
   /**
-   * Create a new "state" DStream where the state for each key is updated by applying
+   * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of the key.
    * [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
    * @param updateFunc State update function. If `this` function returns None, then
@@ -453,19 +461,30 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new DStream.
    * @tparam S State type
    */
-  def updateStateByKey[S: ClassTag](
+  def updateStateByKey[S](
       updateFunc: JFunction2[JList[V], Optional[S], Optional[S]],
       partitioner: Partitioner
   ): JavaPairDStream[K, S] = {
+    implicit val cm: ClassTag[S] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[S]]
     dstream.updateStateByKey(convertUpdateStateFunction(updateFunc), partitioner)
   }
 
+
+  /**
+   * Return a new DStream by applying a map function to the value of each key-value pairs in
+   * 'this' DStream without changing the key.
+   */
   def mapValues[U](f: JFunction[V, U]): JavaPairDStream[K, U] = {
     implicit val cm: ClassTag[U] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
     dstream.mapValues(f)
   }
 
+  /**
+   * Return a new DStream by applying a flatmap function to the value of each key-value pairs in
+   * 'this' DStream without changing the key.
+   */
   def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairDStream[K, U] = {
     import scala.collection.JavaConverters._
     def fn = (x: V) => f.apply(x).asScala
@@ -475,9 +494,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Cogroup `this` DStream with `other` DStream. For each key k in corresponding RDDs of `this`
-   * or `other` DStreams, the generated RDD will contains a tuple with the list of values for that
-   * key in both RDDs. HashPartitioner is used to partition each generated RDD into default number
+   * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
+   * Hash partitioning is used to generate the RDDs with Spark's default number
    * of partitions.
    */
   def cogroup[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (JList[V], JList[W])] = {
@@ -487,21 +505,36 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Cogroup `this` DStream with `other` DStream. For each key k in corresponding RDDs of `this`
-   * or `other` DStreams, the generated RDD will contains a tuple with the list of values for that
-   * key in both RDDs. Partitioner is used to partition each generated RDD.
+   * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
+   * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    */
-  def cogroup[W](other: JavaPairDStream[K, W], partitioner: Partitioner)
-  : JavaPairDStream[K, (JList[V], JList[W])] = {
+  def cogroup[W](
+      other: JavaPairDStream[K, W],
+      numPartitions: Int
+    ): JavaPairDStream[K, (JList[V], JList[W])] = {
     implicit val cm: ClassTag[W] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
-    dstream.cogroup(other.dstream, partitioner)
-        .mapValues(t => (seqAsJavaList(t._1), seqAsJavaList((t._2))))
+    dstream.cogroup(other.dstream, numPartitions)
+           .mapValues(t => (seqAsJavaList(t._1), seqAsJavaList((t._2))))
   }
 
   /**
-   * Join `this` DStream with `other` DStream. HashPartitioner is used
-   * to partition each generated RDD into default number of partitions.
+   * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
+   * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
+   */
+  def cogroup[W](
+      other: JavaPairDStream[K, W],
+      partitioner: Partitioner
+    ): JavaPairDStream[K, (JList[V], JList[W])] = {
+    implicit val cm: ClassTag[W] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    dstream.cogroup(other.dstream, partitioner)
+           .mapValues(t => (seqAsJavaList(t._1), seqAsJavaList((t._2))))
+  }
+
+  /**
+   * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
+   * Hash partitioning is used to generate the RDDs with Spark's default number of partitions.
    */
   def join[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (V, W)] = {
     implicit val cm: ClassTag[W] =
@@ -510,15 +543,109 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   }
 
   /**
-   * Join `this` DStream with `other` DStream, that is, each RDD of the new DStream will
-   * be generated by joining RDDs from `this` and other DStream. Uses the given
-   * Partitioner to partition each generated RDD.
+   * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
+   * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    */
-  def join[W](other: JavaPairDStream[K, W], partitioner: Partitioner)
-  : JavaPairDStream[K, (V, W)] = {
+  def join[W](other: JavaPairDStream[K, W], numPartitions: Int): JavaPairDStream[K, (V, W)] = {
+    implicit val cm: ClassTag[W] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    dstream.join(other.dstream, numPartitions)
+  }
+
+  /**
+   * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
+   * The supplied [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   */
+  def join[W](
+      other: JavaPairDStream[K, W],
+      partitioner: Partitioner
+    ): JavaPairDStream[K, (V, W)] = {
     implicit val cm: ClassTag[W] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
     dstream.join(other.dstream, partitioner)
+  }
+
+  /**
+   * Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
+   * number of partitions.
+   */
+  def leftOuterJoin[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (V, Optional[W])] = {
+    implicit val cm: ClassTag[W] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    val joinResult = dstream.leftOuterJoin(other.dstream)
+    joinResult.mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))}
+  }
+
+  /**
+   * Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
+   * partitions.
+   */
+  def leftOuterJoin[W](
+      other: JavaPairDStream[K, W],
+      numPartitions: Int
+    ): JavaPairDStream[K, (V, Optional[W])] = {
+    implicit val cm: ClassTag[W] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    val joinResult = dstream.leftOuterJoin(other.dstream, numPartitions)
+    joinResult.mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))}
+  }
+
+  /**
+   * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
+   * The supplied [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   */
+  def leftOuterJoin[W](
+      other: JavaPairDStream[K, W],
+      partitioner: Partitioner
+    ): JavaPairDStream[K, (V, Optional[W])] = {
+    implicit val cm: ClassTag[W] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    val joinResult = dstream.leftOuterJoin(other.dstream, partitioner)
+    joinResult.mapValues{case (v, w) => (v, JavaUtils.optionToOptional(w))}
+  }
+
+  /**
+   * Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with Spark's default
+   * number of partitions.
+   */
+  def rightOuterJoin[W](other: JavaPairDStream[K, W]): JavaPairDStream[K, (Optional[V], W)] = {
+    implicit val cm: ClassTag[W] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    val joinResult = dstream.rightOuterJoin(other.dstream)
+    joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)}
+  }
+
+  /**
+   * Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
+   * `other` DStream. Hash partitioning is used to generate the RDDs with `numPartitions`
+   * partitions.
+   */
+  def rightOuterJoin[W](
+      other: JavaPairDStream[K, W],
+      numPartitions: Int
+    ): JavaPairDStream[K, (Optional[V], W)] = {
+    implicit val cm: ClassTag[W] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    val joinResult = dstream.rightOuterJoin(other.dstream, numPartitions)
+    joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)}
+  }
+
+  /**
+   * Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
+   * `other` DStream. The supplied [[org.apache.spark.Partitioner]] is used to control
+   * the partitioning of each RDD.
+   */
+  def rightOuterJoin[W](
+      other: JavaPairDStream[K, W],
+      partitioner: Partitioner
+    ): JavaPairDStream[K, (Optional[V], W)] = {
+    implicit val cm: ClassTag[W] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    val joinResult = dstream.rightOuterJoin(other.dstream, partitioner)
+    joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)}
   }
 
   /**
@@ -591,14 +718,19 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     dstream.saveAsNewAPIHadoopFiles(prefix, suffix, keyClass, valueClass, outputFormatClass, conf)
   }
 
+  /** Convert to a JavaDStream */
+  def toJavaDStream(): JavaDStream[(K, V)] = {
+    new JavaDStream[(K, V)](dstream)
+  }
+
   override val classTag: ClassTag[(K, V)] =
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[Tuple2[K, V]]]
 }
 
 object JavaPairDStream {
-  implicit def fromPairDStream[K: ClassTag, V: ClassTag](dstream: DStream[(K, V)])
-  :JavaPairDStream[K, V] =
+  implicit def fromPairDStream[K: ClassTag, V: ClassTag](dstream: DStream[(K, V)]) : JavaPairDStream[K, V] = {
     new JavaPairDStream[K, V](dstream)
+  }
 
   def fromJavaDStream[K, V](dstream: JavaDStream[(K, V)]): JavaPairDStream[K, V] = {
     implicit val cmk: ClassTag[K] =

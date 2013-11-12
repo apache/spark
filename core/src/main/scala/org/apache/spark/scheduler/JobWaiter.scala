@@ -17,48 +17,58 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.ArrayBuffer
-
 /**
  * An object that waits for a DAGScheduler job to complete. As tasks finish, it passes their
  * results to the given handler function.
  */
-private[spark] class JobWaiter[T](totalTasks: Int, resultHandler: (Int, T) => Unit)
+private[spark] class JobWaiter[T](
+    dagScheduler: DAGScheduler,
+    jobId: Int,
+    totalTasks: Int,
+    resultHandler: (Int, T) => Unit)
   extends JobListener {
 
   private var finishedTasks = 0
 
-  private var jobFinished = false          // Is the job as a whole finished (succeeded or failed)?
-  private var jobResult: JobResult = null  // If the job is finished, this will be its result
+  // Is the job as a whole finished (succeeded or failed)?
+  private var _jobFinished = totalTasks == 0
 
-  override def taskSucceeded(index: Int, result: Any) {
-    synchronized {
-      if (jobFinished) {
-        throw new UnsupportedOperationException("taskSucceeded() called on a finished JobWaiter")
-      }
-      resultHandler(index, result.asInstanceOf[T])
-      finishedTasks += 1
-      if (finishedTasks == totalTasks) {
-        jobFinished = true
-        jobResult = JobSucceeded
-        this.notifyAll()
-      }
-    }
+  def jobFinished = _jobFinished
+
+  // If the job is finished, this will be its result. In the case of 0 task jobs (e.g. zero
+  // partition RDDs), we set the jobResult directly to JobSucceeded.
+  private var jobResult: JobResult = if (jobFinished) JobSucceeded else null
+
+  /**
+   * Sends a signal to the DAGScheduler to cancel the job. The cancellation itself is handled
+   * asynchronously. After the low level scheduler cancels all the tasks belonging to this job, it
+   * will fail this job with a SparkException.
+   */
+  def cancel() {
+    dagScheduler.cancelJob(jobId)
   }
 
-  override def jobFailed(exception: Exception) {
-    synchronized {
-      if (jobFinished) {
-        throw new UnsupportedOperationException("jobFailed() called on a finished JobWaiter")
-      }
-      jobFinished = true
-      jobResult = JobFailed(exception, None)
+  override def taskSucceeded(index: Int, result: Any): Unit = synchronized {
+    if (_jobFinished) {
+      throw new UnsupportedOperationException("taskSucceeded() called on a finished JobWaiter")
+    }
+    resultHandler(index, result.asInstanceOf[T])
+    finishedTasks += 1
+    if (finishedTasks == totalTasks) {
+      _jobFinished = true
+      jobResult = JobSucceeded
       this.notifyAll()
     }
   }
 
+  override def jobFailed(exception: Exception): Unit = synchronized {
+    _jobFinished = true
+    jobResult = JobFailed(exception, None)
+    this.notifyAll()
+  }
+
   def awaitResult(): JobResult = synchronized {
-    while (!jobFinished) {
+    while (!_jobFinished) {
       this.wait()
     }
     return jobResult

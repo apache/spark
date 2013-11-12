@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache</groupId>
     <artifactId>apache</artifactId>
-    <version>11</version>
+    <version>13</version>
   </parent>
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-parent</artifactId>
@@ -60,6 +60,29 @@
   <prerequisites>
     <maven>3.0.0</maven>
   </prerequisites>
+
+  <mailingLists>
+    <mailingList>
+      <name>Dev Mailing List</name>
+      <post>dev@spark.incubator.apache.org</post>
+      <subscribe>dev-subscribe@spark.incubator.apache.org</subscribe>
+      <unsubscribe>dev-unsubscribe@spark.incubator.apache.org</unsubscribe>
+    </mailingList>
+
+    <mailingList>
+      <name>User Mailing List</name>
+      <post>user@spark.incubator.apache.org</post>
+      <subscribe>user-subscribe@spark.incubator.apache.org</subscribe>
+      <unsubscribe>user-unsubscribe@spark.incubator.apache.org</unsubscribe>
+    </mailingList>
+
+    <mailingList>
+      <name>Commits Mailing List</name>
+      <post>commits@spark.incubator.apache.org</post>
+      <subscribe>commits-subscribe@spark.incubator.apache.org</subscribe>
+      <unsubscribe>commits-unsubscribe@spark.incubator.apache.org</unsubscribe>
+    </mailingList>
+  </mailingLists>
 
   <modules>
     <module>core</module>
@@ -119,6 +142,17 @@
       <id>akka-repo</id>
       <name>Akka Repository</name>
       <url>http://repo.akka.io/releases/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>mqtt-repo</id>
+      <name>MQTT Repository</name>
+      <url>https://repo.eclipse.org/content/repositories/paho-releases/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -227,13 +261,36 @@
       </dependency>
       <dependency>
         <groupId>com.typesafe.akka</groupId>
+        <artifactId>akka-actor_${scala-short.version}</artifactId>
+        <version>${akka.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>com.typesafe.akka</groupId>
         <artifactId>akka-remote_${scala-short.version}</artifactId>
         <version>${akka.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.typesafe.akka</groupId>
         <artifactId>akka-slf4j_${scala-short.version}</artifactId>
         <version>${akka.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>it.unimi.dsi</groupId>
@@ -347,6 +404,17 @@
         <scope>test</scope>
       </dependency>
       <dependency>
+        <groupId>org.apache.zookeeper</groupId>
+        <artifactId>zookeeper</artifactId>
+        <version>3.4.5</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-client</artifactId>
         <version>${hadoop.version}</version>
@@ -361,19 +429,11 @@
           </exclusion>
           <exclusion>
             <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-core-asl</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-mapper-asl</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-jaxrs</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-xc</artifactId>
+            <groupId>org.sonatype.sisu.inject</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -397,19 +457,11 @@
           </exclusion>
           <exclusion>
             <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-core-asl</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-mapper-asl</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-jaxrs</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-xc</artifactId>
+            <groupId>org.sonatype.sisu.inject</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -428,19 +480,11 @@
           </exclusion>
           <exclusion>
             <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-core-asl</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-mapper-asl</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-jaxrs</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-xc</artifactId>
+            <groupId>org.sonatype.sisu.inject</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
@@ -459,19 +503,11 @@
           </exclusion>
           <exclusion>
             <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-core-asl</artifactId>
+            <artifactId>*</artifactId>
           </exclusion>
           <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-mapper-asl</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-jaxrs</artifactId>
-          </exclusion>
-          <exclusion>
-            <groupId>org.codehaus.jackson</groupId>
-            <artifactId>jackson-xc</artifactId>
+            <groupId>org.sonatype.sisu.inject</groupId>
+            <artifactId>*</artifactId>
           </exclusion>
         </exclusions>
       </dependency>
