@@ -27,7 +27,7 @@ the challenges of graph construction and transformation and provide
 limited fault-tolerance and support for interactive analysis.
 
 <p align="center">
-  <img src="https://raw.github.com/jegonzal/graphx/Documentation/docs/img/data_parallel_vs_graph_parallel.png" />
+  <img src="https://raw.github.com/amplab/graphx/master/docs/img/data_parallel_vs_graph_parallel.png" />
 </p>
 
 
@@ -47,7 +47,7 @@ Finally, by exploiting the Scala foundation of Spark, we enable users
 to interactively load, transform, and compute on massive graphs.
 
 <p align="center">
-  <img src="https://raw.github.com/jegonzal/graphx/Documentation/docs/img/tables_and_graphs.png" />
+  <img src="https://raw.github.com/amplab/graphx/master/docs/img/tables_and_graphs.png" />
 </p>
 
 ## Examples
