@@ -43,29 +43,35 @@ private[spark] object AkkaUtils {
 
     val akkaFrameSize = System.getProperty("spark.akka.frameSize", "10").toInt
     val lifecycleEvents = if (System.getProperty("spark.akka.logLifecycleEvents", "false").toBoolean) "on" else "off"
-    // 10 seconds is the default akka timeout, but in a cluster, we need higher by default.
-    val akkaWriteTimeout = System.getProperty("spark.akka.writeTimeout", "30").toInt
 
-    val akkaConf = ConfigFactory.parseString("""
-      akka.daemonic = on
-      akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
-      akka.stdout-loglevel = "ERROR"
-      akka.actor.provider = "akka.remote.RemoteActorRefProvider"
-      akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
-      akka.remote.netty.tcp.hostname = "%s"
-      akka.remote.netty.tcp.port = %d
-      akka.remote.netty.tcp.connection-timeout = %d s
-      akka.remote.netty.tcp.maximum-frame-size = %dMiB
-      akka.remote.netty.tcp.execution-pool-size = %d
-      akka.actor.default-dispatcher.throughput = %d
-      akka.remote.log-remote-lifecycle-events = %s
-                                             """.format(host, port, akkaTimeout, akkaFrameSize, akkaThreads, akkaBatchSize,
-        lifecycleEvents))
+    val akkaHeartBeatPauses = System.getProperty("spark.akka.pauses", "30").toInt
+    val akkaFailureDetector = System.getProperty("spark.akka.failure-detector.threshold", "30").toInt
+    val akkaHeartBeatInterval = System.getProperty("spark.akka.heartbeat.interval", "3").toInt
+
+    val akkaConf = ConfigFactory.parseString(
+      s"""
+      |akka.daemonic = on
+      |akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
+      |akka.stdout-loglevel = "ERROR"
+      |akka.remote.watch-failure-detector.acceptable-heartbeat-pause = $akkaHeartBeatPauses s
+      |akka.remote.watch-failure-detector.heartbeat-interval = $akkaHeartBeatInterval s
+      |akka.remote.watch-failure-detector.threshold = $akkaFailureDetector
+      |akka.remote.transport-failure-detector.heartbeat-interval = $akkaHeartBeatInterval s
+      |akka.remote.transport-failure-detector.acceptable-heartbeat-pause = $akkaHeartBeatPauses s
+      |akka.remote.transport-failure-detector.threshold = $akkaFailureDetector
+      |akka.actor.provider = "akka.remote.RemoteActorRefProvider"
+      |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"
+      |akka.remote.netty.tcp.hostname = "$host"
+      |akka.remote.netty.tcp.port = $port
+      |akka.remote.netty.tcp.connection-timeout = $akkaTimeout s
+      |akka.remote.netty.tcp.maximum-frame-size = ${akkaFrameSize}MiB
+      |akka.remote.netty.tcp.execution-pool-size = $akkaThreads
+      |akka.actor.default-dispatcher.throughput = $akkaBatchSize
+      |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
+      """.stripMargin)
 
     val actorSystem = ActorSystem(name, akkaConf)
 
-    // Figure out the port number we bound to, in case port was passed as 0. This is a bit of a
-    // hack because Akka doesn't let you figure out the port through the public API yet.
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
     val boundPort = provider.getDefaultAddress.port.get
     (actorSystem, boundPort)

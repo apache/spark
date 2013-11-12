@@ -59,12 +59,12 @@ private[spark] class StandaloneExecutorBackend(
     driver = context.actorSelection(driverUrl)
     driver ! RegisterExecutor(executorId, hostPort, cores)
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-   // context.watch(driver) // Doesn't work with remote actors, but useful for testing
   }
 
   override def receive = {
     case RegisteredExecutor(sparkProperties) =>
       logInfo("Successfully registered with driver")
+      context.watch(sender) //Start watching for terminated messages.
       // Make this host instead of hostPort ?
       executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties)
 
@@ -81,7 +81,7 @@ private[spark] class StandaloneExecutorBackend(
         executor.launchTask(this, taskDesc.taskId, taskDesc.serializedTask)
       }
 
-    case DisassociatedEvent(_, _, _) =>
+    case Terminated(actor) =>
       logError("Driver terminated or disconnected! Shutting down.")
       System.exit(1)
   }
