@@ -329,18 +329,7 @@ object GraphImpl {
     val index = VertexSetRDD.makeIndex(allVids, Some(Partitioner.defaultPartitioner(vertices)))
     // Index the vertices and fill in missing attributes with the default
     val vtable = VertexSetRDD(vertices, index, mergeFunc).fillMissing(defaultVertexAttr)
-    /**
-     * @todo Verify that there are no edges that contain vertices
-     * that are not in vTable.  This should probably be resolved:
-     *
-     *  edges.flatMap{ e => Array((e.srcId, null), (e.dstId, null)) }
-     *       .cogroup(vertices).map{
-     *         case (vid, _, attr) =>
-     *           if (attr.isEmpty) (vid, defaultValue)
-     *           else (vid, attr)
-     *        }
-     *
-     */
+
     val etable = createETable(edges)
     val vid2pid = new Vid2Pid(etable, vtable.index)
     val localVidMap = createLocalVidMap(etable)

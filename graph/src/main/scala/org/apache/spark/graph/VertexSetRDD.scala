@@ -205,9 +205,11 @@ class VertexSetRDD[@specialized V: ClassManifest](
   } // end of mapValues
 
   /**
+   * Fill in missing values for all vertices in the index.
    *
-    * @param missingValue
-   * @return
+   * @param missingValue the value to be used for vertices in the
+   * index that don't currently have values.
+   * @return A VertexSetRDD with a value for all vertices.
    */
   def fillMissing(missingValue: V): VertexSetRDD[V] = {
     val newValuesRDD: RDD[ (Array[V], BitSet) ] =
