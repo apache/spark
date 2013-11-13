@@ -41,9 +41,11 @@ class BitSet(numBits: Int) {
     val wordIndex = bitIndex >> 6 // divide by 64
     var i = 0
     while(i < wordIndex) { words(i) = -1; i += 1 }
-    // Set the remaining bits
-    val mask = ~(-1L << (bitIndex & 0x3f))
-    words(wordIndex) |= mask
+    if(wordIndex < words.size) {
+      // Set the remaining bits (note that the mask could still be zero)
+      val mask = ~(-1L << (bitIndex & 0x3f))
+      words(wordIndex) |= mask
+    }
   }
 
 
