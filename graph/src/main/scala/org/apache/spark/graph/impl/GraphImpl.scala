@@ -9,6 +9,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.HashPartitioner
 import org.apache.spark.util.ClosureCleaner
 
+import org.apache.spark.Partitioner
 import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
 import org.apache.spark.graph.impl.MsgRDDFunctions._
@@ -320,7 +321,14 @@ object GraphImpl {
     defaultVertexAttr: VD,
     mergeFunc: (VD, VD) => VD): GraphImpl[VD,ED] = {
 
-    val vtable = VertexSetRDD(vertices, mergeFunc)
+    vertices.cache
+    edges.cache
+    // Get the set of all vids
+    val allVids = vertices.map(_._1).union(edges.flatMap(e => Seq(e.srcId, e.dstId)))
+    // Index the set of all vids
+    val index = VertexSetRDD.makeIndex(allVids, Some(Partitioner.defaultPartitioner(vertices)))
+    // Index the vertices and fill in missing attributes with the default
+    val vtable = VertexSetRDD(vertices, index, mergeFunc).fillMissing(defaultVertexAttr)
     /**
      * @todo Verify that there are no edges that contain vertices
      * that are not in vTable.  This should probably be resolved:
