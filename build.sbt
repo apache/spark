@@ -1,6 +1,6 @@
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
-libraryDependencies += "edu.berkeley.cs.amplab" %% "shark" % "0.8.0"
+libraryDependencies += "edu.berkeley.cs.amplab" %% "shark" % "0.9.0-SNAPSHOT"
 
 libraryDependencies ++= Seq(
  "org.apache.hadoop" % "hadoop-client" % "1.0.4",
