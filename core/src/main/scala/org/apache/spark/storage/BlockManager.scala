@@ -356,7 +356,7 @@ private[spark] class BlockManager(
                 // TODO: Consider creating a putValues that also takes in a iterator?
                 val valuesBuffer = new ArrayBuffer[Any]
                 valuesBuffer ++= values
-                memoryStore.putValues(blockId, valuesBuffer, level, true).data match {
+                memoryStore.putValues(blockId, valuesBuffer.toIterator, level, true).data match {
                   case Left(values2) =>
                     return Some(values2)
                   case _ =>
@@ -451,9 +451,7 @@ private[spark] class BlockManager(
 
   def put(blockId: BlockId, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean)
     : Long = {
-    val elements = new ArrayBuffer[Any]
-    elements ++= values
-    put(blockId, elements, level, tellMaster)
+    doPut(blockId, Left(values), level, tellMaster)
   }
 
   /**
@@ -474,7 +472,7 @@ private[spark] class BlockManager(
   def put(blockId: BlockId, values: ArrayBuffer[Any], level: StorageLevel,
           tellMaster: Boolean = true) : Long = {
     require(values != null, "Values is null")
-    doPut(blockId, Left(values), level, tellMaster)
+    doPut(blockId, Left(values.toIterator), level, tellMaster)
   }
 
   /**
@@ -486,7 +484,7 @@ private[spark] class BlockManager(
     doPut(blockId, Right(bytes), level, tellMaster)
   }
 
-  private def doPut(blockId: BlockId, data: Either[ArrayBuffer[Any], ByteBuffer],
+  private def doPut(blockId: BlockId, data: Either[Iterator[Any], ByteBuffer],
                     level: StorageLevel, tellMaster: Boolean = true): Long = {
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
@@ -691,7 +689,7 @@ private[spark] class BlockManager(
           logInfo("Writing block " + blockId + " to disk")
           data match {
             case Left(elements) =>
-              diskStore.putValues(blockId, elements, level, false)
+              diskStore.putValues(blockId, elements.toIterator, level, false)
             case Right(bytes) =>
               diskStore.putBytes(blockId, bytes, level)
           }

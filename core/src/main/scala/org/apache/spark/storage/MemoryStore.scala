@@ -65,7 +65,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
 
   override def putValues(
       blockId: BlockId,
-      values: ArrayBuffer[Any],
+      values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean)
     : PutResult = {
@@ -73,9 +73,9 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     if (level.deserialized) {
       val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
       tryToPut(blockId, values, sizeEstimate, true)
-      PutResult(sizeEstimate, Left(values.iterator))
+      PutResult(sizeEstimate, Left(values))
     } else {
-      val bytes = blockManager.dataSerialize(blockId, values.iterator)
+      val bytes = blockManager.dataSerialize(blockId, values)
       tryToPut(blockId, bytes, bytes.limit, false)
       PutResult(bytes.limit(), Right(bytes.duplicate()))
     }

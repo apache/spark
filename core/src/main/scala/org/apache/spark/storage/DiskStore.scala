@@ -57,7 +57,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
 
   override def putValues(
       blockId: BlockId,
-      values: ArrayBuffer[Any],
+      values: Iterator[Any],
       level: StorageLevel,
       returnValues: Boolean)
     : PutResult = {
@@ -66,7 +66,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     val startTime = System.currentTimeMillis
     val file = diskManager.getFile(blockId)
     val outputStream = new FileOutputStream(file)
-    blockManager.dataSerializeStream(blockId, outputStream, values.iterator)
+    blockManager.dataSerializeStream(blockId, outputStream, values)
     val length = file.length
 
     val timeTaken = System.currentTimeMillis - startTime
