@@ -30,7 +30,7 @@ import org.apache.mesos._
 import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTaskState, _}
 
 import org.apache.spark.{SparkException, Logging, SparkContext, TaskState}
-import org.apache.spark.scheduler.TaskScheduler
+import org.apache.spark.scheduler.ClusterScheduler
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 
 /**
@@ -44,7 +44,7 @@ import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
  * remove this.
  */
 private[spark] class CoarseMesosSchedulerBackend(
-    scheduler: TaskScheduler,
+    scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
     appName: String)

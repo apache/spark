@@ -58,7 +58,7 @@ class FakeDAGScheduler(taskScheduler: FakeTaskScheduler) extends DAGScheduler(ta
  * to work, and these are required for locality in TaskSetManager.
  */
 class FakeTaskScheduler(sc: SparkContext, liveExecutors: (String, String)* /* execId, host */)
-  extends TaskScheduler(sc)
+  extends ClusterScheduler(sc)
 {
   val startedTasks = new ArrayBuffer[Long]
   val endedTasks = new mutable.HashMap[Long, TaskEndReason]
@@ -82,12 +82,13 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
   import TaskLocality.{ANY, PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL}
 
   val LOCALITY_WAIT = System.getProperty("spark.locality.wait", "3000").toLong
+  val MAX_TASK_FAILURES = 4
 
   test("TaskSet with no preferences") {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = createTaskSet(1)
-    val manager = new TaskSetManager(sched, taskSet)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // Offer a host with no CPUs
     assert(manager.resourceOffer("exec1", "host1", 0, ANY) === None)
@@ -113,7 +114,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     sc = new SparkContext("local", "test")
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = createTaskSet(3)
-    val manager = new TaskSetManager(sched, taskSet)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // First three offers should all find tasks
     for (i <- 0 until 3) {
@@ -150,7 +151,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       Seq()   // Last task has no locality prefs
     )
     val clock = new FakeClock
-    val manager = new TaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // First offer host1, exec1: first task should be chosen
     assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
@@ -196,7 +197,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       Seq(TaskLocation("host2"))
     )
     val clock = new FakeClock
-    val manager = new TaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // First offer host1: first task should be chosen
     assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
@@ -233,7 +234,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       Seq(TaskLocation("host3"))
     )
     val clock = new FakeClock
-    val manager = new TaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // First offer host1: first task should be chosen
     assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
@@ -261,7 +262,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = createTaskSet(1)
     val clock = new FakeClock
-    val manager = new TaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
 
@@ -278,17 +279,17 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     val sched = new FakeTaskScheduler(sc, ("exec1", "host1"))
     val taskSet = createTaskSet(1)
     val clock = new FakeClock
-    val manager = new TaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // Fail the task MAX_TASK_FAILURES times, and check that the task set is aborted
     // after the last failure.
-    (0 until manager.MAX_TASK_FAILURES).foreach { index =>
+    (0 until MAX_TASK_FAILURES).foreach { index =>
       val offerResult = manager.resourceOffer("exec1", "host1", 1, ANY)
       assert(offerResult != None,
         "Expect resource offer on iteration %s to return a task".format(index))
       assert(offerResult.get.index === 0)
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, Some(TaskResultLost))
-      if (index < manager.MAX_TASK_FAILURES) {
+      if (index < MAX_TASK_FAILURES) {
         assert(!sched.taskSetsFailed.contains(taskSet.id))
       } else {
         assert(sched.taskSetsFailed.contains(taskSet.id))

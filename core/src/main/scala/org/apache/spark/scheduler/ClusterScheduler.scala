@@ -30,17 +30,13 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
- * Schedules tasks for a single SparkContext. Receives a set of tasks from the DAGScheduler for
- * each stage, and is responsible for sending tasks to executors, running them, retrying if there
- * are failures, and mitigating stragglers.  Returns events to the DAGScheduler.
- * 
- * Clients should first call initialize() and start(), then submit task sets through the
- * runTasks method.
- *
- * This class can work with multiple types of clusters by acting through a SchedulerBackend.
+ * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
  * It can also work with a local setup by using a LocalBackend and setting isLocal to true.
  * It handles common logic, like determining a scheduling order across jobs, waking up to launch
  * speculative tasks, etc.
+ * 
+ * Clients should first call initialize() and start(), then submit task sets through the
+ * runTasks method.
  *
  * THREADING: SchedulerBackends and task-submitting clients can call this class from multiple
  * threads, so it needs locks in public API methods to maintain its state. In addition, some
@@ -48,7 +44,9 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
-private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = false) extends Logging {
+private[spark] class ClusterScheduler(val sc: SparkContext, isLocal: Boolean = false)
+  extends TaskScheduler with Logging {
+
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL = System.getProperty("spark.speculation.interval", "100").toLong
 
@@ -58,6 +56,15 @@ private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = fals
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
   val activeTaskSets = new HashMap[String, TaskSetManager]
+
+  val MAX_TASK_FAILURES = {
+    if (isLocal) {
+      // No sense in retrying if all tasks run locally!
+      0
+    } else {
+      System.getProperty("spark.task.maxFailures", "4").toInt
+    }
+  }
 
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskIdToExecutorId = new HashMap[Long, String]
@@ -95,7 +102,7 @@ private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = fals
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
 
-  def setDAGScheduler(dagScheduler: DAGScheduler) {
+  override def setDAGScheduler(dagScheduler: DAGScheduler) {
     this.dagScheduler = dagScheduler
   }
 
@@ -116,7 +123,7 @@ private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = fals
 
   def newTaskId(): Long = nextTaskId.getAndIncrement()
 
-  def start() {
+  override def start() {
     backend.start()
 
     if (!isLocal && System.getProperty("spark.speculation", "false").toBoolean) {
@@ -138,11 +145,11 @@ private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = fals
     }
   }
 
-  def submitTasks(taskSet: TaskSet) {
+  override def submitTasks(taskSet: TaskSet) {
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      val manager = new TaskSetManager(this, taskSet)
+      val manager = new TaskSetManager(this, taskSet, MAX_TASK_FAILURES)
       activeTaskSets(taskSet.id) = manager
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
@@ -165,7 +172,7 @@ private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = fals
     backend.reviveOffers()
   }
 
-  def cancelTasks(stageId: Int): Unit = synchronized {
+  override def cancelTasks(stageId: Int): Unit = synchronized {
     logInfo("Cancelling stage " + stageId)
     activeTaskSets.find(_._2.stageId == stageId).foreach { case (_, tsm) =>
       // There are two possible cases here:
@@ -351,7 +358,7 @@ private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = fals
     }
   }
 
-  def stop() {
+  override def stop() {
     if (backend != null) {
       backend.stop()
     }
@@ -364,7 +371,7 @@ private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = fals
     Thread.sleep(5000L)
   }
 
-  def defaultParallelism() = backend.defaultParallelism()
+  override def defaultParallelism() = backend.defaultParallelism()
 
   // Check for speculatable tasks in all our active jobs.
   def checkSpeculatableTasks() {
@@ -439,16 +446,10 @@ private[spark] class TaskScheduler(val sc: SparkContext, isLocal: Boolean = fals
 
   // By default, rack is unknown
   def getRackForHost(value: String): Option[String] = None
-
-  /**
-   * Invoked after the system has successfully been initialized. YARN uses this to bootstrap
-   * allocation of resources based on preferred locations, wait for slave registrations, etc.
-   */
-  def postStartHook() { }
 }
 
 
-private[spark] object TaskScheduler {
+private[spark] object ClusterScheduler {
   /**
    * Used to balance containers across hosts.
    *

@@ -24,16 +24,17 @@ import akka.actor.{Actor, ActorRef, Props}
 import org.apache.spark.{SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
-import org.apache.spark.scheduler.{SchedulerBackend, TaskScheduler, WorkerOffer}
+import org.apache.spark.scheduler.{SchedulerBackend, ClusterScheduler, WorkerOffer}
 
 /**
- * LocalBackend sits behind a TaskScheduler and handles launching tasks on a single Executor
- * (created by the LocalBackend) running locally.
+ * LocalBackend is used when running a local version of Spark where the executor, backend, and
+ * master all run in the same JVM. It sits behind a ClusterScheduler and handles launching tasks
+ * on a single Executor (created by the LocalBackend) running locally.
  *
  * THREADING: Because methods can be called both from the Executor and the TaskScheduler, and
  * because the Executor class is not thread safe, all methods are synchronized.
  */
-private[spark] class LocalBackend(scheduler: TaskScheduler, private val totalCores: Int)
+private[spark] class LocalBackend(scheduler: ClusterScheduler, private val totalCores: Int)
   extends SchedulerBackend with ExecutorBackend {
 
   private var freeCores = totalCores

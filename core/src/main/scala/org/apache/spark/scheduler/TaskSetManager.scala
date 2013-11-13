@@ -40,18 +40,21 @@ import org.apache.spark.util.{SystemClock, Clock}
  *
  * THREADING: This class is designed to only be called from code with a lock on the
  * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
+ *
+ * @param sched           the ClusterScheduler associated with the TaskSetManager
+ * @param taskSet         the TaskSet to manage scheduling for
+ * @param maxTaskFailures if any particular task fails more than this number of times, the entire
+ *                        task set will be aborted
  */
 private[spark] class TaskSetManager(
-    sched: TaskScheduler,
+    sched: ClusterScheduler,
     val taskSet: TaskSet,
+    val maxTaskFailures: Int,
     clock: Clock = SystemClock)
   extends Schedulable with Logging
 {
   // CPUs to request per task
   val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toInt
-
-  // Maximum times a task is allowed to fail before failing the job
-  val MAX_TASK_FAILURES = System.getProperty("spark.task.maxFailures", "4").toInt
 
   // Quantile of tasks at which to start speculation
   val SPECULATION_QUANTILE = System.getProperty("spark.speculation.quantile", "0.75").toDouble
@@ -521,10 +524,10 @@ private[spark] class TaskSetManager(
       addPendingTask(index)
       if (state != TaskState.KILLED) {
         numFailures(index) += 1
-        if (numFailures(index) > MAX_TASK_FAILURES) {
+        if (numFailures(index) > maxTaskFailures) {
           logError("Task %s:%d failed more than %d times; aborting job".format(
-            taskSet.id, index, MAX_TASK_FAILURES))
-          abort("Task %s:%d failed more than %d times".format(taskSet.id, index, MAX_TASK_FAILURES))
+            taskSet.id, index, maxTaskFailures))
+          abort("Task %s:%d failed more than %d times".format(taskSet.id, index, maxTaskFailures))
         }
       }
     } else {

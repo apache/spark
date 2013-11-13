@@ -29,9 +29,9 @@ class FakeTaskSetManager(
     initPriority: Int,
     initStageId: Int,
     initNumTasks: Int,
-    taskScheduler: TaskScheduler,
+    taskScheduler: ClusterScheduler,
     taskSet: TaskSet)
-  extends TaskSetManager(taskScheduler, taskSet) {
+  extends TaskSetManager(taskScheduler, taskSet, 1) {
 
   parent = null
   weight = 1
@@ -102,9 +102,9 @@ class FakeTaskSetManager(
   }
 }
 
-class TaskSchedulerSuite extends FunSuite with LocalSparkContext with Logging {
+class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging {
 
-  def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: TaskScheduler, taskSet: TaskSet): FakeTaskSetManager = {
+  def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: ClusterScheduler, taskSet: TaskSet): FakeTaskSetManager = {
     new FakeTaskSetManager(priority, stage, numTasks, cs , taskSet)
   }
 
@@ -131,7 +131,7 @@ class TaskSchedulerSuite extends FunSuite with LocalSparkContext with Logging {
 
   test("FIFO Scheduler Test") {
     sc = new SparkContext("local", "TaskSchedulerSuite")
-    val taskScheduler = new TaskScheduler(sc)
+    val taskScheduler = new ClusterScheduler(sc)
     var tasks = ArrayBuffer[Task[_]]()
     val task = new FakeTask(0)
     tasks += task
@@ -158,7 +158,7 @@ class TaskSchedulerSuite extends FunSuite with LocalSparkContext with Logging {
 
   test("Fair Scheduler Test") {
     sc = new SparkContext("local", "TaskSchedulerSuite")
-    val taskScheduler = new TaskScheduler(sc)
+    val taskScheduler = new ClusterScheduler(sc)
     var tasks = ArrayBuffer[Task[_]]()
     val task = new FakeTask(0)
     tasks += task
@@ -215,7 +215,7 @@ class TaskSchedulerSuite extends FunSuite with LocalSparkContext with Logging {
 
   test("Nested Pool Test") {
     sc = new SparkContext("local", "TaskSchedulerSuite")
-    val taskScheduler = new TaskScheduler(sc)
+    val taskScheduler = new ClusterScheduler(sc)
     var tasks = ArrayBuffer[Task[_]]()
     val task = new FakeTask(0)
     tasks += task

@@ -31,7 +31,7 @@ import org.apache.mesos.Protos.{TaskInfo => MesosTaskInfo, TaskState => MesosTas
 
 import org.apache.spark.{Logging, SparkException, SparkContext, TaskState}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SchedulerBackend, SlaveLost,
-  TaskDescription, TaskScheduler, WorkerOffer}
+  TaskDescription, ClusterScheduler, WorkerOffer}
 import org.apache.spark.util.Utils
 
 /**
@@ -40,7 +40,7 @@ import org.apache.spark.util.Utils
  * from multiple apps can run on different cores) and in time (a core can switch ownership).
  */
 private[spark] class MesosSchedulerBackend(
-    scheduler: TaskScheduler,
+    scheduler: ClusterScheduler,
     sc: SparkContext,
     master: String,
     appName: String)

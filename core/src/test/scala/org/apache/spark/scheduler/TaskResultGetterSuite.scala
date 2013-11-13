@@ -30,7 +30,7 @@ import org.apache.spark.storage.TaskResultBlockId
  * Used to test the case where a BlockManager evicts the task result (or dies) before the
  * TaskResult is retrieved.
  */
-class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskScheduler)
+class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterScheduler)
   extends TaskResultGetter(sparkEnv, scheduler) {
   var removedResult = false
 
@@ -91,8 +91,8 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
   test("task retried if result missing from block manager") {
     // If this test hangs, it's probably because no resource offers were made after the task
     // failed.
-    val scheduler: TaskScheduler = sc.taskScheduler match {
-      case clusterScheduler: TaskScheduler =>
+    val scheduler: ClusterScheduler = sc.taskScheduler match {
+      case clusterScheduler: ClusterScheduler =>
         clusterScheduler
       case _ =>
         assert(false, "Expect local cluster to use TaskScheduler")

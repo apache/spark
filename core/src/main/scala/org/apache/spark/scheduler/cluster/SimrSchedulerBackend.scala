@@ -21,10 +21,10 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem}
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.scheduler.TaskScheduler
+import org.apache.spark.scheduler.ClusterScheduler
 
 private[spark] class SimrSchedulerBackend(
-    scheduler: TaskScheduler,
+    scheduler: ClusterScheduler,
     sc: SparkContext,
     driverFilePath: String)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)

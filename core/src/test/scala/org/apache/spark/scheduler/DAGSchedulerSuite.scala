@@ -37,7 +37,7 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
  * TaskScheduler that records the task sets that the DAGScheduler requested executed.
  */
 class TaskSetRecordingTaskScheduler(sc: SparkContext,
-  mapOutputTrackerMaster: MapOutputTrackerMaster) extends TaskScheduler(sc) {
+  mapOutputTrackerMaster: MapOutputTrackerMaster) extends ClusterScheduler(sc) {
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
   override def start() = {}
