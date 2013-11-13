@@ -8,15 +8,16 @@ import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import util.TestShark
 
 class SQLSuite extends FunSuite with BeforeAndAfterAll {
-  var sc: SharkContext = _
 
   override def beforeAll() {
-    val testShark = new TestShark
-    testShark.loadKv1
-    sc = testShark.sc
   }
 
   test("trivial select query") {
-    sc.sql("SELECT key, val FROM test").foreach(println)
+    val x = new TestShark
+    import x._
+    loadKv1
+    //sc.sql("SELECT key, val FROM test").foreach(println)
+
+    "SELECT key FROM test".q.execute().collect.foreach(println)
   }
 }

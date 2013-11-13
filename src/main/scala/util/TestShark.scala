@@ -2,7 +2,8 @@ package catalyst
 package util
 
 import catalyst.analysis.{Analyzer, HiveMetastoreCatalog}
-import catalyst.frontend.Hive
+import catalyst.frontend._
+import catalyst.planning.TrivalPlanner
 import shark.{SharkContext, SharkEnv}
 
 import util._
@@ -29,14 +30,18 @@ class TestShark {
   class SharkQuery(sql: String) {
     lazy val parsed = Hive.parseSql(sql)
     lazy val analyzed = analyze(parsed)
+    // TODO: Don't just pick the first one...
+    lazy val physicalPlan = TrivalPlanner(analyzed).next()
+
+    def execute() = physicalPlan.execute()
 
     override def toString(): String =
-      s"""
-        |$sql
-        |
-        |== Logical Plan ==
-        |$analyzed
-      """.stripMargin
+      s"""$sql
+         |== Logical Plan ==
+         |$analyzed
+         |== Physical Plan ==
+         |$physicalPlan
+      """.stripMargin.trim
   }
 
   implicit class stringToQuery(str: String) {
