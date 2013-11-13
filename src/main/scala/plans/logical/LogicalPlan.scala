@@ -13,7 +13,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
    * Returns the set of attributes that are referenced by this node
    * during evaluation.
    */
-  def references: Set[Attribute] = ???
+  def references: Set[Attribute]
 
   /**
    * Returns the set of attributes that are output by this node.
@@ -43,6 +43,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
  */
 abstract class LeafNode extends LogicalPlan with trees.LeafNode[LogicalPlan] {
   self: Product =>
+
+  // Leaf nodes by definition cannot reference any input attributes.
+  def references = Set.empty
 }
 
 /**

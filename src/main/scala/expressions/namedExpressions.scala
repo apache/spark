@@ -26,6 +26,7 @@ abstract class NamedExpression extends Expression {
 abstract class Attribute extends NamedExpression {
   self: Product =>
 
+  def references = Set(this)
   def toAttribute = this
 }
 
@@ -44,6 +45,7 @@ case class Alias(child: Expression, name: String)
 
   def dataType = child.dataType
   def nullable = child.nullable
+  def references = child.references
 
   def toAttribute = AttributeReference(name, child.dataType, child.nullable)(exprId)
 

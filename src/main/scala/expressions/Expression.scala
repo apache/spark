@@ -9,10 +9,12 @@ abstract class Expression extends TreeNode[Expression] {
 
   def dataType: DataType
   def nullable: Boolean
+  def references: Set[Attribute]
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
+  def references = left.references ++ right.references
 }
 
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {

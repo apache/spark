@@ -13,6 +13,7 @@ abstract class BinaryPredicate(op: String) extends Predicate with trees.BinaryNo
   self: Product =>
 
   def nullable = left.nullable || right.nullable
+  def references = left.references ++ right.references
   override def toString(): String = s"$left $op $right"
 }
 
