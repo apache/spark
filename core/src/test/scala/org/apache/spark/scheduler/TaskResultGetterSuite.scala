@@ -64,20 +64,18 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
     System.setProperty("spark.akka.frameSize", "1")
   }
 
-  before {
-    sc = new SparkContext("local", "test")
-  }
-
   override def afterAll {
     System.clearProperty("spark.akka.frameSize")
   }
 
   test("handling results smaller than Akka frame size") {
+    sc = new SparkContext("local", "test")
     val result = sc.parallelize(Seq(1), 1).map(x => 2 * x).reduce((x, y) => x)
     assert(result === 2)
   }
 
-  test("handling results larger than Akka frame size") { 
+  test("handling results larger than Akka frame size") {
+    sc = new SparkContext("local", "test")
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x, y) => x)
@@ -89,13 +87,16 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
   }
 
   test("task retried if result missing from block manager") {
+    // Set the maximum number of task failures to > 0, so that the task set isn't aborted
+    // after the result is missing.
+    sc = new SparkContext("local[1,1]", "test")
     // If this test hangs, it's probably because no resource offers were made after the task
     // failed.
     val scheduler: ClusterScheduler = sc.taskScheduler match {
       case clusterScheduler: ClusterScheduler =>
         clusterScheduler
       case _ =>
-        assert(false, "Expect local cluster to use TaskScheduler")
+        assert(false, "Expect local cluster to use ClusterScheduler")
         throw new ClassCastException
     }
     scheduler.taskResultGetter = new ResultDeletingTaskResultGetter(sc.env, scheduler)

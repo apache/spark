@@ -32,7 +32,7 @@ import org.apache.spark.util.{SystemClock, Clock}
 
 
 /**
- * Schedules the tasks within a single TaskSet in the TaskScheduler. This class keeps track of
+ * Schedules the tasks within a single TaskSet in the ClusterScheduler. This class keeps track of
  * each task, retries tasks if they fail (up to a limited number of times), and
  * handles locality-aware scheduling for this TaskSet via delay scheduling. The main interfaces
  * to it are resourceOffer, which asks the TaskSet whether it wants to run a task on one node,

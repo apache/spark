@@ -21,16 +21,16 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark._
 import org.apache.spark.deploy.yarn.{ApplicationMaster, YarnAllocationHandler}
-import org.apache.spark.scheduler.TaskScheduler
+import org.apache.spark.scheduler.ClusterScheduler
 import org.apache.spark.util.Utils
 
 /**
  *
- * This is a simple extension to TaskScheduler - to ensure that appropriate initialization of
+ * This is a simple extension to ClusterScheduler - to ensure that appropriate initialization of
  * ApplicationMaster, etc. is done
  */
 private[spark] class YarnClusterScheduler(sc: SparkContext, conf: Configuration)
-  extends TaskScheduler(sc) {
+  extends ClusterScheduler(sc) {
 
   logInfo("Created YarnClusterScheduler")
 

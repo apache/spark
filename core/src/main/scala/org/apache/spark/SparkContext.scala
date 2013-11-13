@@ -156,6 +156,8 @@ class SparkContext(
   private[spark] var taskScheduler: TaskScheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
+    // Regular expression for local[N, maxRetries], used in tests with failing tasks
+    val LOCAL_N_FAILURES_REGEX = """local\[([0-9]+)\s*,\s*([0-9]+)\]""".r
     // Regular expression for simulating a Spark cluster of [N, cores, memory] locally
     val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
     // Regular expression for connecting to Spark deploy clusters
@@ -165,16 +167,25 @@ class SparkContext(
     // Regular expression for connection to Simr cluster
     val SIMR_REGEX = """simr://(.*)""".r
 
+    // When running locally, don't try to re-execute tasks on failure.
+    val MAX_LOCAL_TASK_FAILURES = 0
+
     master match {
       case "local" =>
-        val scheduler = new ClusterScheduler(this, isLocal = true)
+        val scheduler = new ClusterScheduler(this, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(scheduler, 1) 
         scheduler.initialize(backend)
         scheduler
 
       case LOCAL_N_REGEX(threads) =>
-        val scheduler = new ClusterScheduler(this, isLocal = true)
+        val scheduler = new ClusterScheduler(this, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(scheduler, threads.toInt) 
+        scheduler.initialize(backend)
+        scheduler
+
+      case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
+        val scheduler = new ClusterScheduler(this, maxFailures.toInt, isLocal = true)
+        val backend = new LocalBackend(scheduler, threads.toInt)
         scheduler.initialize(backend)
         scheduler
 
@@ -200,7 +211,7 @@ class SparkContext(
               memoryPerSlaveInt, SparkContext.executorMemoryRequested))
         }
 
-        val scheduler = new ClusterScheduler(this, isLocal = true)
+        val scheduler = new ClusterScheduler(this)
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val masterUrls = localCluster.start()

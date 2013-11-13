@@ -21,7 +21,7 @@ import org.apache.spark.SparkContext
 
 /**
  * A backend interface for scheduling systems that allows plugging in different ones under
- * TaskScheduler. We assume a Mesos-like model where the application gets resource offers as
+ * ClusterScheduler. We assume a Mesos-like model where the application gets resource offers as
  * machines become available and can launch tasks on them.
  */
 private[spark] trait SchedulerBackend {

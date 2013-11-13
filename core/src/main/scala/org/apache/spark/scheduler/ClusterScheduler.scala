@@ -46,8 +46,10 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
-private[spark] class ClusterScheduler(val sc: SparkContext, isLocal: Boolean = false)
-  extends TaskScheduler with Logging {
+private[spark] class ClusterScheduler(
+  val sc: SparkContext,
+  val maxTaskFailures : Int = System.getProperty("spark.task.maxFailures", "4").toInt,
+  isLocal: Boolean = false) extends TaskScheduler with Logging {
 
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL = System.getProperty("spark.speculation.interval", "100").toLong
@@ -58,15 +60,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext, isLocal: Boolean = f
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
   val activeTaskSets = new HashMap[String, TaskSetManager]
-
-  val MAX_TASK_FAILURES = {
-    if (isLocal) {
-      // No sense in retrying if all tasks run locally!
-      0
-    } else {
-      System.getProperty("spark.task.maxFailures", "4").toInt
-    }
-  }
 
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskIdToExecutorId = new HashMap[Long, String]
@@ -142,7 +135,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext, isLocal: Boolean = f
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      val manager = new TaskSetManager(this, taskSet, MAX_TASK_FAILURES)
+      val manager = new TaskSetManager(this, taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
@@ -345,7 +338,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext, isLocal: Boolean = f
         // No task sets are active but we still got an error. Just exit since this
         // must mean the error is during registration.
         // It might be good to do something smarter here in the future.
-        logError("Exiting due to error from task scheduler: " + message)
+        logError("Exiting due to error from cluster scheduler: " + message)
         System.exit(1)
       }
     }
