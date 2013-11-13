@@ -38,19 +38,19 @@ object StoragePerfTester {
     val blockManager = sc.env.blockManager
 
     def writeOutputBytes(mapId: Int, total: AtomicLong) = {
-      val shuffle = blockManager.shuffleBlockManager.forShuffle(1, numOutputSplits,
+      val shuffle = blockManager.shuffleBlockManager.forMapTask(1, mapId, numOutputSplits,
         new KryoSerializer())
-      val buckets = shuffle.acquireWriters(mapId)
+      val writers = shuffle.writers
       for (i <- 1 to recordsPerMap) {
-        buckets.writers(i % numOutputSplits).write(writeData)
+        writers(i % numOutputSplits).write(writeData)
       }
-      buckets.writers.map {w =>
+      writers.map {w =>
         w.commit()
         total.addAndGet(w.fileSegment().length)
         w.close()
       }
 
-      shuffle.releaseWriters(buckets)
+      shuffle.releaseWriters(true)
     }
 
     val start = System.currentTimeMillis()

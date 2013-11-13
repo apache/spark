@@ -25,6 +25,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 
+import akka.util.duration._
+
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
@@ -127,21 +129,12 @@ private[spark] class ClusterScheduler(val sc: SparkContext, isLocal: Boolean = f
     backend.start()
 
     if (!isLocal && System.getProperty("spark.speculation", "false").toBoolean) {
-      new Thread("TaskScheduler speculation check") {
-        setDaemon(true)
+      logInfo("Starting speculative execution thread")
 
-        override def run() {
-          logInfo("Starting speculative execution thread")
-          while (true) {
-            try {
-              Thread.sleep(SPECULATION_INTERVAL)
-            } catch {
-              case e: InterruptedException => {}
-            }
-            checkSpeculatableTasks()
-          }
-        }
-      }.start()
+      sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
+            SPECULATION_INTERVAL milliseconds) {
+        checkSpeculatableTasks()
+      }
     }
   }
 

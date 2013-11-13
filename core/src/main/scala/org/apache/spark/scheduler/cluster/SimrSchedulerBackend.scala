@@ -33,6 +33,10 @@ private[spark] class SimrSchedulerBackend(
   val tmpPath = new Path(driverFilePath + "_tmp")
   val filePath = new Path(driverFilePath)
 
+  val uiFilePath = driverFilePath + "_ui"
+  val tmpUiPath = new Path(uiFilePath + "_tmp")
+  val uiPath = new Path(uiFilePath)
+
   val maxCores = System.getProperty("spark.simr.executor.cores", "1").toInt
 
   override def start() {
@@ -47,6 +51,8 @@ private[spark] class SimrSchedulerBackend(
 
     logInfo("Writing to HDFS file: "  + driverFilePath)
     logInfo("Writing Akka address: "  + driverUrl)
+    logInfo("Writing to HDFS file: "  + uiFilePath)
+    logInfo("Writing Spark UI Address: " + sc.ui.appUIAddress)
 
     // Create temporary file to prevent race condition where executors get empty driverUrl file
     val temp = fs.create(tmpPath, true)
@@ -56,6 +62,12 @@ private[spark] class SimrSchedulerBackend(
 
     // "Atomic" rename
     fs.rename(tmpPath, filePath)
+
+    // Write Spark UI Address to file
+    val uiTemp = fs.create(tmpUiPath, true)
+    uiTemp.writeUTF(sc.ui.appUIAddress)
+    uiTemp.close()
+    fs.rename(tmpUiPath, uiPath)
   }
 
   override def stop() {

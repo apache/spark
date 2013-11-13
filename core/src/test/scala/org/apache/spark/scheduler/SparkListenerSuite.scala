@@ -84,7 +84,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       i
     }
 
-    val d = sc.parallelize(1 to 1e4.toInt, 64).map{i => w(i)}
+    val d = sc.parallelize(0 to 1e4.toInt, 64).map{i => w(i)}
     d.count()
     assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (1)

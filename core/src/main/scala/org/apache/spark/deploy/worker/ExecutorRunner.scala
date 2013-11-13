@@ -104,7 +104,7 @@ private[spark] class ExecutorRunner(
     // SPARK-698: do not call the run.cmd script, as process.destroy()
     // fails to kill a process tree on Windows
     Seq(runner) ++ buildJavaOpts() ++ Seq(command.mainClass) ++
-      command.arguments.map(substituteVariables)
+      (command.arguments ++ Seq(appId)).map(substituteVariables)
   }
 
   /**

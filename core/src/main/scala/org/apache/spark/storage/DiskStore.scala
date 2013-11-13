@@ -44,7 +44,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
     val bytes = _bytes.duplicate()
     logDebug("Attempting to put block " + blockId)
     val startTime = System.currentTimeMillis
-    val file = diskManager.createBlockFile(blockId, allowAppending = false)
+    val file = diskManager.getFile(blockId)
     val channel = new FileOutputStream(file).getChannel()
     while (bytes.remaining > 0) {
       channel.write(bytes)
@@ -64,7 +64,7 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
 
     logDebug("Attempting to write values for block " + blockId)
     val startTime = System.currentTimeMillis
-    val file = diskManager.createBlockFile(blockId, allowAppending = false)
+    val file = diskManager.getFile(blockId)
     val outputStream = new FileOutputStream(file)
     blockManager.dataSerializeStream(blockId, outputStream, values.iterator)
     val length = file.length
