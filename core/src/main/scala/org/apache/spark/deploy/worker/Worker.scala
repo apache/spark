@@ -23,7 +23,6 @@ import java.io.File
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 
 import akka.actor._
 import akka.remote.{RemotingLifecycleEvent, AssociationErrorEvent, DisassociatedEvent}
@@ -61,6 +60,7 @@ private[spark] class Worker(
     masterUrls: Array[String],
     workDirPath: String = null)
   extends Actor with Logging {
+  import context.dispatcher
 
   Utils.checkHost(host, "Expected hostname")
   assert (port > 0)
@@ -174,8 +174,6 @@ private[spark] class Worker(
       }
     retryTimer // start timer
   }
-
-  import context.dispatcher
 
   override def receive = {
     case RegisteredWorker(masterUrl, masterWebUiUrl) =>

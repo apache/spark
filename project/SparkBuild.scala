@@ -227,6 +227,7 @@ object SparkBuild extends Build {
         "org.apache.hadoop"        % "hadoop-client"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
         "org.apache.avro"          % "avro"             % "1.7.4",
         "org.apache.avro"          % "avro-ipc"         % "1.7.4" excludeAll(excludeNetty),
+        "org.apache.zookeeper"     % "zookeeper"        % "3.4.5" excludeAll(excludeNetty),
         "com.codahale.metrics"     % "metrics-core"     % "3.0.0",
         "com.codahale.metrics"     % "metrics-jvm"      % "3.0.0",
         "com.codahale.metrics"     % "metrics-json"     % "3.0.0",

@@ -21,7 +21,6 @@ import java.util.concurrent.TimeoutException
 
 import scala.concurrent.duration._
 import scala.concurrent.Await
-import scala.concurrent.ExecutionContext.Implicits.global
 
 import akka.actor._
 import akka.actor.Terminated
@@ -84,6 +83,7 @@ private[spark] class Client(
     def registerWithMaster() {
       tryRegisterAllMasters()
 
+      import context.dispatcher
       var retries = 0
       lazy val retryTimer: Cancellable =
         context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {

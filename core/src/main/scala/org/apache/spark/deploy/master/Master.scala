@@ -24,7 +24,6 @@ import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
 import scala.concurrent.duration.{ Duration, FiniteDuration }
-import scala.concurrent.ExecutionContext.Implicits.global
 
 import akka.actor._
 import akka.pattern.ask
@@ -58,6 +57,8 @@ import java.util.concurrent.TimeUnit
 
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
+  import context.dispatcher
+
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
   val RETAINED_APPLICATIONS = System.getProperty("spark.deploy.retainedApplications", "200").toInt
