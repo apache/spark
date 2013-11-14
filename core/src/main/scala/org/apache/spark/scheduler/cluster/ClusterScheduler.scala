@@ -249,7 +249,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     var failedExecutor: Option[String] = None
-    var taskFailed = false
     synchronized {
       try {
         if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
@@ -268,9 +267,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
                 taskSetTaskIds(taskSetId) -= tid
               }
               taskIdToExecutorId.remove(tid)
-            }
-            if (state == TaskState.FAILED) {
-              taskFailed = true
             }
             activeTaskSets.get(taskSetId).foreach { taskSet =>
               if (state == TaskState.FINISHED) {
@@ -293,10 +289,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
-    if (taskFailed) {
-      // Also revive offers if a task had failed for some reason other than host lost
-      backend.reviveOffers()
-    }
   }
 
   def handleTaskGettingResult(taskSetManager: ClusterTaskSetManager, tid: Long) {
@@ -316,8 +308,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     taskState: TaskState,
     reason: Option[TaskEndReason]) = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
-    if (taskState == TaskState.FINISHED) {
-      // The task finished successfully but the result was lost, so we should revive offers.
+    if (taskState != TaskState.KILLED) {
+      // Need to revive offers again now that the task set manager state has been updated to
+      // reflect failed tasks that need to be re-run.
       backend.reviveOffers()
     }
   }
