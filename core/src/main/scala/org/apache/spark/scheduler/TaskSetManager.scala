@@ -29,6 +29,7 @@ import org.apache.spark.{ExceptionFailure, FetchFailed, Logging, Resubmitted, Sp
   Success, TaskEndReason, TaskKilled, TaskResultLost, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.util.{SystemClock, Clock}
+import java.io.NotSerializableException
 
 
 /**
@@ -488,7 +489,16 @@ private[spark] class TaskSetManager(
           return
 
         case ef: ExceptionFailure =>
-          sched.dagScheduler.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
+          sched.dagScheduler.taskEnded(
+            tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
+          if (ef.className == classOf[NotSerializableException].getName()) {
+            // If the task result wasn't rerializable, there's no point in trying to re-execute it.
+            logError("Task %s:%s had a not serializable result: %s; not retrying".format(
+              taskSet.id, index, ef.description))
+            abort("Task %s:%s had a not serializable result: %s".format(
+              taskSet.id, index, ef.description))
+            return
+          }
           val key = ef.description
           val now = clock.getTime()
           val (printFull, dupCount) = {
