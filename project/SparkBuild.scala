@@ -172,6 +172,7 @@ object SparkBuild extends Build {
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.9"    % "test",
         "org.easymock"      % "easymock"        % "3.1"    % "test",
+        "org.mockito"       % "mockito-all"     % "1.8.5"  % "test",
         "commons-io"        % "commons-io"      % "2.4"    % "test"
     ),
 
@@ -268,7 +269,7 @@ object SparkBuild extends Build {
 
   def toolsSettings = sharedSettings ++ Seq(
     name := "spark-tools"
-  )
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def bagelSettings = sharedSettings ++ Seq(
     name := "spark-bagel"
@@ -333,7 +334,7 @@ object SparkBuild extends Build {
       case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$") => MergeStrategy.discard
       case "log4j.properties" => MergeStrategy.discard
-      case "META-INF/services/org.apache.hadoop.fs.FileSystem" => MergeStrategy.concat
+      case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
       case "reference.conf" => MergeStrategy.concat
       case _ => MergeStrategy.first
     }

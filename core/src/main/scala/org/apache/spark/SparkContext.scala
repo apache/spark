@@ -248,7 +248,6 @@ class SparkContext(
   taskScheduler.start()
 
   @volatile private[spark] var dagScheduler = new DAGScheduler(taskScheduler)
-  dagScheduler.start()
 
   ui.start()
 
@@ -282,6 +281,12 @@ class SparkContext(
     override protected def childValue(parent: Properties): Properties = new Properties(parent)
   }
 
+  private[spark] def getLocalProperties(): Properties = localProperties.get()
+
+  private[spark] def setLocalProperties(props: Properties) {
+    localProperties.set(props)
+  }
+
   def initLocalProperties() {
     localProperties.set(new Properties())
   }
@@ -303,7 +308,7 @@ class SparkContext(
   /** Set a human readable description of the current job. */
   @deprecated("use setJobGroup", "0.8.1")
   def setJobDescription(value: String) {
-    setJobGroup("", value)
+    setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, value)
   }
 
   /**

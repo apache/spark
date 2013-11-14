@@ -19,9 +19,11 @@ package org.apache.spark.scheduler
 
 import java.io.NotSerializableException
 import java.util.Properties
-import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 import java.util.concurrent.atomic.AtomicInteger
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
 
+import akka.actor._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.reflect.ClassTag
 
@@ -66,12 +68,12 @@ class DAGScheduler(
 
   // Called by TaskScheduler to report task's starting.
   def taskStarted(task: Task[_], taskInfo: TaskInfo) {
-    eventQueue.put(BeginEvent(task, taskInfo))
+    eventProcessActor ! BeginEvent(task, taskInfo)
   }
 
   // Called to report that a task has completed and results are being fetched remotely.
   def taskGettingResult(task: Task[_], taskInfo: TaskInfo) {
-    eventQueue.put(GettingResultEvent(task, taskInfo))
+    eventProcessActor ! GettingResultEvent(task, taskInfo)
   }
 
   // Called by TaskScheduler to report task completions or failures.
@@ -82,35 +84,58 @@ class DAGScheduler(
       accumUpdates: Map[Long, Any],
       taskInfo: TaskInfo,
       taskMetrics: TaskMetrics) {
-    eventQueue.put(CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics))
+    eventProcessActor ! CompletionEvent(task, reason, result, accumUpdates, taskInfo, taskMetrics)
   }
 
   // Called by TaskScheduler when an executor fails.
   def executorLost(execId: String) {
-    eventQueue.put(ExecutorLost(execId))
+    eventProcessActor ! ExecutorLost(execId)
   }
 
   // Called by TaskScheduler when a host is added
   def executorGained(execId: String, host: String) {
-    eventQueue.put(ExecutorGained(execId, host))
+    eventProcessActor ! ExecutorGained(execId, host)
   }
 
   // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
   // cancellation of the job itself.
   def taskSetFailed(taskSet: TaskSet, reason: String) {
-    eventQueue.put(TaskSetFailed(taskSet, reason))
+    eventProcessActor ! TaskSetFailed(taskSet, reason)
   }
 
   // The time, in millis, to wait for fetch failure events to stop coming in after one is detected;
   // this is a simplistic way to avoid resubmitting tasks in the non-fetchable map stage one by one
   // as more failure events come in
-  val RESUBMIT_TIMEOUT = 50L
+  val RESUBMIT_TIMEOUT = 50.milliseconds
 
   // The time, in millis, to wake up between polls of the completion queue in order to potentially
   // resubmit failed stages
   val POLL_TIMEOUT = 10L
 
-  private val eventQueue = new LinkedBlockingQueue[DAGSchedulerEvent]
+  private val eventProcessActor: ActorRef = env.actorSystem.actorOf(Props(new Actor {
+    override def preStart() {
+      context.system.scheduler.schedule(RESUBMIT_TIMEOUT, RESUBMIT_TIMEOUT) {
+        if (failed.size > 0) {
+          resubmitFailedStages()
+        }
+      }
+    }
+
+    /**
+     * The main event loop of the DAG scheduler, which waits for new-job / task-finished / failure
+     * events and responds by launching tasks. This runs in a dedicated thread and receives events
+     * via the eventQueue.
+     */
+    def receive = {
+      case event: DAGSchedulerEvent =>
+        logDebug("Got event of type " + event.getClass.getName)
+
+        if (!processEvent(event))
+          submitWaitingStages()
+        else
+          context.stop(self)
+    }
+  }))
 
   private[scheduler] val nextJobId = new AtomicInteger(0)
 
@@ -150,16 +175,6 @@ class DAGScheduler(
   val resultStageToJob = new HashMap[Stage, ActiveJob]
 
   val metadataCleaner = new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup)
-
-  // Start a thread to run the DAGScheduler event loop
-  def start() {
-    new Thread("DAGScheduler") {
-      setDaemon(true)
-      override def run() {
-        DAGScheduler.this.run()
-      }
-    }.start()
-  }
 
   def addSparkListener(listener: SparkListener) {
     listenerBus.addListener(listener)
@@ -302,8 +317,7 @@ class DAGScheduler(
     assert(partitions.size > 0)
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val waiter = new JobWaiter(this, jobId, partitions.size, resultHandler)
-    eventQueue.put(JobSubmitted(jobId, rdd, func2, partitions.toArray, allowLocal, callSite,
-      waiter, properties))
+    eventProcessActor ! JobSubmitted(jobId, rdd, func2, partitions.toArray, allowLocal, callSite, waiter, properties)
     waiter
   }
 
@@ -338,8 +352,7 @@ class DAGScheduler(
     val func2 = func.asInstanceOf[(TaskContext, Iterator[_]) => _]
     val partitions = (0 until rdd.partitions.size).toArray
     val jobId = nextJobId.getAndIncrement()
-    eventQueue.put(JobSubmitted(jobId, rdd, func2, partitions, allowLocal = false, callSite,
-      listener, properties))
+    eventProcessActor ! JobSubmitted(jobId, rdd, func2, partitions, allowLocal = false, callSite, listener, properties)
     listener.awaitResult()    // Will throw an exception if the job fails
   }
 
@@ -348,19 +361,19 @@ class DAGScheduler(
    */
   def cancelJob(jobId: Int) {
     logInfo("Asked to cancel job " + jobId)
-    eventQueue.put(JobCancelled(jobId))
+    eventProcessActor ! JobCancelled(jobId)
   }
 
   def cancelJobGroup(groupId: String) {
     logInfo("Asked to cancel job group " + groupId)
-    eventQueue.put(JobGroupCancelled(groupId))
+    eventProcessActor ! JobGroupCancelled(groupId)
   }
 
   /**
    * Cancel all jobs that are running or waiting in the queue.
    */
   def cancelAllJobs() {
-    eventQueue.put(AllJobsCancelled)
+    eventProcessActor ! AllJobsCancelled
   }
 
   /**
@@ -472,42 +485,6 @@ class DAGScheduler(
     waiting.clear()
     for (stage <- waiting2.sortBy(_.jobId)) {
       submitStage(stage)
-    }
-  }
-
-
-  /**
-   * The main event loop of the DAG scheduler, which waits for new-job / task-finished / failure
-   * events and responds by launching tasks. This runs in a dedicated thread and receives events
-   * via the eventQueue.
-   */
-  private def run() {
-    SparkEnv.set(env)
-
-    while (true) {
-      val event = eventQueue.poll(POLL_TIMEOUT, TimeUnit.MILLISECONDS)
-      if (event != null) {
-        logDebug("Got event of type " + event.getClass.getName)
-      }
-      this.synchronized { // needed in case other threads makes calls into methods of this class
-        if (event != null) {
-          if (processEvent(event)) {
-            return
-          }
-        }
-
-        val time = System.currentTimeMillis() // TODO: use a pluggable clock for testability
-        // Periodically resubmit failed stages if some map output fetches have failed and we have
-        // waited at least RESUBMIT_TIMEOUT. We wait for this short time because when a node fails,
-        // tasks on many other nodes are bound to get a fetch failure, and they won't all get it at
-        // the same time, so we want to make sure we've identified all the reduce tasks that depend
-        // on the failed node.
-        if (failed.size > 0 && time > lastFetchFailureTime + RESUBMIT_TIMEOUT) {
-          resubmitFailedStages()
-        } else {
-          submitWaitingStages()
-        }
-      }
     }
   }
 
@@ -879,7 +856,7 @@ class DAGScheduler(
     // If the RDD has narrow dependencies, pick the first partition of the first narrow dep
     // that has any placement preferences. Ideally we would choose based on transfer sizes,
     // but this will do for now.
-    rdd.dependencies.foreach(_ match {
+    rdd.dependencies.foreach {
       case n: NarrowDependency[_] =>
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocs(n.rdd, inPart)
@@ -887,7 +864,7 @@ class DAGScheduler(
             return locs
         }
       case _ =>
-    })
+    }
     Nil
   }
 
@@ -910,7 +887,7 @@ class DAGScheduler(
   }
 
   def stop() {
-    eventQueue.put(StopDAGScheduler)
+    eventProcessActor ! StopDAGScheduler
     metadataCleaner.cancel()
     taskSched.stop()
   }
