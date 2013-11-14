@@ -9,6 +9,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.HashPartitioner
 import org.apache.spark.util.ClosureCleaner
 
+import org.apache.spark.Partitioner
 import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
 import org.apache.spark.graph.impl.MsgRDDFunctions._
@@ -320,20 +321,21 @@ object GraphImpl {
     defaultVertexAttr: VD,
     mergeFunc: (VD, VD) => VD): GraphImpl[VD,ED] = {
 
-    val vtable = VertexSetRDD(vertices, mergeFunc)
-    /**
-     * @todo Verify that there are no edges that contain vertices
-     * that are not in vTable.  This should probably be resolved:
-     *
-     *  edges.flatMap{ e => Array((e.srcId, null), (e.dstId, null)) }
-     *       .cogroup(vertices).map{
-     *         case (vid, _, attr) =>
-     *           if (attr.isEmpty) (vid, defaultValue)
-     *           else (vid, attr)
-     *        }
-     *
-     */
-    val etable = createETable(edges)
+    vertices.cache
+    val etable = createETable(edges).cache
+    // Get the set of all vids, preserving partitions
+    val partitioner = Partitioner.defaultPartitioner(vertices)
+    val implicitVids = etable.flatMap {
+      case (pid, partition) => Array.concat(partition.srcIds, partition.dstIds)
+    }.map(vid => (vid, ())).partitionBy(partitioner)
+    val allVids = vertices.zipPartitions(implicitVids) {
+      (a, b) => a.map(_._1) ++ b.map(_._1)
+    }
+    // Index the set of all vids
+    val index = VertexSetRDD.makeIndex(allVids, Some(partitioner))
+    // Index the vertices and fill in missing attributes with the default
+    val vtable = VertexSetRDD(vertices, index, mergeFunc).fillMissing(defaultVertexAttr)
+
     val vid2pid = new Vid2Pid(etable, vtable.index)
     val localVidMap = createLocalVidMap(etable)
     new GraphImpl(vtable, vid2pid, localVidMap, etable)
