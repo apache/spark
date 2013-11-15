@@ -24,10 +24,17 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: analysis.Metastor
   @transient
   val hadoopReader = new HadoopTableReader(tableDesc, SharkContext.hiveconf)
 
+  /**
+    * The hive object inspector for this table, which can be used to extract values from the
+    * serialized row representation.
+    */
   @transient
   lazy val objectInspector =
     tableDesc.getDeserializer.getObjectInspector.asInstanceOf[StructObjectInspector]
 
+  /**
+   * The hive struct field references that correspond to the attributes to be read from this table.
+   */
   @transient
   lazy val refs = attributes.map { a =>
     objectInspector.getAllStructFieldRefs
