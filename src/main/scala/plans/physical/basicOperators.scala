@@ -12,7 +12,14 @@ import shark.{SharkContext, SharkEnv}
 import collection.JavaConversions._
 import org.apache.hadoop.hive.serde2.`lazy`.LazyPrimitive
 
-case class HiveTableScan(attributes: Seq[Attribute], relation: analysis.MetastoreRelation) extends PhysicalPlan with LeafNode {
+case class Sort(sortExprs: Seq[SortOrder], child: PhysicalPlan) extends UnaryNode {
+  // TODO: actually sort
+  def execute() = child.execute()
+
+  def output = child.output
+}
+
+case class HiveTableScan(attributes: Seq[Attribute], relation: analysis.MetastoreRelation) extends LeafNode {
   val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(relation.table)
   val tableDesc = new TableDesc(
     Class.forName(relation.table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[org.apache.hadoop.hive.serde2.Deserializer]],
@@ -48,15 +55,26 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: analysis.Metastor
         refs.map { ref =>
           val data = objectInspector.getStructFieldData(struct, ref)
           ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector].getPrimitiveJavaObject(data)
-        }.toSeq
+        }.toIndexedSeq
     }
   }
 
   def output = attributes
 }
 
-case class InsertIntoHiveTable(tableName: String, child: PhysicalPlan) extends UnaryNode {
-  def output = Seq.empty
-  def execute() = ???
+case class InsertIntoHiveTable(tableName: String, child: PhysicalPlan)
+                              (sc: SharkContext) extends UnaryNode {
+  def output = child.output
+  def execute() = {
+    val childRdd = child.execute()
+    // TODO: write directly to hive
+    val tempDir = java.io.File.createTempFile("data", "tsv")
+    tempDir.delete()
+    tempDir.mkdir()
+    childRdd.map(_.map(_.toString).mkString("\001")).saveAsTextFile(tempDir.getCanonicalPath)
+    sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE $tableName")
+
+    childRdd
+  }
 }
 

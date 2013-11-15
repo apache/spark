@@ -46,7 +46,7 @@ class HiveCompatability extends FunSuite with BeforeAndAfterAll {
         val queriesString = fileToString(testCase)
         queriesString.split("(?<=[^\\\\]);").map(_.trim).filterNot(_ == "").foreach { queryString =>
           val query = new testShark.SharkQuery(queryString)
-          query.execute()
+          Option(query.execute()).foreach(_.foreach(println))
         }
       }
     } else {

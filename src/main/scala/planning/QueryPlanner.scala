@@ -14,9 +14,3 @@ abstract class QueryPlanner {
     iter
   }
 }
-
-object TrivalPlanner extends QueryPlanner {
-  val strategies =
-    HiveTableScans ::
-    DataSinks :: Nil
-}

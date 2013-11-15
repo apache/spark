@@ -9,10 +9,10 @@ abstract class PhysicalPlan extends QueryPlan[PhysicalPlan] {
 
   /**
    * Runs this query returning the result as an RDD.
-   * This fact that this returns an RDD should probably be
+   * TODO: This fact that this returns an RDD should probably be
    * abstracted away from the rest of the planning code.
    */
-  def execute(): RDD[_]
+  def execute(): RDD[IndexedSeq[Any]]
 }
 
 abstract trait LeafNode extends PhysicalPlan with trees.LeafNode[PhysicalPlan] {
