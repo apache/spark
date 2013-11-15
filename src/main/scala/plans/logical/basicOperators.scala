@@ -23,3 +23,8 @@ case class Join(
   def references = condition.map(_.references).getOrElse(Set.empty)
   def output = left.output ++ right.output
 }
+
+case class Sort(order: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {
+  def output = child.output
+  def references = child.references
+}
