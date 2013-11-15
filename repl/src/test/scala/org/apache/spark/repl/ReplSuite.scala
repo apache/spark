@@ -78,7 +78,7 @@ class ReplSuite extends FunSuite {
     System.clearProperty("spark.hostPort")
   }
 
-  test ("simple foreach with accumulator") {
+  test("simple foreach with accumulator") {
     val output = runInterpreter("local", """
                                            |val accum = sc.accumulator(0)
                                            |sc.parallelize(1 to 10).foreach(x => accum += x)

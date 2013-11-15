@@ -22,14 +22,11 @@ import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address}
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
-
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.collection.Map
+import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
-import scala.Some
-
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder

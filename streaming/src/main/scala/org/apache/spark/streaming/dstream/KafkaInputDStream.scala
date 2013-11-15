@@ -33,7 +33,6 @@ import org.I0Itec.zkclient._
 import scala.collection.Map
 import scala.reflect.ClassTag
 
-
 /**
  * Input stream that pulls messages from a Kafka Broker.
  *

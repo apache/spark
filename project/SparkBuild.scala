@@ -105,12 +105,6 @@ object SparkBuild extends Build {
     // also check the local Maven repository ~/.m2
     resolvers ++= Seq(Resolver.file("Local Maven Repo", file(Path.userHome + "/.m2/repository"))),
 
-    // Shared between both core and streaming.
-    resolvers ++= Seq("Akka Repository" at "http://repo.akka.io/releases/"),
-
-    // Shared between both examples and streaming.
-    resolvers ++= Seq("Mqtt Repository" at "https://repo.eclipse.org/content/repositories/paho-releases/"),
-
    // For Sonatype publishing
     resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
@@ -292,7 +286,7 @@ object SparkBuild extends Build {
 
     libraryDependencies ++= Seq(
       "org.apache.flume"      % "flume-ng-sdk"     % "1.2.0" % "compile"  excludeAll(excludeNetty, excludeSnappy),
-      "com.sksamuel.kafka"    %% "kafka"            % "0.8.0-beta1"
+      "com.sksamuel.kafka"   %% "kafka"            % "0.8.0-beta1"
         exclude("com.sun.jdmk", "jmxtools")
         exclude("com.sun.jmx", "jmxri")
         exclude("net.sf.jopt-simple", "jopt-simple")

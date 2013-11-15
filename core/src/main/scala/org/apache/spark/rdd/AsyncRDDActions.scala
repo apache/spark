@@ -21,9 +21,9 @@ import java.util.concurrent.atomic.AtomicLong
 
 import scala.collection.mutable.ArrayBuffer
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.reflect.ClassTag
 
 import org.apache.spark.{ComplexFutureAction, FutureAction, Logging}
-import scala.reflect.ClassTag
 
 /**
  * A set of asynchronous RDD actions available through an implicit conversion.
