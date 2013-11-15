@@ -25,16 +25,17 @@ class HiveCompatability extends FunSuite with BeforeAndAfterAll {
     // without restarting the JVM.
     System.clearProperty("spark.driver.port")
 
-    testShark.sc.runSql("CREATE TABLE src (key INT, val STRING)")
+    testShark.sc.runSql("CREATE TABLE src (key INT, value STRING)")
     testShark.sc.runSql("""LOAD DATA LOCAL INPATH '/Users/marmbrus/workspace/hive/data/files/kv1.txt' INTO TABLE src""")
   }
 
   val testShark = new TestShark
 
-  // TODO: bundle in jar files...
+  // TODO: bundle in jar files... get from classpath
   val hiveQueryDir = new File("/Users/marmbrus/workspace/hive/ql/src/test/queries/clientpositive")
   val testCases = hiveQueryDir.listFiles
 
+  // Go through all the test cases and add them to scala test.
   testCases.foreach { testCase =>
     val testCaseName = testCase.getName.stripSuffix(".q")
     if(blackList contains testCaseName) {
@@ -53,7 +54,7 @@ class HiveCompatability extends FunSuite with BeforeAndAfterAll {
     }
   }
 
-  def fileToString(file: File, encoding: String = "UTF-8") = {
+  protected def fileToString(file: File, encoding: String = "UTF-8") = {
     val inStream = new FileInputStream(file)
     val outStream = new ByteArrayOutputStream
     try {
