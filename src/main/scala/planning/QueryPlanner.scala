@@ -9,7 +9,9 @@ abstract class QueryPlanner {
 
   def apply(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
-    strategies.head(plan).toIterator
+    val iter = strategies.head(plan).toIterator
+    assert(iter.hasNext, s"No plan for $plan")
+    iter
   }
 }
 
