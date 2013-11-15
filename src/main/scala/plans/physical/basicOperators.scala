@@ -48,3 +48,7 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: analysis.Metastor
   def output = attributes
 }
 
+case class InsertIntoHiveTable(tableName: String, child: PhysicalPlan) extends UnaryNode {
+  def output = Seq.empty
+}
+
