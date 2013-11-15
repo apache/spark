@@ -20,3 +20,8 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {
   self: Product =>
 }
+
+abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
+  self: Product =>
+  def references = child.references
+}
