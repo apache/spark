@@ -14,8 +14,13 @@ import collection.JavaConversions._
 class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
   protected val client = new HiveMetaStoreClient(hiveConf)
 
-  def lookupRelation(name: String, alias: Option[String]): LogicalPlan =
-    MetastoreRelation(name)(client.getTable("default", name))
+  def lookupRelation(name: String, alias: Option[String]): LogicalPlan = {
+    val (databaseName, tableName) = name.split("\\.") match {
+      case Array(tableOnly) => ("default", tableOnly)
+      case Array(db, table) => (db, table)
+    }
+    MetastoreRelation(name)(client.getTable(databaseName, tableName))
+  }
 }
 
 object HiveMetatoreTypes {
