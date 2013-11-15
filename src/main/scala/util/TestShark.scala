@@ -33,7 +33,10 @@ class TestShark {
     // TODO: Don't just pick the first one...
     lazy val physicalPlan = TrivalPlanner(analyzed).next()
 
-    def execute() = physicalPlan.execute()
+    def execute() = analyzed match {
+      case NativeCommand(cmd) => sc.runSql(cmd); null
+      case _ => physicalPlan.execute()
+    }
 
     override def toString(): String =
       s"""$sql
