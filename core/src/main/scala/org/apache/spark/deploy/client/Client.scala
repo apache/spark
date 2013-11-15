@@ -145,11 +145,11 @@ private[spark] class Client(
         markDisconnected()
 
       case DisassociatedEvent(_, address, _) if address == masterAddress =>
-        logError("Connection to master failed; stopping client")
+        logWarning("Connection to master failed; waiting for master to reconnect...")
         markDisconnected()
 
       case AssociationErrorEvent(_, _, address, _) if address == masterAddress =>
-        logError("Connection to master failed; stopping client")
+        logWarning("Connection to master failed; waiting for master to reconnect...")
         markDisconnected()
 
       case StopClient =>

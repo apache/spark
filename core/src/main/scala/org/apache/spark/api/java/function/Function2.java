@@ -28,8 +28,6 @@ import java.io.Serializable;
 public abstract class Function2<T1, T2, R> extends WrappedFunction2<T1, T2, R>
   implements Serializable {
 
-  public abstract R call(T1 t1, T2 t2) throws Exception;
-
   public ClassTag<R> returnType() {
     return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
   }

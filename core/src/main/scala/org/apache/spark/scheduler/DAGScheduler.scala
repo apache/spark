@@ -20,12 +20,13 @@ package org.apache.spark.scheduler
 import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
-import scala.concurrent.duration._
+
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
 import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
+import scala.reflect.ClassTag
 
 import akka.actor._
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
-import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD

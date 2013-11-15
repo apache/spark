@@ -25,7 +25,7 @@ import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 
 import akka.actor._
-import akka.remote.{RemotingLifecycleEvent, AssociationErrorEvent, DisassociatedEvent}
+import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
@@ -34,19 +34,6 @@ import org.apache.spark.deploy.master.Master
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{Utils, AkkaUtils}
-import org.apache.spark.deploy.DeployMessages.WorkerStateResponse
-import org.apache.spark.deploy.DeployMessages.RegisterWorkerFailed
-import org.apache.spark.deploy.DeployMessages.KillExecutor
-import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import scala.Some
-import akka.remote.DisassociatedEvent
-import org.apache.spark.deploy.DeployMessages.LaunchExecutor
-import org.apache.spark.deploy.DeployMessages.RegisterWorker
-import org.apache.spark.deploy.DeployMessages.WorkerSchedulerStateResponse
-import org.apache.spark.deploy.DeployMessages.MasterChanged
-import org.apache.spark.deploy.DeployMessages.Heartbeat
-import org.apache.spark.deploy.DeployMessages.RegisteredWorker
-import akka.actor.Terminated
 
 /**
   * @param masterUrls Each url should look like spark://host:port.
@@ -248,7 +235,7 @@ private[spark] class Worker(
         }
       }
 
-    case DisassociatedEvent(_, _, _) =>
+    case DisassociatedEvent(_, address, _) if address == master.path.address =>
       masterDisconnected()
 
     case RequestWorkerState => {

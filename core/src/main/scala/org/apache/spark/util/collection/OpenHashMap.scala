@@ -19,7 +19,6 @@ package org.apache.spark.util.collection
 
 import scala.reflect.ClassTag
 
-
 /**
  * A fast hash map implementation for nullable keys. This hash map supports insertions and updates,
  * but not deletions. This map is about 5X faster than java.util.HashMap, while using much less

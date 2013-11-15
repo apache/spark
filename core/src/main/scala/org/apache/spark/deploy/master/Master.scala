@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.duration.{ Duration, FiniteDuration }
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import akka.actor._
 import akka.pattern.ask
@@ -41,16 +41,6 @@ import org.apache.spark.deploy.DeployMessages.RegisterWorkerFailed
 import org.apache.spark.deploy.DeployMessages.KillExecutor
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 import scala.Some
-import org.apache.spark.deploy.DeployMessages.LaunchExecutor
-import org.apache.spark.deploy.DeployMessages.RegisteredApplication
-import org.apache.spark.deploy.DeployMessages.RegisterWorker
-import org.apache.spark.deploy.DeployMessages.ExecutorUpdated
-import org.apache.spark.deploy.DeployMessages.MasterStateResponse
-import org.apache.spark.deploy.DeployMessages.ExecutorAdded
-import org.apache.spark.deploy.DeployMessages.RegisterApplication
-import org.apache.spark.deploy.DeployMessages.ApplicationRemoved
-import org.apache.spark.deploy.DeployMessages.Heartbeat
-import org.apache.spark.deploy.DeployMessages.RegisteredWorker
 import akka.actor.Terminated
 import akka.serialization.SerializationExtension
 import java.util.concurrent.TimeUnit
@@ -571,7 +561,7 @@ private[spark] object Master {
   def startSystemAndActor(host: String, port: Int, webUiPort: Int): (ActorSystem, Int, Int) = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
     val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort), name = actorName)
-    val timeoutDuration : FiniteDuration = Duration.create(
+    val timeoutDuration: FiniteDuration = Duration.create(
       System.getProperty("spark.akka.askTimeout", "10").toLong, TimeUnit.SECONDS)
     implicit val timeout = Timeout(timeoutDuration)
     val respFuture = actor ? RequestWebUIPort   // ask pattern
