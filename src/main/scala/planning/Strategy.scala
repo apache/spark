@@ -9,6 +9,17 @@ import plans.physical.PhysicalPlan
 
 abstract class Strategy {
   def apply(plan: LogicalPlan): Seq[PhysicalPlan]
+
+  // TODO: Actually plan later.
+  def planLater(plan: LogicalPlan): PhysicalPlan = TrivalPlanner(plan).next
+}
+
+object DataSinks extends Strategy {
+  def apply(plan: LogicalPlan): Seq[PhysicalPlan] = plan match {
+    case InsertIntoHiveTable(tableName, child) =>
+      physical.InsertIntoHiveTable(tableName, planLater(child)) :: Nil
+    case _ => Nil
+  }
 }
 
 object HiveTableScans extends Strategy {

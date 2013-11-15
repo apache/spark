@@ -57,5 +57,6 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: analysis.Metastor
 
 case class InsertIntoHiveTable(tableName: String, child: PhysicalPlan) extends UnaryNode {
   def output = Seq.empty
+  def execute() = ???
 }
 

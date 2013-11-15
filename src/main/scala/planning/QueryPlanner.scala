@@ -9,12 +9,14 @@ abstract class QueryPlanner {
 
   def apply(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
-    val iter = strategies.head(plan).toIterator
+    val iter = strategies.flatMap(_(plan)).toIterator
     assert(iter.hasNext, s"No plan for $plan")
     iter
   }
 }
 
 object TrivalPlanner extends QueryPlanner {
-  val strategies = HiveTableScans :: Nil
+  val strategies =
+    HiveTableScans ::
+    DataSinks :: Nil
 }
