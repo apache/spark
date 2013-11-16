@@ -468,6 +468,7 @@ private[spark] class TaskSetManager(
     removeRunningTask(tid)
     val index = info.index
     info.markFailed()
+    var failureReason = "unknown"
     if (!successful(index)) {
       logWarning("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
       copiesRunning(index) -= 1
@@ -500,6 +501,7 @@ private[spark] class TaskSetManager(
             return
           }
           val key = ef.description
+          failureReason = "Exception failure: %s".format(ef.description)
           val now = clock.getTime()
           val (printFull, dupCount) = {
             if (recentExceptions.contains(key)) {
@@ -525,7 +527,8 @@ private[spark] class TaskSetManager(
           }
 
         case TaskResultLost =>
-          logWarning("Lost result for TID %s on host %s".format(tid, info.host))
+          failureReason = "Lost result for TID %s on host %s".format(tid, info.host)
+          logWarning(failureReason)
           sched.dagScheduler.taskEnded(tasks(index), TaskResultLost, null, null, info, null)
 
         case _ => {}
@@ -537,7 +540,8 @@ private[spark] class TaskSetManager(
         if (numFailures(index) > maxTaskFailures) {
           logError("Task %s:%d failed more than %d times; aborting job".format(
             taskSet.id, index, maxTaskFailures))
-          abort("Task %s:%d failed more than %d times".format(taskSet.id, index, maxTaskFailures))
+          abort("Task %s:%d failed more than %d times (most recent failure: %s)".format(
+            taskSet.id, index, maxTaskFailures, failureReason))
         }
       }
     } else {
