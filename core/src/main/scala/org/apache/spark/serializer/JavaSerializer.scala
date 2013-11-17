@@ -25,7 +25,10 @@ import org.apache.spark.util.ByteBufferInputStream
 private[spark] class JavaSerializationStream(out: OutputStream) extends SerializationStream {
   val objOut = new ObjectOutputStream(out)
   var counter = 0;
-  //Calling reset to avoid memory leak: http://stackoverflow.com/questions/1281549/memory-leak-traps-in-the-java-standard-api
+  /* Calling reset to avoid memory leak: http://stackoverflow.com/questions/1281549/memory-leak-traps-in-the-java-standard-api
+   * But only call it every 1000th time to avoid bloated serialization streams (when
+   * the stream 'resets' object class descriptions have to be re-written)  
+   */
   def writeObject[T](t: T): SerializationStream = {
     objOut.writeObject(t);
     if (counter >= 1000) {

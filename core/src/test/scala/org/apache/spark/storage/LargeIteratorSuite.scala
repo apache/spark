@@ -35,7 +35,12 @@ object Expander {
 }
 
 class LargeIteratorSuite extends FunSuite with LocalSparkContext {
-
+  /* Tests the ability of Spark to deal with user provided iterators that
+   * generate more data then available memory. In any memory based persistance
+   * Spark will unroll the iterator into an ArrayBuffer for caching, however in
+   * the case that the use defines DISK_ONLY persistance, the iterator will be 
+   * fed directly to the serializer and written to disk.
+   */
   val clusterUrl = "local-cluster[1,1,512]"
   test("Flatmap iterator") {
     sc = new SparkContext(clusterUrl, "mem_test");
