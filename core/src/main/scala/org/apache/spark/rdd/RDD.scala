@@ -17,7 +17,7 @@
 
 package org.apache.spark.rdd
 
-import java.util.Random
+import org.apache.spark.util.{XORShiftRandom => Random}
 
 import scala.collection.Map
 import scala.collection.JavaConversions.mapAsScalaMap

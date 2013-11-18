@@ -18,7 +18,7 @@
 package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
-import scala.util.Random
+import org.apache.spark.util.{XORShiftRandom => Random}
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
