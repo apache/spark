@@ -107,7 +107,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     val memUsed = status.memUsed().toString
     val maxMem = status.maxMem.toString
     val diskUsed = status.diskUsed().toString
-    val activeTasks = listener.executorToTasksActive.getOrElse(execId, Seq[Long]()).size
+    val activeTasks = listener.executorToTasksActive.getOrElse(execId, HashSet.empty[Long]).size
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
     val totalTasks = activeTasks + failedTasks + completedTasks
