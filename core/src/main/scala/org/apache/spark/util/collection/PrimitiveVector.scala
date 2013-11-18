@@ -59,6 +59,9 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassManifest](initialS
     val newArray = new Array[V](newLength)
     _array.copyToArray(newArray)
     _array = newArray
+    if (newLength < _numElements) {
+      _numElements = newLength
+    }
     this
   }
 }
