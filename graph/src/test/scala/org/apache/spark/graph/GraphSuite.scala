@@ -99,6 +99,22 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("collectNeighborIds") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val chain = (0 until 100).map(x => (x, (x+1)%100) )
+      val rawEdges = sc.parallelize(chain, 3).map { case (s,d) => (s.toLong, d.toLong) }
+      val graph = Graph(rawEdges)
+      val nbrs = graph.collectNeighborIds(EdgeDirection.Both)
+      assert(nbrs.count === chain.size)
+      assert(graph.numVertices === nbrs.count)
+      nbrs.collect.foreach { case (vid, nbrs) => assert(nbrs.size === 2) }
+      nbrs.collect.foreach { case (vid, nbrs) =>
+        val s = nbrs.toSet
+        assert(s.contains((vid + 1) % 100))
+        assert(s.contains(if (vid > 0) { vid - 1 } else { 99 }))
+      }
+    }
+  }
 
   test("VertexSetRDD") {
     withSpark(new SparkContext("local", "test")) { sc =>
