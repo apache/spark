@@ -76,7 +76,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       </tr>
     }
 
-    val execInfo = for (b <- 0 until storageStatusList.size) yield getExecInfo(b)
+    val execInfo = for (statusId <- 0 until storageStatusList.size) yield getExecInfo(statusId)
     val execTable = UIUtils.listingTable(execHead, execRow, execInfo)
 
     val content =
@@ -99,8 +99,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     UIUtils.headerSparkPage(content, sc, "Executors (" + execInfo.size + ")", Executors)
   }
 
-  def getExecInfo(a: Int): Seq[String] = {
-    val status = sc.getExecutorStorageStatus(a)
+  def getExecInfo(statusId: Int): Seq[String] = {
+    val status = sc.getExecutorStorageStatus(statusId)
     val execId = status.blockManagerId.executorId
     val hostPort = status.blockManagerId.hostPort
     val rddBlocks = status.blocks.size.toString
