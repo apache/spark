@@ -8,6 +8,7 @@ import org.apache.hadoop.hive.ql.parse._
 import analysis._
 import expressions._
 import plans.logical._
+import types._
 
 import collection.JavaConversions._
 
@@ -137,6 +138,25 @@ object Hive {
     }
   }
 
+  def parseDdl(ddl: String): Seq[Attribute] = {
+    val tree =
+      try {
+        ParseUtils.findRootNonNullToken(
+          (new ParseDriver()).parse(ddl, null /* no context required for parsing alone */))
+      } catch {
+        case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
+          throw new RuntimeException(s"Failed to parse ddl: '$ddl'", pe)
+      }
+    assert(tree.asInstanceOf[ASTNode].getText == "TOK_CREATETABLE", "Only CREATE TABLE supported.")
+    val tableOps = tree.getChildren
+    val colList =
+      tableOps
+        .find(_.asInstanceOf[ASTNode].getText == "TOK_TABCOLLIST")
+        .getOrElse(sys.error("No columnList!")).getChildren
+
+    colList.map(nodeToAttribute)
+  }
+
   /** Extractor for matching Hive's AST Tokens */
   protected object Token {
     def unapply(t: Any) = t match {
@@ -146,10 +166,52 @@ object Hive {
     }
   }
 
+  protected def nodeToAttribute(node: Node): Attribute = node match {
+    case Token("TOK_TABCOL",
+           Token(colName, Nil) ::
+           dataType :: Nil) =>
+      AttributeReference(colName, nodeToDataType(dataType), true)()
 
+    case a: ASTNode =>
+      throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
+  }
 
+  protected def nodeToDataType(node: Node): DataType = node match {
+    case Token("TOK_BIGINT", Nil) => IntegerType
+    case Token("TOK_INT", Nil) => IntegerType
+    case Token("TOK_TINYINT", Nil) => IntegerType
+    case Token("TOK_SMALLINT", Nil) => IntegerType
+    case Token("TOK_BOOLEAN", Nil) => BooleanType
+    case Token("TOK_STRING", Nil) => StringType
+    case Token("TOK_FLOAT", Nil) => FloatType
+    case Token("TOK_DOUBLE", Nil) => FloatType
+    case Token("TOK_LIST", elementType :: Nil) => ArrayType(nodeToDataType(elementType))
+    case Token("TOK_STRUCT",
+           Token("TOK_TABCOLLIST", fields) :: Nil) =>
+      StructType(fields.map(nodeToStructField))
+    case Token("TOK_MAP",
+           keyType ::
+           valueType :: Nil) =>
+      MapType(nodeToDataType(keyType), nodeToDataType(valueType))
+    case a: ASTNode =>
+      throw new NotImplementedError(s"No parse rules for DataType:\n ${dumpTree(a).toString} ")
+  }
 
+  protected def nodeToStructField(node: Node): StructField = node match {
+    case Token("TOK_TABCOL",
+           Token(fieldName, Nil) ::
+           dataType :: Nil) =>
+      StructField(fieldName, nodeToDataType(dataType))
+    case Token("TOK_TABCOL",
+           Token(fieldName, Nil) ::
+             dataType ::
+             _ /* comment */:: Nil) =>
+      StructField(fieldName, nodeToDataType(dataType) )
+    case a: ASTNode =>
+      throw new NotImplementedError(s"No parse rules for StructField:\n ${dumpTree(a).toString} ")
+  }
 
+  protected def nodeToPlan(node: Node): LogicalPlan = node match {
     case Token("TOK_QUERY",
            fromClause ::
            Token("TOK_INSERT",
