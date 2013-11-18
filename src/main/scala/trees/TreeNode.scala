@@ -85,7 +85,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   protected def makeCopy(newArgs: Array[AnyRef]): this.type =
     getClass.getConstructors.head.newInstance(newArgs: _*).asInstanceOf[this.type]
 
-  /** Returns the name of this type of TreeNode.  Defaults to the class name */
+  /** Returns the name of this type of TreeNode.  Defaults to the class name. */
   def nodeName = getClass.getSimpleName
 
   /** Returns a string representing the arguments to this node, minus any children */
