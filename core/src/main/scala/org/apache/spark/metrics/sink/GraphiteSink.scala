@@ -17,12 +17,12 @@
 
 package org.apache.spark.metrics.sink
 
-import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.graphite.{GraphiteReporter, Graphite}
-
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import java.net.InetSocketAddress
+
+import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.graphite.{GraphiteReporter, Graphite}
 
 import org.apache.spark.metrics.MetricsSystem
 
@@ -50,12 +50,12 @@ class GraphiteSink(val property: Properties, val registry: MetricRegistry) exten
   val host = propertyToOption(GRAPHITE_KEY_HOST).get
   val port = propertyToOption(GRAPHITE_KEY_PORT).get.toInt
 
-  val pollPeriod = Option(property.getProperty(GRAPHITE_KEY_PERIOD)) match {
+  val pollPeriod = propertyToOption(GRAPHITE_KEY_PERIOD) match {
     case Some(s) => s.toInt
     case None => GRAPHITE_DEFAULT_PERIOD
   }
 
-  val pollUnit = Option(property.getProperty(GRAPHITE_KEY_UNIT)) match {
+  val pollUnit = propertyToOption(GRAPHITE_KEY_UNIT) match {
     case Some(s) => TimeUnit.valueOf(s.toUpperCase())
     case None => TimeUnit.valueOf(GRAPHITE_DEFAULT_UNIT)
   }
