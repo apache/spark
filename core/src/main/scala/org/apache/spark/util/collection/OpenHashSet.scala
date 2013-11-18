@@ -139,7 +139,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
   def getPos(k: T): Int = {
     var pos = hashcode(hasher.hash(k)) & _mask
     var i = 1
-    while (true) {
+    val maxProbe = _data.size
+    while (i < maxProbe) {
       if (!_bitset.get(pos)) {
         return INVALID_POS
       } else if (k == _data(pos)) {
