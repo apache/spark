@@ -4,7 +4,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graph.LocalSparkContext._
-
+import org.apache.spark.rdd._
 
 class GraphSuite extends FunSuite with LocalSparkContext {
 
@@ -17,6 +17,21 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val edges = sc.parallelize(rawEdges)
       val graph = Graph(edges)
       assert( graph.edges.count() === rawEdges.size )
+    }
+  }
+
+  test("Graph Creation with invalid vertices") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val rawEdges = (0L to 98L).zip((1L to 99L) :+ 0L)
+      val edges: RDD[Edge[Int]] = sc.parallelize(rawEdges).map { case (s, t) => Edge(s, t, 1) }
+      val vertices: RDD[(Vid, Boolean)] = sc.parallelize((0L until 10L).map(id => (id, true)))
+      val graph = Graph(vertices, edges, false)
+      assert( graph.edges.count() === rawEdges.size )
+      assert( graph.vertices.count() === 100)
+      graph.triplets.map { et =>
+        assert( (et.srcId < 10 && et.srcAttr) || (et.srcId >= 10 && !et.srcAttr) )
+        assert( (et.dstId < 10 && et.dstAttr) || (et.dstId >= 10 && !et.dstAttr) )
+      }
     }
   }
 
