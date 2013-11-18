@@ -3,7 +3,7 @@ package org.apache.spark.graph
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.ClosureCleaner
-
+import org.apache.spark.SparkException
 
 
 /**
@@ -156,10 +156,18 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    */
   def collectNeighborIds(edgeDirection: EdgeDirection) :
     VertexSetRDD[Array[Vid]] = {
-    val nbrs = graph.aggregateNeighbors[Array[Vid]](
-      (vid, edge) => Some(Array(edge.otherVertexId(vid))),
-      (a, b) => a ++ b,
-      edgeDirection)
+    val nbrs =
+      if (edgeDirection == EdgeDirection.Both) {
+        graph.mapReduceTriplets[Array[Vid]] (
+          et => Array( (et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))), _ ++ _
+        )
+      } else if (edgeDirection == EdgeDirection.Out) {
+        graph.mapReduceTriplets[Array[Vid]](et => Array((et.srcId, Array(et.dstId))), _ ++ _)
+      } else if (edgeDirection == EdgeDirection.In) {
+        graph.mapReduceTriplets[Array[Vid]](et => Array((et.dstId, Array(et.srcId))), _ ++ _)
+      } else {
+        throw new SparkException("It doesn't make sense to collect neighbor ids without a direction.")
+      }
     graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) => nbrsOpt.getOrElse(Array.empty[Vid]) }
   } // end of collectNeighborIds
 
