@@ -48,16 +48,17 @@ class PrimitiveVector[@specialized(Long, Int, Double) V: ClassManifest](initialS
 
   def size: Int = _numElements
 
-  /** Get the underlying array backing this vector. */
+  /** Gets the underlying array backing this vector. */
   def array: Array[V] = _array
 
   /** Trims this vector so that the capacity is equal to the size. */
-  def trim(): Unit = resize(size)
+  def trim(): PrimitiveVector[V] = resize(size)
 
   /** Resizes the array, dropping elements if the total length decreases. */
-  def resize(newLength: Int) {
+  def resize(newLength: Int): PrimitiveVector[V] = {
     val newArray = new Array[V](newLength)
     _array.copyToArray(newArray)
     _array = newArray
+    this
   }
 }
