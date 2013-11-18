@@ -4,12 +4,12 @@ import shark.SharkContext
 import shark.SharkEnv
 
 import java.io._
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import frontend.Hive
 import util.TestShark
 
-class HiveCompatability extends FunSuite with BeforeAndAfterAll {
+class HiveCompatability extends FunSuite with BeforeAndAfterAll with GivenWhenThen {
   /** A list of tests currently deemed out of scope and thus completely ignored */
   val blackList = Seq(
     "set_processor_namespaces" // Unclear how we want to handle the
@@ -44,9 +44,18 @@ class HiveCompatability extends FunSuite with BeforeAndAfterAll {
       // Build a test case and submit it to scala test framework...
       test(testCaseName) {
         val queriesString = fileToString(testCase)
-        queriesString.split("(?<=[^\\\\]);").map(_.trim).filterNot(_ == "").foreach { queryString =>
+        val queryList = queriesString.split("(?<=[^\\\\]);").map(_.trim).filterNot(_ == "")
+
+        val sharkResults = queryList.map { queryString =>
+          info(queryString)
+          testShark.sc.runSql(queryString)
+        }
+
+        // Run w/ catalyst
+        val catalystResults = queryList.map { queryString =>
+          info(queryString)
           val query = new testShark.SharkQuery(queryString)
-          Option(query.execute()).foreach(_.foreach(println))
+          Option(query.execute())
         }
       }
     } else {
