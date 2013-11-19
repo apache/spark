@@ -1,7 +1,7 @@
 package org.apache.spark.graph
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.ClosureCleaner
+import org.apache.spark.Logging
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -22,7 +22,7 @@ import org.apache.spark.storage.StorageLevel
  * @tparam VD the vertex attribute type
  * @tparam ED the edge attribute type
  */
-abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
+abstract class Graph[VD: ClassManifest, ED: ClassManifest] extends Logging {
 
   /**
    * Get the vertices and their data.
@@ -404,6 +404,30 @@ object Graph {
     Graph(vertices, edges, defaultAttr, (a:VD,b:VD) => a)
   }
 
+
+
+  /**
+   * Construct a graph from a collection attributed vertices and
+   * edges.  Duplicate vertices are combined using the `mergeFunc` and
+   * vertices found in the edge collection but not in the input
+   * vertices are the default attribute `defautVertexAttr`.
+   *
+   * @tparam VD the vertex attribute type
+   * @tparam ED the edge attribute type
+   * @param vertices the "set" of vertices and their attributes
+   * @param edges the collection of edges in the graph
+   * @param defaultVertexAttr the default vertex attribute to use for
+   * vertices that are mentioned in `edges` but not in `vertices
+   * @param mergeFunc the function used to merge duplicate vertices
+   * in the `vertices` collection.
+   *
+   */
+  def apply[VD: ClassManifest, ED: ClassManifest](
+      vertices: RDD[(Vid,VD)],
+      edges: RDD[Edge[ED]],
+      defaultVertexAttr: VD): Graph[VD, ED] = {
+    GraphImpl(vertices, edges, defaultVertexAttr, (a,b) => a)
+  }
 
   /**
    * Construct a graph from a collection attributed vertices and

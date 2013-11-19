@@ -9,6 +9,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.HashPartitioner
 import org.apache.spark.util.ClosureCleaner
 
+import org.apache.spark.Partitioner
 import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
 import org.apache.spark.graph.impl.MsgRDDFunctions._
@@ -75,7 +76,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     @transient val vTable: VertexSetRDD[VD],
     @transient val vid2pid: Vid2Pid,
     @transient val localVidMap: RDD[(Pid, VertexIdToIndexMap)],
-    @transient val eTable: RDD[(Pid, EdgePartition[ED])] )
+    @transient val eTable: RDD[(Pid, EdgePartition[ED])],
+    @transient val partitionStrategy: PartitionStrategy = RandomVertexCut)
   extends Graph[VD, ED] {
 
   def this() = this(null, null, null, null)
@@ -94,6 +96,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   /** Return a RDD that brings edges with its source and destination vertices together. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] =
     makeTriplets(localVidMap, vTableReplicatedValues.bothAttrs, eTable)
+
+  @transient private val partitioner: PartitionStrategy = partitionStrategy
 
   override def persist(newLevel: StorageLevel): Graph[VD, ED] = {
     eTable.persist(newLevel)
@@ -337,20 +341,21 @@ object GraphImpl {
     mergeFunc: (VD, VD) => VD,
     partitionStrategy: PartitionStrategy): GraphImpl[VD,ED] = {
 
-    val vtable = VertexSetRDD(vertices, mergeFunc)
-    /**
-     * @todo Verify that there are no edges that contain vertices
-     * that are not in vTable.  This should probably be resolved:
-     *
-     *  edges.flatMap{ e => Array((e.srcId, null), (e.dstId, null)) }
-     *       .cogroup(vertices).map{
-     *         case (vid, _, attr) =>
-     *           if (attr.isEmpty) (vid, defaultValue)
-     *           else (vid, attr)
-     *        }
-     *
-     */
-    val etable = createETable(edges)
+    vertices.cache
+    val etable = createETable(edges, partitionStrategy).cache
+    // Get the set of all vids, preserving partitions
+    val partitioner = Partitioner.defaultPartitioner(vertices)
+    val implicitVids = etable.flatMap {
+      case (pid, partition) => Array.concat(partition.srcIds, partition.dstIds)
+    }.map(vid => (vid, ())).partitionBy(partitioner)
+    val allVids = vertices.zipPartitions(implicitVids) {
+      (a, b) => a.map(_._1) ++ b.map(_._1)
+    }
+    // Index the set of all vids
+    val index = VertexSetRDD.makeIndex(allVids, Some(partitioner))
+    // Index the vertices and fill in missing attributes with the default
+    val vtable = VertexSetRDD(vertices, index, mergeFunc).fillMissing(defaultVertexAttr)
+
     val vid2pid = new Vid2Pid(etable, vtable.index)
     val localVidMap = createLocalVidMap(etable)
     new GraphImpl(vtable, vid2pid, localVidMap, etable)
@@ -513,92 +518,6 @@ object GraphImpl {
     }.partitionBy(g.vTable.index.rdd.partitioner.get)
     // do the final reduction reusing the index map
     VertexSetRDD.aggregate(preAgg, g.vTable.index, reduceFunc)
-  }
-
-  protected def edgePartitionFunction1D(src: Vid, dst: Vid, numParts: Pid): Pid = {
-    val mixingPrime: Vid = 1125899906842597L
-    (math.abs(src) * mixingPrime).toInt % numParts
-  }
-
-  /**
-   * This function implements a classic 2D-Partitioning of a sparse matrix.
-   * Suppose we have a graph with 11 vertices that we want to partition
-   * over 9 machines.  We can use the following sparse matrix representation:
-   *
-   *       __________________________________
-   *  v0   | P0 *     | P1       | P2    *  |
-   *  v1   |  ****    |  *       |          |
-   *  v2   |  ******* |      **  |  ****    |
-   *  v3   |  *****   |  *  *    |       *  |
-   *       ----------------------------------
-   *  v4   | P3 *     | P4 ***   | P5 **  * |
-   *  v5   |  *  *    |  *       |          |
-   *  v6   |       *  |      **  |  ****    |
-   *  v7   |  * * *   |  *  *    |       *  |
-   *       ----------------------------------
-   *  v8   | P6   *   | P7    *  | P8  *   *|
-   *  v9   |     *    |  *    *  |          |
-   *  v10  |       *  |      **  |  *  *    |
-   *  v11  | * <-E    |  ***     |       ** |
-   *       ----------------------------------
-   *
-   * The edge denoted by E connects v11 with v1 and is assigned to
-   * processor P6.  To get the processor number we divide the matrix
-   * into sqrt(numProc) by sqrt(numProc) blocks.  Notice that edges
-   * adjacent to v11 can only be in the first colum of
-   * blocks (P0, P3, P6) or the last row of blocks (P6, P7, P8).
-   * As a consequence we can guarantee that v11 will need to be
-   * replicated to at most 2 * sqrt(numProc) machines.
-   *
-   * Notice that P0 has many edges and as a consequence this
-   * partitioning would lead to poor work balance.  To improve
-   * balance we first multiply each vertex id by a large prime
-   * to effectively shuffle the vertex locations.
-   *
-   * One of the limitations of this approach is that the number of
-   * machines must either be a perfect square.  We partially address
-   * this limitation by computing the machine assignment to the next
-   * largest perfect square and then mapping back down to the actual
-   * number of machines.  Unfortunately, this can also lead to work
-   * imbalance and so it is suggested that a perfect square is used.
-   *
-   *
-   */
-  protected def edgePartitionFunction2D(src: Vid, dst: Vid,
-    numParts: Pid): Pid = {
-    val ceilSqrtNumParts: Pid = math.ceil(math.sqrt(numParts)).toInt
-    val mixingPrime: Vid = 1125899906842597L
-    val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
-    val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
-    (col * ceilSqrtNumParts + row) % numParts
-  }
-
-  /**
-   * Assign edges to an aribtrary machine corresponding to a
-   * random vertex cut.
-   */
-  protected def randomVertexCut(src: Vid, dst: Vid, numParts: Pid): Pid = {
-    math.abs((src, dst).hashCode()) % numParts
-  }
-
-  /**
-   * Assign edges to an arbitrary machine corresponding to a random vertex cut. This
-   * function ensures that edges of opposite direction between the same two vertices
-   * will end up on the same partition.
-   */
-  protected def canonicalRandomVertexCut(src: Vid, dst: Vid, numParts: Pid): Pid = {
-    val lower = math.min(src, dst)
-    val higher = math.max(src, dst)
-    math.abs((lower, higher).hashCode()) % numParts
-  }
-
-  private def accessesVertexAttr[VD: ClassManifest, ED: ClassManifest](
-      closure: AnyRef, attrName: String): Boolean = {
-    try {
-      BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
-    } catch {
-      case _: ClassNotFoundException => true // if we don't know, be conservative
-    }
   }
 
 } // end of object GraphImpl

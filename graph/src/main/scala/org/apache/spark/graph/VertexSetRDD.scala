@@ -205,6 +205,31 @@ class VertexSetRDD[@specialized V: ClassManifest](
   } // end of mapValues
 
   /**
+   * Fill in missing values for all vertices in the index.
+   *
+   * @param missingValue the value to be used for vertices in the
+   * index that don't currently have values.
+   * @return A VertexSetRDD with a value for all vertices.
+   */
+  def fillMissing(missingValue: V): VertexSetRDD[V] = {
+    val newValuesRDD: RDD[ (Array[V], BitSet) ] =
+      valuesRDD.zipPartitions(index.rdd){ (valuesIter, indexIter) =>
+        val index = indexIter.next
+        assert(!indexIter.hasNext)
+        val (values, bs: BitSet) = valuesIter.next
+        assert(!valuesIter.hasNext)
+        // Allocate a new values array with missing value as the default
+        val newValues = Array.fill(values.size)(missingValue)
+        // Copy over the old values
+        bs.iterator.foreach { ind => newValues(ind) = values(ind) }
+        // Create a new bitset matching the keyset
+        val newBS = index.getBitSet
+        Iterator((newValues, newBS))
+      }
+    new VertexSetRDD[V](index, newValuesRDD)
+  }
+
+  /**
    * Pass each vertex attribute along with the vertex id through a map
    * function and retain the original RDD's partitioning and index.
    *
@@ -380,7 +405,6 @@ class VertexSetRDD[@specialized V: ClassManifest](
       // this vertex set then we use the much more efficient leftZipJoin
       case other: VertexSetRDD[_] if index == other.index => {
         leftZipJoin(other)(cleanF)
-        // @todo handle case where other is a VertexSetRDD with a different index
       }
       case _ => {
         val indexedOther: VertexSetRDD[W] = VertexSetRDD(other, index, cleanMerge)
@@ -599,28 +623,24 @@ object VertexSetRDD {
    * can be used to build VertexSets over subsets of the vertices in
    * the input.
    */
-  def makeIndex(keys: RDD[Vid],
-    partitioner: Option[Partitioner] = None): VertexSetIndex = {
-    // @todo: I don't need the boolean its only there to be the second type since I want to shuffle a single RDD
-    // Ugly hack :-(.  In order to partition the keys they must have values.
-    val tbl = keys.mapPartitions(_.map(k => (k, false)), true)
-    // Shuffle the table (if necessary)
-    val shuffledTbl = partitioner match {
-      case None =>  {
-        if (tbl.partitioner.isEmpty) {
-          // @todo: I don't need the boolean its only there to be the second type of the shuffle.
-          new ShuffledRDD[Vid, Boolean, (Vid, Boolean)](tbl, Partitioner.defaultPartitioner(tbl))
-        } else { tbl }
-      }
-      case Some(partitioner) =>
-        tbl.partitionBy(partitioner)
+  def makeIndex(keys: RDD[Vid], partitionerOpt: Option[Partitioner] = None): VertexSetIndex = {
+    val partitioner = partitionerOpt match {
+      case Some(p) => p
+      case None => Partitioner.defaultPartitioner(keys)
     }
 
-    val index = shuffledTbl.mapPartitions( iter => {
+    val preAgg: RDD[(Vid, Unit)] = keys.mapPartitions( iter => {
+      val keys = new VertexIdToIndexMap
+      while(iter.hasNext) { keys.add(iter.next) }
+      keys.iterator.map(k => (k, ()))
+    }, true).partitionBy(partitioner)
+
+    val index = preAgg.mapPartitions( iter => {
       val index = new VertexIdToIndexMap
-      for ( (k,_) <- iter ){ index.add(k) }
+      while(iter.hasNext) { index.add(iter.next._1) }
       Iterator(index)
-      }, true).cache
+    }, true).cache
+
     new VertexSetIndex(index)
   }
 

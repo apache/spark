@@ -57,6 +57,6 @@ object GraphLoader {
     partitionStrategy: PartitionStrategy): GraphImpl[Int, ED] = {
     val vertices = edges.flatMap { edge => List((edge.srcId, 1), (edge.dstId, 1)) }
       .reduceByKey(_ + _)
-      GraphImpl(vertices, edges, 0, (a: Int, b: Int) => a, partitionStrategy)
+    GraphImpl(vertices, edges, 0, (a: Int, b: Int) => a, partitionStrategy)
   }
 }

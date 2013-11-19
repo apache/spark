@@ -256,7 +256,7 @@ object Analytics extends Logging {
                case "EdgePartition1D" => partitionStrategy = EdgePartition1D
                case "EdgePartition2D" => partitionStrategy = EdgePartition2D
                case "CanonicalRandomVertexCut" => partitionStrategy = CanonicalRandomVertexCut
-               case _ => throw new IllegalArgumentException("Invalid Partion Strategy: " + v)
+               case _ => throw new IllegalArgumentException("Invalid Partition Strategy: " + v)
              }
            }
            case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
@@ -294,6 +294,9 @@ object Analytics extends Logging {
            pr.vertices.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
          }
          logInfo("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
+
+
+         Thread.sleep(1000000)
          sc.stop()
        }
 

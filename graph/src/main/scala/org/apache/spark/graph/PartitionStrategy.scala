@@ -1,9 +1,9 @@
 package org.apache.spark.graph
 
-//import org.apache.spark.graph._
 
-
-sealed trait PartitionStrategy extends Serializable { def getPartition(src: Vid, dst: Vid, numParts: Pid): Pid}
+sealed trait PartitionStrategy extends Serializable {
+  def getPartition(src: Vid, dst: Vid, numParts: Pid): Pid
+}
 
 
 /**

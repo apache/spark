@@ -15,13 +15,13 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
   System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
   System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
 
-  test("TestVertexBroadcastMessageInt") {
-    val outMsg = new VertexBroadcastMsg[Int](3,4,5)
+  test("IntVertexBroadcastMsgSerializer") {
+    val outMsg = new VertexBroadcastMsg[Int](3, 4, 5)
     val bout = new ByteArrayOutputStream
     val outStrm = new IntVertexBroadcastMsgSerializer().newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
     outStrm.writeObject(outMsg)
-    bout.flush
+    bout.flush()
     val bin = new ByteArrayInputStream(bout.toByteArray)
     val inStrm = new IntVertexBroadcastMsgSerializer().newInstance().deserializeStream(bin)
     val inMsg1: VertexBroadcastMsg[Int] = inStrm.readObject()
@@ -36,13 +36,13 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("TestVertexBroadcastMessageLong") {
-    val outMsg = new VertexBroadcastMsg[Long](3,4,5)
+  test("LongVertexBroadcastMsgSerializer") {
+    val outMsg = new VertexBroadcastMsg[Long](3, 4, 5)
     val bout = new ByteArrayOutputStream
     val outStrm = new LongVertexBroadcastMsgSerializer().newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
     outStrm.writeObject(outMsg)
-    bout.flush
+    bout.flush()
     val bin = new ByteArrayInputStream(bout.toByteArray)
     val inStrm = new LongVertexBroadcastMsgSerializer().newInstance().deserializeStream(bin)
     val inMsg1: VertexBroadcastMsg[Long] = inStrm.readObject()
@@ -57,13 +57,13 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("TestVertexBroadcastMessageDouble") {
-    val outMsg = new VertexBroadcastMsg[Double](3,4,5.0)
+  test("DoubleVertexBroadcastMsgSerializer") {
+    val outMsg = new VertexBroadcastMsg[Double](3, 4, 5.0)
     val bout = new ByteArrayOutputStream
     val outStrm = new DoubleVertexBroadcastMsgSerializer().newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
     outStrm.writeObject(outMsg)
-    bout.flush
+    bout.flush()
     val bin = new ByteArrayInputStream(bout.toByteArray)
     val inStrm = new DoubleVertexBroadcastMsgSerializer().newInstance().deserializeStream(bin)
     val inMsg1: VertexBroadcastMsg[Double] = inStrm.readObject()
@@ -78,13 +78,13 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("TestAggregationMessageInt") {
-    val outMsg = new AggregationMsg[Int](4,5)
+  test("IntAggMsgSerializer") {
+    val outMsg = new AggregationMsg[Int](4, 5)
     val bout = new ByteArrayOutputStream
     val outStrm = new IntAggMsgSerializer().newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
     outStrm.writeObject(outMsg)
-    bout.flush
+    bout.flush()
     val bin = new ByteArrayInputStream(bout.toByteArray)
     val inStrm = new IntAggMsgSerializer().newInstance().deserializeStream(bin)
     val inMsg1: AggregationMsg[Int] = inStrm.readObject()
@@ -99,13 +99,13 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("TestAggregationMessageLong") {
-    val outMsg = new AggregationMsg[Long](4,5)
+  test("LongAggMsgSerializer") {
+    val outMsg = new AggregationMsg[Long](4, 1L << 32)
     val bout = new ByteArrayOutputStream
     val outStrm = new LongAggMsgSerializer().newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
     outStrm.writeObject(outMsg)
-    bout.flush
+    bout.flush()
     val bin = new ByteArrayInputStream(bout.toByteArray)
     val inStrm = new LongAggMsgSerializer().newInstance().deserializeStream(bin)
     val inMsg1: AggregationMsg[Long] = inStrm.readObject()
@@ -120,13 +120,13 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("TestAggregationMessageDouble") {
-    val outMsg = new AggregationMsg[Double](4,5.0)
+  test("DoubleAggMsgSerializer") {
+    val outMsg = new AggregationMsg[Double](4, 5.0)
     val bout = new ByteArrayOutputStream
     val outStrm = new DoubleAggMsgSerializer().newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
     outStrm.writeObject(outMsg)
-    bout.flush
+    bout.flush()
     val bin = new ByteArrayInputStream(bout.toByteArray)
     val inStrm = new DoubleAggMsgSerializer().newInstance().deserializeStream(bin)
     val inMsg1: AggregationMsg[Double] = inStrm.readObject()
