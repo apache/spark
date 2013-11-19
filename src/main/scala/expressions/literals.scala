@@ -20,4 +20,6 @@ object IntegerLiteral {
 case class Literal(value: Any, dataType: DataType) extends LeafExpression {
   def nullable = false
   def references = Set.empty
+
+  override def toString = value.toString
 }
