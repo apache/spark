@@ -9,12 +9,16 @@ import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, 
 import shark.execution.HadoopTableReader
 import shark.{SharkContext, SharkEnv}
 
+
+import org.apache.spark.SparkContext._
 import collection.JavaConversions._
 import org.apache.hadoop.hive.serde2.`lazy`.LazyPrimitive
 
 case class Sort(sortExprs: Seq[SortOrder], child: PhysicalPlan) extends UnaryNode {
-  // TODO: actually sort
-  def execute() = child.execute()
+  assert(sortExprs.head.child.asInstanceOf[Attribute].name == child.output.head.name,
+    s"Sorting is only supported on the first input attribute until expression evaluation is implemented. ${sortExprs.head.child}, ${child.output.head}")
+
+  def execute() = child.execute().map(row => (row(0).asInstanceOf[Integer], row)).sortByKey().map(_._2)
 
   def output = child.output
 }
