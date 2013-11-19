@@ -12,7 +12,7 @@ import util.TestShark
 class HiveCompatability extends FunSuite with BeforeAndAfterAll with GivenWhenThen {
   /** A list of tests currently deemed out of scope and thus completely ignored */
   val blackList = Seq(
-    "set_processor_namespaces" // Unclear how we want to handle the
+    "set_processor_namespaces" // Unclear if we ever want to handle set commands in catalyst.
   )
 
   /** The set of tests that are believed to be working in catalyst. Tests not in white */
@@ -24,9 +24,7 @@ class HiveCompatability extends FunSuite with BeforeAndAfterAll with GivenWhenTh
     // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
     // without restarting the JVM.
     System.clearProperty("spark.driver.port")
-
-    testShark.sc.runSql("CREATE TABLE src (key INT, value STRING)")
-    testShark.sc.runSql("""LOAD DATA LOCAL INPATH '/Users/marmbrus/workspace/hive/data/files/kv1.txt' INTO TABLE src""")
+    System.clearProperty("spark.hostPort")
   }
 
   val testShark = new TestShark
@@ -44,23 +42,41 @@ class HiveCompatability extends FunSuite with BeforeAndAfterAll with GivenWhenTh
       // Build a test case and submit it to scala test framework...
       test(testCaseName) {
         val queriesString = fileToString(testCase)
-        val queryList = queriesString.split("(?<=[^\\\\]);").map(_.trim).filterNot(_ == "")
+        val queryList = queriesString.split("(?<=[^\\\\]);").map(_.trim).filterNot(_ == "").toSeq
 
-        val sharkResults = queryList.map { queryString =>
-          info(queryString)
-          testShark.sc.runSql(queryString)
-        }
+        cleanup()
+        val hiveResults: Seq[Seq[String]] = queryList.map { queryString =>
+          val result = testShark.runSql(queryString).toSeq
+
+          if(queryString startsWith "DESCRIBE") Nil else result
+        }.toSeq
+
+        cleanup()
 
         // Run w/ catalyst
-        val catalystResults = queryList.map { queryString =>
+        val catalystResults: Seq[Seq[String]] = queryList.map { queryString =>
           info(queryString)
-          val query = new testShark.SharkQuery(queryString)
-          Option(query.execute())
+          val query = new testShark.SharkQuery  (queryString)
+          query.execute().map(_.collect().map(_.mkString("\t")).toSeq).getOrElse(Nil)
+        }.toSeq
+
+        (queryList, hiveResults, catalystResults).zipped.foreach {
+          case (query, hive, catalyst) =>
+            assert(hive === catalyst)
         }
       }
     } else {
       ignore(testCaseName) {}
     }
+  }
+
+  // Depending on QTestUtil is hard since its not published...
+  def cleanup() = {
+    testShark.runSql("DROP TABLE IF EXISTS src")
+    testShark.runSql("DROP TABLE IF EXISTS tmp_select")
+
+    testShark.runSql("CREATE TABLE src (key INT, value STRING)")
+    testShark.runSql("""LOAD DATA LOCAL INPATH '/Users/marmbrus/workspace/hive/data/files/kv1.txt' INTO TABLE src""")
   }
 
   protected def fileToString(file: File, encoding: String = "UTF-8") = {

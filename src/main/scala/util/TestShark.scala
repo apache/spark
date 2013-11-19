@@ -1,32 +1,41 @@
 package catalyst
 package util
 
-import catalyst.analysis.{MetastoreRelation, Analyzer, HiveMetastoreCatalog}
-import catalyst.expressions.{NamedExpression, Attribute}
-import catalyst.frontend._
-import catalyst.planning.{QueryPlanner, Strategy}
-import catalyst.plans.logical._
-import catalyst.plans.physical
-import catalyst.plans.physical.PhysicalPlan
-import shark.{SharkContext, SharkEnv}
 
-import util._
+import shark.{SharkConfVars, SharkContext, SharkEnv}
+
+import analysis.{MetastoreRelation, Analyzer, HiveMetastoreCatalog}
+import expressions.{NamedExpression, Attribute}
+import frontend.{Hive, NativeCommand}
+import planning.{QueryPlanner, Strategy}
+import plans.logical._
+import plans.physical
+import plans.physical.PhysicalPlan
+
 
 class TestShark {
   val WAREHOUSE_PATH = getTempFilePath("sharkWarehouse")
   val METASTORE_PATH = getTempFilePath("sharkMetastore")
   val MASTER = "local"
 
-  val sc = SharkEnv.initWithSharkContext("shark-sql-suite-testing", MASTER)
+  protected val sc = SharkEnv.initWithSharkContext("shark-sql-suite-testing", MASTER)
 
-  sc.runSql("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + METASTORE_PATH + ";create=true")
-  sc.runSql("set hive.metastore.warehouse.dir=" + WAREHOUSE_PATH)
+  // Use hive natively for queries that won't be executed by catalyst. This is because
+  // shark has dependencies on a custom version of hive that we are trying to avoid
+  // in catalyst.
+  SharkConfVars.setVar(SharkContext.hiveconf, SharkConfVars.EXEC_MODE, "hive")
+  val hiveDriver = new org.apache.hadoop.hive.ql.Driver(SharkContext.hiveconf)
+
+  runSql("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + METASTORE_PATH + ";create=true")
+  runSql("set hive.metastore.warehouse.dir=" + WAREHOUSE_PATH)
+
+  def runSql(sql: String) = sc.sql(sql)
 
   def loadKv1 {
     //sc.runSql("DROP TABLE IF EXISTS test")
-    sc.runSql("CREATE TABLE test (key INT, val STRING)")
+    runSql("CREATE TABLE test (key INT, val STRING)")
     // USE ENV VARS
-    sc.runSql("""LOAD DATA LOCAL INPATH '/Users/marmbrus/workspace/hive/data/files/kv1.txt' INTO TABLE test""")
+    runSql("""LOAD DATA LOCAL INPATH '/Users/marmbrus/workspace/hive/data/files/kv1.txt' INTO TABLE test""")
   }
 
   val catalog = new HiveMetastoreCatalog(SharkContext.hiveconf)
@@ -86,11 +95,11 @@ class TestShark {
     lazy val physicalPlan = TrivalPlanner(analyzed).next()
 
     def execute() = analyzed match {
-      case NativeCommand(cmd) => sc.runSql(cmd); null
-      case _ => physicalPlan.execute()
+      case NativeCommand(cmd) => sc.sql(cmd); None
+      case _ => Some(physicalPlan.execute())
     }
 
-    override def toString(): String =
+    override def toString: String =
       s"""$sql
          |== Logical Plan ==
          |$analyzed
