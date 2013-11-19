@@ -15,10 +15,19 @@ import collection.JavaConversions._
 import org.apache.hadoop.hive.serde2.`lazy`.LazyPrimitive
 
 case class Sort(sortExprs: Seq[SortOrder], child: PhysicalPlan) extends UnaryNode {
-  assert(sortExprs.head.child.asInstanceOf[Attribute].name == child.output.head.name,
-    s"Sorting is only supported on the first input attribute until expression evaluation is implemented. ${sortExprs.head.child}, ${child.output.head}")
+  val numPartitions = 1 // TODO: Set with input cardinality
 
-  def execute() = child.execute().map(row => (row(0).asInstanceOf[Integer], row)).sortByKey().map(_._2)
+  def execute() = child.execute().map { row =>
+    val input = Vector(row)
+    val sortKey =
+      sortExprs
+        .map {
+          case SortOrder(e, Ascending) => Evaluate(e, input)
+          //TODO: case SortOrder(e, Decending) =>
+        }.map(_.asInstanceOf[Int]).head // Need concrete type for ordering to be selected.
+                                        // TODO: Implement ordering in evaluate or at least a placeholder.
+    (sortKey, row)
+  }.sortByKey(true, numPartitions).map(_._2)
 
   def output = child.output
 }

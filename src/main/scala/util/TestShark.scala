@@ -2,6 +2,7 @@ package catalyst
 package util
 
 
+import catalyst.rules.RuleExecutor
 import shark.{SharkConfVars, SharkContext, SharkEnv}
 
 import analysis.{MetastoreRelation, Analyzer, HiveMetastoreCatalog}
@@ -88,15 +89,22 @@ class TestShark {
       BasicOperators :: Nil
   }
 
+  object PrepareForExecution extends RuleExecutor[PhysicalPlan] {
+    val batches =
+      Batch("Prepare Expressions", Once,
+        expressions.BindReferences) :: Nil
+  }
+
   class SharkQuery(sql: String) {
     lazy val parsed = Hive.parseSql(sql)
     lazy val analyzed = analyze(parsed)
     // TODO: Don't just pick the first one...
     lazy val physicalPlan = TrivalPlanner(analyzed).next()
+    lazy val executedPlan = PrepareForExecution(physicalPlan)
 
     def execute() = analyzed match {
       case NativeCommand(cmd) => sc.sql(cmd); None
-      case _ => Some(physicalPlan.execute())
+      case _ => Some(executedPlan.execute())
     }
 
     override def toString: String =
