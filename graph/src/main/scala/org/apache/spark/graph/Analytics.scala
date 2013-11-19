@@ -230,7 +230,7 @@ object Analytics extends Logging {
     // Construct set representations of the neighborhoods
     val nbrSets: VertexSetRDD[VertexSet] =
       graph.collectNeighborIds(EdgeDirection.Both).mapValuesWithKeys { (vid, nbrs) =>
-      val set = new VertexSet
+      val set = new VertexSet(4)
       var i = 0
       while (i < nbrs.size) {
         // prevent self cycle
