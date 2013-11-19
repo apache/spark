@@ -10,6 +10,13 @@ object Literal {
   }
 }
 
+object IntegerLiteral {
+  def unapply(a: Any): Option[Int] = a match {
+    case Literal(a: Int, IntegerType) => Some(a)
+    case _ => None
+  }
+}
+
 case class Literal(value: Any, dataType: DataType) extends LeafExpression {
   def nullable = false
   def references = Set.empty
