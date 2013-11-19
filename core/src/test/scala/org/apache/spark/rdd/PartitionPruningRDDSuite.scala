@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark
+package org.apache.spark.rdd
 
 import org.scalatest.FunSuite
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.{PartitionPruningRDDPartition, RDD, PartitionPruningRDD}
+import org.apache.spark.{TaskContext, Partition, SharedSparkContext}
 
 
 class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
@@ -49,7 +48,7 @@ class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
   }
 
 
-  test("Pruned Partitions can be merged ") {
+  test("Pruned Partitions can be unioned ") {
 
     val rdd = new RDD[Int](sc, Nil) {
       override protected def getPartitions = {
@@ -72,17 +71,11 @@ class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
     })
 
     val merged = prunedRDD1 ++ prunedRDD2
-
     assert(merged.count() == 2)
     val take = merged.take(2)
-
     assert(take.apply(0) == 4)
-
     assert(take.apply(1) == 6)
-
-
   }
-
 }
 
 class TestPartition(i: Int, value: Int) extends Partition with Serializable {
