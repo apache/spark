@@ -171,7 +171,7 @@ class VertexSetRDD[@specialized V: ClassManifest](
       var ind = bs.nextSetBit(0)
       while(ind >= 0) {
         val k = index.getValueSafe(ind)
-        if( cleanPred( (k, oldValues(ind)) ) ) {
+        if (cleanPred((k, oldValues(ind)))) {
           newBS.set(ind)
         }
         ind = bs.nextSetBit(ind+1)
@@ -278,7 +278,7 @@ class VertexSetRDD[@specialized V: ClassManifest](
   def zipJoin[W: ClassManifest, Z: ClassManifest](other: VertexSetRDD[W])(f: (Vid, V, W) => Z):
     VertexSetRDD[Z] = {
     val cleanF = index.rdd.context.clean(f)
-    if(index != other.index) {
+    if (index != other.index) {
       throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
     }
     val newValuesRDD: RDD[ (Array[Z], BitSet) ] =
@@ -315,7 +315,7 @@ class VertexSetRDD[@specialized V: ClassManifest](
   def zipJoinFlatMap[W: ClassManifest, Z: ClassManifest](other: VertexSetRDD[W])(f: (Vid, V,W) => Iterator[Z]):
   RDD[Z] = {
     val cleanF = index.rdd.context.clean(f)
-    if(index != other.index) {
+    if (index != other.index) {
       throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
     }
     index.rdd.zipPartitions(valuesRDD, other.valuesRDD) { (indexIter, thisIter, otherIter) =>
@@ -351,7 +351,7 @@ class VertexSetRDD[@specialized V: ClassManifest](
    */
   def leftZipJoin[W: ClassManifest, Z: ClassManifest](other: VertexSetRDD[W])(f: (Vid, V, Option[W]) => Z):
     VertexSetRDD[Z] = {
-    if(index != other.index) {
+    if (index != other.index) {
       throw new SparkException("A zipJoin can only be applied to RDDs with the same index!")
     }
     val cleanF = index.rdd.context.clean(f)

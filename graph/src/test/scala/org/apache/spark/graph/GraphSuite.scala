@@ -16,7 +16,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val rawEdges = (0L to 100L).zip((1L to 99L) :+ 0L)
       val edges = sc.parallelize(rawEdges)
       val graph = Graph(edges, 1.0F)
-      assert( graph.edges.count() === rawEdges.size )
+      assert(graph.edges.count() === rawEdges.size)
     }
   }
 
@@ -29,8 +29,8 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       assert( graph.edges.count() === rawEdges.size )
       assert( graph.vertices.count() === 100)
       graph.triplets.map { et =>
-        assert( (et.srcId < 10 && et.srcAttr) || (et.srcId >= 10 && !et.srcAttr) )
-        assert( (et.dstId < 10 && et.dstAttr) || (et.dstId >= 10 && !et.dstAttr) )
+        assert((et.srcId < 10 && et.srcAttr) || (et.srcId >= 10 && !et.srcAttr))
+        assert((et.dstId < 10 && et.dstAttr) || (et.dstId >= 10 && !et.dstAttr))
       }
     }
   }
@@ -111,7 +111,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       nbrs.collect.foreach { case (vid, nbrs) =>
         val s = nbrs.toSet
         assert(s.contains((vid + 1) % 100))
-        assert(s.contains(if (vid > 0) { vid - 1 } else { 99 }))
+        assert(s.contains(if (vid > 0) vid - 1 else 99 ))
       }
     }
   }

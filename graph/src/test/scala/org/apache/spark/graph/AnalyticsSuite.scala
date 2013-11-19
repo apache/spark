@@ -12,30 +12,30 @@ import org.apache.spark.graph.util.GraphGenerators
 
 
 object GridPageRank {
-  def apply(nRows: Int, nCols: Int, nIter: Int, resetProb: Double) = { 
+  def apply(nRows: Int, nCols: Int, nIter: Int, resetProb: Double) = {
     val inNbrs = Array.fill(nRows * nCols)(collection.mutable.MutableList.empty[Int])
     val outDegree = Array.fill(nRows * nCols)(0)
     // Convert row column address into vertex ids (row major order)
-    def sub2ind(r: Int, c: Int): Int = r * nCols + c 
+    def sub2ind(r: Int, c: Int): Int = r * nCols + c
     // Make the grid graph
-    for(r <- 0 until nRows; c <- 0 until nCols){
+    for (r <- 0 until nRows; c <- 0 until nCols) {
       val ind = sub2ind(r,c)
-      if(r+1 < nRows) {
+      if (r+1 < nRows) {
         outDegree(ind) += 1
-        inNbrs(sub2ind(r+1,c)) += ind 
+        inNbrs(sub2ind(r+1,c)) += ind
       }
-      if(c+1 < nCols) { 
+      if (c+1 < nCols) {
         outDegree(ind) += 1
-        inNbrs(sub2ind(r,c+1)) += ind 
+        inNbrs(sub2ind(r,c+1)) += ind
       }
     }
     // compute the pagerank
     var pr = Array.fill(nRows * nCols)(resetProb)
-    for(iter <- 0 until nIter) {
+    for (iter <- 0 until nIter) {
       val oldPr = pr
       pr = new Array[Double](nRows * nCols)
-      for(ind <- 0 until (nRows * nCols)) {
-        pr(ind) = resetProb + (1.0 - resetProb) * 
+      for (ind <- 0 until (nRows * nCols)) {
+        pr(ind) = resetProb + (1.0 - resetProb) *
           inNbrs(ind).map( nbr => oldPr(nbr) / outDegree(nbr)).sum
       }
     }
@@ -58,13 +58,13 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val resetProb = 0.15
       val prGraph1 = Analytics.pagerank(starGraph, 1, resetProb)
       val prGraph2 = Analytics.pagerank(starGraph, 2, resetProb)
-    
+
       val notMatching = prGraph1.vertices.zipJoin(prGraph2.vertices) { (vid, pr1, pr2) =>
         if (pr1 != pr2) { 1 } else { 0 }
       }.map { case (vid, test) => test }.sum
       assert(notMatching === 0)
       prGraph2.vertices.foreach(println(_))
-      val errors = prGraph2.vertices.map{ case (vid, pr) =>
+      val errors = prGraph2.vertices.map { case (vid, pr) =>
         val correct = (vid > 0 && pr == resetProb) ||
         (vid == 0 && math.abs(pr - (resetProb + (1.0 - resetProb) * (resetProb * (nVertices - 1)) )) < 1.0E-5)
         if ( !correct ) { 1 } else { 0 }
@@ -141,9 +141,12 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       }
       val ccMap = vertices.toMap
       println(ccMap)
-      for( id <- 0 until 20 ) {
-        if(id < 10) { assert(ccMap(id) === 0) }
-        else { assert(ccMap(id) === 10) }
+      for (id <- 0 until 20) {
+        if (id < 10) {
+          assert(ccMap(id) === 0)
+        } else {
+          assert(ccMap(id) === 10)
+        }
       }
     }
   } // end of chain connected components
@@ -157,14 +160,20 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val ccGraph = Analytics.connectedComponents(twoChains).cache()
       val vertices = ccGraph.vertices.collect
       for ( (id, cc) <- vertices ) {
-        if(id < 10) { assert(cc === 0) }
-        else { assert(cc === 10) }
+        if (id < 10) {
+          assert(cc === 0)
+        } else {
+          assert(cc === 10)
+        }
       }
       val ccMap = vertices.toMap
       println(ccMap)
-      for( id <- 0 until 20 ) {
-        if(id < 10) { assert(ccMap(id) === 0) }
-        else { assert(ccMap(id) === 10) }
+      for ( id <- 0 until 20 ) {
+        if (id < 10) {
+          assert(ccMap(id) === 0)
+        } else {
+          assert(ccMap(id) === 10)
+        }
       }
     }
   } // end of reverse chain connected components
@@ -181,15 +190,18 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
   test("Count two triangles") {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val triangles = Array( 0L -> 1L, 1L -> 2L, 2L -> 0L ) ++
-        Array( 0L -> -1L, -1L -> -2L, -2L -> 0L )
+      val triangles = Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
+        Array(0L -> -1L, -1L -> -2L, -2L -> 0L)
       val rawEdges = sc.parallelize(triangles, 2)
       val graph = Graph(rawEdges, true).cache
       val triangleCount = Analytics.triangleCount(graph)
       val verts = triangleCount.vertices
       verts.collect.foreach { case (vid, count) =>
-        if(vid == 0) {  assert(count === 2) }
-        else { assert(count === 1) }
+        if (vid == 0) {
+          assert(count === 2)
+        } else {
+          assert(count === 1)
+        }
       }
     }
   }
@@ -197,24 +209,27 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   test("Count two triangles with bi-directed edges") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val triangles =
-        Array( 0L -> 1L, 1L -> 2L, 2L -> 0L ) ++
-        Array( 0L -> -1L, -1L -> -2L, -2L -> 0L )
+        Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
+        Array(0L -> -1L, -1L -> -2L, -2L -> 0L)
       val revTriangles = triangles.map { case (a,b) => (b,a) }
-
       val rawEdges = sc.parallelize(triangles ++ revTriangles, 2)
       val graph = Graph(rawEdges, true).cache
       val triangleCount = Analytics.triangleCount(graph)
       val verts = triangleCount.vertices
       verts.collect.foreach { case (vid, count) =>
-        if(vid == 0) {  assert(count === 4) }
-        else { assert(count === 2) }
+        if (vid == 0) {
+          assert(count === 4)
+        } else {
+          assert(count === 2)
+        }
       }
     }
   }
 
   test("Count a single triangle with duplicate edges") {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val rawEdges = sc.parallelize(Array( 0L->1L, 1L->2L, 2L->0L ) ++ Array( 0L->1L, 1L->2L, 2L->0L ), 2)
+      val rawEdges = sc.parallelize(Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
+        Array(0L -> 1L, 1L -> 2L, 2L -> 0L), 2)
       val graph = Graph(rawEdges, true).cache
       val triangleCount = Analytics.triangleCount(graph)
       val verts = triangleCount.vertices

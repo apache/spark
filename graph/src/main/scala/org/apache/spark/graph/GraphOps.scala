@@ -158,13 +158,18 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     VertexSetRDD[Array[Vid]] = {
     val nbrs =
       if (edgeDirection == EdgeDirection.Both) {
-        graph.mapReduceTriplets[Array[Vid]] (
-          et => Array( (et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))), _ ++ _
+        graph.mapReduceTriplets[Array[Vid]](
+          mapFunc = et => Array((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
+          reduceFunc = _ ++ _
         )
       } else if (edgeDirection == EdgeDirection.Out) {
-        graph.mapReduceTriplets[Array[Vid]](et => Array((et.srcId, Array(et.dstId))), _ ++ _)
+        graph.mapReduceTriplets[Array[Vid]](
+          mapFunc = et => Array((et.srcId, Array(et.dstId))),
+          reduceFunc = _ ++ _)
       } else if (edgeDirection == EdgeDirection.In) {
-        graph.mapReduceTriplets[Array[Vid]](et => Array((et.dstId, Array(et.srcId))), _ ++ _)
+        graph.mapReduceTriplets[Array[Vid]](
+          mapFunc = et => Array((et.dstId, Array(et.srcId))),
+          reduceFunc = _ ++ _)
       } else {
         throw new SparkException("It doesn't make sense to collect neighbor ids without a direction.")
       }

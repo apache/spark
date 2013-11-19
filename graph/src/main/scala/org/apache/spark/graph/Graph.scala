@@ -61,7 +61,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * type Color = Int
    * val graph: Graph[Color, Int] = Graph.textFile("hdfs://file.tsv")
    * val numInvalid = graph.edgesWithVertices()
-   *   .map(e => if(e.src.data == e.dst.data) 1 else 0).sum
+   *   .map(e => if (e.src.data == e.dst.data) 1 else 0).sum
    * }}}
    *
    * @see edges() If only the edge data and adjacent vertex ids are
@@ -110,7 +110,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * val rawGraph: Graph[(), ()] = Graph.textFile("hdfs://file")
    * val root = 42
    * var bfsGraph = rawGraph
-   *   .mapVertices[Int]((vid, data) => if(vid == root) 0 else Math.MaxValue)
+   *   .mapVertices[Int]((vid, data) => if (vid == root) 0 else Math.MaxValue)
    * }}}
    *
    */
@@ -349,16 +349,15 @@ object Graph {
   }
 
   /**
-   * Construct a graph from a collection of edges encoded as vertex id
-   * pairs.
+   * Construct a graph from a collection of edges encoded as vertex id pairs.
    *
    * @param rawEdges the RDD containing the set of edges in the graph
    *
-   * @return a graph with edge attributes containing the count of
-   * duplicate edges.
+   * @return a graph with edge attributes containing the count of duplicate edges.
    */
-  def apply[VD: ClassManifest](rawEdges: RDD[(Vid, Vid)], defaultValue: VD):
-    Graph[VD, Int] = { Graph(rawEdges, defaultValue, false) }
+  def apply[VD: ClassManifest](rawEdges: RDD[(Vid, Vid)], defaultValue: VD): Graph[VD, Int] = {
+    Graph(rawEdges, defaultValue, false)
+  }
 
   /**
    * Construct a graph from a collection of edges encoded as vertex id
@@ -377,7 +376,7 @@ object Graph {
   def apply[VD: ClassManifest](rawEdges: RDD[(Vid, Vid)], defaultValue: VD, uniqueEdges: Boolean):
     Graph[VD, Int] = {
     val graph = GraphImpl(rawEdges.map(p => Edge(p._1, p._2, 1)), defaultValue)
-    if(uniqueEdges) {
+    if (uniqueEdges) {
       graph.groupEdges((a,b) => a+b)
     } else {
       graph
