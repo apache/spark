@@ -1,13 +1,10 @@
 package catalyst
 package trees
 
-import catalyst.expressions
-import catalyst.expressions
 import org.scalatest.FunSuite
 
 import expressions._
 import rules._
-import types.IntegerType
 
 class RuleExecutorSuite extends FunSuite {
   object IncrementLits extends Rule[Expression] {
