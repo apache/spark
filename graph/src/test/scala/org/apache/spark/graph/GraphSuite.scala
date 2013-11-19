@@ -54,7 +54,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 0)
       val starDeg = star.joinVertices(star.degrees){ (vid, oldV, deg) => deg }
       val neighborDegreeSums = starDeg.mapReduceTriplets(
-        edge => Array((edge.srcId, edge.dstAttr), (edge.dstId, edge.srcAttr)),
+        edge => Iterator((edge.srcId, edge.dstAttr), (edge.dstId, edge.srcAttr)),
         (a: Int, b: Int) => a + b)
       assert(neighborDegreeSums.collect().toSet === (0 to n).map(x => (x, n)).toSet)
     }

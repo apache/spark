@@ -61,11 +61,11 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    */
   private def degreesRDD(edgeDirection: EdgeDirection): VertexSetRDD[Int] = {
     if (edgeDirection == EdgeDirection.In) {
-      graph.mapReduceTriplets(et => Array((et.dstId,1)), _+_)
+      graph.mapReduceTriplets(et => Iterator((et.dstId,1)), _ + _)
     } else if (edgeDirection == EdgeDirection.Out) {
-      graph.mapReduceTriplets(et => Array((et.srcId,1)), _+_)
+      graph.mapReduceTriplets(et => Iterator((et.srcId,1)), _ + _)
     } else { // EdgeDirection.both
-      graph.mapReduceTriplets(et => Array((et.srcId,1), (et.dstId,1)), _+_)
+      graph.mapReduceTriplets(et => Iterator((et.srcId,1), (et.dstId,1)), _ + _)
     }
   }
 
@@ -133,11 +133,10 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
         } else { Option.empty[A] }
       // construct the return array
       (src, dst) match {
-        case (None, None) => Array.empty[(Vid, A)]
-        case (Some(srcA),None) => Array((et.srcId, srcA))
-        case (None, Some(dstA)) => Array((et.dstId, dstA))
-        case (Some(srcA), Some(dstA)) =>
-          Array((et.srcId, srcA), (et.dstId, dstA))
+        case (None, None) => Iterator.empty
+        case (Some(srcA),None) => Iterator((et.srcId, srcA))
+        case (None, Some(dstA)) => Iterator((et.dstId, dstA))
+        case (Some(srcA), Some(dstA)) => Iterator((et.srcId, srcA), (et.dstId, dstA))
       }
     }
 
@@ -159,16 +158,16 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     val nbrs =
       if (edgeDirection == EdgeDirection.Both) {
         graph.mapReduceTriplets[Array[Vid]](
-          mapFunc = et => Array((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
+          mapFunc = et => Iterator((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _
         )
       } else if (edgeDirection == EdgeDirection.Out) {
         graph.mapReduceTriplets[Array[Vid]](
-          mapFunc = et => Array((et.srcId, Array(et.dstId))),
+          mapFunc = et => Iterator((et.srcId, Array(et.dstId))),
           reduceFunc = _ ++ _)
       } else if (edgeDirection == EdgeDirection.In) {
         graph.mapReduceTriplets[Array[Vid]](
-          mapFunc = et => Array((et.dstId, Array(et.srcId))),
+          mapFunc = et => Iterator((et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _)
       } else {
         throw new SparkException("It doesn't make sense to collect neighbor ids without a direction.")

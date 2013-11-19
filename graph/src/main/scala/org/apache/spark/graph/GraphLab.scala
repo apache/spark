@@ -34,7 +34,7 @@ object GraphLab {
    * @return the resulting graph after the algorithm converges
    */
   def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest]
-    (graph: Graph[VD, ED], numIter: Int,  
+    (graph: Graph[VD, ED], numIter: Int,
      gatherDirection: EdgeDirection = EdgeDirection.In,
      scatterDirection: EdgeDirection = EdgeDirection.Out)
     (gatherFunc: (Vid, EdgeTriplet[VD, ED]) => A,
@@ -100,20 +100,20 @@ object GraphLab {
       val gathered: RDD[(Vid, A)] =
         activeGraph.aggregateNeighbors(gather, mergeFunc, gatherDirection)
 
-      // Apply 
+      // Apply
       activeGraph = activeGraph.outerJoinVertices(gathered)(apply).cache()
 
-      
+
 
       // Scatter is basically a gather in the opposite direction so we reverse the edge direction
       // activeGraph: Graph[(Boolean, VD), ED]
-      val scattered: RDD[(Vid, Boolean)] = 
+      val scattered: RDD[(Vid, Boolean)] =
         activeGraph.aggregateNeighbors(scatter, _ || _, scatterDirection.reverse)
 
       activeGraph = activeGraph.joinVertices(scattered)(applyActive).cache()
 
       // Calculate the number of active vertices
-      numActive = activeGraph.vertices.map{ 
+      numActive = activeGraph.vertices.map{
         case (vid, data) => if (data._1) 1 else 0
         }.reduce(_ + _)
       println("Number active vertices: " + numActive)

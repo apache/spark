@@ -93,7 +93,7 @@ object Pregel {
   def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest]
     (graph: Graph[VD, ED], initialMsg: A, numIter: Int)(
       vprog: (Vid, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Array[(Vid,A)],
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(Vid,A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 
@@ -163,7 +163,7 @@ object Pregel {
   def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest]
     (graph: Graph[VD, ED], initialMsg: A)(
       vprog: (Vid, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Array[(Vid,A)],
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(Vid,A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 
@@ -174,7 +174,7 @@ object Pregel {
       }
     }
 
-    def sendMsgFun(edge: EdgeTriplet[(VD,Boolean), ED]): Array[(Vid, A)] = {
+    def sendMsgFun(edge: EdgeTriplet[(VD,Boolean), ED]): Iterator[(Vid, A)] = {
       if(edge.srcAttr._2) {
         val et = new EdgeTriplet[VD, ED]
         et.srcId = edge.srcId
@@ -183,7 +183,9 @@ object Pregel {
         et.dstAttr = edge.dstAttr._1
         et.attr = edge.attr
         sendMsg(et)
-      } else { Array.empty[(Vid,A)] }
+      } else {
+        Iterator.empty
+      }
     }
 
     var g = graph.mapVertices( (vid, vdata) => (vprog(vid, vdata, initialMsg), true) )

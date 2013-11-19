@@ -277,7 +277,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    */
   def mapReduceTriplets[A: ClassManifest](
-      mapFunc: EdgeTriplet[VD, ED] => Array[(Vid, A)],
+      mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
       reduceFunc: (A, A) => A)
     : VertexSetRDD[A]
 

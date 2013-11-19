@@ -75,7 +75,7 @@ object Analytics extends Logging {
     def vertexProgram(id: Vid, attr: Double, msgSum: Double): Double =
       resetProb + (1.0 - resetProb) * msgSum
     def sendMessage(edge: EdgeTriplet[Double, Double]) =
-      Array((edge.dstId, edge.srcAttr * edge.attr))
+      Iterator((edge.dstId, edge.srcAttr * edge.attr))
     def messageCombiner(a: Double, b: Double): Double = a + b
     // The initial message received by all vertices in PageRank
     val initialMessage = 0.0
@@ -151,8 +151,10 @@ object Analytics extends Logging {
     }
     def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
       if (edge.srcAttr._2 > tol) {
-        Array((edge.dstId, edge.srcAttr._2 * edge.attr))
-      } else { Array.empty[(Vid, Double)] }
+        Iterator((edge.dstId, edge.srcAttr._2 * edge.attr))
+      } else {
+        Iterator.empty
+      }
     }
     def messageCombiner(a: Double, b: Double): Double = a + b
     // The initial message received by all vertices in PageRank
@@ -186,11 +188,11 @@ object Analytics extends Logging {
 
     def sendMessage(edge: EdgeTriplet[Vid, ED]) = {
       if (edge.srcAttr < edge.dstAttr) {
-        Array((edge.dstId, edge.srcAttr))
+        Iterator((edge.dstId, edge.srcAttr))
       } else if (edge.srcAttr > edge.dstAttr) {
-        Array((edge.srcId, edge.dstAttr))
+        Iterator((edge.srcId, edge.dstAttr))
       } else {
-        Array.empty[(Vid, Vid)]
+        Iterator.empty
       }
     }
     val initialMessage = Long.MaxValue
@@ -244,7 +246,7 @@ object Analytics extends Logging {
       (vid, _, optSet) => optSet.getOrElse(null)
     }
     // Edge function computes intersection of smaller vertex with larger vertex
-    def edgeFunc(et: EdgeTriplet[VertexSet, ED]): Array[(Vid, Int)] = {
+    def edgeFunc(et: EdgeTriplet[VertexSet, ED]): Iterator[(Vid, Int)] = {
       assert(et.srcAttr != null)
       assert(et.dstAttr != null)
       val (smallSet, largeSet) = if (et.srcAttr.size < et.dstAttr.size) {
@@ -258,7 +260,7 @@ object Analytics extends Logging {
         val vid = iter.next
         if (vid != et.srcId && vid != et.dstId && largeSet.contains(vid)) { counter += 1 }
       }
-      Array((et.srcId, counter), (et.dstId, counter))
+      Iterator((et.srcId, counter), (et.dstId, counter))
     }
     // compute the intersection along edges
     val counters: VertexSetRDD[Int] = setGraph.mapReduceTriplets(edgeFunc, _ + _)

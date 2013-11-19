@@ -233,7 +233,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   //////////////////////////////////////////////////////////////////////////////////////////////////
 
   override def mapReduceTriplets[A: ClassManifest](
-      mapFunc: EdgeTriplet[VD, ED] => Array[(Vid, A)],
+      mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
       reduceFunc: (A, A) => A)
     : VertexSetRDD[A] =
     GraphImpl.mapReduceTriplets(this, mapFunc, reduceFunc)
@@ -402,7 +402,7 @@ object GraphImpl {
 
   def mapReduceTriplets[VD: ClassManifest, ED: ClassManifest, A: ClassManifest](
       g: GraphImpl[VD, ED],
-      mapFunc: EdgeTriplet[VD, ED] => Array[(Vid, A)],
+      mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
       reduceFunc: (A, A) => A): VertexSetRDD[A] = {
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
