@@ -14,6 +14,8 @@ conf/java-opts
 conf/spark-env.sh
 conf/streaming-env.sh
 conf/log4j.properties
+conf/slaves
+conf/core-site.xml
 docs/_site
 docs/api
 target/
