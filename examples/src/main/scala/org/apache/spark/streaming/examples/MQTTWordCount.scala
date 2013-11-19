@@ -54,12 +54,12 @@ object MQTTPublisher {
 
     client.connect()
 
-    val msgtopic: MqttTopic = client.getTopic(topic);
+    val msgtopic: MqttTopic = client.getTopic(topic)
     val msg: String = "hello mqtt demo for spark streaming"
 
     while (true) {
       val message: MqttMessage = new MqttMessage(String.valueOf(msg).getBytes())
-      msgtopic.publish(message);
+      msgtopic.publish(message)
       println("Published data. topic: " + msgtopic.getName() + " Message: " + message)
     }
    client.disconnect()

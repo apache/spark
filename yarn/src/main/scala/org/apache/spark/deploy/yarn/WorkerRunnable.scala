@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
@@ -38,7 +38,6 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.Logging
-import org.apache.spark.util.Utils
 
 class WorkerRunnable(container: Container, conf: Configuration, masterAddress: String,
     slaveId: String, hostname: String, workerMemory: Int, workerCores: Int) 
@@ -204,8 +203,8 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
 
     // use doAs and remoteUser here so we can add the container token and not 
     // pollute the current users credentials with all of the individual container tokens
-    val user = UserGroupInformation.createRemoteUser(container.getId().toString());
-    val containerToken = container.getContainerToken();
+    val user = UserGroupInformation.createRemoteUser(container.getId().toString())
+    val containerToken = container.getContainerToken()
     if (containerToken != null) {
       user.addToken(ProtoUtils.convertFromProtoFormat(containerToken, cmAddress))
     }
@@ -217,7 +216,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
                 cmAddress, conf).asInstanceOf[ContainerManager]
           }
         });
-    return proxy;
+    proxy
   }
   
 }
