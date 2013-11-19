@@ -78,7 +78,10 @@ case class InsertIntoHiveTable(tableName: String, child: PhysicalPlan)
     childRdd.map(_.map(_.toString).mkString("\001")).saveAsTextFile(tempDir.getCanonicalPath)
     sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE $tableName")
 
-    childRdd
+    // It would be nice to just return the childRdd unchanged so insert operations could be chained,
+    // however for now we return an empty list to simplify compatibility checks with hive, which
+    // does not return anything for insert operations.
+    sc.makeRDD(Nil, 1)
   }
 }
 
