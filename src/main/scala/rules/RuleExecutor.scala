@@ -21,12 +21,11 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] {
       curPlan = batch.rules.foldLeft(curPlan) { case (curPlan, rule) => rule(curPlan) }
 
       while(iteration < batch.strategy.maxIterations &&
-            !(curPlan == lastPlan)) {
+            !(curPlan fastEquals lastPlan)) {
         lastPlan = curPlan
         curPlan = batch.rules.foldLeft(curPlan) { case (curPlan, rule) => rule(curPlan) }
         iteration += 1
       }
-
     }
 
     curPlan
