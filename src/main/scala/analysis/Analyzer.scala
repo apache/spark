@@ -5,8 +5,10 @@ import plans.logical._
 import rules._
 
 class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
+  val fixedPoint = FixedPoint(100)
+
   val batches = Seq(
-    Batch("Resolution",
+    Batch("Resolution", fixedPoint,
       ResolveReferences,
       ResolveRelations)
   )

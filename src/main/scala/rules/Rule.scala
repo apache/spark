@@ -1,9 +1,9 @@
 package catalyst
 package rules
 
-import plans._
+import trees._
 
-abstract class Rule[PlanType <: QueryPlan[_]] {
+abstract class Rule[TreeType <: TreeNode[_]] {
   val name = {
     val className = getClass.getName
     if(className endsWith "$")
@@ -12,5 +12,5 @@ abstract class Rule[PlanType <: QueryPlan[_]] {
       className
   }
 
-  def apply(plan: PlanType): PlanType
+  def apply(plan: TreeType): TreeType
 }
