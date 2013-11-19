@@ -17,8 +17,6 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.util.{XORShiftRandom => Random}
-
 import scala.collection.Map
 import scala.collection.JavaConversions.mapAsScalaMap
 import scala.collection.mutable.ArrayBuffer
@@ -38,7 +36,7 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, BoundedPriorityQueue}
+import org.apache.spark.util.{Utils, BoundedPriorityQueue, XORShiftRandom => Random}
 
 import org.apache.spark.SparkContext._
 import org.apache.spark._

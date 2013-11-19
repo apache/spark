@@ -21,7 +21,7 @@ import java.util.Random
 import org.scalatest.FlatSpec
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-import org.apache.spark.util.Utils.{TimesInt, intToTimesInt, timeIt}
+import org.apache.spark.util.Utils.times
 
 class XORShiftRandomSuite extends FunSuite with ShouldMatchers {
 
@@ -48,7 +48,7 @@ class XORShiftRandomSuite extends FunSuite with ShouldMatchers {
     val bins = Array.fill(numBins)(0)
 
     // populate bins based on modulus of the random number
-    f.hundMil.times(bins(math.abs(f.xorRand.nextInt) % 10) += 1)
+    times(f.hundMil) {bins(math.abs(f.xorRand.nextInt) % 10) += 1}
 
     /* since the seed is deterministic, until the algorithm is changed, we know the result will be 
      * exactly this: Array(10004908, 9993136, 9994600, 10000744, 10000091, 10002474, 10002272, 
@@ -67,9 +67,9 @@ class XORShiftRandomSuite extends FunSuite with ShouldMatchers {
      * and 10 bins will happen at X-squared of ~16.9196. So, the test will fail if X-squared
      * is greater than or equal to that number.
      */
-     val binSize = f.hundMil/numBins
-     val xSquared = bins.map(x => math.pow((binSize - x), 2)/binSize).sum
-     xSquared should be <  (16.9196)
+    val binSize = f.hundMil/numBins
+    val xSquared = bins.map(x => math.pow((binSize - x), 2)/binSize).sum
+    xSquared should be <  (16.9196)
 
   }
 

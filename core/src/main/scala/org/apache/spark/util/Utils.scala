@@ -818,42 +818,33 @@ private[spark] object Utils extends Logging {
     hashAbs
   }
 
-  /* Returns a copy of the system properties that is thread-safe to iterator over. */
+  /** Returns a copy of the system properties that is thread-safe to iterator over. */
   def getSystemProperties(): Map[String, String] = {
     return System.getProperties().clone()
       .asInstanceOf[java.util.Properties].toMap[String, String]
   }
 
-  /* Used for performance tersting along with the intToTimesInt() and timeIt methods
-   * It uses a while loop instead of a for comprehension since the JIT will
-   * optimize the while loop better than the "for" closure 
-   * e.g. 
-   * import org.apache.spark.util.Utils.{TimesInt, intToTimesInt, timeIt}
-   * import java.util.Random
-   * val rand = new Random()
-   * timeIt(rand.nextDouble, 10000000)
+  /**
+   * Method executed for repeating a task for side effects.
+   * Unlike a for comprehension, it permits JVM JIT optimization
    */
-  class TimesInt(i: Int) {
-    def times(f: => Unit) = {
-      var x = 1
-      while (x <= i) {
-        f
-        x += 1 
+  def times(numIters: Int)(f: => Unit): Unit = {
+    var i = 0
+    while (i < numIters) {
+      f
+      i += 1
       }
-    }
   }
-  
-  /* Used in conjunction with TimesInt since it's Scala 2.9.3
-   * instead of 2.10 and we don't have implicit classes */
-  implicit def intToTimesInt(i: Int) = new TimesInt(i)
 
-  /* See TimesInt for use example */
-  def timeIt(f: => Unit, iters: Int): Long = {
-
+  /** 
+   * Timing method based on iterations that permit JVM JIT optimization.
+   * @param numIters number of iterations
+   * @param f function to be executed
+   */
+  def timeIt(numIters: Int)(f: => Unit): Long = {
     val start = System.currentTimeMillis
-    iters.times(f)
+    times(numIters)(f)
     System.currentTimeMillis - start
-
   }
-  
+
 }

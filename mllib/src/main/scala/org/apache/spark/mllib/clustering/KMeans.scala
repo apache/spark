@@ -18,15 +18,16 @@
 package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.util.{XORShiftRandom => Random}
+
+import org.jblas.DoubleMatrix
 
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.util.MLUtils
+import org.apache.spark.util.{XORShiftRandom => Random}
 
-import org.jblas.DoubleMatrix
 
 
 /**
