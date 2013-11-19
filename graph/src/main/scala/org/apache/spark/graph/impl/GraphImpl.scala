@@ -517,4 +517,13 @@ object GraphImpl {
     VertexSetRDD.aggregate(preAgg, g.vTable.index, reduceFunc)
   }
 
+  private def accessesVertexAttr[VD: ClassManifest, ED: ClassManifest](
+      closure: AnyRef, attrName: String): Boolean = {
+    try {
+      BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
+    } catch {
+      case _: ClassNotFoundException => true // if we don't know, be conservative
+    }
+  }
+
 } // end of object GraphImpl
