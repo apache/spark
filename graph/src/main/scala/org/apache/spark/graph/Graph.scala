@@ -241,7 +241,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @return Graph[VD,ED2] The resulting graph with a single Edge for
    * each source, dest vertex pair.
    */
-  def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ): Graph[VD,ED2]
+  def groupEdges(merge: (ED, ED) => ED): Graph[VD,ED]
 
 
   /**
@@ -335,20 +335,30 @@ object Graph {
   import org.apache.spark.SparkContext._
 
   /**
+   * Construct a graph from a collection of edges.
+   *
+   * @param edges the RDD containing the set of edges in the graph
+   * @param defaultValue the default vertex attribute to use for each vertex
+   *
+   * @return a graph with edge attributes described by `edges` and vertices
+   *         given by all vertices in `edges` with value `defaultValue`
+   */
+  def apply[VD: ClassManifest, ED: ClassManifest](
+      edges: RDD[Edge[ED]], defaultValue: VD): Graph[VD, ED] = {
+    GraphImpl(edges, defaultValue)
+  }
+
+  /**
    * Construct a graph from a collection of edges encoded as vertex id
-   * pairs.  Duplicate directed edges are merged to a single edge with
-   * weight equal to the number of duplicate edges.  The returned
-   * vertex attribute is the number of edges adjacent to that vertex
-   * (i.e., the undirected degree).
+   * pairs.
    *
    * @param rawEdges the RDD containing the set of edges in the graph
    *
    * @return a graph with edge attributes containing the count of
-   * duplicate edges and vertex attributes containing the total degree
-   * of each vertex.
+   * duplicate edges.
    */
-  def apply(rawEdges: RDD[(Vid, Vid)]): Graph[Int, Int] = { Graph(rawEdges, true) }
-
+  def apply[VD: ClassManifest](rawEdges: RDD[(Vid, Vid)], defaultValue: VD):
+    Graph[VD, Int] = { Graph(rawEdges, defaultValue, false) }
 
   /**
    * Construct a graph from a collection of edges encoded as vertex id
@@ -364,23 +374,15 @@ object Graph {
    * attributes containing the total degree of each vertex.
    *
    */
-  def apply(rawEdges: RDD[(Vid, Vid)], uniqueEdges: Boolean): Graph[Int, Int] = {
-    // Reduce to unique edges.
-    val edges: RDD[Edge[Int]] =
-      if (uniqueEdges) {
-        rawEdges.map((_, 1)).reduceByKey(_ + _).map { case ((s, t), cnt) => Edge(s, t, cnt) }
-      } else {
-        rawEdges.map { case (s, t) => Edge(s, t, 1) }
-      }
-    // Determine unique vertices
-    /** @todo Should this reduceByKey operation be indexed? */
-    val vertices: RDD[(Vid, Int)] =
-      edges.flatMap{ case Edge(s, t, cnt) => Array((s, 1), (t, 1)) }.reduceByKey(_ + _)
-
-    // Return graph
-    GraphImpl(vertices, edges, 0)
+  def apply[VD: ClassManifest](rawEdges: RDD[(Vid, Vid)], defaultValue: VD, uniqueEdges: Boolean):
+    Graph[VD, Int] = {
+    val graph = GraphImpl(rawEdges.map(p => Edge(p._1, p._2, 1)), defaultValue)
+    if(uniqueEdges) {
+      graph.groupEdges((a,b) => a+b)
+    } else {
+      graph
+    }
   }
-
 
   /**
    * Construct a graph from a collection attributed vertices and

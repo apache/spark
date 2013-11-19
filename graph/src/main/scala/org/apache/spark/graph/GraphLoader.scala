@@ -20,43 +20,83 @@ object GraphLoader {
    * @param minEdgePartitions the number of partitions for the
    * the Edge RDD
    *
-   * @todo remove minVertexPartitions arg
    */
   def textFile[ED: ClassManifest](
       sc: SparkContext,
       path: String,
       edgeParser: Array[String] => ED,
       minEdgePartitions: Int = 1,
-      minVertexPartitions: Int = 1,
       partitionStrategy: PartitionStrategy = RandomVertexCut()): GraphImpl[Int, ED] = {
-
     // Parse the edge data table
-    val edges = sc.textFile(path, minEdgePartitions).flatMap { line =>
-      if (!line.isEmpty && line(0) != '#') {
+    val edges = sc.textFile(path, minEdgePartitions).mapPartitions( iter =>
+      iter.filter(line => !line.isEmpty && line(0) != '#').map { line =>
         val lineArray = line.split("\\s+")
         if(lineArray.length < 2) {
           println("Invalid line: " + line)
           assert(false)
         }
-        val source = lineArray(0)
-        val target = lineArray(1)
+        val source = lineArray(0).trim.toLong
+        val target = lineArray(1).trim.toLong
         val tail = lineArray.drop(2)
         val edata = edgeParser(tail)
-        Array(Edge(source.trim.toInt, target.trim.toInt, edata))
-      } else {
-        Array.empty[Edge[ED]]
-      }
-    }.cache()
-
-    val graph = fromEdges(edges, partitionStrategy)
-    graph
+        Edge(source, target, edata)
+      })
+    val defaultVertexAttr = 1
+    Graph(edges, defaultVertexAttr, partitionStrategy)
   }
 
-  private def fromEdges[ED: ClassManifest](
-    edges: RDD[Edge[ED]],
-    partitionStrategy: PartitionStrategy): GraphImpl[Int, ED] = {
-    val vertices = edges.flatMap { edge => List((edge.srcId, 1), (edge.dstId, 1)) }
-      .reduceByKey(_ + _)
-    GraphImpl(vertices, edges, 0, (a: Int, b: Int) => a, partitionStrategy)
-  }
+  /**
+   * Load a graph from an edge list formatted file with each line containing
+   * two integers: a source Id and a target Id.
+   *
+   * @example A file in the following format:
+   * {{{
+   * # Comment Line
+   * # Source Id <\t> Target Id
+   * 1   -5
+   * 1    2
+   * 2    7
+   * 1    8
+   * }}}
+   *
+   * If desired the edges can be automatically oriented in the positive
+   * direction (source Id < target Id) by setting `canonicalOrientation` to
+   * true
+   *
+   * @param sc
+   * @param path the path to the file (e.g., /Home/data/file or hdfs://file)
+   * @param canonicalOrientation whether to orient edges in the positive
+   *        direction.
+   * @param minEdgePartitions the number of partitions for the
+   *        the Edge RDD
+   * @tparam ED
+   * @return
+   */
+  def edgeListFile[ED: ClassManifest](
+      sc: SparkContext,
+      path: String,
+      canonicalOrientation: Boolean = false,
+      minEdgePartitions: Int = 1,
+      partitionStrategy: PartitionStrategy = RandomVertexCut()):
+    Graph[Int, Int] = {
+    // Parse the edge data table
+    val edges = sc.textFile(path, minEdgePartitions).mapPartitions( iter =>
+      iter.filter(line => !line.isEmpty && line(0) != '#').map { line =>
+        val lineArray = line.split("\\s+")
+        if(lineArray.length < 2) {
+          println("Invalid line: " + line)
+          assert(false)
+        }
+        val source = lineArray(0).trim.toLong
+        val target = lineArray(1).trim.toLong
+        if (canonicalOrientation && target > source) {
+          Edge(target, source, 1)
+        } else {
+          Edge(source, target, 1)
+        }
+      })
+    val defaultVertexAttr = 1
+    Graph(edges, defaultVertexAttr, partitionStrategy)
+  } // end of edgeListFile
+
 }

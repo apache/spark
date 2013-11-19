@@ -1,6 +1,7 @@
 package org.apache.spark.graph.impl
 
 import org.apache.spark.graph._
+import org.apache.spark.util.collection.OpenHashMap
 
 
 /**
@@ -9,8 +10,7 @@ import org.apache.spark.graph._
 class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest](
     val srcIds: Array[Vid],
     val dstIds: Array[Vid],
-    val data: Array[ED])
-{
+    val data: Array[ED]) {
 
   def reverse: EdgePartition[ED] = new EdgePartition(dstIds, srcIds, data)
 
@@ -40,6 +40,22 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
       f(edge)
       i += 1
     }
+  }
+
+  def groupEdges(merge: (ED, ED) => ED): EdgePartition[ED] = {
+    val agg = new OpenHashMap[(Vid,Vid), ED] //(math.ceil((data.size + 1)/0.7).toInt)
+    foreach { e => agg.setMerge((e.srcId, e.dstId), e.attr, merge) }
+    val newSrcIds = new Array[Vid](agg.size)
+    val newDstIds = new Array[Vid](agg.size)
+    val newData = new Array[ED](agg.size)
+    var i = 0
+    agg.foreach { kv =>
+      newSrcIds(i) = kv._1._1
+      newDstIds(i) = kv._1._2
+      newData(i) = kv._2
+      i += 1
+    }
+    new EdgePartition(newSrcIds, newDstIds, newData)
   }
 
   def size: Int = srcIds.size

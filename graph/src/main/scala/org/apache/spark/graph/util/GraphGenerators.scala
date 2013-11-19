@@ -275,7 +275,7 @@ object GraphGenerators {
    */
   def starGraph(sc: SparkContext, nverts: Int): Graph[Int, Int] = {
     val edges: RDD[(Vid, Vid)] = sc.parallelize(1 until nverts).map(vid => (vid, 0))
-    Graph(edges, false)
+    Graph(edges, 1)
   } // end of starGraph
 
 

@@ -644,6 +644,23 @@ object VertexSetRDD {
     new VertexSetIndex(index)
   }
 
+  /**
+   * Cosntruct an VertexSetRDD with all vertices initialized to the default value.
+   *
+   * @param index
+   * @param defaultValue
+   * @tparam V
+   * @return
+   */
+  def apply[V: ClassManifest](index: VertexSetIndex, defaultValue: V): VertexSetRDD[V] = {
+    // Use the index to build the new values table
+    val values: RDD[ (Array[V], BitSet) ] = index.rdd.mapPartitions(_.map { index  =>
+      val values = Array.fill(index.capacity)(defaultValue)
+      val bs = index.getBitSet
+      (values, bs)
+    }, preservesPartitioning = true)
+    new VertexSetRDD(index, values)
+  } // end of apply
 } // end of object VertexSetRDD
 
 
