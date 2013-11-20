@@ -3,7 +3,9 @@ package expressions
 
 
 
-case class Add(left: Expression, right: Expression) extends BinaryExpression("+") {
+case class Add(left: Expression, right: Expression) extends BinaryExpression {
+  def symbol = "+"
+
   def dataType = {
     require(left.dataType == right.dataType) // TODO(marmbrus): Figure out rules for coersions.
     left.dataType
