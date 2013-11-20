@@ -11,6 +11,21 @@ import expressions._
 import collection.JavaConversions._
 import org.apache.spark.SparkContext._
 
+case class Project(projectList: Seq[NamedExpression], @transient child: SharkPlan) extends UnaryNode {
+  def output = projectList.map(_.toAttribute)
+
+  def execute() = child.execute().map { row =>
+    projectList.map(Evaluate(_, Vector(row))).toIndexedSeq
+  }
+}
+
+case class Filter(condition: Expression, @transient child: SharkPlan) extends UnaryNode {
+  def output = child.output
+  def execute() = child.execute().filter { row =>
+    Evaluate(condition, Vector(row)).asInstanceOf[Boolean]
+  }
+}
+
 case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
   val numPartitions = 1 // TODO: Set with input cardinality
 
