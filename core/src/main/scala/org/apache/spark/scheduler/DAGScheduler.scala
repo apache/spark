@@ -384,7 +384,7 @@ class DAGScheduler(
               .format(jobId, stageId))
           } else {
             jobSet -= jobId
-            if ((jobSet - jobId).isEmpty) { // no other job needs this stage
+            if (jobSet.isEmpty) { // no other job needs this stage
               p(stageId)
             }
           }
