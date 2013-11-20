@@ -568,8 +568,8 @@ class DAGScheduler(
         val activeInGroup = activeJobs.filter(groupId == _.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
         val jobIds = activeInGroup.map(_.jobId)
         jobIds.foreach { handleJobCancellation }
-        activeJobs -- activeInGroup
-        idToActiveJob -- jobIds
+        activeJobs --= activeInGroup
+        idToActiveJob --= jobIds
 
       case AllJobsCancelled =>
         // Cancel all running jobs.
