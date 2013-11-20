@@ -8,6 +8,7 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.SparkContext._
 import org.apache.spark.HashPartitioner
 import org.apache.spark.util.ClosureCleaner
+import org.apache.spark.SparkException
 
 import org.apache.spark.Partitioner
 import org.apache.spark.graph._
@@ -96,8 +97,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   /** Return a RDD that brings edges with its source and destination vertices together. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] =
     makeTriplets(localVidMap, vTableReplicatedValues.bothAttrs, eTable)
-
-  //@transient private val partitioner: PartitionStrategy = partitionStrategy
 
   override def persist(newLevel: StorageLevel): Graph[VD, ED] = {
     eTable.persist(newLevel)
@@ -250,43 +249,55 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   override def groupEdgeTriplets[ED2: ClassManifest](
     f: Iterator[EdgeTriplet[VD,ED]] => ED2 ): Graph[VD,ED2] = {
-      val newEdges: RDD[Edge[ED2]] = triplets.mapPartitions { partIter =>
-        partIter
-        // TODO(crankshaw) toList requires that the entire edge partition
-        // can fit in memory right now.
-        .toList
-        // groups all ETs in this partition that have the same src and dst
-        // Because all ETs with the same src and dst will live on the same
-        // partition due to the canonicalRandomVertexCut partitioner, this
-        // guarantees that these ET groups will be complete.
-        .groupBy { t: EdgeTriplet[VD, ED] =>  (t.srcId, t.dstId) }
-        .mapValues { ts: List[EdgeTriplet[VD, ED]] => f(ts.toIterator) }
-        .toList
-        .toIterator
-        .map { case ((src, dst), data) => Edge(src, dst, data) }
-        .toIterator
-      }
+      partitioner match {
+        case _: CanonicalRandomVertexCut => {
+          val newEdges: RDD[Edge[ED2]] = triplets.mapPartitions { partIter =>
+            partIter
+            // TODO(crankshaw) toList requires that the entire edge partition
+            // can fit in memory right now.
+            .toList
+            // groups all ETs in this partition that have the same src and dst
+            // Because all ETs with the same src and dst will live on the same
+            // partition due to the canonicalRandomVertexCut partitioner, this
+            // guarantees that these ET groups will be complete.
+            .groupBy { t: EdgeTriplet[VD, ED] =>  (t.srcId, t.dstId) }
+            .mapValues { ts: List[EdgeTriplet[VD, ED]] => f(ts.toIterator) }
+            .toList
+            .toIterator
+            .map { case ((src, dst), data) => Edge(src, dst, data) }
+            .toIterator
+          }
+          //TODO(crankshaw) eliminate the need to call createETable
+          val newETable = createETable(newEdges, partitioner)
+          new GraphImpl(vTable, vid2pid, localVidMap, newETable, partitioner)
+        }
 
-      //TODO(crankshaw) eliminate the need to call createETable
-      val newETable = createETable(newEdges, partitioner)
-      new GraphImpl(vTable, vid2pid, localVidMap, newETable, partitioner)
+        case _ => throw new SparkException(partitioner.getClass.getName
+          + " is incompatible with groupEdgeTriplets")
+      }
   }
 
   override def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ):
     Graph[VD,ED2] = {
+      partitioner match {
+        case _: CanonicalRandomVertexCut => {
+          val newEdges: RDD[Edge[ED2]] = edges.mapPartitions { partIter =>
+            partIter.toList
+            .groupBy { e: Edge[ED] => (e.srcId, e.dstId) }
+            .mapValues { ts => f(ts.toIterator) }
+            .toList
+            .toIterator
+            .map { case ((src, dst), data) => Edge(src, dst, data) }
+          }
+          // TODO(crankshaw) eliminate the need to call createETable
+          val newETable = createETable(newEdges, partitioner)
 
-      val newEdges: RDD[Edge[ED2]] = edges.mapPartitions { partIter =>
-        partIter.toList
-        .groupBy { e: Edge[ED] => (e.srcId, e.dstId) }
-        .mapValues { ts => f(ts.toIterator) }
-        .toList
-        .toIterator
-        .map { case ((src, dst), data) => Edge(src, dst, data) }
+          new GraphImpl(vTable, vid2pid, localVidMap, newETable, partitioner)
+        }
+
+        case _ => throw new SparkException(partitioner.getClass.getName
+          + " is incompatible with groupEdges")
       }
-      // TODO(crankshaw) eliminate the need to call createETable
-      val newETable = createETable(newEdges, partitioner)
-
-      new GraphImpl(vTable, vid2pid, localVidMap, newETable, partitioner)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -315,7 +326,7 @@ object GraphImpl {
     vertices: RDD[(Vid, VD)],
     edges: RDD[Edge[ED]],
     defaultVertexAttr: VD): GraphImpl[VD,ED] = {
-    apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a, RandomVertexCut)
+    apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a, RandomVertexCut())
   }
 
   def apply[VD: ClassManifest, ED: ClassManifest](
@@ -331,7 +342,7 @@ object GraphImpl {
     edges: RDD[Edge[ED]],
     defaultVertexAttr: VD,
     mergeFunc: (VD, VD) => VD): GraphImpl[VD,ED] = {
-    apply(vertices, edges, defaultVertexAttr, mergeFunc, RandomVertexCut)
+    apply(vertices, edges, defaultVertexAttr, mergeFunc, RandomVertexCut())
   }
 
   def apply[VD: ClassManifest, ED: ClassManifest](
@@ -361,14 +372,6 @@ object GraphImpl {
     new GraphImpl(vtable, vid2pid, localVidMap, etable, partitionStrategy)
   }
 
-
-
-
-  // TODO(crankshaw) - can I remove this
-  //protected def createETable[ED: ClassManifest](edges: RDD[Edge[ED]])
-  //  : RDD[(Pid, EdgePartition[ED])] = {
-  //    createETable(edges, RandomVertexCut)
-  //}
 
   /**
    * Create the edge table RDD, which is much more efficient for Java heap storage than the

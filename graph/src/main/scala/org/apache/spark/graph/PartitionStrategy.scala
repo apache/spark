@@ -50,7 +50,7 @@ sealed trait PartitionStrategy extends Serializable {
  *
  *
  */
-object EdgePartition2D extends PartitionStrategy {
+case class EdgePartition2D() extends PartitionStrategy {
   override def getPartition(src: Vid, dst: Vid, numParts: Pid): Pid = {
     val ceilSqrtNumParts: Pid = math.ceil(math.sqrt(numParts)).toInt
     val mixingPrime: Vid = 1125899906842597L
@@ -61,7 +61,7 @@ object EdgePartition2D extends PartitionStrategy {
 }
 
 
-object EdgePartition1D extends PartitionStrategy {
+case class EdgePartition1D() extends PartitionStrategy {
   override def getPartition(src: Vid, dst: Vid, numParts: Pid): Pid = {
     val mixingPrime: Vid = 1125899906842597L
     (math.abs(src) * mixingPrime).toInt % numParts
@@ -73,7 +73,7 @@ object EdgePartition1D extends PartitionStrategy {
  * Assign edges to an aribtrary machine corresponding to a
  * random vertex cut.
  */
-object RandomVertexCut extends PartitionStrategy {
+case class RandomVertexCut() extends PartitionStrategy {
   override def getPartition(src: Vid, dst: Vid, numParts: Pid): Pid = {
     math.abs((src, dst).hashCode()) % numParts
   }
@@ -85,7 +85,7 @@ object RandomVertexCut extends PartitionStrategy {
  * function ensures that edges of opposite direction between the same two vertices
  * will end up on the same partition.
  */
-object CanonicalRandomVertexCut extends PartitionStrategy {
+case class CanonicalRandomVertexCut() extends PartitionStrategy {
   override def getPartition(src: Vid, dst: Vid, numParts: Pid): Pid = {
     val lower = math.min(src, dst)
     val higher = math.max(src, dst)

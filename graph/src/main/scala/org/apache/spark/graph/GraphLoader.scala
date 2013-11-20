@@ -28,7 +28,7 @@ object GraphLoader {
       edgeParser: Array[String] => ED,
       minEdgePartitions: Int = 1,
       minVertexPartitions: Int = 1,
-      partitionStrategy: PartitionStrategy = RandomVertexCut): GraphImpl[Int, ED] = {
+      partitionStrategy: PartitionStrategy = RandomVertexCut()): GraphImpl[Int, ED] = {
 
     // Parse the edge data table
     val edges = sc.textFile(path, minEdgePartitions).flatMap { line =>

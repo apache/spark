@@ -2,12 +2,11 @@ package org.apache.spark.graph
 
 import scala.collection.JavaConversions._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.Logging
 
 /**
  * This object implements the GraphLab gather-apply-scatter api.
  */
-object GraphLab extends Logging {
+object GraphLab {
 
   /**
    * Execute the GraphLab Gather-Apply-Scatter API

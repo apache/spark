@@ -1,7 +1,6 @@
 package org.apache.spark.graph
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.Logging
 
 
 /**
@@ -42,7 +41,7 @@ import org.apache.spark.Logging
  * }}}
  *
  */
-object Pregel extends Logging {
+object Pregel {
 
 
   /**
