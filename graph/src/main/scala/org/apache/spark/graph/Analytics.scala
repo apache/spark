@@ -295,8 +295,6 @@ object Analytics extends Logging {
          }
          logInfo("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
 
-
-         Thread.sleep(1000000)
          sc.stop()
        }
 
