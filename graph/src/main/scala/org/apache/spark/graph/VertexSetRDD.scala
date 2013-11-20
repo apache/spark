@@ -645,11 +645,11 @@ object VertexSetRDD {
   }
 
   /**
-   * Cosntruct an VertexSetRDD with all vertices initialized to the default value.
+   * Create a VertexSetRDD with all vertices initialized to the default value.
    *
-   * @param index
-   * @param defaultValue
-   * @tparam V
+   * @param index an index over the set of vertices
+   * @param defaultValue the default value to use when initializing the vertices
+   * @tparam V the type of the vertex attribute
    * @return
    */
   def apply[V: ClassManifest](index: VertexSetIndex, defaultValue: V): VertexSetRDD[V] = {

@@ -74,7 +74,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
   def persist(newLevel: StorageLevel): Graph[VD, ED]
 
-
   /**
    * Return a graph that is cached when first created. This is used to
    * pin a graph in memory enabling multiple queries to reuse the same
@@ -84,13 +83,10 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    */
   def cache(): Graph[VD, ED]
 
-
   /**
    * Compute statistics describing the graph representation.
    */
   def statistics: Map[String, Any]
-
-
 
   /**
    * Construct a new graph where each vertex value has been
@@ -160,9 +156,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    *
    */
-  def mapTriplets[ED2: ClassManifest](
-    map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
-
+  def mapTriplets[ED2: ClassManifest](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 
   /**
    * Construct a new graph with all the edges reversed.  If this graph
@@ -171,7 +165,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    */
   def reverse: Graph[VD, ED]
-
 
   /**
    * This function takes a vertex and edge predicate and constructs
@@ -198,35 +191,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
     vpred: (Vid, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
 
-
-
-  /**
-   * groupEdgeTriplets is used to merge multiple edges that have the
-   * same source and destination vertex into a single edge. The user
-   * supplied function is applied to each directed pair of vertices
-   * (u, v) and has access to all EdgeTriplets
-   *
-   * {e: for all e in E where e.src = u and e.dst = v}
-   *
-   * This function is identical to
-   * [[org.apache.spark.graph.Graph.groupEdges]] except that this
-   * function provides the user-supplied function with an iterator
-   * over EdgeTriplets, which contain the vertex data, whereas
-   * groupEdges provides the user-supplied function with an iterator
-   * over Edges, which only contain the vertex IDs.
-   *
-   * @tparam ED2 the type of the resulting edge data after grouping
-   *
-   * @param f the user supplied function to merge multiple EdgeTriplets
-   * into a single ED2 object
-   *
-   * @return Graph[VD,ED2] The resulting graph with a single Edge for each
-   * source, dest vertex pair.
-   *
-   */
-  def groupEdgeTriplets[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ): Graph[VD,ED2]
-
-
   /**
    * This function merges multiple edges between two vertices into a
    * single Edge. See
@@ -235,14 +199,13 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    * @tparam ED2 the type of the resulting edge data after grouping.
    *
-   * @param f the user supplied function to merge multiple Edges
-   * into a single ED2 object.
+   * @param f the user supplied commutative associative function to merge
+   * edge attributes for duplicate edges.
    *
    * @return Graph[VD,ED2] The resulting graph with a single Edge for
    * each source, dest vertex pair.
    */
   def groupEdges(merge: (ED, ED) => ED): Graph[VD,ED]
-
 
   /**
    * The mapReduceTriplets function is used to compute statistics
@@ -281,7 +244,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
       reduceFunc: (A, A) => A)
     : VertexSetRDD[A]
 
-
   /**
    * Join the vertices with an RDD and then apply a function from the
    * the vertex and RDD entry to a new vertex value and type.  The
@@ -314,7 +276,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def outerJoinVertices[U: ClassManifest, VD2: ClassManifest](table: RDD[(Vid, U)])
       (mapFunc: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
-
 
   // Save a copy of the GraphOps object so there is always one unique GraphOps object
   // for a given Graph object, and thus the lazy vals in GraphOps would work as intended.
