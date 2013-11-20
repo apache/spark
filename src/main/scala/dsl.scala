@@ -55,6 +55,9 @@ package object dsl {
   }
 
   implicit def intToLiteral(i: Int) = Literal(i)
+  implicit def longToLiteral(l: Long) = Literal(l)
+  implicit def floatToLiteral(f: Float) = Literal(f)
+  implicit def doubleToLiteral(d: Double) = Literal(d)
   implicit def stringToLiteral(s: String) = Literal(s)
 
   implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
