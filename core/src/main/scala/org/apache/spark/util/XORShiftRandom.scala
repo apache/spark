@@ -31,7 +31,7 @@ import org.apache.spark.util.Utils.timeIt
  * uses a regular Long. We can forgo thread safety since we use a new instance of the RNG
  * for each thread.
  */
-class XORShiftRandom(init: Long) extends JavaRandom(init) {
+private[spark] class XORShiftRandom(init: Long) extends JavaRandom(init) {
   
   def this() = this(System.nanoTime)
 
@@ -49,7 +49,7 @@ class XORShiftRandom(init: Long) extends JavaRandom(init) {
 }
 
 /** Contains benchmark method and main method to run benchmark of the RNG */
-object XORShiftRandom {
+private[spark] object XORShiftRandom {
 
   /**
    * Main method for running benchmark

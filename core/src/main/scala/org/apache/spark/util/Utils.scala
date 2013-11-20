@@ -833,7 +833,7 @@ private[spark] object Utils extends Logging {
     while (i < numIters) {
       f
       i += 1
-      }
+    }
   }
 
   /** 
