@@ -62,7 +62,6 @@ private[spark] class SimrSchedulerBackend(
     val conf = new Configuration()
     val fs = FileSystem.get(conf)
     fs.delete(new Path(driverFilePath), false)
-    super.stopExecutors()
     super.stop()
   }
 }
