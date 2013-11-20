@@ -91,3 +91,8 @@ case class InsertIntoHiveTable(tableName: String, child: SharkPlan)
   }
 }
 
+case class LocalRelation(output: Seq[Attribute], data: Seq[IndexedSeq[Any]])
+                        (sc: SharkContext) extends LeafNode {
+  def execute() = sc.makeRDD(data, 1)
+}
+

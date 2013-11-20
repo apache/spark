@@ -13,7 +13,7 @@ import dsl._
 class AnalysisSuite extends FunSuite {
   val analyze = new Analyzer(EmptyCatalog)
 
-  val testRelation = new TestRelation('a.int)
+  val testRelation = LocalRelation('a.int)
 
   test("analyze project") {
     assert(analyze(Project(Seq(UnresolvedAttribute("a")), testRelation)) === Project(testRelation.output, testRelation))

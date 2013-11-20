@@ -4,4 +4,12 @@ package logical
 
 import expressions._
 
-case class TestRelation(output: Attribute*) extends LeafNode
+object LocalRelation {
+  def apply(output: Attribute*) =
+    new LocalRelation(output)
+}
+
+case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil) extends LeafNode {
+  // TODO: Validate schema compliance.
+  def loadData(newData: Seq[Product]) = new LocalRelation(output, data ++ newData)
+}
