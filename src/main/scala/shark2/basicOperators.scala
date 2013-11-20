@@ -35,7 +35,7 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
       sortExprs
         .map {
           case SortOrder(e, Ascending) => Evaluate(e, input)
-          //TODO: case SortOrder(e, Decending) =>
+          case SortOrder(e, Descending) => ???
         }.map(_.asInstanceOf[Int]).head // Need concrete type for ordering to be selected.
                                         // TODO: Implement ordering in evaluate or at least a placeholder.
     (sortKey, row)
