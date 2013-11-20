@@ -102,6 +102,7 @@ case class InsertIntoHiveTable(tableName: String, child: SharkPlan)
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which
     // does not return anything for insert operations.
+    // TODO: implement hive compatibility as rules.
     sc.makeRDD(Nil, 1)
   }
 }
