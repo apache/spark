@@ -17,14 +17,13 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.{InetAddress, InetSocketAddress, UnknownHostException, URI}
+import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileContext, FileStatus, FileSystem, Path, FileUtil}
 import org.apache.hadoop.fs.permission.FsPermission
 import org.apache.hadoop.mapred.Master
-import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
@@ -40,9 +39,7 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.Map
 import scala.collection.JavaConversions._
 
-import org.apache.spark.Logging 
-import org.apache.spark.util.Utils
-import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.Logging
 
 class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl with Logging {
   
@@ -123,7 +120,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     
     // if we have requested more then the clusters max for a single resource then exit.
     if (args.workerMemory > maxMem) {
-      logError("the worker size is to large to run on this cluster " + args.workerMemory);
+      logError("the worker size is to large to run on this cluster " + args.workerMemory)
       System.exit(1)
     }
     val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
@@ -160,8 +157,8 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     var dstHost = dstUri.getHost()
     if ((srcHost != null) && (dstHost != null)) {
       try {
-        srcHost = InetAddress.getByName(srcHost).getCanonicalHostName();
-        dstHost = InetAddress.getByName(dstHost).getCanonicalHostName();
+        srcHost = InetAddress.getByName(srcHost).getCanonicalHostName()
+        dstHost = InetAddress.getByName(dstHost).getCanonicalHostName()
       } catch {
         case e: UnknownHostException =>
           return false
@@ -178,7 +175,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     if (srcUri.getPort() != dstUri.getPort()) {
       return false
     }
-    return true;
+    return true
   }
 
   /**
@@ -190,13 +187,13 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       replication: Short,
       setPerms: Boolean = false): Path = {
     val fs = FileSystem.get(conf)
-    val remoteFs = originalPath.getFileSystem(conf);
+    val remoteFs = originalPath.getFileSystem(conf)
     var newPath = originalPath
     if (! compareFs(remoteFs, fs)) {
       newPath = new Path(dstDir, originalPath.getName())
       logInfo("Uploading " + originalPath + " to " + newPath)
-      FileUtil.copy(remoteFs, originalPath, fs, newPath, false, conf);
-      fs.setReplication(newPath, replication);
+      FileUtil.copy(remoteFs, originalPath, fs, newPath, false, conf)
+      fs.setReplication(newPath, replication)
       if (setPerms) fs.setPermission(newPath, new FsPermission(APP_FILE_PERMISSION))
     } 
     // resolve any symlinks in the URI path so using a "current" symlink
@@ -214,7 +211,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     // Add them as local resources to the AM
     val fs = FileSystem.get(conf)
 
-    val delegTokenRenewer = Master.getMasterPrincipal(conf);
+    val delegTokenRenewer = Master.getMasterPrincipal(conf)
     if (UserGroupInformation.isSecurityEnabled()) {
       if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
         logError("Can't get Master Kerberos principal for use as renewer")
@@ -226,7 +223,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     if (UserGroupInformation.isSecurityEnabled()) {
       val dstFs = dst.getFileSystem(conf)
-      dstFs.addDelegationTokens(delegTokenRenewer, credentials);
+      dstFs.addDelegationTokens(delegTokenRenewer, credentials)
     }
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
@@ -286,7 +283,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       }
     }
 
-    UserGroupInformation.getCurrentUser().addCredentials(credentials);
+    UserGroupInformation.getCurrentUser().addCredentials(credentials)
     return localResources
   }
   
@@ -366,7 +363,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     }
 
     // Command for the ApplicationMaster
-    var javaCommand = "java";
+    var javaCommand = "java"
     val javaHome = System.getenv("JAVA_HOME")
     if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
       javaCommand = Environment.JAVA_HOME.$() + "/bin/java"

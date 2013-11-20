@@ -251,7 +251,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
       Thread.sleep(500) // Give some time for the forgetting old RDDs to complete
     } catch {
-      case e: Exception => e.printStackTrace(); throw e;
+      case e: Exception => {e.printStackTrace(); throw e}
     } finally {
       ssc.stop()
     }
