@@ -241,6 +241,7 @@ object Analytics extends Logging {
          var outFname = ""
          var numVPart = 4
          var numEPart = 4
+         var partitionStrategy: PartitionStrategy = RandomVertexCut()
 
          options.foreach{
            case ("numIter", v) => numIter = v.toInt
@@ -249,6 +250,15 @@ object Analytics extends Logging {
            case ("output", v) => outFname = v
            case ("numVPart", v) => numVPart = v.toInt
            case ("numEPart", v) => numEPart = v.toInt
+           case ("partStrategy", v) =>  {
+             partitionStrategy = v match {
+               case "RandomVertexCut" => RandomVertexCut()
+               case "EdgePartition1D" => EdgePartition1D()
+               case "EdgePartition2D" => EdgePartition2D()
+               case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut()
+               case _ => throw new IllegalArgumentException("Invalid Partition Strategy: " + v)
+             }
+           }
            case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
          }
 
