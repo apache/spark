@@ -5,7 +5,7 @@ import plans.logical._
 import rules._
 
 /**
- * A trivial analyze with an [[EmptyCatalog]]. Used for testing when all relations are
+ * A trivial [[Analyzer]] with an [[EmptyCatalog]]. Used for testing when all relations are
  * already filled in and the analyser needs only to resolve attribute references.
  */
 object SimpleAnalyzer extends Analyzer(EmptyCatalog)
@@ -19,12 +19,18 @@ class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
       ResolveRelations)
   )
 
+  /**
+   * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
+   */
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case UnresolvedRelation(name, alias) => catalog.lookupRelation(name, alias)
     }
   }
 
+  /**
+   * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from a logical plan node's children.
+   */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
