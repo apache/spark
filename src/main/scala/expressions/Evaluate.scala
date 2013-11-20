@@ -1,6 +1,9 @@
 package catalyst
 package expressions
 
+/**
+ * Performs evaluation of an expression tree, given a set of input tuples.
+ */
 object Evaluate {
   def apply(e: Expression, input: Seq[Seq[Any]]): Any = {
     def eval(e: Expression) = Evaluate(e, input)
@@ -10,6 +13,7 @@ object Evaluate {
         case (l: Int, r: Int) => l + r
       }
       case Literal(v, _) => v
+      case Equals(l, r) => eval(l) == eval(r)
       case BoundReference(inputTuple, ordinal, _) => input(inputTuple)(ordinal)
       case other => throw new NotImplementedError(s"Evaluation for:\n $e")
     }
