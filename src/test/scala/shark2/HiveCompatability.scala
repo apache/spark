@@ -56,7 +56,7 @@ class HiveCompatability extends FunSuite with BeforeAndAfterAll with GivenWhenTh
         // Run w/ catalyst
         val catalystResults: Seq[Seq[String]] = queryList.map { queryString =>
           info(queryString)
-          val query = new testShark.SharkQuery  (queryString)
+          val query = new testShark.SharkSqlQuery(queryString)
           query.execute().map(_.collect().map(_.mkString("\t")).toSeq).getOrElse(Nil)
         }.toSeq
 

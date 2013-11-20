@@ -2,11 +2,13 @@ package catalyst
 package shark2
 
 import analysis._
+import catalyst.plans.logical.LogicalPlan
 import frontend.hive._
 import planning._
 import rules._
 import shark.{SharkConfVars, SharkContext, SharkEnv}
 import util._
+import org.apache.spark.rdd.RDD
 
 /**
  * A locally running test instance of spark.  The lifecycle for a given query is managed by the inner class
@@ -40,7 +42,6 @@ class TestShark {
   // shark has dependencies on a custom version of hive that we are trying to avoid
   // in catalyst.
   SharkConfVars.setVar(SharkContext.hiveconf, SharkConfVars.EXEC_MODE, "hive")
-  val hiveDriver = new org.apache.hadoop.hive.ql.Driver(SharkContext.hiveconf)
 
   runSql("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + METASTORE_PATH + ";create=true")
   runSql("set hive.metastore.warehouse.dir=" + WAREHOUSE_PATH)
@@ -55,7 +56,7 @@ class TestShark {
   }
 
   val catalog = new HiveMetastoreCatalog(SharkContext.hiveconf)
-  val analyze = new Analyzer(new HiveMetastoreCatalog(SharkContext.hiveconf))
+  val analyze = new Analyzer(catalog)
 
   object TrivalPlanner extends QueryPlanner[SharkPlan] with PlanningStrategies {
     val sc = self.sc
@@ -71,12 +72,13 @@ class TestShark {
         expressions.BindReferences) :: Nil
   }
 
-  class SharkQuery(sql: String) {
+
+  class SharkSqlQuery(sql: String) {
     lazy val parsed = Hive.parseSql(sql)
     lazy val analyzed = analyze(parsed)
     // TODO: Don't just pick the first one...
-    lazy val SharkPlan = TrivalPlanner(analyzed).next()
-    lazy val executedPlan = PrepareForExecution(SharkPlan)
+    lazy val sharkPlan = TrivalPlanner(analyzed).next()
+    lazy val executedPlan = PrepareForExecution(sharkPlan)
 
     def execute() = analyzed match {
       case NativeCommand(cmd) => sc.sql(cmd); None
@@ -88,11 +90,22 @@ class TestShark {
          |== Logical Plan ==
          |$analyzed
          |== Physical Plan ==
-         |$SharkPlan
+         |$sharkPlan
       """.stripMargin.trim
   }
 
   implicit class stringToQuery(str: String) {
-    def q = new SharkQuery(str)
+    def q = new SharkSqlQuery(str)
+  }
+
+  implicit class logicalToRdd(plan: LogicalPlan) {
+    // TODO: Include plan info in custom rdd?
+    def toRdd: RDD[IndexedSeq[Any]] = {
+       val analyzed = analyze(plan)
+      // TODO: Don't just pick the first one...
+      val sharkPlan = TrivalPlanner(analyzed).next()
+      val executedPlan = PrepareForExecution(sharkPlan)
+      executedPlan.execute()
+    }
   }
 }
