@@ -1,4 +1,5 @@
 package catalyst
+package expressions
 
 import org.scalatest.FunSuite
 

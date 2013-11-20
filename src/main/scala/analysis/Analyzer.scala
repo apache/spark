@@ -4,6 +4,12 @@ package analysis
 import plans.logical._
 import rules._
 
+/**
+ * A trivial analyze with an [[EmptyCatalog]]. Used for testing when all relations are
+ * already filled in and the analyser needs only to resolve attribute references.
+ */
+object SimpleAnalyzer extends Analyzer(EmptyCatalog)
+
 class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
   val fixedPoint = FixedPoint(100)
 

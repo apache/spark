@@ -1,20 +1,35 @@
 package catalyst
-package util
+package shark2
 
-
-import catalyst.rules.RuleExecutor
+import analysis._
+import frontend.hive._
+import planning._
+import rules._
 import shark.{SharkConfVars, SharkContext, SharkEnv}
+import util._
 
-import analysis.{MetastoreRelation, Analyzer, HiveMetastoreCatalog}
-import expressions.{NamedExpression, Attribute}
-import frontend.{Hive, NativeCommand}
-import planning.{QueryPlanner, Strategy}
-import plans.logical._
-import plans.physical
-import plans.physical.PhysicalPlan
-
-
+/**
+ * A locally running test instance of spark.  The lifecycle for a given query is managed by the inner class
+ * [[SharkQuery]].  A [[SharkQuery]] can either be instantiated directly or using the implicit conversion.
+ *
+ * {{{
+ *   scala> val query = "SELECT key FROM test".q
+ *   query: testShark.SharkQuery =
+ *   SELECT key FROM test
+ *   == Logical Plan ==
+ *   Project {key#2}
+ *    MetastoreRelation test
+ *
+ *   == Physical Plan ==
+ *   HiveTableScan {key#2}, MetastoreRelation test
+ *
+ *   scala> query.execute().get.collect()
+ *   res0: Array[IndexedSeq[Any]] = Array(Vector(238), Vector(86), Vector(311), ...
+ * }}}
+ */
 class TestShark {
+  self =>
+
   val WAREHOUSE_PATH = getTempFilePath("sharkWarehouse")
   val METASTORE_PATH = getTempFilePath("sharkMetastore")
   val MASTER = "local"
@@ -42,54 +57,15 @@ class TestShark {
   val catalog = new HiveMetastoreCatalog(SharkContext.hiveconf)
   val analyze = new Analyzer(new HiveMetastoreCatalog(SharkContext.hiveconf))
 
-  def planLater(plan: LogicalPlan): PhysicalPlan = TrivalPlanner(plan).next
-
-  object DataSinks extends Strategy {
-    def apply(plan: LogicalPlan): Seq[PhysicalPlan] = plan match {
-      case InsertIntoHiveTable(tableName, child) =>
-        physical.InsertIntoHiveTable(tableName, planLater(child))(sc) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object HiveTableScans extends Strategy {
-    def apply(plan: LogicalPlan): Seq[PhysicalPlan] = plan match {
-      case p @ Project(projectList, m: MetastoreRelation) if isSimpleProject(projectList) =>
-        physical.HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m) :: Nil
-      case m: MetastoreRelation =>
-        physical.HiveTableScan(m.output, m) :: Nil
-      case _ => Nil
-    }
-
-    /**
-     * Returns true if [[projectList]] only performs column pruning and
-     * does not evaluate other complex expressions.
-     */
-    def isSimpleProject(projectList: Seq[NamedExpression]) = {
-      projectList.map {
-        case a: Attribute => true
-        case _ => false
-      }.reduceLeft(_ && _)
-    }
-  }
-
-  // Can we automate these 'pass through' operations?
-  object BasicOperators extends Strategy {
-    def apply(plan: LogicalPlan): Seq[PhysicalPlan] = plan match {
-      case Sort(sortExprs, child) =>
-        physical.Sort(sortExprs, planLater(child)) :: Nil
-      case _ => Nil
-    }
-  }
-
-  object TrivalPlanner extends QueryPlanner {
+  object TrivalPlanner extends QueryPlanner[SharkPlan] with PlanningStrategies {
+    val sc = self.sc
     val strategies =
       HiveTableScans ::
       DataSinks ::
       BasicOperators :: Nil
   }
 
-  object PrepareForExecution extends RuleExecutor[PhysicalPlan] {
+  object PrepareForExecution extends RuleExecutor[SharkPlan] {
     val batches =
       Batch("Prepare Expressions", Once,
         expressions.BindReferences) :: Nil
@@ -99,8 +75,8 @@ class TestShark {
     lazy val parsed = Hive.parseSql(sql)
     lazy val analyzed = analyze(parsed)
     // TODO: Don't just pick the first one...
-    lazy val physicalPlan = TrivalPlanner(analyzed).next()
-    lazy val executedPlan = PrepareForExecution(physicalPlan)
+    lazy val SharkPlan = TrivalPlanner(analyzed).next()
+    lazy val executedPlan = PrepareForExecution(SharkPlan)
 
     def execute() = analyzed match {
       case NativeCommand(cmd) => sc.sql(cmd); None
@@ -112,7 +88,7 @@ class TestShark {
          |== Logical Plan ==
          |$analyzed
          |== Physical Plan ==
-         |$physicalPlan
+         |$SharkPlan
       """.stripMargin.trim
   }
 

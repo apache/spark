@@ -1,21 +1,21 @@
 package catalyst
+package shark2
 
-import shark.SharkContext
-import shark.SharkEnv
+import shark.{SharkContext, SharkEnv}
 
 import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
-import frontend.Hive
-import util.TestShark
-
 class HiveCompatability extends FunSuite with BeforeAndAfterAll with GivenWhenThen {
-  /** A list of tests currently deemed out of scope and thus completely ignored */
+  /** A list of tests deemed out of scope and thus completely disregarded */
   val blackList = Seq(
     "set_processor_namespaces" // Unclear if we ever want to handle set commands in catalyst.
   )
 
-  /** The set of tests that are believed to be working in catalyst. Tests not in white */
+  /**
+   * The set of tests that are believed to be working in catalyst. Tests not in whiteList
+   * blacklist.
+   */
   val whiteList = Seq(
     "tablename_with_select"
   )

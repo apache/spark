@@ -1,5 +1,6 @@
 package catalyst
 package frontend
+package hive
 
 import catalyst.analysis.UnresolvedRelation
 import org.apache.hadoop.hive.ql.lib.Node

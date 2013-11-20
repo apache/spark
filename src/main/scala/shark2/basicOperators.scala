@@ -1,20 +1,17 @@
 package catalyst
-package plans
-package physical
+package shark2
 
-import expressions._
-import plans.logical
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, StructObjectInspector}
 import shark.execution.HadoopTableReader
 import shark.{SharkContext, SharkEnv}
 
+import expressions._
 
-import org.apache.spark.SparkContext._
 import collection.JavaConversions._
-import org.apache.hadoop.hive.serde2.`lazy`.LazyPrimitive
+import org.apache.spark.SparkContext._
 
-case class Sort(sortExprs: Seq[SortOrder], child: PhysicalPlan) extends UnaryNode {
+case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
   val numPartitions = 1 // TODO: Set with input cardinality
 
   def execute() = child.execute().map { row =>
@@ -32,7 +29,7 @@ case class Sort(sortExprs: Seq[SortOrder], child: PhysicalPlan) extends UnaryNod
   def output = child.output
 }
 
-case class HiveTableScan(attributes: Seq[Attribute], relation: analysis.MetastoreRelation) extends LeafNode {
+case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation) extends LeafNode {
   val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(relation.table)
   val tableDesc = new TableDesc(
     Class.forName(relation.table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[org.apache.hadoop.hive.serde2.Deserializer]],
@@ -75,7 +72,7 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: analysis.Metastor
   def output = attributes
 }
 
-case class InsertIntoHiveTable(tableName: String, child: PhysicalPlan)
+case class InsertIntoHiveTable(tableName: String, child: SharkPlan)
                               (sc: SharkContext) extends UnaryNode {
   def output = child.output
   def execute() = {

@@ -3,18 +3,16 @@ package expressions
 
 import types._
 
-abstract class Predicate extends Expression {
+abstract trait Predicate extends Expression {
   self: Product =>
 
   def dataType = BooleanType
 }
 
-abstract class BinaryPredicate(op: String) extends Predicate with trees.BinaryNode[Expression] {
+abstract class BinaryPredicate(symbol: String) extends BinaryExpression(symbol) with Predicate {
   self: Product =>
 
   def nullable = left.nullable || right.nullable
-  def references = left.references ++ right.references
-  override def toString(): String = s"$left $op $right"
 }
 
 case class Equals(left: Expression, right: Expression) extends BinaryPredicate("=")

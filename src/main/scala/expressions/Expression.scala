@@ -12,9 +12,11 @@ abstract class Expression extends TreeNode[Expression] {
   def references: Set[Attribute]
 }
 
-abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
+abstract class BinaryExpression(symbol: String) extends Expression with trees.BinaryNode[Expression] {
   self: Product =>
   def references = left.references ++ right.references
+
+  override def toString = s"($left $symbol $right)"
 }
 
 abstract class LeafExpression extends Expression with trees.LeafNode[Expression] {

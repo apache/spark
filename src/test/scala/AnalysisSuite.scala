@@ -1,5 +1,5 @@
 package catalyst
-package frontend
+package analysis
 
 import org.scalatest.FunSuite
 
@@ -8,10 +8,12 @@ import expressions._
 import plans.logical._
 import types._
 
+import dsl._
+
 class AnalysisSuite extends FunSuite {
   val analyze = new Analyzer(EmptyCatalog)
 
-  val testRelation = new TestRelation(AttributeReference("a", IntegerType)() :: Nil)
+  val testRelation = new TestRelation('a.int)
 
   test("analyze project") {
     assert(analyze(Project(Seq(UnresolvedAttribute("a")), testRelation)) === Project(testRelation.output, testRelation))

@@ -4,4 +4,4 @@ package logical
 
 import expressions._
 
-case class TestRelation(output: Seq[Attribute]) extends LeafNode
+case class TestRelation(output: Attribute*) extends LeafNode

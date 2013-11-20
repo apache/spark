@@ -58,7 +58,7 @@ case class Alias(child: Expression, name: String)
  * @param name The name of this attribute, should only be used during analysis or for debugging.
  * @param dataType The [[DataType]] of this attribute.
  * @param nullable True if null is a valid value for this attribute.
- * @param exprId A globally unique id used to check if different AttributeReferences
+ * @param exprId A globally unique id used to check if different AttributeReferences refer to the same attribute.
  */
 case class AttributeReference(name: String, dataType: DataType, nullable: Boolean = true)
                              (val exprId: ExprId = NamedExpression.newExprId)

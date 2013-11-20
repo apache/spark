@@ -1,12 +1,12 @@
 package catalyst
-package analysis
+package shark2
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.Table
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
 
-import expressions.AttributeReference
-import plans.logical.{LogicalPlan, LeafNode}
+import analysis.Catalog
+import expressions._
 import types._
 
 import collection.JavaConversions._
@@ -14,7 +14,7 @@ import collection.JavaConversions._
 class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
   protected val client = new HiveMetaStoreClient(hiveConf)
 
-  def lookupRelation(name: String, alias: Option[String]): LogicalPlan = {
+  def lookupRelation(name: String, alias: Option[String]): plans.logical.LogicalPlan = {
     val (databaseName, tableName) = name.split("\\.") match {
       case Array(tableOnly) => ("default", tableOnly)
       case Array(db, table) => (db, table)
@@ -31,7 +31,7 @@ object HiveMetatoreTypes {
     }
 }
 
-case class MetastoreRelation(tableName: String)(val table: Table) extends LeafNode {
+case class MetastoreRelation(tableName: String)(val table: Table) extends plans.logical.LeafNode {
 
   // Must be a stable value since new attributes are born here.
   val output = table.getSd.getCols.map { col =>
