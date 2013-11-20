@@ -72,6 +72,12 @@ package object dsl {
     def where(condition: Expression) = Filter(condition, plan)
     def join(otherPlan: LogicalPlan, joinType: JoinType = Inner, condition: Option[Expression] = None) =
       Join(plan, otherPlan, joinType, condition)
+    def orderBy(sortExprs: SortOrder*) = Sort(sortExprs, plan)
     def analyze = analysis.SimpleAnalyzer(plan)
+  }
+
+  implicit class toSortOrder(e: Expression) {
+    def asc = SortOrder(e, Ascending)
+    def desc = SortOrder(e, Descending)
   }
 }
