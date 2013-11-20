@@ -243,10 +243,9 @@ class DAGScheduler(
   }
 
   /**
-   * Create a Stage for the given RDD, either as a shuffle map stage (for a ShuffleDependency) or
-   * as a result stage for the final RDD used directly in an action. The stage will also be
-   * associated with the provided jobId..  Shuffle map stages, whose shuffleId may have previously
-   * been registered in the MapOutputTracker, should be (re)-created using newOrUsedStage.
+   * Create a Stage -- either directly for use as a result stage, or as part of the (re)-creation
+   * of a shuffle map stage in newOrUsedStage.  The stage will be associated with the provided
+   * jobId. Production of shuffle map stages should always use newOrUsedStage, not newStage directly.
    */
   private def newStage(
       rdd: RDD[_],
