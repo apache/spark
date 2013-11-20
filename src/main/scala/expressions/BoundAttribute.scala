@@ -6,13 +6,21 @@ import errors._
 
 import shark2.SharkPlan
 
-case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: AttributeReference) extends LeafExpression {
-  def references = baseReference.references
-  def nullable = baseReference.nullable
-  def dataType = baseReference.dataType
+/**
+ * A bound reference points to a specific slot in the input tuple, allowing the actual value to be retrieved more
+ * efficiently.  However, since operations like column pruning can change the layout of intermediate tuples,
+ * BindReferences should be run after all such transformations.
+ */
+case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: AttributeReference)
+  extends Attribute with trees.LeafNode[Expression] {
+
+  lazy val nullable = baseReference.nullable
+  lazy val dataType = baseReference.dataType
+  def exprId = baseReference.exprId
+  def name = baseReference.name
 }
 
-// TODO: Should be against any query plan...
+// TODO: Should run against any query plan, not just SharkPlans
 object BindReferences extends Rule[SharkPlan] {
   def apply(plan: SharkPlan): SharkPlan = {
     plan.transform {
