@@ -255,7 +255,7 @@ object GraphImpl {
       defaultValue: VD,
       partitionStrategy: PartitionStrategy):
     GraphImpl[VD, ED] = {
-    val etable = createETable(edges).cache
+    val etable = createETable(edges, partitionStrategy).cache
     // Get the set of all vids
     val vids = etable.mapPartitions( iter => {
       val (pid, epart) = iter.next()
@@ -271,28 +271,28 @@ object GraphImpl {
     new GraphImpl(vtable, vid2pid, localVidMap, etable, partitionStrategy)
   }
 
-  def apply[VD: ClassManifest, ED: ClassManifest](
-    vertices: RDD[(Vid, VD)],
-    edges: RDD[Edge[ED]],
-    defaultVertexAttr: VD): GraphImpl[VD,ED] = {
-    apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a, RandomVertexCut())
-  }
+  // def apply[VD: ClassManifest, ED: ClassManifest](
+  //   vertices: RDD[(Vid, VD)],
+  //   edges: RDD[Edge[ED]],
+  //   defaultVertexAttr: VD): GraphImpl[VD,ED] = {
+  //   apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a, RandomVertexCut())
+  // }
 
-  def apply[VD: ClassManifest, ED: ClassManifest](
-    vertices: RDD[(Vid, VD)],
-    edges: RDD[Edge[ED]],
-    defaultVertexAttr: VD,
-    partitionStrategy: PartitionStrategy): GraphImpl[VD,ED] = {
-    apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a, partitionStrategy)
-  }
+  // def apply[VD: ClassManifest, ED: ClassManifest](
+  //   vertices: RDD[(Vid, VD)],
+  //   edges: RDD[Edge[ED]],
+  //   defaultVertexAttr: VD,
+  //   partitionStrategy: PartitionStrategy): GraphImpl[VD,ED] = {
+  //   apply(vertices, edges, defaultVertexAttr, (a:VD, b:VD) => a, partitionStrategy)
+  // }
 
-  def apply[VD: ClassManifest, ED: ClassManifest](
-    vertices: RDD[(Vid, VD)],
-    edges: RDD[Edge[ED]],
-    defaultVertexAttr: VD,
-    mergeFunc: (VD, VD) => VD): GraphImpl[VD,ED] = {
-    apply(vertices, edges, defaultVertexAttr, mergeFunc, RandomVertexCut())
-  }
+  // def apply[VD: ClassManifest, ED: ClassManifest](
+  //   vertices: RDD[(Vid, VD)],
+  //   edges: RDD[Edge[ED]],
+  //   defaultVertexAttr: VD,
+  //   mergeFunc: (VD, VD) => VD): GraphImpl[VD,ED] = {
+  //   apply(vertices, edges, defaultVertexAttr, mergeFunc, RandomVertexCut())
+  // }
 
   def apply[VD: ClassManifest, ED: ClassManifest](
     vertices: RDD[(Vid, VD)],

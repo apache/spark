@@ -351,7 +351,7 @@ object Analytics extends Logging {
          val sc = new SparkContext(host, "PageRank(" + fname + ")")
 
          val graph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart, minVertexPartitions = numVPart).cache()
+          minEdgePartitions = numEPart).cache()
 
          val startTime = System.currentTimeMillis
          logInfo("GRAPHX: starting tasks")
@@ -401,14 +401,10 @@ object Analytics extends Logging {
            println("======================================")
 
            val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")")
-           //val graph = GraphLoader.textFile(sc, fname, a => 1.0F)
            val graph = GraphLoader.edgeListFile(sc, fname,
-            minEdgePartitions = numEPart, minVertexPartitions = numVPart).cache()
+            minEdgePartitions = numEPart).cache()
            val cc = Analytics.connectedComponents(graph)
-           //val cc = if(isDynamic) Analytics.dynamicConnectedComponents(graph, numIter)
-           //         else Analytics.connectedComponents(graph, numIter)
            println("Components: " + cc.vertices.map{ case (vid,data) => data}.distinct())
-
            sc.stop()
          }
 
@@ -425,14 +421,12 @@ object Analytics extends Logging {
          println("|      Triangle Count                |")
          println("--------------------------------------")
          val sc = new SparkContext(host, "TriangleCount(" + fname + ")")
-         //val graph = GraphLoader.textFile(sc, fname, a => 1.0F)
-         val graph = GraphLoader.edgeListFileUndirected(sc, fname,
-           minEdgePartitions = numEPart, minVertexPartitions = numVPart).cache()
+         val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
+           minEdgePartitions = numEPart).cache()
          val triangles = Analytics.triangleCount(graph)
-         //val cc = if(isDynamic) Analytics.dynamicConnectedComponents(graph, numIter)
-         //         else Analytics.connectedComponents(graph, numIter)
-         println("Triangles: " + triangles.vertices.map{ case (vid,data) => data.toLong }.reduce(_+_) /3)
-
+         println("Triangles: " + triangles.vertices.map {
+            case (vid,data) => data.toLong
+          }.reduce(_+_) / 3)
          sc.stop()
        }
 

@@ -296,20 +296,6 @@ object Graph {
   import org.apache.spark.SparkContext._
 
   /**
-   * Construct a graph from a collection of edges.
-   *
-   * @param edges the RDD containing the set of edges in the graph
-   * @param defaultValue the default vertex attribute to use for each vertex
-   *
-   * @return a graph with edge attributes described by `edges` and vertices
-   *         given by all vertices in `edges` with value `defaultValue`
-   */
-  def apply[VD: ClassManifest, ED: ClassManifest](
-      edges: RDD[Edge[ED]], defaultValue: VD): Graph[VD, ED] = {
-    GraphImpl(edges, defaultValue)
-  }
-
-  /**
    * Construct a graph from a collection of edges encoded as vertex id pairs.
    *
    * @param rawEdges the RDD containing the set of edges in the graph
@@ -317,7 +303,7 @@ object Graph {
    * @return a graph with edge attributes containing the count of duplicate edges.
    */
   def apply[VD: ClassManifest](rawEdges: RDD[(Vid, Vid)], defaultValue: VD): Graph[VD, Int] = {
-    Graph(rawEdges, defaultValue, false)
+    Graph(rawEdges, defaultValue, false, RandomVertexCut())
   }
 
   /**
@@ -334,14 +320,50 @@ object Graph {
    * attributes containing the total degree of each vertex.
    *
    */
-  def apply[VD: ClassManifest](rawEdges: RDD[(Vid, Vid)], defaultValue: VD, uniqueEdges: Boolean):
+  def apply[VD: ClassManifest](
+      rawEdges: RDD[(Vid, Vid)],
+      defaultValue: VD,
+      uniqueEdges: Boolean,
+      partitionStrategy: PartitionStrategy):
     Graph[VD, Int] = {
-    val graph = GraphImpl(rawEdges.map(p => Edge(p._1, p._2, 1)), defaultValue)
+    val edges = rawEdges.map(p => Edge(p._1, p._2, 1))
+    val graph = GraphImpl(edges, defaultValue, partitionStrategy)
     if (uniqueEdges) {
       graph.groupEdges((a,b) => a+b)
     } else {
       graph
     }
+  }
+
+  /**
+   * Construct a graph from a collection of edges.
+   *
+   * @param edges the RDD containing the set of edges in the graph
+   * @param defaultValue the default vertex attribute to use for each vertex
+   *
+   * @return a graph with edge attributes described by `edges` and vertices
+   *         given by all vertices in `edges` with value `defaultValue`
+   */
+  def apply[VD: ClassManifest, ED: ClassManifest](
+      edges: RDD[Edge[ED]],
+      defaultValue: VD): Graph[VD, ED] = {
+    Graph(edges, defaultValue, RandomVertexCut())
+  }
+
+  /**
+   * Construct a graph from a collection of edges.
+   *
+   * @param edges the RDD containing the set of edges in the graph
+   * @param defaultValue the default vertex attribute to use for each vertex
+   *
+   * @return a graph with edge attributes described by `edges` and vertices
+   *         given by all vertices in `edges` with value `defaultValue`
+   */
+  def apply[VD: ClassManifest, ED: ClassManifest](
+      edges: RDD[Edge[ED]],
+      defaultValue: VD,
+      partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
+    GraphImpl(edges, defaultValue, partitionStrategy)
   }
 
   /**
@@ -362,10 +384,8 @@ object Graph {
       vertices: RDD[(Vid,VD)],
       edges: RDD[Edge[ED]]): Graph[VD, ED] = {
     val defaultAttr: VD = null.asInstanceOf[VD]
-    Graph(vertices, edges, defaultAttr, (a:VD,b:VD) => a)
+    Graph(vertices, edges, defaultAttr, (a:VD,b:VD) => a, RandomVertexCut())
   }
-
-
 
   /**
    * Construct a graph from a collection attributed vertices and
@@ -373,21 +393,21 @@ object Graph {
    * vertices found in the edge collection but not in the input
    * vertices are the default attribute `defautVertexAttr`.
    *
+   * @note Duplicate vertices are removed arbitrarily .
+   *
    * @tparam VD the vertex attribute type
    * @tparam ED the edge attribute type
    * @param vertices the "set" of vertices and their attributes
    * @param edges the collection of edges in the graph
    * @param defaultVertexAttr the default vertex attribute to use for
-   * vertices that are mentioned in `edges` but not in `vertices
-   * @param mergeFunc the function used to merge duplicate vertices
-   * in the `vertices` collection.
+   * vertices that are mentioned in `edges` but not in `vertices`
    *
    */
   def apply[VD: ClassManifest, ED: ClassManifest](
       vertices: RDD[(Vid,VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD): Graph[VD, ED] = {
-    GraphImpl(vertices, edges, defaultVertexAttr, (a,b) => a)
+    Graph(vertices, edges, defaultVertexAttr, (a,b) => a, RandomVertexCut())
   }
 
   /**
@@ -404,14 +424,17 @@ object Graph {
    * vertices that are mentioned in `edges` but not in `vertices
    * @param mergeFunc the function used to merge duplicate vertices
    * in the `vertices` collection.
+   * @param partitionStrategy the partition strategy to use when
+   * partitioning the edges.
    *
    */
   def apply[VD: ClassManifest, ED: ClassManifest](
       vertices: RDD[(Vid,VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD,
-      mergeFunc: (VD, VD) => VD): Graph[VD, ED] = {
-    GraphImpl(vertices, edges, defaultVertexAttr, mergeFunc)
+      mergeFunc: (VD, VD) => VD,
+      partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
+    GraphImpl(vertices, edges, defaultVertexAttr, mergeFunc, partitionStrategy)
   }
 
   /**

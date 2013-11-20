@@ -65,7 +65,7 @@ object GraphGenerators {
 
   // Right now it just generates a bunch of edges where
   // the edge data is the weight (default 1)
-  def logNormalGraph(sc: SparkContext, numVertices: Int): GraphImpl[Int, Int] = {
+  def logNormalGraph(sc: SparkContext, numVertices: Int): Graph[Int, Int] = {
     // based on Pregel settings
     val mu = 4
     val sigma = 1.3
@@ -75,11 +75,11 @@ object GraphGenerators {
       src => (src, sampleLogNormal(mu, sigma, numVertices))
     }
 
-    val edges = vertices.flatMap{ 
-      v => generateRandomEdges(v._1.toInt, v._2, numVertices) 
+    val edges = vertices.flatMap{
+      v => generateRandomEdges(v._1.toInt, v._2, numVertices)
     }
-    
-    GraphImpl(vertices, edges, 0)
+
+    Graph(vertices, edges, 0)
     //println("Vertices:")
     //for (v <- vertices) {
     //  println(v.id)
@@ -137,7 +137,7 @@ object GraphGenerators {
 
 
 
-  def rmatGraph(sc: SparkContext, requestedNumVertices: Int, numEdges: Int): GraphImpl[Int, Int] = {
+  def rmatGraph(sc: SparkContext, requestedNumVertices: Int, numEdges: Int): Graph[Int, Int] = {
     // let N = requestedNumVertices
     // the number of vertices is 2^n where n=ceil(log2[N])
     // This ensures that the 4 quadrants are the same size at all recursion levels
@@ -155,12 +155,12 @@ object GraphGenerators {
 
   }
 
-  def outDegreeFromEdges[ED: ClassManifest](edges: RDD[Edge[ED]]): GraphImpl[Int, ED] = {
-    
+  def outDegreeFromEdges[ED: ClassManifest](edges: RDD[Edge[ED]]): Graph[Int, ED] = {
+
     val vertices = edges.flatMap { edge => List((edge.srcId, 1)) }
       .reduceByKey(_ + _)
       .map{ case (vid, degree) => (vid, degree) }
-    GraphImpl(vertices, edges, 0)
+    Graph(vertices, edges, 0)
   }
 
   /**
@@ -192,7 +192,7 @@ object GraphGenerators {
    *       |   c  |   d  |  |
    *       |      |      |  |
    *       ***************  -
-   *        
+   *
    * where this represents the subquadrant of the adj matrix currently being
    * subdivided. (x,y) represent the upper left hand corner of the subquadrant,
    * and T represents the side length (guaranteed to be a power of 2).
@@ -204,7 +204,7 @@ object GraphGenerators {
    *    quad = c, x'=x, y'=y+T/2, T'=T/2
    *    quad = d, x'=x+T/2, y'=y+T/2, T'=T/2
    *
-   * @param src is the 
+   * @param src is the
    */
   @tailrec
   def chooseCell(x: Int, y: Int, t: Int): (Int, Int) = {
@@ -242,7 +242,7 @@ object GraphGenerators {
    * Create `rows` by `cols` grid graph with each vertex connected to its
    * row+1 and col+1 neighbors.  Vertex ids are assigned in row major
    * order.
-   * 
+   *
    * @param sc the spark context in which to construct the graph
    * @param rows the number of rows
    * @param cols the number of columns
@@ -252,12 +252,12 @@ object GraphGenerators {
    */
   def gridGraph(sc: SparkContext, rows: Int, cols: Int): Graph[(Int,Int), Double] = {
     // Convert row column address into vertex ids (row major order)
-    def sub2ind(r: Int, c: Int): Vid = r * cols + c 
+    def sub2ind(r: Int, c: Int): Vid = r * cols + c
 
-    val vertices: RDD[(Vid, (Int,Int))] = 
+    val vertices: RDD[(Vid, (Int,Int))] =
       sc.parallelize(0 until rows).flatMap( r => (0 until cols).map( c => (sub2ind(r,c), (r,c)) ) )
-    val edges: RDD[Edge[Double]] = 
-      vertices.flatMap{ case (vid, (r,c)) => 
+    val edges: RDD[Edge[Double]] =
+      vertices.flatMap{ case (vid, (r,c)) =>
         (if (r+1 < rows) { Seq( (sub2ind(r, c), sub2ind(r+1, c))) } else { Seq.empty }) ++
         (if (c+1 < cols) { Seq( (sub2ind(r, c), sub2ind(r, c+1))) } else { Seq.empty })
       }.map{ case (src, dst) => Edge(src, dst, 1.0) }
@@ -266,7 +266,7 @@ object GraphGenerators {
 
   /**
    * Create a star graph with vertex 0 being the center.
-   * 
+   *
    * @param sc the spark context in which to construct the graph
    * @param the number of vertices in the star
    *
