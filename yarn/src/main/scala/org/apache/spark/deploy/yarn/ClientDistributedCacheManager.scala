@@ -197,11 +197,11 @@ class ClientDistributedCacheManager() extends Logging {
    */
   def checkPermissionOfOther(fs: FileSystem, path: Path,
       action: FsAction, statCache: Map[URI, FileStatus]): Boolean = {
-    val status = getFileStatus(fs, path.toUri(), statCache);
+    val status = getFileStatus(fs, path.toUri(), statCache)
     val perms = status.getPermission()
     val otherAction = perms.getOtherAction()
     if (otherAction.implies(action)) {
-      return true;
+      return true
     }
     return false
   }
