@@ -195,7 +195,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
           successed = true
         } finally {
           logDebug("finishing main")
-          isLastAMRetry = true;
+          isLastAMRetry = true
           if (successed) {
             ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.SUCCEEDED)
           } else {

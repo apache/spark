@@ -124,7 +124,9 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
 
   def stop() {
     synchronized {
-      if (stopped) return ;
+      if (stopped) {
+        return
+      }
       stopped = true
     }
     executor.shutdown()

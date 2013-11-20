@@ -201,7 +201,7 @@ class ClientDistributedCacheManager() extends Logging {
     val perms = status.getPermission()
     val otherAction = perms.getOtherAction()
     if (otherAction.implies(action)) {
-      return true;
+      return true
     }
     return false
   }

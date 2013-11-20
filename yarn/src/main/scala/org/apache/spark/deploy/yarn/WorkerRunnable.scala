@@ -107,7 +107,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     credentials.writeTokenStorageToStream(dob)
     ctx.setContainerTokens(ByteBuffer.wrap(dob.getData()))
 
-    var javaCommand = "java";
+    var javaCommand = "java"
     val javaHome = System.getenv("JAVA_HOME")
     if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
       javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
@@ -215,7 +215,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
             return rpc.getProxy(classOf[ContainerManager],
                 cmAddress, conf).asInstanceOf[ContainerManager]
           }
-        });
+        })
     proxy
   }
   
