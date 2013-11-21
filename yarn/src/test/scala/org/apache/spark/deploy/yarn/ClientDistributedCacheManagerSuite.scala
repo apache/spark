@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.URI;
+import java.net.URI
 
 import org.scalatest.FunSuite
 import org.scalatest.mock.MockitoSugar

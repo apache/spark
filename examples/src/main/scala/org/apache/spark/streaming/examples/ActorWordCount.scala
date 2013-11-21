@@ -121,7 +121,7 @@ object FeederActor {
 
     println("Feeder started as:" + feeder)
 
-    actorSystem.awaitTermination();
+    actorSystem.awaitTermination()
   }
 }
 

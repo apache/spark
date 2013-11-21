@@ -17,11 +17,11 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.io.IOException;
+import java.io.IOException
 import java.net.Socket
-import java.security.PrivilegedExceptionAction
 import java.util.concurrent.CopyOnWriteArrayList
 import java.util.concurrent.atomic.{AtomicInteger, AtomicReference}
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.net.NetUtils
@@ -34,7 +34,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.util.Utils
-import org.apache.hadoop.security.UserGroupInformation
+
 import scala.collection.JavaConversions._
 
 class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) extends Logging {
@@ -54,7 +54,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   private val maxAppAttempts: Int = conf.getInt(YarnConfiguration.RM_AM_MAX_RETRIES,
     YarnConfiguration.DEFAULT_RM_AM_MAX_RETRIES)
   private var isLastAMRetry: Boolean = true
-
+  // default to numWorkers * 2, with minimum of 3 
+  private val maxNumWorkerFailures = System.getProperty("spark.yarn.max.worker.failures",
+    math.max(args.numWorkers * 2, 3).toString()).toInt
 
   def run() {
     // setup the directories so things go to yarn approved directories rather
@@ -65,7 +67,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     ShutdownHookManager.get().addShutdownHook(new AppMasterShutdownHook(this), 30)
     
     appAttemptId = getApplicationAttemptId()
-    isLastAMRetry = appAttemptId.getAttemptId() >= maxAppAttempts;
+    isLastAMRetry = appAttemptId.getAttemptId() >= maxAppAttempts
     resourceManager = registerWithResourceManager()
 
     // Workaround until hadoop moves to something which has
@@ -186,8 +188,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
         var successed = false
         try {
           // Copy
-          var mainArgs: Array[String] = new Array[String](args.userArgs.size())
-          args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size())
+          var mainArgs: Array[String] = new Array[String](args.userArgs.size)
+          args.userArgs.copyToArray(mainArgs, 0, args.userArgs.size)
           mainMethod.invoke(null, mainArgs)
           // some job script has "System.exit(0)" at the end, for example SparkPi, SparkLR
           // userThread will stop here unless it has uncaught exception thrown out
@@ -195,7 +197,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
           successed = true
         } finally {
           logDebug("finishing main")
-          isLastAMRetry = true;
+          isLastAMRetry = true
           if (successed) {
             ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.SUCCEEDED)
           } else {
@@ -227,12 +229,13 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
 
         if (null != sparkContext) {
           uiAddress = sparkContext.ui.appUIAddress
-          this.yarnAllocator = YarnAllocationHandler.newAllocator(yarnConf, resourceManager, appAttemptId, args, 
-                                               sparkContext.preferredNodeLocationData) 
+          this.yarnAllocator = YarnAllocationHandler.newAllocator(yarnConf, resourceManager, 
+            appAttemptId, args, sparkContext.preferredNodeLocationData) 
         } else {
           logWarning("Unable to retrieve sparkContext inspite of waiting for " + count * waitTime + 
-                  ", numTries = " + numTries)
-          this.yarnAllocator = YarnAllocationHandler.newAllocator(yarnConf, resourceManager, appAttemptId, args)
+            ", numTries = " + numTries)
+          this.yarnAllocator = YarnAllocationHandler.newAllocator(yarnConf, resourceManager,
+            appAttemptId, args)
         }
       }
     } finally {
@@ -251,8 +254,11 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       while(yarnAllocator.getNumWorkersRunning < args.numWorkers &&
         // If user thread exists, then quit !
         userThread.isAlive) {
-
-          this.yarnAllocator.allocateContainers(math.max(args.numWorkers - yarnAllocator.getNumWorkersRunning, 0))
+          if (yarnAllocator.getNumWorkersFailed >= maxNumWorkerFailures) {
+            finishApplicationMaster(FinalApplicationStatus.FAILED,
+              "max number of worker failures reached")
+          }
+          yarnAllocator.allocateContainers(math.max(args.numWorkers - yarnAllocator.getNumWorkersRunning, 0))
           ApplicationMaster.incrementAllocatorLoop(1)
           Thread.sleep(100)
       }
@@ -268,21 +274,27 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       // ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapse.
 
       val timeoutInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
-      // must be <= timeoutInterval/ 2.
-      // On other hand, also ensure that we are reasonably responsive without causing too many requests to RM.
-      // so atleast 1 minute or timeoutInterval / 10 - whichever is higher.
-      val interval = math.min(timeoutInterval / 2, math.max(timeoutInterval/ 10, 60000L))
+
+      // we want to be reasonably responsive without causing too many requests to RM.
+      val schedulerInterval = 
+        System.getProperty("spark.yarn.scheduler.heartbeat.interval-ms", "5000").toLong
+
+      // must be <= timeoutInterval / 2.
+      val interval = math.min(timeoutInterval / 2, schedulerInterval)
       launchReporterThread(interval)
     }
   }
 
-  // TODO: We might want to extend this to allocate more containers in case they die !
   private def launchReporterThread(_sleepTime: Long): Thread = {
     val sleepTime = if (_sleepTime <= 0 ) 0 else _sleepTime
 
     val t = new Thread {
       override def run() {
         while (userThread.isAlive) {
+          if (yarnAllocator.getNumWorkersFailed >= maxNumWorkerFailures) {
+            finishApplicationMaster(FinalApplicationStatus.FAILED, 
+              "max number of worker failures reached")
+          }
           val missingWorkerCount = args.numWorkers - yarnAllocator.getNumWorkersRunning
           if (missingWorkerCount > 0) {
             logInfo("Allocating " + missingWorkerCount + " containers to make up for (potentially ?) lost containers")
@@ -321,7 +333,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   }
   */
 
-  def finishApplicationMaster(status: FinalApplicationStatus) {
+  def finishApplicationMaster(status: FinalApplicationStatus, diagnostics: String = "") {
 
     synchronized {
       if (isFinished) {
@@ -335,6 +347,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       .asInstanceOf[FinishApplicationMasterRequest]
     finishReq.setAppAttemptId(appAttemptId)
     finishReq.setFinishApplicationStatus(status)
+    finishReq.setDiagnostics(diagnostics)
     // set tracking url to empty since we don't have a history server
     finishReq.setTrackingUrl("")
     resourceManager.finishApplicationMaster(finishReq)

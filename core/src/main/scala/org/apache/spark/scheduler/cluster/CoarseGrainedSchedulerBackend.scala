@@ -194,6 +194,7 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
   }
 
   override def stop() {
+    stopExecutors()
     try {
       if (driverActor != null) {
         val future = driverActor.ask(StopDriver)(timeout)

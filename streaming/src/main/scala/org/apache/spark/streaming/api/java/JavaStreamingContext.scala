@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.lang.{Long => JLong, Integer => JInt}
+import java.lang.{Integer => JInt}
 import java.io.InputStream
 import java.util.{Map => JMap, List => JList}
 
@@ -36,10 +36,9 @@ import twitter4j.auth.Authorization
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
-import org.apache.spark.api.java.{JavaPairRDD, JavaRDDLike, JavaSparkContext, JavaRDD}
+import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receivers.{ActorReceiver, ReceiverSupervisorStrategy}
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -315,7 +314,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
     implicit val cmf: ClassTag[F] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[F]]
-    ssc.fileStream[K, V, F](directory);
+    ssc.fileStream[K, V, F](directory)
   }
 
   /**

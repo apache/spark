@@ -71,7 +71,7 @@ class CartesianRDD[T: ClassTag, U:ClassTag](
   override def compute(split: Partition, context: TaskContext) = {
     val currSplit = split.asInstanceOf[CartesianPartition]
     for (x <- rdd1.iterator(currSplit.s1, context);
-      y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
+         y <- rdd2.iterator(currSplit.s2, context)) yield (x, y)
   }
 
   override def getDependencies: Seq[Dependency[_]] = List(
