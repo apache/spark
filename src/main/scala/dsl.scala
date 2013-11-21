@@ -32,12 +32,6 @@ import types._
  * }}}
  */
 package object dsl {
-  /** A class for creating new typed attributes.  Primarily for the creation of fake "test" relations. */
-  implicit class DslAttribute(s: Symbol) {
-    def int = AttributeReference(s.name, IntegerType, false)()
-    def string = AttributeReference(s.name, StringType, false)()
-  }
-
   abstract protected trait ImplicitOperators {
     def expr: Expression
 
@@ -51,6 +45,8 @@ package object dsl {
 
     def asc = SortOrder(expr, Ascending)
     def desc = SortOrder(expr, Descending)
+
+    def as(s: Symbol) = Alias(expr, s.name)()
   }
 
   implicit class DslExpression(e: Expression) extends ImplicitOperators {
@@ -68,6 +64,19 @@ package object dsl {
   implicit class DslSymbol(s: Symbol) extends ImplicitOperators {
     def expr = attr
     def attr = analysis.UnresolvedAttribute(s.name)
+
+    /** Creates a new typed attributes of type int */
+    def int = AttributeReference(s.name, IntegerType, false)()
+    /** Creates a new typed attributes of type string */
+    def string = AttributeReference(s.name, StringType, false)()
+  }
+
+  implicit class DslAttribute(a: AttributeReference) {
+    def notNull = a.withNullability(false)
+    def nullable = a.withNullability(true)
+
+    // Protobuf terminology
+    def required = a.withNullability(false)
   }
 
   implicit class DslLogicalPlan(plan: LogicalPlan) {
