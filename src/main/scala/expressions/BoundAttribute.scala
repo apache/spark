@@ -18,6 +18,7 @@ case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: Attribut
   lazy val dataType = baseReference.dataType
   def exprId = baseReference.exprId
   def name = baseReference.name
+  override def toString = s"$baseReference:$inputTuple.$ordinal"
 }
 
 // TODO: Should run against any query plan, not just SharkPlans
