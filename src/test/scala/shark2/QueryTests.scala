@@ -3,6 +3,7 @@ package shark2
 
 import catalyst.analysis
 
+import catalyst.plans.logical.LogicalPlan
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import analysis._
@@ -38,13 +39,14 @@ class QueryTests extends FunSuite with BeforeAndAfterAll {
     )
 
   test("table scan") {
-    assert(
-      testData.toRdd.collect().toSeq === testData.data.map(_.productIterator.toIndexedSeq))
+    checkAnswer(
+      testData,
+      testData.data)
   }
 
   test("simple select") {
-    assert(
-      testData.where('key === 1).select('value).toRdd.collect().toSeq ===
+    checkAnswer(
+      testData.where('key === 1).select('value),
       Seq(Seq("1")))
   }
 
@@ -53,9 +55,39 @@ class QueryTests extends FunSuite with BeforeAndAfterAll {
   }
 
   test("sorting") {
-    assert(testData2.orderBy('a.asc, 'b.asc).toRdd.collect().toSeq === Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)).map(_.productIterator.toIndexedSeq))
-    assert(testData2.orderBy('a.asc, 'b.desc).toRdd.collect().toSeq === Seq((1,2), (1,1), (2,2), (2,1), (3,2), (3,1)).map(_.productIterator.toIndexedSeq))
-    assert(testData2.orderBy('a.desc, 'b.desc).toRdd.collect().toSeq === Seq((3,2), (3,1), (2,2), (2,1), (1,2), (1,1)).map(_.productIterator.toIndexedSeq))
-    assert(testData2.orderBy('a.desc, 'b.asc).toRdd.collect().toSeq === Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)).map(_.productIterator.toIndexedSeq))
+    checkAnswer(
+      testData2.orderBy('a.asc, 'b.asc),
+      Seq((1,1), (1,2), (2,1), (2,2), (3,1), (3,2)))
+
+    checkAnswer(
+      testData2.orderBy('a.asc, 'b.desc),
+      Seq((1,2), (1,1), (2,2), (2,1), (3,2), (3,1)))
+
+    checkAnswer(
+      testData2.orderBy('a.desc, 'b.desc),
+      Seq((3,2), (3,1), (2,2), (2,1), (1,2), (1,1)))
+
+    checkAnswer(
+      testData2.orderBy('a.desc, 'b.asc),
+      Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
+  }
+
+
+  /**
+   * Runs the plan and makes sure the answer matches the expected result.
+   * @param plan the query to be executed
+   * @param expectedAnswer the expected result, can either be Seq[Product] or Seq[Seq[Any]]
+   */
+  protected def checkAnswer(plan: LogicalPlan, expectedAnswer: Seq[Any]): Unit = {
+    val convertedAnswer =
+      if(expectedAnswer.isEmpty)
+        expectedAnswer
+      else if(expectedAnswer.head.isInstanceOf[Product] && !expectedAnswer.head.isInstanceOf[::[_]])
+        expectedAnswer.map(_.asInstanceOf[Product].productIterator.toSeq)
+      else
+        expectedAnswer
+
+    val sharkAnswer = plan.toRdd.collect().toSeq
+    assert(convertedAnswer === sharkAnswer)
   }
 }
