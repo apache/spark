@@ -76,16 +76,16 @@ class QueryTests extends FunSuite with BeforeAndAfterAll {
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param plan the query to be executed
-   * @param expectedAnswer the expected result, can either be Seq[Product] or Seq[Seq[Any]]
+   * @param expectedAnswer the expected result, can either be an Any, Seq[Products.] or Seq[Seq[Any]]
    */
-  protected def checkAnswer(plan: LogicalPlan, expectedAnswer: Seq[Any]): Unit = {
-    val convertedAnswer =
-      if(expectedAnswer.isEmpty)
-        expectedAnswer
-      else if(expectedAnswer.head.isInstanceOf[Product] && !expectedAnswer.head.isInstanceOf[::[_]])
-        expectedAnswer.map(_.asInstanceOf[Product].productIterator.toSeq)
-      else
-        expectedAnswer
+  protected def checkAnswer(plan: LogicalPlan, expectedAnswer: Any): Unit = {
+    val convertedAnswer = expectedAnswer match {
+      case s: Seq[_] if s.isEmpty => s
+      case s: Seq[_] if s.head.isInstanceOf[Product] &&
+                        !s.head.isInstanceOf[Seq[_]] => s.map(_.asInstanceOf[Product].productIterator.toIndexedSeq)
+      case s: Seq[_] => s
+      case singleItem => Seq(Seq(singleItem))
+    }
 
     val sharkAnswer = plan.toRdd.collect().toSeq
     assert(convertedAnswer === sharkAnswer)
