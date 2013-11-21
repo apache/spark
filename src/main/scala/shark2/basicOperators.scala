@@ -66,13 +66,14 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
     }
   }
 
-  def execute() =
+  def execute() = attachTree(this, "sort") {
     child.execute().map { row =>
       val input = Vector(row)
       val sortKey = new SortKey(sortExprs.map(s => Evaluate(s.child, input)).toIndexedSeq)
 
       (sortKey, row)
     }.sortByKey(true, numPartitions).map(_._2)
+  }
 
   def output = child.output
 }
