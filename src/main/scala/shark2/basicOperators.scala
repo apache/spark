@@ -6,6 +6,7 @@ import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, 
 import shark.execution.HadoopTableReader
 import shark.{SharkContext, SharkEnv}
 
+import errors._
 import expressions._
 import types._
 
@@ -24,6 +25,55 @@ case class Filter(condition: Expression, child: SharkPlan) extends UnaryNode {
   def output = child.output
   def execute() = child.execute().filter { row =>
     Evaluate(condition, Vector(row)).asInstanceOf[Boolean]
+  }
+}
+
+/**
+ * Uses spark constructs such as Accumulators to perform aggregation.
+ *
+ * Currently supports only COUNT() with no group by.
+ * @param groupingExprs
+ * @param aggregateExprs
+ * @param child
+ * @param sc
+ */
+case class SparkAggregate(groupingExprs: Seq[Expression], aggregateExprs: Seq[NamedExpression], child: SharkPlan)
+                         (@transient sc: SharkContext) extends UnaryNode {
+  def output = aggregateExprs.map(_.toAttribute)
+  override def otherCopyArgs = Seq(sc)
+
+  abstract class AggregateFunction extends Serializable {
+    def apply(input: Seq[Seq[Any]]): Unit
+    def result: Any
+  }
+
+  case class AverageFunction(expr: Expression) extends AggregateFunction with Serializable {
+    def this() = this(null)
+
+    val count  = sc.accumulable(0)
+    val sum = sc.accumulable(0)
+    def result: Any = sum.value.toDouble / count.value.toDouble
+
+    def apply(input: Seq[Seq[Any]]): Unit = {
+      count += 1
+      // TODO: Support all types here...
+      sum += Evaluate(expr, input).asInstanceOf[Int]
+    }
+  }
+
+  def execute() = attachTree(this, "execute") {
+    if(!groupingExprs.isEmpty) ??? // TODO: Generalize
+    val aggFunctions = aggregateExprs.map {
+        case Alias(Average(expr), _) => new AverageFunction(expr)
+        case _ => throw new OptimizationException(this, "Aggregate not implemented in SparkAggregate")
+      }
+
+    println(s"Running aggregates: $aggFunctions")
+    child.execute().foreach { row =>
+      val input = Vector(row)
+      aggFunctions.foreach(_.apply(input))
+    }
+    sc.makeRDD(Seq(aggFunctions.map(_.result).toIndexedSeq), 1)
   }
 }
 

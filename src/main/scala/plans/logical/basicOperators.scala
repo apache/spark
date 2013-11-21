@@ -28,3 +28,12 @@ case class Sort(order: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {
   def output = child.output
   def references = child.references
 }
+
+case class Aggregate(
+    groupingExpressions: Seq[Expression],
+    aggregateExpressions: Seq[NamedExpression],
+    child: LogicalPlan) extends UnaryNode {
+
+  def output = aggregateExpressions.map(_.toAttribute)
+  def references = child.references
+}

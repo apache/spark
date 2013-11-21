@@ -85,6 +85,13 @@ package object dsl {
     def join(otherPlan: LogicalPlan, joinType: JoinType = Inner, condition: Option[Expression] = None) =
       Join(plan, otherPlan, joinType, condition)
     def orderBy(sortExprs: SortOrder*) = Sort(sortExprs, plan)
+    def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*) = {
+      val aliasedExprs = aggregateExprs.map {
+        case ne: NamedExpression => ne
+        case e => Alias(e, e.toString)()
+      }
+      Aggregate(groupingExprs, aliasedExprs, plan)
+    }
     def analyze = analysis.SimpleAnalyzer(plan)
   }
 }

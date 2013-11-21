@@ -72,6 +72,11 @@ class QueryTests extends FunSuite with BeforeAndAfterAll {
       Seq((3,1), (3,2), (2,1), (2,2), (1,1), (1,2)))
   }
 
+  test("average") {
+    checkAnswer(
+      testData2.groupBy()(Average('a)),
+      2.0)
+  }
 
   /**
    * Runs the plan and makes sure the answer matches the expected result.
