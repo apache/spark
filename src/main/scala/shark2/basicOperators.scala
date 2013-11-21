@@ -7,11 +7,12 @@ import shark.execution.HadoopTableReader
 import shark.{SharkContext, SharkEnv}
 
 import expressions._
+import types._
 
 import collection.JavaConversions._
 import org.apache.spark.SparkContext._
 
-case class Project(projectList: Seq[NamedExpression], @transient child: SharkPlan) extends UnaryNode {
+case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
 
   def execute() = child.execute().map { row =>
@@ -19,7 +20,7 @@ case class Project(projectList: Seq[NamedExpression], @transient child: SharkPla
   }
 }
 
-case class Filter(condition: Expression, @transient child: SharkPlan) extends UnaryNode {
+case class Filter(condition: Expression, child: SharkPlan) extends UnaryNode {
   def output = child.output
   def execute() = child.execute().filter { row =>
     Evaluate(condition, Vector(row)).asInstanceOf[Boolean]
@@ -29,17 +30,49 @@ case class Filter(condition: Expression, @transient child: SharkPlan) extends Un
 case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
   val numPartitions = 1 // TODO: Set with input cardinality
 
-  def execute() = child.execute().map { row =>
-    val input = Vector(row)
-    val sortKey =
-      sortExprs
-        .map {
-          case SortOrder(e, Ascending) => Evaluate(e, input)
-          case SortOrder(e, Descending) => ???
-        }.map(_.asInstanceOf[Int]).head // Need concrete type for ordering to be selected.
-                                        // TODO: Implement ordering in evaluate or at least a placeholder.
-    (sortKey, row)
-  }.sortByKey(true, numPartitions).map(_._2)
+  val directions = sortExprs.map(_.direction).toIndexedSeq
+  val dataTypes = sortExprs.map(_.dataType).toIndexedSeq
+
+  class SortKey(val keyValues: IndexedSeq[Any]) extends Ordered[SortKey] with Serializable {
+    def compare(other: SortKey): Int = {
+      var i = 0
+      while(i < keyValues.size) {
+        val left = keyValues(i)
+        val right = other.keyValues(i)
+        val curDirection = directions(i)
+        val curDataType = dataTypes(i)
+
+        // TODO: Configure logging...
+        // println(s"Comparing $left, $right as $curDataType order $curDirection")
+
+        val comparison =
+          if(curDataType == IntegerType)
+            if(curDirection == Ascending)
+              left.asInstanceOf[Int] compare right.asInstanceOf[Int]
+            else
+              right.asInstanceOf[Int] compare left.asInstanceOf[Int]
+          else if(curDataType == DoubleType)
+            if(curDirection == Ascending)
+              left.asInstanceOf[Double] compare right.asInstanceOf[Double]
+            else
+              right.asInstanceOf[Double] compare left.asInstanceOf[Double]
+          else
+            sys.error(s"Comparison not yet implemented for: $curDataType")
+
+        if(comparison != 0) return comparison
+        i += 1
+      }
+      return 0
+    }
+  }
+
+  def execute() =
+    child.execute().map { row =>
+      val input = Vector(row)
+      val sortKey = new SortKey(sortExprs.map(s => Evaluate(s.child, input)).toIndexedSeq)
+
+      (sortKey, row)
+    }.sortByKey(true, numPartitions).map(_._2)
 
   def output = child.output
 }
@@ -108,7 +141,7 @@ case class InsertIntoHiveTable(tableName: String, child: SharkPlan)
 }
 
 case class LocalRelation(output: Seq[Attribute], data: Seq[IndexedSeq[Any]])
-                        (sc: SharkContext) extends LeafNode {
+                        (@transient sc: SharkContext) extends LeafNode {
   def execute() = sc.makeRDD(data, 1)
 }
 
