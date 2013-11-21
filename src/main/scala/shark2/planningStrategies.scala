@@ -52,8 +52,8 @@ abstract trait PlanningStrategies {
         shark2.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         shark2.Filter(condition, planLater(child)) :: Nil
-      case logical.Aggregate(group, agg, child) =>
-        shark2.SparkAggregate(group, agg, planLater(child))(sc) :: Nil
+      case logical.Aggregate(Nil, agg, child) =>
+        shark2.SparkAggregate(agg, planLater(child))(sc) :: Nil
       case logical.LocalRelation(output, data) =>
         shark2.LocalRelation(output, data.map(_.productIterator.toVector))(sc) :: Nil
       case _ => Nil

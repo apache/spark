@@ -29,15 +29,11 @@ case class Filter(condition: Expression, child: SharkPlan) extends UnaryNode {
 }
 
 /**
- * Uses spark constructs such as Accumulators to perform aggregation.
+ * Uses spark Accumulators to perform global aggregation.
  *
- * Currently supports only COUNT() with no group by.
- * @param groupingExprs
- * @param aggregateExprs
- * @param child
- * @param sc
+ * Currently supports only COUNT().
  */
-case class SparkAggregate(groupingExprs: Seq[Expression], aggregateExprs: Seq[NamedExpression], child: SharkPlan)
+case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan)
                          (@transient sc: SharkContext) extends UnaryNode {
   def output = aggregateExprs.map(_.toAttribute)
   override def otherCopyArgs = Seq(sc)
@@ -61,14 +57,13 @@ case class SparkAggregate(groupingExprs: Seq[Expression], aggregateExprs: Seq[Na
     }
   }
 
-  def execute() = attachTree(this, "execute") {
-    if(!groupingExprs.isEmpty) ??? // TODO: Generalize
+  def execute() = attachTree(this, "SparkAggregate") {
     val aggFunctions = aggregateExprs.map {
         case Alias(Average(expr), _) => new AverageFunction(expr)
         case _ => throw new OptimizationException(this, "Aggregate not implemented in SparkAggregate")
       }
 
-    println(s"Running aggregates: $aggFunctions")
+    //TOOD: println(s"Running aggregates: $aggFunctions")
     child.execute().foreach { row =>
       val input = Vector(row)
       aggFunctions.foreach(_.apply(input))
@@ -80,10 +75,10 @@ case class SparkAggregate(groupingExprs: Seq[Expression], aggregateExprs: Seq[Na
 case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
   val numPartitions = 1 // TODO: Set with input cardinality
 
-  val directions = sortExprs.map(_.direction).toIndexedSeq
-  val dataTypes = sortExprs.map(_.dataType).toIndexedSeq
+  private final val directions = sortExprs.map(_.direction).toIndexedSeq
+  private final val dataTypes = sortExprs.map(_.dataType).toIndexedSeq
 
-  class SortKey(val keyValues: IndexedSeq[Any]) extends Ordered[SortKey] with Serializable {
+  private class SortKey(val keyValues: IndexedSeq[Any]) extends Ordered[SortKey] with Serializable {
     def compare(other: SortKey): Int = {
       var i = 0
       while(i < keyValues.size) {
@@ -116,6 +111,7 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
     }
   }
 
+  // TODO: Don't include redundant expressions in both sortKey and row.
   def execute() = attachTree(this, "sort") {
     child.execute().map { row =>
       val input = Vector(row)
