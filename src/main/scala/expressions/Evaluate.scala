@@ -17,6 +17,10 @@ object Evaluate {
       case BoundReference(inputTuple, ordinal, _) => input(inputTuple)(ordinal)
       case GreaterThan(l, r) => (eval(l), eval(r)) match {
         case (l: Double, r: Double) => l > r
+        case (l: Int, r: Int) => l > r
+        case (l: String, r: String) => l > r
+        case (l: Float, r: Float) => l > r
+        case (l, r) => throw new NotImplementedError(s"no > for ${l.getClass.getName} ${r.getClass.getName}")
       }
       case Rand => scala.util.Random.nextDouble
       case other => throw new NotImplementedError(s"Evaluation for:\n $e")
