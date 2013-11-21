@@ -24,7 +24,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
    * Returns the set of attributes that this node takes as
    * input from its children.
    */
-  def inputSet: Set[Attribute] = ???
+  def inputSet: Set[Attribute] = children.flatMap(_.output).toSet
 
   def resolve(name: String): Option[Attribute] = {
     val options = children.flatMap(_.output).filter(_.name == name)
