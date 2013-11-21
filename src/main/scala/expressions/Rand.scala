@@ -1,10 +1,11 @@
 package catalyst
 package expressions
 
-import catalyst.types.FloatType
+import types.DoubleType
 
 case object Rand extends LeafExpression {
-  def dataType = FloatType
+  def dataType = DoubleType
   def nullable = false
   def references = Set.empty
+  override def toString = "RAND()"
 }
