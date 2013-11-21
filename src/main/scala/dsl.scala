@@ -48,6 +48,9 @@ package object dsl {
     def >(other: Expression) = GreaterThan(expr, other)
     def >=(other: Expression) = GreaterThanOrEqual(expr, other)
     def ===(other: Expression) = Equals(expr, other)
+
+    def asc = SortOrder(expr, Ascending)
+    def desc = SortOrder(expr, Descending)
   }
 
   implicit class DslExpression(e: Expression) extends ImplicitOperators {
@@ -74,10 +77,5 @@ package object dsl {
       Join(plan, otherPlan, joinType, condition)
     def orderBy(sortExprs: SortOrder*) = Sort(sortExprs, plan)
     def analyze = analysis.SimpleAnalyzer(plan)
-  }
-
-  implicit class toSortOrder(e: Expression) {
-    def asc = SortOrder(e, Ascending)
-    def desc = SortOrder(e, Descending)
   }
 }
