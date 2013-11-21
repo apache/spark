@@ -76,7 +76,7 @@ private[spark] object ShuffleCopier extends Logging {
     extends FileClientHandler with Logging {
 
     override def handle(ctx: ChannelHandlerContext, in: ByteBuf, header: FileHeader) {
-      logDebug("Received Block: " + header.blockId + " (" + header.fileLen + "B)");
+      logDebug("Received Block: " + header.blockId + " (" + header.fileLen + "B)")
       resultCollectCallBack(header.blockId, header.fileLen.toLong, in.readBytes(header.fileLen))
     }
 

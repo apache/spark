@@ -65,7 +65,7 @@ object SparkTC {
       oldCount = nextCount
       // Perform the join, obtaining an RDD of (y, (z, x)) pairs,
       // then project the result to obtain the new (x, z) paths.
-      tc = tc.union(tc.join(edges).map(x => (x._2._2, x._2._1))).distinct().cache();
+      tc = tc.union(tc.join(edges).map(x => (x._2._2, x._2._1))).distinct().cache()
       nextCount = tc.count()
     } while (nextCount != oldCount)
 

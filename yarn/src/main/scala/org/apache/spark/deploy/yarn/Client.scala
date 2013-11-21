@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.{InetAddress, InetSocketAddress, UnknownHostException, URI}
+import java.net.{InetAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
@@ -27,6 +27,7 @@ import scala.collection.mutable.Map
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileContext, FileStatus, FileSystem, Path, FileUtil}
 import org.apache.hadoop.fs.permission.FsPermission;
+import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
@@ -60,6 +61,8 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
   val APP_FILE_PERMISSION: FsPermission = FsPermission.createImmutable(0644:Short) 
 
   def run() {
+    validateArgs()
+
     init(yarnConf)
     start()
     logClusterResourceDetails()
@@ -84,6 +87,23 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     System.exit(0)
   }
 
+  def validateArgs() = {
+    Map((System.getenv("SPARK_JAR") == null) -> "Error: You must set SPARK_JAR environment variable!",
+      (args.userJar == null) -> "Error: You must specify a user jar!",
+      (args.userClass == null) -> "Error: You must specify a user class!",
+      (args.numWorkers <= 0) -> "Error: You must specify atleast 1 worker!",
+      (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) ->
+        ("Error: AM memory size must be greater then: " + YarnAllocationHandler.MEMORY_OVERHEAD),
+      (args.workerMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) ->
+        ("Error: Worker memory size must be greater then: " + YarnAllocationHandler.MEMORY_OVERHEAD.toString()))
+    .foreach { case(cond, errStr) => 
+      if (cond) {
+        logError(errStr)
+        args.printUsageAndExit(1)
+      }
+    }
+  }
+
   def getAppStagingDir(appId: ApplicationId): String = {
     SPARK_STAGING + Path.SEPARATOR + appId.toString() + Path.SEPARATOR
   }
@@ -103,14 +123,13 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
         queueInfo.getChildQueues.size)
   }
 
-
   def verifyClusterResources(app: GetNewApplicationResponse) = { 
     val maxMem = app.getMaximumResourceCapability().getMemory()
     logInfo("Max mem capabililty of a single resource in this cluster " + maxMem)
 
     // If we have requested more then the clusters max for a single resource then exit.
     if (args.workerMemory > maxMem) {
-      logError("the worker size is to large to run on this cluster " + args.workerMemory);
+      logError("the worker size is to large to run on this cluster " + args.workerMemory)
       System.exit(1)
     }
     val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
@@ -145,8 +164,8 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     var dstHost = dstUri.getHost()
     if ((srcHost != null) && (dstHost != null)) {
       try {
-        srcHost = InetAddress.getByName(srcHost).getCanonicalHostName();
-        dstHost = InetAddress.getByName(dstHost).getCanonicalHostName();
+        srcHost = InetAddress.getByName(srcHost).getCanonicalHostName()
+        dstHost = InetAddress.getByName(dstHost).getCanonicalHostName()
       } catch {
         case e: UnknownHostException =>
           return false
@@ -163,7 +182,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     if (srcUri.getPort() != dstUri.getPort()) {
       return false
     }
-    return true;
+    return true
   }
 
   /** Copy the file into HDFS if needed. */
@@ -173,13 +192,13 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       replication: Short,
       setPerms: Boolean = false): Path = {
     val fs = FileSystem.get(conf)
-    val remoteFs = originalPath.getFileSystem(conf);
+    val remoteFs = originalPath.getFileSystem(conf)
     var newPath = originalPath
     if (! compareFs(remoteFs, fs)) {
       newPath = new Path(dstDir, originalPath.getName())
       logInfo("Uploading " + originalPath + " to " + newPath)
-      FileUtil.copy(remoteFs, originalPath, fs, newPath, false, conf);
-      fs.setReplication(newPath, replication);
+      FileUtil.copy(remoteFs, originalPath, fs, newPath, false, conf)
+      fs.setReplication(newPath, replication)
       if (setPerms) fs.setPermission(newPath, new FsPermission(APP_FILE_PERMISSION))
     } 
     // Resolve any symlinks in the URI path so using a "current" symlink to point to a specific
@@ -196,7 +215,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     // local resources to the AM.
     val fs = FileSystem.get(conf)
 
-    val delegTokenRenewer = Master.getMasterPrincipal(conf);
+    val delegTokenRenewer = Master.getMasterPrincipal(conf)
     if (UserGroupInformation.isSecurityEnabled()) {
       if (delegTokenRenewer == null || delegTokenRenewer.length() == 0) {
         logError("Can't get Master Kerberos principal for use as renewer")
@@ -208,17 +227,12 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     if (UserGroupInformation.isSecurityEnabled()) {
       val dstFs = dst.getFileSystem(conf)
-      dstFs.addDelegationTokens(delegTokenRenewer, credentials);
+      dstFs.addDelegationTokens(delegTokenRenewer, credentials)
     }
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
 
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
-
-    if (System.getenv("SPARK_JAR") == null || args.userJar == null) {
-      logError("Error: You must set SPARK_JAR environment variable and specify a user jar!")
-      System.exit(1)
-    }
 
     Map(Client.SPARK_JAR -> System.getenv("SPARK_JAR"), Client.APP_JAR -> args.userJar, 
       Client.LOG4J_PROP -> System.getenv("SPARK_LOG4J_CONF"))
@@ -273,7 +287,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       }
     }
 
-    UserGroupInformation.getCurrentUser().addCredentials(credentials);
+    UserGroupInformation.getCurrentUser().addCredentials(credentials)
     return localResources
   }
 
@@ -359,16 +373,11 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       JAVA_OPTS += env("SPARK_JAVA_OPTS") + " "
     }
 
-    // Command for the ApplicationMaster.
-    var javaCommand = "java";
+    // Command for the ApplicationMaster
+    var javaCommand = "java"
     val javaHome = System.getenv("JAVA_HOME")
     if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
       javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
-    }
-
-    if (args.userClass == null) {
-      logError("Error: You must specify a user class!")
-      System.exit(1)
     }
 
     val commands = List[String](javaCommand + 
@@ -448,6 +457,7 @@ object Client {
     System.setProperty("SPARK_YARN_MODE", "true")
 
     val args = new ClientArguments(argStrings)
+
     new Client(args).run
   }
 

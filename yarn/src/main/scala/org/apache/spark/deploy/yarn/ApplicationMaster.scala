@@ -57,7 +57,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   private val maxAppAttempts: Int = conf.getInt(YarnConfiguration.RM_AM_MAX_RETRIES,
     YarnConfiguration.DEFAULT_RM_AM_MAX_RETRIES)
   private var isLastAMRetry: Boolean = true
-
+  // default to numWorkers * 2, with minimum of 3
+  private val maxNumWorkerFailures = System.getProperty("spark.yarn.max.worker.failures",
+    math.max(args.numWorkers * 2, 3).toString()).toInt
 
   def run() {
     // Setup the directories so things go to yarn approved directories rather
@@ -68,7 +70,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     ShutdownHookManager.get().addShutdownHook(new AppMasterShutdownHook(this), 30)
     
     appAttemptId = getApplicationAttemptId()
-    isLastAMRetry = appAttemptId.getAttemptId() >= maxAppAttempts;
+    isLastAMRetry = appAttemptId.getAttemptId() >= maxAppAttempts
     resourceManager = registerWithResourceManager()
 
     // Workaround until hadoop moves to something which has
@@ -203,7 +205,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
           successed = true
         } finally {
           logDebug("finishing main")
-          isLastAMRetry = true;
+          isLastAMRetry = true
           if (successed) {
             ApplicationMaster.this.finishApplicationMaster(FinalApplicationStatus.SUCCEEDED)
           } else {
@@ -267,9 +269,12 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
 
       // Exists the loop if the user thread exits.
       while (yarnAllocator.getNumWorkersRunning < args.numWorkers && userThread.isAlive) {
-        val numContainersToAllocate = math.max(
-          args.numWorkers - yarnAllocator.getNumWorkersRunning, 0)
-        this.yarnAllocator.allocateContainers(numContainersToAllocate)
+        if (yarnAllocator.getNumWorkersFailed >= maxNumWorkerFailures) {
+          finishApplicationMaster(FinalApplicationStatus.FAILED,
+            "max number of worker failures reached")
+        }
+        yarnAllocator.allocateContainers(
+          math.max(args.numWorkers - yarnAllocator.getNumWorkersRunning, 0))
         ApplicationMaster.incrementAllocatorLoop(1)
         Thread.sleep(100)
       }
@@ -286,21 +291,28 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     if (userThread.isAlive) {
       // Ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapses.
       val timeoutInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
-      // Must be <= timeoutInterval/ 2.
-      // On other hand, also ensure that we are reasonably responsive without causing too many
-      // requests to RM. So, at least 1 minute or timeoutInterval / 10 - whichever is higher.
-      val interval = math.min(timeoutInterval / 2, math.max(timeoutInterval/ 10, 60000L))
+
+      // we want to be reasonably responsive without causing too many requests to RM.
+      val schedulerInterval =
+        System.getProperty("spark.yarn.scheduler.heartbeat.interval-ms", "5000").toLong
+
+      // must be <= timeoutInterval / 2.
+      val interval = math.min(timeoutInterval / 2, schedulerInterval)
+
       launchReporterThread(interval)
     }
   }
 
-  // TODO: We might want to extend this to allocate more containers in case they die.
   private def launchReporterThread(_sleepTime: Long): Thread = {
     val sleepTime = if (_sleepTime <= 0 ) 0 else _sleepTime
 
     val t = new Thread {
       override def run() {
         while (userThread.isAlive) {
+          if (yarnAllocator.getNumWorkersFailed >= maxNumWorkerFailures) {
+            finishApplicationMaster(FinalApplicationStatus.FAILED,
+              "max number of worker failures reached")
+          }
           val missingWorkerCount = args.numWorkers - yarnAllocator.getNumWorkersRunning
           if (missingWorkerCount > 0) {
             logInfo("Allocating %d containers to make up for (potentially) lost containers".
@@ -340,7 +352,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   }
   */
 
-  def finishApplicationMaster(status: FinalApplicationStatus) {
+  def finishApplicationMaster(status: FinalApplicationStatus, diagnostics: String = "") {
     synchronized {
       if (isFinished) {
         return
@@ -353,6 +365,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       .asInstanceOf[FinishApplicationMasterRequest]
     finishReq.setAppAttemptId(appAttemptId)
     finishReq.setFinishApplicationStatus(status)
+    finishReq.setDiagnostics(diagnostics)
     // Set tracking url to empty since we don't have a history server.
     finishReq.setTrackingUrl("")
     resourceManager.finishApplicationMaster(finishReq)
