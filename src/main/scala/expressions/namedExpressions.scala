@@ -36,8 +36,9 @@ abstract class Attribute extends NamedExpression {
  *  Alias(Add(Literal(1), Literal(1), "a")()
  *
  * @param child the computation being performed
- * @param name
- * @param exprId
+ * @param name the name to be associated with the result of computing [[child]].
+ * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this alias.
+ *               Auto-assigned if left blank.
  */
 case class Alias(child: Expression, name: String)
                 (val exprId: ExprId = NamedExpression.newExprId)
