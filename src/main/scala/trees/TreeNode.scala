@@ -1,6 +1,8 @@
 package catalyst
 package trees
 
+import errors._
+
 object TreeNode {
   private val currentId = new java.util.concurrent.atomic.AtomicLong
   protected def nextId() = currentId.getAndIncrement()
@@ -85,13 +87,25 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Args to the constructor that should be copied, but not transformed.
+   * These are appended to the transformed args automatically by makeCopy
+   * @return
+   */
+  protected def otherCopyArgs: Seq[AnyRef] = Nil
+
+  /**
    * Creates a copy of this type of tree node after a transformation.
    * Must be overridden by child classes that have constructor arguments
    * that are not present in the [[productIterator]].
    * @param newArgs the new product arguments.
    */
-  protected def makeCopy(newArgs: Array[AnyRef]): this.type =
-    getClass.getConstructors.head.newInstance(newArgs: _*).asInstanceOf[this.type]
+  protected def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
+    if(otherCopyArgs.isEmpty)
+      getClass.getConstructors.head.newInstance(newArgs: _*).asInstanceOf[this.type]
+    else
+     getClass.getConstructors.head.newInstance((newArgs ++ otherCopyArgs).toArray :_*).asInstanceOf[this.type]
+  }
+
 
   /** Returns the name of this type of TreeNode.  Defaults to the class name. */
   def nodeName = getClass.getSimpleName

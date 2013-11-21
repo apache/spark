@@ -50,6 +50,8 @@ case class Alias(child: Expression, name: String)
   def toAttribute = AttributeReference(name, child.dataType, child.nullable)(exprId)
 
   override def toString(): String = s"$child AS $name"
+
+  override protected final def otherCopyArgs = exprId :: Nil
 }
 
 /**
