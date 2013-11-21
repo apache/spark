@@ -14,8 +14,8 @@ import shark2.SharkPlan
 case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: AttributeReference)
   extends Attribute with trees.LeafNode[Expression] {
 
-  lazy val nullable = baseReference.nullable
-  lazy val dataType = baseReference.dataType
+  def nullable = baseReference.nullable
+  def dataType = baseReference.dataType
   def exprId = baseReference.exprId
   def name = baseReference.name
   override def toString = s"$baseReference:$inputTuple.$ordinal"
