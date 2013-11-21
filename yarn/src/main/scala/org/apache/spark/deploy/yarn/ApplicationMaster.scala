@@ -176,8 +176,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
         driverUp = true
       } catch {
         case e: Exception => {
-          logWarning("Failed to connect to driver at %s:%s, retrying ...").
-            format(driverHost, driverPort)
+          logWarning("Failed to connect to driver at %s:%s, retrying ...".
+            format(driverHost, driverPort))
           Thread.sleep(100)
           tries = tries + 1
         }

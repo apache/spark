@@ -88,15 +88,16 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
   }
 
   def validateArgs() = {
-    Map((System.getenv("SPARK_JAR") == null) -> "Error: You must set SPARK_JAR environment variable!",
+    Map(
+      (System.getenv("SPARK_JAR") == null) -> "Error: You must set SPARK_JAR environment variable!",
       (args.userJar == null) -> "Error: You must specify a user jar!",
       (args.userClass == null) -> "Error: You must specify a user class!",
       (args.numWorkers <= 0) -> "Error: You must specify atleast 1 worker!",
-      (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) ->
-        ("Error: AM memory size must be greater then: " + YarnAllocationHandler.MEMORY_OVERHEAD),
-      (args.workerMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) ->
-        ("Error: Worker memory size must be greater then: " + YarnAllocationHandler.MEMORY_OVERHEAD.toString()))
-    .foreach { case(cond, errStr) => 
+      (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: AM memory size must be " +
+        "greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD),
+      (args.workerMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Worker memory size " +
+        "must be greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD)
+    ).foreach { case(cond, errStr) => 
       if (cond) {
         logError(errStr)
         args.printUsageAndExit(1)
@@ -120,7 +121,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
         queueInfo.getCurrentCapacity,
         queueInfo.getMaximumCapacity,
         queueInfo.getApplications.size,
-        queueInfo.getChildQueues.size)
+        queueInfo.getChildQueues.size))
   }
 
   def verifyClusterResources(app: GetNewApplicationResponse) = { 
@@ -242,7 +243,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
         var localURI = new URI(localPath)
         // if not specified assume these are in the local filesystem to keep behavior like Hadoop
         if (localURI.getScheme() == null) {
-          localURI = new URI(FileSystem.getLocal(conf).makeQualified(new Path(localPath)).toString())
+          localURI = new URI(FileSystem.getLocal(conf).makeQualified(new Path(localPath)).toString)
         }
         val setPermissions = if (destName.equals(Client.APP_JAR)) true else false
         val destPath = copyRemoteFile(dst, new Path(localURI), replication, setPermissions)
