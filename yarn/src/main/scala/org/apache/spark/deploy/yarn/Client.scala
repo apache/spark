@@ -17,26 +17,31 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.{InetSocketAddress, URI}
+import java.net.{InetAddress, InetSocketAddress, UnknownHostException, URI}
 import java.nio.ByteBuffer
+
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.{FileContext, FileStatus, FileSystem, Path, FileUtil}
+import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.mapred.Master
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
+import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.client.YarnClientImpl
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
+import org.apache.hadoop.yarn.util.{Apps, Records}
+
 import scala.collection.mutable.HashMap
+import scala.collection.mutable.Map
 import scala.collection.JavaConversions._
+
 import org.apache.spark.Logging 
 import org.apache.spark.util.Utils
-import org.apache.hadoop.yarn.util.{Apps, Records, ConverterUtils}
-import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.spark.deploy.SparkHadoopUtil
 
 class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl with Logging {
@@ -45,8 +50,15 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
   
   var rpc: YarnRPC = YarnRPC.create(conf)
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
-  val credentials = UserGroupInformation.getCurrentUser().getCredentials();
-  
+  val credentials = UserGroupInformation.getCurrentUser().getCredentials()
+  private val SPARK_STAGING: String = ".sparkStaging"
+  private val distCacheMgr = new ClientDistributedCacheManager()
+
+  // staging directory is private! -> rwx--------
+  val STAGING_DIR_PERMISSION: FsPermission = FsPermission.createImmutable(0700:Short)
+  // app files are world-wide readable and owner writable -> rw-r--r--
+  val APP_FILE_PERMISSION: FsPermission = FsPermission.createImmutable(0644:Short) 
+
   def run() {
     init(yarnConf)
     start()
@@ -57,8 +69,9 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     verifyClusterResources(newApp)
     val appContext = createApplicationSubmissionContext(appId)
-    val localResources = prepareLocalResources(appId, "spark")
-    val env = setupLaunchEnv(localResources)
+    val appStagingDir = getAppStagingDir(appId)
+    val localResources = prepareLocalResources(appStagingDir)
+    val env = setupLaunchEnv(localResources, appStagingDir)
     val amContainer = createContainerLaunchContext(newApp, localResources, env)
 
     appContext.setQueue(args.amQueue)
@@ -70,7 +83,10 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     monitorApplication(appId)
     System.exit(0)
   }
-  
+
+  def getAppStagingDir(appId: ApplicationId): String = {
+    SPARK_STAGING + Path.SEPARATOR + appId.toString() + Path.SEPARATOR
+  }
 
   def logClusterResourceDetails() {
     val clusterMetrics: YarnClusterMetrics = super.getYarnClusterMetrics
@@ -109,11 +125,74 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     appContext.setApplicationName(args.appName)
     return appContext
   }
-  
-  def prepareLocalResources(appId: ApplicationId, appName: String): HashMap[String, LocalResource] = {
+
+  /*
+   * see if two file systems are the same or not.
+   */
+  private def compareFs(srcFs: FileSystem, destFs: FileSystem): Boolean = {
+    val srcUri = srcFs.getUri()
+    val dstUri = destFs.getUri()
+    if (srcUri.getScheme() == null) {
+      return false
+    }
+    if (!srcUri.getScheme().equals(dstUri.getScheme())) {
+      return false
+    }
+    var srcHost = srcUri.getHost()
+    var dstHost = dstUri.getHost()
+    if ((srcHost != null) && (dstHost != null)) {
+      try {
+        srcHost = InetAddress.getByName(srcHost).getCanonicalHostName();
+        dstHost = InetAddress.getByName(dstHost).getCanonicalHostName();
+      } catch {
+        case e: UnknownHostException =>
+          return false
+      }
+      if (!srcHost.equals(dstHost)) {
+        return false
+      }
+    } else if (srcHost == null && dstHost != null) {
+      return false
+    } else if (srcHost != null && dstHost == null) {
+      return false
+    }
+    //check for ports
+    if (srcUri.getPort() != dstUri.getPort()) {
+      return false
+    }
+    return true;
+  }
+
+  /**
+   * Copy the file into HDFS if needed.
+   */
+  private def copyRemoteFile(
+      dstDir: Path,
+      originalPath: Path,
+      replication: Short,
+      setPerms: Boolean = false): Path = {
+    val fs = FileSystem.get(conf)
+    val remoteFs = originalPath.getFileSystem(conf);
+    var newPath = originalPath
+    if (! compareFs(remoteFs, fs)) {
+      newPath = new Path(dstDir, originalPath.getName())
+      logInfo("Uploading " + originalPath + " to " + newPath)
+      FileUtil.copy(remoteFs, originalPath, fs, newPath, false, conf);
+      fs.setReplication(newPath, replication);
+      if (setPerms) fs.setPermission(newPath, new FsPermission(APP_FILE_PERMISSION))
+    } 
+    // resolve any symlinks in the URI path so using a "current" symlink
+    // to point to a specific version shows the specific version
+    // in the distributed cache configuration
+    val qualPath = fs.makeQualified(newPath)
+    val fc = FileContext.getFileContext(qualPath.toUri(), conf)
+    val destPath = fc.resolvePath(qualPath)
+    destPath
+  }
+
+  def prepareLocalResources(appStagingDir: String): HashMap[String, LocalResource] = {
     logInfo("Preparing Local resources")
-    val locaResources = HashMap[String, LocalResource]()
-    // Upload Spark and the application JAR to the remote file system
+    // Upload Spark and the application JAR to the remote file system if necessary
     // Add them as local resources to the AM
     val fs = FileSystem.get(conf)
 
@@ -124,67 +203,95 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
         System.exit(1)
       }
     }
+    val dst = new Path(fs.getHomeDirectory(), appStagingDir)
+    val replication = System.getProperty("spark.yarn.submit.file.replication", "3").toShort
 
-    Map("spark.jar" -> System.getenv("SPARK_JAR"), "app.jar" -> args.userJar, "log4j.properties" -> System.getenv("SPARK_LOG4J_CONF"))
+    if (UserGroupInformation.isSecurityEnabled()) {
+      val dstFs = dst.getFileSystem(conf)
+      dstFs.addDelegationTokens(delegTokenRenewer, credentials);
+    }
+    val localResources = HashMap[String, LocalResource]()
+    FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
+
+    val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
+
+    if (System.getenv("SPARK_JAR") == null || args.userJar == null) {
+      logError("Error: You must set SPARK_JAR environment variable and specify a user jar!")
+      System.exit(1)
+    }
+
+    Map(Client.SPARK_JAR -> System.getenv("SPARK_JAR"), Client.APP_JAR -> args.userJar, 
+      Client.LOG4J_PROP -> System.getenv("SPARK_LOG4J_CONF"))
     .foreach { case(destName, _localPath) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
       if (! localPath.isEmpty()) {
-        val src = new Path(localPath)
-        val pathSuffix = appName + "/" + appId.getId() + destName
-        val dst = new Path(fs.getHomeDirectory(), pathSuffix)
-        logInfo("Uploading " + src + " to " + dst)
-        fs.copyFromLocalFile(false, true, src, dst)
-        val destStatus = fs.getFileStatus(dst)
-
-        // get tokens for anything we upload to hdfs
-        if (UserGroupInformation.isSecurityEnabled()) {
-          fs.addDelegationTokens(delegTokenRenewer, credentials);
+        var localURI = new URI(localPath)
+        // if not specified assume these are in the local filesystem to keep behavior like Hadoop
+        if (localURI.getScheme() == null) {
+          localURI = new URI(FileSystem.getLocal(conf).makeQualified(new Path(localPath)).toString())
         }
-
-        val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
-        amJarRsrc.setType(LocalResourceType.FILE)
-        amJarRsrc.setVisibility(LocalResourceVisibility.APPLICATION)
-        amJarRsrc.setResource(ConverterUtils.getYarnUrlFromPath(dst))
-        amJarRsrc.setTimestamp(destStatus.getModificationTime())
-        amJarRsrc.setSize(destStatus.getLen())
-        locaResources(destName) = amJarRsrc
+        val setPermissions = if (destName.equals(Client.APP_JAR)) true else false
+        val destPath = copyRemoteFile(dst, new Path(localURI), replication, setPermissions)
+        distCacheMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, 
+          destName, statCache)
       }
     }
+
+    // handle any add jars
+    if ((args.addJars != null) && (!args.addJars.isEmpty())){
+      args.addJars.split(',').foreach { case file: String =>
+        val localURI = new URI(file.trim())
+        val localPath = new Path(localURI)
+        val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
+        val destPath = copyRemoteFile(dst, localPath, replication)
+        distCacheMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, 
+          linkname, statCache, true)
+      }
+    }
+
+    // handle any distributed cache files
+    if ((args.files != null) && (!args.files.isEmpty())){
+      args.files.split(',').foreach { case file: String =>
+        val localURI = new URI(file.trim())
+        val localPath = new Path(localURI)
+        val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
+        val destPath = copyRemoteFile(dst, localPath, replication)
+        distCacheMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, 
+          linkname, statCache)
+      }
+    }
+
+    // handle any distributed cache archives
+    if ((args.archives != null) && (!args.archives.isEmpty())) {
+      args.archives.split(',').foreach { case file:String =>
+        val localURI = new URI(file.trim())
+        val localPath = new Path(localURI)
+        val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
+        val destPath = copyRemoteFile(dst, localPath, replication)
+        distCacheMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.ARCHIVE, 
+          linkname, statCache)
+      }
+    }
+
     UserGroupInformation.getCurrentUser().addCredentials(credentials);
-    return locaResources
+    return localResources
   }
   
-  def setupLaunchEnv(localResources: HashMap[String, LocalResource]): HashMap[String, String] = {
+  def setupLaunchEnv(
+      localResources: HashMap[String, LocalResource], 
+      stagingDir: String): HashMap[String, String] = {
     logInfo("Setting up the launch environment")
-    val log4jConfLocalRes = localResources.getOrElse("log4j.properties", null)
+    val log4jConfLocalRes = localResources.getOrElse(Client.LOG4J_PROP, null)
 
     val env = new HashMap[String, String]()
 
-    // If log4j present, ensure ours overrides all others
-    if (log4jConfLocalRes != null) Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./")
-
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "./*")
-    Apps.addToEnvironment(env, Environment.CLASSPATH.name, "$CLASSPATH")
-    Client.populateHadoopClasspath(yarnConf, env)
+    Client.populateClasspath(yarnConf, log4jConfLocalRes != null, env)
     env("SPARK_YARN_MODE") = "true"
-    env("SPARK_YARN_JAR_PATH") = 
-      localResources("spark.jar").getResource().getScheme.toString() + "://" +
-      localResources("spark.jar").getResource().getFile().toString()
-    env("SPARK_YARN_JAR_TIMESTAMP") =  localResources("spark.jar").getTimestamp().toString()
-    env("SPARK_YARN_JAR_SIZE") =  localResources("spark.jar").getSize().toString()
+    env("SPARK_YARN_STAGING_DIR") = stagingDir
 
-    env("SPARK_YARN_USERJAR_PATH") =
-      localResources("app.jar").getResource().getScheme.toString() + "://" +
-      localResources("app.jar").getResource().getFile().toString()
-    env("SPARK_YARN_USERJAR_TIMESTAMP") =  localResources("app.jar").getTimestamp().toString()
-    env("SPARK_YARN_USERJAR_SIZE") =  localResources("app.jar").getSize().toString()
-
-    if (log4jConfLocalRes != null) {
-      env("SPARK_YARN_LOG4J_PATH") =
-        log4jConfLocalRes.getResource().getScheme.toString() + "://" + log4jConfLocalRes.getResource().getFile().toString()
-      env("SPARK_YARN_LOG4J_TIMESTAMP") =  log4jConfLocalRes.getTimestamp().toString()
-      env("SPARK_YARN_LOG4J_SIZE") =  log4jConfLocalRes.getSize().toString()
-    }
+    // set the environment variables to be passed on to the Workers
+    distCacheMgr.setDistFilesEnv(env)
+    distCacheMgr.setDistArchivesEnv(env)
 
     // allow users to specify some environment variables
     Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
@@ -251,6 +358,11 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     val javaHome = System.getenv("JAVA_HOME")
     if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
       javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
+    }
+
+    if (args.userClass == null) {
+      logError("Error: You must specify a user class!")
+      System.exit(1)
     }
 
     val commands = List[String](javaCommand + 
@@ -320,6 +432,10 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 }
 
 object Client {
+  val SPARK_JAR: String = "spark.jar"
+  val APP_JAR: String = "app.jar"
+  val LOG4J_PROP: String = "log4j.properties"
+
   def main(argStrings: Array[String]) {
     // Set an env variable indicating we are running in YARN mode.
     // Note that anything with SPARK prefix gets propagated to all (remote) processes
@@ -334,5 +450,31 @@ object Client {
     for (c <- conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH)) {
       Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
     }
+  }
+
+  def populateClasspath(conf: Configuration, addLog4j: Boolean, env: HashMap[String, String]) {
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$())
+    // If log4j present, ensure ours overrides all others
+    if (addLog4j) {
+      Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() + 
+        Path.SEPARATOR + LOG4J_PROP)
+    }
+    // normally the users app.jar is last in case conflicts with spark jars
+    val userClasspathFirst = System.getProperty("spark.yarn.user.classpath.first", "false")
+      .toBoolean
+    if (userClasspathFirst) {
+      Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() + 
+        Path.SEPARATOR + APP_JAR)
+    }
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() + 
+      Path.SEPARATOR + SPARK_JAR)
+    Client.populateHadoopClasspath(conf, env)
+
+    if (!userClasspathFirst) {
+      Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() + 
+        Path.SEPARATOR + APP_JAR)
+    }
+    Apps.addToEnvironment(env, Environment.CLASSPATH.name, Environment.PWD.$() + 
+      Path.SEPARATOR + "*")
   }
 }

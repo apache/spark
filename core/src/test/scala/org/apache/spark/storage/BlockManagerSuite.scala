@@ -32,7 +32,6 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.util.{SizeEstimator, Utils, AkkaUtils, ByteBufferInputStream}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 
-
 class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodTester {
   var store: BlockManager = null
   var store2: BlockManager = null
@@ -45,6 +44,10 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   System.setProperty("spark.kryoserializer.buffer.mb", "1")
   val serializer = new KryoSerializer
+
+  // Implicitly convert strings to BlockIds for test clarity.
+  implicit def StringToBlockId(value: String): BlockId = new TestBlockId(value)
+  def rdd(rddId: Int, splitId: Int) = RDDBlockId(rddId, splitId)
 
   before {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("test", "localhost", 0)
@@ -229,31 +232,31 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
     // Putting a1, a2 and a3 in memory.
-    store.putSingle("rdd_0_0", a1, StorageLevel.MEMORY_ONLY)
-    store.putSingle("rdd_0_1", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 0), a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 1), a2, StorageLevel.MEMORY_ONLY)
     store.putSingle("nonrddblock", a3, StorageLevel.MEMORY_ONLY)
     master.removeRdd(0, blocking = false)
 
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("rdd_0_0") should be (None)
-      master.getLocations("rdd_0_0") should have size 0
+      store.getSingle(rdd(0, 0)) should be (None)
+      master.getLocations(rdd(0, 0)) should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
-      store.getSingle("rdd_0_1") should be (None)
-      master.getLocations("rdd_0_1") should have size 0
+      store.getSingle(rdd(0, 1)) should be (None)
+      master.getLocations(rdd(0, 1)) should have size 0
     }
     eventually(timeout(1000 milliseconds), interval(10 milliseconds)) {
       store.getSingle("nonrddblock") should not be (None)
       master.getLocations("nonrddblock") should have size (1)
     }
 
-    store.putSingle("rdd_0_0", a1, StorageLevel.MEMORY_ONLY)
-    store.putSingle("rdd_0_1", a2, StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 0), a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 1), a2, StorageLevel.MEMORY_ONLY)
     master.removeRdd(0, blocking = true)
-    store.getSingle("rdd_0_0") should be (None)
-    master.getLocations("rdd_0_0") should have size 0
-    store.getSingle("rdd_0_1") should be (None)
-    master.getLocations("rdd_0_1") should have size 0
+    store.getSingle(rdd(0, 0)) should be (None)
+    master.getLocations(rdd(0, 0)) should have size 0
+    store.getSingle(rdd(0, 1)) should be (None)
+    master.getLocations(rdd(0, 1)) should have size 0
   }
 
   test("reregistration on heart beat") {
@@ -372,41 +375,41 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val a1 = new Array[Byte](400)
     val a2 = new Array[Byte](400)
     val a3 = new Array[Byte](400)
-    store.putSingle("rdd_0_1", a1, StorageLevel.MEMORY_ONLY)
-    store.putSingle("rdd_0_2", a2, StorageLevel.MEMORY_ONLY)
-    store.putSingle("rdd_0_3", a3, StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 1), a1, StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 2), a2, StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 3), a3, StorageLevel.MEMORY_ONLY)
     // Even though we accessed rdd_0_3 last, it should not have replaced partitions 1 and 2
     // from the same RDD
-    assert(store.getSingle("rdd_0_3") === None, "rdd_0_3 was in store")
-    assert(store.getSingle("rdd_0_2") != None, "rdd_0_2 was not in store")
-    assert(store.getSingle("rdd_0_1") != None, "rdd_0_1 was not in store")
+    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
+    assert(store.getSingle(rdd(0, 2)) != None, "rdd_0_2 was not in store")
+    assert(store.getSingle(rdd(0, 1)) != None, "rdd_0_1 was not in store")
     // Check that rdd_0_3 doesn't replace them even after further accesses
-    assert(store.getSingle("rdd_0_3") === None, "rdd_0_3 was in store")
-    assert(store.getSingle("rdd_0_3") === None, "rdd_0_3 was in store")
-    assert(store.getSingle("rdd_0_3") === None, "rdd_0_3 was in store")
+    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
+    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
+    assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
   }
 
   test("in-memory LRU for partitions of multiple RDDs") {
     store = new BlockManager("<driver>", actorSystem, master, serializer, 1200)
-    store.putSingle("rdd_0_1", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
-    store.putSingle("rdd_0_2", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
-    store.putSingle("rdd_1_1", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 1), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 2), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(1, 1), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     // At this point rdd_1_1 should've replaced rdd_0_1
-    assert(store.memoryStore.contains("rdd_1_1"), "rdd_1_1 was not in store")
-    assert(!store.memoryStore.contains("rdd_0_1"), "rdd_0_1 was in store")
-    assert(store.memoryStore.contains("rdd_0_2"), "rdd_0_2 was not in store")
+    assert(store.memoryStore.contains(rdd(1, 1)), "rdd_1_1 was not in store")
+    assert(!store.memoryStore.contains(rdd(0, 1)), "rdd_0_1 was in store")
+    assert(store.memoryStore.contains(rdd(0, 2)), "rdd_0_2 was not in store")
     // Do a get() on rdd_0_2 so that it is the most recently used item
-    assert(store.getSingle("rdd_0_2") != None, "rdd_0_2 was not in store")
+    assert(store.getSingle(rdd(0, 2)) != None, "rdd_0_2 was not in store")
     // Put in more partitions from RDD 0; they should replace rdd_1_1
-    store.putSingle("rdd_0_3", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
-    store.putSingle("rdd_0_4", new Array[Byte](400), StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 3), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(0, 4), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     // Now rdd_1_1 should be dropped to add rdd_0_3, but then rdd_0_2 should *not* be dropped
     // when we try to add rdd_0_4.
-    assert(!store.memoryStore.contains("rdd_1_1"), "rdd_1_1 was in store")
-    assert(!store.memoryStore.contains("rdd_0_1"), "rdd_0_1 was in store")
-    assert(!store.memoryStore.contains("rdd_0_4"), "rdd_0_4 was in store")
-    assert(store.memoryStore.contains("rdd_0_2"), "rdd_0_2 was not in store")
-    assert(store.memoryStore.contains("rdd_0_3"), "rdd_0_3 was not in store")
+    assert(!store.memoryStore.contains(rdd(1, 1)), "rdd_1_1 was in store")
+    assert(!store.memoryStore.contains(rdd(0, 1)), "rdd_0_1 was in store")
+    assert(!store.memoryStore.contains(rdd(0, 4)), "rdd_0_4 was in store")
+    assert(store.memoryStore.contains(rdd(0, 2)), "rdd_0_2 was not in store")
+    assert(store.memoryStore.contains(rdd(0, 3)), "rdd_0_3 was not in store")
   }
 
   test("on-disk storage") {
@@ -590,43 +593,46 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     try {
       System.setProperty("spark.shuffle.compress", "true")
       store = new BlockManager("exec1", actorSystem, master, serializer, 2000)
-      store.putSingle("shuffle_0_0_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
-      assert(store.memoryStore.getSize("shuffle_0_0_0") <= 100, "shuffle_0_0_0 was not compressed")
+      store.putSingle(ShuffleBlockId(0, 0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0)) <= 100,
+        "shuffle_0_0_0 was not compressed")
       store.stop()
       store = null
 
       System.setProperty("spark.shuffle.compress", "false")
       store = new BlockManager("exec2", actorSystem, master, serializer, 2000)
-      store.putSingle("shuffle_0_0_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
-      assert(store.memoryStore.getSize("shuffle_0_0_0") >= 1000, "shuffle_0_0_0 was compressed")
+      store.putSingle(ShuffleBlockId(0, 0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize(ShuffleBlockId(0, 0, 0)) >= 1000,
+        "shuffle_0_0_0 was compressed")
       store.stop()
       store = null
 
       System.setProperty("spark.broadcast.compress", "true")
       store = new BlockManager("exec3", actorSystem, master, serializer, 2000)
-      store.putSingle("broadcast_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
-      assert(store.memoryStore.getSize("broadcast_0") <= 100, "broadcast_0 was not compressed")
+      store.putSingle(BroadcastBlockId(0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize(BroadcastBlockId(0)) <= 100,
+        "broadcast_0 was not compressed")
       store.stop()
       store = null
 
       System.setProperty("spark.broadcast.compress", "false")
       store = new BlockManager("exec4", actorSystem, master, serializer, 2000)
-      store.putSingle("broadcast_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
-      assert(store.memoryStore.getSize("broadcast_0") >= 1000, "broadcast_0 was compressed")
+      store.putSingle(BroadcastBlockId(0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize(BroadcastBlockId(0)) >= 1000, "broadcast_0 was compressed")
       store.stop()
       store = null
 
       System.setProperty("spark.rdd.compress", "true")
       store = new BlockManager("exec5", actorSystem, master, serializer, 2000)
-      store.putSingle("rdd_0_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
-      assert(store.memoryStore.getSize("rdd_0_0") <= 100, "rdd_0_0 was not compressed")
+      store.putSingle(rdd(0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize(rdd(0, 0)) <= 100, "rdd_0_0 was not compressed")
       store.stop()
       store = null
 
       System.setProperty("spark.rdd.compress", "false")
       store = new BlockManager("exec6", actorSystem, master, serializer, 2000)
-      store.putSingle("rdd_0_0", new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
-      assert(store.memoryStore.getSize("rdd_0_0") >= 1000, "rdd_0_0 was compressed")
+      store.putSingle(rdd(0, 0), new Array[Byte](1000), StorageLevel.MEMORY_ONLY_SER)
+      assert(store.memoryStore.getSize(rdd(0, 0)) >= 1000, "rdd_0_0 was compressed")
       store.stop()
       store = null
 

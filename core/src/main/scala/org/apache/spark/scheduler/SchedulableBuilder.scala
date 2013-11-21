@@ -30,7 +30,10 @@ import scala.xml.XML
  * addTaskSetManager: build the leaf nodes(TaskSetManagers)
  */
 private[spark] trait SchedulableBuilder {
+  def rootPool: Pool
+
   def buildPools()
+
   def addTaskSetManager(manager: Schedulable, properties: Properties)
 }
 

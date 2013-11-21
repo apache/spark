@@ -27,7 +27,11 @@ package org.apache.spark.deploy.client
 private[spark] trait ClientListener {
   def connected(appId: String): Unit
 
+  /** Disconnection may be a temporary state, as we fail over to a new Master. */
   def disconnected(): Unit
+
+  /** Dead means that we couldn't find any Masters to connect to, and have given up. */
+  def dead(): Unit
 
   def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int, memory: Int): Unit
 

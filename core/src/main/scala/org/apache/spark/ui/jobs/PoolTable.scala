@@ -21,13 +21,13 @@ import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
 import scala.xml.Node
 
-import org.apache.spark.scheduler.{Schedulable, Stage}
+import org.apache.spark.scheduler.{Schedulable, StageInfo}
 import org.apache.spark.ui.UIUtils
 
 /** Table showing list of pools */
 private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressListener) {
 
-  var poolToActiveStages: HashMap[String, HashSet[Stage]] = listener.poolToActiveStages
+  var poolToActiveStages: HashMap[String, HashSet[StageInfo]] = listener.poolToActiveStages
 
   def toNodeSeq(): Seq[Node] = {
     listener.synchronized {
@@ -35,7 +35,7 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
     }
   }
 
-  private def poolTable(makeRow: (Schedulable, HashMap[String, HashSet[Stage]]) => Seq[Node],
+  private def poolTable(makeRow: (Schedulable, HashMap[String, HashSet[StageInfo]]) => Seq[Node],
     rows: Seq[Schedulable]
     ): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable table-fixed">
@@ -53,7 +53,7 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
     </table>
   }
 
-  private def poolRow(p: Schedulable, poolToActiveStages: HashMap[String, HashSet[Stage]])
+  private def poolRow(p: Schedulable, poolToActiveStages: HashMap[String, HashSet[StageInfo]])
     : Seq[Node] = {
     val activeStages = poolToActiveStages.get(p.name) match {
       case Some(stages) => stages.size

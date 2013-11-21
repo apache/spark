@@ -36,52 +36,52 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   val RETAINED_STAGES = System.getProperty("spark.ui.retained_stages", "1000").toInt
   val DEFAULT_POOL_NAME = "default"
 
-  val stageToPool = new HashMap[Stage, String]()
-  val stageToDescription = new HashMap[Stage, String]()
-  val poolToActiveStages = new HashMap[String, HashSet[Stage]]()
+  val stageIdToPool = new HashMap[Int, String]()
+  val stageIdToDescription = new HashMap[Int, String]()
+  val poolToActiveStages = new HashMap[String, HashSet[StageInfo]]()
 
-  val activeStages = HashSet[Stage]()
-  val completedStages = ListBuffer[Stage]()
-  val failedStages = ListBuffer[Stage]()
+  val activeStages = HashSet[StageInfo]()
+  val completedStages = ListBuffer[StageInfo]()
+  val failedStages = ListBuffer[StageInfo]()
 
   // Total metrics reflect metrics only for completed tasks
   var totalTime = 0L
   var totalShuffleRead = 0L
   var totalShuffleWrite = 0L
 
-  val stageToTime = HashMap[Int, Long]()
-  val stageToShuffleRead = HashMap[Int, Long]()
-  val stageToShuffleWrite = HashMap[Int, Long]()
-  val stageToTasksActive = HashMap[Int, HashSet[TaskInfo]]()
-  val stageToTasksComplete = HashMap[Int, Int]()
-  val stageToTasksFailed = HashMap[Int, Int]()
-  val stageToTaskInfos =
+  val stageIdToTime = HashMap[Int, Long]()
+  val stageIdToShuffleRead = HashMap[Int, Long]()
+  val stageIdToShuffleWrite = HashMap[Int, Long]()
+  val stageIdToTasksActive = HashMap[Int, HashSet[TaskInfo]]()
+  val stageIdToTasksComplete = HashMap[Int, Int]()
+  val stageIdToTasksFailed = HashMap[Int, Int]()
+  val stageIdToTaskInfos =
     HashMap[Int, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
   override def onStageCompleted(stageCompleted: StageCompleted) = synchronized {
-    val stage = stageCompleted.stageInfo.stage
-    poolToActiveStages(stageToPool(stage)) -= stage
+    val stage = stageCompleted.stage
+    poolToActiveStages(stageIdToPool(stage.stageId)) -= stage
     activeStages -= stage
     completedStages += stage
     trimIfNecessary(completedStages)
   }
 
   /** If stages is too large, remove and garbage collect old stages */
-  def trimIfNecessary(stages: ListBuffer[Stage]) = synchronized {
+  def trimIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > RETAINED_STAGES) {
       val toRemove = RETAINED_STAGES / 10
       stages.takeRight(toRemove).foreach( s => {
-        stageToTaskInfos.remove(s.id)
-        stageToTime.remove(s.id)
-        stageToShuffleRead.remove(s.id)
-        stageToShuffleWrite.remove(s.id)
-        stageToTasksActive.remove(s.id)
-        stageToTasksComplete.remove(s.id)
-        stageToTasksFailed.remove(s.id)
-        stageToPool.remove(s)
-        if (stageToDescription.contains(s)) {stageToDescription.remove(s)}
+        stageIdToTaskInfos.remove(s.stageId)
+        stageIdToTime.remove(s.stageId)
+        stageIdToShuffleRead.remove(s.stageId)
+        stageIdToShuffleWrite.remove(s.stageId)
+        stageIdToTasksActive.remove(s.stageId)
+        stageIdToTasksComplete.remove(s.stageId)
+        stageIdToTasksFailed.remove(s.stageId)
+        stageIdToPool.remove(s.stageId)
+        if (stageIdToDescription.contains(s.stageId)) {stageIdToDescription.remove(s.stageId)}
       })
       stages.trimEnd(toRemove)
     }
@@ -95,63 +95,69 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     val poolName = Option(stageSubmitted.properties).map {
       p => p.getProperty("spark.scheduler.pool", DEFAULT_POOL_NAME)
     }.getOrElse(DEFAULT_POOL_NAME)
-    stageToPool(stage) = poolName
+    stageIdToPool(stage.stageId) = poolName
 
     val description = Option(stageSubmitted.properties).flatMap {
       p => Option(p.getProperty(SparkContext.SPARK_JOB_DESCRIPTION))
     }
-    description.map(d => stageToDescription(stage) = d)
+    description.map(d => stageIdToDescription(stage.stageId) = d)
 
-    val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[Stage]())
+    val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[StageInfo]())
     stages += stage
   }
   
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
     val sid = taskStart.task.stageId
-    val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
+    val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive += taskStart.taskInfo
-    val taskList = stageToTaskInfos.getOrElse(
+    val taskList = stageIdToTaskInfos.getOrElse(
       sid, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList += ((taskStart.taskInfo, None, None))
-    stageToTaskInfos(sid) = taskList
+    stageIdToTaskInfos(sid) = taskList
   }
- 
+
+  override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult)
+      = synchronized {
+    // Do nothing: because we don't do a deep copy of the TaskInfo, the TaskInfo in
+    // stageToTaskInfos already has the updated status.
+  }
+
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val sid = taskEnd.task.stageId
-    val tasksActive = stageToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
+    val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive -= taskEnd.taskInfo
     val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
       taskEnd.reason match {
         case e: ExceptionFailure =>
-          stageToTasksFailed(sid) = stageToTasksFailed.getOrElse(sid, 0) + 1
+          stageIdToTasksFailed(sid) = stageIdToTasksFailed.getOrElse(sid, 0) + 1
           (Some(e), e.metrics)
         case _ =>
-          stageToTasksComplete(sid) = stageToTasksComplete.getOrElse(sid, 0) + 1
+          stageIdToTasksComplete(sid) = stageIdToTasksComplete.getOrElse(sid, 0) + 1
           (None, Option(taskEnd.taskMetrics))
       }
 
-    stageToTime.getOrElseUpdate(sid, 0L)
+    stageIdToTime.getOrElseUpdate(sid, 0L)
     val time = metrics.map(m => m.executorRunTime).getOrElse(0)
-    stageToTime(sid) += time
+    stageIdToTime(sid) += time
     totalTime += time
 
-    stageToShuffleRead.getOrElseUpdate(sid, 0L)
+    stageIdToShuffleRead.getOrElseUpdate(sid, 0L)
     val shuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s =>
       s.remoteBytesRead).getOrElse(0L)
-    stageToShuffleRead(sid) += shuffleRead
+    stageIdToShuffleRead(sid) += shuffleRead
     totalShuffleRead += shuffleRead
 
-    stageToShuffleWrite.getOrElseUpdate(sid, 0L)
+    stageIdToShuffleWrite.getOrElseUpdate(sid, 0L)
     val shuffleWrite = metrics.flatMap(m => m.shuffleWriteMetrics).map(s =>
       s.shuffleBytesWritten).getOrElse(0L)
-    stageToShuffleWrite(sid) += shuffleWrite
+    stageIdToShuffleWrite(sid) += shuffleWrite
     totalShuffleWrite += shuffleWrite
 
-    val taskList = stageToTaskInfos.getOrElse(
+    val taskList = stageIdToTaskInfos.getOrElse(
       sid, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList -= ((taskEnd.taskInfo, None, None))
     taskList += ((taskEnd.taskInfo, metrics, failureInfo))
-    stageToTaskInfos(sid) = taskList
+    stageIdToTaskInfos(sid) = taskList
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
@@ -159,10 +165,15 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
       case end: SparkListenerJobEnd =>
         end.jobResult match {
           case JobFailed(ex, Some(stage)) =>
-            activeStages -= stage
-            poolToActiveStages(stageToPool(stage)) -= stage
-            failedStages += stage
-            trimIfNecessary(failedStages)
+            /* If two jobs share a stage we could get this failure message twice. So we first
+            *  check whether we've already retired this stage. */
+            val stageInfo = activeStages.filter(s => s.stageId == stage.id).headOption
+            stageInfo.foreach {s =>
+              activeStages -= s
+              poolToActiveStages(stageIdToPool(stage.id)) -= s
+              failedStages += s
+              trimIfNecessary(failedStages)
+            }
           case _ =>
         }
       case _ =>

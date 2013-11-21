@@ -175,7 +175,7 @@ To further tune garbage collection, we first need to understand some basic infor
 * Java Heap space is divided in to two regions Young and Old. The Young generation is meant to hold short-lived objects
   while the Old generation is intended for objects with longer lifetimes.
 
-* The Young generation is further divided into three regions [Eden, Survivor1, Survivor2].
+* The Young generation is further divided into three regions \[Eden, Survivor1, Survivor2\].
 
 * A simplified description of the garbage collection procedure: When Eden is full, a minor GC is run on Eden and objects
   that are alive from Eden and Survivor1 are copied to Survivor2. The Survivor regions are swapped. If an object is old
