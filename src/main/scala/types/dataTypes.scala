@@ -7,6 +7,7 @@ case object IntegerType extends DataType
 case object StringType extends DataType
 case object BooleanType extends DataType
 case object FloatType extends DataType
+case object DoubleType extends DataType
 
 case class ArrayType(elementType: DataType) extends DataType
 
