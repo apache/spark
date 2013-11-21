@@ -12,7 +12,6 @@ case object Descending extends SortDirection
  * transformations over expression will descend into its child.
  */
 case class SortOrder(child: Expression, direction: SortDirection) extends UnaryExpression {
-  // TODO: This might be a little sloppy... not clear integer is the right thing here.
-  def dataType = IntegerType
+  def dataType = child.dataType
   def nullable = child.nullable
 }
