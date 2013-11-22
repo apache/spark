@@ -35,7 +35,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    */
   def foreach(f: BaseType => Unit): Unit = {
     f(this)
-    children.foreach(f)
+    children.foreach(_.foreach(f))
   }
 
   /**
