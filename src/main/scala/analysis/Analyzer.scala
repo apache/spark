@@ -1,6 +1,7 @@
 package catalyst
 package analysis
 
+import expressions._
 import plans.logical._
 import rules._
 
@@ -16,7 +17,9 @@ class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
   val batches = Seq(
     Batch("Resolution", fixedPoint,
       ResolveReferences,
-      ResolveRelations)
+      ResolveRelations),
+    Batch("Aggregation", Once,
+      GlobalAggregates)
   )
 
   /**
@@ -40,6 +43,24 @@ class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
           // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
           q.resolve(name).getOrElse(u)
       }
+    }
+  }
+
+  /**
+   * Turns projections that contain aggregate expressions into aggregations.
+   */
+  object GlobalAggregates extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Project(projectList, child) if containsAggregates(projectList) =>
+        Aggregate(Nil, projectList, child)
+    }
+
+    def containsAggregates(exprs: Seq[Expression]): Boolean = {
+      exprs.foreach(_.foreach {
+        case agg: AggregateExpression => return true
+        case _ =>
+      })
+      return false
     }
   }
 }

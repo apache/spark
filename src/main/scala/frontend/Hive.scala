@@ -212,6 +212,13 @@ object Hive {
       throw new NotImplementedError(s"No parse rules for StructField:\n ${dumpTree(a).toString} ")
   }
 
+  protected def nameExpressions(exprs: Seq[Expression]): Seq[NamedExpression] = {
+    exprs.zipWithIndex.map {
+      case (ne: NamedExpression, _) => ne
+      case (e, i) => Alias(e, s"c_$i")()
+    }
+  }
+
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     case Token("TOK_QUERY",
            fromClause ::
@@ -221,7 +228,7 @@ object Hive {
                 selectExprs) :: Nil) :: Nil) =>
       nodeToDest(
         destClause,
-        Project(selectExprs.map(nodeToExpr),
+        Project(nameExpressions(selectExprs.map(selExprNodeToExpr)),
           nodeToPlan(fromClause)))
 
     // TODO: find a less redundant way to do this.
@@ -236,7 +243,7 @@ object Hive {
       nodeToDest(
         destClause,
         Sort(orderByExprs.map(nodeToSortOrder),
-          Project(selectExprs.map(nodeToExpr),
+          Project(nameExpressions(selectExprs.map(selExprNodeToExpr)),
             nodeToPlan(fromClause))))
 
     case Token("TOK_FROM",
@@ -272,11 +279,20 @@ object Hive {
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
-  protected def nodeToExpr(node: Node): NamedExpression = node match {
+  protected def selExprNodeToExpr(node: Node): Expression = node match {
     case Token("TOK_SELEXPR",
-           Token("TOK_TABLE_OR_COL",
-             Token(name, Nil) :: Nil) :: Nil) =>
+           e :: Nil) =>
+      nodeToExpr(e)
+  }
+
+  protected def nodeToExpr(node: Node): Expression = node match {
+    case Token("TOK_TABLE_OR_COL",
+           Token(name, Nil) :: Nil) =>
       UnresolvedAttribute(name)
+    case Token("TOK_FUNCTION",
+           Token("AVG", Nil) ::
+           arg :: Nil) =>
+      Average(nodeToExpr(arg))
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
