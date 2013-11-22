@@ -13,7 +13,7 @@ import types._
 
 import dsl._
 
-class QueryTests extends FunSuite with BeforeAndAfterAll {
+class DslQueryTests extends FunSuite with BeforeAndAfterAll {
   override def beforeAll() {
     // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
     // without restarting the JVM.
