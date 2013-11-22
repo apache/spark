@@ -50,6 +50,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Returns a Seq containing the result of applying a partial function to all elements in this tree on which the
+   * function is defined.
+   */
+  def collect[B](pf: PartialFunction[BaseType, B]): Seq[B] = {
+    val ret = new collection.mutable.ArrayBuffer[B]()
+    val lifted = pf.lift
+    foreach(node => lifted(node).foreach(ret.+=))
+    ret
+  }
+
+  /**
    * Returns a copy of this node where [[rule]] has been recursively
    * applied to it and all of its children.  When [[rule]] does not
    * apply to a given node it is left unchanged.

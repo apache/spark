@@ -6,7 +6,7 @@ import expressions._
 
 import org.scalatest.{FunSuite}
 
-class TransformSuite extends FunSuite {
+class TreeNodeSuite extends FunSuite {
 
   test("top node changed") {
     val after = Literal(1) transform { case Literal(1, _) => Literal(2) }
@@ -26,5 +26,13 @@ class TransformSuite extends FunSuite {
 
     assert(before === after)
     assert(before.map(_.id) === after.map(_.id))
+  }
+
+  test("collect") {
+    val tree = Add(Literal(1), Add(Literal(2), Add(Literal(3), Literal(4))))
+    val literals = tree collect {case l: Literal => l}
+
+    assert(literals.size === 4)
+    (1 to 4).foreach(i => assert(literals contains Literal(i)))
   }
 }
