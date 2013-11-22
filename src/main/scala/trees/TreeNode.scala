@@ -120,8 +120,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   /** String representation of this node without any children */
   def simpleString = s"$nodeName $argString"
 
-  override def toString(): String = generateTreeString(0, new StringBuilder).toString
+  override def toString(): String = treeString
 
+  /** Returns a string representation of the nodes in this tree */
+  def treeString = generateTreeString(0, new StringBuilder).toString
+
+  /** Appends the string represent of this node and its children to [[builder]]. */
   protected def generateTreeString(depth: Int, builder: StringBuilder): StringBuilder = {
     builder.append(" " * depth)
     builder.append(simpleString)
