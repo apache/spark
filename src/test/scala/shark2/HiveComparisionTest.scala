@@ -6,6 +6,10 @@ import shark.{SharkContext, SharkEnv}
 import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
+/**
+ * Allows the creations of tests that execute the same query against both hive
+ * and catalyst, comparing the results.
+ */
 abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen {
   val testShark = new TestShark
 
