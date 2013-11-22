@@ -44,9 +44,11 @@ private[spark] object AkkaUtils {
     val akkaFrameSize = System.getProperty("spark.akka.frameSize", "10").toInt
     val lifecycleEvents = if (System.getProperty("spark.akka.logLifecycleEvents", "false").toBoolean) "on" else "off"
 
-    val akkaHeartBeatPauses = System.getProperty("spark.akka.pauses", "30").toInt
-    val akkaFailureDetector = System.getProperty("spark.akka.failure-detector.threshold", "30").toInt
-    val akkaHeartBeatInterval = System.getProperty("spark.akka.heartbeat.interval", "3").toInt
+    val akkaHeartBeatPauses = System.getProperty("spark.akka.pauses", "60").toInt
+    val akkaFailureDetector = System.getProperty("spark.akka.failure-detector.threshold", "12.0").toDouble
+    // Since we have our own Heart Beat mechanism and TCP already tracks connections. 
+    // Using this makes very little sense. So setting this to a relatively larger value suffices.
+    val akkaHeartBeatInterval = System.getProperty("spark.akka.heartbeat.interval", "3").toInt 
 
     val akkaConf = ConfigFactory.parseString(
       s"""
@@ -56,8 +58,8 @@ private[spark] object AkkaUtils {
       |akka.remote.watch-failure-detector.acceptable-heartbeat-pause = $akkaHeartBeatPauses s
       |akka.remote.watch-failure-detector.heartbeat-interval = $akkaHeartBeatInterval s
       |akka.remote.watch-failure-detector.threshold = $akkaFailureDetector
-      |akka.remote.transport-failure-detector.heartbeat-interval = $akkaHeartBeatInterval s
-      |akka.remote.transport-failure-detector.acceptable-heartbeat-pause = $akkaHeartBeatPauses s
+      |akka.remote.transport-failure-detector.heartbeat-interval = 30 s
+      |akka.remote.transport-failure-detector.acceptable-heartbeat-pause = ${akkaHeartBeatPauses + 10} s
       |akka.remote.transport-failure-detector.threshold = $akkaFailureDetector
       |akka.actor.provider = "akka.remote.RemoteActorRefProvider"
       |akka.remote.netty.tcp.transport-class = "akka.remote.transport.netty.NettyTransport"

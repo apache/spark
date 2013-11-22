@@ -17,8 +17,9 @@
 
 package org.apache.spark.deploy.master
 
-import java.util.Date
 import java.text.SimpleDateFormat
+import java.util.concurrent.TimeUnit
+import java.util.Date
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
@@ -28,6 +29,7 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 import akka.actor._
 import akka.pattern.ask
 import akka.remote._
+import akka.serialization.SerializationExtension
 import akka.util.Timeout
 
 import org.apache.spark.{Logging, SparkException}
@@ -40,11 +42,6 @@ import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.deploy.DeployMessages.RegisterWorkerFailed
 import org.apache.spark.deploy.DeployMessages.KillExecutor
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import scala.Some
-import akka.actor.Terminated
-import akka.serialization.SerializationExtension
-import java.util.concurrent.TimeUnit
-
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   import context.dispatcher
@@ -102,6 +99,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
+    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.start()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort.get
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
@@ -267,8 +265,17 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     case Terminated(actor) => {
       // The disconnected actor could've been either a worker or an app; remove whichever of
       // those we have an entry for in the corresponding actor hashmap
+      logInfo(s"$actor got terminated, removing it.")
       actorToWorker.get(actor).foreach(removeWorker)
       actorToApp.get(actor).foreach(finishApplication)
+      if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
+    }
+
+    case DisassociatedEvent(_, address, _) => {
+      // The disconnected client could've been either a worker or an app; remove whichever it was
+      logInfo(s"$address got disassociated, removing it.")
+      addressToWorker.get(address).foreach(removeWorker)
+      addressToApp.get(address).foreach(finishApplication)
       if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
@@ -431,6 +438,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         exec.id, ExecutorState.LOST, Some("worker lost"), None)
       exec.application.removeExecutor(exec)
     }
+    context.stop(worker.actor)
+    context.unwatch(worker.actor)
     persistenceEngine.removeWorker(worker)
   }
 
@@ -493,6 +502,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         app.driver ! ApplicationRemoved(state.toString)
       }
       persistenceEngine.removeApplication(app)
+      context.stop(app.driver)
+      context.unwatch(app.driver)
       schedule()
     }
   }

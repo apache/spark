@@ -121,6 +121,9 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
       case Terminated(actor) =>
         actorToExecutorId.get(actor).foreach(removeExecutor(_, "Akka actor terminated"))
 
+      case DisassociatedEvent(_, address, _) => 
+        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client disassociated"))
+
     }
 
     // Make fake resource offers on all executors

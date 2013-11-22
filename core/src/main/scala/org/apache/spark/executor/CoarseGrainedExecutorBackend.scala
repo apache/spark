@@ -26,11 +26,6 @@ import org.apache.spark.Logging
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{Utils, AkkaUtils}
-import akka.remote.DisassociatedEvent
-import akka.remote.AssociationErrorEvent
-import akka.remote.DisassociatedEvent
-import akka.actor.Terminated
-
 
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
@@ -82,7 +77,11 @@ private[spark] class CoarseGrainedExecutorBackend(
       }
 
     case Terminated(actor) =>
-      logError(s"Driver $actor terminated or disconnected! Shutting down.")
+      logError(s"Driver $actor terminated, Shutting down.")
+      System.exit(1)
+
+    case x: DisassociatedEvent =>
+      logError(s"Driver $x disassociated! Shutting down.")
       System.exit(1)
 
     case StopExecutor =>

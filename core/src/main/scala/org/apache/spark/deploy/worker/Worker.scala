@@ -17,14 +17,16 @@
 
 package org.apache.spark.deploy.worker
 
+import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.io.File
 
 import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 
 import akka.actor._
+import akka.remote.{ DisassociatedEvent, RemotingLifecycleEvent}
+
 import org.apache.spark.Logging
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
@@ -36,10 +38,8 @@ import org.apache.spark.deploy.DeployMessages.WorkerStateResponse
 import org.apache.spark.deploy.DeployMessages.RegisterWorkerFailed
 import org.apache.spark.deploy.DeployMessages.KillExecutor
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import scala.Some
 import org.apache.spark.deploy.DeployMessages.Heartbeat
 import org.apache.spark.deploy.DeployMessages.RegisteredWorker
-import akka.remote.DisassociatedEvent
 import org.apache.spark.deploy.DeployMessages.LaunchExecutor
 import org.apache.spark.deploy.DeployMessages.RegisterWorker
 
@@ -124,7 +124,7 @@ private[spark] class Worker(
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
-
+    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.start()
     registerWithMaster()
 
@@ -247,6 +247,10 @@ private[spark] class Worker(
 
     case Terminated(actor_) =>
       logInfo(s"$actor_ terminated !")
+      masterDisconnected()
+
+    case x: DisassociatedEvent =>
+      logInfo(s"$x Disassociated !")
       masterDisconnected()
 
     case RequestWorkerState => {
