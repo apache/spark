@@ -12,6 +12,9 @@ object Literal {
   }
 }
 
+/**
+ * Extractor for retrieving Int literals.
+ */
 object IntegerLiteral {
   def unapply(a: Any): Option[Int] = a match {
     case Literal(a: Int, IntegerType) => Some(a)
