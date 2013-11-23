@@ -20,28 +20,29 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
       testShark.reset()
 
       // Run w/ catalyst
-      val catalystResults: Seq[Seq[String]] = queryList.map { queryString =>
+      val catalystResults = queryList.map { queryString =>
         info(queryString)
         val query = new testShark.SharkSqlQuery(queryString)
-        query.execute().map(_.collect().map(_.mkString("\t")).toSeq).getOrElse(Nil)
+        (query, query.execute().map(_.collect().map(_.mkString("\t")).toSeq).getOrElse(Nil))
       }.toSeq
 
       testShark.reset()
 
-      val hiveResults: Seq[Seq[String]] = queryList.map { queryString =>
+      val hiveResults = queryList.map { queryString =>
         // Analyze the query with catalyst to ensure test tables are loaded.
         (new testShark.SharkSqlQuery(queryString)).analyzed
 
         val result = testShark.runSqlHive(queryString).toSeq
 
+        // We don't yet match DESCRIBE output... In the end this command will probably be passed back to hive.
         if(queryString startsWith "DESCRIBE") Nil else result
       }.toSeq
 
       testShark.reset()
 
       (queryList, hiveResults, catalystResults).zipped.foreach {
-        case (query, hive, catalyst) =>
-          assert(hive === catalyst)
+        case (query, hive, (sharkQuery, catalyst)) =>
+          assert(hive === catalyst, s"Results do not match for query: $sharkQuery")
       }
     }
   }
