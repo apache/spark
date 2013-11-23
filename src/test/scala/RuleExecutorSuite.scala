@@ -7,7 +7,7 @@ import expressions._
 import rules._
 
 class RuleExecutorSuite extends FunSuite {
-  object IncrementLits extends Rule[Expression] {
+  object DecrementLiterals extends Rule[Expression] {
     def apply(e: Expression): Expression = e transform {
       case IntegerLiteral(i) if i > 0 => Literal(i - 1)
     }
@@ -15,7 +15,7 @@ class RuleExecutorSuite extends FunSuite {
 
   test("only once") {
     object ApplyOnce extends RuleExecutor[Expression] {
-      val batches = Batch("once", Once, IncrementLits) :: Nil
+      val batches = Batch("once", Once, DecrementLiterals) :: Nil
     }
 
     assert(ApplyOnce(Literal(10)) === Literal(9))
@@ -23,7 +23,7 @@ class RuleExecutorSuite extends FunSuite {
 
   test("to fixed point") {
     object ToFixedPoint extends RuleExecutor[Expression] {
-      val batches = Batch("fixedPoint", FixedPoint(100), IncrementLits) :: Nil
+      val batches = Batch("fixedPoint", FixedPoint(100), DecrementLiterals) :: Nil
     }
 
     assert(ToFixedPoint(Literal(10)) === Literal(0))
@@ -31,7 +31,7 @@ class RuleExecutorSuite extends FunSuite {
 
   test("to maxIterations") {
     object ToFixedPoint extends RuleExecutor[Expression] {
-      val batches = Batch("fixedPoint", FixedPoint(10), IncrementLits) :: Nil
+      val batches = Batch("fixedPoint", FixedPoint(10), DecrementLiterals) :: Nil
     }
 
     assert(ToFixedPoint(Literal(100)) === Literal(90))
