@@ -8,6 +8,7 @@ object Literal {
     // TODO(marmbrus): Use bigInt type for value?
     case i: Int => Literal(i, IntegerType)
     case d: Double => Literal(d, FloatType)
+    case s: String => Literal(s, StringType)
   }
 }
 
