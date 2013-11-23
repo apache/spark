@@ -13,6 +13,7 @@ object Evaluate {
         case (l: Int, r: Int) => l + r
       }
       case Literal(v, _) => v
+      case Alias(c, _) => eval(c)
       case Equals(l, r) => eval(l) == eval(r)
       case BoundReference(inputTuple, ordinal, _) => input(inputTuple)(ordinal)
       case GreaterThan(l, r) => (eval(l), eval(r)) match {
