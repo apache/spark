@@ -39,8 +39,12 @@ private[spark] class ZippedPartitionsPartition(
 
 abstract class ZippedPartitionsBaseRDD[V: ClassManifest](
     sc: SparkContext,
-    var rdds: Seq[RDD[_]])
+    var rdds: Seq[RDD[_]],
+    preservesPartitioning: Boolean = false)
   extends RDD[V](sc, rdds.map(x => new OneToOneDependency(x))) {
+
+  override val partitioner =
+    if (preservesPartitioning) firstParent[Any].partitioner else None
 
   override def getPartitions: Array[Partition] = {
     val sizes = rdds.map(x => x.partitions.size)
@@ -76,8 +80,9 @@ class ZippedPartitionsRDD2[A: ClassManifest, B: ClassManifest, V: ClassManifest]
     sc: SparkContext,
     f: (Iterator[A], Iterator[B]) => Iterator[V],
     var rdd1: RDD[A],
-    var rdd2: RDD[B])
-  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2)) {
+    var rdd2: RDD[B],
+    preservesPartitioning: Boolean = false)
+  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
@@ -97,8 +102,9 @@ class ZippedPartitionsRDD3
     f: (Iterator[A], Iterator[B], Iterator[C]) => Iterator[V],
     var rdd1: RDD[A],
     var rdd2: RDD[B],
-    var rdd3: RDD[C])
-  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3)) {
+    var rdd3: RDD[C],
+    preservesPartitioning: Boolean = false)
+  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
@@ -122,8 +128,9 @@ class ZippedPartitionsRDD4
     var rdd1: RDD[A],
     var rdd2: RDD[B],
     var rdd3: RDD[C],
-    var rdd4: RDD[D])
-  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3, rdd4)) {
+    var rdd4: RDD[D],
+    preservesPartitioning: Boolean = false)
+  extends ZippedPartitionsBaseRDD[V](sc, List(rdd1, rdd2, rdd3, rdd4), preservesPartitioning) {
 
   override def compute(s: Partition, context: TaskContext): Iterator[V] = {
     val partitions = s.asInstanceOf[ZippedPartitionsPartition].partitions
