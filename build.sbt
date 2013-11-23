@@ -13,6 +13,8 @@ libraryDependencies ++= Seq(
  "org.apache.hive" % "hive-exec" % "0.10.0",
  "org.apache.hive" % "hive-builtins" % "0.10.0")
 
+ // Multiple queries rely on the TestShark singleton.  See comments there for more details.
+ parallelExecution in Test := false
 
 resolvers ++= Seq(
     // For Optiq
@@ -33,5 +35,4 @@ import catalyst.plans.logical._
 import catalyst.rules._
 import catalyst.types._
 import catalyst.util._
-lazy val testShark = new catalyst.shark2.TestShark
-import testShark._"""
+import catalyst.shark2.TestShark._"""

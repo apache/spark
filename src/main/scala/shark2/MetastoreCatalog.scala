@@ -12,7 +12,7 @@ import types._
 import collection.JavaConversions._
 
 class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
-  protected val client = new HiveMetaStoreClient(hiveConf)
+  val client = new HiveMetaStoreClient(hiveConf)
 
   def lookupRelation(name: String, alias: Option[String]): plans.logical.LogicalPlan = {
     val (databaseName, tableName) = name.split("\\.") match {

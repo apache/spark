@@ -21,8 +21,7 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
     System.clearProperty("spark.hostPort")
   }
 
-  val testShark = new TestShark
-  import testShark._
+  import TestShark._
 
   val testData =
     logical.LocalRelation('key.int, 'value.string)

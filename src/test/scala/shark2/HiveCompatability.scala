@@ -1,6 +1,8 @@
 package catalyst
 package shark2
 
+import java.io._
+
 /**
  * A framework for running the query tests that are included in hive distribution.
  */
@@ -18,15 +20,8 @@ class HiveCompatability extends HiveComaparisionTest {
     "tablename_with_select"
   )
 
-  override def beforeAll() {
-    // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
-    // without restarting the JVM.
-    System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
-  }
-
   // TODO: bundle in jar files... get from classpath
-  val hiveQueryDir = new File("/Users/marmbrus/workspace/hive/ql/src/test/queries/clientpositive")
+  val hiveQueryDir = new File(testShark.hiveDevHome, "ql/src/test/queries/clientpositive")
   val testCases = hiveQueryDir.listFiles
 
   // Go through all the test cases and add them to scala test.
