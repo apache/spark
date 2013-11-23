@@ -26,7 +26,7 @@ case class Join(
 
 case class Sort(order: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {
   def output = child.output
-  def references = child.references
+  def references = order.flatMap(_.references).toSet
 }
 
 case class Aggregate(
