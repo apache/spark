@@ -61,7 +61,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * type Color = Int
    * val graph: Graph[Color, Int] = Graph.textFile("hdfs://file.tsv")
    * val numInvalid = graph.edgesWithVertices()
-   *   .map(e => if(e.src.data == e.dst.data) 1 else 0).sum
+   *   .map(e => if (e.src.data == e.dst.data) 1 else 0).sum
    * }}}
    *
    * @see edges() If only the edge data and adjacent vertex ids are
@@ -74,7 +74,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
   def persist(newLevel: StorageLevel): Graph[VD, ED]
 
-
   /**
    * Return a graph that is cached when first created. This is used to
    * pin a graph in memory enabling multiple queries to reuse the same
@@ -84,13 +83,10 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    */
   def cache(): Graph[VD, ED]
 
-
   /**
    * Compute statistics describing the graph representation.
    */
   def statistics: Map[String, Any]
-
-
 
   /**
    * Construct a new graph where each vertex value has been
@@ -110,7 +106,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * val rawGraph: Graph[(), ()] = Graph.textFile("hdfs://file")
    * val root = 42
    * var bfsGraph = rawGraph
-   *   .mapVertices[Int]((vid, data) => if(vid == root) 0 else Math.MaxValue)
+   *   .mapVertices[Int]((vid, data) => if (vid == root) 0 else Math.MaxValue)
    * }}}
    *
    */
@@ -160,9 +156,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    *
    */
-  def mapTriplets[ED2: ClassManifest](
-    map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
-
+  def mapTriplets[ED2: ClassManifest](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 
   /**
    * Construct a new graph with all the edges reversed.  If this graph
@@ -171,7 +165,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    */
   def reverse: Graph[VD, ED]
-
 
   /**
    * This function takes a vertex and edge predicate and constructs
@@ -198,35 +191,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
     vpred: (Vid, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
 
-
-
-  /**
-   * groupEdgeTriplets is used to merge multiple edges that have the
-   * same source and destination vertex into a single edge. The user
-   * supplied function is applied to each directed pair of vertices
-   * (u, v) and has access to all EdgeTriplets
-   *
-   * {e: for all e in E where e.src = u and e.dst = v}
-   *
-   * This function is identical to
-   * [[org.apache.spark.graph.Graph.groupEdges]] except that this
-   * function provides the user-supplied function with an iterator
-   * over EdgeTriplets, which contain the vertex data, whereas
-   * groupEdges provides the user-supplied function with an iterator
-   * over Edges, which only contain the vertex IDs.
-   *
-   * @tparam ED2 the type of the resulting edge data after grouping
-   *
-   * @param f the user supplied function to merge multiple EdgeTriplets
-   * into a single ED2 object
-   *
-   * @return Graph[VD,ED2] The resulting graph with a single Edge for each
-   * source, dest vertex pair.
-   *
-   */
-  def groupEdgeTriplets[ED2: ClassManifest](f: Iterator[EdgeTriplet[VD,ED]] => ED2 ): Graph[VD,ED2]
-
-
   /**
    * This function merges multiple edges between two vertices into a
    * single Edge. See
@@ -235,14 +199,13 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    * @tparam ED2 the type of the resulting edge data after grouping.
    *
-   * @param f the user supplied function to merge multiple Edges
-   * into a single ED2 object.
+   * @param f the user supplied commutative associative function to merge
+   * edge attributes for duplicate edges.
    *
    * @return Graph[VD,ED2] The resulting graph with a single Edge for
    * each source, dest vertex pair.
    */
-  def groupEdges[ED2: ClassManifest](f: Iterator[Edge[ED]] => ED2 ): Graph[VD,ED2]
-
+  def groupEdges(merge: (ED, ED) => ED): Graph[VD,ED]
 
   /**
    * The mapReduceTriplets function is used to compute statistics
@@ -277,10 +240,9 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    *
    */
   def mapReduceTriplets[A: ClassManifest](
-      mapFunc: EdgeTriplet[VD, ED] => Array[(Vid, A)],
+      mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
       reduceFunc: (A, A) => A)
     : VertexSetRDD[A]
-
 
   /**
    * Join the vertices with an RDD and then apply a function from the
@@ -315,7 +277,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
       (mapFunc: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
 
-
   // Save a copy of the GraphOps object so there is always one unique GraphOps object
   // for a given Graph object, and thus the lazy vals in GraphOps would work as intended.
   val ops = new GraphOps(this)
@@ -335,20 +296,15 @@ object Graph {
   import org.apache.spark.SparkContext._
 
   /**
-   * Construct a graph from a collection of edges encoded as vertex id
-   * pairs.  Duplicate directed edges are merged to a single edge with
-   * weight equal to the number of duplicate edges.  The returned
-   * vertex attribute is the number of edges adjacent to that vertex
-   * (i.e., the undirected degree).
+   * Construct a graph from a collection of edges encoded as vertex id pairs.
    *
    * @param rawEdges the RDD containing the set of edges in the graph
    *
-   * @return a graph with edge attributes containing the count of
-   * duplicate edges and vertex attributes containing the total degree
-   * of each vertex.
+   * @return a graph with edge attributes containing the count of duplicate edges.
    */
-  def apply(rawEdges: RDD[(Vid, Vid)]): Graph[Int, Int] = { Graph(rawEdges, true) }
-
+  def apply[VD: ClassManifest](rawEdges: RDD[(Vid, Vid)], defaultValue: VD): Graph[VD, Int] = {
+    Graph(rawEdges, defaultValue, false, RandomVertexCut())
+  }
 
   /**
    * Construct a graph from a collection of edges encoded as vertex id
@@ -364,23 +320,51 @@ object Graph {
    * attributes containing the total degree of each vertex.
    *
    */
-  def apply(rawEdges: RDD[(Vid, Vid)], uniqueEdges: Boolean): Graph[Int, Int] = {
-    // Reduce to unique edges.
-    val edges: RDD[Edge[Int]] =
-      if (uniqueEdges) {
-        rawEdges.map((_, 1)).reduceByKey(_ + _).map { case ((s, t), cnt) => Edge(s, t, cnt) }
-      } else {
-        rawEdges.map { case (s, t) => Edge(s, t, 1) }
-      }
-    // Determine unique vertices
-    /** @todo Should this reduceByKey operation be indexed? */
-    val vertices: RDD[(Vid, Int)] =
-      edges.flatMap{ case Edge(s, t, cnt) => Array((s, 1), (t, 1)) }.reduceByKey(_ + _)
-
-    // Return graph
-    GraphImpl(vertices, edges, 0)
+  def apply[VD: ClassManifest](
+      rawEdges: RDD[(Vid, Vid)],
+      defaultValue: VD,
+      uniqueEdges: Boolean,
+      partitionStrategy: PartitionStrategy):
+    Graph[VD, Int] = {
+    val edges = rawEdges.map(p => Edge(p._1, p._2, 1))
+    val graph = GraphImpl(edges, defaultValue, partitionStrategy)
+    if (uniqueEdges) {
+      graph.groupEdges((a,b) => a+b)
+    } else {
+      graph
+    }
   }
 
+  /**
+   * Construct a graph from a collection of edges.
+   *
+   * @param edges the RDD containing the set of edges in the graph
+   * @param defaultValue the default vertex attribute to use for each vertex
+   *
+   * @return a graph with edge attributes described by `edges` and vertices
+   *         given by all vertices in `edges` with value `defaultValue`
+   */
+  def apply[VD: ClassManifest, ED: ClassManifest](
+      edges: RDD[Edge[ED]],
+      defaultValue: VD): Graph[VD, ED] = {
+    Graph(edges, defaultValue, RandomVertexCut())
+  }
+
+  /**
+   * Construct a graph from a collection of edges.
+   *
+   * @param edges the RDD containing the set of edges in the graph
+   * @param defaultValue the default vertex attribute to use for each vertex
+   *
+   * @return a graph with edge attributes described by `edges` and vertices
+   *         given by all vertices in `edges` with value `defaultValue`
+   */
+  def apply[VD: ClassManifest, ED: ClassManifest](
+      edges: RDD[Edge[ED]],
+      defaultValue: VD,
+      partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
+    GraphImpl(edges, defaultValue, partitionStrategy)
+  }
 
   /**
    * Construct a graph from a collection attributed vertices and
@@ -400,10 +384,8 @@ object Graph {
       vertices: RDD[(Vid,VD)],
       edges: RDD[Edge[ED]]): Graph[VD, ED] = {
     val defaultAttr: VD = null.asInstanceOf[VD]
-    Graph(vertices, edges, defaultAttr, (a:VD,b:VD) => a)
+    Graph(vertices, edges, defaultAttr, (a:VD,b:VD) => a, RandomVertexCut())
   }
-
-
 
   /**
    * Construct a graph from a collection attributed vertices and
@@ -411,21 +393,21 @@ object Graph {
    * vertices found in the edge collection but not in the input
    * vertices are the default attribute `defautVertexAttr`.
    *
+   * @note Duplicate vertices are removed arbitrarily .
+   *
    * @tparam VD the vertex attribute type
    * @tparam ED the edge attribute type
    * @param vertices the "set" of vertices and their attributes
    * @param edges the collection of edges in the graph
    * @param defaultVertexAttr the default vertex attribute to use for
-   * vertices that are mentioned in `edges` but not in `vertices
-   * @param mergeFunc the function used to merge duplicate vertices
-   * in the `vertices` collection.
+   * vertices that are mentioned in `edges` but not in `vertices`
    *
    */
   def apply[VD: ClassManifest, ED: ClassManifest](
       vertices: RDD[(Vid,VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD): Graph[VD, ED] = {
-    GraphImpl(vertices, edges, defaultVertexAttr, (a,b) => a)
+    Graph(vertices, edges, defaultVertexAttr, (a,b) => a, RandomVertexCut())
   }
 
   /**
@@ -442,14 +424,17 @@ object Graph {
    * vertices that are mentioned in `edges` but not in `vertices
    * @param mergeFunc the function used to merge duplicate vertices
    * in the `vertices` collection.
+   * @param partitionStrategy the partition strategy to use when
+   * partitioning the edges.
    *
    */
   def apply[VD: ClassManifest, ED: ClassManifest](
       vertices: RDD[(Vid,VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD,
-      mergeFunc: (VD, VD) => VD): Graph[VD, ED] = {
-    GraphImpl(vertices, edges, defaultVertexAttr, mergeFunc)
+      mergeFunc: (VD, VD) => VD,
+      partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
+    GraphImpl(vertices, edges, defaultVertexAttr, mergeFunc, partitionStrategy)
   }
 
   /**
