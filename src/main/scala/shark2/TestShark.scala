@@ -127,12 +127,15 @@ object TestShark {
       case _ => Some(executedPlan.execute())
     }
 
+    protected def stringOrError[A](f: => A): String =
+      try f.toString catch { case e: Throwable => e.toString }
+
     override def toString: String =
       s"""$sql
          |== Logical Plan ==
-         |$analyzed
+         |${stringOrError(analyzed)}
          |== Physical Plan ==
-         |$sharkPlan
+         |${stringOrError(sharkPlan)}
       """.stripMargin.trim
   }
 
