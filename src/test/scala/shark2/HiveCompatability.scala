@@ -17,7 +17,8 @@ class HiveCompatability extends HiveComaparisionTest {
    * blacklist are implicitly marked as ignored.
    */
   val whiteList = Seq(
-    "tablename_with_select"
+    "tablename_with_select",
+    "literal_string"
   )
 
   // TODO: bundle in jar files... get from classpath

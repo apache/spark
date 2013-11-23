@@ -311,8 +311,16 @@ object Hive {
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("TOK_FUNCTION", Token("RAND", Nil) :: Nil) => Rand
     case Token(doubleLiteral(str), Nil) => Literal(str.toDouble)
+    case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
+      Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.asInstanceOf[ASTNode].getText)).mkString)
+
+    case ast: ASTNode if ast.getType == HiveParser.Number => Literal(ast.getText.toInt)
+    case ast: ASTNode if ast.getType == HiveParser.StringLiteral =>
+      Literal(BaseSemanticAnalyzer.unescapeSQLString(ast.getText))
+    //case Token(singleQuotedLiteral(str), Nil) => Literal(str)
     case a: ASTNode =>
-      throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
+      throw new NotImplementedError(
+        s"No parse rules for ASTNode type: ${a.getType}, text: ${a.getText} :\n ${dumpTree(a).toString}")
   }
 
   protected def dumpTree(node: Node, builder: StringBuilder = new StringBuilder, indent: Int = 0)
