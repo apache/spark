@@ -122,6 +122,8 @@ object TestShark {
     lazy val sharkPlan = TrivalPlanner(analyzed).next()
     lazy val executedPlan = PrepareForExecution(sharkPlan)
 
+    lazy val toRdd = execute().getOrElse(sys.error("No result for this query type."))
+
     def execute() = analyzed match {
       case NativeCommand(cmd) => runSqlHive(cmd); None
       case _ => Some(executedPlan.execute())
