@@ -158,12 +158,29 @@ object Hive {
     colList.map(nodeToAttribute)
   }
 
-  /** Extractor for matching Hive's AST Tokens */
+  /** Extractor for matching Hive's AST Tokens. */
   protected object Token {
+    /** @returns matches of the form (tokenName, children). */
     def unapply(t: Any) = t match {
       case t: ASTNode =>
         Some((t.getText, Option(t.getChildren).map(_.toList).getOrElse(Nil)))
       case _ => None
+    }
+  }
+
+  protected def getClauses(clauseNames: Seq[String], nodeList: Seq[Node]): Seq[Option[Node]] = {
+    clauseNames.map(getClauseOption(_, nodeList))
+  }
+
+  protected def getClause(clauseName: String, nodeList: Seq[Node]) =
+    getClauseOption(clauseName, nodeList)
+      .getOrElse(sys.error(s"Expected clause $clauseName missing from ${nodeList.map(dumpTree(_)).mkString("\n")}"))
+
+  protected def getClauseOption(clauseName: String, nodeList: Seq[Node]): Option[Node] = {
+    nodeList.filter { case ast: ASTNode => ast.getText == clauseName } match {
+      case Seq(oneMatch) => Some(oneMatch)
+      case Seq() => None
+      case _ => sys.error(s"Found multiple instances of clause $clauseName")
     }
   }
 
@@ -222,29 +239,25 @@ object Hive {
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     case Token("TOK_QUERY",
            fromClause ::
-           Token("TOK_INSERT",
-             destClause ::
-             Token("TOK_SELECT",
-                selectExprs) :: Nil) :: Nil) =>
-      nodeToDest(
-        destClause,
-        Project(nameExpressions(selectExprs.map(selExprNodeToExpr)),
-          nodeToPlan(fromClause)))
+           Token("TOK_INSERT", insertClauses) :: Nil) =>
 
-    // TODO: find a less redundant way to do this.
-    case Token("TOK_QUERY",
-           fromClause ::
-           Token("TOK_INSERT",
-             destClause ::
-             Token("TOK_SELECT",
-               selectExprs) ::
-             Token("TOK_ORDERBY",
-               orderByExprs) :: Nil) :: Nil) =>
+      val (Some(destClause) ::
+          Some(selectClause) ::
+          whereClause ::
+          orderByClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_ORDERBY"), insertClauses)
+
+      val relations = nodeToPlan(fromClause)
+      val withWhere = whereClause.map { whereNode =>
+        val Seq(whereExpr) = whereNode.getChildren().toSeq
+        Filter(nodeToExpr(whereExpr), relations)
+      }.getOrElse(relations)
+
+      val withProject = Project(nameExpressions(selectClause.getChildren.map(selExprNodeToExpr)), withWhere)
+      val withSort = orderByClause.map(_.getChildren.map(nodeToSortOrder)).map(Sort(_, withProject)).getOrElse(withProject)
+
       nodeToDest(
         destClause,
-        Sort(orderByExprs.map(nodeToSortOrder),
-          Project(nameExpressions(selectExprs.map(selExprNodeToExpr)),
-            nodeToPlan(fromClause))))
+        withSort)
 
     case Token("TOK_FROM",
            Token("TOK_TABREF",
@@ -256,10 +269,8 @@ object Hive {
   }
 
   def nodeToSortOrder(node: Node): SortOrder = node match {
-    case Token("TOK_TABSORTCOLNAMEASC",
-           Token("TOK_TABLE_OR_COL",
-             Token(name, Nil) :: Nil) :: Nil) =>
-      SortOrder(UnresolvedAttribute(name), Ascending)
+    case Token("TOK_TABSORTCOLNAMEASC", sortExpr :: Nil) =>
+      SortOrder(nodeToExpr(sortExpr), Ascending)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
@@ -285,14 +296,19 @@ object Hive {
       nodeToExpr(e)
   }
 
+  val doubleLiteral = "(\\d+\\.\\d+)".r
   protected def nodeToExpr(node: Node): Expression = node match {
     case Token("TOK_TABLE_OR_COL",
            Token(name, Nil) :: Nil) =>
       UnresolvedAttribute(name)
-    case Token("TOK_FUNCTION",
-           Token("AVG", Nil) ::
-           arg :: Nil) =>
-      Average(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token("AVG", Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
+    case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
+    case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))
+    case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
+    case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
+    case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
+    case Token("TOK_FUNCTION", Token("RAND", Nil) :: Nil) => Rand
+    case Token(doubleLiteral(str), Nil) => Literal(str.toDouble)
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
