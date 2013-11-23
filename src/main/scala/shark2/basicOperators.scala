@@ -28,6 +28,12 @@ case class Filter(condition: Expression, child: SharkPlan) extends UnaryNode {
   }
 }
 
+case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) extends UnaryNode {
+  def output = child.output
+  // TODO: Pick num splits based on |limit|.
+  def execute() = sc.makeRDD(child.execute().take(limit),1)
+}
+
 /**
  * Uses spark Accumulators to perform global aggregation.
  *

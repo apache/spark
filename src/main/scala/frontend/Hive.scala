@@ -244,7 +244,8 @@ object Hive {
       val (Some(destClause) ::
           Some(selectClause) ::
           whereClause ::
-          orderByClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_ORDERBY"), insertClauses)
+          orderByClause ::
+          limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_ORDERBY", "TOK_LIMIT"), insertClauses)
 
       val relations = nodeToPlan(fromClause)
       val withWhere = whereClause.map { whereNode =>
@@ -254,10 +255,11 @@ object Hive {
 
       val withProject = Project(nameExpressions(selectClause.getChildren.map(selExprNodeToExpr)), withWhere)
       val withSort = orderByClause.map(_.getChildren.map(nodeToSortOrder)).map(Sort(_, withProject)).getOrElse(withProject)
+      val withLimit = limitClause.map(l => nodeToExpr(l.getChildren.head)).map(StopAfter(_, withSort)).getOrElse(withSort)
 
       nodeToDest(
         destClause,
-        withSort)
+        withLimit)
 
     case Token("TOK_FROM",
            Token("TOK_TABREF",

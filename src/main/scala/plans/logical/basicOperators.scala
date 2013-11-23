@@ -37,3 +37,8 @@ case class Aggregate(
   def output = aggregateExpressions.map(_.toAttribute)
   def references = child.references
 }
+
+case class StopAfter(limit: Expression, child: LogicalPlan) extends UnaryNode {
+  def output = child.output
+  def references = limit.references
+}
