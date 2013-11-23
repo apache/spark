@@ -15,7 +15,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
 
   def createQueryTest(testCaseName: String, sql: String) {
     test(testCaseName) {
-      val queryList = sql.split("(?<=[^\\\\]);").map(_.trim).filterNot(_ == "").toSeq
+      val queryList = sql.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "" || (q startsWith "EXPLAIN")).toSeq
 
       testShark.reset()
 
