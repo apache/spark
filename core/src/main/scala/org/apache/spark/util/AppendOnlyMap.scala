@@ -56,7 +56,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
     var i = 1
     while (true) {
       val curKey = data(2 * pos)
-      if (k.eq(curKey) || k == curKey) {
+      if (k.eq(curKey) || k.equals(curKey)) {
         return data(2 * pos + 1).asInstanceOf[V]
       } else if (curKey.eq(null)) {
         return null.asInstanceOf[V]
@@ -104,7 +104,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
     var i = 1
     while (true) {
       val curKey = data(2 * pos)
-      if (k.eq(curKey) || k == curKey) {
+      if (k.eq(curKey) || k.equals(curKey)) {
         val newValue = updateFunc(true, data(2 * pos + 1).asInstanceOf[V])
         data(2 * pos + 1) = newValue.asInstanceOf[AnyRef]
         return newValue
@@ -167,12 +167,11 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
   }
 
   /**
-   * Re-hash a value to deal better with hash functions that don't differ
-   * in the lower bits, similar to java.util.HashMap
+   * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
+   * We use the Murmur Hash 3 finalization step that's also used in fastutil.
    */
   private def rehash(h: Int): Int = {
-    val r = h ^ (h >>> 20) ^ (h >>> 12)
-    r ^ (r >>> 7) ^ (r >>> 4)
+    it.unimi.dsi.fastutil.HashCommon.murmurHash3(h)
   }
 
   /**
@@ -190,7 +189,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
         data(2 * pos) = key
         data(2 * pos + 1) = value.asInstanceOf[AnyRef]
         return true
-      } else if (curKey.eq(key) || curKey == key) {
+      } else if (curKey.eq(key) || curKey.equals(key)) {
         data(2 * pos + 1) = value.asInstanceOf[AnyRef]
         return false
       } else {
