@@ -5,7 +5,7 @@ import org.apache.spark.graph._
 
 
 //private[graph]
-class EdgePartitionBuilder[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
+class EdgePartitionBuilder[@specialized(Char, Int, Boolean, Byte, Long, Float, Double)
 ED: ClassManifest]{
   val srcIds = new VertexArrayList
   val dstIds = new VertexArrayList
@@ -22,10 +22,6 @@ ED: ClassManifest]{
   def toEdgePartition: EdgePartition[ED] = {
     new EdgePartition(srcIds.toLongArray(), dstIds.toLongArray(), dataBuilder.result())
   }
-  
+
 
 }
-
-
-
-
