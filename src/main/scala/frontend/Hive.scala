@@ -298,7 +298,9 @@ object Hive {
       nodeToExpr(e)
   }
 
-  val doubleLiteral = "(\\d+\\.\\d+)".r
+
+  val numericAstTypes =
+    Seq(HiveParser.Number, HiveParser.TinyintLiteral, HiveParser.SmallintLiteral, HiveParser.BigintLiteral)
   protected def nodeToExpr(node: Node): Expression = node match {
     case Token("TOK_TABLE_OR_COL",
            Token(name, Nil) :: Nil) =>
@@ -310,11 +312,50 @@ object Hive {
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("TOK_FUNCTION", Token("RAND", Nil) :: Nil) => Rand
-    case Token(doubleLiteral(str), Nil) => Literal(str.toDouble)
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.asInstanceOf[ASTNode].getText)).mkString)
 
-    case ast: ASTNode if ast.getType == HiveParser.Number => Literal(ast.getText.toInt)
+    // This code is adapted from https://github.com/apache/hive/blob/branch-0.10/ql/src/java/org/apache/hadoop/hive/ql/parse/TypeCheckProcFactory.java#L223
+    case ast: ASTNode if numericAstTypes contains ast.getType() =>
+      var v: Literal = null
+      try {
+        if (ast.getText().endsWith("L")) {
+          // Literal bigint.
+          v = Literal(ast.getText().substring(0, ast.getText().length() - 1).toLong, LongType)
+        } else if (ast.getText().endsWith("S")) {
+          // Literal smallint.
+          v = Literal(ast.getText().substring(0, ast.getText().length() - 1).toShort, ShortType)
+        } else if (ast.getText().endsWith("Y")) {
+          // Literal tinyint.
+          v = Literal(ast.getText().substring(0, ast.getText().length() - 1).toByte, ByteType)
+        } else if (ast.getText().endsWith("BD")) {
+          throw new NotImplementedError("Hive Decimal not implemented yet")
+          /*
+          // Literal decimal
+          val strVal = ast.getText().substring(0, ast.getText().length() - 2);
+          HiveDecimal hd = HiveDecimal.create(strVal);
+          int prec = 1;
+          int scale = 0;
+          if (hd != null) {
+            prec = hd.precision();
+            scale = hd.scale();
+          }
+          DecimalTypeInfo typeInfo = TypeInfoFactory.getDecimalTypeInfo(prec, scale);
+          return new ExprNodeConstantDesc(typeInfo, strVal);   */
+        } else {
+          v = Literal(ast.getText().toDouble, DoubleType)
+          v = Literal(ast.getText().toLong, LongType)
+          v = Literal(ast.getText().toInt, IntegerType)
+        }
+      } catch {
+        case nfe: NumberFormatException => // Do nothing
+      }
+
+      if(v == null)
+        sys.error(s"Failed to parse number ${ast.getText}")
+      else
+        v
+
     case ast: ASTNode if ast.getType == HiveParser.StringLiteral =>
       Literal(BaseSemanticAnalyzer.unescapeSQLString(ast.getText))
     //case Token(singleQuotedLiteral(str), Nil) => Literal(str)
