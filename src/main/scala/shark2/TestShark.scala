@@ -187,7 +187,7 @@ object TestShark {
     loadedTables.clear()
     catalog.client.getAllTables("default").foreach(t => {
       println(s"Deleting table $t")
-      runSqlHive(s"DROP TABLE $t")
+      catalog.client.dropTable("default", t)
     })
   }
 }
