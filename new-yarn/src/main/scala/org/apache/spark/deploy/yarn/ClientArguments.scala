@@ -17,12 +17,14 @@
 
 package org.apache.spark.deploy.yarn
 
-import org.apache.spark.util.MemoryParam
-import org.apache.spark.util.IntParam
-import collection.mutable.{ArrayBuffer, HashMap}
-import org.apache.spark.scheduler.{InputFormatInfo, SplitInfo}
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 
-// TODO: Add code and support for ensuring that yarn resource 'asks' are location aware !
+import org.apache.spark.scheduler.{InputFormatInfo, SplitInfo}
+import org.apache.spark.util.IntParam
+import org.apache.spark.util.MemoryParam
+
+
+// TODO: Add code and support for ensuring that yarn resource 'tasks' are location aware !
 class ClientArguments(val args: Array[String]) {
   var addJars: String = null
   var files: String = null
@@ -30,14 +32,16 @@ class ClientArguments(val args: Array[String]) {
   var userJar: String = null
   var userClass: String = null
   var userArgs: Seq[String] = Seq[String]()
-  var workerMemory = 1024
+  var workerMemory = 1024 // MB
   var workerCores = 1
   var numWorkers = 2
   var amQueue = System.getProperty("QUEUE", "default")
-  var amMemory: Int = 512
+  var amMemory: Int = 512 // MB
   var appName: String = "Spark"
   // TODO
   var inputFormatInfo: List[InputFormatInfo] = null
+  // TODO(harvey)
+  var priority = 0
 
   parseArgs(args.toList)
 
@@ -47,8 +51,7 @@ class ClientArguments(val args: Array[String]) {
 
     var args = inputArgs
 
-    while (! args.isEmpty) {
-
+    while (!args.isEmpty) {
       args match {
         case ("--jar") :: value :: tail =>
           userJar = value
