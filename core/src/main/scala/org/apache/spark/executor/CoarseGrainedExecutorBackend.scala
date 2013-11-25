@@ -51,7 +51,6 @@ private[spark] class CoarseGrainedExecutorBackend(
   override def receive = {
     case RegisteredExecutor(sparkProperties) =>
       logInfo("Successfully registered with driver")
-      context.watch(sender) //Start watching for terminated messages.
       // Make this host instead of hostPort ?
       executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties)
 
@@ -75,10 +74,6 @@ private[spark] class CoarseGrainedExecutorBackend(
       } else {
         executor.killTask(taskId)
       }
-
-    case Terminated(actor) =>
-      logError(s"Driver $actor terminated, Shutting down.")
-      System.exit(1)
 
     case x: DisassociatedEvent =>
       logError(s"Driver $x disassociated! Shutting down.")

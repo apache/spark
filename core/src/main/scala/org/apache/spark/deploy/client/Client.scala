@@ -23,7 +23,6 @@ import scala.concurrent.duration._
 import scala.concurrent.Await
 
 import akka.actor._
-import akka.actor.Terminated
 import akka.pattern.AskTimeoutException
 import akka.pattern.ask
 import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent, AssociationErrorEvent}
@@ -62,6 +61,7 @@ private[spark] class Client(
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
 
     override def preStart() {
+      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
       try {
         registerWithMaster()
       } catch {
@@ -107,7 +107,6 @@ private[spark] class Client(
 
     override def receive = {
       case RegisteredApplication(appId_, masterUrl) =>
-        context.watch(sender)
         prevMaster = sender
         appId = appId_
         registered = true
@@ -123,7 +122,7 @@ private[spark] class Client(
         val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort, cores))
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
-
+ 
       case ExecutorUpdated(id, state, message, exitStatus) =>
         val fullId = appId + "/" + id
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
@@ -134,13 +133,12 @@ private[spark] class Client(
 
       case MasterChanged(masterUrl, masterWebUiUrl) =>
         logInfo("Master has changed, new master is at " + masterUrl)
-        context.unwatch(prevMaster)
         changeMaster(masterUrl)
         alreadyDisconnected = false
         sender ! MasterChangeAcknowledged(appId)
 
-      case Terminated(actor_) =>
-        logWarning(s"Connection to $actor_ failed; waiting for master to reconnect...")
+      case DisassociatedEvent(_, address, _) => 
+        logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
 
       case StopClient =>

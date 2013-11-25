@@ -73,7 +73,6 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
           sender ! RegisteredExecutor(sparkProperties)
-          context.watch(sender)
           executorActor(executorId) = sender
           executorHost(executorId) = Utils.parseHostPort(hostPort)._1
           freeCores(executorId) = cores
@@ -117,9 +116,6 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
       case RemoveExecutor(executorId, reason) =>
         removeExecutor(executorId, reason)
         sender ! true
-
-      case Terminated(actor) =>
-        actorToExecutorId.get(actor).foreach(removeExecutor(_, "Akka actor terminated"))
 
       case DisassociatedEvent(_, address, _) => 
         addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client disassociated"))

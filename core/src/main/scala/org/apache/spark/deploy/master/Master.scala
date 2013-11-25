@@ -147,9 +147,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         RecoveryState.ALIVE
       else
         RecoveryState.RECOVERING
-
       logInfo("I have been elected leader! New state: " + state)
-
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedWorkers)
         context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis) { completeRecovery() }
@@ -171,7 +169,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       } else {
         val worker = new WorkerInfo(id, host, port, cores, memory, sender, webUiPort, publicAddress)
         registerWorker(worker)
-        context.watch(sender)
         persistenceEngine.addWorker(worker)
         sender ! RegisteredWorker(masterUrl, masterWebUiUrl)
         schedule()
@@ -186,7 +183,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         val app = createApplication(description, sender)
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
-        context.watch(sender)
         persistenceEngine.addApplication(app)
         sender ! RegisteredApplication(app.id, masterUrl)
         schedule()
@@ -260,15 +256,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       }
 
       if (canCompleteRecovery) { completeRecovery() }
-    }
-
-    case Terminated(actor) => {
-      // The disconnected actor could've been either a worker or an app; remove whichever of
-      // those we have an entry for in the corresponding actor hashmap
-      logInfo(s"$actor got terminated, removing it.")
-      actorToWorker.get(actor).foreach(removeWorker)
-      actorToApp.get(actor).foreach(finishApplication)
-      if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
     }
 
     case DisassociatedEvent(_, address, _) => {
@@ -438,8 +425,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         exec.id, ExecutorState.LOST, Some("worker lost"), None)
       exec.application.removeExecutor(exec)
     }
-    context.stop(worker.actor)
-    context.unwatch(worker.actor)
     persistenceEngine.removeWorker(worker)
   }
 
@@ -502,8 +487,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         app.driver ! ApplicationRemoved(state.toString)
       }
       persistenceEngine.removeApplication(app)
-      context.stop(app.driver)
-      context.unwatch(app.driver)
       schedule()
     }
   }

@@ -73,7 +73,6 @@ private[spark] class Worker(
 
   val masterLock: Object = new Object()
   var master: ActorSelection = null
-  var prevMaster: ActorRef = null
   var activeMasterUrl: String = ""
   var activeMasterWebUiUrl : String = ""
   @volatile var registered = false
@@ -173,8 +172,6 @@ private[spark] class Worker(
     case RegisteredWorker(masterUrl, masterWebUiUrl) =>
       logInfo("Successfully registered with master " + masterUrl)
       registered = true
-      context.watch(sender) // remote death watch for master
-      prevMaster = sender
       changeMaster(masterUrl, masterWebUiUrl)
       context.system.scheduler.schedule(0 millis, HEARTBEAT_MILLIS millis, self, SendHeartbeat)
 
@@ -185,8 +182,6 @@ private[spark] class Worker(
 
     case MasterChanged(masterUrl, masterWebUiUrl) =>
       logInfo("Master has changed, new master is at " + masterUrl)
-      context.unwatch(prevMaster)
-      prevMaster = sender
       changeMaster(masterUrl, masterWebUiUrl)
 
       val execs = executors.values.
@@ -244,10 +239,6 @@ private[spark] class Worker(
             logInfo("Asked to kill unknown executor " + fullId)
         }
       }
-
-    case Terminated(actor_) =>
-      logInfo(s"$actor_ terminated !")
-      masterDisconnected()
 
     case x: DisassociatedEvent =>
       logInfo(s"$x Disassociated !")
