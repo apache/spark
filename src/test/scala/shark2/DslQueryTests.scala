@@ -43,6 +43,12 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
       testData.data)
   }
 
+  test("select *") {
+    checkAnswer(
+      testData.select(Star),
+      testData.data)
+  }
+
   test("simple select") {
     checkAnswer(
       testData.where('key === 1).select('value),

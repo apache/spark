@@ -25,6 +25,20 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   def exprId = throw new UnresolvedException(this, "exprId")
   def dataType = throw new UnresolvedException(this, "dataType")
   def nullable = throw new UnresolvedException(this, "nullable")
+  def resolved = false
 
   override def toString(): String = s"'$name"
+}
+
+/**
+ * Represents all of the input attributes to a given relational operator, for example in "SELECT * FROM ..."
+ */
+case object Star extends Attribute with trees.LeafNode[Expression] {
+  def name = throw new UnresolvedException(this, "exprId")
+  def exprId = throw new UnresolvedException(this, "exprId")
+  def dataType = throw new UnresolvedException(this, "dataType")
+  def nullable = throw new UnresolvedException(this, "nullable")
+  def resolved = false
+
+  override def toString = "*"
 }

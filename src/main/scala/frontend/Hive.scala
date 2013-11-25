@@ -305,6 +305,7 @@ object Hive {
     case Token("TOK_TABLE_OR_COL",
            Token(name, Nil) :: Nil) =>
       UnresolvedAttribute(name)
+    case Token("TOK_ALLCOLREF", Nil) => Star
     case Token("TOK_FUNCTION", Token("AVG", Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
     case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
     case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))

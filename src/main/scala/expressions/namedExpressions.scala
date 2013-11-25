@@ -21,6 +21,12 @@ abstract class NamedExpression extends Expression {
   def name: String
   def exprId: ExprId
   def toAttribute: Attribute
+
+  /**
+   * Returns true if this attribute has been resolved to a specific input value and false if it is still an unresolved
+   * placeholder
+   */
+  def resolved: Boolean
 }
 
 abstract class Attribute extends NamedExpression {
@@ -47,6 +53,7 @@ case class Alias(child: Expression, name: String)
   def dataType = child.dataType
   def nullable = child.nullable
   def references = child.references
+  def resolved = true
 
   def toAttribute = AttributeReference(name, child.dataType, child.nullable)(exprId)
 
@@ -66,6 +73,8 @@ case class Alias(child: Expression, name: String)
 case class AttributeReference(name: String, dataType: DataType, nullable: Boolean = true)
                              (val exprId: ExprId = NamedExpression.newExprId)
   extends Attribute with trees.LeafNode[Expression] {
+
+  def resolved = true
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.

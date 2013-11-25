@@ -18,6 +18,7 @@ case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: Attribut
   def dataType = baseReference.dataType
   def exprId = baseReference.exprId
   def name = baseReference.name
+  def resolved = true
   override def toString = s"$baseReference:$inputTuple.$ordinal"
 }
 
