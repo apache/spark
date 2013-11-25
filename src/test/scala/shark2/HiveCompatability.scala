@@ -19,7 +19,8 @@ class HiveCompatability extends HiveComaparisionTest {
   val whiteList = Seq(
     "tablename_with_select",
     "literal_string",
-    "literal_ints"
+    "literal_ints",
+    "literal_double",
   )
 
   // TODO: bundle in jar files... get from classpath

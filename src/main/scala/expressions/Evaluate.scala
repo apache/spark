@@ -10,13 +10,22 @@ object Evaluate {
 
     e match {
       case Add(l, r) => (eval(l), eval(r)) match {
+        // TODO: Use Numeric instead of writing out the cases by hand here.
         case (l: Int, r: Int) => l + r
       }
       case Literal(v, _) => v
       case Alias(c, _) => eval(c)
       case Equals(l, r) => eval(l) == eval(r)
       case BoundReference(inputTuple, ordinal, _) => input(inputTuple)(ordinal)
+      case UnaryMinus(child) => eval(child) match {
+        // TODO: Use Numeric instead of writing out the cases by hand here.
+        case i: Int => i * -1
+        case l: Long => l * -1
+        case d: Double => d * -1
+        case f: Float => f * -1
+      }
       case GreaterThan(l, r) => (eval(l), eval(r)) match {
+        // TODO: Use Numeric instead of writing out the cases by hand here.
         case (l: Double, r: Double) => l > r
         case (l: Int, r: Int) => l > r
         case (l: String, r: String) => l > r
