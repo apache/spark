@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.io.NotSerializableException
 import java.util.Arrays
 
 import scala.collection.mutable.ArrayBuffer
@@ -484,6 +485,14 @@ private[spark] class ClusterTaskSetManager(
 
         case ef: ExceptionFailure =>
           sched.dagScheduler.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
+          if (ef.className == classOf[NotSerializableException].getName()) {
+            // If the task result wasn't serializable, there's no point in trying to re-execute it.
+            logError("Task %s:%s had a not serializable result: %s; not retrying".format(
+              taskSet.id, index, ef.description))
+            abort("Task %s:%s had a not serializable result: %s".format(
+              taskSet.id, index, ef.description))
+            return
+          }
           val key = ef.description
           val now = clock.getTime()
           val (printFull, dupCount) = {

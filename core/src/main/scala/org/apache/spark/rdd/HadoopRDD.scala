@@ -52,7 +52,7 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  * sources in HBase, or S3).
  *
  * @param sc The SparkContext to associate the RDD with.
- * @param broadCastedConf A general Hadoop Configuration, or a subclass of it. If the enclosed
+ * @param broadcastedConf A general Hadoop Configuration, or a subclass of it. If the enclosed
  *     variabe references an instance of JobConf, then that JobConf will be used for the Hadoop job.
  *     Otherwise, a new JobConf will be created on each slave using the enclosed Configuration.
  * @param initLocalJobConfFuncOpt Optional closure used to initialize any JobConf that HadoopRDD
@@ -132,6 +132,8 @@ class HadoopRDD[K, V](
 
   override def getPartitions: Array[Partition] = {
     val jobConf = getJobConf()
+    // add the credentials here as this can be called before SparkContext initialized
+    SparkHadoopUtil.get.addCredentials(jobConf)
     val inputFormat = getInputFormat(jobConf)
     if (inputFormat.isInstanceOf[Configurable]) {
       inputFormat.asInstanceOf[Configurable].setConf(jobConf)

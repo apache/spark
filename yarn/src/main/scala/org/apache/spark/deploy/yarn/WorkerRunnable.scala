@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{FileStatus, FileSystem, Path}
+import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
@@ -38,7 +38,6 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.Logging
-import org.apache.spark.util.Utils
 
 class WorkerRunnable(container: Container, conf: Configuration, masterAddress: String,
     slaveId: String, hostname: String, workerMemory: Int, workerCores: Int) 
@@ -108,7 +107,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     credentials.writeTokenStorageToStream(dob)
     ctx.setContainerTokens(ByteBuffer.wrap(dob.getData()))
 
-    var javaCommand = "java";
+    var javaCommand = "java"
     val javaHome = System.getenv("JAVA_HOME")
     if ((javaHome != null && !javaHome.isEmpty()) || env.isDefinedAt("JAVA_HOME")) {
       javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
@@ -142,11 +141,12 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       rtype: LocalResourceType,
       localResources: HashMap[String, LocalResource],
       timestamp: String,
-      size: String) = {
+      size: String, 
+      vis: String) = {
     val uri = new URI(file)
     val amJarRsrc = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
     amJarRsrc.setType(rtype)
-    amJarRsrc.setVisibility(LocalResourceVisibility.APPLICATION)
+    amJarRsrc.setVisibility(LocalResourceVisibility.valueOf(vis))
     amJarRsrc.setResource(ConverterUtils.getYarnUrlFromURI(uri))
     amJarRsrc.setTimestamp(timestamp.toLong)
     amJarRsrc.setSize(size.toLong)
@@ -158,44 +158,14 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     logInfo("Preparing Local resources")
     val localResources = HashMap[String, LocalResource]()
     
-    // Spark JAR
-    val sparkJarResource = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
-    sparkJarResource.setType(LocalResourceType.FILE)
-    sparkJarResource.setVisibility(LocalResourceVisibility.APPLICATION)
-    sparkJarResource.setResource(ConverterUtils.getYarnUrlFromURI(
-      new URI(System.getenv("SPARK_YARN_JAR_PATH"))))
-    sparkJarResource.setTimestamp(System.getenv("SPARK_YARN_JAR_TIMESTAMP").toLong)
-    sparkJarResource.setSize(System.getenv("SPARK_YARN_JAR_SIZE").toLong)
-    localResources("spark.jar") = sparkJarResource
-    // User JAR
-    val userJarResource = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
-    userJarResource.setType(LocalResourceType.FILE)
-    userJarResource.setVisibility(LocalResourceVisibility.APPLICATION)
-    userJarResource.setResource(ConverterUtils.getYarnUrlFromURI(
-      new URI(System.getenv("SPARK_YARN_USERJAR_PATH"))))
-    userJarResource.setTimestamp(System.getenv("SPARK_YARN_USERJAR_TIMESTAMP").toLong)
-    userJarResource.setSize(System.getenv("SPARK_YARN_USERJAR_SIZE").toLong)
-    localResources("app.jar") = userJarResource
-
-    // Log4j conf - if available
-    if (System.getenv("SPARK_YARN_LOG4J_PATH") != null) {
-      val log4jConfResource = Records.newRecord(classOf[LocalResource]).asInstanceOf[LocalResource]
-      log4jConfResource.setType(LocalResourceType.FILE)
-      log4jConfResource.setVisibility(LocalResourceVisibility.APPLICATION)
-      log4jConfResource.setResource(ConverterUtils.getYarnUrlFromURI(
-        new URI(System.getenv("SPARK_YARN_LOG4J_PATH"))))
-      log4jConfResource.setTimestamp(System.getenv("SPARK_YARN_LOG4J_TIMESTAMP").toLong)
-      log4jConfResource.setSize(System.getenv("SPARK_YARN_LOG4J_SIZE").toLong)
-      localResources("log4j.properties") = log4jConfResource
-    }
-
     if (System.getenv("SPARK_YARN_CACHE_FILES") != null) {
       val timeStamps = System.getenv("SPARK_YARN_CACHE_FILES_TIME_STAMPS").split(',')
       val fileSizes = System.getenv("SPARK_YARN_CACHE_FILES_FILE_SIZES").split(',')
       val distFiles = System.getenv("SPARK_YARN_CACHE_FILES").split(',')
+      val visibilities = System.getenv("SPARK_YARN_CACHE_FILES_VISIBILITIES").split(',')
       for( i <- 0 to distFiles.length - 1) {
         setupDistributedCache(distFiles(i), LocalResourceType.FILE, localResources, timeStamps(i),
-          fileSizes(i))
+          fileSizes(i), visibilities(i))
       }
     }
 
@@ -203,9 +173,10 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       val timeStamps = System.getenv("SPARK_YARN_CACHE_ARCHIVES_TIME_STAMPS").split(',')
       val fileSizes = System.getenv("SPARK_YARN_CACHE_ARCHIVES_FILE_SIZES").split(',')
       val distArchives = System.getenv("SPARK_YARN_CACHE_ARCHIVES").split(',')
+      val visibilities = System.getenv("SPARK_YARN_CACHE_ARCHIVES_VISIBILITIES").split(',')
       for( i <- 0 to distArchives.length - 1) {
         setupDistributedCache(distArchives(i), LocalResourceType.ARCHIVE, localResources, 
-          timeStamps(i), fileSizes(i))
+          timeStamps(i), fileSizes(i), visibilities(i))
       }
     }
     
@@ -232,8 +203,8 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
 
     // use doAs and remoteUser here so we can add the container token and not 
     // pollute the current users credentials with all of the individual container tokens
-    val user = UserGroupInformation.createRemoteUser(container.getId().toString());
-    val containerToken = container.getContainerToken();
+    val user = UserGroupInformation.createRemoteUser(container.getId().toString())
+    val containerToken = container.getContainerToken()
     if (containerToken != null) {
       user.addToken(ProtoUtils.convertFromProtoFormat(containerToken, cmAddress))
     }
@@ -244,8 +215,8 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
             return rpc.getProxy(classOf[ContainerManager],
                 cmAddress, conf).asInstanceOf[ContainerManager]
           }
-        });
-    return proxy;
+        })
+    proxy
   }
   
 }

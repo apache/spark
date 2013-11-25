@@ -19,9 +19,7 @@ package org.apache.spark.storage
 
 import java.util.concurrent.ConcurrentHashMap
 
-private[storage] trait BlockInfo {
-  def level: StorageLevel
-  def tellMaster: Boolean
+private[storage] class BlockInfo(val level: StorageLevel, val tellMaster: Boolean) {
   // To save space, 'pending' and 'failed' are encoded as special sizes:
   @volatile var size: Long = BlockInfo.BLOCK_PENDING
   private def pending: Boolean = size == BlockInfo.BLOCK_PENDING
@@ -80,18 +78,4 @@ private object BlockInfo {
 
   private val BLOCK_PENDING: Long = -1L
   private val BLOCK_FAILED: Long = -2L
-}
-
-// All shuffle blocks have the same `level` and `tellMaster` properties,
-// so we can save space by not storing them in each instance:
-private[storage] class ShuffleBlockInfo extends BlockInfo {
-  // These need to be defined using 'def' instead of 'val' in order for
-  // the compiler to eliminate the fields:
-  def level: StorageLevel = StorageLevel.DISK_ONLY
-  def tellMaster: Boolean = false
-}
-
-private[storage] class BlockInfoImpl(val level: StorageLevel, val tellMaster: Boolean)
-  extends BlockInfo {
-  // Intentionally left blank
 }

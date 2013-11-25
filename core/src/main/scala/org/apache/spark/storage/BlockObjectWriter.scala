@@ -34,19 +34,11 @@ import org.apache.spark.serializer.{SerializationStream, Serializer}
  */
 abstract class BlockObjectWriter(val blockId: BlockId) {
 
-  var closeEventHandler: () => Unit = _
-
   def open(): BlockObjectWriter
 
-  def close() {
-    closeEventHandler()
-  }
+  def close()
 
   def isOpen: Boolean
-
-  def registerCloseEventHandler(handler: () => Unit) {
-    closeEventHandler = handler
-  }
 
   /**
    * Flush the partial writes and commit them as a single atomic block. Return the
@@ -101,6 +93,8 @@ class DiskBlockObjectWriter(
     def write(i: Int): Unit = callWithTiming(out.write(i))
     override def write(b: Array[Byte]) = callWithTiming(out.write(b))
     override def write(b: Array[Byte], off: Int, len: Int) = callWithTiming(out.write(b, off, len))
+    override def close() = out.close()
+    override def flush() = out.flush()
   }
 
   private val syncWrites = System.getProperty("spark.shuffle.sync", "false").toBoolean
@@ -146,8 +140,6 @@ class DiskBlockObjectWriter(
       ts = null
       objOut = null
     }
-    // Invoke the close callback handler.
-    super.close()
   }
 
   override def isOpen: Boolean = objOut != null

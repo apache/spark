@@ -18,13 +18,10 @@
 package org.apache.spark.deploy.yarn
 
 import org.apache.spark.deploy.SparkHadoopUtil
-import collection.mutable.HashMap
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-import java.security.PrivilegedExceptionAction
 
 /**
  * Contains util methods to interact with Hadoop from spark.
@@ -40,7 +37,7 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
   // add any user credentials to the job conf which are necessary for running on a secure Hadoop cluster
   override def addCredentials(conf: JobConf) {
-    val jobCreds = conf.getCredentials();
+    val jobCreds = conf.getCredentials()
     jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
   }
 }

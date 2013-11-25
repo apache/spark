@@ -17,12 +17,12 @@
 
 package org.apache.spark.deploy
 
-import akka.actor.{ActorRef, Props, Actor, ActorSystem, Terminated}
+import akka.actor.ActorSystem
 
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.util.{Utils, AkkaUtils}
-import org.apache.spark.{Logging}
+import org.apache.spark.util.Utils
+import org.apache.spark.Logging
 
 import scala.collection.mutable.ArrayBuffer
 
