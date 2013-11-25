@@ -14,6 +14,12 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
   def references = condition.references
 }
 
+case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
+  // TODO: These aren't really the same attributes as nullability etc might change.
+  def output = left.output
+  def references = Set.empty
+}
+
 case class Join(
   left: LogicalPlan,
   right: LogicalPlan,

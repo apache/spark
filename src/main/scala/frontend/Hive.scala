@@ -260,7 +260,12 @@ object Hive {
       nodeToDest(
         destClause,
         withLimit)
+    case Token("TOK_FROM",
+          Token("TOK_SUBQUERY",
+            query :: alias :: Nil) :: Nil) =>
+      nodeToPlan(query)
 
+    case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
     case Token("TOK_FROM",
            Token("TOK_TABREF",
              Token("TOK_TABNAME",

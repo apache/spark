@@ -58,6 +58,8 @@ abstract trait PlanningStrategies {
         shark2.LocalRelation(output, data.map(_.productIterator.toVector))(sc) :: Nil
       case logical.StopAfter(limit, child) =>
         shark2.StopAfter(Evaluate(limit, Nil).asInstanceOf[Int], planLater(child))(sc) :: Nil
+      case logical.Union(left, right) =>
+        shark2.Union(planLater(left), planLater(right))(sc) :: Nil
       case _ => Nil
     }
   }

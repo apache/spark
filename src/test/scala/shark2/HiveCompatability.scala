@@ -21,6 +21,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "literal_string",
     "literal_ints",
     "literal_double",
+    "union16"
   )
 
   // TODO: bundle in jar files... get from classpath
