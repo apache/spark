@@ -824,4 +824,28 @@ private[spark] object Utils extends Logging {
     return System.getProperties().clone()
       .asInstanceOf[java.util.Properties].toMap[String, String]
   }
+
+  /**
+   * Method executed for repeating a task for side effects.
+   * Unlike a for comprehension, it permits JVM JIT optimization
+   */
+  def times(numIters: Int)(f: => Unit): Unit = {
+    var i = 0
+    while (i < numIters) {
+      f
+      i += 1
+    }
+  }
+
+  /** 
+   * Timing method based on iterations that permit JVM JIT optimization.
+   * @param numIters number of iterations
+   * @param f function to be executed
+   */
+  def timeIt(numIters: Int)(f: => Unit): Long = {
+    val start = System.currentTimeMillis
+    times(numIters)(f)
+    System.currentTimeMillis - start
+  }
+
 }

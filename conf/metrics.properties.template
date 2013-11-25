@@ -80,6 +80,14 @@
 #     /metrics/aplications/json # App information
 #     /metrics/master/json      # Master information
 
+# org.apache.spark.metrics.sink.GraphiteSink
+#   Name:     Default:      Description:
+#   host      NONE          Hostname of Graphite server
+#   port      NONE          Port of Graphite server
+#   period    10            Poll period
+#   unit      seconds       Units of poll period
+#   prefix    EMPTY STRING  Prefix to prepend to metric name
+
 ## Examples
 # Enable JmxSink for all instances by class name
 #*.sink.jmx.class=org.apache.spark.metrics.sink.JmxSink
