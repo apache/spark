@@ -72,9 +72,11 @@ private[yarn] class YarnAllocationHandler(val conf: Configuration, val resourceM
   // Used to generate a unique id per worker
   private val workerIdCounter = new AtomicInteger()
   private val lastResponseId = new AtomicInteger()
+  private val numWorkersFailed = new AtomicInteger()
 
   def getNumWorkersRunning: Int = numWorkersRunning.intValue
 
+  def getNumWorkersFailed: Int = numWorkersFailed.intValue
 
   def isResourceConstraintSatisfied(container: Container): Boolean = {
     container.getResource.getMemory >= (workerMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
@@ -253,8 +255,16 @@ private[yarn] class YarnAllocationHandler(val conf: Configuration, val resourceM
         else {
           // simply decrement count - next iteration of ReporterThread will take care of allocating !
           numWorkersRunning.decrementAndGet()
-          logInfo("Container completed ? nodeId: " + containerId + ", state " + completedContainer.getState +
-            " httpaddress: " + completedContainer.getDiagnostics)
+          logInfo("Container completed not by us ? nodeId: " + containerId + ", state " + completedContainer.getState +
+            " httpaddress: " + completedContainer.getDiagnostics + " exit status: " + completedContainer.getExitStatus())
+
+          // Hadoop 2.2.X added a ContainerExitStatus we should switch to use
+          // there are some exit status' we shouldn't necessarily count against us, but for
+          // now I think its ok as none of the containers are expected to exit
+          if (completedContainer.getExitStatus() != 0) {
+            logInfo("Container marked as failed: " + containerId) 
+            numWorkersFailed.incrementAndGet()
+          }
         }
 
         allocatedHostToContainersMap.synchronized {
@@ -377,8 +387,6 @@ private[yarn] class YarnAllocationHandler(val conf: Configuration, val resourceM
 
     val releasedContainerList = createReleasedContainerList()
     req.addAllReleases(releasedContainerList)
-
-
 
     if (numWorkers > 0) {
       logInfo("Allocating " + numWorkers + " worker containers with " + (workerMemory + YarnAllocationHandler.MEMORY_OVERHEAD) + " of memory each.")

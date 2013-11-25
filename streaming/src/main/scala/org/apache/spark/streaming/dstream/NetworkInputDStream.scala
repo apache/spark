@@ -232,11 +232,11 @@ abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Log
       logInfo("Data handler stopped")
     }
 
-    def += (obj: T) {
+    def += (obj: T): Unit = synchronized {
       currentBuffer += obj
     }
 
-    private def updateCurrentBuffer(time: Long) {
+    private def updateCurrentBuffer(time: Long): Unit = synchronized {
       try {
         val newBlockBuffer = currentBuffer
         currentBuffer = new ArrayBuffer[T]

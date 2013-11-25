@@ -22,7 +22,7 @@ import java.nio.ByteBuffer
 import akka.actor.{ActorRef, Actor, Props, Terminated}
 import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.Logging
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{Utils, AkkaUtils}
@@ -111,7 +111,7 @@ private[spark] object CoarseGrainedExecutorBackend {
 
   def main(args: Array[String]) {
     if (args.length < 4) {
-      //the reason we allow the last frameworkId argument is to make it easy to kill rogue executors
+      //the reason we allow the last appid argument is to make it easy to kill rogue executors
       System.err.println(
         "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> <cores> " +
         "[<appid>]")
