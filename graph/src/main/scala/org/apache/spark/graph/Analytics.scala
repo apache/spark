@@ -298,6 +298,16 @@ object Analytics extends Logging {
         loggerName -> prevLevel
       }.toMap
     }
+
+    def pickPartitioner(v: String): PartitionStrategy = {
+      v match {
+         case "RandomVertexCut" => RandomVertexCut()
+         case "EdgePartition1D" => EdgePartition1D()
+         case "EdgePartition2D" => EdgePartition2D()
+         case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut()
+         case _ => throw new IllegalArgumentException("Invalid Partition Strategy: " + v)
+       }
+    }
 //       setLogLevels(org.apache.log4j.Level.DEBUG, Seq("org.apache.spark"))
 
      val serializer = "org.apache.spark.serializer.KryoSerializer"
@@ -323,15 +333,7 @@ object Analytics extends Logging {
            case ("output", v) => outFname = v
            case ("numVPart", v) => numVPart = v.toInt
            case ("numEPart", v) => numEPart = v.toInt
-           case ("partStrategy", v) =>  {
-             partitionStrategy = v match {
-               case "RandomVertexCut" => RandomVertexCut()
-               case "EdgePartition1D" => EdgePartition1D()
-               case "EdgePartition2D" => EdgePartition2D()
-               case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut()
-               case _ => throw new IllegalArgumentException("Invalid Partition Strategy: " + v)
-             }
-           }
+           case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
            case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
          }
 
@@ -351,7 +353,7 @@ object Analytics extends Logging {
          val sc = new SparkContext(host, "PageRank(" + fname + ")")
 
          val graph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart).cache()
+          minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
 
          val startTime = System.currentTimeMillis
          logInfo("GRAPHX: starting tasks")
@@ -377,12 +379,14 @@ object Analytics extends Logging {
            var numVPart = 4
            var numEPart = 4
            var isDynamic = false
+           var partitionStrategy: PartitionStrategy = RandomVertexCut()
 
            options.foreach{
              case ("numIter", v) => numIter = v.toInt
              case ("dynamic", v) => isDynamic = v.toBoolean
              case ("numEPart", v) => numEPart = v.toInt
              case ("numVPart", v) => numVPart = v.toInt
+             case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
              case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
            }
 
@@ -400,7 +404,7 @@ object Analytics extends Logging {
 
            val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")")
            val graph = GraphLoader.edgeListFile(sc, fname,
-            minEdgePartitions = numEPart).cache()
+            minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
            val cc = Analytics.connectedComponents(graph)
            println("Components: " + cc.vertices.map{ case (vid,data) => data}.distinct())
            sc.stop()
@@ -409,10 +413,12 @@ object Analytics extends Logging {
        case "triangles" => {
          var numVPart = 4
          var numEPart = 4
+         var partitionStrategy: PartitionStrategy = RandomVertexCut()
 
          options.foreach{
            case ("numEPart", v) => numEPart = v.toInt
            case ("numVPart", v) => numVPart = v.toInt
+           case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
            case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
          }
          println("======================================")
@@ -420,7 +426,7 @@ object Analytics extends Logging {
          println("--------------------------------------")
          val sc = new SparkContext(host, "TriangleCount(" + fname + ")")
          val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
-           minEdgePartitions = numEPart).cache()
+           minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
          val triangles = Analytics.triangleCount(graph)
          println("Triangles: " + triangles.vertices.map {
             case (vid,data) => data.toLong
