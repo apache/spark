@@ -308,6 +308,7 @@ object Hive {
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
     case Token("TOK_ALLCOLREF", Nil) => Star
     case Token("TOK_FUNCTION", Token("AVG", Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token("count", Nil) :: arg :: Nil) => Count(nodeToExpr(arg))
     case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
     case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))

@@ -49,8 +49,8 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
     def result: Any
   }
 
-  case class AverageFunction(expr: Expression) extends AggregateFunction with Serializable {
-    def this() = this(null)
+  case class AverageFunction(expr: Expression) extends AggregateFunction {
+    def this() = this(null) // Required for serialization.
 
     val count  = sc.accumulable(0)
     val sum = sc.accumulable(0)
@@ -63,10 +63,23 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
     }
   }
 
+  case class CountFunction(expr: Expression) extends AggregateFunction {
+    def this() = this(null) // Required for serialization.
+
+    val count = sc.accumulable(0)
+
+    def apply(input: Seq[Seq[Any]]): Unit =
+      if(Evaluate(expr, input) != null)
+        count += 1
+
+    def result: Any = count.value.toLong
+  }
+
   def execute() = attachTree(this, "SparkAggregate") {
     val aggFunctions = aggregateExprs.map {
         case Alias(Average(expr), _) => new AverageFunction(expr)
-        case _ => throw new OptimizationException(this, "Aggregate not implemented in SparkAggregate")
+        case Alias(Count(expr), _) => new CountFunction(expr)
+        case unsupported => throw new OptimizationException(unsupported, "Aggregate not implemented in SparkAggregate")
       }
 
     //TOOD: println(s"Running aggregates: $aggFunctions")

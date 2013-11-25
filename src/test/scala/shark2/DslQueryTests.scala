@@ -83,6 +83,13 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
       2.0)
   }
 
+  test("count") {
+    checkAnswer(
+      testData2.groupBy()(Count(1)),
+      testData2.data.size
+    )
+  }
+
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param plan the query to be executed
