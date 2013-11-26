@@ -69,7 +69,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRule = rule.applyOrElse(this, identity[BaseType])
     // Check if unchanged and then possibly return old copy to avoid gc churn.
-    if(this.id == afterRule.id || this == afterRule)
+    if(this fastEquals afterRule)
       transformChildren(rule)
     else
       afterRule.transformChildren(rule)
@@ -86,7 +86,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val newArgs = productIterator.map {
       case arg: TreeNode[_] if(children contains arg) =>
           val newChild = arg.asInstanceOf[BaseType].transform(rule)
-          if(newChild.id != arg.id && newChild != arg) {
+          if(!(newChild fastEquals arg)) {
             changed = true
             newChild
           } else {
