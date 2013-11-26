@@ -275,9 +275,30 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.akka.timeout</td>
-  <td>20</td>
+  <td>60</td>
   <td>
     Communication timeout between Spark nodes, in seconds.
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.pauses</td>
+  <td>60</td>
+  <td>
+     Acceptable heart beat pause in seconds for akka, tune this if you expect GC pauses or network delays (reconnections) etc.
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.failure-detector.threshold</td>
+  <td>12.0</td>
+  <td>
+     Tuning this is not recommended unless you are sure what you are doing. This maps to akka's `akka.remote.transport-failure-detector.threshold`. Usually having a larger value of `spark.akka.pauses` should suffice. 
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.heartbeat.interval</td>
+  <td>5</td>
+  <td>
+     A larger interval value in seconds reduces network overhead and a smaller value might be more informative for akka's failure detector. Tune this in combination of `spark.akka.pauses` and `spark.akka.failure-detector.threshold` if you need to.
   </td>
 </tr>
 <tr>
