@@ -68,7 +68,7 @@ class VertexPartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double
     for ((k, v) <- this.iterator) {
       hashMap.setMerge(k, v, arbitraryMerge)
     }
-    new VertexPartition(hashMap.keySet, hashMap._values, index.getBitSet)
+    new VertexPartition(hashMap.keySet, hashMap._values, hashMap.keySet.getBitSet)
   }
 
   def iterator = mask.iterator.map(ind => (index.getValueSafe(ind), values(ind)))
