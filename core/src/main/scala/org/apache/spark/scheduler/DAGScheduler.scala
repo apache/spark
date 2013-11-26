@@ -597,14 +597,6 @@ class DAGScheduler(
         listenerBus.post(SparkListenerTaskEnd(task, reason, taskInfo, taskMetrics))
         handleTaskCompletion(completion)
 
-      case LocalJobCompleted(job, result) =>
-        val stage = job.finalStage
-        stageIdToJobIds -= stage.id    // clean up data structures that were populated for a local job,
-        stageIdToStage -= stage.id     // but that won't get cleaned up via the normal paths through
-        stageToInfos -= stage          // completion events or stage abort
-        jobIdToStageIds -= job.jobId
-        listenerBus.post(SparkListenerJobEnd(job, result))
-
       case TaskSetFailed(taskSet, reason) =>
         stageIdToStage.get(taskSet.stageId).foreach { abortStage(_, reason) }
 
@@ -691,7 +683,12 @@ class DAGScheduler(
         jobResult = JobFailed(e, Some(job.finalStage))
         job.listener.jobFailed(e)
     } finally {
-      eventProcessActor ! LocalJobCompleted(job, jobResult)
+      val s = job.finalStage
+      stageIdToJobIds -= s.id    // clean up data structures that were populated for a local job,
+      stageIdToStage -= s.id     // but that won't get cleaned up via the normal paths through
+      stageToInfos -= s          // completion events or stage abort
+      jobIdToStageIds -= job.jobId
+      listenerBus.post(SparkListenerJobEnd(job, jobResult))
     }
   }
 

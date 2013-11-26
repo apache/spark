@@ -219,8 +219,6 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     }
     val jobId = scheduler.nextJobId.getAndIncrement()
     runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, null, listener))
-    assert(scheduler.stageToInfos.size === 1)
-    runEvent(LocalJobCompleted(scheduler.stageToInfos.keys.head))
     assert(results === Map(0 -> 42))
     assertDataStructuresEmpty
   }
