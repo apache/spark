@@ -17,35 +17,51 @@
 
 package org.apache.spark.util.collection
 
-/** Provides a simple, non-threadsafe, array-backed vector that can store primitives. */
+/**
+ * An append-only, non-threadsafe, array-backed vector that is optimized for primitive types.
+ */
 private[spark]
 class PrimitiveVector[@specialized(Long, Int, Double) V: ClassManifest](initialSize: Int = 64) {
-  private var numElements = 0
-  private var array: Array[V] = _
+  private var _numElements = 0
+  private var _array: Array[V] = _
 
   // NB: This must be separate from the declaration, otherwise the specialized parent class
-  // will get its own array with the same initial size. TODO: Figure out why...
-  array = new Array[V](initialSize)
+  // will get its own array with the same initial size.
+  _array = new Array[V](initialSize)
 
   def apply(index: Int): V = {
-    require(index < numElements)
-    array(index)
+    require(index < _numElements)
+    _array(index)
   }
 
   def +=(value: V) {
-    if (numElements == array.length) { resize(array.length * 2) }
-    array(numElements) = value
-    numElements += 1
+    if (_numElements == _array.length) {
+      resize(_array.length * 2)
+    }
+    _array(_numElements) = value
+    _numElements += 1
   }
 
-  def length = numElements
+  def capacity: Int = _array.length
 
-  def getUnderlyingArray = array
+  def length: Int = _numElements
+
+  def size: Int = _numElements
+
+  /** Gets the underlying array backing this vector. */
+  def array: Array[V] = _array
+
+  /** Trims this vector so that the capacity is equal to the size. */
+  def trim(): PrimitiveVector[V] = resize(size)
 
   /** Resizes the array, dropping elements if the total length decreases. */
-  def resize(newLength: Int) {
+  def resize(newLength: Int): PrimitiveVector[V] = {
     val newArray = new Array[V](newLength)
-    array.copyToArray(newArray)
-    array = newArray
+    _array.copyToArray(newArray)
+    _array = newArray
+    if (newLength < _numElements) {
+      _numElements = newLength
+    }
+    this
   }
 }
