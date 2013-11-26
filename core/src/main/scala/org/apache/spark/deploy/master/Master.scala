@@ -517,9 +517,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 }
 
 private[spark] object Master {
-  private val systemName = "sparkMaster"
+  val systemName = "sparkMaster"
   private val actorName = "Master"
-  private val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
+  val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
     val args = new MasterArguments(argStrings)
