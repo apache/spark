@@ -229,7 +229,7 @@ object Analytics extends Logging {
 
     // Construct set representations of the neighborhoods
     val nbrSets: VertexSetRDD[VertexSet] =
-      graph.collectNeighborIds(EdgeDirection.Both).mapValuesWithKeys { (vid, nbrs) =>
+      graph.collectNeighborIds(EdgeDirection.Both).mapValues { (vid, nbrs) =>
       val set = new VertexSet(4)
       var i = 0
       while (i < nbrs.size) {
@@ -254,7 +254,7 @@ object Analytics extends Logging {
       } else {
         (et.dstAttr, et.srcAttr)
       }
-      val iter = smallSet.iterator()
+      val iter = smallSet.iterator
       var counter: Int = 0
       while (iter.hasNext) {
         val vid = iter.next

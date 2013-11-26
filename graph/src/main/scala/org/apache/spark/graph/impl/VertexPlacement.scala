@@ -1,6 +1,5 @@
 package org.apache.spark.graph.impl
 
-import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.ArrayBuilder
 
@@ -39,18 +38,26 @@ class VertexPlacement(
 
   private def createPid2Vid(
       includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[Vid]]] = {
-    // Determine which vertices each edge partition needs by creating a mapping
-    // from vid to pid
+    // Determine which vertices each edge partition needs by creating a mapping from vid to pid.
     val preAgg = eTable.mapPartitions { iter =>
-      val (pid, edgePartition) = iter.next()
+      val (pid: Pid, edgePartition: EdgePartition[_]) = iter.next()
+      val numEdges = edgePartition.size
       val vSet = new VertexSet
-      if (includeSrcAttr || includeDstAttr) {
-        edgePartition.foreach { e =>
-          if (includeSrcAttr) vSet.add(e.srcId)
-          if (includeDstAttr) vSet.add(e.dstId)
+      if (includeSrcAttr) {  // Add src vertices to the set.
+        var i = 0
+        while (i < numEdges) {
+          vSet.add(edgePartition.srcIds(i))
+          i += 1
         }
       }
-      vSet.iterator.map { vid => (vid.toLong, pid) }
+      if (includeDstAttr) {  // Add dst vertices to the set.
+        var i = 0
+        while (i < numEdges) {
+          vSet.add(edgePartition.dstIds(i))
+          i += 1
+        }
+      }
+      vSet.iterator.map { vid => (vid, pid) }
     }
     // Aggregate the mappings to determine where each vertex should go
     val vid2pid = VertexSetRDD[Pid, ArrayBuffer[Pid]](preAgg, vTable.index,
