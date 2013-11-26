@@ -1,7 +1,7 @@
 package catalyst
 package shark2
 
-import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
 import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, StructObjectInspector}
 import shark.execution.HadoopTableReader
 import shark.{SharkContext, SharkEnv}
@@ -12,6 +12,12 @@ import types._
 
 import collection.JavaConversions._
 import org.apache.spark.SparkContext._
+import org.apache.hadoop.hive.ql.exec.OperatorFactory
+import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
+import org.apache.hadoop.hive.serde2.Serializer
+import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.fs.Path
+;
 
 case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
@@ -151,16 +157,8 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
 }
 
 case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation) extends LeafNode {
-  val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(relation.table)
-  val tableDesc = new TableDesc(
-    Class.forName(relation.table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[org.apache.hadoop.hive.serde2.Deserializer]],
-    Class.forName(relation.table.getSd.getInputFormat).asInstanceOf[Class[org.apache.hadoop.mapred.InputFormat[_,_]]],
-    Class.forName(relation.table.getSd.getOutputFormat),
-    hiveQlTable.getSchema
-  )
-
   @transient
-  val hadoopReader = new HadoopTableReader(tableDesc, SharkContext.hiveconf)
+  val hadoopReader = new HadoopTableReader(relation.tableDesc, SharkContext.hiveconf)
 
   /**
     * The hive object inspector for this table, which can be used to extract values from the
@@ -168,7 +166,7 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
     */
   @transient
   lazy val objectInspector =
-    tableDesc.getDeserializer.getObjectInspector.asInstanceOf[StructObjectInspector]
+    relation.tableDesc.getDeserializer.getObjectInspector.asInstanceOf[StructObjectInspector]
 
   /**
    * The hive struct field references that correspond to the attributes to be read from this table.
@@ -181,7 +179,7 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
   }
 
   def execute() = {
-    hadoopReader.makeRDDForTable(hiveQlTable).map {
+    hadoopReader.makeRDDForTable(relation.hiveQlTable).map {
       case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct =>
         refs.map { ref =>
           val data = objectInspector.getStructFieldData(struct, ref)
@@ -193,17 +191,40 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
   def output = attributes
 }
 
-case class InsertIntoHiveTable(tableName: String, child: SharkPlan)
-                              (sc: SharkContext) extends UnaryNode {
+case class InsertIntoHiveTable(table: MetastoreRelation, child: SharkPlan)
+                              (@transient sc: SharkContext) extends UnaryNode {
+  /**
+   * This file sink / record writer code is only the first step towards implementing this operator correctly and is not
+   * actually used yet.
+   */
+  val desc = new FileSinkDesc("./", table.tableDesc, false)
+  val outputClass = {
+    val serializer = table.tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
+    serializer.initialize(null, table.tableDesc.getProperties)
+    serializer.getSerializedClass
+  }
+
+  lazy val conf = new JobConf();
+  lazy val writer = HiveFileFormatUtils.getHiveRecordWriter(
+    conf,
+    table.tableDesc,
+    outputClass,
+    desc,
+    new Path((new org.apache.hadoop.fs.RawLocalFileSystem).getWorkingDirectory(), "test.out"),
+    null)
+
+  override def otherCopyArgs = sc :: Nil
+
   def output = child.output
   def execute() = {
     val childRdd = child.execute()
+
     // TODO: write directly to hive
     val tempDir = java.io.File.createTempFile("data", "tsv")
     tempDir.delete()
     tempDir.mkdir()
     childRdd.map(_.map(_.toString).mkString("\001")).saveAsTextFile(tempDir.getCanonicalPath)
-    sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE $tableName")
+    sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName}")
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

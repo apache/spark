@@ -292,7 +292,7 @@ object Hive {
            Token("TOK_TAB",
              Token("TOK_TABNAME",
                Token(tableName, Nil) :: Nil) :: Nil) :: Nil) =>
-      InsertIntoHiveTable(tableName, query)
+      InsertIntoTable(UnresolvedRelation(tableName, None), query)
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
