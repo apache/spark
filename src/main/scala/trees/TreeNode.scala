@@ -111,10 +111,16 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * @param newArgs the new product arguments.
    */
   protected def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
+    try {
     if(otherCopyArgs.isEmpty)
       getClass.getConstructors.head.newInstance(newArgs: _*).asInstanceOf[this.type]
     else
      getClass.getConstructors.head.newInstance((newArgs ++ otherCopyArgs).toArray :_*).asInstanceOf[this.type]
+    } catch {
+      case e: java.lang.IllegalArgumentException =>
+        throw new OptimizationException(
+          this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName?")
+    }
   }
 
 
