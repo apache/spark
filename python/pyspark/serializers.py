@@ -179,8 +179,6 @@ class BatchedSerializer(Serializer):
                 yield items
 
     def dump_stream(self, iterator, stream):
-        if isinstance(iterator, basestring):
-            iterator = [iterator]
         self.serializer.dump_stream(self._batched(iterator), stream)
 
     def load_stream(self, stream):
