@@ -1,7 +1,9 @@
 package org.apache.spark.graph
 
+import org.apache.spark.graph.impl._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
+
 
 /**
  * The Graph abstractly represents a graph with arbitrary objects
@@ -162,7 +164,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * Construct a new graph with all the edges reversed.  If this graph
    * contains an edge from a to b then the returned graph contains an
    * edge from b to a.
-   *
    */
   def reverse: Graph[VD, ED]
 
@@ -292,9 +293,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
  */
 object Graph {
 
-  import org.apache.spark.graph.impl._
-  import org.apache.spark.SparkContext._
-
   /**
    * Construct a graph from a collection of edges encoded as vertex id pairs.
    *
@@ -324,15 +322,10 @@ object Graph {
       rawEdges: RDD[(Vid, Vid)],
       defaultValue: VD,
       uniqueEdges: Boolean,
-      partitionStrategy: PartitionStrategy):
-    Graph[VD, Int] = {
+      partitionStrategy: PartitionStrategy): Graph[VD, Int] = {
     val edges = rawEdges.map(p => Edge(p._1, p._2, 1))
     val graph = GraphImpl(edges, defaultValue, partitionStrategy)
-    if (uniqueEdges) {
-      graph.groupEdges((a,b) => a+b)
-    } else {
-      graph
-    }
+    if (uniqueEdges) graph.groupEdges((a, b) => a + b) else graph
   }
 
   /**
@@ -344,9 +337,8 @@ object Graph {
    * @return a graph with edge attributes described by `edges` and vertices
    *         given by all vertices in `edges` with value `defaultValue`
    */
-  def apply[VD: ClassManifest, ED: ClassManifest](
-      edges: RDD[Edge[ED]],
-      defaultValue: VD): Graph[VD, ED] = {
+  def apply[VD: ClassManifest, ED: ClassManifest](edges: RDD[Edge[ED]], defaultValue: VD)
+    : Graph[VD, ED] = {
     Graph(edges, defaultValue, RandomVertexCut())
   }
 

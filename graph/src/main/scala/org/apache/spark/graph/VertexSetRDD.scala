@@ -23,23 +23,22 @@ import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
 
-import org.apache.spark.graph.impl.AggregationMsg
-import org.apache.spark.graph.impl.MsgRDDFunctions._
 import org.apache.spark.graph.impl.VertexPartition
+
 
 /**
  * Maintains the per-partition mapping from vertex id to the corresponding
  * location in the per-partition values array. This class is meant to be an
  * opaque type.
- *
  */
+private[graph]
 class VertexSetIndex(private[spark] val rdd: RDD[VertexIdToIndexMap]) {
   /**
    * The persist function behaves like the standard RDD persist
    */
   def persist(newLevel: StorageLevel): VertexSetIndex = {
     rdd.persist(newLevel)
-    return this
+    this
   }
 
   /**
@@ -80,6 +79,8 @@ class VertexSetRDD[@specialized VD: ClassManifest](
   /**
    * The `VertexSetIndex` representing the layout of this `VertexSetRDD`.
    */
+  // TOOD: Consider removing the exposure of index to outside, and implement methods in this
+  // class to handle any operations that would require indexing.
   def index = new VertexSetIndex(partitionsRDD.mapPartitions(_.map(_.index),
     preservesPartitioning = true))
 
@@ -134,13 +135,12 @@ class VertexSetRDD[@specialized VD: ClassManifest](
     tuples.compute(part, context)
 
   /**
-   * Return a new VertexSetRDD by applying a function to each VertexPartition of
-   * this RDD.
+   * Return a new VertexSetRDD by applying a function to each VertexPartition of this RDD.
    */
-  def mapVertexPartitions[VD2: ClassManifest](
-      f: VertexPartition[VD] => VertexPartition[VD2]): VertexSetRDD[VD2] = {
+  def mapVertexPartitions[VD2: ClassManifest](f: VertexPartition[VD] => VertexPartition[VD2])
+    : VertexSetRDD[VD2] = {
     val cleanF = sparkContext.clean(f)
-    val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
+    val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(cleanF), preservesPartitioning = true)
     new VertexSetRDD(newPartitionsRDD)
   }
 
@@ -175,6 +175,7 @@ class VertexSetRDD[@specialized VD: ClassManifest](
    * the original vertex-set.  Furthermore, the filter only
    * modifies the bitmap index and so no new values are allocated.
    */
+  // TODO: Should we consider making pred taking two arguments, instead of a tuple?
   override def filter(pred: Tuple2[Vid, VD] => Boolean): VertexSetRDD[VD] =
     this.mapVertexPartitions(_.filter(Function.untupled(pred)))
 
@@ -190,13 +191,26 @@ class VertexSetRDD[@specialized VD: ClassManifest](
    * VertexSetRDD retains the same index.
    */
   def mapValues[VD2: ClassManifest](f: VD => VD2): VertexSetRDD[VD2] =
-    this.mapVertexPartitions(_.map { case (vid, attr) => f(attr) })
+    this.mapVertexPartitions(_.map((vid, attr) => f(attr)))
+
+  /**
+   * Pass each vertex attribute through a map function and retain the
+   * original RDD's partitioning and index.
+   *
+   * @tparam VD2 the type returned by the map function
+   *
+   * @param f the function applied to each value in the RDD
+   * @return a new VertexSetRDD with values obtained by applying `f` to
+   * each of the entries in the original VertexSet.  The resulting
+   * VertexSetRDD retains the same index.
+   */
+  def mapValues[VD2: ClassManifest](f: (Vid, VD) => VD2): VertexSetRDD[VD2] =
+    this.mapVertexPartitions(_.map(f))
 
   /**
    * Fill in missing values for all vertices in the index.
    *
-   * @param missingValue the value to be used for vertices in the
-   * index that don't currently have values.
+   * @param missingValue the value to use for vertices that don't currently have values.
    * @return A VertexSetRDD with a value for all vertices.
    */
   def fillMissing(missingValue: VD): VertexSetRDD[VD] = {
@@ -212,29 +226,6 @@ class VertexSetRDD[@specialized VD: ClassManifest](
       new VertexPartition(part.index, newValues, newMask)
     }
   }
-
-  /**
-   * Pass each vertex attribute along with the vertex id through a map
-   * function and retain the original RDD's partitioning and index.
-   *
-   * @tparam VD2 the type returned by the map function
-   *
-   * @param f the function applied to each vertex id and vertex
-   * attribute in the RDD
-   * @return a new VertexSet with values obtained by applying `f` to
-   * each of the entries in the original VertexSet.  The resulting
-   * VertexSetRDD retains the same index.
-   */
-  def mapValuesWithKeys[VD2: ClassManifest](f: (Vid, VD) => VD2): VertexSetRDD[VD2] = {
-    this.mapVertexPartitions { part =>
-      // Construct a view of the map transformation
-      val newValues = new Array[VD2](part.index.capacity)
-      part.mask.iterator.foreach { ind =>
-        newValues(ind) = f(part.index.getValueSafe(ind), part.values(ind))
-      }
-      new VertexPartition(part.index, newValues, part.mask)
-    }
-  } // end of mapValuesWithKeys
 
   /**
    * Inner join this VertexSet with another VertexSet which has the
@@ -266,35 +257,6 @@ class VertexSetRDD[@specialized VD: ClassManifest](
           f(thisPart.index.getValueSafe(ind), thisPart.values(ind), otherPart.values(ind))
       }
       new VertexPartition(thisPart.index, newValues, newMask)
-    }
-  }
-
-  /**
-   * Inner join this VertexSet with another VertexSet which has the
-   * same Index.  This function will fail if both VertexSets do not
-   * share the same index.
-   *
-   * @param other the vertex set to join with this vertex set
-   * @param f the function mapping a vertex id and its attributes in
-   * this and the other vertex set to a collection of tuples.
-   * @tparam VD2 the type of the other vertex set attributes
-   * @tparam VD3 the type of the tuples emitted by `f`
-   * @return an RDD containing the tuples emitted by `f`
-   */
-  def zipJoinFlatMap[VD2: ClassManifest, VD3: ClassManifest]
-    (other: VertexSetRDD[VD2])
-    (f: (Vid, VD, VD2) => Iterator[VD3]): RDD[VD3] = {
-    val cleanF = sparkContext.clean(f)
-    partitionsRDD.zipPartitions(other.partitionsRDD) {
-      (thisPartIter, otherPartIter) =>
-      val thisPart = thisPartIter.next()
-      val otherPart = otherPartIter.next()
-      if (thisPart.index != otherPart.index) {
-        throw new SparkException("can't zip join VertexSetRDDs with different indexes")
-      }
-      (thisPart.mask & otherPart.mask).iterator.flatMap { ind =>
-        cleanF(thisPart.index.getValueSafe(ind), thisPart.values(ind), otherPart.values(ind))
-      }
     }
   }
 
@@ -333,7 +295,6 @@ class VertexSetRDD[@specialized VD: ClassManifest](
     }
   } // end of leftZipJoin
 
-
   /**
    * Left join this VertexSet with an RDD containing vertex attribute
    * pairs.  If the other RDD is backed by a VertexSet with the same
@@ -343,7 +304,7 @@ class VertexSetRDD[@specialized VD: ClassManifest](
    * VertexSet then a `None` attribute is generated
    *
    * @tparam VD2 the attribute type of the other VertexSet
-   * @tparam VD2 the attribute type of the resulting VertexSet
+   * @tparam VD3 the attribute type of the resulting VertexSet
    *
    * @param other the other VertexSet with which to join.
    * @param f the function mapping a vertex id and its attributes in
@@ -358,18 +319,14 @@ class VertexSetRDD[@specialized VD: ClassManifest](
     (other: RDD[(Vid, VD2)])
     (f: (Vid, VD, Option[VD2]) => VD3, merge: (VD2, VD2) => VD2 = (a: VD2, b: VD2) => a)
     : VertexSetRDD[VD3] = {
-    // Test if the other vertex is a VertexSetRDD to choose the optimal
-    // join strategy
+    // Test if the other vertex is a VertexSetRDD to choose the optimal join strategy.
+    // If the other set is a VertexSetRDD then we use the much more efficient leftZipJoin
     other match {
-      // If the other set is a VertexSetRDD then we use the much more efficient
-      // leftZipJoin
-      case other: VertexSetRDD[_] => {
+      case other: VertexSetRDD[VD2] =>
         leftZipJoin(other)(f)
-      }
-      case _ => {
+      case _ =>
         val indexedOther: VertexSetRDD[VD2] = VertexSetRDD(other, this.index, merge)
         leftZipJoin(indexedOther)(f)
-      }
     }
   } // end of leftJoin
 
@@ -433,12 +390,11 @@ object VertexSetRDD {
    *
    * @tparam VD the vertex attribute type
    * @param rdd the rdd containing vertices
-   * @param indexPrototype a VertexSetRDD whose indexes will be reused. The
+   * @param index a VertexSetRDD whose indexes will be reused. The
    * indexes must be a superset of the vertices in rdd
    * in RDD
    */
-  def apply[VD: ClassManifest](
-      rdd: RDD[(Vid, VD)], index: VertexSetIndex): VertexSetRDD[VD] =
+  def apply[VD: ClassManifest](rdd: RDD[(Vid, VD)], index: VertexSetIndex): VertexSetRDD[VD] =
     apply(rdd, index, (a: VD, b: VD) => a)
 
   /**
@@ -447,8 +403,8 @@ object VertexSetRDD {
    *
    * @tparam VD the vertex attribute type
    * @param rdd the rdd containing vertices
-   * @param indexPrototype a VertexSetRDD whose indexes will be reused. The
-   * indexes must be a superset of the vertices in rdd
+   * @param index a VertexSetRDD whose indexes will be reused. The
+   *              indexes must be a superset of the vertices in rdd
    * @param reduceFunc the user defined reduce function used to merge
    * duplicate vertex attributes.
    */
@@ -456,6 +412,7 @@ object VertexSetRDD {
       rdd: RDD[(Vid, VD)],
       index: VertexSetIndex,
       reduceFunc: (VD, VD) => VD): VertexSetRDD[VD] =
+    // TODO: Considering removing the following apply.
     apply(rdd, index, (v: VD) => v, reduceFunc, reduceFunc)
 
   /**
@@ -463,7 +420,7 @@ object VertexSetRDD {
    *
    * @tparam VD the vertex attribute type
    * @param rdd the rdd containing vertices
-   * @param indexPrototype a VertexSetRDD whose indexes will be reused. The
+   * @param index a VertexSetRDD whose indexes will be reused. The
    * indexes must be a superset of the vertices in rdd
    * @param reduceFunc the user defined reduce function used to merge
    * duplicate vertex attributes.
@@ -476,9 +433,7 @@ object VertexSetRDD {
     val cReduceFunc = rdd.context.clean(reduceFunc)
     assert(rdd.partitioner == Some(index.partitioner))
     // Use the index to build the new values table
-    val partitionsRDD = index.rdd.zipPartitions(
-      rdd, preservesPartitioning = true
-    ) {
+    val partitionsRDD = index.rdd.zipPartitions(rdd, preservesPartitioning = true) {
       (indexIter, tblIter) =>
       // There is only one map
       val index = indexIter.next()
