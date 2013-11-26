@@ -57,10 +57,12 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
   // Staging directory is private! -> rwx--------
   val STAGING_DIR_PERMISSION: FsPermission = FsPermission.createImmutable(0700:Short)
+
   // App files are world-wide readable and owner writable -> rw-r--r--
   val APP_FILE_PERMISSION: FsPermission = FsPermission.createImmutable(0644:Short) 
 
-  def run() {
+  // for client user who want to monitor app status by itself.
+  def runApp() = {
     validateArgs()
 
     init(yarnConf)
@@ -82,7 +84,11 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     appContext.setUser(UserGroupInformation.getCurrentUser().getShortUserName())
 
     submitApp(appContext)
+    appId
+  }
 
+  def run() {
+    val appId = runApp()
     monitorApplication(appId)
     System.exit(0)
   }
@@ -384,7 +390,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     val commands = List[String](javaCommand + 
       " -server " +
       JAVA_OPTS +
-      " org.apache.spark.deploy.yarn.ApplicationMaster" +
+      " " + args.amClass +
       " --class " + args.userClass + 
       " --jar " + args.userJar +
       userArgsToString(args) +

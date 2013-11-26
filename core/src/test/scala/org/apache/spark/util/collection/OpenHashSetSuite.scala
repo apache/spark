@@ -1,9 +1,27 @@
 package org.apache.spark.util.collection
 
 import org.scalatest.FunSuite
+import org.scalatest.matchers.ShouldMatchers
+
+import org.apache.spark.util.SizeEstimator
 
 
-class OpenHashSetSuite extends FunSuite {
+class OpenHashSetSuite extends FunSuite with ShouldMatchers {
+
+  test("size for specialized, primitive int") {
+    val loadFactor = 0.7
+    val set = new OpenHashSet[Int](64, loadFactor)
+    for (i <- 0 until 1024) {
+      set.add(i)
+    }
+    assert(set.size === 1024)
+    assert(set.capacity > 1024)
+    val actualSize = SizeEstimator.estimate(set)
+    // 32 bits for the ints + 1 bit for the bitset
+    val expectedSize = set.capacity * (32 + 1) / 8
+    // Make sure we are not allocating a significant amount of memory beyond our expected.
+    actualSize should be <= (expectedSize * 1.1).toLong
+  }
 
   test("primitive int") {
     val set = new OpenHashSet[Int]
