@@ -109,6 +109,96 @@ object Hive {
     "TOK_SWITCHDATABASE"
   )
 
+  /**
+   * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations similar to
+   * [[catalyst.tree.TreeNode]].
+   *
+   * Note that this should be considered very experimental and is not indented as a replacement for TreeNode.  Primarily
+   * it should be noted ASTNodes are not immutable and do not appear to have clean copy semantics.  Therefore, users of
+   * this class should take care when copying/modifying trees that might be used elsewhere.
+   */
+  implicit class TransformableNode(n: ASTNode) {
+    /**
+     * Returns a copy of this node where [[rule]] has been recursively
+     * applied to it and all of its children.  When [[rule]] does not
+     * apply to a given node it is left unchanged.
+     * @param rule the function use to transform this nodes children
+     */
+    def transform(rule: PartialFunction[ASTNode, ASTNode]): ASTNode = {
+      try {
+        val afterRule = rule.applyOrElse(n, identity[ASTNode])
+        println(afterRule.getChildren)
+        afterRule.withChildren(
+          nilIfEmpty(afterRule.getChildren)
+            .asInstanceOf[Seq[ASTNode]]
+            .map(ast => Option(ast).map(_.transform(rule)).orNull))
+      } catch {
+        case e: Exception =>
+          println(dumpTree(n))
+          throw e
+      }
+    }
+
+    /**
+     * Returns a scala.Seq equivilent to [s] or Nil if [s] is null.
+     */
+    private def nilIfEmpty[A](s: java.util.List[A]): Seq[A] =
+      Option(s).map(_.toSeq).getOrElse(Nil)
+
+    /**
+     * Returns this ASTNode with the text changed to [[newText]].
+     */
+    def withText(newText: String): ASTNode = {
+      n.token.asInstanceOf[org.antlr.runtime.CommonToken].setText(newText)
+      n
+    }
+
+    /**
+     * Returns this ASTNode with the children changed to [[newChildren]].
+     */
+    def withChildren(newChildren: Seq[ASTNode]): ASTNode = {
+      (1 to n.getChildCount).foreach(_ => n.deleteChild(0))
+      n.addChildren(newChildren)
+      n
+    }
+
+    /**
+     * Throws an error if this is not equal to other.
+     *
+     * Right now this function only checks the name, type, text and children of the node
+     * for equality.
+     */
+    def checkEquals(other: ASTNode) {
+      def check(field: String, f: ASTNode => Any) =
+        if(f(n) != f(other))
+          sys.error(s"$field does not match for trees. '${f(n)}' != '${f(other)}' left: ${dumpTree(n)}, right: ${dumpTree(other)}")
+
+      check("name", _.getName)
+      check("type", _.getType)
+      check("text", _.getText)
+      check("numChildren", n => nilIfEmpty(n.getChildren).size)
+
+      val leftChildren = nilIfEmpty(n.getChildren).asInstanceOf[Seq[ASTNode]]
+      val rightChildren = nilIfEmpty(other.getChildren).asInstanceOf[Seq[ASTNode]]
+      leftChildren zip rightChildren foreach {
+        case (l,r) => l checkEquals r
+      }
+    }
+  }
+
+  /**
+   * Returns the AST for the given SQL string.
+   */
+  def getAst(sql: String): ASTNode = {
+    try {
+      ParseUtils.findRootNonNullToken(
+        (new ParseDriver()).parse(sql))
+    } catch {
+      case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
+        throw new RuntimeException(s"Failed to parse sql: '$sql'", pe)
+    }
+  }
+
   def parseSql(sql: String): LogicalPlan = {
     if(sql.toLowerCase.startsWith("set"))
       ConfigurationAssignment(sql)
@@ -123,14 +213,7 @@ object Hive {
     else if(sql.startsWith("!"))
       ShellCommand(sql.drop(1))
     else {
-      val tree =
-          try {
-            ParseUtils.findRootNonNullToken(
-              (new ParseDriver()).parse(sql, null /* no context required for parsing alone */))
-          } catch {
-            case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
-              throw new RuntimeException(s"Failed to parse sql: '$sql'", pe)
-          }
+      val tree = getAst(sql)
 
       if(nativeCommands contains tree.getText)
         NativeCommand(sql)
@@ -159,11 +242,11 @@ object Hive {
   }
 
   /** Extractor for matching Hive's AST Tokens. */
-  protected object Token {
+  object Token {
     /** @returns matches of the form (tokenName, children). */
     def unapply(t: Any) = t match {
       case t: ASTNode =>
-        Some((t.getText, Option(t.getChildren).map(_.toList).getOrElse(Nil)))
+        Some((t.getText, Option(t.getChildren).map(_.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
       case _ => None
     }
   }
@@ -172,11 +255,11 @@ object Hive {
     clauseNames.map(getClauseOption(_, nodeList))
   }
 
-  protected def getClause(clauseName: String, nodeList: Seq[Node]) =
+  def getClause(clauseName: String, nodeList: Seq[Node]) =
     getClauseOption(clauseName, nodeList)
       .getOrElse(sys.error(s"Expected clause $clauseName missing from ${nodeList.map(dumpTree(_)).mkString("\n")}"))
 
-  protected def getClauseOption(clauseName: String, nodeList: Seq[Node]): Option[Node] = {
+  def getClauseOption(clauseName: String, nodeList: Seq[Node]): Option[Node] = {
     nodeList.filter { case ast: ASTNode => ast.getText == clauseName } match {
       case Seq(oneMatch) => Some(oneMatch)
       case Seq() => None
@@ -372,7 +455,7 @@ object Hive {
         s"No parse rules for ASTNode type: ${a.getType}, text: ${a.getText} :\n ${dumpTree(a).toString}")
   }
 
-  protected def dumpTree(node: Node, builder: StringBuilder = new StringBuilder, indent: Int = 0)
+  def dumpTree(node: Node, builder: StringBuilder = new StringBuilder, indent: Int = 0)
   : StringBuilder = {
     node match {
       case a: ASTNode => builder.append(("  " * indent) + a.getText + "\n")
