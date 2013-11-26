@@ -10,6 +10,7 @@ import expressions._
 import types._
 
 import collection.JavaConversions._
+import org.apache.hadoop.hive.ql.plan.TableDesc
 
 class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
   val client = new HiveMetaStoreClient(hiveConf)
@@ -31,7 +32,14 @@ object HiveMetatoreTypes {
     }
 }
 
-case class MetastoreRelation(tableName: String)(val table: Table) extends plans.logical.LeafNode {
+case class MetastoreRelation(tableName: String)(val table: Table) extends plans.logical.BaseRelation {
+  val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
+  val tableDesc = new TableDesc(
+    Class.forName(table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[org.apache.hadoop.hive.serde2.Deserializer]],
+    Class.forName(table.getSd.getInputFormat).asInstanceOf[Class[org.apache.hadoop.mapred.InputFormat[_,_]]],
+    Class.forName(table.getSd.getOutputFormat),
+    hiveQlTable.getSchema
+  )
 
   // Must be a stable value since new attributes are born here.
   val output = table.getSd.getCols.map { col =>

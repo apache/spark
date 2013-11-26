@@ -2,7 +2,7 @@ package catalyst
 package analysis
 
 import expressions.{Attribute, Expression}
-import plans.logical.LeafNode
+import plans.logical.BaseRelation
 import trees.TreeNode
 
 /**
@@ -14,7 +14,7 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 /**
  * Holds the name of a relation that has yet to be looked up in a [[Catalog]].
  */
-case class UnresolvedRelation(name: String, alias: Option[String]) extends LeafNode {
+case class UnresolvedRelation(name: String, alias: Option[String]) extends BaseRelation {
   def output = Nil
 }
 
