@@ -191,8 +191,8 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
    * the maximum value of the last position and all NaN entries will be counted
    * in that bucket.
    */
-  def histogram(buckets: Array[Double]): Array[Long] = {
-    srdd.histogram(buckets.map(_.toDouble), false)
+  def histogram(buckets: Array[scala.Double]): Array[Long] = {
+    srdd.histogram(buckets, false)
   }
 
   def histogram(buckets: Array[Double], evenBuckets: Boolean): Array[Long] = {
