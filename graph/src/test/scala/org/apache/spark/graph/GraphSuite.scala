@@ -139,6 +139,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val subgraph = star.subgraph(vpred = (vid, attr) => vid % 2 == 0)
       assert(subgraph.vertices.collect().toSet ===
         (0 to n / 2).map(x => (x * 2, "defaultValue")).toSet)
+      assert(subgraph.edges.collect().toSet === (1 to n / 2).map(x => Edge(0, x * 2)).toSet)
     }
   }
 
