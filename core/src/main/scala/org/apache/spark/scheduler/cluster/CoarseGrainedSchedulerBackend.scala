@@ -25,7 +25,7 @@ import scala.concurrent.duration._
 
 import akka.actor._
 import akka.pattern.ask
-import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
+import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
 import org.apache.spark.{SparkException, Logging, TaskState}
 import org.apache.spark.scheduler.TaskDescription
@@ -52,7 +52,6 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
     private val executorAddress = new HashMap[String, Address]
     private val executorHost = new HashMap[String, String]
     private val freeCores = new HashMap[String, Int]
-    private val actorToExecutorId = new HashMap[ActorRef, String]
     private val addressToExecutorId = new HashMap[Address, String]
 
     override def preStart() {
@@ -77,7 +76,6 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
           executorHost(executorId) = Utils.parseHostPort(hostPort)._1
           freeCores(executorId) = cores
           executorAddress(executorId) = sender.path.address
-          actorToExecutorId(sender) = executorId
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           makeOffers()
@@ -147,7 +145,6 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
       if (executorActor.contains(executorId)) {
         logInfo("Executor " + executorId + " disconnected, so removing it")
         val numCores = freeCores(executorId)
-        actorToExecutorId -= executorActor(executorId)
         addressToExecutorId -= executorAddress(executorId)
         executorActor -= executorId
         executorHost -= executorId

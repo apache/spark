@@ -22,7 +22,6 @@ import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.reflect.ClassTag
 
@@ -115,6 +114,7 @@ class DAGScheduler(
 
   private val eventProcessActor: ActorRef = env.actorSystem.actorOf(Props(new Actor {
     override def preStart() {
+      import context.dispatcher
       context.system.scheduler.schedule(RESUBMIT_TIMEOUT, RESUBMIT_TIMEOUT) {
         if (failed.size > 0) {
           resubmitFailedStages()

@@ -21,15 +21,11 @@ import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.HashSet
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 import akka.actor._
-import scala.concurrent.Await
 import akka.pattern.ask
-import akka.remote._
-
-import scala.concurrent.duration.Duration
-import akka.util.Timeout
-import scala.concurrent.duration._
 
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId

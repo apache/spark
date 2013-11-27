@@ -17,24 +17,15 @@
 
 package org.apache.spark.storage
 
-import akka.actor._
-import scala.concurrent.Await
-import scala.concurrent.Future
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
 import scala.concurrent.ExecutionContext.Implicits.global
 
+import akka.actor._
 import akka.pattern.ask
-import scala.concurrent.duration._
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.storage.BlockManagerMessages.GetLocations
-import org.apache.spark.storage.BlockManagerMessages.GetLocationsMultipleBlockIds
-import org.apache.spark.storage.BlockManagerMessages.RegisterBlockManager
-import org.apache.spark.storage.BlockManagerMessages.HeartBeat
-import org.apache.spark.storage.BlockManagerMessages.RemoveExecutor
-import org.apache.spark.storage.BlockManagerMessages.GetPeers
-import org.apache.spark.storage.BlockManagerMessages.RemoveBlock
-import org.apache.spark.storage.BlockManagerMessages.RemoveRdd
 
 private[spark] class BlockManagerMaster(var driverActor : Either[ActorRef, ActorSelection]) extends Logging {
 

@@ -281,7 +281,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.akka.pauses</td>
+  <td>spark.akka.heartbeat.pauses</td>
   <td>60</td>
   <td>
      Acceptable heart beat pause in seconds for akka, tune this if you expect GC pauses or network delays (reconnections) etc.
@@ -298,7 +298,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.akka.heartbeat.interval</td>
   <td>5</td>
   <td>
-     A larger interval value in seconds reduces network overhead and a smaller value might be more informative for akka's failure detector. Tune this in combination of `spark.akka.pauses` and `spark.akka.failure-detector.threshold` if you need to.
+     A larger interval value in seconds reduces network overhead and a smaller value might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to.
   </td>
 </tr>
 <tr>

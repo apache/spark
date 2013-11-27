@@ -27,7 +27,7 @@ import scala.concurrent.duration._
 import akka.actor._
 import akka.remote.{ DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -73,6 +73,7 @@ private[spark] class Worker(
 
   val masterLock: Object = new Object()
   var master: ActorSelection = null
+  var masterAddress: Address = null
   var activeMasterUrl: String = ""
   var activeMasterWebUiUrl : String = ""
   @volatile var registered = false
@@ -136,6 +137,10 @@ private[spark] class Worker(
       activeMasterUrl = url
       activeMasterWebUiUrl = uiUrl
       master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
+      masterAddress = activeMasterUrl match {
+        case Master.sparkUrlRegex(_host, _port) => Address("akka.tcp", Master.systemName, _host, _port.toInt)
+        case x => throw new SparkException("Invalid spark URL:"+x)
+      }
       connected = true
     }
   }
@@ -240,7 +245,7 @@ private[spark] class Worker(
         }
       }
 
-    case x: DisassociatedEvent =>
+    case x: DisassociatedEvent if x.remoteAddress == masterAddress =>
       logInfo(s"$x Disassociated !")
       masterDisconnected()
 

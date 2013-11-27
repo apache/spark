@@ -39,9 +39,6 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{Utils, AkkaUtils}
-import org.apache.spark.deploy.DeployMessages.RegisterWorkerFailed
-import org.apache.spark.deploy.DeployMessages.KillExecutor
-import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   import context.dispatcher
@@ -159,7 +156,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       System.exit(0)
     }
 
-    case RegisterWorker(id, host, workerPort, cores, memory, webUiPort, publicAddress) => {
+    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerWebUiPort, publicAddress) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         host, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -167,7 +164,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       } else if (idToWorker.contains(id)) {
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {
-        val worker = new WorkerInfo(id, host, port, cores, memory, sender, webUiPort, publicAddress)
+        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
+          sender, workerWebUiPort, publicAddress)
         registerWorker(worker)
         persistenceEngine.addWorker(worker)
         sender ! RegisteredWorker(masterUrl, masterWebUiUrl)
