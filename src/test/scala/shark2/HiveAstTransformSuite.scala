@@ -15,6 +15,8 @@ object HiveDistinctToGroupBy {
       val selectDistinctClause = getClause("TOK_SELECTDI", children)
       val selectExprs = selectDistinctClause.getChildren.map {
         case Token("TOK_SELEXPR", child :: Nil) => child
+        case Token("TOK_SELEXPR", child :: _ /* discard alias */ :: Nil) => child
+
       }
 
       val groupByClause = new ASTNode(new org.antlr.runtime.CommonToken(HiveParser.TOK_GROUPBY))
@@ -58,4 +60,21 @@ class HiveAstTransformSuite extends FunSuite {
 
     groupBy checkEquals transformed
   }
+
+  test("distinct to group by with alias") {
+    val distinct = getAst("SELECT DISTINCT key as k FROM src")
+    val groupBy = getAst("SELECT key as k FROM src GROUP BY key")
+    val transformed = HiveDistinctToGroupBy(distinct)
+
+    groupBy checkEquals transformed
+  }
+
+  test("distinct to group by complex exprs") {
+    val distinct = getAst("SELECT DISTINCT key + 1 FROM src")
+    val groupBy = getAst("SELECT key + 1 FROM src GROUP BY key + 1")
+    val transformed = HiveDistinctToGroupBy(distinct)
+
+    groupBy checkEquals transformed
+  }
+
 }
