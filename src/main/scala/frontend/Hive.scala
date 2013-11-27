@@ -127,7 +127,6 @@ object Hive {
     def transform(rule: PartialFunction[ASTNode, ASTNode]): ASTNode = {
       try {
         val afterRule = rule.applyOrElse(n, identity[ASTNode])
-        println(afterRule.getChildren)
         afterRule.withChildren(
           nilIfEmpty(afterRule.getChildren)
             .asInstanceOf[Seq[ASTNode]]
