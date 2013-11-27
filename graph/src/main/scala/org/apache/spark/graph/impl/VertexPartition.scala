@@ -15,6 +15,16 @@ private[graph] object VertexPartition {
     }
     new VertexPartition(map.keySet, map._values, map.keySet.getBitSet)
   }
+
+  def apply[VD: ClassManifest](iter: Iterator[(Vid, VD)], mergeFunc: (VD, VD) => VD)
+    : VertexPartition[VD] =
+  {
+    val map = new PrimitiveKeyOpenHashMap[Vid, VD]
+    iter.foreach { case (k, v) =>
+      map.setMerge(k, v, mergeFunc)
+    }
+    new VertexPartition(map.keySet, map._values, map.keySet.getBitSet)
+  }
 }
 
 
@@ -114,12 +124,36 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition(index, newValues, mask)
   }
 
+  /** Left outer join another iterator of messages. */
+  def leftJoin[VD2: ClassManifest, VD3: ClassManifest]
+      (other: Iterator[(Vid, VD2)])
+      (f: (Vid, VD, Option[VD2]) => VD3): VertexPartition[VD3] = {
+    leftJoin(createUsingIndex(other))(f)
+  }
+
+  /**
+   * Similar effect as aggregateUsingIndex((a, b) => a)
+   */
+  def createUsingIndex[VD2: ClassManifest](iter: Iterator[Product2[Vid, VD2]])
+    : VertexPartition[VD2] = {
+    val newMask = new BitSet(capacity)
+    val newValues = new Array[VD2](capacity)
+    iter.foreach { case (vid, vdata) =>
+      val pos = index.getPos(vid)
+      newMask.set(pos)
+      newValues(pos) = vdata
+    }
+    new VertexPartition[VD2](index, newValues, newMask)
+  }
+
   def aggregateUsingIndex[VD2: ClassManifest](
       iter: Iterator[Product2[Vid, VD2]], reduceFunc: (VD2, VD2) => VD2): VertexPartition[VD2] =
   {
     val newMask = new BitSet(capacity)
     val newValues = new Array[VD2](capacity)
-    iter.foreach { case (vid, vdata) =>
+    iter.foreach { product =>
+      val vid = product._1
+      val vdata = product._2
       val pos = index.getPos(vid)
       if (newMask.get(pos)) {
         newValues(pos) = reduceFunc(newValues(pos), vdata)

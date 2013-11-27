@@ -132,9 +132,9 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val chain1 = (0 until 9).map(x => (x, x+1) )
       val chain2 = (10 until 20).map(x => (x, x+1) )
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
-      val twoChains = Graph(rawEdges, 1.0)
+      val twoChains = Graph.fromEdgeTuples(rawEdges, 1.0)
       val ccGraph = Analytics.connectedComponents(twoChains).cache()
-      val vertices = ccGraph.vertices.collect
+      val vertices = ccGraph.vertices.collect()
       for ( (id, cc) <- vertices ) {
         if(id < 10) { assert(cc === 0) }
         else { assert(cc === 10) }
@@ -156,7 +156,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val chain1 = (0 until 9).map(x => (x, x+1) )
       val chain2 = (10 until 20).map(x => (x, x+1) )
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
-      val twoChains = Graph(rawEdges, true).reverse
+      val twoChains = Graph.fromEdgeTuples(rawEdges, true).reverse
       val ccGraph = Analytics.connectedComponents(twoChains).cache()
       val vertices = ccGraph.vertices.collect
       for ( (id, cc) <- vertices ) {
@@ -181,7 +181,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   test("Count a single triangle") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rawEdges = sc.parallelize(Array( 0L->1L, 1L->2L, 2L->0L ), 2)
-      val graph = Graph(rawEdges, true).cache
+      val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
       val triangleCount = Analytics.triangleCount(graph)
       val verts = triangleCount.vertices
       verts.collect.foreach { case (vid, count) => assert(count === 1) }
@@ -193,10 +193,10 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val triangles = Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(0L -> -1L, -1L -> -2L, -2L -> 0L)
       val rawEdges = sc.parallelize(triangles, 2)
-      val graph = Graph(rawEdges, true).cache
+      val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
       val triangleCount = Analytics.triangleCount(graph)
       val verts = triangleCount.vertices
-      verts.collect.foreach { case (vid, count) =>
+      verts.collect().foreach { case (vid, count) =>
         if (vid == 0) {
           assert(count === 2)
         } else {
@@ -213,10 +213,10 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
         Array(0L -> -1L, -1L -> -2L, -2L -> 0L)
       val revTriangles = triangles.map { case (a,b) => (b,a) }
       val rawEdges = sc.parallelize(triangles ++ revTriangles, 2)
-      val graph = Graph(rawEdges, true).cache
+      val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
       val triangleCount = Analytics.triangleCount(graph)
       val verts = triangleCount.vertices
-      verts.collect.foreach { case (vid, count) =>
+      verts.collect().foreach { case (vid, count) =>
         if (vid == 0) {
           assert(count === 4)
         } else {
@@ -230,7 +230,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rawEdges = sc.parallelize(Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(0L -> 1L, 1L -> 2L, 2L -> 0L), 2)
-      val graph = Graph(rawEdges, true).cache
+      val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
       val triangleCount = Analytics.triangleCount(graph)
       val verts = triangleCount.vertices
       verts.collect.foreach { case (vid, count) => assert(count === 1) }

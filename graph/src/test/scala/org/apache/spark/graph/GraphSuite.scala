@@ -15,8 +15,17 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rawEdges = (0L to 100L).zip((1L to 99L) :+ 0L)
       val edges = sc.parallelize(rawEdges)
-      val graph = Graph(edges, 1.0F)
+      val graph = Graph.fromEdgeTuples(edges, 1.0F)
       assert(graph.edges.count() === rawEdges.size)
+    }
+  }
+
+  test("mapReduceTriplets") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val edges = sc.parallelize((0L to 100L).zip((1L to 99L) :+ 0L))
+      val graph = Graph.fromEdgeTuples(edges, 1.0F)
+
+      val d = graph.mapReduceTriplets[Int](et => Iterator((et.srcId, 0)), (a, b) => a + b)
     }
   }
 
@@ -38,7 +47,9 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("mapEdges") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "defaultValue")
+      val star = Graph.fromEdgeTuples(
+        sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))),
+        "defaultValue")
       val starWithEdgeAttrs = star.mapEdges(e => e.dstId)
 
       // map(_.copy()) is a workaround for https://github.com/amplab/graphx/issues/25
@@ -51,7 +62,14 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("mapReduceTriplets") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 0)
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 0)
+
+      println("--------------------------------------- star vertices")
+      println(star.vertices.partitionsRDD.map { v => v.index.toString }.collect().toSeq)
+
+      println("---------------------------------------  starDeg")
+      println(star.degrees.partitionsRDD.map { v => v.index.toString }.collect().toSeq)
+
       val starDeg = star.joinVertices(star.degrees){ (vid, oldV, deg) => deg }
       val neighborDegreeSums = starDeg.mapReduceTriplets(
         edge => Iterator((edge.srcId, edge.dstAttr), (edge.dstId, edge.srcAttr)),
@@ -63,7 +81,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("aggregateNeighbors") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 1)
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 1)
 
       val indegrees = star.aggregateNeighbors(
         (vid, edge) => Some(1),
@@ -103,7 +121,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val chain = (0 until 100).map(x => (x, (x+1)%100) )
       val rawEdges = sc.parallelize(chain, 3).map { case (s,d) => (s.toLong, d.toLong) }
-      val graph = Graph(rawEdges, 1.0)
+      val graph = Graph.fromEdgeTuples(rawEdges, 1.0)
       val nbrs = graph.collectNeighborIds(EdgeDirection.Both)
       assert(nbrs.count === chain.size)
       assert(graph.numVertices === nbrs.count)
@@ -122,7 +140,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val b = VertexSetRDD(a).mapValues(x => -x)
       assert(b.count === 101)
       assert(b.leftJoin(a){ (id, a, bOpt) => a + bOpt.get }.map(x=> x._2).reduce(_+_) === 0)
-      val c = VertexSetRDD(a, b.index)
+      val c = b.aggregateUsingIndex[Long, (Long, Long)](a, (x, y) => x)
       assert(b.leftJoin(c){ (id, b, cOpt) => b + cOpt.get }.map(x=> x._2).reduce(_+_) === 0)
       val d = c.filter(q => ((q._2 % 2) == 0))
       val e = a.filter(q => ((q._2 % 2) == 0))

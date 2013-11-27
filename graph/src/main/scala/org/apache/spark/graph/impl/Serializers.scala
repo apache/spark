@@ -3,7 +3,28 @@ package org.apache.spark.graph.impl
 import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
+import org.apache.spark.graph._
 import org.apache.spark.serializer._
+
+
+class VidMsgSerializer extends Serializer {
+  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
+
+    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
+      def writeObject[T](t: T) = {
+        val msg = t.asInstanceOf[(Vid, _)]
+        writeVarLong(msg._1, optimizePositive = false)
+        this
+      }
+    }
+
+    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
+      override def readObject[T](): T = {
+        (readVarLong(optimizePositive = false), null).asInstanceOf[T]
+      }
+    }
+  }
+}
 
 
 /** A special shuffle serializer for VertexBroadcastMessage[Int]. */

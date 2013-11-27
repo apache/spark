@@ -240,7 +240,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
         case None => data
       }
     }
-    ClosureCleaner.clean(uf)
     graph.outerJoinVertices(table)(uf)
   }
 

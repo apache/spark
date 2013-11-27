@@ -6,7 +6,7 @@ import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
 import org.apache.spark.graph.impl.MsgRDDFunctions._
 import org.apache.spark.graph.util.BytecodeUtils
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{ShuffledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ClosureCleaner
 import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
@@ -252,7 +252,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
           }
         }
       }
-      // construct an iterator of tuples Iterator[(Vid, A)]
+      // construct an iterator of tuples. Iterator[(Vid, A)]
       msgBS.iterator.map { ind =>
         new AggregationMsg[A](vidToIndex.getValue(ind), msgArray(ind))
       }
@@ -265,6 +265,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   override def outerJoinVertices[U: ClassManifest, VD2: ClassManifest]
     (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2): Graph[VD2, ED] = {
     ClosureCleaner.clean(updateF)
+    println("type of --------------------------- " + updates)
     val newVTable = vTable.leftJoin(updates)(updateF)
     new GraphImpl(newVTable, eTable, vertexPlacement, partitioner)
   }
@@ -276,18 +277,24 @@ object GraphImpl {
   def apply[VD: ClassManifest, ED: ClassManifest](
       edges: RDD[Edge[ED]],
       defaultValue: VD,
-      partitionStrategy: PartitionStrategy): GraphImpl[VD, ED] = {
-    val etable = createETable(edges, partitionStrategy).cache
+      partitionStrategy: PartitionStrategy): GraphImpl[VD, ED] =
+  {
+    val etable = createETable(edges, partitionStrategy).cache()
+
     // Get the set of all vids
-    val vids = etable.mapPartitions(iter => {
-      val (pid, epart) = iter.next()
+    val vids = etable.mapPartitions { iter =>
+      val (_, epart) = iter.next()
       assert(!iter.hasNext)
-      epart.iterator.flatMap(e => Iterator(e.srcId, e.dstId))
-    }, preservesPartitioning = true)
-    // Index the set of all vids
-    val index = VertexSetRDD.makeIndex(vids)
-    // Index the vertices and fill in missing attributes with the default
-    val vtable = VertexSetRDD(index, defaultValue)
+      epart.iterator.flatMap(e => Iterator((e.srcId, 0), (e.dstId, 0)))
+    }
+
+    // Shuffle the vids and create the VertexSetRDD.
+    // TODO: Consider doing map side distinct before shuffle.
+    val shuffled = new ShuffledRDD[Vid, Int, (Vid, Int)](
+      vids, new HashPartitioner(edges.partitions.size))
+    shuffled.setSerializer(classOf[VidMsgSerializer].getName)
+    val vtable = VertexSetRDD(shuffled.mapValues(x => defaultValue))
+
     val vertexPlacement = new VertexPlacement(etable, vtable)
     new GraphImpl(vtable, etable, vertexPlacement, partitionStrategy)
   }
@@ -296,23 +303,24 @@ object GraphImpl {
       vertices: RDD[(Vid, VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD,
-      mergeFunc: (VD, VD) => VD,
-      partitionStrategy: PartitionStrategy): GraphImpl[VD, ED] = {
-
-    vertices.cache
-    val etable = createETable(edges, partitionStrategy).cache
-    // Get the set of all vids, preserving partitions
+      partitionStrategy: PartitionStrategy): GraphImpl[VD, ED] =
+  {
+    vertices.cache()
+    val etable = createETable(edges, partitionStrategy).cache()
+    // Get the set of all vids
     val partitioner = Partitioner.defaultPartitioner(vertices)
-    val implicitVids = etable.flatMap {
-      case (pid, partition) => Array.concat(partition.srcIds, partition.dstIds)
-    }.map(vid => (vid, ())).partitionBy(partitioner)
-    val allVids = vertices.zipPartitions(implicitVids, preservesPartitioning = true) {
-      (a, b) => a.map(_._1) ++ b.map(_._1)
+
+    val vPartitioned = vertices.partitionBy(partitioner)
+
+    val vidsFromEdges = etable.flatMap { case (_, p) => Array.concat(p.srcIds, p.dstIds) }
+                              .map(vid => (vid, 0))
+                              .partitionBy(partitioner)
+
+    val vids = vPartitioned.zipPartitions(vidsFromEdges) { (vertexIter, vidsFromEdgesIter) =>
+      vertexIter.map(_._1) ++ vidsFromEdgesIter.map(_._1)
     }
-    // Index the set of all vids
-    val index = VertexSetRDD.makeIndex(allVids, Some(partitioner))
-    // Index the vertices and fill in missing attributes with the default
-    val vtable = VertexSetRDD(vertices, index, mergeFunc).fillMissing(defaultVertexAttr)
+
+    val vtable = VertexSetRDD(vids, vPartitioned, defaultVertexAttr)
 
     val vertexPlacement = new VertexPlacement(etable, vtable)
     new GraphImpl(vtable, etable, vertexPlacement, partitionStrategy)

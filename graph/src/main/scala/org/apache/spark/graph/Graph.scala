@@ -287,22 +287,9 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
 
 
 /**
- * The Graph object contains a collection of routines used to
- * construct graphs from RDDs.
- *
+ * The Graph object contains a collection of routines used to construct graphs from RDDs.
  */
 object Graph {
-
-  /**
-   * Construct a graph from a collection of edges encoded as vertex id pairs.
-   *
-   * @param rawEdges the RDD containing the set of edges in the graph
-   *
-   * @return a graph with edge attributes containing the count of duplicate edges.
-   */
-  def apply[VD: ClassManifest](rawEdges: RDD[(Vid, Vid)], defaultValue: VD): Graph[VD, Int] = {
-    Graph(rawEdges, defaultValue, false, RandomVertexCut())
-  }
 
   /**
    * Construct a graph from a collection of edges encoded as vertex id
@@ -316,13 +303,12 @@ object Graph {
    * @return a graph with edge attributes containing either the count
    * of duplicate edges or 1 (if `uniqueEdges=false`) and vertex
    * attributes containing the total degree of each vertex.
-   *
    */
-  def apply[VD: ClassManifest](
+  def fromEdgeTuples[VD: ClassManifest](
       rawEdges: RDD[(Vid, Vid)],
       defaultValue: VD,
-      uniqueEdges: Boolean,
-      partitionStrategy: PartitionStrategy): Graph[VD, Int] = {
+      uniqueEdges: Boolean = false,
+      partitionStrategy: PartitionStrategy = RandomVertexCut): Graph[VD, Int] = {
     val edges = rawEdges.map(p => Edge(p._1, p._2, 1))
     val graph = GraphImpl(edges, defaultValue, partitionStrategy)
     if (uniqueEdges) graph.groupEdges((a, b) => a + b) else graph
@@ -337,106 +323,42 @@ object Graph {
    * @return a graph with edge attributes described by `edges` and vertices
    *         given by all vertices in `edges` with value `defaultValue`
    */
-  def apply[VD: ClassManifest, ED: ClassManifest](edges: RDD[Edge[ED]], defaultValue: VD)
-    : Graph[VD, ED] = {
-    Graph(edges, defaultValue, RandomVertexCut())
-  }
-
-  /**
-   * Construct a graph from a collection of edges.
-   *
-   * @param edges the RDD containing the set of edges in the graph
-   * @param defaultValue the default vertex attribute to use for each vertex
-   *
-   * @return a graph with edge attributes described by `edges` and vertices
-   *         given by all vertices in `edges` with value `defaultValue`
-   */
-  def apply[VD: ClassManifest, ED: ClassManifest](
+  def fromEdges[VD: ClassManifest, ED: ClassManifest](
       edges: RDD[Edge[ED]],
       defaultValue: VD,
-      partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
+      partitionStrategy: PartitionStrategy = RandomVertexCut): Graph[VD, ED] = {
     GraphImpl(edges, defaultValue, partitionStrategy)
   }
 
   /**
    * Construct a graph from a collection attributed vertices and
-   * edges.
-   *
-   * @note Duplicate vertices are removed arbitrarily and missing
-   * vertices (vertices in the edge collection that are not in the
-   * vertex collection) are replaced by null vertex attributes.
-   *
-   * @tparam VD the vertex attribute type
-   * @tparam ED the edge attribute type
-   * @param vertices the "set" of vertices and their attributes
-   * @param edges the collection of edges in the graph
-   *
-   */
-  def apply[VD: ClassManifest, ED: ClassManifest](
-      vertices: RDD[(Vid,VD)],
-      edges: RDD[Edge[ED]]): Graph[VD, ED] = {
-    val defaultAttr: VD = null.asInstanceOf[VD]
-    Graph(vertices, edges, defaultAttr, (a:VD,b:VD) => a, RandomVertexCut())
-  }
-
-  /**
-   * Construct a graph from a collection attributed vertices and
-   * edges.  Duplicate vertices are combined using the `mergeFunc` and
+   * edges.  Duplicate vertices are picked arbitrarily and
    * vertices found in the edge collection but not in the input
-   * vertices are the default attribute `defautVertexAttr`.
-   *
-   * @note Duplicate vertices are removed arbitrarily .
+   * vertices are the default attribute.
    *
    * @tparam VD the vertex attribute type
    * @tparam ED the edge attribute type
    * @param vertices the "set" of vertices and their attributes
    * @param edges the collection of edges in the graph
    * @param defaultVertexAttr the default vertex attribute to use for
-   * vertices that are mentioned in `edges` but not in `vertices`
-   *
-   */
-  def apply[VD: ClassManifest, ED: ClassManifest](
-      vertices: RDD[(Vid,VD)],
-      edges: RDD[Edge[ED]],
-      defaultVertexAttr: VD): Graph[VD, ED] = {
-    Graph(vertices, edges, defaultVertexAttr, (a,b) => a, RandomVertexCut())
-  }
-
-  /**
-   * Construct a graph from a collection attributed vertices and
-   * edges.  Duplicate vertices are combined using the `mergeFunc` and
-   * vertices found in the edge collection but not in the input
-   * vertices are the default attribute `defautVertexAttr`.
-   *
-   * @tparam VD the vertex attribute type
-   * @tparam ED the edge attribute type
-   * @param vertices the "set" of vertices and their attributes
-   * @param edges the collection of edges in the graph
-   * @param defaultVertexAttr the default vertex attribute to use for
-   * vertices that are mentioned in `edges` but not in `vertices
-   * @param mergeFunc the function used to merge duplicate vertices
-   * in the `vertices` collection.
+   * vertices that are mentioned in edges but not in vertices
    * @param partitionStrategy the partition strategy to use when
    * partitioning the edges.
-   *
    */
   def apply[VD: ClassManifest, ED: ClassManifest](
-      vertices: RDD[(Vid,VD)],
+      vertices: RDD[(Vid, VD)],
       edges: RDD[Edge[ED]],
-      defaultVertexAttr: VD,
-      mergeFunc: (VD, VD) => VD,
-      partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
-    GraphImpl(vertices, edges, defaultVertexAttr, mergeFunc, partitionStrategy)
+      defaultVertexAttr: VD = null.asInstanceOf[VD],
+      partitionStrategy: PartitionStrategy = RandomVertexCut): Graph[VD, ED] = {
+    GraphImpl(vertices, edges, defaultVertexAttr, partitionStrategy)
   }
 
   /**
-   * The implicit graphToGraphOPs function extracts the GraphOps
-   * member from a graph.
+   * The implicit graphToGraphOPs function extracts the GraphOps member from a graph.
    *
-   * To improve modularity the Graph type only contains a small set of
-   * basic operations.  All the convenience operations are defined in
-   * the GraphOps class which may be shared across multiple graph
-   * implementations.
+   * To improve modularity the Graph type only contains a small set of basic operations.  All the
+   * convenience operations are defined in the GraphOps class which may be shared across multiple
+   * graph implementations.
    */
   implicit def graphToGraphOps[VD: ClassManifest, ED: ClassManifest](g: Graph[VD, ED]) = g.ops
 } // end of Graph object

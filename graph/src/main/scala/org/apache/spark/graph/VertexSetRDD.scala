@@ -28,28 +28,6 @@ import org.apache.spark.util.ClosureCleaner
 
 
 /**
- * Maintains the per-partition mapping from vertex id to the corresponding
- * location in the per-partition values array. This class is meant to be an
- * opaque type.
- */
-private[graph]
-class VertexSetIndex(private[spark] val rdd: RDD[VertexIdToIndexMap]) {
-  /**
-   * The persist function behaves like the standard RDD persist
-   */
-  def persist(newLevel: StorageLevel): VertexSetIndex = {
-    rdd.persist(newLevel)
-    this
-  }
-
-  /**
-   * Returns the partitioner object of the underlying RDD.  This is
-   * used by the VertexSetRDD to partition the values RDD.
-   */
-  def partitioner: Partitioner = rdd.partitioner.get
-} // end of VertexSetIndex
-
-/**
  * A `VertexSetRDD[VD]` extends the `RDD[(Vid, VD)]` by ensuring that there is
  * only one entry for each vertex and by pre-indexing the entries for fast,
  * efficient joins.
@@ -77,26 +55,20 @@ class VertexSetRDD[@specialized VD: ClassManifest](
     @transient val partitionsRDD: RDD[VertexPartition[VD]])
   extends RDD[(Vid, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
-  /**
-   * The `VertexSetIndex` representing the layout of this `VertexSetRDD`.
-   */
-  // TOOD: Consider removing the exposure of index to outside, and implement methods in this
-  // class to handle any operations that would require indexing.
-  def index = new VertexSetIndex(partitionsRDD.mapPartitions(_.map(_.index),
-    preservesPartitioning = true))
+  require(partitionsRDD.partitioner.isDefined)
 
   /**
    * Construct a new VertexSetRDD that is indexed by only the keys in the RDD.
    * The resulting VertexSet will be based on a different index and can
    * no longer be quickly joined with this RDD.
    */
-   def reindex(): VertexSetRDD[VD] = VertexSetRDD(this)
+  def reindex(): VertexSetRDD[VD] = new VertexSetRDD(partitionsRDD.map(_.reindex()))
 
   /**
    * An internal representation which joins the block indices with the values
    * This is used by the compute function to emulate `RDD[(Vid, VD)]`
    */
-  protected[spark] val tuples = partitionsRDD.flatMap(_.iterator)
+  protected[spark] val tuples: RDD[(Vid, VD)] = partitionsRDD.flatMap(_.iterator)
 
   /**
    * The partitioner is defined by the index.
@@ -305,10 +277,18 @@ class VertexSetRDD[@specialized VD: ClassManifest](
     // If the other set is a VertexSetRDD then we use the much more efficient leftZipJoin
     other match {
       case other: VertexSetRDD[VD2] =>
+        println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         leftZipJoin(other)(f)
       case _ =>
-        val indexedOther: VertexSetRDD[VD2] = VertexSetRDD(other, this.index, (a, b) => a)
-        leftZipJoin(indexedOther)(f)
+        println("------------------------------------------------------")
+        new VertexSetRDD[VD3](
+          partitionsRDD.zipPartitions(
+            other.partitionBy(this.partitioner.get), preservesPartitioning = true)
+          { (part, msgs) =>
+            val vertexPartition: VertexPartition[VD] = part.next()
+            Iterator(vertexPartition.leftJoin(msgs)(f))
+          }
+        )
     }
   }
 
@@ -316,7 +296,7 @@ class VertexSetRDD[@specialized VD: ClassManifest](
       messages: RDD[VidVDPair], reduceFunc: (VD2, VD2) => VD2): VertexSetRDD[VD2] =
   {
     // TODO: use specialized shuffle serializer.
-    val shuffled = new ShuffledRDD[Vid, VD2, VidVDPair](messages, partitionsRDD.partitioner.get)
+    val shuffled = new ShuffledRDD[Vid, VD2, VidVDPair](messages, this.partitioner.get)
     val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
       val vertextPartition: VertexPartition[VD] = thisIter.next()
       Iterator(vertextPartition.aggregateUsingIndex(msgIter, reduceFunc))
@@ -352,166 +332,31 @@ object VertexSetRDD {
   }
 
   /**
-   * Construct a vertex set from an RDD using an existing index.
-   *
-   * @note duplicate vertices are discarded arbitrarily
-   *
-   * @tparam VD the vertex attribute type
-   * @param rdd the rdd containing vertices
-   * @param index a VertexSetRDD whose indexes will be reused. The
-   * indexes must be a superset of the vertices in rdd
-   * in RDD
-   */
-  // TODO: only used in testing. Consider removing.
-  def apply[VD: ClassManifest](rdd: RDD[(Vid, VD)], index: VertexSetIndex): VertexSetRDD[VD] =
-    apply(rdd, index, (a: VD, b: VD) => a)
-
-  /**
-   * Construct a vertex set from an RDD using an existing index and a
-   * user defined `combiner` to merge duplicate vertices.
+   * Construct a vertex set from an RDD of vertex-attribute pairs.
+   * Duplicate entries are merged using mergeFunc.
    *
    * @tparam VD the vertex attribute type
-   * @param rdd the rdd containing vertices
-   * @param index a VertexSetRDD whose indexes will be reused. The
-   *              indexes must be a superset of the vertices in rdd
-   * @param reduceFunc the user defined reduce function used to merge
-   * duplicate vertex attributes.
-   */
-  def apply[VD: ClassManifest](
-      rdd: RDD[(Vid, VD)],
-      index: VertexSetIndex,
-      reduceFunc: (VD, VD) => VD): VertexSetRDD[VD] =
-    // TODO: Considering removing the following apply.
-    apply(rdd, index, (v: VD) => v, reduceFunc, reduceFunc)
-
-  /**
-   * Construct a vertex set from an RDD of Product2[Vid, VD]
    *
-   * @tparam VD the vertex attribute type
-   * @param rdd the rdd containing vertices
-   * @param index a VertexSetRDD whose indexes will be reused. The
-   * indexes must be a superset of the vertices in rdd
-   * @param reduceFunc the user defined reduce function used to merge
-   * duplicate vertex attributes.
+   * @param rdd the collection of vertex-attribute pairs
+   * @param mergeFunc the associative, commutative merge function.
    */
-  private[spark] def aggregate[VD: ClassManifest, VidVDPair <: Product2[Vid, VD] : ClassManifest](
-      rdd: RDD[VidVDPair],
-      index: VertexSetIndex,
-      reduceFunc: (VD, VD) => VD): VertexSetRDD[VD] = {
-
-    val cReduceFunc = rdd.context.clean(reduceFunc)
-    assert(rdd.partitioner == Some(index.partitioner))
-    // Use the index to build the new values table
-    val partitionsRDD = index.rdd.zipPartitions(rdd, preservesPartitioning = true) {
-      (indexIter, tblIter) =>
-      // There is only one map
-      val index = indexIter.next()
-      val mask = new BitSet(index.capacity)
-      val values = new Array[VD](index.capacity)
-      for (vertexPair <- tblIter) {
-        // Get the location of the key in the index
-        val pos = index.getPos(vertexPair._1)
-        if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) {
-          throw new SparkException("Error: Trying to bind an external index " +
-            "to an RDD which contains keys that are not in the index.")
-        } else {
-          // Get the actual index
-          val ind = pos & OpenHashSet.POSITION_MASK
-          // If this value has already been seen then merge
-          if (mask.get(ind)) {
-            values(ind) = cReduceFunc(values(ind), vertexPair._2)
-          } else { // otherwise just store the new value
-            mask.set(ind)
-            values(ind) = vertexPair._2
-          }
-        }
-      }
-      Iterator(new VertexPartition(index, values, mask))
+  def apply[VD: ClassManifest](rdd: RDD[(Vid, VD)], mergeFunc: (VD, VD) => VD): VertexSetRDD[VD] =
+  {
+    val partitioned: RDD[(Vid, VD)] = rdd.partitioner match {
+      case Some(p) => rdd
+      case None => rdd.partitionBy(new HashPartitioner(rdd.partitions.size))
     }
-
-    new VertexSetRDD(partitionsRDD)
+    val vertexPartitions = partitioned.mapPartitions(
+      iter => Iterator(VertexPartition(iter)),
+      preservesPartitioning = true)
+    new VertexSetRDD(vertexPartitions)
   }
 
-  /**
-   * Construct a vertex set from an RDD using an existing index and a
-   * user defined `combiner` to merge duplicate vertices.
-   *
-   * @tparam VD the vertex attribute type
-   * @param rdd the rdd containing vertices
-   * @param index the index which must be a superset of the vertices
-   * in RDD
-   * @param createCombiner a user defined function to create a combiner
-   * from a vertex attribute
-   * @param mergeValue a user defined function to merge a vertex
-   * attribute into an existing combiner
-   * @param mergeCombiners a user defined function to merge combiners
-   *
-   */
-  def apply[VD: ClassManifest, C: ClassManifest](
-      rdd: RDD[(Vid, VD)],
-      index: VertexSetIndex,
-      createCombiner: VD => C,
-      mergeValue: (C, VD) => C,
-      mergeCombiners: (C, C) => C): VertexSetRDD[C] = {
-    val cCreateCombiner = rdd.context.clean(createCombiner)
-    val cMergeValue = rdd.context.clean(mergeValue)
-    val cMergeCombiners = rdd.context.clean(mergeCombiners)
-    val partitioner = index.partitioner
-    // Preaggregate and shuffle if necessary
-    val partitioned =
-      if (rdd.partitioner != Some(partitioner)) {
-        // Preaggregation.
-        val aggregator = new Aggregator[Vid, VD, C](cCreateCombiner, cMergeValue, cMergeCombiners)
-        rdd.mapPartitions(aggregator.combineValuesByKey).partitionBy(partitioner)
-      } else {
-        rdd.mapValues(x => createCombiner(x))
-      }
-
-    aggregate(partitioned, index, mergeCombiners)
-  } // end of apply
-
-  /**
-   * Construct an index of the unique vertices.  The resulting index
-   * can be used to build VertexSets over subsets of the vertices in
-   * the input.
-   */
-  def makeIndex(
-      keys: RDD[Vid], partitionerOpt: Option[Partitioner] = None): VertexSetIndex = {
-    val partitioner = partitionerOpt match {
-      case Some(p) => p
-      case None => Partitioner.defaultPartitioner(keys)
+  def apply[VD: ClassManifest](vids: RDD[Vid], rdd: RDD[(Vid, VD)], defaultVal: VD)
+    : VertexSetRDD[VD] =
+  {
+    VertexSetRDD(vids.map(vid => (vid, defaultVal))).leftJoin(rdd) { (vid, default, value) =>
+      value.getOrElse(default)
     }
-
-    val preAgg: RDD[(Vid, Unit)] = keys.mapPartitions(iter => {
-      val keys = new VertexIdToIndexMap
-      while (iter.hasNext) { keys.add(iter.next) }
-      keys.iterator.map(k => (k, ()))
-    }, preservesPartitioning = true).partitionBy(partitioner)
-
-    val index = preAgg.mapPartitions(iter => {
-      val index = new VertexIdToIndexMap
-      while (iter.hasNext) { index.add(iter.next._1) }
-      Iterator(index)
-    }, preservesPartitioning = true).cache
-
-    new VertexSetIndex(index)
   }
-
-  /**
-   * Create a VertexSetRDD with all vertices initialized to the default value.
-   *
-   * @param index an index over the set of vertices
-   * @param defaultValue the default value to use when initializing the vertices
-   * @tparam VD the type of the vertex attribute
-   * @return
-   */
-  def apply[VD: ClassManifest](index: VertexSetIndex, defaultValue: VD): VertexSetRDD[VD] = {
-    // Use the index to build the new values tables
-    val partitionsRDD = index.rdd.mapPartitions(_.map { index =>
-      val values = Array.fill(index.capacity)(defaultValue)
-      val mask = index.getBitSet
-      new VertexPartition(index, values, mask)
-    }, preservesPartitioning = true)
-    new VertexSetRDD(partitionsRDD)
-  } // end of apply
-} // end of object VertexSetRDD
+}
