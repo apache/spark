@@ -2,7 +2,21 @@ package org.apache.spark.graph.impl
 
 import org.apache.spark.util.collection.{BitSet, PrimitiveKeyOpenHashMap}
 
+import org.apache.spark.SparkException
 import org.apache.spark.graph._
+
+
+private[graph] object VertexPartition {
+
+  def apply[VD: ClassManifest](iter: Iterator[(Vid, VD)]): VertexPartition[VD] = {
+    val map = new PrimitiveKeyOpenHashMap[Vid, VD]
+    iter.foreach { case (k, v) =>
+      map(k) = v
+    }
+    new VertexPartition(map.keySet, map._values, map.keySet.getBitSet)
+  }
+}
+
 
 private[graph]
 class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
@@ -14,6 +28,8 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   // understand the internal data structures. This can possibly be achieved by implementing
   // the aggregate and join functions in this class, and VertexSetRDD can simply call into
   // that.
+
+  val capacity: Int = index.capacity
 
   /**
    * Pass each vertex attribute along with the vertex id through a map
@@ -30,7 +46,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
    */
   def map[VD2: ClassManifest](f: (Vid, VD) => VD2): VertexPartition[VD2] = {
     // Construct a view of the map transformation
-    val newValues = new Array[VD2](index.capacity)
+    val newValues = new Array[VD2](capacity)
     var i = mask.nextSetBit(0)
     while (i >= 0) {
       newValues(i) = f(index.getValue(i), values(i))
@@ -50,7 +66,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
    */
   def filter(pred: (Vid, VD) => Boolean): VertexPartition[VD] = {
     // Allocate the array to store the results into
-    val newMask = new BitSet(index.capacity)
+    val newMask = new BitSet(capacity)
     // Iterate over the active bits in the old mask and evaluate the predicate
     var i = mask.nextSetBit(0)
     while (i >= 0) {
@@ -60,6 +76,59 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
       i = mask.nextSetBit(i + 1)
     }
     new VertexPartition(index, values, newMask)
+  }
+
+  /** Inner join another VertexPartition. */
+  def join[VD2: ClassManifest, VD3: ClassManifest]
+      (other: VertexPartition[VD2])
+      (f: (Vid, VD, VD2) => VD3): VertexPartition[VD3] = {
+    if (index != other.index) {
+      throw new SparkException("can't zip join VertexSetRDDs with different indexes")
+    }
+    val newValues = new Array[VD3](capacity)
+    val newMask = mask & other.mask
+
+    var i = newMask.nextSetBit(0)
+    while (i >= 0) {
+      newValues(i) = f(index.getValue(i), values(i), other.values(i))
+      i = mask.nextSetBit(i + 1)
+    }
+    new VertexPartition(index, newValues, newMask)
+  }
+
+  /** Left outer join another VertexPartition. */
+  def leftJoin[VD2: ClassManifest, VD3: ClassManifest]
+      (other: VertexPartition[VD2])
+      (f: (Vid, VD, Option[VD2]) => VD3): VertexPartition[VD3] = {
+    if (index != other.index) {
+      throw new SparkException("can't zip join VertexSetRDDs with different indexes")
+    }
+    val newValues = new Array[VD3](capacity)
+
+    var i = mask.nextSetBit(0)
+    while (i >= 0) {
+      val otherV: Option[VD2] = if (other.mask.get(i)) Some(other.values(i)) else None
+      newValues(i) = f(index.getValue(i), values(i), otherV)
+      i = mask.nextSetBit(i + 1)
+    }
+    new VertexPartition(index, newValues, mask)
+  }
+
+  def aggregateUsingIndex[VD2: ClassManifest](
+      iter: Iterator[Product2[Vid, VD2]], reduceFunc: (VD2, VD2) => VD2): VertexPartition[VD2] =
+  {
+    val newMask = new BitSet(capacity)
+    val newValues = new Array[VD2](capacity)
+    iter.foreach { case (vid, vdata) =>
+      val pos = index.getPos(vid)
+      if (newMask.get(pos)) {
+        newValues(pos) = reduceFunc(newValues(pos), vdata)
+      } else { // otherwise just store the new value
+        newMask.set(pos)
+        newValues(pos) = vdata
+      }
+    }
+    new VertexPartition[VD2](index, newValues, newMask)
   }
 
   /**

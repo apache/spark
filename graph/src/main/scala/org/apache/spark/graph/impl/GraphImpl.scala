@@ -256,10 +256,10 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       msgBS.iterator.map { ind =>
         new AggregationMsg[A](vidToIndex.getValue(ind), msgArray(ind))
       }
-    }.partitionBy(vTable.partitioner.get)
+    }
 
     // do the final reduction reusing the index map
-    VertexSetRDD.aggregate(preAgg, vTable.index, reduceFunc)
+    vTable.aggregateUsingIndex(preAgg, reduceFunc)
   } // end of mapReduceTriplets
 
   override def outerJoinVertices[U: ClassManifest, VD2: ClassManifest]
