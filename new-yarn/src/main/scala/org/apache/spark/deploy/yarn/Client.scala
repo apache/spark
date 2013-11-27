@@ -65,9 +65,8 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
   def this(args: ClientArguments) = this(new Configuration(), args)
 
-  def run() {
+  def runApp(): ApplicationId = {
     validateArgs()
-
     // Initialize and start the client service.
     init(yarnConf)
     start()
@@ -104,8 +103,12 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     // Finally, submit and monitor the application.
     submitApp(appContext)
-    monitorApplication(appId)
+    appId
+  }
 
+  def run() {
+    val appId = runApp()
+    monitorApplication(appId)
     System.exit(0)
   }
 
@@ -406,7 +409,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       javaCommand + 
       " -server " +
       JAVA_OPTS +
-      " org.apache.spark.deploy.yarn.ApplicationMaster" +
+      " " + args.amClass +
       " --class " + args.userClass + 
       " --jar " + args.userJar +
       userArgsToString(args) +
