@@ -113,30 +113,7 @@ class DAGScheduler(
   // Warns the user if a stage contains a task with size greater than this value (in KB)
   val TASK_SIZE_TO_WARN = 100
 
-  private val eventProcessActor: ActorRef = env.actorSystem.actorOf(Props(new Actor {
-    override def preStart() {
-      context.system.scheduler.schedule(RESUBMIT_TIMEOUT milliseconds, RESUBMIT_TIMEOUT milliseconds) {
-        if (failed.size > 0) {
-          resubmitFailedStages()
-        }
-      }
-    }
-
-    /**
-     * The main event loop of the DAG scheduler, which waits for new-job / task-finished / failure
-     * events and responds by launching tasks. This runs in a dedicated thread and receives events
-     * via the eventQueue.
-     */
-    def receive = {
-      case event: DAGSchedulerEvent =>
-        logDebug("Got event of type " + event.getClass.getName)
-
-        if (!processEvent(event))
-          submitWaitingStages()
-        else
-          context.stop(self)
-    }
-  }))
+  private var eventProcessActor: ActorRef = _
 
   private[scheduler] val nextJobId = new AtomicInteger(0)
 
@@ -176,6 +153,34 @@ class DAGScheduler(
   val resultStageToJob = new HashMap[Stage, ActiveJob]
 
   val metadataCleaner = new MetadataCleaner(MetadataCleanerType.DAG_SCHEDULER, this.cleanup)
+
+  def start() {
+    eventProcessActor = env.actorSystem.actorOf(Props(new Actor {
+      var resubmissionTask: Cancellable = _
+
+      override def preStart() {
+        resubmissionTask = context.system.scheduler.schedule(
+          RESUBMIT_TIMEOUT.millis, RESUBMIT_TIMEOUT.millis, self, ResubmitFailedStages)
+      }
+
+      /**
+       * The main event loop of the DAG scheduler, which waits for new-job / task-finished / failure
+       * events and responds by launching tasks. This runs in a dedicated thread and receives events
+       * via the eventQueue.
+       */
+      def receive = {
+        case event: DAGSchedulerEvent =>
+          logDebug("Got event of type " + event.getClass.getName)
+
+          if (!processEvent(event)) {
+            submitWaitingStages()
+          } else {
+            resubmissionTask.cancel()
+            context.stop(self)
+          }
+      }
+    }))
+  }
 
   def addSparkListener(listener: SparkListener) {
     listenerBus.addListener(listener)
@@ -456,6 +461,11 @@ class DAGScheduler(
 
       case TaskSetFailed(taskSet, reason) =>
         abortStage(stageIdToStage(taskSet.stageId), reason)
+
+      case ResubmitFailedStages =>
+        if (failed.size > 0) {
+          resubmitFailedStages()
+        }
 
       case StopDAGScheduler =>
         // Cancel any active jobs
@@ -900,7 +910,9 @@ class DAGScheduler(
   }
 
   def stop() {
-    eventProcessActor ! StopDAGScheduler
+    if (eventProcessActor != null) {
+      eventProcessActor ! StopDAGScheduler
+    }
     metadataCleaner.cancel()
     taskSched.stop()
   }
