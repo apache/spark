@@ -326,8 +326,12 @@ object Hive {
       val (Some(destClause) ::
           Some(selectClause) ::
           whereClause ::
+          groupByClause ::
           orderByClause ::
-          limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_ORDERBY", "TOK_LIMIT"), insertClauses)
+          limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_LIMIT"), insertClauses)
+
+      println(dumpTree(node))
+      println(groupByClause)
 
       val relations = nodeToPlan(fromClause)
       val withWhere = whereClause.map { whereNode =>
@@ -335,13 +339,20 @@ object Hive {
         Filter(nodeToExpr(whereExpr), relations)
       }.getOrElse(relations)
 
-      val withProject = Project(nameExpressions(selectClause.getChildren.map(selExprNodeToExpr)), withWhere)
+      val selectExpressions = nameExpressions(selectClause.getChildren.map(selExprNodeToExpr))
+
+      val withProject = groupByClause match {
+        case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
+        case None => Project(selectExpressions, withWhere)
+      }
+
       val withSort = orderByClause.map(_.getChildren.map(nodeToSortOrder)).map(Sort(_, withProject)).getOrElse(withProject)
       val withLimit = limitClause.map(l => nodeToExpr(l.getChildren.head)).map(StopAfter(_, withSort)).getOrElse(withSort)
 
       nodeToDest(
         destClause,
         withLimit)
+
     case Token("TOK_FROM",
           Token("TOK_SUBQUERY",
             query :: alias :: Nil) :: Nil) =>
@@ -396,6 +407,9 @@ object Hive {
     case Token("TOK_ALLCOLREF", Nil) => Star
     case Token("TOK_FUNCTION", Token("AVG", Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token("count", Nil) :: arg :: Nil) => Count(nodeToExpr(arg))
+    case Token("TOK_FUNCTIONSTAR", Token("count", Nil) :: Nil) => Count(Literal(1))
+    case Token("TOK_FUNCTION", Token("sum", Nil) :: arg :: Nil) => Sum(nodeToExpr(arg))
+    case Token("TOK_FUNCTIONDI", Token("count", Nil) :: args) => CountDistinct(args.map(nodeToExpr))
     case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
     case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))

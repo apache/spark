@@ -68,7 +68,7 @@ object TestShark {
   /**
    * Runs the specified SQL query using Hive.
    */
-  def runSqlHive(sql: String) = sc.sql(sql)
+  def runSqlHive(sql: String) = sc.sql(rewritePaths(sql))
 
   /** Returns the value of specified environmental variable as a [[java.io.File]] after checking to ensure it exists */
   private def envVarToFile(envVar: String): File = {
@@ -77,6 +77,12 @@ object TestShark {
     assert(ret.exists(), s"Specified $envVar '${ret.getCanonicalPath}' does not exist.")
     ret
   }
+
+  private def rewritePaths(cmd: String): String =
+    if(cmd startsWith "LOAD")
+      cmd.replaceAll("\\.\\.", hiveDevHome.getCanonicalPath)
+    else
+      cmd
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
@@ -123,12 +129,6 @@ object TestShark {
     lazy val executedPlan = PrepareForExecution(sharkPlan)
 
     lazy val toRdd = execute().getOrElse(sys.error("No result for this query type."))
-
-    private def rewritePaths(cmd: String): String =
-      if(cmd startsWith "LOAD")
-        cmd.replaceAll("\\.\\.", hiveDevHome.getCanonicalPath)
-      else
-        cmd
 
     def execute() = analyzed match {
       case NativeCommand(cmd) => runSqlHive(rewritePaths(cmd)); None
