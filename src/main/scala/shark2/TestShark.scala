@@ -124,8 +124,15 @@ object TestShark {
 
     lazy val toRdd = execute().getOrElse(sys.error("No result for this query type."))
 
+    private def rewritePaths(cmd: String): String =
+      if(cmd startsWith "LOAD")
+        cmd.replaceAll("\\.\\.", hiveDevHome.getCanonicalPath)
+      else
+        cmd
+
     def execute() = analyzed match {
-      case NativeCommand(cmd) => runSqlHive(cmd); None
+      case NativeCommand(cmd) => runSqlHive(rewritePaths(cmd)); None
+      case ConfigurationAssignment(cmd) => runSqlHive(cmd); None
       case _ => Some(executedPlan.execute())
     }
 
