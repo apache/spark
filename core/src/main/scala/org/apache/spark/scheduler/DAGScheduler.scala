@@ -167,6 +167,9 @@ class DAGScheduler(
    */
   def start() {
     eventProcessActor = env.actorSystem.actorOf(Props(new Actor {
+      /**
+       * A handle to the periodical task, used to cancel the task when the actor is stopped.
+       */
       var resubmissionTask: Cancellable = _
 
       override def preStart() {
