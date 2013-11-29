@@ -162,8 +162,8 @@ class SparkContext(
     val LOCAL_CLUSTER_REGEX = """local-cluster\[\s*([0-9]+)\s*,\s*([0-9]+)\s*,\s*([0-9]+)\s*]""".r
     // Regular expression for connecting to Spark deploy clusters
     val SPARK_REGEX = """spark://(.*)""".r
-    // Regular expression for connection to Mesos cluster
-    val MESOS_REGEX = """mesos://(.*)""".r
+    // Regular expression for connection to Mesos cluster by mesos:// or zk:// url
+    val MESOS_REGEX = """(mesos|zk)://.*""".r
     // Regular expression for connection to Simr cluster
     val SIMR_REGEX = """simr://(.*)""".r
 
@@ -251,14 +251,15 @@ class SparkContext(
         scheduler.initialize(backend)
         scheduler
 
-      case MESOS_REGEX(mesosUrl) =>
+      case mesosUrl @ MESOS_REGEX(_) =>
         MesosNativeLibrary.load()
         val scheduler = new ClusterScheduler(this)
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
+        val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, this, mesosUrl, appName)
+          new CoarseMesosSchedulerBackend(scheduler, this, url, appName)
         } else {
-          new MesosSchedulerBackend(scheduler, this, mesosUrl, appName)
+          new MesosSchedulerBackend(scheduler, this, url, appName)
         }
         scheduler.initialize(backend)
         scheduler
