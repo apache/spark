@@ -92,6 +92,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
           } else {
             arg
           }
+      case args: Seq[_] => args.map {
+        case arg: TreeNode[_] if(children contains arg) =>
+          val newChild = arg.asInstanceOf[BaseType].transform(rule)
+          if(!(newChild fastEquals arg)) {
+            changed = true
+            newChild
+          } else {
+            arg
+          }
+        case other => other
+      }
       case nonChild: AnyRef => nonChild
     }.toArray
     if(changed) makeCopy(newArgs) else this
