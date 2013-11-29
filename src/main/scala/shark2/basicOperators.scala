@@ -47,6 +47,25 @@ case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) 
   def execute() = sc.makeRDD(child.execute().take(limit),1)
 }
 
+case class Aggregate(groupingExpressions: Seq[Expression],
+                     aggregateExpressions: Seq[NamedExpression],
+                     child: SharkPlan) extends UnaryNode {
+  def output = aggregateExpressions.map(_.toAttribute)
+  def execute() = attachTree(this, "execute") {
+    val grouped = child.execute().map(row => (groupingExpressions.map(Evaluate(_, Vector(row))), row)).groupByKey()
+    grouped.map {
+      case (group, rows) =>
+        // TODO: Handle other types of expressions that build on aggregate expressions.
+        aggregateExpressions.map {
+          case BoundReference(0, idx, _) => rows.head(idx) // Assume that this is an 'Any'
+          case Alias(Sum(e), _) => rows.map(r => Evaluate(e, Vector(r)).asInstanceOf[Int]).sum
+          case Alias(Count(e), _) => rows.map(r => Evaluate(e, Vector(r))).filter(_ != null).size
+          case Alias(CountDistinct(exprs), _) => rows.map(r => exprs.map(Evaluate(_, Vector(r)))).filter(_.map(_ != null).reduceLeft(_ && _)).distinct.size
+        }.toIndexedSeq
+    }
+  }
+}
+
 /**
  * Uses spark Accumulators to perform global aggregation.
  *

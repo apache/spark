@@ -37,6 +37,12 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
       (3, 2) :: Nil
     )
 
+  val testData3 =
+    logical.LocalRelation('a.int, 'b.int).loadData(
+      (1, null) ::
+      (2, 2) :: Nil
+  )
+
   test("table scan") {
     checkAnswer(
       testData,
@@ -87,6 +93,18 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
     checkAnswer(
       testData2.groupBy()(Count(1)),
       testData2.data.size
+    )
+  }
+
+  test("null count") {
+    checkAnswer(
+      testData3.groupBy('a)('a, Count('b)),
+      Seq((1,0), (2, 1))
+    )
+
+    checkAnswer(
+      testData3.groupBy()(Count('a), Count('b), Count(1), CountDistinct('a :: Nil), CountDistinct('b :: Nil)),
+      (2, 1, 2, 2, 1) :: Nil
     )
   }
 

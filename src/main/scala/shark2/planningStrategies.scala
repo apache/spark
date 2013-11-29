@@ -43,6 +43,28 @@ abstract trait PlanningStrategies {
     }
   }
 
+  /**
+   * Aggregate functions that use sparks accumulator functionality.
+   */
+  object SparkAggregates extends Strategy {
+    val allowedAggregates = Set[Class[_]](
+      classOf[Count],
+      classOf[Average],
+      classOf[Sum])
+
+    /** Returns true if [[exprs]] contains only aggregates that can be computed using Acumulators. */
+    def onlyAllowedAggregates(exprs: Seq[Expression]): Boolean = {
+      val aggs = exprs.flatMap(_.collect { case a: AggregateExpression => a}).map(_.getClass)
+      aggs.map(allowedAggregates contains _).reduceLeft(_ && _)
+    }
+
+    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
+      case logical.Aggregate(Nil, agg, child) if onlyAllowedAggregates(agg) =>
+        shark2.SparkAggregate(agg, planLater(child))(sc) :: Nil
+      case _ => Nil
+    }
+  }
+
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
@@ -52,8 +74,8 @@ abstract trait PlanningStrategies {
         shark2.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         shark2.Filter(condition, planLater(child)) :: Nil
-      case logical.Aggregate(Nil, agg, child) =>
-        shark2.SparkAggregate(agg, planLater(child))(sc) :: Nil
+      case logical.Aggregate(group, agg, child) =>
+        shark2.Aggregate(group, agg, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         shark2.LocalRelation(output, data.map(_.productIterator.toVector))(sc) :: Nil
       case logical.StopAfter(limit, child) =>
