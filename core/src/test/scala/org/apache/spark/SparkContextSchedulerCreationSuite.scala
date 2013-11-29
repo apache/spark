@@ -99,9 +99,11 @@ class SparkContextSchedulerCreationSuite
       case e: Throwable => fail(e)
     }
   }
+
   test("yarn-standalone") {
     testYarn("yarn-standalone", "org.apache.spark.scheduler.cluster.YarnClusterScheduler")
   }
+
   test("yarn-client") {
     testYarn("yarn-client", "org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
   }
@@ -120,14 +122,17 @@ class SparkContextSchedulerCreationSuite
       case e: Throwable => fail(e)
     }
   }
+
   test("mesos fine-grained") {
     System.setProperty("spark.mesos.coarse", "false")
     testMesos("mesos://localhost:1234", classOf[MesosSchedulerBackend])
   }
+
   test("mesos coarse-grained") {
     System.setProperty("spark.mesos.coarse", "true")
     testMesos("mesos://localhost:1234", classOf[CoarseMesosSchedulerBackend])
   }
+
   test("mesos with zookeeper") {
     System.setProperty("spark.mesos.coarse", "false")
     testMesos("zk://localhost:1234,localhost:2345", classOf[MesosSchedulerBackend])
