@@ -330,9 +330,6 @@ object Hive {
           orderByClause ::
           limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_LIMIT"), insertClauses)
 
-      println(dumpTree(node))
-      println(groupByClause)
-
       val relations = nodeToPlan(fromClause)
       val withWhere = whereClause.map { whereNode =>
         val Seq(whereExpr) = whereNode.getChildren().toSeq
