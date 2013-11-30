@@ -137,7 +137,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("VertexSetRDD") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)
-      val b = VertexSetRDD(a).mapValues(x => -x)
+      val b = VertexSetRDD(a).mapValues(x => -x).cache() // Allow joining b with a derived RDD of b
       assert(b.count === 101)
       assert(b.leftJoin(a){ (id, a, bOpt) => a + bOpt.get }.map(x=> x._2).reduce(_+_) === 0)
       val c = b.aggregateUsingIndex[Long, (Long, Long)](a, (x, y) => x)
