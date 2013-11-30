@@ -24,15 +24,9 @@ private class PairwiseRRDD(
   override def getPartitions = parent.partitions
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Array[Byte], Array[Byte])] = {
-    // TODO: implement me
-
-//    parent.iterator(split, context).grouped(2).map {
-//      case Seq(keyBytes, valBytes) => (keyBytes, valBytes)
-//      case x => throw new SparkContext("PairwiseRRDD: un")
-//    }
 
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-    val pb = SparkRHelper.rPairwiseWorkerProcessBuilder
+    val pb = SparkRHelper.rWorkerProcessBuilder
 
     val proc = pb.start()
     val env = SparkEnv.get
@@ -68,10 +62,6 @@ private class PairwiseRRDD(
         dataOut.writeInt(functionDependencies.length)
         dataOut.write(functionDependencies, 0, functionDependencies.length)
 
-//        val iter = parent.iterator(split, context)
-
-//        println("***********iter.length = " + iter.length)
-
         dataOut.writeInt(parent.iterator(split, context).length)
 
         // TODO: is it okay to use parent as opposed to firstParent?
@@ -89,7 +79,6 @@ private class PairwiseRRDD(
             }
           case _ => throw new SparkException("PairwiseRRDD: unexpected element (not (Array[Byte], Array[Bytes]))")
         }
-//        dataOut.writeInt(0) // End of output
         stream.close()
       }
     }.start()
@@ -112,14 +101,6 @@ private class PairwiseRRDD(
       private def read(): (Array[Byte], Array[Byte]) = {
         try {
           val length = dataStream.readInt()
-          // logError("READ length " + length)
-          // val lengthStr = Option(dataStream.readLine()).getOrElse("0").trim()
-          // var length = 0
-          // try {
-          //   length = lengthStr.toInt
-          // } catch {
-          //   case nfe: NumberFormatException =>
-          // }
 
           length match {
             case length if length == 2 =>
@@ -162,9 +143,6 @@ class RRDD[T: ClassManifest](
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
 
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-    // val depsFileName = new File(depsFile).getName
-    // val localDepsFile = SparkFiles.get(depsFileName)
-
     val pb = SparkRHelper.rWorkerProcessBuilder
 
     val proc = pb.start()
@@ -198,11 +176,11 @@ class RRDD[T: ClassManifest](
 
         dataOut.writeInt(if(dataSerialized) 1 else 0)
 
-        // dataOut.writeInt(localDepsFile.length)
-        // dataOut.writeBytes(localDepsFile)
-
         dataOut.writeInt(functionDependencies.length)
         dataOut.write(functionDependencies, 0, functionDependencies.length)
+
+        // Special flag that tells the worker that I am a normal RRDD.
+        dataOut.writeInt(-1)
 
         for (elem <- firstParent[T].iterator(split, context)) {
           if (dataSerialized) {
@@ -235,14 +213,6 @@ class RRDD[T: ClassManifest](
       private def read(): Array[Byte] = {
         try {
           val length = dataStream.readInt()
-          // logError("READ length " + length)
-          // val lengthStr = Option(dataStream.readLine()).getOrElse("0").trim()
-          // var length = 0
-          // try {
-          //   length = lengthStr.toInt
-          // } catch {
-          //   case nfe: NumberFormatException =>
-          // }
 
           length match {
             case length if length > 0 =>
@@ -301,8 +271,6 @@ object RRDD {
 
 object SparkRHelper {
 
-  // FIXME: my eyes bleed...
-
   lazy val rWorkerProcessBuilder = {
     val rCommand = "Rscript"
     val rOptions = "--vanilla"
@@ -311,18 +279,6 @@ object SparkRHelper {
       case None => sys.error("SPARK_HOME not set as an environment variable.")
     }
     val rExecScript = sparkHome + "/R/pkg/inst/worker/worker.R"
-    new ProcessBuilder(List(rCommand, rOptions, rExecScript))
-  }
-
-
-  lazy val rPairwiseWorkerProcessBuilder = {
-    val rCommand = "Rscript"
-    val rOptions = "--vanilla"
-    val sparkHome = Option(new ProcessBuilder().environment().get("SPARK_HOME")) match {
-      case Some(path) => path
-      case None => sys.error("SPARK_HOME not set as an environment variable.")
-    }
-    val rExecScript = sparkHome + "/R/pkg/inst/worker/pairwiseWorker.R"
     new ProcessBuilder(List(rCommand, rOptions, rExecScript))
   }
 
