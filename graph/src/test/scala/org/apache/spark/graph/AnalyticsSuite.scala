@@ -54,7 +54,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   test("Star PageRank") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val nVertices = 100
-      val starGraph = GraphGenerators.starGraph(sc, nVertices)
+      val starGraph = GraphGenerators.starGraph(sc, nVertices).cache()
       val resetProb = 0.15
       val prGraph1 = Analytics.pagerank(starGraph, 1, resetProb)
       val prGraph2 = Analytics.pagerank(starGraph, 2, resetProb)
@@ -86,7 +86,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
   test("Grid PageRank") {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10)
+      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).cache()
       val resetProb = 0.15
       val prGraph1 = Analytics.pagerank(gridGraph, 50, resetProb).cache()
       val prGraph2 = Analytics.deltaPagerank(gridGraph, 0.0001, resetProb).cache()
@@ -109,7 +109,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
   test("Grid Connected Components") {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10)
+      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).cache()
       val ccGraph = Analytics.connectedComponents(gridGraph).cache()
       val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
       assert(maxCCid === 0)
@@ -119,7 +119,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
   test("Reverse Grid Connected Components") {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).reverse
+      val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).reverse.cache()
       val ccGraph = Analytics.connectedComponents(gridGraph).cache()
       val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
       assert(maxCCid === 0)
@@ -132,7 +132,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val chain1 = (0 until 9).map(x => (x, x+1) )
       val chain2 = (10 until 20).map(x => (x, x+1) )
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
-      val twoChains = Graph.fromEdgeTuples(rawEdges, 1.0)
+      val twoChains = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
       val ccGraph = Analytics.connectedComponents(twoChains).cache()
       val vertices = ccGraph.vertices.collect()
       for ( (id, cc) <- vertices ) {
@@ -156,7 +156,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val chain1 = (0 until 9).map(x => (x, x+1) )
       val chain2 = (10 until 20).map(x => (x, x+1) )
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
-      val twoChains = Graph.fromEdgeTuples(rawEdges, true).reverse
+      val twoChains = Graph.fromEdgeTuples(rawEdges, true).reverse.cache()
       val ccGraph = Analytics.connectedComponents(twoChains).cache()
       val vertices = ccGraph.vertices.collect
       for ( (id, cc) <- vertices ) {

@@ -268,7 +268,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   override def outerJoinVertices[U: ClassManifest, VD2: ClassManifest]
     (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2): Graph[VD2, ED] = {
     ClosureCleaner.clean(updateF)
-    println("type of --------------------------- " + updates)
     val newVTable = vTable.leftJoin(updates)(updateF)
     new GraphImpl(newVTable, eTable, vertexPlacement, partitioner)
   }

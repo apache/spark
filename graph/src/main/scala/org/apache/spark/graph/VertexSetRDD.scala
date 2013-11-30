@@ -276,7 +276,7 @@ class VertexSetRDD[@specialized VD: ClassManifest](
     // Test if the other vertex is a VertexSetRDD to choose the optimal join strategy.
     // If the other set is a VertexSetRDD then we use the much more efficient leftZipJoin
     other match {
-      case other: VertexSetRDD[VD2] =>
+      case other: VertexSetRDD[_] =>
         leftZipJoin(other)(f)
       case _ =>
         new VertexSetRDD[VD3](
