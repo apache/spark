@@ -45,10 +45,13 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   /** Return a RDD that brings edges with its source and destination vertices together. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
+    val vdManifest = classManifest[VD]
+    val edManifest = classManifest[ED]
+
     eTable.zipPartitions(vTableReplicated.bothAttrs) { (eTableIter, vTableReplicatedIter) =>
       val (_, edgePartition) = eTableIter.next()
       val (_, (vidToIndex, vertexArray)) = vTableReplicatedIter.next()
-      new EdgeTripletIterator(vidToIndex, vertexArray, edgePartition)
+      new EdgeTripletIterator(vidToIndex, vertexArray, edgePartition)(vdManifest, edManifest)
     }
   }
 
@@ -174,10 +177,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // this graph
     val newVTable = vTable.mapVertexPartitions(_.filter(vpred).reindex())
 
+    val edges = triplets.filter { et =>
+      vpred(et.srcId, et.srcAttr) && vpred(et.dstId, et.dstAttr) && epred(et)
+    }.map(et => Edge(et.srcId, et.dstId, et.attr))
+
     // Restrict the set of edges to those that satisfy the vertex and the edge predicate.
-    val newETable = createETable(
-      triplets.filter(t => vpred(t.srcId, t.srcAttr) && vpred(t.dstId, t.dstAttr) && epred(t))
-        .map(t => Edge(t.srcId, t.dstId, t.attr)), partitioner)
+    val newETable = createETable(edges, partitioner)
 
     // Construct the VertexPlacement map
     val newVertexPlacement = new VertexPlacement(newETable, newVTable)

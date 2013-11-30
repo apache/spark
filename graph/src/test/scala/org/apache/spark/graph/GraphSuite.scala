@@ -136,12 +136,17 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
   test("subgraph") {
     withSpark(new SparkContext("local", "test")) { sc =>
+      // Create a star graph of 10 veritces.
       val n = 10
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "defaultValue")
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "v")
+      // Take only vertices whose vids are even
       val subgraph = star.subgraph(vpred = (vid, attr) => vid % 2 == 0)
-      assert(subgraph.vertices.collect().toSet ===
-        (0 to n / 2).map(x => (x * 2, "defaultValue")).toSet)
-      assert(subgraph.edges.collect().toSet === (1 to n / 2).map(x => Edge(0, x * 2)).toSet)
+
+      // We should have 5 vertices.
+      assert(subgraph.vertices.collect().toSet === (0 to n / 2).map(x => (x * 2, "v")).toSet)
+
+      // And 4 edges.
+      assert(subgraph.edges.map(_.copy()).collect().toSet === (1 to n / 2).map(x => Edge(0, x * 2, 1)).toSet)
     }
   }
 
