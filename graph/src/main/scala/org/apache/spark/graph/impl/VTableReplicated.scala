@@ -49,17 +49,17 @@ class VTableReplicated[VD: ClassManifest](
     // vertexPlacement
     val msgsByPartition = placement.zipPartitions(vTable.partitionsRDD) {
       (pid2vidIter, vertexPartIter) =>
-        val pid2vid = pid2vidIter.next()
-        val vertexPart = vertexPartIter.next()
-
-        val vmap = new PrimitiveKeyOpenHashMap(vertexPart.index, vertexPart.values)
+        val pid2vid: Array[Array[Vid]] = pid2vidIter.next()
+        val vertexPart: VertexPartition[VD] = vertexPartIter.next()
         val output = new Array[(Pid, VertexAttributeBlock[VD])](pid2vid.size)
         for (pid <- 0 until pid2vid.size) {
-          val block = new VertexAttributeBlock(pid2vid(pid), pid2vid(pid).map(vid => vmap(vid)))
+          val block = new VertexAttributeBlock(
+            pid2vid(pid), pid2vid(pid).map(vid => vertexPart(vid)))
           output(pid) = (pid, block)
         }
         output.iterator
     }.partitionBy(eTable.partitioner.get).cache()
+    // TODO: Consider using a specialized shuffler.
 
     // Within each edge partition, create a local map from vid to an index into
     // the attribute array. Each map contains a superset of the vertices that it

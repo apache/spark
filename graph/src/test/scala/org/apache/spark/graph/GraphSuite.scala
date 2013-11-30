@@ -20,15 +20,6 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("mapReduceTriplets") {
-    withSpark(new SparkContext("local", "test")) { sc =>
-      val edges = sc.parallelize((0L to 100L).zip((1L to 99L) :+ 0L))
-      val graph = Graph.fromEdgeTuples(edges, 1.0F)
-
-      val d = graph.mapReduceTriplets[Int](et => Iterator((et.srcId, 0)), (a, b) => a + b)
-    }
-  }
-
   test("Graph Creation with invalid vertices") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rawEdges = (0L to 98L).zip((1L to 99L) :+ 0L)
@@ -63,13 +54,6 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
       val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 0)
-
-      println("--------------------------------------- star vertices")
-      println(star.vertices.partitionsRDD.map { v => v.index.toString }.collect().toSeq)
-
-      println("---------------------------------------  starDeg")
-      println(star.degrees.partitionsRDD.map { v => v.index.toString }.collect().toSeq)
-
       val starDeg = star.joinVertices(star.degrees){ (vid, oldV, deg) => deg }
       val neighborDegreeSums = starDeg.mapReduceTriplets(
         edge => Iterator((edge.srcId, edge.dstAttr), (edge.dstId, edge.srcAttr)),

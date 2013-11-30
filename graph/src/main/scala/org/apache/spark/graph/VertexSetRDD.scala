@@ -184,27 +184,6 @@ class VertexSetRDD[@specialized VD: ClassManifest](
     this.mapVertexPartitions(_.map(f))
 
   /**
-   * Fill in missing values for all vertices in the index.
-   *
-   * @param missingValue the value to use for vertices that don't currently have values.
-   * @return A VertexSetRDD with a value for all vertices.
-   */
-  def fillMissing(missingValue: VD): VertexSetRDD[VD] = {
-    // TODO: I think this can be done using a join.
-    this.mapVertexPartitions { part =>
-      // Allocate a new values array with missing value as the default
-      val newValues = Array.fill(part.values.size)(missingValue)
-      // Copy over the old values
-      part.mask.iterator.foreach { ind =>
-        newValues(ind) = part.values(ind)
-      }
-      // Create a new mask with all vertices in the index
-      val newMask = part.index.getBitSet
-      new VertexPartition(part.index, newValues, newMask)
-    }
-  }
-
-  /**
    * Inner join this VertexSet with another VertexSet which has the
    * same Index.  This function will fail if both VertexSets do not
    * share the same index.  The resulting vertex set will only contain

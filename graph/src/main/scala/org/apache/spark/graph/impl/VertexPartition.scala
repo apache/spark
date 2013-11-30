@@ -30,9 +30,9 @@ private[graph] object VertexPartition {
 
 private[graph]
 class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
-    val index: VertexIdToIndexMap,
-    val values: Array[VD],
-    val mask: BitSet)
+    private val index: VertexIdToIndexMap,
+    private val values: Array[VD],
+    private val mask: BitSet)
   extends Logging {
 
   // TODO: Encapsulate the internal data structures in this class so callers don't need to
@@ -42,7 +42,10 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
 
   val capacity: Int = index.capacity
 
-  def size: Int = mask.cardinality
+  def size: Int = mask.cardinality()
+
+  /** Return the vertex attribute for the given vertex ID. */
+  def apply(vid: Vid): VD = values(index.getPos(vid))
 
   /**
    * Pass each vertex attribute along with the vertex id through a map
