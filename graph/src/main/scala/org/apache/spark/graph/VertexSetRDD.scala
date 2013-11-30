@@ -101,6 +101,11 @@ class VertexSetRDD[@specialized VD: ClassManifest](
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   override def cache(): VertexSetRDD[VD] = persist()
 
+  /** Return the number of vertices in this set. */
+  override def count(): Long = {
+    partitionsRDD.map(_.size).reduce(_ + _)
+  }
+
   /**
    * Provide the `RDD[(Vid, VD)]` equivalent output.
    */

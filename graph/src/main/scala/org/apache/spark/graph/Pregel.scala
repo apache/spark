@@ -139,8 +139,6 @@ object Pregel {
    * @param initialMsg the message each vertex will receive at the on
    * the first iteration.
    *
-   * @param numIter the number of iterations to run this computation.
-   *
    * @param vprog the user-defined vertex program which runs on each
    * vertex and receives the inbound message and computes a new vertex
    * value.  On the first iteration the vertex program is invoked on
