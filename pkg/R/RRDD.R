@@ -3,8 +3,7 @@
 #setOldClass("jobjRef")
 
 setClass("RRDD", slots = list(jrdd = "jobjRef",
-                              serialized = "logical",
-                              pairwise = "logical"))
+                              serialized = "logical"))
 
 setValidity("RRDD",
             function(object) {
@@ -18,8 +17,8 @@ setValidity("RRDD",
             })
 
 # Constructor of the RRDD class.
-RRDD <- function(jrdd, serialized = TRUE, pairwise = FALSE) {
-  new("RRDD", jrdd = jrdd, serialized = serialized, pairwise = pairwise)
+RRDD <- function(jrdd, serialized = TRUE) {
+  new("RRDD", jrdd = jrdd, serialized = serialized)
 }
 
 
@@ -38,13 +37,12 @@ setGeneric("collect", function(rrdd, ...) { standardGeneric("collect") })
 setMethod("collect",
           signature(rrdd = "RRDD"),
           function(rrdd, flatten = TRUE) {
+            # Assumes a pairwise RRDD is backed by a JavaPairRDD.
+            isPairwise <- grep("spark.api.java.JavaPairRDD",
+                               rrdd@jrdd$getClass()$getName())
             collected <- .jcall(rrdd@jrdd, "Ljava/util/List;", "collect")
-            convertJListToRList(collected, if (rrdd@pairwise) FALSE else flatten)
-            # if (rrdd@pairwise) {
-              # convertJListToRList(collected, FALSE)
-            # } else {
-              # convertJListToRList(collected, flatten)
-            # }
+            convertJListToRList(collected, if (length(isPairwise) == 1) FALSE
+                                           else flatten)
           })
 
 
@@ -94,7 +92,7 @@ setMethod("lapplyPartition",
                            depsBinArr,
                            X@jrdd$classManifest())
             jrdd <- rrddRef$asJavaRDD()
-            RRDD(jrdd, TRUE, X@pairwise)
+            RRDD(jrdd, TRUE)
           })
 
 setGeneric("reduce", function(rrdd, func) { standardGeneric("reduce") })
@@ -199,7 +197,7 @@ setMethod("partitionBy",
             # shuffled acutal content key-val pairs.
             r <- javaPairRDD$values()
 
-            RRDD(r, rrdd@serialized, TRUE)
+            RRDD(r, rrdd@serialized)
           })
 
 

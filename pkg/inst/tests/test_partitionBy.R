@@ -20,6 +20,9 @@ partitionByParity <- function(key) { if (key %% 2 == 1) 3 else 100 }
 # Tests
 
 test_that("partitionBy() partitions data correctly", {
+
+  # Partition by magnitude
+
   rrdd <- parallelize(jsc, numPairs, length(numPairs), pairwise = TRUE)
   resultRRDD <- partitionBy(rrdd, 2L, partitionByMagnitude)
 
@@ -31,6 +34,7 @@ test_that("partitionBy() partitions data correctly", {
   expect_equal(actual_first, expected_first)
   expect_equal(actual_second, expected_second)
 
+  # Partition by parity
 
   rrdd <- parallelize(jsc, numPairs, 1L, pairwise = TRUE)
   resultRRDD <- partitionBy(rrdd, numPartitions = 2L, partitionByParity)

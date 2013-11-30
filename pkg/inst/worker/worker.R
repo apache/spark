@@ -16,7 +16,6 @@ sparkHome <- Sys.getenv("SPARK_HOME")
 
 # NOTE: We use "stdin" to get the process stdin instead of the command line
 inputCon  <- file("stdin", open = "rb")
-#outputFileName <- tempfile(pattern="spark-exec", fileext=".out")
 
 outputFileName <- readLines(inputCon, n = 1)
 outputCon <- file(outputFileName, open="wb")

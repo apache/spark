@@ -13,7 +13,7 @@ textFile <- function(jsc, name, minSplits=NULL) {
   }
   jrdd <- .jcall(jsc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", name,
                  as.integer(minSplits))
-  RRDD(jrdd, FALSE, FALSE)
+  RRDD(jrdd, FALSE)
 }
 
 # Distribute a local R homogeneous list to form an RRDD[Array[Byte]]. If a
@@ -80,5 +80,5 @@ parallelize <- function(jsc, coll, numSlices = 1, pairwise = FALSE) {
                  jsc,
                  javaSerializedSlices)
 
-  RRDD(jrdd, TRUE, pairwise)
+  RRDD(jrdd, TRUE)
 }
