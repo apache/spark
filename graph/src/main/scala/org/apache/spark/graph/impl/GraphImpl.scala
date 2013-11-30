@@ -258,9 +258,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       }
     }
 
-    // Permit joining the result of mapReduceTriplets back with vTable
-    vTable.cache()
-
     // do the final reduction reusing the index map
     vTable.aggregateUsingIndex(preAgg, reduceFunc)
   } // end of mapReduceTriplets
