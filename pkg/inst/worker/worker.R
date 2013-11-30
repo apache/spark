@@ -20,17 +20,20 @@ inputCon  <- file("stdin", open = "rb")
 outputFileName <- readLines(inputCon, n = 1)
 outputCon <- file(outputFileName, open="wb")
 
-# First read the function
+# First read the function; if used for pairwise RRDD, this is the hash function.
 execFunction <- unserialize(readRaw(inputCon))
 
+# read the isSerialized bit flag
 isSerialized <- readInt(inputCon)
 
+# read function dependencies
 execFunctionDeps <- readRaw(inputCon)
+
+# load the dependencies into current environment
 depsFileName <- tempfile(pattern="spark-exec", fileext=".deps")
 depsFile <- file(depsFileName, open="wb")
 writeBin(execFunctionDeps, depsFile, endian="big")
 close(depsFile)
-
 load(depsFileName, envir=environment(execFunction))
 unlink(depsFileName)
 
@@ -38,21 +41,54 @@ unlink(depsFileName)
 # interfering with outputStream
 sink(stderr())
 
-if (isSerialized) {
-  # Now read as many characters as described in funcLen
-  data <- unserialize(readRaw(inputCon))
+# If -1: read as normal RDD; if >= 0, treat as pairwise RDD and treat the int
+# as number of elements to read next.
+dataLen <- readInt(inputCon)
+
+if (dataLen == -1) {
+
+  if (isSerialized) {
+    # Now read as many characters as described in funcLen
+    data <- unserialize(readRaw(inputCon))
+  } else {
+    data <- readLines(inputCon)
+  }
+  output <- execFunction(data)
+  writeRaw(outputCon, output)
+
 } else {
-  data <- readLines(inputCon)
+
+  keyValPairs = list()
+
+  for (i in 1:dataLen) {
+    if (isSerialized) {
+      key <- unserialize(readRaw(inputCon))
+      val <- unserialize(readRaw(inputCon))
+      keyValPairs[[length(keyValPairs) + 1]] <- list(key, val)
+    } else {
+      # FIXME?
+      data <- readLines(inputCon)
+    }
+  }
+
+  # Step 1: convert the environment into a list of lists.
+  envirList <- as.list(execFunction(keyValPairs))
+  keyed = list()
+  for (key in names(envirList)) {
+    bucketList <- list(as.integer(key), envirList[[key]])
+    keyed[[length(keyed) + 1]] <- bucketList
+  }
+
+  # Step 2: write out all of the keyed list.
+  for (keyedEntry in keyed) {
+    writeInt(outputCon, 2L)
+    writeRaw(outputCon, keyedEntry[[1]])
+    writeRaw(outputCon, keyedEntry[[2]])
+  }
+
 }
 
-
-#sink(stderr())
-#print(execFunction)
-#sink()
-
-output <- execFunction(data)
-
-writeRaw(outputCon, output)
+# End of output
 writeInt(outputCon, 0L)
 
 close(outputCon)
