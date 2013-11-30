@@ -277,10 +277,8 @@ class VertexSetRDD[@specialized VD: ClassManifest](
     // If the other set is a VertexSetRDD then we use the much more efficient leftZipJoin
     other match {
       case other: VertexSetRDD[VD2] =>
-        println("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         leftZipJoin(other)(f)
       case _ =>
-        println("------------------------------------------------------")
         new VertexSetRDD[VD3](
           partitionsRDD.zipPartitions(
             other.partitionBy(this.partitioner.get), preservesPartitioning = true)

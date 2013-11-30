@@ -2,7 +2,7 @@ package org.apache.spark.graph.impl
 
 import org.apache.spark.util.collection.{BitSet, PrimitiveKeyOpenHashMap}
 
-import org.apache.spark.SparkException
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.graph._
 
 
@@ -32,7 +32,8 @@ private[graph]
 class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     val index: VertexIdToIndexMap,
     val values: Array[VD],
-    val mask: BitSet) {
+    val mask: BitSet)
+  extends Logging {
 
   // TODO: Encapsulate the internal data structures in this class so callers don't need to
   // understand the internal data structures. This can possibly be achieved by implementing
@@ -93,17 +94,19 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
       (other: VertexPartition[VD2])
       (f: (Vid, VD, VD2) => VD3): VertexPartition[VD3] = {
     if (index != other.index) {
-      throw new SparkException("can't zip join VertexSetRDDs with different indexes")
-    }
-    val newValues = new Array[VD3](capacity)
-    val newMask = mask & other.mask
+      logWarning("Joining two VertexPartitions with different indexes is slow.")
+      join(createUsingIndex(other.iterator))(f)
+    } else {
+      val newValues = new Array[VD3](capacity)
+      val newMask = mask & other.mask
 
-    var i = newMask.nextSetBit(0)
-    while (i >= 0) {
-      newValues(i) = f(index.getValue(i), values(i), other.values(i))
-      i = mask.nextSetBit(i + 1)
+      var i = newMask.nextSetBit(0)
+      while (i >= 0) {
+        newValues(i) = f(index.getValue(i), values(i), other.values(i))
+        i = mask.nextSetBit(i + 1)
+      }
+      new VertexPartition(index, newValues, newMask)
     }
-    new VertexPartition(index, newValues, newMask)
   }
 
   /** Left outer join another VertexPartition. */
@@ -111,17 +114,19 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
       (other: VertexPartition[VD2])
       (f: (Vid, VD, Option[VD2]) => VD3): VertexPartition[VD3] = {
     if (index != other.index) {
-      throw new SparkException("can't zip join VertexSetRDDs with different indexes")
-    }
-    val newValues = new Array[VD3](capacity)
+      logWarning("Joining two VertexPartitions with different indexes is slow.")
+      leftJoin(createUsingIndex(other.iterator))(f)
+    } else {
+      val newValues = new Array[VD3](capacity)
 
-    var i = mask.nextSetBit(0)
-    while (i >= 0) {
-      val otherV: Option[VD2] = if (other.mask.get(i)) Some(other.values(i)) else None
-      newValues(i) = f(index.getValue(i), values(i), otherV)
-      i = mask.nextSetBit(i + 1)
+      var i = mask.nextSetBit(0)
+      while (i >= 0) {
+        val otherV: Option[VD2] = if (other.mask.get(i)) Some(other.values(i)) else None
+        newValues(i) = f(index.getValue(i), values(i), otherV)
+        i = mask.nextSetBit(i + 1)
+      }
+      new VertexPartition(index, newValues, mask)
     }
-    new VertexPartition(index, newValues, mask)
   }
 
   /** Left outer join another iterator of messages. */
@@ -178,5 +183,5 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition(hashMap.keySet, hashMap._values, index.getBitSet)
   }
 
-  def iterator = mask.iterator.map(ind => (index.getValue(ind), values(ind)))
+  def iterator: Iterator[(Vid, VD)] = mask.iterator.map(ind => (index.getValue(ind), values(ind)))
 }
