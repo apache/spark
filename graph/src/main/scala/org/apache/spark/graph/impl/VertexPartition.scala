@@ -2,7 +2,7 @@ package org.apache.spark.graph.impl
 
 import org.apache.spark.util.collection.{BitSet, PrimitiveKeyOpenHashMap}
 
-import org.apache.spark.{Logging, SparkException}
+import org.apache.spark.Logging
 import org.apache.spark.graph._
 
 
@@ -184,8 +184,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     for ((k, v) <- this.iterator) {
       hashMap.setMerge(k, v, arbitraryMerge)
     }
-    // TODO: Is this a bug? Why are we using index.getBitSet here?
-    new VertexPartition(hashMap.keySet, hashMap._values, index.getBitSet)
+    new VertexPartition(hashMap.keySet, hashMap._values, hashMap.keySet.getBitSet)
   }
 
   def iterator: Iterator[(Vid, VD)] = mask.iterator.map(ind => (index.getValue(ind), values(ind)))
