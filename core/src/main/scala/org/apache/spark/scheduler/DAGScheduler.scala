@@ -413,7 +413,17 @@ class DAGScheduler(
   private[scheduler] def processEvent(event: DAGSchedulerEvent): Boolean = {
     event match {
       case JobSubmitted(jobId, rdd, func, partitions, allowLocal, callSite, listener, properties) =>
-        val finalStage = newStage(rdd, partitions.size, None, jobId, Some(callSite))
+        var finalStage: Stage = null
+        try {
+          // New stage creation at times and if its not protected, the scheduler thread is killed. 
+          // e.g. it can fail when jobs are run on HadoopRDD whose underlying hdfs files have been deleted
+          finalStage = newStage(rdd, partitions.size, None, jobId, Some(callSite))
+        } catch {
+          case e: Exception =>
+            logWarning("Creating new stage failed due to exception - job: " + jobId, e)
+            listener.jobFailed(e)
+            return false
+        }
         val job = new ActiveJob(jobId, finalStage, func, partitions, callSite, listener, properties)
         clearCacheLocs()
         logInfo("Got job " + job.jobId + " (" + callSite + ") with " + partitions.length +
