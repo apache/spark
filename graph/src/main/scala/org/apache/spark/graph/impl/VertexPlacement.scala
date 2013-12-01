@@ -11,9 +11,7 @@ import org.apache.spark.util.collection.PrimitiveVector
  * Stores the layout of replicated vertex attributes for GraphImpl. Tells each
  * partition of the vertex data where it should go.
  */
-class VertexPlacement(
-    eTable: RDD[(Pid, EdgePartition[ED])] forSome { type ED },
-    vTable: VertexSetRDD[_]) {
+class VertexPlacement(eTable: EdgeRDD[_], vTable: VertexRDD[_]) {
 
   val bothAttrs: RDD[Array[Array[Vid]]] = createPid2Vid(true, true)
   val srcAttrOnly: RDD[Array[Array[Vid]]] = createPid2Vid(true, false)
@@ -38,19 +36,19 @@ class VertexPlacement(
   private def createPid2Vid(
       includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[Vid]]] = {
     // Determine which vertices each edge partition needs by creating a mapping from vid to pid.
-    val vid2pid: RDD[(Vid, Pid)] = eTable.mapPartitions { iter =>
+    val vid2pid: RDD[(Vid, Pid)] = eTable.partitionsRDD.mapPartitions { iter =>
       val (pid: Pid, edgePartition: EdgePartition[_]) = iter.next()
       val numEdges = edgePartition.size
       val vSet = new VertexSet
       if (includeSrcAttr) {  // Add src vertices to the set.
-        var i = 0
+      var i = 0
         while (i < numEdges) {
           vSet.add(edgePartition.srcIds(i))
           i += 1
         }
       }
       if (includeDstAttr) {  // Add dst vertices to the set.
-        var i = 0
+      var i = 0
         while (i < numEdges) {
           vSet.add(edgePartition.dstIds(i))
           i += 1

@@ -35,11 +35,6 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     private val mask: BitSet)
   extends Logging {
 
-  // TODO: Encapsulate the internal data structures in this class so callers don't need to
-  // understand the internal data structures. This can possibly be achieved by implementing
-  // the aggregate and join functions in this class, and VertexSetRDD can simply call into
-  // that.
-
   val capacity: Int = index.capacity
 
   def size: Int = mask.cardinality()

@@ -18,7 +18,7 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
   var dstId: Vid = 0,
   /**
    * The attribute associated with the edge.
-   */ 
+   */
   var attr: ED = nullValue[ED]) {
 
   /**

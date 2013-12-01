@@ -228,7 +228,7 @@ object Analytics extends Logging {
     val graph = rawGraph.groupEdges( (a,b) => a ).cache
 
     // Construct set representations of the neighborhoods
-    val nbrSets: VertexSetRDD[VertexSet] =
+    val nbrSets: VertexRDD[VertexSet] =
       graph.collectNeighborIds(EdgeDirection.Both).mapValues { (vid, nbrs) =>
       val set = new VertexSet(4)
       var i = 0
@@ -263,7 +263,7 @@ object Analytics extends Logging {
       Iterator((et.srcId, counter), (et.dstId, counter))
     }
     // compute the intersection along edges
-    val counters: VertexSetRDD[Int] = setGraph.mapReduceTriplets(edgeFunc, _ + _)
+    val counters: VertexRDD[Int] = setGraph.mapReduceTriplets(edgeFunc, _ + _)
     // Merge counters with the graph and divide by two since each triangle is counted twice
     graph.outerJoinVertices(counters) {
       (vid, _, optCounter: Option[Int]) =>

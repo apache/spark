@@ -11,8 +11,8 @@ import org.apache.spark.graph._
  */
 private[impl]
 class VTableReplicated[VD: ClassManifest](
-    vTable: VertexSetRDD[VD],
-    eTable: RDD[(Pid, EdgePartition[ED])] forSome { type ED },
+    vTable: VertexRDD[VD],
+    eTable: EdgeRDD[_],
     vertexPlacement: VertexPlacement) {
 
   val bothAttrs: RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] =
@@ -37,8 +37,8 @@ class VTableReplicated[VD: ClassManifest](
   }
 
   private def createVTableReplicated[VD: ClassManifest](
-       vTable: VertexSetRDD[VD],
-       eTable: RDD[(Pid, EdgePartition[ED])] forSome { type ED },
+       vTable: VertexRDD[VD],
+       eTable: EdgeRDD[_],
        vertexPlacement: VertexPlacement,
        includeSrcAttr: Boolean,
        includeDstAttr: Boolean): RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] = {
@@ -66,7 +66,7 @@ class VTableReplicated[VD: ClassManifest](
     // will receive, because it stores vids from both the source and destination
     // of edges. It must always include both source and destination vids because
     // some operations, such as GraphImpl.mapReduceTriplets, rely on this.
-    val localVidMap = eTable.mapPartitions(_.map {
+    val localVidMap = eTable.partitionsRDD.mapPartitions(_.map {
       case (pid, epart) =>
         val vidToIndex = new VertexIdToIndexMap
         epart.foreach { e =>
