@@ -17,7 +17,7 @@
 
 package org.apache.spark.util
 
-import akka.actor.{ActorSystem, ExtendedActorSystem}
+import akka.actor.{SparkActorSystem, ActorSystem, ExtendedActorSystem}
 import com.typesafe.config.ConfigFactory
 import scala.concurrent.duration._
 import scala.concurrent.Await
@@ -70,7 +70,7 @@ private[spark] object AkkaUtils {
       |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
       """.stripMargin)
 
-    val actorSystem = ActorSystem(name, akkaConf)
+    val actorSystem = SparkActorSystem(name, akkaConf)
 
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
     val boundPort = provider.getDefaultAddress.port.get
