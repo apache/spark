@@ -16,11 +16,7 @@
  */
 package org.apache.spark.mllib.tree.model
 
-case class Split(feature: Int, threshold : Double, kind : String){
-  override def toString = "Feature = " + feature + ", threshold = " + threshold + ", kind =  " + kind
+case class Filter(split : Split, comparison : Int) {
+  // Comparison -1,0,1 signifies <.=,>
+  override def toString = " split = " + split + "comparison = " + comparison
 }
-
-class DummyLowSplit(kind : String) extends Split(Int.MinValue, Double.MinValue, kind)
-
-class DummyHighSplit(kind : String) extends Split(Int.MaxValue, Double.MaxValue, kind)
-

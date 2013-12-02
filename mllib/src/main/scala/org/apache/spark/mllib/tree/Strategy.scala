@@ -23,6 +23,6 @@ class Strategy (
                 val impurity : Impurity,
                 val maxDepth : Int,
                 val numSplits : Int,
-                val quantileCalculationStrategy : String = "sampleAndSort") {
+                val quantileCalculationStrategy : String = "sort") {
 
 }

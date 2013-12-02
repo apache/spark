@@ -16,6 +16,6 @@
  */
 package org.apache.spark.mllib.tree.model
 
-case class Bin(kind : String, lowSplit : Split, highSplit : Split) {
+case class Bin(lowSplit : Split, highSplit : Split, kind : String) {
 
 }
