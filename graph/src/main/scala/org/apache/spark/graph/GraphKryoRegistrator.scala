@@ -13,7 +13,6 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[Edge[Object]])
     kryo.register(classOf[MessageToPartition[Object]])
     kryo.register(classOf[VertexBroadcastMsg[Object]])
-    kryo.register(classOf[AggregationMsg[Object]])
     kryo.register(classOf[(Vid, Object)])
     kryo.register(classOf[EdgePartition[Object]])
     kryo.register(classOf[BitSet])

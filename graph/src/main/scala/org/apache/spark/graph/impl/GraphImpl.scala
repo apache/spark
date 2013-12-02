@@ -1,7 +1,7 @@
 package org.apache.spark.graph.impl
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.{HashPartitioner, Partitioner}
+import org.apache.spark.SparkContext._
 import org.apache.spark.graph._
 import org.apache.spark.graph.impl.GraphImpl._
 import org.apache.spark.graph.impl.MsgRDDFunctions._
@@ -213,7 +213,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // in the relevant position in an edge.
     val mapUsesSrcAttr = accessesVertexAttr[VD, ED](mapFunc, "srcAttr")
     val mapUsesDstAttr = accessesVertexAttr[VD, ED](mapFunc, "dstAttr")
-    val vs: RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] = vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr)
+    val vs = vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr)
 
     // Map and combine.
     val preAgg = edges.zipEdgePartitions(vs) { (edgePartition, vTableReplicatedIter) =>
@@ -254,9 +254,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         }
       }
       // construct an iterator of tuples. Iterator[(Vid, A)]
-      msgBS.iterator.map { ind =>
-        new AggregationMsg[A](vidToIndex.getValue(ind), msgArray(ind))
-      }
+      msgBS.iterator.map { ind => (vidToIndex.getValue(ind), msgArray(ind)) }
     }
 
     // do the final reduction reusing the index map
@@ -336,16 +334,16 @@ object GraphImpl {
    */
   protected def createETable[ED: ClassManifest](
       edges: RDD[Edge[ED]],
-      partitionStrategy: PartitionStrategy): EdgeRDD[ED] = {
-    // Get the number of partitions
-    val numPartitions = edges.partitions.size
+    partitionStrategy: PartitionStrategy): EdgeRDD[ED] = {
+      // Get the number of partitions
+      val numPartitions = edges.partitions.size
 
-    val eTable = edges.map { e =>
-      val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
+      val eTable = edges.map { e =>
+        val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
 
-      // Should we be using 3-tuple or an optimized class
-      new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
-    }
+        // Should we be using 3-tuple or an optimized class
+        new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
+      }
     .partitionBy(new HashPartitioner(numPartitions))
     .mapPartitionsWithIndex( { (pid, iter) =>
       val builder = new EdgePartitionBuilder[ED]

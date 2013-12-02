@@ -5,19 +5,16 @@ import org.apache.spark.graph._
 
 object ConnectedComponents {
   /**
-   * Compute the connected component membership of each vertex and
-   * return an RDD with the vertex value containing the lowest vertex
-   * id in the connected component containing that vertex.
+   * Compute the connected component membership of each vertex and return an RDD with the vertex
+   * value containing the lowest vertex id in the connected component containing that vertex.
    *
-   * @tparam VD the vertex attribute type (discarded in the
-   * computation)
+   * @tparam VD the vertex attribute type (discarded in the computation)
    * @tparam ED the edge attribute type (preserved in the computation)
    *
-   * @param graph the graph for which to compute the connected
-   * components
+   * @param graph the graph for which to compute the connected components
    *
-   * @return a graph with vertex attributes containing the smallest
-   * vertex in each connected component
+   * @return a graph with vertex attributes containing the smallest vertex in each
+   *         connected component
    */
   def run[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]): Graph[Vid, ED] = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }

@@ -1,7 +1,5 @@
 package org.apache.spark.graph
 
-import org.apache.spark.rdd.RDD
-
 
 /**
  * This object implements a Pregel-like bulk-synchronous

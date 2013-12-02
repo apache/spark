@@ -2,7 +2,7 @@ package org.apache.spark.graph.impl
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.collection.{OpenHashSet, PrimitiveKeyOpenHashMap}
+import org.apache.spark.util.collection.OpenHashSet
 
 import org.apache.spark.graph._
 

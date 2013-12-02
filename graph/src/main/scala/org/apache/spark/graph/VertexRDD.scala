@@ -21,10 +21,9 @@ import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
 
+import org.apache.spark.graph.impl.MsgRDDFunctions
 import org.apache.spark.graph.impl.VertexPartition
-import org.apache.spark.util.ClosureCleaner
 
 
 /**
@@ -269,11 +268,10 @@ class VertexRDD[@specialized VD: ClassManifest](
     }
   }
 
-  def aggregateUsingIndex[VD2: ClassManifest, VidVDPair <: Product2[Vid, VD2] : ClassManifest](
-      messages: RDD[VidVDPair], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] =
+  def aggregateUsingIndex[VD2: ClassManifest](
+      messages: RDD[(Vid, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] =
   {
-    // TODO: use specialized shuffle serializer.
-    val shuffled = new ShuffledRDD[Vid, VD2, VidVDPair](messages, this.partitioner.get)
+    val shuffled = MsgRDDFunctions.partitionForAggregation(messages, this.partitioner.get)
     val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
       val vertextPartition: VertexPartition[VD] = thisIter.next()
       Iterator(vertextPartition.aggregateUsingIndex(msgIter, reduceFunc))

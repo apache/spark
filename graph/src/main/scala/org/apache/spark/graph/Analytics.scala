@@ -92,19 +92,21 @@ object Analytics extends Logging {
           minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
 
          val startTime = System.currentTimeMillis
-         logInfo("GRAPHX: starting tasks")
-         logInfo("GRAPHX: Number of vertices " + graph.vertices.count)
-         logInfo("GRAPHX: Number of edges " + graph.edges.count)
+         println("GRAPHX: starting tasks")
+         println("GRAPHX: Number of vertices " + graph.vertices.count)
+         println("GRAPHX: Number of edges " + graph.edges.count)
 
          //val pr = Analytics.pagerank(graph, numIter)
           val pr = if(isDynamic) PageRank.runUntillConvergence(graph, tol, numIter)
             else  PageRank.run(graph, numIter)
-         logInfo("GRAPHX: Total rank: " + pr.vertices.map{ case (id,r) => r }.reduce(_+_) )
+         println("GRAPHX: Total rank: " + pr.vertices.map{ case (id,r) => r }.reduce(_+_) )
          if (!outFname.isEmpty) {
            println("Saving pageranks of pages to " + outFname)
            pr.vertices.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
          }
-         logInfo("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
+         println("GRAPHX: Runtime: " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
+
+         Thread.sleep(100000)
 
          sc.stop()
        }

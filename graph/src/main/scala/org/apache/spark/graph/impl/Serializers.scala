@@ -101,9 +101,9 @@ class IntAggMsgSerializer extends Serializer {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[AggregationMsg[Int]]
-        writeLong(msg.vid)
-        writeUnsignedVarInt(msg.data)
+        val msg = t.asInstanceOf[(Vid, Int)]
+        writeLong(msg._1)
+        writeUnsignedVarInt(msg._2)
         this
       }
     }
@@ -112,7 +112,7 @@ class IntAggMsgSerializer extends Serializer {
       override def readObject[T](): T = {
         val a = readLong()
         val b = readUnsignedVarInt()
-        new AggregationMsg[Int](a, b).asInstanceOf[T]
+        (a, b).asInstanceOf[T]
       }
     }
   }
@@ -124,9 +124,9 @@ class LongAggMsgSerializer extends Serializer {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[AggregationMsg[Long]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeVarLong(msg.data, optimizePositive = true)
+        val msg = t.asInstanceOf[(Vid, Long)]
+        writeVarLong(msg._1, optimizePositive = false)
+        writeVarLong(msg._2, optimizePositive = true)
         this
       }
     }
@@ -135,7 +135,7 @@ class LongAggMsgSerializer extends Serializer {
       override def readObject[T](): T = {
         val a = readVarLong(optimizePositive = false)
         val b = readVarLong(optimizePositive = true)
-        new AggregationMsg[Long](a, b).asInstanceOf[T]
+        (a, b).asInstanceOf[T]
       }
     }
   }
@@ -148,9 +148,9 @@ class DoubleAggMsgSerializer extends Serializer {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[AggregationMsg[Double]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeDouble(msg.data)
+        val msg = t.asInstanceOf[(Vid, Double)]
+        writeVarLong(msg._1, optimizePositive = false)
+        writeDouble(msg._2)
         this
       }
     }
@@ -159,7 +159,7 @@ class DoubleAggMsgSerializer extends Serializer {
       def readObject[T](): T = {
         val a = readVarLong(optimizePositive = false)
         val b = readDouble()
-        new AggregationMsg[Double](a, b).asInstanceOf[T]
+        (a, b).asInstanceOf[T]
       }
     }
   }

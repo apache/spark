@@ -1,7 +1,5 @@
 package org.apache.spark.graph.impl
 
-import scala.collection.mutable
-
 import org.apache.spark.graph._
 import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
@@ -39,22 +37,5 @@ class EdgeTripletIterator[VD: ClassManifest, ED: ClassManifest](
     triplet.attr = edgePartition.data(pos)
     pos += 1
     triplet
-  }
-
-  // TODO: Why do we need this?
-  override def toList: List[EdgeTriplet[VD, ED]] = {
-    val lb = new mutable.ListBuffer[EdgeTriplet[VD,ED]]
-    val currentEdge = new EdgeTriplet[VD, ED]
-    for (i <- 0 until edgePartition.size) {
-      currentEdge.srcId = edgePartition.srcIds(i)
-      // assert(vmap.containsKey(e.src.id))
-      currentEdge.srcAttr = vmap(currentEdge.srcId)
-      currentEdge.dstId = edgePartition.dstIds(i)
-      // assert(vmap.containsKey(e.dst.id))
-      currentEdge.dstAttr = vmap(currentEdge.dstId)
-      currentEdge.attr = edgePartition.data(i)
-      lb += currentEdge
-    }
-    lb.toList
   }
 }

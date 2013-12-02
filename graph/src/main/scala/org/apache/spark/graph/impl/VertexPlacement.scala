@@ -1,10 +1,9 @@
 package org.apache.spark.graph.impl
 
 import org.apache.spark.SparkContext._
+import org.apache.spark.graph._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-
-import org.apache.spark.graph._
 import org.apache.spark.util.collection.PrimitiveVector
 
 /**
@@ -41,7 +40,7 @@ class VertexPlacement(eTable: EdgeRDD[_], vTable: VertexRDD[_]) {
       val numEdges = edgePartition.size
       val vSet = new VertexSet
       if (includeSrcAttr) {  // Add src vertices to the set.
-      var i = 0
+        var i = 0
         while (i < numEdges) {
           vSet.add(edgePartition.srcIds(i))
           i += 1
