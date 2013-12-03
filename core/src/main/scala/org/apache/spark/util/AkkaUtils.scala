@@ -35,7 +35,9 @@ private[spark] object AkkaUtils {
    * Note: the `name` parameter is important, as even if a client sends a message to right
    * host + port, if the system name is incorrect, Akka will drop the message.
    */
-  def createActorSystem(name: String, host: String, port: Int): (ActorSystem, Int) = {
+  def createActorSystem(name: String, host: String, port: Int,
+    useSparkAS: Boolean = false): (ActorSystem, Int) = {
+
     val akkaThreads   = System.getProperty("spark.akka.threads", "4").toInt
     val akkaBatchSize = System.getProperty("spark.akka.batchSize", "15").toInt
 
@@ -70,7 +72,12 @@ private[spark] object AkkaUtils {
       |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
       """.stripMargin)
 
-    val actorSystem = SparkActorSystem(name, akkaConf)
+    val actorSystem = if (useSparkAS) {
+      SparkActorSystem(name, akkaConf)
+    }
+    else {
+      ActorSystem(name, akkaConf)
+    }
 
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
     val boundPort = provider.getDefaultAddress.port.get
