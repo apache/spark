@@ -120,11 +120,14 @@ private[spark] class StagePage(parent: JobProgressUI) {
           // machine and to send back the result (but not the time to fetch the task result,
           // if it needed to be fetched from the block manager on the worker).
           val schedulerDelays = validTasks.map{case (info, metrics, exception) =>
-            if (info.gettingResultTime > 0) {
-              (info.gettingResultTime - info.launchTime).toDouble
-            } else {
-              (info.finishTime - info.launchTime).toDouble
+            val totalExecutionTime = {
+              if (info.gettingResultTime > 0) {
+                (info.gettingResultTime - info.launchTime).toDouble
+              } else {
+                (info.finishTime - info.launchTime).toDouble
+              }
             }
+            totalExecutionTime - metrics.get.executorRunTime
           }
           val schedulerDelayQuantiles = ("Scheduler delay" +:
             Distribution(schedulerDelays).get.getQuantiles().map(
