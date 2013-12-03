@@ -101,7 +101,7 @@ abstract class RDD[T: ClassManifest](
   protected def getPreferredLocations(split: Partition): Seq[String] = Nil
 
   /** Optionally overridden by subclasses to specify how they are partitioned. */
-  val partitioner: Option[Partitioner] = None
+  @transient val partitioner: Option[Partitioner] = None
 
   // =======================================================================
   // Methods and fields available on all RDDs
@@ -114,7 +114,7 @@ abstract class RDD[T: ClassManifest](
   val id: Int = sc.newRddId()
 
   /** A friendly name for this RDD */
-  var name: String = null
+  @transient var name: String = null
 
   /** Assign a name to this RDD */
   def setName(_name: String) = {
@@ -123,7 +123,7 @@ abstract class RDD[T: ClassManifest](
   }
 
   /** User-defined generator of this RDD*/
-  var generator = Utils.getCallSiteInfo.firstUserClass
+  @transient var generator = Utils.getCallSiteInfo.firstUserClass
 
   /** Reset generator*/
   def setGenerator(_generator: String) = {
