@@ -54,4 +54,5 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
   def vertexAttr(vid: Vid): VD =
     if (srcId == vid) srcAttr else { assert(dstId == vid); dstAttr }
 
+  override def toString() = ((srcId, srcAttr), (dstId, dstAttr), attr).toString()
 }

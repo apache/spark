@@ -15,7 +15,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rawEdges = (0L to 100L).zip((1L to 99L) :+ 0L)
       val edges = sc.parallelize(rawEdges)
-      val graph = Graph(edges, 1.0F)
+      val graph = Graph.fromEdgeTuples(edges, 1.0F)
       assert(graph.edges.count() === rawEdges.size)
     }
   }
@@ -38,7 +38,9 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("mapEdges") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "defaultValue")
+      val star = Graph.fromEdgeTuples(
+        sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))),
+        "defaultValue")
       val starWithEdgeAttrs = star.mapEdges(e => e.dstId)
 
       // map(_.copy()) is a workaround for https://github.com/amplab/graphx/issues/25
@@ -51,7 +53,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("mapReduceTriplets") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 0)
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 0)
       val starDeg = star.joinVertices(star.degrees){ (vid, oldV, deg) => deg }
       val neighborDegreeSums = starDeg.mapReduceTriplets(
         edge => Iterator((edge.srcId, edge.dstAttr), (edge.dstId, edge.srcAttr)),
@@ -63,7 +65,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("aggregateNeighbors") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 1)
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 1)
 
       val indegrees = star.aggregateNeighbors(
         (vid, edge) => Some(1),
@@ -103,7 +105,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val chain = (0 until 100).map(x => (x, (x+1)%100) )
       val rawEdges = sc.parallelize(chain, 3).map { case (s,d) => (s.toLong, d.toLong) }
-      val graph = Graph(rawEdges, 1.0)
+      val graph = Graph.fromEdgeTuples(rawEdges, 1.0)
       val nbrs = graph.collectNeighborIds(EdgeDirection.Both)
       assert(nbrs.count === chain.size)
       assert(graph.numVertices === nbrs.count)
@@ -119,16 +121,32 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("VertexSetRDD") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)
-      val b = VertexSetRDD(a).mapValues(x => -x)
+      val b = VertexRDD(a).mapValues(x => -x).cache() // Allow joining b with a derived RDD of b
       assert(b.count === 101)
       assert(b.leftJoin(a){ (id, a, bOpt) => a + bOpt.get }.map(x=> x._2).reduce(_+_) === 0)
-      val c = VertexSetRDD(a, b.index)
+      val c = b.aggregateUsingIndex[Long, (Long, Long)](a, (x, y) => x)
       assert(b.leftJoin(c){ (id, b, cOpt) => b + cOpt.get }.map(x=> x._2).reduce(_+_) === 0)
       val d = c.filter(q => ((q._2 % 2) == 0))
       val e = a.filter(q => ((q._2 % 2) == 0))
       assert(d.count === e.count)
       assert(b.zipJoin(c)((id, b, c) => b + c).map(x => x._2).reduce(_+_) === 0)
 
+    }
+  }
+
+  test("subgraph") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      // Create a star graph of 10 veritces.
+      val n = 10
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "v")
+      // Take only vertices whose vids are even
+      val subgraph = star.subgraph(vpred = (vid, attr) => vid % 2 == 0)
+
+      // We should have 5 vertices.
+      assert(subgraph.vertices.collect().toSet === (0 to n / 2).map(x => (x * 2, "v")).toSet)
+
+      // And 4 edges.
+      assert(subgraph.edges.map(_.copy()).collect().toSet === (1 to n / 2).map(x => Edge(0, x * 2, 1)).toSet)
     }
   }
 

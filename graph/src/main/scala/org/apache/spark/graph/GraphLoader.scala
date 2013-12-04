@@ -1,9 +1,6 @@
 package org.apache.spark.graph
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-import org.apache.spark.graph.impl.GraphImpl
 
 
 object GraphLoader {
@@ -26,7 +23,7 @@ object GraphLoader {
       path: String,
       edgeParser: Array[String] => ED,
       minEdgePartitions: Int = 1,
-      partitionStrategy: PartitionStrategy = RandomVertexCut()):
+      partitionStrategy: PartitionStrategy = RandomVertexCut):
     Graph[Int, ED] = {
     // Parse the edge data table
     val edges = sc.textFile(path, minEdgePartitions).mapPartitions( iter =>
@@ -43,7 +40,7 @@ object GraphLoader {
         Edge(source, target, edata)
       })
     val defaultVertexAttr = 1
-    Graph(edges, defaultVertexAttr, partitionStrategy)
+    Graph.fromEdges(edges, defaultVertexAttr, partitionStrategy)
   }
 
   /**
@@ -78,7 +75,7 @@ object GraphLoader {
       path: String,
       canonicalOrientation: Boolean = false,
       minEdgePartitions: Int = 1,
-      partitionStrategy: PartitionStrategy = RandomVertexCut()):
+      partitionStrategy: PartitionStrategy = RandomVertexCut):
     Graph[Int, Int] = {
     // Parse the edge data table
     val edges = sc.textFile(path, minEdgePartitions).mapPartitions( iter =>
@@ -97,7 +94,7 @@ object GraphLoader {
         }
       })
     val defaultVertexAttr = 1
-    Graph(edges, defaultVertexAttr, partitionStrategy)
+    Graph.fromEdges(edges, defaultVertexAttr, partitionStrategy)
   } // end of edgeListFile
 
 }

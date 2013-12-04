@@ -158,7 +158,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
   /** Return the value at the specified position. */
   def getValue(pos: Int): T = _data(pos)
 
-  def iterator() = new Iterator[T] {
+  def iterator = new Iterator[T] {
     var pos = nextPos(0)
     override def hasNext: Boolean = pos != INVALID_POS
     override def next(): T = {

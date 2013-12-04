@@ -1,7 +1,5 @@
 package org.apache.spark.graph
 
-import org.apache.spark.rdd.RDD
-
 
 /**
  * This object implements a Pregel-like bulk-synchronous
@@ -138,8 +136,6 @@ object Pregel {
    *
    * @param initialMsg the message each vertex will receive at the on
    * the first iteration.
-   *
-   * @param numIter the number of iterations to run this computation.
    *
    * @param vprog the user-defined vertex program which runs on each
    * vertex and receives the inbound message and computes a new vertex
