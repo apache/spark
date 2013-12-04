@@ -85,12 +85,11 @@ object SparkBuild extends Build {
   }
 
   // Conditionally include the yarn sub-project
-  lazy val yarn = Project("yarn", file(if (isNewHadoop) "new-yarn" else "yarn"), settings = yarnSettings) dependsOn(core)
-
-  //lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn(core)
-
-  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
-  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
+  lazy val yarnCommon = Project("yarn-common", file("yarn/common"), settings = yarnCommonSettings) dependsOn(core)
+  lazy val yarnAPI = Project("yarn-api", file(if (isNewHadoop) "yarn/2.2" else "yarn/2.0"), settings = yarnAPISettings) dependsOn(yarnCommon)
+  lazy val yarnScheduler = Project("yarn", file("yarn/scheduler"), settings = yarnSchedulerSettings) dependsOn(yarnAPI)
+  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](yarnCommon, yarnAPI, yarnScheduler) else Seq[ClasspathDependency]()
+  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](yarnCommon, yarnAPI, yarnScheduler) else Seq[ProjectReference]()
 
   // Everything except assembly, tools and examples belong to packageProjects
   lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib) ++ maybeYarnRef
@@ -320,9 +319,17 @@ object SparkBuild extends Build {
     )
   )
 
-  def yarnSettings = sharedSettings ++ Seq(
-    name := "spark-yarn"
+  def yarnAPISettings = sharedSettings ++ Seq(
+    name := "spark-yarn-api"
   ) ++ extraYarnSettings
+
+  def yarnCommonSettings = sharedSettings ++ Seq(
+    name := "spark-yarn-common"
+  )
+
+  def yarnSchedulerSettings = sharedSettings ++ Seq(
+    name := "spark-yarn"
+  )
 
   // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain
   // if we refer to nonexistent dependencies (e.g. hadoop-yarn-api from a Hadoop version without YARN).
