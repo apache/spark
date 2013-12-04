@@ -152,21 +152,18 @@ private[spark] class StagePage(parent: JobProgressUI) {
       else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
     val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
 
-    var shuffleReadSortable: String = ""
-    var shuffleReadReadable: String = ""
-    if (shuffleRead) {
-      shuffleReadSortable = metrics.flatMap{m => m.shuffleReadMetrics}.map{s => s.remoteBytesRead}.toString()
-      shuffleReadReadable = metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>
-        Utils.bytesToString(s.remoteBytesRead)}.getOrElse("")
-    }
+    val maybeShuffleRead = metrics.flatMap{m => m.shuffleReadMetrics}.map{s => s.remoteBytesRead}
+    val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
+    val shuffleReadReadable = maybeShuffleRead.map{Utils.bytesToString(_)}.getOrElse("")
 
-    var shuffleWriteSortable: String = ""
-    var shuffleWriteReadable: String = ""
-    if (shuffleWrite) {
-      shuffleWriteSortable = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleBytesWritten}.toString()
-      shuffleWriteReadable = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
-        Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")
-    }
+    val maybeShuffleWrite = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleBytesWritten}
+    val shuffleWriteSortable = maybeShuffleWrite.map(_.toString).getOrElse("")
+    val shuffleWriteReadable = maybeShuffleWrite.map{Utils.bytesToString(_)}.getOrElse("")
+
+    val maybeWriteTime = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleWriteTime}
+    val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
+    val writeTimeReadable = maybeWriteTime.map{ t => t / (1000 * 1000)}.map{ ms =>
+      if (ms == 0) "" else parent.formatDuration(ms)}.getOrElse("")
 
     <tr>
       <td>{info.index}</td>
@@ -187,8 +184,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
          </td>
       }}
       {if (shuffleWrite) {
-         <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
-           parent.formatDuration(s.shuffleWriteTime / (1000 * 1000))}.getOrElse("")}
+         <td sorttable_customkey={writeTimeSortable}>
+           {writeTimeReadable}
          </td>
          <td sorttable_customkey={shuffleWriteSortable}>
            {shuffleWriteReadable}
