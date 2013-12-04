@@ -19,56 +19,27 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-parent</artifactId>
+    <artifactId>spark-yarn-aggregator_${scala.binary.version}</artifactId>
     <version>0.9.0-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-yarn-aggregator_${scala.binary.version}</artifactId>
-  <packaging>pom</packaging>
-  <name>Spark Project YARN Aggregator</name>
+  <artifactId>spark-yarn_2.10</artifactId>
+  <packaging>jar</packaging>
+  <name>Spark Project YARN Assembly</name>
   <url>http://spark.incubator.apache.org/</url>
-  
-  <modules>
-    <module>common</module>
-    <module>scheduler</module>
-    <module>assembly</module>
-  </modules>
 
-  <repositories>
-    <repository>
-      <id>maven-root</id>
-      <name>Maven root repository</name>
-      <url>http://repo1.maven.org/maven2</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-  </repositories>
+  <dependencies>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-yarn-scheduler_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+  </dependencies>
 
-  <dependencyManagement>
-    <dependencies>
-    </dependencies>
-  </dependencyManagement>
-
-  <profiles>
-    <profile>
-      <id>hadoop2-yarn</id>
-      <modules>
-        <module>2.0</module>
-      </modules>
-    </profile>
-
-    <profile>
-      <id>new-yarn</id>
-      <modules>
-        <module>2.2</module>
-      </modules>
-    </profile>
-  </profiles>
-
+  <build>
+    <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala.version}/test-classes</testOutputDirectory>
+  </build>
 </project>
