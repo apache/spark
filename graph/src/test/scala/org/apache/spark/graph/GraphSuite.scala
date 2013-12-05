@@ -116,6 +116,53 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("projectGraph") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val n = 5
+      val vertices = sc.parallelize((0 to n).map(x => (x:Vid, x)))
+      val edges = sc.parallelize((1 to n).map(x => Edge(0, x, x)))
+      val graph: Graph[Int, Int] = Graph(vertices, edges)
+
+      val subgraph = graph.subgraph(
+        e => e.dstId != 4L,
+        (vid, vdata) => vid != 3L
+      ).mapVertices((vid, vdata) => -1).mapEdges(e => -1)
+
+      val projectedGraph = graph.mask(subgraph)
+
+      val v = projectedGraph.vertices.collect().toSet
+      assert(v === Set((0,0), (1,1), (2,2), (4,4), (5,5)))
+
+      // the map is necessary because of object-reuse in the edge iterator
+      val e = projectedGraph.edges.map(e => Edge(e.srcId, e.dstId, e.attr)).collect().toSet
+      assert(e === Set(Edge(0,1,1), Edge(0,2,2), Edge(0,5,5)))
+
+    }
+  }
+
+  test ("filterGraph") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val n = 5
+      val vertices = sc.parallelize((0 to n).map(x => (x:Vid, x)))
+      val edges = sc.parallelize((1 to n).map(x => Edge(0, x, x)))
+      val graph: Graph[Int, Int] = Graph(vertices, edges)
+      val filteredGraph = graph.filter(
+        graph => {
+          val degrees: VertexSetRDD[Int] = graph.outDegrees
+          graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
+        },
+        vpred = (vid: Vid, deg:Int) => deg > 0
+      )
+
+      val v = filteredGraph.vertices.collect().toSet
+      assert(v === Set((0,0)))
+
+      // the map is necessary because of object-reuse in the edge iterator
+      val e = filteredGraph.edges.map(e => Edge(e.srcId, e.dstId, e.attr)).collect().toSet
+      assert(e.isEmpty)
+    }
+  }
+
   test("VertexSetRDD") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)

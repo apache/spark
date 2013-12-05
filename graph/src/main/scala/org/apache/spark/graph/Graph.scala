@@ -192,6 +192,14 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
     vpred: (Vid, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
 
   /**
+   * Subgraph of this graph with only vertices and edges from the other graph.
+   * @param other the graph to project this graph onto
+   * @return a graph with vertices and edges that exists in both the current graph and other,
+   * with vertex and edge data from the current graph.
+   */
+  def mask[VD2: ClassManifest, ED2: ClassManifest](other: Graph[VD2, ED2]): Graph[VD, ED]
+
+  /**
    * This function merges multiple edges between two vertices into a
    * single Edge. See
    * [[org.apache.spark.graph.Graph.groupEdgeTriplets]] for more

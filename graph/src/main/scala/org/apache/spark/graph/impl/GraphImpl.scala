@@ -208,6 +208,9 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     new GraphImpl(newVTable, newETable, newVertexPlacement, partitioner)
   } // end of subgraph
 
+  override def mask[VD2: ClassManifest, ED2: ClassManifest] (
+      other: Graph[VD2, ED2]) : Graph[VD, ED] = GraphImpl.mask(this, other)
+
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
     ClosureCleaner.clean(merge)
     val newETable =
@@ -346,6 +349,39 @@ object GraphImpl {
       new EdgeTripletIterator(vidToIndex, vertexArray, edgePartition)
     }
   }
+
+  def mask[VD: ClassManifest, ED: ClassManifest, VD2: ClassManifest, ED2: ClassManifest] (
+      thisGraph: Graph[VD, ED], otherGraph: Graph[VD2, ED2]) : Graph[VD, ED] = {
+    // basically vertices.join(other.vertices)
+    // written this way to take advantage of fast join in VertexSetRDDs
+    val newVTable = VertexSetRDD(
+      thisGraph.vertices.leftJoin(otherGraph.vertices)((vid, v, w) => if (w.isEmpty) None else Some(v))
+          .filter{case (vid, opt) => !opt.isEmpty}
+          .map{case (vid, opt) => (vid, opt.get)}
+    )
+
+    // TODO(amatsukawa): safer way to downcast? case matching perhaps?
+    val thisImpl = thisGraph.asInstanceOf[GraphImpl[VD, ED]]
+    val otherImpl = otherGraph.asInstanceOf[GraphImpl[VD2, ED2]]
+    val newETable =  thisImpl.eTable.zipPartitions(otherImpl.eTable) {
+      // extract two edge partitions, keep all edges in in this partition that is
+      // also in the other partition
+      (thisIter, otherIter) =>
+        val (_, otherEPart) = otherIter.next()
+        val otherEdges = otherEPart.iterator.map(e => (e.srcId, e.dstId)).toSet
+        val (pid, thisEPart) = thisIter.next()
+        val newEPartBuilder = new EdgePartitionBuilder[ED]
+        thisEPart.foreach { e =>
+          if (otherEdges.contains((e.srcId, e.dstId)))
+            newEPartBuilder.add(e.srcId, e.dstId, e.attr)
+        }
+        Iterator((pid, newEPartBuilder.toEdgePartition))
+    }.partitionBy(thisImpl.eTable.partitioner.get)
+
+    val newVertexPlacement = new VertexPlacement(newETable, newVTable)
+    new GraphImpl(newVTable, newETable, newVertexPlacement, thisImpl.partitioner)
+  }
+
 
   protected def mapTriplets[VD: ClassManifest, ED: ClassManifest, ED2: ClassManifest](
       g: GraphImpl[VD, ED],
