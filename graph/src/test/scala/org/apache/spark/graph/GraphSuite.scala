@@ -124,7 +124,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val b = VertexRDD(a).mapValues(x => -x).cache() // Allow joining b with a derived RDD of b
       assert(b.count === 101)
       assert(b.leftJoin(a){ (id, a, bOpt) => a + bOpt.get }.map(x=> x._2).reduce(_+_) === 0)
-      val c = b.aggregateUsingIndex[Long, (Long, Long)](a, (x, y) => x)
+      val c = b.aggregateUsingIndex[Long](a, (x, y) => x)
       assert(b.leftJoin(c){ (id, b, cOpt) => b + cOpt.get }.map(x=> x._2).reduce(_+_) === 0)
       val d = c.filter(q => ((q._2 % 2) == 0))
       val e = a.filter(q => ((q._2 % 2) == 0))
