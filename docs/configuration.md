@@ -331,7 +331,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.shuffle.consolidateFiles</td>
   <td>false</td>
   <td>
-    If set to "true", consolidates intermediate files created during a shuffle.
+    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance if you run shuffles with large numbers of reduce tasks.
   </td>
 </tr>
 <tr>
@@ -346,7 +346,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.speculation.interval</td>
   <td>100</td>
   <td>
-    How often Spark will check for tasks to speculate, in seconds.
+    How often Spark will check for tasks to speculate, in milliseconds.
   </td>
 </tr>
 <tr>
