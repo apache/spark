@@ -24,6 +24,8 @@ object GraphLab {
    * @param scatterFunc Executed after the apply function the scatter function takes
    *                    a triplet and signals whether the neighboring vertex program
    *                    must be recomputed.
+   * @param startVertices predicate to determine which vertices to start the computation on.
+   *                      these will be the active vertices in the first iteration.
    * @param numIter The maximum number of iterations to run.
    * @param gatherDirection The direction of edges to consider during the gather phase
    * @param scatterDirection The direction of edges to consider during the scatter phase
@@ -40,12 +42,13 @@ object GraphLab {
     (gatherFunc: (Vid, EdgeTriplet[VD, ED]) => A,
      mergeFunc: (A, A) => A,
      applyFunc: (Vid, VD, Option[A]) => VD,
-     scatterFunc: (Vid, EdgeTriplet[VD, ED]) => Boolean): Graph[VD, ED] = {
+     scatterFunc: (Vid, EdgeTriplet[VD, ED]) => Boolean,
+     startVertices: (Vid, VD) => Boolean = (vid: Vid, data: VD) => true): Graph[VD, ED] = {
 
 
     // Add an active attribute to all vertices to track convergence.
     var activeGraph: Graph[(Boolean, VD), ED] = graph.mapVertices {
-      case (id, data) => (true, data)
+      case (id, data) => (startVertices(id, data), data)
     }.cache()
 
     // The gather function wrapper strips the active attribute and
