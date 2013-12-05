@@ -1,6 +1,6 @@
 package catalyst
 
-import java.io.File
+import java.io.{PrintWriter, ByteArrayOutputStream, FileInputStream, File}
 
 package object util {
   /**
@@ -13,5 +13,31 @@ package object util {
     val tempFile = File.createTempFile(prefix, suffix)
     tempFile.delete()
     tempFile
+  }
+
+  def fileToString(file: File, encoding: String = "UTF-8") = {
+    val inStream = new FileInputStream(file)
+    val outStream = new ByteArrayOutputStream
+    try {
+      var reading = true
+      while ( reading ) {
+        inStream.read() match {
+          case -1 => reading = false
+          case c => outStream.write(c)
+        }
+      }
+      outStream.flush()
+    }
+    finally {
+      inStream.close()
+    }
+    new String(outStream.toByteArray(), encoding)
+  }
+
+  def stringToFile(file: File, str: String): File = {
+    val out = new PrintWriter(file)
+    out.write(str)
+    out.close()
+    file
   }
 }
