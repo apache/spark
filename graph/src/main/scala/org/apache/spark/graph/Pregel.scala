@@ -103,7 +103,12 @@ object Pregel {
       // compute the messages
       val messages = g.mapReduceTriplets(sendMsg, mergeMsg) // broadcast & aggregation
       // receive the messages
-      g = g.deltaJoin(messages)(vprog).cache() // updating the graph
+      val newVerts = g.vertices.zipJoin(messages)(vprog).cache() // updating the vertices
+      val changedVerts = g.vertices.diff(newVerts)
+      println("Replicating %d changed vertices instead of %d total vertices".format(
+        changedVerts.count, newVerts.count))
+      // replicate the changed vertices
+      g = graph.deltaJoinVertices(newVerts, changedVerts)
       // count the iteration
       i += 1
     }

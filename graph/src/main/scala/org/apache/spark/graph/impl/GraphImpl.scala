@@ -28,24 +28,15 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     @transient val vertices: VertexRDD[VD],
     @transient val edges: EdgeRDD[ED],
     @transient val vertexPlacement: VertexPlacement,
-    @transient val prevVTableReplicated: Option[VTableReplicated[VD]] = None)
+    @transient val vTableReplicated: VTableReplicated[VD])
   extends Graph[VD, ED] {
 
-  //def this() = this(null, null, null, null)
-
   def this(
-      vertices: RDD[VertexPartition[VD]],
-      edges: RDD[(Pid, EdgePartition[ED])],
+      vertices: VertexRDD[VD],
+      edges: EdgeRDD[ED],
       vertexPlacement: VertexPlacement) = {
-    this(new VertexRDD(vertices), new EdgeRDD(edges), vertexPlacement)
+    this(vertices, edges, vertexPlacement, new VTableReplicated(vertices, edges, vertexPlacement))
   }
-
-  @transient private val vTableReplicated: VTableReplicated[VD] =
-    new VTableReplicated(vertices, edges, vertexPlacement, prevVTableReplicated)
-
-  /** Return a RDD of edges. */
-//  @transient override val edges: RDD[Edge[ED]] =
-//    edges.mapPartitions(_.next()._2.iterator, true)
 
   /** Return a RDD that brings edges with its source and destination vertices together. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
@@ -269,11 +260,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     new GraphImpl(newVTable, edges, vertexPlacement)
   }
 
-  override def deltaJoin[VD2: ClassManifest]
-    (updates: VertexRDD[VD2])(updateF: (Vid, VD, VD2) => VD): Graph[VD, ED] =
-  {
-    val newVTable = vertices.deltaJoin(updates)(updateF)
-    new GraphImpl(newVTable, edges, vertexPlacement, Some(vTableReplicated))
+  override def deltaJoinVertices(
+      newVerts: VertexRDD[VD],
+      changedVerts: VertexRDD[VD]): Graph[VD, ED] = {
+    val newVTableReplicated = new VTableReplicated(
+      changedVerts, edges, vertexPlacement, Some(vTableReplicated))
+    new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
   }
 } // end of class GraphImpl
 

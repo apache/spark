@@ -89,6 +89,21 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition(index, values, newMask)
   }
 
+  def diff(other: VertexPartition[VD]): VertexPartition[VD] = {
+    assert(index == other.index)
+
+    val newMask = mask & other.mask
+
+    var i = newMask.nextSetBit(0)
+    while (i >= 0) {
+      if (values(i) == other.values(i)) {
+        newMask.unset(i)
+      }
+      i = mask.nextSetBit(i + 1)
+    }
+    new VertexPartition[VD](index, other.values, newMask)
+  }
+
   /** Inner join another VertexPartition. */
   def join[VD2: ClassManifest, VD3: ClassManifest]
       (other: VertexPartition[VD2])
@@ -108,29 +123,6 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
       }
       new VertexPartition(index, newValues, newMask)
     }
-  }
-
-  /** Inner join another VertexPartition, only keeping values that change. */
-  def deltaJoin[VD2: ClassManifest]
-    (other: VertexPartition[VD2])
-    (f: (Vid, VD, VD2) => VD): VertexPartition[VD] =
-  {
-    assert(index == other.index)
-
-    val newValues = new Array[VD](capacity)
-    val newMask = mask & other.mask
-
-    var i = newMask.nextSetBit(0)
-    while (i >= 0) {
-      newValues(i) = f(index.getValue(i), values(i), other.values(i))
-      // Only set the mask if the value changes (we are using precise comparison here).
-      // TODO: Use delta comparison for double type.
-      if (newValues(i) == values(i)) {
-        newMask.unset(i)
-      }
-      i = mask.nextSetBit(i + 1)
-    }
-    new VertexPartition[VD](index, newValues, newMask)
   }
 
   /** Left outer join another VertexPartition. */
