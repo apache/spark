@@ -79,7 +79,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("IntAggMsgSerializer") {
-    val outMsg = (4, 5)
+    val outMsg = (4: Vid, 5)
     val bout = new ByteArrayOutputStream
     val outStrm = new IntAggMsgSerializer().newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
@@ -98,7 +98,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("LongAggMsgSerializer") {
-    val outMsg = (4, 1L << 32)
+    val outMsg = (4: Vid, 1L << 32)
     val bout = new ByteArrayOutputStream
     val outStrm = new LongAggMsgSerializer().newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
@@ -117,7 +117,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("DoubleAggMsgSerializer") {
-    val outMsg = (4, 5.0)
+    val outMsg = (4: Vid, 5.0)
     val bout = new ByteArrayOutputStream
     val outStrm = new DoubleAggMsgSerializer().newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
