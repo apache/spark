@@ -35,7 +35,7 @@ import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.api.records._
-import org.apache.hadoop.yarn.client.YarnClientImpl
+import org.apache.hadoop.yarn.client.api.impl.YarnClientImpl
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{Apps, Records}
@@ -45,9 +45,12 @@ import org.apache.spark.util.Utils
 import org.apache.spark.deploy.SparkHadoopUtil
 
 
+/**
+ * The entry point (starting in Client#main() and Client#run()) for launching Spark on YARN. The
+ * Client submits an application to the global ResourceManager to launch Spark's ApplicationMaster,
+ * which will launch a Spark master process and negotiate resources throughout its duration.
+ */
 class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl with Logging {
-
-  def this(args: ClientArguments) = this(new Configuration(), args)
 
   var rpc: YarnRPC = YarnRPC.create(conf)
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
@@ -56,33 +59,49 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
   private val distCacheMgr = new ClientDistributedCacheManager()
 
   // Staging directory is private! -> rwx--------
-  val STAGING_DIR_PERMISSION: FsPermission = FsPermission.createImmutable(0700:Short)
-
+  val STAGING_DIR_PERMISSION: FsPermission = FsPermission.createImmutable(0700: Short)
   // App files are world-wide readable and owner writable -> rw-r--r--
-  val APP_FILE_PERMISSION: FsPermission = FsPermission.createImmutable(0644:Short) 
+  val APP_FILE_PERMISSION: FsPermission = FsPermission.createImmutable(0644: Short)
 
-  // for client user who want to monitor app status by itself.
-  def runApp() = {
+  def this(args: ClientArguments) = this(new Configuration(), args)
+
+  def runApp(): ApplicationId = {
     validateArgs()
-
+    // Initialize and start the client service.
     init(yarnConf)
     start()
+
+    // Log details about this YARN cluster (e.g, the number of slave machines/NodeManagers).
     logClusterResourceDetails()
 
-    val newApp = super.getNewApplication()
-    val appId = newApp.getApplicationId()
+    // Prepare to submit a request to the ResourcManager (specifically its ApplicationsManager (ASM)
+    // interface).
 
-    verifyClusterResources(newApp)
-    val appContext = createApplicationSubmissionContext(appId)
+    // Get a new client application.
+    val newApp = super.createApplication()
+    val newAppResponse = newApp.getNewApplicationResponse()
+    val appId = newAppResponse.getApplicationId()
+
+    verifyClusterResources(newAppResponse)
+
+    // Set up resource and environment variables.
     val appStagingDir = getAppStagingDir(appId)
     val localResources = prepareLocalResources(appStagingDir)
-    val env = setupLaunchEnv(localResources, appStagingDir)
-    val amContainer = createContainerLaunchContext(newApp, localResources, env)
+    val launchEnv = setupLaunchEnv(localResources, appStagingDir)
+    val amContainer = createContainerLaunchContext(newAppResponse, localResources, launchEnv)
 
+    // Set up an application submission context.
+    val appContext = newApp.getApplicationSubmissionContext()
+    appContext.setApplicationName(args.appName)
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
-    appContext.setUser(UserGroupInformation.getCurrentUser().getShortUserName())
 
+    // Memory for the ApplicationMaster.
+    val memoryResource = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
+    memoryResource.setMemory(args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
+    appContext.setResource(memoryResource)
+
+    // Finally, submit and monitor the application.
     submitApp(appContext)
     appId
   }
@@ -93,17 +112,18 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     System.exit(0)
   }
 
+  // TODO(harvey): This could just go in ClientArguments.
   def validateArgs() = {
     Map(
       (System.getenv("SPARK_JAR") == null) -> "Error: You must set SPARK_JAR environment variable!",
       (args.userJar == null) -> "Error: You must specify a user jar!",
       (args.userClass == null) -> "Error: You must specify a user class!",
       (args.numWorkers <= 0) -> "Error: You must specify atleast 1 worker!",
-      (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: AM memory size must be " +
+      (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: AM memory size must be" +
         "greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD),
-      (args.workerMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Worker memory size " +
-        "must be greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD)
-    ).foreach { case(cond, errStr) => 
+      (args.workerMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Worker memory size" +
+        "must be greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD.toString)
+    ).foreach { case(cond, errStr) =>
       if (cond) {
         logError(errStr)
         args.printUsageAndExit(1)
@@ -117,11 +137,11 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
   def logClusterResourceDetails() {
     val clusterMetrics: YarnClusterMetrics = super.getYarnClusterMetrics
-    logInfo("Got Cluster metric info from ASM, numNodeManagers = " +
+    logInfo("Got Cluster metric info from ApplicationsManager (ASM), number of NodeManagers: " +
       clusterMetrics.getNumNodeManagers)
 
     val queueInfo: QueueInfo = super.getQueueInfo(args.amQueue)
-    logInfo("""Queue info ... queueName = %s, queueCurrentCapacity = %s, queueMaxCapacity = %s,
+    logInfo("""Queue info ... queueName: %s, queueCurrentCapacity: %s, queueMaxCapacity: %s,
       queueApplicationCount = %s, queueChildQueueCount = %s""".format(
         queueInfo.getQueueName,
         queueInfo.getCurrentCapacity,
@@ -136,25 +156,19 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
 
     // If we have requested more then the clusters max for a single resource then exit.
     if (args.workerMemory > maxMem) {
-      logError("the worker size is to large to run on this cluster " + args.workerMemory)
+      logError("Required worker memory (%d MB), is above the max threshold (%d MB) of this cluster.".
+        format(args.workerMemory, maxMem))
       System.exit(1)
     }
     val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
     if (amMem > maxMem) {
-      logError("AM size is to large to run on this cluster "  + amMem)
+      logError("Required AM memory (%d) is above the max threshold (%d) of this cluster".
+        format(args.amMemory, maxMem))
       System.exit(1)
     }
 
     // We could add checks to make sure the entire cluster has enough resources but that involves
-    // getting all the node reports and computing ourselves 
-  }
-
-  def createApplicationSubmissionContext(appId: ApplicationId): ApplicationSubmissionContext = {
-    logInfo("Setting up application submission context for ASM")
-    val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
-    appContext.setApplicationId(appId)
-    appContext.setApplicationName(args.appName)
-    return appContext
+    // getting all the node reports and computing ourselves.
   }
 
   /** See if two file systems are the same or not. */
@@ -219,7 +233,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
   def prepareLocalResources(appStagingDir: String): HashMap[String, LocalResource] = {
     logInfo("Preparing Local resources")
     // Upload Spark and the application JAR to the remote file system if necessary. Add them as
-    // local resources to the AM.
+    // local resources to the application master.
     val fs = FileSystem.get(conf)
 
     val delegTokenRenewer = Master.getMasterPrincipal(conf)
@@ -236,18 +250,20 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       val dstFs = dst.getFileSystem(conf)
       dstFs.addDelegationTokens(delegTokenRenewer, credentials)
     }
+
     val localResources = HashMap[String, LocalResource]()
     FileSystem.mkdirs(fs, dst, new FsPermission(STAGING_DIR_PERMISSION))
 
     val statCache: Map[URI, FileStatus] = HashMap[URI, FileStatus]()
 
-    Map(Client.SPARK_JAR -> System.getenv("SPARK_JAR"), Client.APP_JAR -> args.userJar, 
-      Client.LOG4J_PROP -> System.getenv("SPARK_LOG4J_CONF"))
-    .foreach { case(destName, _localPath) =>
+    Map(
+      Client.SPARK_JAR -> System.getenv("SPARK_JAR"), Client.APP_JAR -> args.userJar,
+      Client.LOG4J_PROP -> System.getenv("SPARK_LOG4J_CONF")
+    ).foreach { case(destName, _localPath) =>
       val localPath: String = if (_localPath != null) _localPath.trim() else ""
       if (! localPath.isEmpty()) {
         var localURI = new URI(localPath)
-        // if not specified assume these are in the local filesystem to keep behavior like Hadoop
+        // If not specified assume these are in the local filesystem to keep behavior like Hadoop
         if (localURI.getScheme() == null) {
           localURI = new URI(FileSystem.getLocal(conf).makeQualified(new Path(localPath)).toString)
         }
@@ -258,19 +274,21 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       }
     }
 
-    // handle any add jars
+    // Handle jars local to the ApplicationMaster.
     if ((args.addJars != null) && (!args.addJars.isEmpty())){
       args.addJars.split(',').foreach { case file: String =>
         val localURI = new URI(file.trim())
         val localPath = new Path(localURI)
         val linkname = Option(localURI.getFragment()).getOrElse(localPath.getName())
         val destPath = copyRemoteFile(dst, localPath, replication)
+        // Only add the resource to the Spark ApplicationMaster.
+        val appMasterOnly = true
         distCacheMgr.addResource(fs, conf, destPath, localResources, LocalResourceType.FILE, 
-          linkname, statCache, true)
+          linkname, statCache, appMasterOnly)
       }
     }
 
-    // handle any distributed cache files
+    // Handle any distributed cache files
     if ((args.files != null) && (!args.files.isEmpty())){
       args.files.split(',').foreach { case file: String =>
         val localURI = new URI(file.trim())
@@ -282,7 +300,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       }
     }
 
-    // handle any distributed cache archives
+    // Handle any distributed cache archives
     if ((args.archives != null) && (!args.archives.isEmpty())) {
       args.archives.split(',').foreach { case file:String =>
         val localURI = new URI(file.trim())
@@ -295,7 +313,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     }
 
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
-    return localResources
+    localResources
   }
 
   def setupLaunchEnv(
@@ -317,8 +335,9 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     // Allow users to specify some environment variables.
     Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
 
-    // Add each SPARK-* key to the environment.
+    // Add each SPARK_* key to the environment.
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
+
     env
   }
 
@@ -341,33 +360,32 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     amContainer.setLocalResources(localResources)
     amContainer.setEnvironment(env)
 
-    val minResMemory: Int = newApp.getMinimumResourceCapability().getMemory()
-
-    // TODO(harvey): This can probably be a val.
-    var amMemory = ((args.amMemory / minResMemory) * minResMemory) +
-      ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
-        YarnAllocationHandler.MEMORY_OVERHEAD)
+    // TODO: Need a replacement for the following code to fix -Xmx?
+    // val minResMemory: Int = newApp.getMinimumResourceCapability().getMemory()
+    // var amMemory = ((args.amMemory / minResMemory) * minResMemory) +
+    //  ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
+    //    YarnAllocationHandler.MEMORY_OVERHEAD)
 
     // Extra options for the JVM
     var JAVA_OPTS = ""
 
-    // Add Xmx for am memory
-    JAVA_OPTS += "-Xmx" + amMemory + "m "
+    // Add Xmx for AM memory
+    JAVA_OPTS += "-Xmx" + args.amMemory + "m"
 
-    JAVA_OPTS += " -Djava.io.tmpdir=" + 
-      new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
+    val tmpDir = new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR)
+    JAVA_OPTS += " -Djava.io.tmpdir=" + tmpDir
 
-    // Commenting it out for now - so that people can refer to the properties if required. Remove
-    // it once cpuset version is pushed out. The context is, default gc for server class machines
-    // end up using all cores to do gc - hence if there are multiple containers in same node,
-    // spark gc effects all other containers performance (which can also be other spark containers)
-    // Instead of using this, rely on cpusets by YARN to enforce spark behaves 'properly' in
-    // multi-tenant environments. Not sure how default java gc behaves if it is limited to subset
+    // TODO: Remove once cpuset version is pushed out.
+    // The context is, default gc for server class machines ends up using all cores to do gc -
+    // hence if there are multiple containers in same node, Spark GC affects all other containers'
+    // performance (which can be that of other Spark containers)
+    // Instead of using this, rely on cpusets by YARN to enforce "proper" Spark behavior in
+    // multi-tenant environments. Not sure how default Java GC behaves if it is limited to subset
     // of cores on a node.
     val useConcurrentAndIncrementalGC = env.isDefinedAt("SPARK_USE_CONC_INCR_GC") &&
       java.lang.Boolean.parseBoolean(env("SPARK_USE_CONC_INCR_GC"))
     if (useConcurrentAndIncrementalGC) {
-      // In our expts, using (default) throughput collector has severe perf ramnifications in
+      // In our expts, using (default) throughput collector has severe perf ramifications in
       // multi-tenant machines
       JAVA_OPTS += " -XX:+UseConcMarkSweepGC "
       JAVA_OPTS += " -XX:+CMSIncrementalMode "
@@ -377,7 +395,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
     }
 
     if (env.isDefinedAt("SPARK_JAVA_OPTS")) {
-      JAVA_OPTS += env("SPARK_JAVA_OPTS") + " "
+      JAVA_OPTS += " " + env("SPARK_JAVA_OPTS")
     }
 
     // Command for the ApplicationMaster
@@ -387,7 +405,8 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       javaCommand = Environment.JAVA_HOME.$() + "/bin/java"
     }
 
-    val commands = List[String](javaCommand + 
+    val commands = List[String](
+      javaCommand + 
       " -server " +
       JAVA_OPTS +
       " " + args.amClass +
@@ -399,18 +418,14 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       " --num-workers " + args.numWorkers +
       " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
       " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
-    logInfo("Command for the ApplicationMaster: " + commands(0))
-    amContainer.setCommands(commands)
 
-    val capability = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
-    // Memory for the ApplicationMaster.
-    capability.setMemory(args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
-    amContainer.setResource(capability)
+    logInfo("Command for starting the Spark ApplicationMaster: " + commands(0))
+    amContainer.setCommands(commands)
 
     // Setup security tokens.
     val dob = new DataOutputBuffer()
     credentials.writeTokenStorageToStream(dob)
-    amContainer.setContainerTokens(ByteBuffer.wrap(dob.getData()))
+    amContainer.setTokens(ByteBuffer.wrap(dob.getData()))
 
     amContainer
   }
@@ -429,7 +444,7 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
       logInfo("Application report from ASM: \n" +
         "\t application identifier: " + appId.toString() + "\n" +
         "\t appId: " + appId.getId() + "\n" +
-        "\t clientToken: " + report.getClientToken() + "\n" +
+        "\t clientToAMToken: " + report.getClientToAMToken() + "\n" +
         "\t appDiagnostics: " + report.getDiagnostics() + "\n" +
         "\t appMasterHost: " + report.getHost() + "\n" +
         "\t appQueue: " + report.getQueue() + "\n" +
@@ -460,12 +475,13 @@ object Client {
 
   def main(argStrings: Array[String]) {
     // Set an env variable indicating we are running in YARN mode.
-    // Note that anything with SPARK prefix gets propagated to all (remote) processes
+    // Note: anything env variable with SPARK_ prefix gets propagated to all (remote) processes -
+    // see Client#setupLaunchEnv().
     System.setProperty("SPARK_YARN_MODE", "true")
 
     val args = new ClientArguments(argStrings)
 
-    new Client(args).run
+    (new Client(args)).run()
   }
 
   // Based on code from org.apache.hadoop.mapreduce.v2.util.MRApps
