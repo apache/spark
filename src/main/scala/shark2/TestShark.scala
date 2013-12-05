@@ -114,8 +114,14 @@ object TestShark {
         expressions.BindReferences) :: Nil
   }
 
-  class SharkSqlQuery(sql: String) {
+  class SharkSqlQuery(sql: String) extends SharkQuery {
     lazy val parsed = Hive.parseSql(sql)
+    override def toString = sql + "\n" + super.toString
+  }
+
+  abstract class SharkQuery {
+    def parsed: LogicalPlan
+
     lazy val analyzed = {
       // Make sure any test tables referenced are loaded.
       val referencedTables = parsed collect { case UnresolvedRelation(name, _) => name }
@@ -129,20 +135,32 @@ object TestShark {
     lazy val sharkPlan = TrivalPlanner(analyzed).next()
     lazy val executedPlan = PrepareForExecution(sharkPlan)
 
-    lazy val toRdd = execute().getOrElse(sys.error("No result for this query type."))
+    lazy val toRdd = executedPlan.execute()
 
-    def execute() = analyzed match {
-      case NativeCommand(cmd) => runSqlHive(rewritePaths(cmd)); None
-      case ConfigurationAssignment(cmd) => runSqlHive(cmd); None
-      case _ => Some(executedPlan.execute())
+    /**
+     * Returns the result as a hive compatible sequence of strings.  For native commands, the execution is simply
+     * passed back to Hive.
+     */
+    def stringResult(): Seq[String] = analyzed match {
+      case NativeCommand(cmd) => runSqlHive(rewritePaths(cmd))
+      case ConfigurationAssignment(cmd) => runSqlHive(cmd)
+      case ExplainCommand(plan) => (new SharkQuery { val parsed = plan }).toString.split("\n")
+      case query =>
+        val result: Seq[Seq[Any]] = toRdd.collect.toSeq
+        // Reformat to match hive tab delimited output.
+        val asString = result.map(_.map {
+          case null => "NULL"
+          case other => other
+        }).map(_.mkString("\t")).toSeq
+
+        asString
     }
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }
 
     override def toString: String =
-      s"""$sql
-         |== Logical Plan ==
+      s"""== Logical Plan ==
          |${stringOrError(analyzed)}
          |== Physical Plan ==
          |${stringOrError(sharkPlan)}
@@ -153,16 +171,7 @@ object TestShark {
     def q = new SharkSqlQuery(str)
   }
 
-  implicit class logicalToRdd(plan: LogicalPlan) {
-    // TODO: Include plan info in custom rdd?
-    def toRdd: RDD[IndexedSeq[Any]] = {
-       val analyzed = analyze(plan)
-      // TODO: Don't just pick the first one...
-      val sharkPlan = TrivalPlanner(analyzed).next()
-      val executedPlan = PrepareForExecution(sharkPlan)
-      executedPlan.execute()
-    }
-  }
+  implicit def logicalToSharkQuery(plan: LogicalPlan) = new SharkQuery { val parsed = plan }
 
   protected case class TestTable(name: String, commands: String*)
 

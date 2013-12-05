@@ -14,9 +14,12 @@ class HiveQueryTests extends HiveComaparisionTest {
     "SELECT 'test' FROM src")
 
   test("Run random sample") { // Since this is non-deterministic we just check to make sure it runs for now.
-    "SELECT key, value FROM src WHERE RAND() > 0.5 ORDER BY RAND()".q.execute().get.collect()
+    "SELECT key, value FROM src WHERE RAND() > 0.5 ORDER BY RAND()".q.stringResult()
   }
 
   createQueryTest("Escape sequences",
     """SELECT key, '\\\t\\' FROM src WHERE key = 86""")
+
+  createQueryTest("IgnoreExplain",
+    """EXPLAIN SELECT key FROM src""")
 }

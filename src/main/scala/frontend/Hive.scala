@@ -28,6 +28,8 @@ abstract class Command extends LeafNode {
  */
 case class NativeCommand(cmd: String) extends Command
 
+case class ExplainCommand(plan: LogicalPlan) extends Command
+
 case class DfsCommand(cmd: String) extends Command
 
 case class ShellCommand(cmd: String) extends Command
@@ -42,8 +44,6 @@ case class AddFile(filePath: String) extends Command
 
 object Hive {
   protected val nativeCommands = Seq(
-    "TOK_EXPLAIN",
-
     "TOK_DESCFUNCTION",
     "TOK_DESCTABLE",
     "TOK_DESCDATABASE",
@@ -319,6 +319,7 @@ object Hive {
   }
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
+    case Token("TOK_EXPLAIN", query :: Nil) => ExplainCommand(nodeToPlan(query))
     case Token("TOK_QUERY",
            fromClause ::
            Token("TOK_INSERT", insertClauses) :: Nil) =>
