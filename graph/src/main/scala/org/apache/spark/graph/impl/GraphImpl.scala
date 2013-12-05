@@ -27,7 +27,8 @@ import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHa
 class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     @transient val vertices: VertexRDD[VD],
     @transient val edges: EdgeRDD[ED],
-    @transient val vertexPlacement: VertexPlacement)
+    @transient val vertexPlacement: VertexPlacement,
+    @transient val prevVTableReplicated: Option[VTableReplicated[VD]] = None)
   extends Graph[VD, ED] {
 
   //def this() = this(null, null, null, null)
@@ -39,8 +40,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     this(new VertexRDD(vertices), new EdgeRDD(edges), vertexPlacement)
   }
 
-  @transient val vTableReplicated: VTableReplicated[VD] =
-    new VTableReplicated(vertices, edges, vertexPlacement)
+  @transient private val vTableReplicated: VTableReplicated[VD] =
+    new VTableReplicated(vertices, edges, vertexPlacement, prevVTableReplicated)
 
   /** Return a RDD of edges. */
 //  @transient override val edges: RDD[Edge[ED]] =
@@ -266,6 +267,13 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     ClosureCleaner.clean(updateF)
     val newVTable = vertices.leftJoin(updates)(updateF)
     new GraphImpl(newVTable, edges, vertexPlacement)
+  }
+
+  override def deltaJoin[VD2: ClassManifest]
+    (updates: VertexRDD[VD2])(updateF: (Vid, VD, VD2) => VD): Graph[VD, ED] =
+  {
+    val newVTable = vertices.deltaJoin(updates)(updateF)
+    new GraphImpl(newVTable, edges, vertexPlacement, Some(vTableReplicated))
   }
 } // end of class GraphImpl
 

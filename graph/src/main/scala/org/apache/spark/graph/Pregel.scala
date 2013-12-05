@@ -96,17 +96,29 @@ object Pregel {
     : Graph[VD, ED] = {
 
     // Receive the first set of messages
-    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg)).cache
+    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
 
     var i = 0
-    while (i < numIter) {
+    while (i < numIter - 1) {
       // compute the messages
-      val messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+      val messages = g.mapReduceTriplets(sendMsg, mergeMsg) // broadcast & aggregation
       // receive the messages
-      g = g.joinVertices(messages)(vprog).cache
+      g = g.deltaJoin(messages)(vprog).cache() // updating the graph
       // count the iteration
       i += 1
     }
+
+    // compute the messages
+    val messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+    // receive the messages
+    g = g.outerJoinVertices(messages) { (vid, vd, msgOption) =>
+      if (msgOption.isDefined) {
+        vprog(vid, vd, msgOption.get)
+      } else {
+        vd
+      }
+    }.cache()
+
     // Return the final graph
     g
   } // end of apply

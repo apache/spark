@@ -268,6 +268,13 @@ class VertexRDD[@specialized VD: ClassManifest](
     }
   }
 
+  def deltaJoin[VD2: ClassManifest](other: VertexRDD[VD2])(f: (Vid, VD, VD2) => VD): VertexRDD[VD] =
+  {
+    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
+      thisPart.deltaJoin(otherPart)(f)
+    }
+  }
+
   def aggregateUsingIndex[VD2: ClassManifest](
       messages: RDD[(Vid, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] =
   {
