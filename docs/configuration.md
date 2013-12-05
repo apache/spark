@@ -327,7 +327,42 @@ Apart from these, the following properties are also available, and may be useful
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>
-
+<tr>
+  <td>spark.shuffle.consolidateFiles</td>
+  <td>false</td>
+  <td>
+    If set to "true", consolidates intermediate files created during a shuffle.
+  </td>
+</tr>
+<tr>
+<tr>
+  <td>spark.speculation</td>
+  <td>false</td>
+  <td>
+    If set to "true", performs speculative execution of tasks. This means if one or more tasks are running slowly in a stage, they will be re-launched.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation.interval</td>
+  <td>100</td>
+  <td>
+    How often Spark will check for tasks to speculate, in seconds.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation.quantile</td>
+  <td>0.75</td>
+  <td>
+    Percentage of tasks which must be complete before speculation is enabled for a particular stage.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation.multiplier</td>
+  <td>1.5</td>
+  <td>
+    How many times slower a task is than the median to be considered for speculation.
+  </td>
+</tr>
 </table>
 
 # Environment Variables
