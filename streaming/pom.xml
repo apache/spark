@@ -86,9 +86,8 @@
       <artifactId>scala-library</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.typesafe.akka</groupId>
+      <groupId>${akka.group}</groupId>
       <artifactId>akka-zeromq</artifactId>
-      <version>2.0.3</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
