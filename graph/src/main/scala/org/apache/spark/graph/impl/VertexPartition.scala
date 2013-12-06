@@ -30,9 +30,9 @@ private[graph] object VertexPartition {
 
 private[graph]
 class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
-    private val index: VertexIdToIndexMap,
-    private val values: Array[VD],
-    private val mask: BitSet)
+    val index: VertexIdToIndexMap,
+    val values: Array[VD],
+    val mask: BitSet)
   extends Logging {
 
   val capacity: Int = index.capacity
@@ -41,6 +41,8 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
 
   /** Return the vertex attribute for the given vertex ID. */
   def apply(vid: Vid): VD = values(index.getPos(vid))
+
+  def isDefined(vid: Vid): Boolean = mask.get(index.getPos(vid))
 
   /**
    * Pass each vertex attribute along with the vertex id through a map
@@ -89,10 +91,26 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition(index, values, newMask)
   }
 
+  def diff(other: VertexPartition[VD]): VertexPartition[VD] = {
+    assert(index == other.index)
+
+    val newMask = mask & other.mask
+
+    var i = newMask.nextSetBit(0)
+    while (i >= 0) {
+      if (values(i) == other.values(i)) {
+        newMask.unset(i)
+      }
+      i = mask.nextSetBit(i + 1)
+    }
+    new VertexPartition[VD](index, other.values, newMask)
+  }
+
   /** Inner join another VertexPartition. */
   def join[VD2: ClassManifest, VD3: ClassManifest]
       (other: VertexPartition[VD2])
-      (f: (Vid, VD, VD2) => VD3): VertexPartition[VD3] = {
+      (f: (Vid, VD, VD2) => VD3): VertexPartition[VD3] =
+  {
     if (index != other.index) {
       logWarning("Joining two VertexPartitions with different indexes is slow.")
       join(createUsingIndex(other.iterator))(f)
@@ -143,6 +161,19 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     : VertexPartition[VD2] = {
     val newMask = new BitSet(capacity)
     val newValues = new Array[VD2](capacity)
+    iter.foreach { case (vid, vdata) =>
+      val pos = index.getPos(vid)
+      newMask.set(pos)
+      newValues(pos) = vdata
+    }
+    new VertexPartition[VD2](index, newValues, newMask)
+  }
+
+  def updateUsingIndex[VD2: ClassManifest](iter: Iterator[Product2[Vid, VD2]])
+    : VertexPartition[VD2] = {
+    val newMask = new BitSet(capacity)
+    val newValues = new Array[VD2](capacity)
+    System.arraycopy(values, 0, newValues, 0, newValues.length)
     iter.foreach { case (vid, vdata) =>
       val pos = index.getPos(vid)
       newMask.set(pos)

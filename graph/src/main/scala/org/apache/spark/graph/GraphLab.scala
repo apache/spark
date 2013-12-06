@@ -124,12 +124,3 @@ object GraphLab {
     activeGraph.mapVertices{case (vid, data) => data._2 }
   }
 }
-
-
-
-
-
-
-
-
-

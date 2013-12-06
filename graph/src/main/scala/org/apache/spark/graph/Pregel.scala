@@ -96,17 +96,23 @@ object Pregel {
     : Graph[VD, ED] = {
 
     // Receive the first set of messages
-    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg)).cache
+    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
 
     var i = 0
     while (i < numIter) {
       // compute the messages
-      val messages = g.mapReduceTriplets(sendMsg, mergeMsg)
+      val messages = g.mapReduceTriplets(sendMsg, mergeMsg) // broadcast & aggregation
       // receive the messages
-      g = g.joinVertices(messages)(vprog).cache
+      val newVerts = g.vertices.zipJoin(messages)(vprog).cache() // updating the vertices
+      val changedVerts = g.vertices.diff(newVerts)
+      println("Replicating %d changed vertices instead of %d total vertices".format(
+        changedVerts.count, newVerts.count))
+      // replicate the changed vertices
+      g = graph.deltaJoinVertices(newVerts, changedVerts)
       // count the iteration
       i += 1
     }
+
     // Return the final graph
     g
   } // end of apply
@@ -163,36 +169,29 @@ object Pregel {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 
-    def vprogFun(id: Vid, attr: (VD, Boolean), msgOpt: Option[A]): (VD, Boolean) = {
-      msgOpt match {
-        case Some(msg) => (vprog(id, attr._1, msg), true)
-        case None => (attr._1, false)
-      }
-    }
-
-    def sendMsgFun(edge: EdgeTriplet[(VD,Boolean), ED]): Iterator[(Vid, A)] = {
-      if(edge.srcAttr._2) {
-        val et = new EdgeTriplet[VD, ED]
-        et.srcId = edge.srcId
-        et.srcAttr = edge.srcAttr._1
-        et.dstId = edge.dstId
-        et.dstAttr = edge.dstAttr._1
-        et.attr = edge.attr
-        sendMsg(et)
+    def sendMsgFun(edge: EdgeTriplet[VD, ED]): Iterator[(Vid, A)] = {
+      if (edge.srcMask) {
+        sendMsg(edge)
       } else {
         Iterator.empty
       }
     }
 
-    var g = graph.mapVertices( (vid, vdata) => (vprog(vid, vdata, initialMsg), true) )
+    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) )
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsgFun, mergeMsg).cache
+    var messages = g.mapReduceTriplets(sendMsgFun, mergeMsg).cache()
     var activeMessages = messages.count
     // Loop
     var i = 0
     while (activeMessages > 0) {
       // receive the messages
-      g = g.outerJoinVertices(messages)(vprogFun)
+      val newVerts = g.vertices.zipJoin(messages)(vprog).cache() // updating the vertices
+      val changedVerts = g.vertices.diff(newVerts)
+      println("Replicating %d changed vertices instead of %d total vertices".format(
+        changedVerts.count, newVerts.count))
+      // replicate the changed vertices
+      g = graph.deltaJoinVertices(newVerts, changedVerts)
+
       val oldMessages = messages
       // compute the messages
       messages = g.mapReduceTriplets(sendMsgFun, mergeMsg).cache
@@ -202,8 +201,8 @@ object Pregel {
       // count the iteration
       i += 1
     }
-    // Return the final graph
-    g.mapVertices((id, attr) => attr._1)
+
+    g
   } // end of apply
 
 } // end of class Pregel
