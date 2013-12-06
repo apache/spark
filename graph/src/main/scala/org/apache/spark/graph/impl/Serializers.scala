@@ -167,7 +167,7 @@ class DoubleAggMsgSerializer extends Serializer {
 // Helper classes to shorten the implementation of those special serializers.
 ////////////////////////////////////////////////////////////////////////////////
 
-sealed abstract class ShuffleSerializationStream(s: OutputStream) extends SerializationStream {
+abstract class ShuffleSerializationStream(s: OutputStream) extends SerializationStream {
   // The implementation should override this one.
   def writeObject[T](t: T): SerializationStream
 
@@ -280,7 +280,7 @@ sealed abstract class ShuffleSerializationStream(s: OutputStream) extends Serial
   override def close(): Unit = s.close()
 }
 
-sealed abstract class ShuffleDeserializationStream(s: InputStream) extends DeserializationStream {
+abstract class ShuffleDeserializationStream(s: InputStream) extends DeserializationStream {
   // The implementation should override this one.
   def readObject[T](): T
 
@@ -311,17 +311,16 @@ sealed abstract class ShuffleDeserializationStream(s: InputStream) extends Deser
   def readVarLong(optimizePositive: Boolean): Long = {
     // TODO: unroll the while loop.
     var value: Long = 0L
-    var i: Int = 0
     def readOrThrow(): Int = {
       val in = s.read()
       if (in < 0) throw new java.io.EOFException
       in & 0xFF
     }
+    var i: Int = 0
     var b: Int = readOrThrow()
-    while ((b & 0x80) != 0) {
+    while (i < 56 && (b & 0x80) != 0) {
       value |= (b & 0x7F).toLong << i
       i += 7
-      if (i > 63) throw new IllegalArgumentException("Variable length quantity is too long")
       b = readOrThrow()
     }
     val ret = value | (b.toLong << i)
