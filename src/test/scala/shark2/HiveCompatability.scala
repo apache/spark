@@ -31,13 +31,14 @@ class HiveCompatability extends HiveComaparisionTest {
   // TODO: bundle in jar files... get from classpath
   val hiveQueryDir = new File(testShark.hiveDevHome, "ql/src/test/queries/clientpositive")
   val testCases = hiveQueryDir.listFiles
+  val runAll = !(System.getProperty("shark.hive.alltests") == null)
 
   // Go through all the test cases and add them to scala test.
   testCases.foreach { testCase =>
     val testCaseName = testCase.getName.stripSuffix(".q")
     if(blackList contains testCaseName) {
       // Do nothing
-    } else if(whiteList contains testCaseName) {
+    } else if(whiteList.contains(testCaseName)  || runAll) {
       // Build a test case and submit it to scala test framework...
       val queriesString = fileToString(testCase)
       createQueryTest(testCaseName, queriesString)
