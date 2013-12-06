@@ -138,8 +138,10 @@ private[spark] class Worker(
       activeMasterWebUiUrl = uiUrl
       master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
       masterAddress = activeMasterUrl match {
-        case Master.sparkUrlRegex(_host, _port) => Address("akka.tcp", Master.systemName, _host, _port.toInt)
-        case x => throw new SparkException("Invalid spark URL:"+x)
+        case Master.sparkUrlRegex(_host, _port) =>
+          Address("akka.tcp", Master.systemName, _host, _port.toInt)
+        case x =>
+          throw new SparkException("Invalid spark URL: " + x)
       }
       connected = true
     }

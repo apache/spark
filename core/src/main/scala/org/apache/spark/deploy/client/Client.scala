@@ -104,8 +104,10 @@ private[spark] class Client(
       activeMasterUrl = url
       master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
       masterAddress = activeMasterUrl match {
-        case Master.sparkUrlRegex(host, port) => Address("akka.tcp", Master.systemName, host, port.toInt)
-        case x => throw new SparkException("Invalid spark URL:"+x)
+        case Master.sparkUrlRegex(host, port) =>
+          Address("akka.tcp", Master.systemName, host, port.toInt)
+        case x =>
+          throw new SparkException("Invalid spark URL: " + x)
       }
     }
 

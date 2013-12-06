@@ -17,11 +17,8 @@
 
 package org.apache.spark.util
 
-import akka.actor.{IndestructibleActorSystem, ActorSystem, ExtendedActorSystem}
+import akka.actor.{ActorSystem, ExtendedActorSystem, IndestructibleActorSystem}
 import com.typesafe.config.ConfigFactory
-import scala.concurrent.duration._
-import scala.concurrent.Await
-import akka.remote.RemoteActorRefProvider
 
 /**
  * Various utility classes for working with Akka.
@@ -47,7 +44,8 @@ private[spark] object AkkaUtils {
     val akkaTimeout = System.getProperty("spark.akka.timeout", "100").toInt
 
     val akkaFrameSize = System.getProperty("spark.akka.frameSize", "10").toInt
-    val lifecycleEvents = if (System.getProperty("spark.akka.logLifecycleEvents", "false").toBoolean) "on" else "off"
+    val lifecycleEvents =
+      if (System.getProperty("spark.akka.logLifecycleEvents", "false").toBoolean) "on" else "off"
 
     val akkaHeartBeatPauses = System.getProperty("spark.akka.heartbeat.pauses", "600").toInt
     val akkaFailureDetector =
