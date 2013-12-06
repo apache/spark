@@ -93,7 +93,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
       val prGraph2 = PageRank.runUntillConvergence(gridGraph, 0.0001, resetProb).cache()
       val error = prGraph1.vertices.zipJoin(prGraph2.vertices) { case (id, a, b) => (a - b) * (a - b) }
         .map { case (id, error) => error }.sum
-      prGraph1.vertices.zipJoin(prGraph2.vertices) { (id, a, b) => (a, b, a-b) }.foreach(println(_))
+      //prGraph1.vertices.zipJoin(prGraph2.vertices) { (id, a, b) => (a, b, a-b) }.foreach(println(_))
       println(error)
       assert(error < 1.0e-5)
       val pr3: RDD[(Vid, Double)] = sc.parallelize(GridPageRank(10,10, 50, resetProb))
@@ -101,7 +101,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
         val b: Double  = bOpt.get
         (a - b) * (a - b)
       }.map { case (id, error) => error }.sum
-      prGraph1.vertices.leftJoin(pr3) { (id, a, b) => (a, b) }.foreach( println(_) )
+      //prGraph1.vertices.leftJoin(pr3) { (id, a, b) => (a, b) }.foreach( println(_) )
       println(error2)
       assert(error2 < 1.0e-5)
     }

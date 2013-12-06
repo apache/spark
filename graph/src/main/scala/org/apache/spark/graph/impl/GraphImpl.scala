@@ -9,7 +9,6 @@ import org.apache.spark.graph.util.BytecodeUtils
 import org.apache.spark.rdd.{ShuffledRDD, RDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.ClosureCleaner
-import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHashMap}
 
 
 /**
@@ -198,9 +197,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
-
-    // Use explicit manifest in PrimitiveKeyOpenHashMap so we don't have to serialize GraphImpl.
-    val vdManifest = classManifest[VD]
 
     // For each vertex, replicate its attribute only to partitions where it is
     // in the relevant position in an edge.
