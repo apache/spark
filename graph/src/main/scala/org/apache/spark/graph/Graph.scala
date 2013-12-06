@@ -278,7 +278,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
       (mapFunc: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
 
-  def deltaJoinVertices(newVerts: VertexRDD[VD], changedVerts: VertexRDD[VD]): Graph[VD, ED]
+  def deltaJoinVertices(changedVerts: VertexRDD[VD]): Graph[VD, ED]
 
   // Save a copy of the GraphOps object so there is always one unique GraphOps object
   // for a given Graph object, and thus the lazy vals in GraphOps would work as intended.

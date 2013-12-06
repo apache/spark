@@ -207,6 +207,14 @@ class VertexRDD[@specialized VD: ClassManifest](
     }
   }
 
+  def deltaJoin[VD2: ClassManifest]
+      (other: VertexRDD[VD2])(f: (Vid, VD, VD2) => VD): VertexRDD[VD] =
+  {
+    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
+      thisPart.deltaJoin(otherPart)(f)
+    }
+  }
+
   /**
    * Left join this VertexSet with another VertexSet which has the
    * same Index.  This function will fail if both VertexSets do not
