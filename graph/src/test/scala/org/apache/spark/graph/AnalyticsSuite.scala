@@ -64,7 +64,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
         if (pr1 != pr2) { 1 } else { 0 }
       }.map { case (vid, test) => test }.sum
       assert(notMatching === 0)
-      prGraph2.vertices.foreach(println(_))
+      //prGraph2.vertices.foreach(println(_))
       val errors = prGraph2.vertices.map { case (vid, pr) =>
         val correct = (vid > 0 && pr == resetProb) ||
         (vid == 0 && math.abs(pr - (resetProb + (1.0 - resetProb) * (resetProb * (nVertices - 1)) )) < 1.0E-5)
@@ -141,7 +141,6 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
         else { assert(cc === 10) }
       }
       val ccMap = vertices.toMap
-      println(ccMap)
       for (id <- 0 until 20) {
         if (id < 10) {
           assert(ccMap(id) === 0)

@@ -42,7 +42,10 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   /** Return the vertex attribute for the given vertex ID. */
   def apply(vid: Vid): VD = values(index.getPos(vid))
 
-  def isDefined(vid: Vid): Boolean = mask.get(index.getPos(vid))
+  def isDefined(vid: Vid): Boolean = {
+    val pos = index.getPos(vid)
+    pos >= 0 && mask.get(pos)
+  }
 
   /**
    * Pass each vertex attribute along with the vertex id through a map
