@@ -14,6 +14,7 @@ import util._
 import org.apache.spark.rdd.RDD
 
 import collection.JavaConversions._
+import org.apache.hadoop.hive.metastore.MetaStoreUtils
 
 /**
  * A locally running test instance of spark.  The lifecycle for a given query is managed by the inner class
@@ -57,13 +58,17 @@ object TestShark {
     SharkEnv.initWithSharkContext("shark-sql-suite-testing", MASTER)
   }
 
-  // Use hive natively for queries that won't be executed by catalyst. This is because
-  // shark has dependencies on a custom version of hive that we are trying to avoid
-  // in catalyst.
-  SharkConfVars.setVar(SharkContext.hiveconf, SharkConfVars.EXEC_MODE, "hive")
+  configure()
 
-  runSqlHive("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + METASTORE_PATH + ";create=true")
-  runSqlHive("set hive.metastore.warehouse.dir=" + WAREHOUSE_PATH)
+  def configure() {
+    // Use hive natively for queries that won't be executed by catalyst. This is because
+    // shark has dependencies on a custom version of hive that we are trying to avoid
+    // in catalyst.
+    SharkConfVars.setVar(SharkContext.hiveconf, SharkConfVars.EXEC_MODE, "hive")
+
+    runSqlHive("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + METASTORE_PATH + ";create=true")
+    runSqlHive("set hive.metastore.warehouse.dir=" + WAREHOUSE_PATH)
+  }
 
   /**
    * Runs the specified SQL query using Hive.
@@ -201,10 +206,38 @@ object TestShark {
    * TODO: also clear out UDFs, views, etc.
    */
   def reset() {
-    loadedTables.clear()
-    catalog.client.getAllTables("default").foreach(t => {
-      println(s"Deleting table $t")
-      catalog.client.dropTable("default", t)
-    })
+    try {
+      // It is important that we RESET first as broken hooks that might have been set could break other sql exec here.
+      runSqlHive("RESET")
+      // For some reason, RESET does not reset the following variables...
+      runSqlHive("set datanucleus.cache.collections=true")
+      runSqlHive("set datanucleus.cache.collections.lazy=true")
+
+
+      loadedTables.clear()
+      catalog.client.getAllTables("default").foreach(t => {
+        println(s"Deleting table $t")
+        val table = catalog.client.getTable("default", t)
+
+        catalog.client.listIndexes("default", t, 255)
+          .foreach(i => catalog.client.dropIndex("default", t, i.getIndexName, true))
+
+        if(!MetaStoreUtils.isIndexTable(table))
+          catalog.client.dropTable("default", t)
+      })
+
+      catalog.client.getAllDatabases.filterNot(_ == "default").foreach {db =>
+        println(s"Dropping Database: $db")
+        catalog.client.dropDatabase(db, true, false, true)
+      }
+
+      configure()
+
+      runSqlHive("USE default")
+    } catch {
+      case e: Exception =>
+        println(s"FATAL ERROR: Failed to reset TestDB state. $e")
+        Thread.sleep(100000)
+    }
   }
 }
