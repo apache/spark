@@ -16,19 +16,19 @@ class VTableReplicated[VD: ClassManifest](
     vertexPlacement: VertexPlacement,
     prevVTableReplicated: Option[VTableReplicated[VD]] = None) {
 
-  val bothAttrs: RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] =
+  val bothAttrs: RDD[(Pid, VertexPartition[VD])] =
     createVTableReplicated(vTable, eTable, vertexPlacement, true, true)
 
-  val srcAttrOnly: RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] =
+  val srcAttrOnly: RDD[(Pid, VertexPartition[VD])] =
     createVTableReplicated(vTable, eTable, vertexPlacement, true, false)
 
-  val dstAttrOnly: RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] =
+  val dstAttrOnly: RDD[(Pid, VertexPartition[VD])] =
     createVTableReplicated(vTable, eTable, vertexPlacement, false, true)
 
-  val noAttrs: RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] =
+  val noAttrs: RDD[(Pid, VertexPartition[VD])] =
     createVTableReplicated(vTable, eTable, vertexPlacement, false, false)
 
-  def get(includeSrc: Boolean, includeDst: Boolean): RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] = {
+  def get(includeSrc: Boolean, includeDst: Boolean): RDD[(Pid, VertexPartition[VD])] = {
     (includeSrc, includeDst) match {
       case (true, true) => bothAttrs
       case (true, false) => srcAttrOnly
@@ -42,7 +42,7 @@ class VTableReplicated[VD: ClassManifest](
        eTable: EdgeRDD[_],
        vertexPlacement: VertexPlacement,
        includeSrcAttr: Boolean,
-       includeDstAttr: Boolean): RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] = {
+       includeDstAttr: Boolean): RDD[(Pid, VertexPartition[VD])] = {
 
     val placement = vertexPlacement.get(includeSrcAttr, includeDstAttr)
     val vdManifest = classManifest[VD]
@@ -55,25 +55,14 @@ class VTableReplicated[VD: ClassManifest](
 
     prevVTableReplicated match {
       case Some(vTableReplicated) =>
-        val prev: RDD[(Pid, (VertexIdToIndexMap, Array[VD]))] =
+        val prev: RDD[(Pid, VertexPartition[VD])] =
           vTableReplicated.get(includeSrcAttr, includeDstAttr)
 
         prev.zipPartitions(msgsByPartition) { (vTableIter, msgsIter) =>
-          val (pid, (vidToIndex, oldVertexArray)) = vTableIter.next()
-
-          val vertexArray = vdManifest.newArray(oldVertexArray.length)
-          System.arraycopy(oldVertexArray, 0, vertexArray, 0, vertexArray.length)
-
-          for ((_, block) <- msgsIter) {
-            for (i <- 0 until block.vids.size) {
-              val vid = block.vids(i)
-              val attr = block.attrs(i)
-              val ind = vidToIndex.getPos(vid) & OpenHashSet.POSITION_MASK
-              vertexArray(ind) = attr
-            }
-          }
-
-          Iterator((pid, (vidToIndex, vertexArray)))
+          val (pid, vertexPartition) = vTableIter.next()
+          val (_, block) = msgsIter.next()
+          val newVPart = vertexPartition.updateUsingIndex(block.iterator)(vdManifest)
+          Iterator((pid, newVPart))
         }.cache()
 
       case None =>
@@ -107,7 +96,7 @@ class VTableReplicated[VD: ClassManifest](
               vertexArray(ind) = attr
             }
           }
-          Iterator((pid, (vidToIndex, vertexArray)))
+          Iterator((pid, new VertexPartition(vidToIndex, vertexArray, vidToIndex.getBitSet)(vdManifest)))
         }.cache()
     }
   }
@@ -131,4 +120,6 @@ object VTableReplicated {
   }
 }
 
-class VertexAttributeBlock[VD: ClassManifest](val vids: Array[Vid], val attrs: Array[VD])
+class VertexAttributeBlock[VD: ClassManifest](val vids: Array[Vid], val attrs: Array[VD]) {
+  def iterator: Iterator[(Vid, VD)] = (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
+}

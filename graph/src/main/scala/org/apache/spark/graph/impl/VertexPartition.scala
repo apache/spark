@@ -42,6 +42,8 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   /** Return the vertex attribute for the given vertex ID. */
   def apply(vid: Vid): VD = values(index.getPos(vid))
 
+  def isDefined(vid: Vid): Boolean = mask.get(index.getPos(vid))
+
   /**
    * Pass each vertex attribute along with the vertex id through a map
    * function and retain the original RDD's partitioning and index.
@@ -159,6 +161,19 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     : VertexPartition[VD2] = {
     val newMask = new BitSet(capacity)
     val newValues = new Array[VD2](capacity)
+    iter.foreach { case (vid, vdata) =>
+      val pos = index.getPos(vid)
+      newMask.set(pos)
+      newValues(pos) = vdata
+    }
+    new VertexPartition[VD2](index, newValues, newMask)
+  }
+
+  def updateUsingIndex[VD2: ClassManifest](iter: Iterator[Product2[Vid, VD2]])
+    : VertexPartition[VD2] = {
+    val newMask = new BitSet(capacity)
+    val newValues = new Array[VD2](capacity)
+    System.arraycopy(values, 0, newValues, 0, newValues.length)
     iter.foreach { case (vid, vdata) =>
       val pos = index.getPos(vid)
       newMask.set(pos)

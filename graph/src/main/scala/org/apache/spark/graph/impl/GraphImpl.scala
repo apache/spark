@@ -23,6 +23,9 @@ import org.apache.spark.util.collection.{BitSet, OpenHashSet, PrimitiveKeyOpenHa
  * destinations. `vertexPlacement` specifies where each vertex will be
  * replicated. `vTableReplicated` stores the replicated vertex attributes, which
  * are co-partitioned with the relevant edges.
+ *
+ * mask in vertices means filter
+ * mask in vTableReplicated means active
  */
 class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     @transient val vertices: VertexRDD[VD],
@@ -44,8 +47,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     val edManifest = classManifest[ED]
 
     edges.zipEdgePartitions(vTableReplicated.bothAttrs) { (edgePartition, vTableReplicatedIter) =>
-      val (_, (vidToIndex, vertexArray)) = vTableReplicatedIter.next()
-      new EdgeTripletIterator(vidToIndex, vertexArray, edgePartition)(vdManifest, edManifest)
+      val (_, vPart) = vTableReplicatedIter.next()
+      new EdgeTripletIterator(vPart.index, vPart.values, edgePartition)(vdManifest, edManifest)
     }
   }
 
@@ -141,14 +144,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     val vdManifest = classManifest[VD]
     val newETable =
       edges.zipEdgePartitions(vTableReplicated.bothAttrs) { (edgePartition, vTableReplicatedIter) =>
-        val (pid, (vidToIndex, vertexArray)) = vTableReplicatedIter.next()
+        val (pid, vPart) = vTableReplicatedIter.next()
         val et = new EdgeTriplet[VD, ED]
-        val vmap = new PrimitiveKeyOpenHashMap[Vid, VD](
-          vidToIndex, vertexArray)(classManifest[Vid], vdManifest)
         val newEdgePartition = edgePartition.map { e =>
           et.set(e)
-          et.srcAttr = vmap(e.srcId)
-          et.dstAttr = vmap(e.dstId)
+          et.srcAttr = vPart(e.srcId)
+          et.dstAttr = vPart(e.dstId)
           f(et)
         }
         Iterator((pid, newEdgePartition))
@@ -209,44 +210,22 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
     // Map and combine.
     val preAgg = edges.zipEdgePartitions(vs) { (edgePartition, vTableReplicatedIter) =>
-      val (_, (vidToIndex, vertexArray)) = vTableReplicatedIter.next()
-      assert(vidToIndex.capacity == vertexArray.size)
-      val vmap = new PrimitiveKeyOpenHashMap[Vid, VD](vidToIndex, vertexArray)(
-        classManifest[Vid], vdManifest)
+      val (_, vertexPartition) = vTableReplicatedIter.next()
 
-      // Note: This doesn't allow users to send messages to arbitrary vertices.
-      val msgArray = new Array[A](vertexArray.size)
-      val msgBS = new BitSet(vertexArray.size)
       // Iterate over the partition
-      val et = new EdgeTriplet[VD, ED]
-
-      edgePartition.foreach { e =>
+      val et = new EdgeTriplet[VD, ED](vertexPartition)
+      val filteredEdges = edgePartition.iterator.flatMap { e =>
         et.set(e)
         if (mapUsesSrcAttr) {
-          et.srcAttr = vmap(e.srcId)
+          et.srcAttr = vertexPartition(e.srcId)
         }
         if (mapUsesDstAttr) {
-          et.dstAttr = vmap(e.dstId)
+          et.dstAttr = vertexPartition(e.dstId)
         }
-        // TODO(rxin): rewrite the foreach using a simple while loop to speed things up.
-        // Also given we are only allowing zero, one, or two messages, we can completely unroll
-        // the for loop.
-        mapFunc(et).foreach { case (vid, msg) =>
-          // verify that the vid is valid
-          assert(vid == et.srcId || vid == et.dstId)
-          // Get the index of the key
-          val ind = vidToIndex.getPos(vid) & OpenHashSet.POSITION_MASK
-          // Populate the aggregator map
-          if (msgBS.get(ind)) {
-            msgArray(ind) = reduceFunc(msgArray(ind), msg)
-          } else {
-            msgArray(ind) = msg
-            msgBS.set(ind)
-          }
-        }
+        mapFunc(et)
       }
-      // construct an iterator of tuples. Iterator[(Vid, A)]
-      msgBS.iterator.map { ind => (vidToIndex.getValue(ind), msgArray(ind)) }
+      // Note: This doesn't allow users to send messages to arbitrary vertices.
+      vertexPartition.aggregateUsingIndex(filteredEdges, reduceFunc).iterator
     }
 
     // do the final reduction reusing the index map
