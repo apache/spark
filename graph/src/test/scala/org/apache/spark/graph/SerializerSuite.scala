@@ -1,13 +1,16 @@
 package org.apache.spark.graph
 
+import java.io.{EOFException, ByteArrayInputStream, ByteArrayOutputStream}
+
+import scala.util.Random
+
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext
+import org.apache.spark._
 import org.apache.spark.graph.LocalSparkContext._
-import java.io.{EOFException, ByteArrayInputStream, ByteArrayOutputStream}
 import org.apache.spark.graph.impl._
 import org.apache.spark.graph.impl.MsgRDDFunctions._
-import org.apache.spark._
+import org.apache.spark.serializer.SerializationStream
 
 
 class SerializerSuite extends FunSuite with LocalSparkContext {
@@ -141,6 +144,38 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
         new VertexBroadcastMsg[Int](pid, pid, pid)
       }
       bmsgs.partitionBy(new HashPartitioner(3)).collect()
+    }
+  }
+
+  test("variable long encoding") {
+    def testVarLongEncoding(v: Long, optimizePositive: Boolean) {
+      val bout = new ByteArrayOutputStream
+      val stream = new ShuffleSerializationStream(bout) {
+        def writeObject[T](t: T): SerializationStream = {
+          writeVarLong(t.asInstanceOf[Long], optimizePositive = optimizePositive)
+          this
+        }
+      }
+      stream.writeObject(v)
+
+      val bin = new ByteArrayInputStream(bout.toByteArray)
+      val dstream = new ShuffleDeserializationStream(bin) {
+        def readObject[T](): T = {
+          readVarLong(optimizePositive).asInstanceOf[T]
+        }
+      }
+      val read = dstream.readObject[Long]()
+      assert(read === v)
+    }
+
+    // Test all variable encoding code path (each branch uses 7 bits, i.e. 1L << 7 difference)
+    val d = Random.nextLong() % 128
+    Seq[Long](0, 1L << 0 + d, 1L << 7 + d, 1L << 14 + d, 1L << 21 + d, 1L << 28 + d, 1L << 35 + d,
+      1L << 42 + d, 1L << 49 + d, 1L << 56 + d, 1L << 63 + d).foreach { number =>
+      testVarLongEncoding(number, optimizePositive = false)
+      testVarLongEncoding(number, optimizePositive = true)
+      testVarLongEncoding(-number, optimizePositive = false)
+      testVarLongEncoding(-number, optimizePositive = true)
     }
   }
 }
