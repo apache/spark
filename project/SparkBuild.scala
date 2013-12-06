@@ -51,7 +51,7 @@ object SparkBuild extends Build {
 
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn(core)
 
-  lazy val graph = Project("graph", file("graph"), settings = graphSettings) dependsOn(core)
+  lazy val graph = Project("graph", file("graph"), settings = graphSettings) dependsOn(core) 
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
@@ -91,7 +91,6 @@ object SparkBuild extends Build {
     scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
       "-target:" + SCALAC_JVM_VERSION),
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
-    javaOptions += "-Dsun.io.serialization.extendedDebugInfo=true",
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
