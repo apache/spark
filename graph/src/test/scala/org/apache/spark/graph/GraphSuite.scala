@@ -156,7 +156,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       // Create a star graph of 10 vertices
       val n = 10
-      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "v1")
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "v1").cache()
 
       // Modify only vertices whose vids are even
       val newVerts = star.vertices.mapValues((vid, attr) => if (vid % 2 == 0) "v2" else attr)
@@ -167,7 +167,12 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
       // The graph's vertices should be correct
       assert(changedStar.vertices.collect().toSet === newVerts.collect().toSet)
+
+      // Send the leaf attributes to the center
+      val sums = changedStar.mapReduceTriplets(
+        edge => Iterator((edge.srcId, Set(edge.dstAttr))),
+        (a: Set[String], b: Set[String]) => a ++ b)
+      assert(sums.collect().toSet === Set((0, Set("v1", "v2"))))
     }
   }
-
 }
