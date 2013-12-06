@@ -7,7 +7,10 @@ object Literal {
   def apply(v: Any): Literal = v match {
     // TODO(marmbrus): Use bigInt type for value?
     case i: Int => Literal(i, IntegerType)
-    case d: Double => Literal(d, FloatType)
+    case d: Double => Literal(d, DoubleType)
+    case f: Float => Literal(f, FloatType)
+    case b: Byte => Literal(b, ByteType)
+    case s: Short => Literal(s, ShortType)
     case s: String => Literal(s, StringType)
   }
 }
