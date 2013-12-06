@@ -10,20 +10,19 @@ import scala.util.control.{ControlThrowable, NonFatal}
 import com.typesafe.config.Config
 
 /**
- * An ActorSystem specific to Spark. Based off of [[akka.actor.ActorSystem]].
- * The only change from the default system is that we do not shut down the ActorSystem
- * in the event of a fatal exception. This is necessary as Spark is allowed to recover
- * from fatal exceptions (see [[org.apache.spark.executor.Executor]]).
+ * An [[akka.actor.ActorSystem]] which refuses to shut down in the event of a fatal exception.
+ * This is necessary as Spark Executors are allowed to recover from fatal exceptions
+ * (see [[org.apache.spark.executor.Executor]]).
  */
-object SparkActorSystem {
+object IndestructibleActorSystem {
   def apply(name: String, config: Config): ActorSystem =
     apply(name, config, ActorSystem.findClassLoader())
 
   def apply(name: String, config: Config, classLoader: ClassLoader): ActorSystem =
-    new SparkActorSystemImpl(name, config, classLoader).start()
+    new IndestructibleActorSystemImpl(name, config, classLoader).start()
 }
 
-private[akka] class SparkActorSystemImpl(
+private[akka] class IndestructibleActorSystemImpl(
     override val name: String,
     applicationConfig: Config,
     classLoader: ClassLoader)
@@ -36,7 +35,7 @@ private[akka] class SparkActorSystemImpl(
       def uncaughtException(thread: Thread, cause: Throwable): Unit = {
         if (isFatalError(cause) && !settings.JvmExitOnFatalError) {
           log.error(cause, "Uncaught fatal error from thread [{}] not shutting down " +
-            "ActorSystem tolerating and continuing.... [{}]", thread.getName, name)
+            "ActorSystem [{}] tolerating and continuing.... ", thread.getName, name)
           //shutdown()                 //TODO make it configurable
         } else {
           fallbackHandler.uncaughtException(thread, cause)

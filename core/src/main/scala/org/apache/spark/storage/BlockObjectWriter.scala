@@ -44,7 +44,7 @@ abstract class BlockObjectWriter(val blockId: BlockId) {
    * Flush the partial writes and commit them as a single atomic block. Return the
    * number of bytes written for this commit.
    */
-  def commit(): Long
+  def commit(): LongSpark
 
   /**
    * Reverts writes that haven't been flushed yet. Callers should invoke this function
