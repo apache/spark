@@ -159,14 +159,20 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "v1").cache()
 
       // Modify only vertices whose vids are even
-      val newVerts = star.vertices.mapValues((vid, attr) => if (vid % 2 == 0) "v2" else attr)
-      val changedVerts = star.vertices.diff(newVerts)
+      val changedVerts = star.vertices.filter(_._1 % 2 == 0).mapValues((vid, attr) => "v2")
 
       // Apply the modification to the graph
-      val changedStar = star.deltaJoinVertices(newVerts, changedVerts)
+      val changedStar = star.deltaJoinVertices(changedVerts)
+
+      val newVertices = star.vertices.leftZipJoin(changedVerts) { (vid, oldVd, newVdOpt) =>
+        newVdOpt match {
+          case Some(newVd) => newVd
+          case None => oldVd
+        }
+      }
 
       // The graph's vertices should be correct
-      assert(changedStar.vertices.collect().toSet === newVerts.collect().toSet)
+      assert(changedStar.vertices.collect().toSet === newVertices.collect().toSet)
 
       // Send the leaf attributes to the center
       val sums = changedStar.mapReduceTriplets(

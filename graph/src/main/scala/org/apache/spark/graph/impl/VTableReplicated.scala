@@ -2,7 +2,7 @@ package org.apache.spark.graph.impl
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.collection.OpenHashSet
+import org.apache.spark.util.collection.{PrimitiveVector, OpenHashSet}
 
 import org.apache.spark.graph._
 
@@ -109,14 +109,23 @@ object VTableReplicated {
   def buildBuffer[VD: ClassManifest](pid2vidIter: Iterator[Array[Array[Vid]]], vertexPartIter: Iterator[VertexPartition[VD]]) = {
     val pid2vid: Array[Array[Vid]] = pid2vidIter.next()
     val vertexPart: VertexPartition[VD] = vertexPartIter.next()
-    val output = new Array[(Pid, VertexAttributeBlock[VD])](pid2vid.size)
-    //val output = mmm.newArray(pid2vid.size)
-    for (pid <- 0 until pid2vid.size) {
-      val block = new VertexAttributeBlock(
-        pid2vid(pid), pid2vid(pid).map(vid => vertexPart(vid)).toArray)
-      output(pid) = (pid, block)
+
+    Iterator.tabulate(pid2vid.size) { pid =>
+      val vidsCandidate = pid2vid(pid)
+      val size = vidsCandidate.length
+      val vids = new PrimitiveVector[Vid](pid2vid(pid).size)
+      val attrs = new PrimitiveVector[VD](pid2vid(pid).size)
+      var i = 0
+      while (i < size) {
+        val vid = vidsCandidate(i)
+        if (vertexPart.isDefined(vid)) {
+          vids += vid
+          attrs += vertexPart(vid)
+        }
+        i += 1
+      }
+      (pid, new VertexAttributeBlock(vids.trim().array, attrs.trim().array))
     }
-    output.iterator
   }
 }
 
