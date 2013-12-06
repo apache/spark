@@ -168,7 +168,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration) exte
     System.setProperty("spark.driver.host", driverHost)
     System.setProperty("spark.driver.port", driverPort.toString)
 
-    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+    val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       driverHost, driverPort.toString, CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
     actor = actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")
