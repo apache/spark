@@ -60,11 +60,13 @@ private[spark] class StagePage(parent: JobProgressUI) {
       var activeTime = 0L
       listener.stageIdToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
 
+      val finishedTasks = listener.stageIdToTaskInfos(stageId).filter(_._1.finished)
+
       val summary =
         <div>
           <ul class="unstyled">
             <li>
-              <strong>CPU time: </strong>
+              <strong>Total duration across all tasks: </strong>
               {parent.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
             </li>
             {if (hasShuffleRead)
@@ -104,6 +106,33 @@ private[spark] class StagePage(parent: JobProgressUI) {
           val serviceQuantiles = "Duration" +: Distribution(serviceTimes).get.getQuantiles().map(
             ms => parent.formatDuration(ms.toLong))
 
+          val gettingResultTimes = validTasks.map{case (info, metrics, exception) =>
+            if (info.gettingResultTime > 0) {
+              (info.finishTime - info.gettingResultTime).toDouble
+            } else {
+              0.0
+            }
+          }
+          val gettingResultQuantiles = ("Time spent fetching task results" +:
+            Distribution(gettingResultTimes).get.getQuantiles().map(
+              millis => parent.formatDuration(millis.toLong)))
+          // The scheduler delay includes the network delay to send the task to the worker
+          // machine and to send back the result (but not the time to fetch the task result,
+          // if it needed to be fetched from the block manager on the worker).
+          val schedulerDelays = validTasks.map{case (info, metrics, exception) =>
+            val totalExecutionTime = {
+              if (info.gettingResultTime > 0) {
+                (info.gettingResultTime - info.launchTime).toDouble
+              } else {
+                (info.finishTime - info.launchTime).toDouble
+              }
+            }
+            totalExecutionTime - metrics.get.executorRunTime
+          }
+          val schedulerDelayQuantiles = ("Scheduler delay" +:
+            Distribution(schedulerDelays).get.getQuantiles().map(
+              millis => parent.formatDuration(millis.toLong)))
+
           def getQuantileCols(data: Seq[Double]) =
             Distribution(data).get.getQuantiles().map(d => Utils.bytesToString(d.toLong))
 
@@ -119,7 +148,10 @@ private[spark] class StagePage(parent: JobProgressUI) {
           }
           val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
-          val listings: Seq[Seq[String]] = Seq(serviceQuantiles,
+          val listings: Seq[Seq[String]] = Seq(
+            serviceQuantiles,
+            gettingResultQuantiles,
+            schedulerDelayQuantiles,
             if (hasShuffleRead) shuffleReadQuantiles else Nil,
             if (hasShuffleWrite) shuffleWriteQuantiles else Nil)
 
