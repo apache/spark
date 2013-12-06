@@ -51,7 +51,7 @@
     </profile>
 
     <profile>
-      <id>new-yarn</id>
+      <id>hadoop2.2-yarn</id>
        <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
