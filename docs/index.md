@@ -56,7 +56,7 @@ Hadoop, you must build Spark against the same version that your cluster uses.
 By default, Spark links to Hadoop 1.0.4. You can change this by setting the
 `SPARK_HADOOP_VERSION` variable when compiling:
 
-    SPARK_HADOOP_VERSION=1.2.1 sbt/sbt assembly
+    SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
 
 In addition, if you wish to run Spark on [YARN](running-on-yarn.md), set
 `SPARK_YARN` to `true`:
