@@ -331,7 +331,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.shuffle.consolidateFiles</td>
   <td>false</td>
   <td>
-    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance if you run shuffles with large numbers of reduce tasks.
+    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is reccomended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
   </td>
 </tr>
 <tr>
