@@ -57,6 +57,7 @@ class HiveCompatability extends HiveComaparisionTest {
      "nestedvirtual",
      "quote2",
      "rename_column",
+     "select_as_omitted",
      "set_variable_sub",
      "show_describe_func_quotes",
      "show_functions",

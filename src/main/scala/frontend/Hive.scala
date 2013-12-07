@@ -392,6 +392,9 @@ object Hive {
     case Token("TOK_SELEXPR",
            e :: Nil) =>
       nodeToExpr(e)
+    case Token("TOK_SELEXPR",
+           e :: Token(alias, Nil) :: Nil) =>
+      Alias(nodeToExpr(e), alias)()
   }
 
 
