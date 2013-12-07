@@ -64,6 +64,6 @@ class VertexPlacement(eTable: EdgeRDD[_], vTable: VertexRDD[_]) {
       }
 
       Iterator(pid2vid.map(_.trim().array))
-    }
+    }.cache().setName("VertexPlacement %s %s".format(includeSrcAttr, includeDstAttr))
   }
 }

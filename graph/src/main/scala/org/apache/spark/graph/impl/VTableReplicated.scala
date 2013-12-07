@@ -62,7 +62,7 @@ class VTableReplicated[VD: ClassManifest](
           val (pid, vertexPartition) = vTableIter.next()
           val newVPart = vertexPartition.updateUsingIndex(msgsIter.flatMap(_._2.iterator))(vdManifest)
           Iterator((pid, newVPart))
-        }.cache()
+        }.cache().setName("VTableReplicated delta %s %s".format(includeSrcAttr, includeDstAttr))
 
       case None =>
         // Within each edge partition, create a local map from vid to an index into
@@ -96,7 +96,7 @@ class VTableReplicated[VD: ClassManifest](
             }
           }
           Iterator((pid, new VertexPartition(vidToIndex, vertexArray, vidToIndex.getBitSet)(vdManifest)))
-        }.cache()
+        }.cache().setName("VTableReplicated %s %s".format(includeSrcAttr, includeDstAttr))
     }
   }
 

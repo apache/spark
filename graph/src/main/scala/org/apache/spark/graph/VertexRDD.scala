@@ -56,6 +56,8 @@ class VertexRDD[@specialized VD: ClassManifest](
 
   require(partitionsRDD.partitioner.isDefined)
 
+  partitionsRDD.setName("VertexRDD")
+
   /**
    * Construct a new VertexRDD that is indexed by only the keys in the RDD.
    * The resulting VertexSet will be based on a different index and can
