@@ -21,7 +21,6 @@ import io.netty.channel.ChannelInitializer;
 import io.netty.channel.socket.SocketChannel;
 import io.netty.handler.codec.string.StringEncoder;
 
-
 class FileClientChannelInitializer extends ChannelInitializer<SocketChannel> {
 
   private final FileClientHandler fhandler;
