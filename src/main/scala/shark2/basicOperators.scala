@@ -42,6 +42,8 @@ case class Union(left: SharkPlan, right: SharkPlan)(@transient sc: SharkContext)
 }
 
 case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) extends UnaryNode {
+  override def otherCopyArgs = sc :: Nil
+
   def output = child.output
   // TODO: Pick num splits based on |limit|.
   def execute() = sc.makeRDD(child.execute().take(limit),1)
