@@ -335,7 +335,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-<tr>
   <td>spark.speculation</td>
   <td>false</td>
   <td>
