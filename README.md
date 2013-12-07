@@ -55,7 +55,7 @@ versions without YARN, use:
     # Cloudera CDH 4.2.0 with MapReduce v1
     $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt/sbt assembly
 
-For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
+For Apache Hadoop 2.0.X, 2.1.X, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
 with YARN, also set `SPARK_YARN=true`:
 
     # Apache Hadoop 2.0.5-alpha
@@ -63,6 +63,11 @@ with YARN, also set `SPARK_YARN=true`:
 
     # Cloudera CDH 4.2.0 with MapReduce v2
     $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_YARN=true sbt/sbt assembly
+
+When building for Hadoop 2.2.X and newer, you'll need to include the additional `new-yarn` profile:
+
+    # Apache Hadoop 2.2.X and newer
+    $ mvn -Dyarn.version=2.2.0 -Dhadoop.version=2.2.0 -Pnew-yarn
 
 For convenience, these variables may also be set through the `conf/spark-env.sh` file
 described below.
