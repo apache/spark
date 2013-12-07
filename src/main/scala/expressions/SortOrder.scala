@@ -14,4 +14,5 @@ case object Descending extends SortDirection
 case class SortOrder(child: Expression, direction: SortDirection) extends UnaryExpression {
   def dataType = child.dataType
   def nullable = child.nullable
+  override def toString = s"$child ${if(direction == Ascending) "ASC" else "DESC"}"
 }
