@@ -64,73 +64,82 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
           |=============================""".stripMargin)
       val queryList = sql.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
 
-      testShark.reset()
-
-      // Run w/ catalyst
-      val catalystResults = queryList.map { queryString =>
-        info(queryString)
-        val query = new testShark.SharkSqlQuery(queryString)
-
-        (query, prepareAnswer(query, query.stringResult()))
-      }.toSeq
-
-      testShark.reset()
-
-      val hiveResults: Seq[Seq[String]] = queryList.zipWithIndex.map {
-        case (queryString, i)  =>
-          val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
-          val cachedAnswerFile = new File(answerCache, cachedAnswerName)
-
-          if(cachedAnswerFile.exists) {
-            println(s"Using cached answer for: $queryString")
-            val cachedAnswer = fileToString(cachedAnswerFile)
-            if(cachedAnswer == "")
-              Nil
-            else
-              cachedAnswer.split("\n").toSeq
-          } else {
-            // Analyze the query with catalyst to ensure test tables are loaded.
-            val sharkQuery = (new testShark.SharkSqlQuery(queryString))
-            val answer = sharkQuery.analyzed match {
-              case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
-              case _ => prepareAnswer(sharkQuery, testShark.runSqlHive(queryString))
-            }
-
-            stringToFile(cachedAnswerFile, answer.mkString("\n"))
-
-            answer
-          }
-      }.toSeq
-
-      testShark.reset()
-
-      (queryList, hiveResults, catalystResults).zipped.foreach {
-        case (query, hive, (sharkQuery, catalyst)) =>
-          // Check that the results match unless its an EXPLAIN query.
-          if((!sharkQuery.parsed.isInstanceOf[ExplainCommand]) && hive != catalyst) {
-            fail(
-              s"""
-                |Results do not match for query:
-                |$sharkQuery\n${sharkQuery.analyzed.output.mkString("\t")}
-                |== HIVE - ${hive.size} row(s) ==
-                |${hive.mkString("\n")}
-                |== CATALYST - ${catalyst.size} row(s) ==
-                |${catalyst.mkString("\n")}
-              """.stripMargin)
-          }
-      }
-
-      passedList.println(testCaseName)
-
-      // Canary query.
       try {
-        new testShark.SharkSqlQuery("SELECT key FROM src").stringResult()
-        testShark.runSqlHive("SELECT key FROM src")
+        testShark.reset()
+
+        // Run w/ catalyst
+        val catalystResults = queryList.map { queryString =>
+          info(queryString)
+          val query = new testShark.SharkSqlQuery(queryString)
+
+          (query, prepareAnswer(query, query.stringResult()))
+        }.toSeq
+
+        testShark.reset()
+
+        val hiveResults: Seq[Seq[String]] = queryList.zipWithIndex.map {
+          case (queryString, i)  =>
+            val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
+            val cachedAnswerFile = new File(answerCache, cachedAnswerName)
+
+            if(cachedAnswerFile.exists) {
+              println(s"Using cached answer for: $queryString")
+              val cachedAnswer = fileToString(cachedAnswerFile)
+              if(cachedAnswer == "")
+                Nil
+              else
+                cachedAnswer.split("\n").toSeq
+            } else {
+              // Analyze the query with catalyst to ensure test tables are loaded.
+              val sharkQuery = (new testShark.SharkSqlQuery(queryString))
+              val answer = sharkQuery.analyzed match {
+                case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
+                case _ => prepareAnswer(sharkQuery, testShark.runSqlHive(queryString))
+              }
+
+              stringToFile(cachedAnswerFile, answer.mkString("\n"))
+
+              answer
+            }
+        }.toSeq
+
+        testShark.reset()
+
+        (queryList, hiveResults, catalystResults).zipped.foreach {
+          case (query, hive, (sharkQuery, catalyst)) =>
+            // Check that the results match unless its an EXPLAIN query.
+            if((!sharkQuery.parsed.isInstanceOf[ExplainCommand]) && hive != catalyst) {
+              fail(
+                s"""
+                  |Results do not match for query:
+                  |$sharkQuery\n${sharkQuery.analyzed.output.mkString("\t")}
+                  |== HIVE - ${hive.size} row(s) ==
+                  |${hive.mkString("\n")}
+                  |== CATALYST - ${catalyst.size} row(s) ==
+                  |${catalyst.mkString("\n")}
+                """.stripMargin)
+            }
+        }
+
+        passedList.println(testCaseName)
       } catch {
-        case e: Exception =>
-          println("CANARY QUERY FAILED: This implies that the testing environment has been corrupted and thus testing will stop.")
-          Thread.sleep(1000000)
-          System.exit(1)
+        case originalException: Exception =>
+          // When we encounter an error we check to see if the environment is still okay by running a simple query.
+          // If this fails then we halt testing since something must have gone seriously wrong.
+          try {
+            new testShark.SharkSqlQuery("SELECT key FROM src").stringResult()
+            testShark.runSqlHive("SELECT key FROM src")
+          } catch {
+            case e: Exception =>
+              println(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")
+              // The testing setup traps exits so wait here for a long time so the developer can see when things started
+              // to go wrong.
+              Thread.sleep(1000000)
+              System.exit(1)
+          }
+
+          // If the canary query didn't fail then the environment is still okay, so just throw the original exception.
+          throw originalException
       }
     }
   }
