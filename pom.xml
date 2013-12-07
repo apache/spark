@@ -104,7 +104,7 @@
     <scala-short.version>2.10</scala-short.version>
     <scala.version>2.10.3</scala.version>
     <mesos.version>0.13.0</mesos.version>
-    <akka.version>2.2.1</akka.version>
+    <akka.version>2.2.3</akka.version>
     <slf4j.version>1.7.2</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
@@ -116,10 +116,10 @@
   </properties>
 
   <repositories>
-    <repository>
-      <id>typesafe-repo</id>
-      <name>Typesafe Repository</name>
-      <url>http://repo.typesafe.com/typesafe/releases/</url>
+    <repository> 
+      <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
+      <name>Maven Repository</name>
+      <url>http://repo.maven.apache.org/maven2/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -139,17 +139,6 @@
       </snapshots>
     </repository>
     <repository>
-      <id>akka-repo</id>
-      <name>Akka Repository</name>
-      <url>http://repo.akka.io/releases/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
       <id>mqtt-repo</id>
       <name>MQTT Repository</name>
       <url>https://repo.eclipse.org/content/repositories/paho-releases/</url>
@@ -161,41 +150,6 @@
       </snapshots>
     </repository>
   </repositories>
-  <pluginRepositories>
-    <pluginRepository>
-      <id>oss-sonatype-releases</id>
-      <name>OSS Sonatype</name>
-      <url>https://oss.sonatype.org/content/repositories/releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </pluginRepository>
-    <pluginRepository>
-      <id>oss-sonatype-snapshots</id>
-      <name>OSS Sonatype</name>
-      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </pluginRepository>
-    <pluginRepository>
-      <id>oss-sonatype</id>
-      <name>OSS Sonatype</name>
-      <url>https://oss.sonatype.org/content/groups/public</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </pluginRepository>
-  </pluginRepositories>
 
   <dependencyManagement>
     <dependencies>

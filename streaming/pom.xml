@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-streaming_${scala-short.version}</artifactId>
+  <artifactId>spark-streaming_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Streaming</name>
   <url>http://spark.incubator.apache.org/</url>
