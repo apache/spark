@@ -23,6 +23,7 @@ import io.netty.channel.ChannelOption;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.oio.OioSocketChannel;
 
+import io.netty.util.concurrent.EventExecutorGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -32,6 +33,7 @@ class FileClient {
   private FileClientHandler handler = null;
   private Channel channel = null;
   private Bootstrap bootstrap = null;
+  private EventLoopGroup group = null;
   private int connectTimeout = 60*1000; // 1 min
 
   public FileClient(FileClientHandler handler, int connectTimeout) {
@@ -40,8 +42,9 @@ class FileClient {
   }
 
   public void init() {
-    bootstrap = new Bootstrap();
-    bootstrap.group(new OioEventLoopGroup())
+    group = new OioEventLoopGroup();
+    Bootstrap bootstrap = new Bootstrap();
+    bootstrap.group(group)
       .channel(OioSocketChannel.class)
       .option(ChannelOption.SO_KEEPALIVE, true)
       .option(ChannelOption.TCP_NODELAY, true)
@@ -76,11 +79,13 @@ class FileClient {
 
   public void close() {
     if(channel != null) {
-      channel.close();
+      channel.close().awaitUninterruptibly();
       channel = null;
     }
-    if ( bootstrap!=null) {
-      bootstrap.shutdown();
+
+    if (group!=null) {
+      group.shutdownGracefully();
+      group = null;
       bootstrap = null;
     }
   }

@@ -21,13 +21,13 @@ import java.io.File;
 import java.io.FileInputStream;
 
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundMessageHandlerAdapter;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.DefaultFileRegion;
 
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.FileSegment;
 
-class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
+class FileServerHandler extends SimpleChannelInboundHandler<String> {
 
   PathResolver pResolver;
 
@@ -36,7 +36,7 @@ class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
   }
 
   @Override
-  public void messageReceived(ChannelHandlerContext ctx, String blockIdString) {
+  public void channelRead0(ChannelHandlerContext ctx, String blockIdString) {
     BlockId blockId = BlockId.apply(blockIdString);
     FileSegment fileSegment = pResolver.getBlockLocation(blockId);
     // if getBlockLocation returns null, close the channel
@@ -60,7 +60,7 @@ class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
       int len = new Long(length).intValue();
       ctx.write((new FileHeader(len, blockId)).buffer());
       try {
-        ctx.sendFile(new DefaultFileRegion(new FileInputStream(file)
+        ctx.write(new DefaultFileRegion(new FileInputStream(file)
           .getChannel(), fileSegment.offset(), fileSegment.length()));
       } catch (Exception e) {
         e.printStackTrace();
