@@ -196,7 +196,7 @@ object TestShark {
     if(!(loadedTables contains name)) {
       println(s"Loading test table $name")
       val createCmds = testTables.find(_.name == name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
-      createCmds.foreach(runSqlHive)
+      createCmds.foreach(_.q.stringResult())
       loadedTables += name
     }
   }
@@ -237,6 +237,8 @@ object TestShark {
     } catch {
       case e: Exception =>
         println(s"FATAL ERROR: Failed to reset TestDB state. $e")
+        // At this point there is really no reason to continue, but the test framework traps exits.  So instead we just
+        // pause forever so that at least the developer can see where things started to go wrong.
         Thread.sleep(100000)
     }
   }
