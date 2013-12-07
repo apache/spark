@@ -15,6 +15,11 @@ abstract class BinaryPredicate extends BinaryExpression with Predicate {
   def nullable = left.nullable || right.nullable
 }
 
+case class Not(child: Expression) extends Predicate with trees.UnaryNode[Expression]{
+  def references = child.references
+  def nullable = child.nullable
+}
+
 case class Equals(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "="
 }

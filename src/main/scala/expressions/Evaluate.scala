@@ -11,7 +11,8 @@ object Evaluate {
     def eval(e: Expression) = Evaluate(e, input)
 
     /**
-     * A set of helper functions that return the correct [[scala.math.Integral]] type and do any casting necessary.
+     * A set of helper functions that return the correct decendent of [[scala.math.Numeric]] type and do any casting
+     * necessary of child evaluation.
      */
 
     @inline
@@ -92,6 +93,7 @@ object Evaluate {
       // Divide & remainder implementation are different for fractional and integral dataTypes.
       case Divide(l, r) if(l.dataType == DoubleType || l.dataType == FloatType) => f2(l,r, _.div(_, _))
       case Divide(l, r) => i2(l,r, _.quot(_, _))
+      // Remainder is only allowed on Integral types.
       case Remainder(l, r) => i2(l,r, _.rem(_, _))
       case UnaryMinus(child) => n1(child, _.negate(_))
 
@@ -101,6 +103,9 @@ object Evaluate {
       case GreaterThanOrEqual(l, r) => n2(l, r, _.gteq(_, _))
       case LessThan(l, r) => n2(l, r, _.lt(_, _))
       case LessThanOrEqual(l, r) => n2(l, r, _.lteq(_, _))
+
+      /* Boolean Logic */
+      case Not(c) => !eval(c).asInstanceOf[Boolean]
 
       /* References to input tuples */
       case BoundReference(inputTuple, ordinal, _) => input(inputTuple)(ordinal)
