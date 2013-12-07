@@ -37,7 +37,7 @@ case class Filter(condition: Expression, child: SharkPlan) extends UnaryNode {
 case class Union(left: SharkPlan, right: SharkPlan)(@transient sc: SharkContext) extends BinaryNode {
   // TODO: attributes output by union should be distinct for nullability purposes
   def output = left.output
-  // TODO: is it more efficent to union a bunch of rdds at once? should union be variadic?
+  // TODO: is it more efficient to union a bunch of rdds at once? should union be variadic?
   def execute() = sc.union(left.execute(), right.execute())
 }
 
