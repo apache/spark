@@ -20,7 +20,9 @@ class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
       ResolveRelations,
       StarExpansion),
     Batch("Aggregation", Once,
-      GlobalAggregates)
+      GlobalAggregates),
+    Batch("Type Coersion", fixedPoint,
+      ConvertNaNs)
   )
 
   /**
