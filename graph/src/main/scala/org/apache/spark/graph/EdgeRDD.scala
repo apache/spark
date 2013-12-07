@@ -11,6 +11,8 @@ class EdgeRDD[@specialized ED: ClassManifest](
     val partitionsRDD: RDD[(Pid, EdgePartition[ED])])
   extends RDD[Edge[ED]](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
+  partitionsRDD.setName("EdgeRDD")
+
   override val partitioner = partitionsRDD.partitioner
 
   override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
