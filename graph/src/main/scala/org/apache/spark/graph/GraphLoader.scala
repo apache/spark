@@ -1,9 +1,12 @@
 package org.apache.spark.graph
 
-import org.apache.spark.SparkContext
+import java.util.{Arrays => JArrays}
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.graph.impl.{EdgePartition, GraphImpl}
+import org.apache.spark.util.collection.PrimitiveVector
 
 
-object GraphLoader {
+object GraphLoader extends Logging {
 
   /**
    * Load an edge list from file initializing the Graph
@@ -77,24 +80,42 @@ object GraphLoader {
       minEdgePartitions: Int = 1,
       partitionStrategy: PartitionStrategy = RandomVertexCut):
     Graph[Int, Int] = {
+    val startTime = System.currentTimeMillis
+
     // Parse the edge data table
-    val edges = sc.textFile(path, minEdgePartitions).mapPartitions( iter =>
-      iter.filter(line => !line.isEmpty && line(0) != '#').map { line =>
-        val lineArray = line.split("\\s+")
-        if(lineArray.length < 2) {
-          println("Invalid line: " + line)
-          assert(false)
+    val edges = sc.textFile(path, minEdgePartitions).mapPartitionsWithIndex { (index, iter) =>
+      val srcIds = new PrimitiveVector[Long]
+      val dstIds = new PrimitiveVector[Long]
+      iter.foreach { line =>
+        if (!line.isEmpty && line(0) != '#') {
+          val lineArray = line.split("\\s+")
+          if (lineArray.length < 2) {
+            logWarning("Invalid line: " + line)
+          }
+          val srcId = lineArray(0).toLong
+          val dstId = lineArray(1).toLong
+          if (canonicalOrientation && dstId > srcId) {
+            srcIds += dstId
+            dstIds += srcId
+          } else {
+            srcIds += srcId
+            dstIds += dstId
+          }
         }
-        val source = lineArray(0).trim.toLong
-        val target = lineArray(1).trim.toLong
-        if (canonicalOrientation && target > source) {
-          Edge(target, source, 1)
-        } else {
-          Edge(source, target, 1)
-        }
-      })
+      }
+      val srcIdArray = srcIds.trim().array
+      val dstIdArray = dstIds.trim().array
+      val data = new Array[Int](srcIdArray.length)
+      JArrays.fill(data, 1)
+
+      Iterator((index, new EdgePartition[Int](srcIdArray, dstIdArray, data)))
+    }.cache()
+    edges.count()
+
+    logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
+
     val defaultVertexAttr = 1
-    Graph.fromEdges(edges, defaultVertexAttr, partitionStrategy)
+    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr, partitionStrategy)
   } // end of edgeListFile
 
 }

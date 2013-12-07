@@ -253,25 +253,11 @@ object GraphImpl {
 
   def apply[VD: ClassManifest, ED: ClassManifest](
       edges: RDD[Edge[ED]],
-      defaultValue: VD,
+      defaultVertexAttr: VD,
       partitionStrategy: PartitionStrategy): GraphImpl[VD, ED] =
   {
     val etable = createETable(edges, partitionStrategy).cache()
-
-    // Get the set of all vids
-    val vids = etable.flatMap { e =>
-      Iterator((e.srcId, 0), (e.dstId, 0))
-    }
-
-    // Shuffle the vids and create the VertexRDD.
-    // TODO: Consider doing map side distinct before shuffle.
-    val shuffled = new ShuffledRDD[Vid, Int, (Vid, Int)](
-      vids, new HashPartitioner(edges.partitions.size))
-    shuffled.setSerializer(classOf[VidMsgSerializer].getName)
-    val vtable = VertexRDD(shuffled.mapValues(x => defaultValue))
-
-    val vertexPlacement = new VertexPlacement(etable, vtable)
-    new GraphImpl(vtable, etable, vertexPlacement)
+    fromEdgeRDD(etable, defaultVertexAttr)
   }
 
   def apply[VD: ClassManifest, ED: ClassManifest](
@@ -303,6 +289,14 @@ object GraphImpl {
     new GraphImpl(vtable, etable, vertexPlacement)
   }
 
+  def fromEdgePartitions[VD: ClassManifest, ED: ClassManifest](
+      edges: RDD[(Pid, EdgePartition[ED])],
+      defaultVertexAttr: VD,
+      partitionStrategy: PartitionStrategy): GraphImpl[VD, ED] = {
+    val etable = createETableFromEdgePartitions(edges, partitionStrategy)
+    fromEdgeRDD(etable, defaultVertexAttr)
+  }
+
   /**
    * Create the edge table RDD, which is much more efficient for Java heap storage than the
    * normal edges data structure (RDD[(Vid, Vid, ED)]).
@@ -313,27 +307,53 @@ object GraphImpl {
    */
   protected def createETable[ED: ClassManifest](
       edges: RDD[Edge[ED]],
-    partitionStrategy: PartitionStrategy): EdgeRDD[ED] = {
-      // Get the number of partitions
-      val numPartitions = edges.partitions.size
+      partitionStrategy: PartitionStrategy): EdgeRDD[ED] = {
+    // Get the number of partitions
+    val numPartitions = edges.partitions.size
 
-      val eTable = edges.map { e =>
-        val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
+    val eTable = edges.map { e =>
+      val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
 
-        // Should we be using 3-tuple or an optimized class
-        new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
-      }
-    .partitionBy(new HashPartitioner(numPartitions))
-    .mapPartitionsWithIndex( { (pid, iter) =>
-      val builder = new EdgePartitionBuilder[ED]
-      iter.foreach { message =>
-        val data = message.data
-        builder.add(data._1, data._2, data._3)
-      }
-      val edgePartition = builder.toEdgePartition
-      Iterator((pid, edgePartition))
-    }, preservesPartitioning = true).cache()
+      // Should we be using 3-tuple or an optimized class
+      new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
+    }
+      .partitionBy(new HashPartitioner(numPartitions))
+      .mapPartitionsWithIndex( { (pid, iter) =>
+        val builder = new EdgePartitionBuilder[ED]
+        iter.foreach { message =>
+          val data = message.data
+          builder.add(data._1, data._2, data._3)
+        }
+        val edgePartition = builder.toEdgePartition
+        Iterator((pid, edgePartition))
+      }, preservesPartitioning = true).cache()
     new EdgeRDD(eTable)
+  }
+
+  protected def createETableFromEdgePartitions[ED: ClassManifest](
+      edges: RDD[(Pid, EdgePartition[ED])],
+      partitionStrategy: PartitionStrategy): EdgeRDD[ED] = {
+    // TODO(ankurdave): provide option to repartition edges using partitionStrategy
+    new EdgeRDD(edges)
+  }
+
+  private def fromEdgeRDD[VD: ClassManifest, ED: ClassManifest](
+      edges: EdgeRDD[ED],
+      defaultVertexAttr: VD): GraphImpl[VD, ED] = {
+    // Get the set of all vids
+    val vids = edges.flatMap { e =>
+      Iterator((e.srcId, 0), (e.dstId, 0))
+    }
+
+    // Shuffle the vids and create the VertexRDD.
+    // TODO: Consider doing map side distinct before shuffle.
+    val shuffled = new ShuffledRDD[Vid, Int, (Vid, Int)](
+      vids, new HashPartitioner(edges.partitions.size))
+    shuffled.setSerializer(classOf[VidMsgSerializer].getName)
+    val vtable = VertexRDD(shuffled.mapValues(x => defaultVertexAttr))
+
+    val vertexPlacement = new VertexPlacement(edges, vtable)
+    new GraphImpl(vtable, edges, vertexPlacement)
   }
 
   private def accessesVertexAttr[VD, ED](closure: AnyRef, attrName: String): Boolean = {
