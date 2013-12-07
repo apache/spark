@@ -9,7 +9,7 @@ import trees.TreeNode
  * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully resolved.
  */
 class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String) extends
-  errors.OptimizationException(tree, "Invalid call to $function on unresolved object")
+  errors.OptimizationException(tree, s"Invalid call to $function on unresolved object")
 
 /**
  * Holds the name of a relation that has yet to be looked up in a [[Catalog]].
