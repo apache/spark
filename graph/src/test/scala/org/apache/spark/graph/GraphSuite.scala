@@ -120,9 +120,10 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
   test("VertexSetRDD") {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)
+      val n = 100
+      val a = sc.parallelize((0 to n).map(x => (x.toLong, x.toLong)), 5)
       val b = VertexRDD(a).mapValues(x => -x).cache() // Allow joining b with a derived RDD of b
-      assert(b.count === 101)
+      assert(b.count === n + 1)
       assert(b.leftJoin(a){ (id, a, bOpt) => a + bOpt.get }.map(x=> x._2).reduce(_+_) === 0)
       val c = b.aggregateUsingIndex[Long](a, (x, y) => x)
       assert(b.leftJoin(c){ (id, b, cOpt) => b + cOpt.get }.map(x=> x._2).reduce(_+_) === 0)
@@ -130,7 +131,8 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val e = a.filter(q => ((q._2 % 2) == 0))
       assert(d.count === e.count)
       assert(b.zipJoin(c)((id, b, c) => b + c).map(x => x._2).reduce(_+_) === 0)
-
+      val f = b.mapValues(x => if (x % 2 == 0) -x else x)
+      assert(b.diff(f).collect().toSet === (2 to n by 2).map(x => (x.toLong, x.toLong)).toSet)
     }
   }
 
@@ -143,11 +145,40 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val subgraph = star.subgraph(vpred = (vid, attr) => vid % 2 == 0)
 
       // We should have 5 vertices.
-      assert(subgraph.vertices.collect().toSet === (0 to n / 2).map(x => (x * 2, "v")).toSet)
+      assert(subgraph.vertices.collect().toSet === (0 to n by 2).map(x => (x, "v")).toSet)
 
       // And 4 edges.
-      assert(subgraph.edges.map(_.copy()).collect().toSet === (1 to n / 2).map(x => Edge(0, x * 2, 1)).toSet)
+      assert(subgraph.edges.map(_.copy()).collect().toSet === (2 to n by 2).map(x => Edge(0, x, 1)).toSet)
     }
   }
 
+  test("deltaJoinVertices") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      // Create a star graph of 10 vertices
+      val n = 10
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "v1").cache()
+
+      // Modify only vertices whose vids are even
+      val changedVerts = star.vertices.filter(_._1 % 2 == 0).mapValues((vid, attr) => "v2")
+
+      // Apply the modification to the graph
+      val changedStar = star.deltaJoinVertices(changedVerts)
+
+      val newVertices = star.vertices.leftZipJoin(changedVerts) { (vid, oldVd, newVdOpt) =>
+        newVdOpt match {
+          case Some(newVd) => newVd
+          case None => oldVd
+        }
+      }
+
+      // The graph's vertices should be correct
+      assert(changedStar.vertices.collect().toSet === newVertices.collect().toSet)
+
+      // Send the leaf attributes to the center
+      val sums = changedStar.mapReduceTriplets(
+        edge => Iterator((edge.srcId, Set(edge.dstAttr))),
+        (a: Set[String], b: Set[String]) => a ++ b)
+      assert(sums.collect().toSet === Set((0, Set("v1", "v2"))))
+    }
+  }
 }

@@ -1,33 +1,38 @@
 package org.apache.spark.graph
 
+import org.apache.spark.graph.impl.VertexPartition
+
 /**
  * An edge triplet represents two vertices and edge along with their
  * attributes.
  *
  * @tparam VD the type of the vertex attribute.
  * @tparam ED the type of the edge attribute
- * 
+ *
  * @todo specialize edge triplet for basic types, though when I last
  * tried specializing I got a warning about inherenting from a type
  * that is not a trait.
  */
-class EdgeTriplet[VD, ED] extends Edge[ED] {
+class EdgeTriplet[VD, ED](vPart: VertexPartition[VD] = null) extends Edge[ED] {
 // class EdgeTriplet[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD: ClassManifest,
 //                   @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest] extends Edge[ED] {
- 
+
 
   /**
    * The source vertex attribute
    */
-   var srcAttr: VD = _ //nullValue[VD] 
+  var srcAttr: VD = _ //nullValue[VD]
 
   /**
    * The destination vertex attribute
    */
-   var dstAttr: VD = _ //nullValue[VD]
+  var dstAttr: VD = _ //nullValue[VD]
+
+  def srcMask: Boolean = vPart.isDefined(srcId)
+  def dstMask: Boolean = vPart.isDefined(dstId)
 
   /**
-   * Set the edge properties of this triplet.  
+   * Set the edge properties of this triplet.
    */
   protected[spark] def set(other: Edge[ED]): EdgeTriplet[VD,ED] = {
     srcId = other.srcId

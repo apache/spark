@@ -102,6 +102,10 @@ class BitSet(numBits: Int) {
     words(index >> 6) |= bitmask        // div by 64 and mask
   }
 
+  def unset(index: Int) {
+    val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
+    words(index >> 6) &= ~bitmask        // div by 64 and mask
+  }
 
   /**
    * Return the value of the bit with the specified index. The value is true if the bit with

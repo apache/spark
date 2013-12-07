@@ -177,6 +177,12 @@ class VertexRDD[@specialized VD: ClassManifest](
   def mapValues[VD2: ClassManifest](f: (Vid, VD) => VD2): VertexRDD[VD2] =
     this.mapVertexPartitions(_.map(f))
 
+  def diff(other: VertexRDD[VD]): VertexRDD[VD] = {
+    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
+      thisPart.diff(otherPart)
+    }
+  }
+
   /**
    * Inner join this VertexSet with another VertexSet which has the
    * same Index.  This function will fail if both VertexSets do not
@@ -198,6 +204,14 @@ class VertexRDD[@specialized VD: ClassManifest](
   {
     this.zipVertexPartitions(other) { (thisPart, otherPart) =>
       thisPart.join(otherPart)(f)
+    }
+  }
+
+  def deltaJoin[VD2: ClassManifest]
+      (other: VertexRDD[VD2])(f: (Vid, VD, VD2) => VD): VertexRDD[VD] =
+  {
+    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
+      thisPart.deltaJoin(otherPart)(f)
     }
   }
 
