@@ -45,7 +45,7 @@ The system currently supports three cluster managers:
   easy to set up a cluster.
 * [Apache Mesos](running-on-mesos.html) -- a general cluster manager that can also run Hadoop MapReduce
   and service applications.
-* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.0.
+* [Hadoop YARN](running-on-yarn.html) -- the resource manager in Hadoop 2.
 
 In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
 cluster on Amazon EC2.
