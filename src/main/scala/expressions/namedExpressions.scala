@@ -1,6 +1,7 @@
 package catalyst
 package expressions
 
+import catalyst.analysis.{UnresolvedAttribute, UnresolvedException}
 import types._
 
 object NamedExpression {
@@ -53,11 +54,19 @@ case class Alias(child: Expression, name: String)
   def dataType = child.dataType
   def nullable = child.nullable
   def references = child.references
-  def resolved = true
 
-  def toAttribute = AttributeReference(name, child.dataType, child.nullable)(exprId)
+  // An alias is only resolved if all of its children are.
+  def resolved = try { child.dataType; true } catch {
+    case e: UnresolvedException[_] => false
+  }
 
-  override def toString(): String = s"$child AS $name"
+  def toAttribute =
+    if(resolved)
+      AttributeReference(name, child.dataType, child.nullable)(exprId)
+    else
+      UnresolvedAttribute(name)
+
+  override def toString(): String = s"$child AS $name#${exprId.id}"
 
   override protected final def otherCopyArgs = exprId :: Nil
 }
