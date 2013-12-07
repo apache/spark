@@ -20,10 +20,10 @@ package org.apache.spark.network.netty;
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.oio.OioSocketChannel;
 
-import io.netty.util.concurrent.EventExecutorGroup;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -83,7 +83,7 @@ class FileClient {
       channel = null;
     }
 
-    if (group!=null) {
+    if (group != null) {
       group.shutdownGracefully();
       group = null;
       bootstrap = null;
