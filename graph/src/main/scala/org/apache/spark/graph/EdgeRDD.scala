@@ -64,4 +64,8 @@ class EdgeRDD[@specialized ED: ClassManifest](
     }
   }
 
+  def collectVids(): RDD[Vid] = {
+    partitionsRDD.flatMap { case (_, p) => Array.concat(p.srcIds, p.dstIds) }
+  }
+
 }

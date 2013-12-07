@@ -16,7 +16,9 @@ object TriangleCount {
    *    triangle is counted twice.
    *
    *
-   * @param graph a graph with `sourceId` less than `destId`
+   * @param graph a graph with `sourceId` less than `destId`. The graph must have been partitioned
+   * using Graph.partitionBy.
+   *
    * @return
    */
   def run[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD,ED]): Graph[Int, ED] = {

@@ -251,7 +251,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rawEdges = sc.parallelize(Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(0L -> 1L, 1L -> 2L, 2L -> 0L), 2)
-      val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
+      val graph = Graph.fromEdgeTuples(rawEdges, Some(RandomVertexCut)).cache()
       val triangleCount = TriangleCount.run(graph)
       val verts = triangleCount.vertices
       verts.collect.foreach { case (vid, count) => assert(count === 1) }
