@@ -121,7 +121,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * that are not present in the [[productIterator]].
    * @param newArgs the new product arguments.
    */
-  protected def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
+  def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
     try {
     if(otherCopyArgs.isEmpty)
       getClass.getConstructors.head.newInstance(newArgs: _*).asInstanceOf[this.type]
