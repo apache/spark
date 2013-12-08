@@ -19,6 +19,7 @@ package org.apache.spark.broadcast
 
 import java.io.{File, FileOutputStream, ObjectInputStream, OutputStream}
 import java.net.URL
+import java.util.concurrent.TimeUnit
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
@@ -83,6 +84,8 @@ private object HttpBroadcast extends Logging {
   private val files = new TimeStampedHashSet[String]
   private val cleaner = new MetadataCleaner(MetadataCleanerType.HTTP_BROADCAST, cleanup)
 
+  private val httpReadTimeout = TimeUnit.MILLISECONDS.convert(5,TimeUnit.MINUTES).toInt
+
   private lazy val compressionCodec = CompressionCodec.createCodec()
 
   def initialize(isDriver: Boolean) {
@@ -138,10 +141,13 @@ private object HttpBroadcast extends Logging {
   def read[T](id: Long): T = {
     val url = serverUri + "/" + BroadcastBlockId(id).name
     val in = {
+      val httpConnection = new URL(url).openConnection()
+      httpConnection.setReadTimeout(httpReadTimeout)
+      val inputStream = httpConnection.getInputStream()
       if (compress) {
-        compressionCodec.compressedInputStream(new URL(url).openStream())
+        compressionCodec.compressedInputStream(inputStream)
       } else {
-        new FastBufferedInputStream(new URL(url).openStream(), bufferSize)
+        new FastBufferedInputStream(inputStream, bufferSize)
       }
     }
     val ser = SparkEnv.get.serializer.newInstance()

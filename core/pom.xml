@@ -95,15 +95,15 @@
       <version>0.3.1</version>
     </dependency>
     <dependency>
-      <groupId>com.typesafe.akka</groupId>
+      <groupId>${akka.group}</groupId>
       <artifactId>akka-actor</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.typesafe.akka</groupId>
+      <groupId>${akka.group}</groupId>
       <artifactId>akka-remote</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.typesafe.akka</groupId>
+      <groupId>${akka.group}</groupId>
       <artifactId>akka-slf4j</artifactId>
     </dependency>
     <dependency>
@@ -125,10 +125,6 @@
     <dependency>
       <groupId>colt</groupId>
       <artifactId>colt</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>com.github.scala-incubator.io</groupId>
-      <artifactId>scala-io-file_2.9.2</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.mesos</groupId>
@@ -157,6 +153,10 @@
     <dependency>
       <groupId>com.codahale.metrics</groupId>
       <artifactId>metrics-ganglia</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>com.codahale.metrics</groupId>
+      <artifactId>metrics-graphite</artifactId>
     </dependency>
     <dependency>
       <groupId>org.apache.derby</groupId>

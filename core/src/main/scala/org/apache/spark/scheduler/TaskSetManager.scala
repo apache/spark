@@ -583,7 +583,7 @@ private[spark] class TaskSetManager(
     runningTasks = runningTasksSet.size
   }
 
-  private def removeAllRunningTasks() {
+  private[scheduler] def removeAllRunningTasks() {
     val numRunningTasks = runningTasksSet.size
     runningTasksSet.clear()
     if (parent != null) {

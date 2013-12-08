@@ -137,8 +137,8 @@ class FlumeReceiver(
 
   protected override def onStart() {
     val responder = new SpecificResponder(
-      classOf[AvroSourceProtocol], new FlumeEventServer(this));
-    val server = new NettyServer(responder, new InetSocketAddress(host, port));
+      classOf[AvroSourceProtocol], new FlumeEventServer(this))
+    val server = new NettyServer(responder, new InetSocketAddress(host, port))
     blockGenerator.start()
     server.start()
     logInfo("Flume receiver started")
