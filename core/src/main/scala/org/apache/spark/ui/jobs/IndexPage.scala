@@ -45,6 +45,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
       val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
+      val executorTable = new ExecutorTable(parent)
 
       val pools = listener.sc.getAllPools
       val poolTable = new PoolTable(pools, listener)
@@ -56,6 +57,10 @@ private[spark] class IndexPage(parent: JobProgressUI) {
              {parent.formatDuration(now - listener.sc.startTime)}
            </li>
            <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
+           <li>
+             <a href="#executors"><strong>Executor Summary:</strong></a>
+             {listener.executorIdToSummary.size}
+           </li>
            <li>
              <a href="#active"><strong>Active Stages:</strong></a>
              {activeStages.size}
@@ -77,6 +82,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
         } else {
           Seq()
         }} ++
+        <h4 id="executor">Executor Summary</h4> ++
+        executorTable.toNodeSeq++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq++
         <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++

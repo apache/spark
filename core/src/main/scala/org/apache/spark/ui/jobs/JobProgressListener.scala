@@ -57,6 +57,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   val stageIdToTasksFailed = HashMap[Int, Int]()
   val stageIdToTaskInfos =
     HashMap[Int, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
+  val executorIdToSummary = HashMap[String, ExecutorSummary]()
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
@@ -114,6 +115,9 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
       sid, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList += ((taskStart.taskInfo, None, None))
     stageIdToTaskInfos(sid) = taskList
+    val executorSummary = executorIdToSummary.getOrElseUpdate(key = taskStart.taskInfo.executorId,
+      op = new ExecutorSummary())
+    executorSummary.totalTasks += 1
   }
 
   override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult)
@@ -123,9 +127,43 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
+    // update executor summary
+    val executorSummary = executorIdToSummary.get(taskEnd.taskInfo.executorId)
+    executorSummary match {
+      case Some(x) => {
+        // first update failed-task, succeed-task
+        taskEnd.reason match {
+          case e: ExceptionFailure =>
+            x.failedTasks += 1
+          case _ =>
+            x.succeedTasks += 1
+        }
+
+        // update duration
+        x.duration += taskEnd.taskInfo.duration
+
+        // update shuffle read/write
+        val shuffleRead = taskEnd.taskMetrics.shuffleReadMetrics
+        shuffleRead match {
+          case Some(s) =>
+            x.shuffleRead += s.remoteBytesRead
+          case _ => {}
+        }
+        val shuffleWrite = taskEnd.taskMetrics.shuffleWriteMetrics
+        shuffleWrite match {
+          case Some(s) => {
+            x.shuffleWrite += s.shuffleBytesWritten
+          }
+          case _ => {}
+        }
+      }
+      case _ => {}
+    }
+
     val sid = taskEnd.task.stageId
     val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive -= taskEnd.taskInfo
+
     val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
       taskEnd.reason match {
         case e: ExceptionFailure =>
