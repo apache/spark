@@ -10,7 +10,7 @@ with these distributions:
 # Compile-time Hadoop Version
 
 When compiling Spark, you'll need to 
-[set the SPARK_HADOOP_VERSION flag](http://localhost:4000/index.html#a-note-about-hadoop-versions):
+[set the SPARK_HADOOP_VERSION flag](index.html#a-note-about-hadoop-versions):
 
     SPARK_HADOOP_VERSION=1.0.4 sbt/sbt assembly
 
