@@ -2,410 +2,553 @@ Spark Change Log
 
 Release 0.8.1-incubating
 
+  c14f373 Sat Dec 7 22:35:31 2013 -0800
+  Merge pull request #241 from pwendell/master
+  [Update broken links and add HDP 2.0 version string]
+
+  9c9e71e Sat Dec 7 12:47:26 2013 -0800
+  Merge pull request #241 from pwendell/branch-0.8
+  [Fix race condition in JobLoggerSuite [0.8 branch]]
+
   92597c0 Sat Dec 7 11:58:00 2013 -0800
   Merge pull request #240 from pwendell/master
- 
+  [SPARK-917 Improve API links in nav bar]
+
   cfca70e Sat Dec 7 01:15:20 2013 -0800
   Merge pull request #236 from pwendell/shuffle-docs
- 
+  [Adding disclaimer for shuffle file consolidation]
+
   80cc4ff Sat Dec 7 01:15:20 2013 -0800
   Merge pull request #237 from pwendell/formatting-fix
- 
+  [Formatting fix]
+
   4a6aae3 Sat Dec 7 01:15:20 2013 -0800
   Merge pull request #235 from pwendell/master
- 
+  [Minor doc fixes and updating README]
+
   2642312 Sat Dec 7 01:15:20 2013 -0800
   Merge pull request #234 from alig/master
- 
+  [Updated documentation about the YARN v2.2 build process]
+
   2d3eae2 Sat Dec 7 01:15:19 2013 -0800
   Merge pull request #199 from harveyfeng/yarn-2.2
- 
+  [Hadoop 2.2 migration]
+
   1e9d084 Sat Dec 7 01:15:19 2013 -0800
   Merge pull request #101 from colorant/yarn-client-scheduler
- 
+  [For SPARK-527, Support spark-shell when running on YARN]
+
   20d1f8b Sat Dec 7 01:15:09 2013 -0800
   Merge pull request #191 from hsaputra/removesemicolonscala
- 
+  [Cleanup to remove semicolons (;) from Scala code]
+
   2b76315 Sat Dec 7 00:02:14 2013 -0800
   Merge pull request #178 from hsaputra/simplecleanupcode
- 
+  [Simple cleanup on Spark's Scala code]
+
   ee22be0 Fri Dec 6 23:29:38 2013 -0800
   Merge pull request #189 from tgravescs/sparkYarnErrorHandling
- 
+  [Impove Spark on Yarn Error handling]
+
   d77c337 Thu Dec 5 23:30:11 2013 -0800
   Merge pull request #232 from markhamstra/FiniteWait
- 
+  [jobWaiter.synchronized before jobWaiter.wait]
+
   17ca8a1 Thu Dec 5 14:32:01 2013 -0800
   Merge pull request #231 from pwendell/branch-0.8
- 
+  [Bumping version numbers for 0.8.1 release]
+
   47fce43 Thu Dec 5 12:33:02 2013 -0800
   Merge pull request #228 from pwendell/master
+  [Document missing configs and set shuffle consolidation to false.]
 
   cc33f9f Wed Dec 4 15:57:47 2013 -0800
   Merge pull request #227 from pwendell/master
+  [Fix small bug in web UI and minor clean-up.]
 
   ba44f21 Wed Dec 4 15:56:58 2013 -0800
   Merge pull request #223 from rxin/transient
+  [Mark partitioner, name, and generator field in RDD as @transient.]
 
   31da065 Wed Dec 4 14:01:13 2013 -0800
   Merge pull request #95 from aarondav/perftest
+  [Minor: Put StoragePerfTester in org/apache/]
 
   daaaee1 Tue Dec 3 14:22:05 2013 -0800
   Merge pull request #218 from JoshRosen/spark-970-pyspark-unicode-error
+  [Fix UnicodeEncodeError in PySpark saveAsTextFile() (SPARK-970)]
 
   8b091fe Mon Dec 2 21:28:13 2013 -0800
   Merge pull request #181 from BlackNiuza/fix_tasks_number
+  [correct number of tasks in ExecutorsUI]
 
   d21266e Sun Dec 1 12:47:30 2013 -0800
   Merge pull request #219 from sundeepn/schedulerexception
+  [Scheduler quits when newStage fails]
 
   be9c176 Tue Nov 26 10:27:41 2013 -0800
   Merge pull request #201 from rxin/mappartitions
+  [Use the proper partition index in mapPartitionsWIthIndex]
 
   9949561 Mon Nov 25 07:51:23 2013 +0800
   Merge pull request #197 from aarondav/patrick-fix
+  [Fix 'timeWriting' stat for shuffle files]
 
   c59ce18 Sun Nov 24 11:04:00 2013 +0800
   Merge pull request #200 from mateiz/hash-fix
+  [AppendOnlyMap fixes]
 
   d7ab87e Fri Nov 22 10:27:16 2013 +0800
   Merge pull request #193 from aoiwelle/patch-1
+  [Fix Kryo Serializer buffer documentation inconsistency]
 
   d7c6a00 Fri Nov 22 10:13:37 2013 +0800
   Merge pull request #196 from pwendell/master
+  [TimeTrackingOutputStream should pass on calls to close() and flush().]
 
   37126e8 Sun Nov 17 18:53:16 2013 -0800
   Merge pull request #174 from ahirreddy/master
+  [Write Spark UI url to driver file on HDFS]
 
   8823057 Sun Nov 17 18:53:04 2013 -0800
   Merge pull request #166 from ahirreddy/simr-spark-ui
+  [SIMR Backend Scheduler will now write Spark UI URL to HDFS, which is to ...]
 
   e134ed5 Sun Nov 17 18:51:19 2013 -0800
   Merge pull request #137 from tgravescs/sparkYarnJarsHdfsRebase
+  [Allow spark on yarn to be run from HDFS.]
 
   af98fbc Sun Nov 17 18:50:23 2013 -0800
   Merge pull request #165 from NathanHowell/kerberos-master
+  [spark-assembly.jar fails to authenticate with YARN ResourceManager]
 
   a64397b Sun Nov 17 18:49:40 2013 -0800
   Merge pull request #153 from ankurdave/stop-spot-cluster
+  [Enable stopping and starting a spot cluster]
 
   6c60768 Sun Nov 17 18:46:40 2013 -0800
   Merge pull request #160 from xiajunluan/JIRA-923
+  [Fix bug JIRA-923]
 
   f0d350a Sun Nov 17 18:44:49 2013 -0800
   Merge pull request #175 from kayousterhout/no_retry_not_serializable
+  [Don't retry tasks when they fail due to a NotSerializableException]
 
   9d56371 Sun Nov 17 18:43:59 2013 -0800
   Merge pull request #173 from kayousterhout/scheduler_hang
+  [Fix bug where scheduler could hang after task failure.]
 
   24e238b Sun Nov 17 18:42:41 2013 -0800
   Merge pull request #182 from rxin/vector
+  [Slightly enhanced PrimitiveVector:]
 
   e7927ad Thu Nov 14 10:32:27 2013 -0800
   Merge pull request #169 from kayousterhout/mesos_fix
+  [Don't ignore spark.cores.max when using Mesos Coarse mode]
 
   41dc566 Thu Nov 14 10:30:57 2013 -0800
   Merge pull request #170 from liancheng/hadooprdd-doc-typo
+  [Fixed a scaladoc typo in HadoopRDD.scala]
 
   333859f Thu Nov 14 10:26:27 2013 -0800
   Merge pull request #171 from RIA-pierre-borckmans/master
+  [Fixed typos in the CDH4 distributions version codes.]
 
   c856651 Tue Nov 12 10:22:18 2013 -0800
   Merge pull request #164 from tdas/kafka-fix
+  [Made block generator thread safe to fix Kafka bug.]
 
   30786c6 Sun Nov 10 11:58:58 2013 -0800
   Merge pull request #157 from rxin/kryo
+  [3 Kryo related changes.]
 
   5ce6c75 Sat Nov 9 22:31:59 2013 -0800
   Merge pull request #147 from JoshRosen/fix-java-api-completeness-checker
+  [Add spark-tools assembly to spark-class'ss classpath]
 
   1d52b50 Sat Nov 9 15:47:40 2013 -0800
   Merge pull request #149 from tgravescs/fixSecureHdfsAccess
+  [Fix secure hdfs access for spark on yarn]
 
   32a0c4f Sat Nov 9 15:40:54 2013 -0800
   Merge pull request #155 from rxin/jobgroup
+  [Don't reset job group when a new job description is set.]
 
   07ae524 Sat Nov 9 11:56:46 2013 -0800
   Merge pull request #152 from rxin/repl
+  [Propagate SparkContext local properties from spark-repl caller thread to the repl execution thread.]
 
   a5916b9 Thu Nov 7 11:08:44 2013 -0800
   Merge pull request #148 from squito/include_appId
+  [Include appId in executor cmd line args]
 
   d5ae953 Wed Nov 6 23:23:12 2013 -0800
   Merge pull request #23 from jerryshao/multi-user
+  [Add Spark multi-user support for standalone mode and Mesos]
 
   1d9412b Wed Nov 6 13:28:02 2013 -0800
   Merge pull request #144 from liancheng/runjob-clean
+  [Removed unused return value in SparkContext.runJob]
 
   c8e0c0d Wed Nov 6 09:40:00 2013 -0800
   Merge pull request #145 from aarondav/sls-fix
+  [Attempt to fix SparkListenerSuite breakage]
 
   0f62786 Tue Nov 5 23:14:28 2013 -0800
   Merge pull request #143 from rxin/scheduler-hang
+  [Ignore a task update status if the executor doesn't exist anymore.]
 
   96670e7 Tue Nov 5 10:43:10 2013 -0800
   Merge pull request #140 from aarondav/merge-75
+  [Manually merge BlockManager refactor #75]
 
   0848167 Tue Nov 5 10:42:36 2013 -0800
   Merge pull request #142 from liancheng/dagscheduler-pattern-matching
+  [Using case class deep match to simplify code in DAGScheduler.processEvent]
 
   07b3f01 Mon Nov 4 23:32:56 2013 -0800
   Merge pull request #75 from JoshRosen/block-manager-cleanup
+  [Code de-duplication in BlockManager]
 
   e80d1cf Mon Nov 4 20:47:44 2013 -0800
   Merge pull request #139 from aarondav/shuffle-next
+  [Never store shuffle blocks in BlockManager]
 
   518cf22 Mon Nov 4 18:21:27 2013 -0800
   Merge pull request #128 from shimingfei/joblogger-doc
+  [add javadoc to JobLogger, and some small fix]
 
   7e00dee Mon Nov 4 17:54:35 2013 -0800
   Merge pull request #130 from aarondav/shuffle
+  [Memory-optimized shuffle file consolidation]
 
   1d11e43 Mon Nov 4 16:30:30 2013 -0800
   Merge pull request #138 from marmbrus/branch-0.8
+  [Fix build break caused by BlockInfo refactor]
 
   a3544ee Sun Nov 3 23:49:19 2013 -0800
   Merge pull request #70 from rxin/hash1
+  [Fast, memory-efficient hash set, hash table implementations optimized for primitive data types.]
 
   e094daf Sun Nov 3 23:48:40 2013 -0800
   Merge pull request #129 from velvia/2013-11/document-local-uris
+  [Document & finish support for local: URIs]
 
   a9e7787 Sun Nov 3 23:48:26 2013 -0800
   Merge pull request #125 from velvia/2013-10/local-jar-uri
+  [Add support for local:// URI scheme for addJars()]
 
   57fdb3f Sun Nov 3 23:46:18 2013 -0800
   Merge pull request #117 from stephenh/avoid_concurrent_modification_exception
+  [Handle ConcurrentModificationExceptions in SparkContext init.]
 
   ec0e4f0 Sun Nov 3 23:45:23 2013 -0800
   Merge pull request #124 from tgravescs/sparkHadoopUtilFix
+  [Pull SparkHadoopUtil out of SparkEnv (jira SPARK-886)]
 
   ba0e858 Sun Nov 3 23:43:48 2013 -0800
   Merge pull request #126 from kayousterhout/local_fix
+  [Fixed incorrect log message in local scheduler]
 
   504fe74 Sun Nov 3 23:43:03 2013 -0800
   Merge pull request #118 from JoshRosen/blockinfo-memory-usage
+  [Reduce the memory footprint of BlockInfo objects]
 
   25fa229 Sun Nov 3 23:41:19 2013 -0800
   Merge pull request #112 from kayousterhout/ui_task_attempt_id
+  [Display both task ID and task attempt ID in UI, and rename taskId to taskAttemptId]
 
   57ea854 Sun Nov 3 23:38:37 2013 -0800
   Merge pull request #102 from tdas/transform
+  [Added new Spark Streaming operations]
 
   5b45c9b Sat Nov 2 14:42:22 2013 -0700
   Merge pull request #133 from Mistobaan/link_fix
+  [update default github]
 
   054d97b Sat Nov 2 14:37:35 2013 -0700
   Merge pull request #134 from rxin/readme
+  [Fixed a typo in Hadoop version in README.]
 
   87d4e1c Fri Nov 1 17:58:38 2013 -0700
   Merge pull request #132 from Mistobaan/doc_fix
+  [fix persistent-hdfs]
 
   3db505c Tue Oct 29 01:42:07 2013 -0400
   Merge pull request #119 from soulmachine/master
+  [A little revise for the document]
 
   abeca01 Sun Oct 27 22:11:39 2013 -0400
   Merge pull request #115 from aarondav/shuffle-fix
+  [Eliminate extra memory usage when shuffle file consolidation is disabled]
 
   79e5c50 Sat Oct 26 13:05:40 2013 -0700
   Merge pull request #108 from alig/master
+  [Changes to enable executing by using HDFS as a synchronization point between driver and executors, as well as ensuring executors exit properly.]
 
   cb24278 Sat Oct 26 11:41:18 2013 -0700
   Merge pull request #113 from pwendell/master
+  [Improve error message when multiple assembly jars are present.]
 
   3ec2f51 Sat Oct 26 11:39:29 2013 -0700
   Merge pull request #111 from kayousterhout/ui_name
+  [Properly display the name of a stage in the UI.]
 
   7d47704 Sat Oct 26 11:36:23 2013 -0700
   Merge pull request #114 from soulmachine/master
+  [A little revise for the document]
 
   148509f Thu Oct 24 22:32:23 2013 -0700
   Merge pull request #109 from pwendell/master
+  [Adding Java/Java Streaming versions of `repartition` with associated tests]
 
   c018c61 Thu Oct 24 17:27:28 2013 -0700
   Merge pull request #97 from ewencp/pyspark-system-properties
+  [Add classmethod to SparkContext to set system properties.]
 
   3500b66 Thu Oct 24 17:27:11 2013 -0700
   Merge pull request #93 from kayousterhout/ui_new_state
+  [Show "GETTING_RESULTS" state in UI.]
 
   f5eff85 Thu Oct 24 17:26:44 2013 -0700
   Merge pull request #83 from ewencp/pyspark-accumulator-add-method
+  [Add an add() method to pyspark accumulators.]
 
   59d6f06 Thu Oct 24 17:09:05 2013 -0700
   Merge pull request #106 from pwendell/master
+  [Add a `repartition` operator.]
 
   76f3c2f Wed Oct 23 18:03:26 2013 -0700
   Merge pull request #103 from JoshRosen/unpersist-fix
+  [Add unpersist() to JavaDoubleRDD and JavaPairRDD.]
 
   534bab2 Tue Oct 22 16:02:45 2013 -0700
   Merge pull request #100 from JoshRosen/spark-902
+  [Remove redundant Java Function call() definitions]
 
   fa9a0e4 Tue Oct 22 12:23:17 2013 -0700
   Merge pull request #90 from pwendell/master
+  [SPARK-940: Do not directly pass Stage objects to SparkListener.]
 
   c449ee1 Tue Oct 22 00:00:35 2013 -0700
   Merge pull request #92 from tgravescs/sparkYarnFixClasspath
+  [Fix the Worker to use CoarseGrainedExecutorBackend and modify classpath ...]
 
   498cc6b Mon Oct 21 22:45:31 2013 -0700
   Merge pull request #87 from aarondav/shuffle-base
+  [Basic shuffle file consolidation]
 
   e3ad6a5 Mon Oct 21 20:20:42 2013 -0700
   Revert "Merge pull request #94 from aarondav/mesos-fix"
+  [This reverts commit fe974ba1484dbe6fffdae8680b3b37b26de83145.]
 
   fe974ba Mon Oct 21 20:15:30 2013 -0700
   Merge pull request #94 from aarondav/mesos-fix
+  [Fix mesos urls]
 
   1c3f4bd Mon Oct 21 11:58:22 2013 -0700
   Merge pull request #88 from rxin/clean
+  [Made the following traits/interfaces/classes non-public:]
 
   1a50c79 Sun Oct 20 22:27:29 2013 -0700
   Merge pull request #41 from pwendell/shuffle-benchmark
+  [Provide Instrumentation for Shuffle Write Performance]
 
   37a755c Sun Oct 20 21:04:33 2013 -0700
   Merge pull request #89 from rxin/executor
+  [Don't setup the uncaught exception handler in local mode.]
 
   ec74428 Sun Oct 20 11:46:14 2013 -0700
   Merge pull request #84 from rxin/kill1
+  [Added documentation for setJobGroup. Also some minor cleanup in SparkContext.]
 
   52d13a6 Sun Oct 20 10:50:54 2013 -0700
   Merge pull request #85 from rxin/clean
+  [Moved the top level spark package object from spark to org.apache.spark]
 
   919c557 Sat Oct 19 11:29:00 2013 -0700
   Merge pull request #79 from aarondav/scdefaults0.8
+  [Add deprecation warning to unrecognized MASTER urls]
 
   f3de2ce Fri Oct 18 23:20:16 2013 -0700
   Merge pull request #76 from pwendell/master
+  [Clarify compression property.]
 
   f181560 Fri Oct 18 23:14:28 2013 -0700
   Merge pull request #68 from mosharaf/master
+  [Faster and stable/reliable broadcast]
 
   eaa2150 Fri Oct 18 23:08:47 2013 -0700
   Merge pull request #74 from rxin/kill
+  [Job cancellation via job group id.]
 
   df21ac8 Thu Oct 17 18:38:46 2013 -0700
   Merge pull request #69 from KarthikTunga/master
+  [Fix for issue SPARK-627. Implementing --config argument in the scripts.]
 
   b531552 Thu Oct 17 18:37:22 2013 -0700
   Merge pull request #67 from kayousterhout/remove_tsl
+  [Removed TaskSchedulerListener interface.]
 
   5a73ab7 Thu Oct 17 18:36:36 2013 -0700
   Merge pull request #62 from harveyfeng/master
+  [Make TaskContext's stageId publicly accessible.]
 
   b6ce111 Thu Oct 17 18:35:33 2013 -0700
   Merge pull request #61 from kayousterhout/daemon_thread
+  [Unified daemon thread pools]
 
   2760055 Thu Oct 17 18:34:56 2013 -0700
   Merge pull request #59 from rxin/warning
+  [Bump up logging level to warning for failed tasks.]
 
   1e67234 Thu Oct 17 18:33:21 2013 -0700
   Merge pull request #65 from tgravescs/fixYarn
+  [Fix yarn build]
 
   d0c9d41 Thu Oct 17 18:32:54 2013 -0700
   Merge pull request #34 from kayousterhout/rename
+  [Renamed StandaloneX to CoarseGrainedX.]
 
   cee3b43 Wed Oct 16 10:37:55 2013 -0700
   Merge pull request #63 from pwendell/master
+  [Fixing spark streaming example and a bug in examples build.]
 
   1d92983 Tue Oct 15 10:52:15 2013 -0700
   Merge pull request #58 from hsaputra/update-pom-asf
+  [Update pom.xml to use version 13 of the ASF parent pom]
 
   c50b016 Mon Oct 14 23:18:37 2013 -0700
   Merge pull request #29 from rxin/kill
+  [Job killing]
 
   616ea6f Mon Oct 14 20:59:31 2013 -0700
   Merge pull request #57 from aarondav/bid
+  [Refactor BlockId into an actual type]
 
   e306de8 Mon Oct 14 20:58:48 2013 -0700
   Merge pull request #53 from witgo/master
+  [Add a zookeeper compile dependency to fix build in maven]
 
   d66c01f Mon Oct 14 20:58:17 2013 -0700
   Merge pull request #19 from aarondav/master-zk
+  [Standalone Scheduler fault tolerance using ZooKeeper]
 
   0fcb234 Mon Oct 14 20:54:34 2013 -0700
   Merge pull request #46 from mateiz/py-sort-update
+  [Fix PySpark docs and an overly long line of code after #38]
 
   f94aa52 Mon Oct 14 20:53:15 2013 -0700
   Merge pull request #44 from mateiz/fast-map
+  [A fast and low-memory append-only map for shuffle operations]
 
   36f5b08 Mon Oct 14 20:50:28 2013 -0700
   Merge pull request #33 from AndreSchumacher/pyspark_partition_key_change
+  [Fixing SPARK-602: PythonPartitioner]
 
   d615b14 Mon Oct 14 20:48:45 2013 -0700
   Merge pull request #32 from mridulm/master
+  [Address review comments, move to incubator spark]
 
   7084217 Mon Oct 14 19:31:22 2013 -0700
   Merge pull request #27 from davidmccauley/master
+  [SPARK-920/921 - JSON endpoint updates]
 
   a35259a Mon Oct 14 19:28:46 2013 -0700
   Merge pull request #26 from Du-Li/master
+  [fixed a wildcard bug in make-distribution.sh; ask sbt to check local]
 
   62ce4ae Mon Oct 14 19:28:09 2013 -0700
   Merge pull request #25 from CruncherBigData/master
+  [Update README: updated the link]
 
   6961744 Mon Oct 14 18:55:41 2013 -0700
   Merge pull request #10 from kayousterhout/results_through-bm
+  [Send Task results through the block manager when larger than Akka frame size (fixes SPARK-669).]
 
   ce364c0 Mon Oct 14 18:54:35 2013 -0700
   Merge pull request #4 from MLnick/implicit-als
+  [Adding algorithm for implicit feedback data to ALS]
 
   f94bd3f Mon Oct 14 15:10:59 2013 -0700
   Merge pull request #28 from tgravescs/sparYarnAppName
+  [Allow users to set the application name for Spark on Yarn]
 
   dc2c90d Mon Oct 14 15:03:34 2013 -0700
   Merge pull request #38 from AndreSchumacher/pyspark_sorting
+  [SPARK-705: implement sortByKey() in PySpark]
 
   00a7551 Sat Oct 12 21:26:22 2013 -0700
   Merge pull request #52 from harveyfeng/hadoop-closure
+  [Add an optional closure parameter to HadoopRDD instantiation to use when creating local JobConfs.]
 
   5383a5a Sat Oct 12 21:26:11 2013 -0700
   Merge pull request #20 from harveyfeng/hadoop-config-cache
+  [Allow users to pass broadcasted Configurations and cache InputFormats across Hadoop file reads.]
 
   4a2e76a Fri Oct 11 16:09:07 2013 -0700
   Merge pull request #54 from aoiwelle/remove_unused_imports
+  [Remove unnecessary mutable imports]
 
   64fae16 Wed Oct 9 21:42:18 2013 -0700
   Merge pull request #47 from xiliu82/branch-0.8
+  [add Function3 and WrappedFunction3]
 
   dfc62e2 Wed Oct 9 16:55:58 2013 -0700
   Merge pull request #49 from mateiz/kryo-fix-2
+  [Fix Chill serialization of Range objects]
 
   0b6f047 Wed Oct 9 16:53:31 2013 -0700
   Merge pull request #50 from kayousterhout/SPARK-908
+  [Fix race condition in SparkListenerSuite (fixes SPARK-908).]
 
   f930dd4 Tue Oct 8 22:58:35 2013 -0700
   Merge pull request #43 from mateiz/kryo-fix
+  [Don't allocate Kryo buffers unless needed]
 
   8e9bd93 Mon Oct 7 20:47:09 2013 -0700
   Merge pull request #42 from pwendell/shuffle-read-perf
+  [Fix inconsistent and incorrect log messages in shuffle read path]
 
   f2cdcc4 Mon Oct 7 15:49:32 2013 -0700
   Merge pull request #40 from pwendell/branch-0.8
+  [Adding Shark 0.7.1 to EC2 scripts [branch 0.8 version]]
 
   023e3fd Mon Oct 7 10:47:45 2013 -0700
   Merge pull request #31 from sundeepn/branch-0.8
+  [Resolving package conflicts with hadoop 0.23.9]
 
   3cb9040 Thu Sep 26 14:37:06 2013 -0700
   Merge pull request #17 from rxin/optimize
+  [Remove -optimize flag]
 
   35bcf32 Thu Sep 26 14:17:00 2013 -0700
   Merge pull request #930 from holdenk/master
+  [Add mapPartitionsWithIndex]
 
   976fe60 Thu Sep 26 14:16:17 2013 -0700
   Merge pull request #14 from kayousterhout/untangle_scheduler
+  [Improved organization of scheduling packages.]
 
   8cbc96b Thu Sep 26 13:16:05 2013 -0700
   Merge pull request #7 from wannabeast/memorystore-fixes
+  [some minor fixes to MemoryStore]
 
   240ca93 Thu Sep 26 13:12:06 2013 -0700
   Merge pull request #9 from rxin/limit
+  [Smarter take/limit implementation.]
 
   a186792 Thu Sep 26 13:10:59 2013 -0700
   Merge pull request #937 from jerryshao/localProperties-fix
+  [Fix PR926 local properties issues in Spark Streaming like scenarios]
 
   f3c60c9 Thu Sep 26 13:10:24 2013 -0700
   Merge pull request #941 from ilikerps/master
+  [Add "org.apache." prefix to packages in spark-class]
 
   d5a8dbf Thu Sep 26 13:09:30 2013 -0700
   Merge pull request #928 from jerryshao/fairscheduler-refactor
+  [Refactor FairSchedulableBuilder]
 
 Release 0.8.0-incubating
 
