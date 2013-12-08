@@ -114,7 +114,7 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     // Once A is cancelled, job B should finish fairly quickly.
     assert(jobB.get() === 100)
   }
-
+/*
   test("two jobs sharing the same stage") {
     // sem1: make sure cancel is issued after some tasks are launched
     // sem2: make sure the first stage is not finished until cancel is issued
@@ -148,7 +148,7 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     intercept[SparkException] { f1.get() }
     intercept[SparkException] { f2.get() }
   }
-
+ */
   def testCount() {
     // Cancel before launching any tasks
     {

@@ -574,7 +574,7 @@ private[spark] class ClusterTaskSetManager(
     runningTasks = runningTasksSet.size
   }
 
-  private def removeAllRunningTasks() {
+  private[cluster] def removeAllRunningTasks() {
     val numRunningTasks = runningTasksSet.size
     runningTasksSet.clear()
     if (parent != null) {
