@@ -64,6 +64,7 @@ import cPickle
 from itertools import chain, izip, product
 import marshal
 import struct
+import msgpack
 from pyspark import cloudpickle
 
 
@@ -260,7 +261,6 @@ class MarshalSerializer(FramedSerializer):
     dumps = marshal.dumps
     loads = marshal.loads
 
-
 class MUTF8Deserializer(Serializer):
     """
     Deserializes streams written by Java's DataOutputStream.writeUTF().
@@ -278,6 +278,38 @@ class MUTF8Deserializer(Serializer):
                 return
             except EOFError:
                 return
+
+
+class PairMUTF8Deserializer(Serializer):
+    """
+    Deserializes streams of tuples written by Java's DataOutputStream.writeUTF().
+    """
+    def loads(self, stream):
+        l1 = struct.unpack('>H', stream.read(2))[0]
+        a = stream.read(l1).decode('utf8')
+        l2 = struct.unpack('>H', stream.read(2))[0]
+        b = stream.read(l2).decode('utf8')
+        return (a, b)
+
+    def load_stream(self, stream):
+        while True:
+            try:
+                yield self.loads(stream)
+            except struct.error:
+                return
+            except EOFError:
+                return
+
+class MsgPackDeserializer(FramedSerializer):
+    """
+
+    """
+    def loads(self, obj):
+        return msgpack.loads(obj, use_list=0)
+
+    def dumps(self, obj):
+        return msgpack.dumps(obj)
+
 
 
 def read_long(stream):

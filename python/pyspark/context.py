@@ -26,7 +26,7 @@ from pyspark.accumulators import Accumulator
 from pyspark.broadcast import Broadcast
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
-from pyspark.serializers import PickleSerializer, BatchedSerializer, MUTF8Deserializer
+from pyspark.serializers import PickleSerializer, BatchedSerializer, MUTF8Deserializer, PairMUTF8Deserializer, MsgPackDeserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 
@@ -51,7 +51,7 @@ class SparkContext(object):
 
 
     def __init__(self, master, jobName, sparkHome=None, pyFiles=None,
-        environment=None, batchSize=1024, serializer=PickleSerializer()):
+                 environment=None, batchSize=1024, serializer=PickleSerializer()):
         """
         Create a new SparkContext.
 
@@ -95,15 +95,15 @@ class SparkContext(object):
         # Create the Java SparkContext through Py4J
         empty_string_array = self._gateway.new_array(self._jvm.String, 0)
         self._jsc = self._jvm.JavaSparkContext(master, jobName, sparkHome,
-                                              empty_string_array)
+                                               empty_string_array)
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
         self._accumulatorServer = accumulators._start_update_server()
         (host, port) = self._accumulatorServer.server_address
         self._javaAccumulator = self._jsc.accumulator(
-                self._jvm.java.util.ArrayList(),
-                self._jvm.PythonAccumulatorParam(host, port))
+            self._jvm.java.util.ArrayList(),
+            self._jvm.PythonAccumulatorParam(host, port))
 
         self.pythonExec = os.environ.get("PYSPARK_PYTHON", 'python')
         # Broadcast's __reduce__ method stores Broadcast instances here.
@@ -212,6 +212,49 @@ class SparkContext(object):
         minSplits = minSplits or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minSplits), self,
                    MUTF8Deserializer())
+
+    ###
+    def sequenceFileAsText(self, name):
+        """
+        Read a Hadoopp SequenceFile with arbitrary key and value class from HDFS,
+        a local file system (available on all nodes), or any Hadoop-supported file system URI,
+        and return it as an RDD of (String, String) where the key and value representations
+        are generated using the 'toString()' method of the relevant Java class.
+        """
+        #minSplits = minSplits or min(self.defaultParallelism, 2)
+        jrdd = self._jvm.PythonRDD.sequenceFileAsText(self._jsc, name)
+        return RDD(jrdd, self, MsgPackDeserializer())  # MsgPackDeserializer   PairMUTF8Deserializer
+
+    def sequenceFile(self, name, keyClass, valueClass, keyWrapper="", valueWrapper="", minSplits=None):
+        """
+        Read a Hadoopp SequenceFile with arbitrary key and value class from HDFS,
+        a local file system (available on all nodes), or any Hadoop-supported file system URI,
+        and return it as an RDD of (String, String) where the key and value representations
+        are generated using the 'toString()' method of the relevant Java class.
+
+        >>> sc.sequenceFile("/tmp/spark/test/sfint/").collect()
+        [(1, 'aa'), (2, 'bb'), (2, 'aa'), (3, 'cc'), (2, 'bb'), (1, 'aa')]
+        """
+        minSplits = minSplits or min(self.defaultParallelism, 2)
+        jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, name, keyClass, valueClass, keyWrapper, valueWrapper, minSplits)
+        #jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, name, keyWrapper, valueWrapper, minSplits)
+        return RDD(jrdd, self, MsgPackDeserializer())  # MsgPackDeserializer   PairMUTF8Deserializer
+
+    def newHadoopFile(self, name, inputFormat, keyClass, valueClass, keyWrapper="toString", valueWrapper="toString", conf = {}):
+        """
+        Read a Hadoopp file with arbitrary InputFormat, key and value class from HDFS,
+        a local file system (available on all nodes), or any Hadoop-supported file system URI,
+        and return it as an RDD of (String, String), where the key and value representations
+        are generated using the 'toString()' method of the relevant Java class.
+        """
+        jconf = self._jvm.java.util.HashMap()
+        for k, v in conf.iteritems():
+            jconf[k] = v
+        jrdd = self._jvm.PythonRDD.newHadoopFile(self._jsc, name, inputFormat, keyClass, valueClass, keyWrapper,
+                                                       valueWrapper, jconf)
+        return RDD(jrdd, self, MsgPackDeserializer())
+
+    ###
 
     def _checkpointFile(self, name, input_deserializer):
         jrdd = self._jsc.checkpointFile(name)
@@ -344,12 +387,14 @@ class SparkContext(object):
 
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
         return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
-            storageLevel.deserialized, storageLevel.replication)
+                               storageLevel.deserialized, storageLevel.replication)
+
 
 def _test():
     import atexit
     import doctest
     import tempfile
+
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     globs['tempdir'] = tempfile.mkdtemp()

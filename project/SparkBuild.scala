@@ -248,7 +248,8 @@ object SparkBuild extends Build {
       "com.codahale.metrics" % "metrics-ganglia" % "3.0.0",
       "com.codahale.metrics" % "metrics-graphite" % "3.0.0",
       "com.twitter" % "chill_2.9.3" % "0.3.1",
-      "com.twitter" % "chill-java" % "0.3.1"
+      "com.twitter" % "chill-java" % "0.3.1",
+      "org.msgpack" %% "msgpack-scala" % "0.6.8"
     )
   )
 
