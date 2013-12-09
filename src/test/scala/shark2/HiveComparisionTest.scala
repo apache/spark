@@ -67,16 +67,6 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
       try {
         testShark.reset()
 
-        // Run w/ catalyst
-        val catalystResults = queryList.map { queryString =>
-          info(queryString)
-          val query = new testShark.SharkSqlQuery(queryString)
-
-          (query, prepareAnswer(query, query.stringResult()))
-        }.toSeq
-
-        testShark.reset()
-
         val hiveResults: Seq[Seq[String]] = queryList.zipWithIndex.map {
           case (queryString, i)  =>
             val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
@@ -94,7 +84,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
               val sharkQuery = (new testShark.SharkSqlQuery(queryString))
               val answer = sharkQuery.analyzed match {
                 case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
-                case _ => prepareAnswer(sharkQuery, testShark.runSqlHive(queryString))
+                case _ => testShark.runSqlHive(queryString)
               }
 
               stringToFile(cachedAnswerFile, answer.mkString("\n"))
@@ -105,10 +95,29 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
 
         testShark.reset()
 
+        // Run w/ catalyst
+        val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
+          info(queryString)
+          val query = new testShark.SharkSqlQuery(queryString)
+          try { (query, prepareAnswer(query, query.stringResult())) } catch {
+            case e: Exception =>
+              fail(
+                s"""
+                  |Failed to execute query using catalyst:
+                  |$query
+                  |== HIVE - ${hive.size} row(s) ==
+                  |${hive.mkString("\n")}
+                """.stripMargin)
+          }
+        }.toSeq
+
+
+        testShark.reset()
+
         (queryList, hiveResults, catalystResults).zipped.foreach {
           case (query, hive, (sharkQuery, catalyst)) =>
             // Check that the results match unless its an EXPLAIN query.
-            if((!sharkQuery.parsed.isInstanceOf[ExplainCommand]) && hive != catalyst) {
+            if((!sharkQuery.parsed.isInstanceOf[ExplainCommand]) && prepareAnswer(sharkQuery,hive) != catalyst) {
               fail(
                 s"""
                   |Results do not match for query:
@@ -123,6 +132,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
 
         passedList.println(testCaseName)
       } catch {
+        case tf: org.scalatest.exceptions.TestFailedException => throw tf
         case originalException: Exception =>
           // When we encounter an error we check to see if the environment is still okay by running a simple query.
           // If this fails then we halt testing since something must have gone seriously wrong.
