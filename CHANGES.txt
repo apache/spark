@@ -2,6 +2,10 @@ Spark Change Log
 
 Release 0.8.1-incubating
 
+  3e1f78c Sun Dec 8 21:34:12 2013 -0800
+  Merge pull request #195 from dhardy92/fix_DebScriptPackage
+  [[Deb] fix package of Spark classes adding org.apache prefix in scripts embeded in .deb]
+
   c14f373 Sat Dec 7 22:35:31 2013 -0800
   Merge pull request #241 from pwendell/master
   [Update broken links and add HDP 2.0 version string]
