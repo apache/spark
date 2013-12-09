@@ -28,6 +28,7 @@ import org.jblas._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.impurity.Gini
+import org.apache.spark.mllib.tree.model.Filter
 
 class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
 
@@ -54,6 +55,23 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length==100)
     println(splits(1)(98))
   }
+
+  test("stump"){
+    val arr = DecisionTreeSuite.generateReverseOrderedLabeledPoints()
+    assert(arr.length == 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy("regression",Gini,3,100,"sort")
+    val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
+    assert(splits.length==2)
+    assert(splits(0).length==99)
+    assert(bins.length==2)
+    assert(bins(0).length==100)
+    assert(splits(0).length==99)
+    assert(bins(0).length==100)
+    println(splits(1)(98))
+    DecisionTree.findBestSplits(rdd,strategy,0,Array[List[Filter]](),splits,bins)
+  }
+
 }
 
 object DecisionTreeSuite {

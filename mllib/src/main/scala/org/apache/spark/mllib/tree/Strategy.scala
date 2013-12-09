@@ -18,7 +18,7 @@ package org.apache.spark.mllib.tree
 
 import org.apache.spark.mllib.tree.impurity.Impurity
 
-class Strategy (
+case class Strategy (
                 val kind : String,
                 val impurity : Impurity,
                 val maxDepth : Int,

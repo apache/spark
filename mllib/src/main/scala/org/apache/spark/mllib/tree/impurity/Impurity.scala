@@ -16,7 +16,7 @@
  */
 package org.apache.spark.mllib.tree.impurity
 
-trait Impurity {
+trait Impurity extends Serializable {
 
   def calculate(c0 : Double, c1 : Double): Double
 
