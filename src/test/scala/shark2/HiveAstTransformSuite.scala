@@ -8,7 +8,7 @@ import org.apache.hadoop.hive.ql.parse.{HiveParser, ASTNode}
 import collection.JavaConversions._
 
 object HiveDistinctToGroupBy {
-  import Hive._
+  import HiveQl._
 
   def apply(n: ASTNode): ASTNode = n transform {
     case t @ Token(_, children) if getClauseOption("TOK_SELECTDI", children).isDefined =>
@@ -34,7 +34,7 @@ object HiveDistinctToGroupBy {
 }
 
 class HiveAstTransformSuite extends FunSuite {
-  import Hive._
+  import HiveQl._
   test("simple transform") {
     val q1 = getAst("SELECT key FROM src")
     val q2 = getAst("SELECT value FROM src")

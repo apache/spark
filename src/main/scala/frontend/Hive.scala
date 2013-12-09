@@ -42,7 +42,7 @@ case class AddJar(jarPath: String) extends Command
 
 case class AddFile(filePath: String) extends Command
 
-object Hive {
+object HiveQl {
   protected val nativeCommands = Seq(
     "TOK_DESCFUNCTION",
     "TOK_DESCTABLE",
