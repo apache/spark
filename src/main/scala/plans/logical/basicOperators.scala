@@ -55,3 +55,8 @@ case class StopAfter(limit: Expression, child: LogicalPlan) extends UnaryNode {
   def output = child.output
   def references = limit.references
 }
+
+case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
+  def output = child.output.map(_.withQualifiers(alias :: Nil))
+  def references = Set.empty
+}

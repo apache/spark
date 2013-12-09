@@ -2,6 +2,7 @@ package catalyst
 package shark2
 
 import catalyst.expressions.AttributeReference
+import catalyst.optimizer.Optimize
 import java.io.File
 
 import analysis._
@@ -136,8 +137,9 @@ object TestShark {
       // Proceed with analysis.
       analyze(parsed)
     }
+    lazy val optimizedPlan = Optimize(analyzed)
     // TODO: Don't just pick the first one...
-    lazy val sharkPlan = TrivalPlanner(analyzed).next()
+    lazy val sharkPlan = TrivalPlanner(optimizedPlan).next()
     lazy val executedPlan = PrepareForExecution(sharkPlan)
 
     lazy val toRdd = executedPlan.execute()
