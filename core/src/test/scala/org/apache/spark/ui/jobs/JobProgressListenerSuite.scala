@@ -85,5 +85,12 @@ class JobProgressListenerSuite extends FunSuite {
     listener.onTaskEnd(new SparkListenerTaskEnd(
       new ShuffleMapTask(0, null, null, 0, null), Success, taskInfo, taskMetrics))
     assert(listener.executorIdToSummary.getOrElse("exe-2", fail()).shuffleRead == 1000)
+
+    // do finalize
+    sc.stop()
+
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.hostPort")
   }
 }
