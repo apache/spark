@@ -1,7 +1,5 @@
 # YARN DIRECTORY LAYOUT
 
-Hadoop Yarn related code are organized 
-
 Hadoop Yarn related codes are organized in separate modules with layered dependency.
 
  * common : Common codes that will be called into by other modules.
