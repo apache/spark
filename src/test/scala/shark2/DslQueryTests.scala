@@ -51,7 +51,7 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
 
   test("select *") {
     checkAnswer(
-      testData.select(Star),
+      testData.select(Star(None)),
       testData.data)
   }
 

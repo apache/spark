@@ -33,6 +33,10 @@ abstract class NamedExpression extends Expression {
 abstract class Attribute extends NamedExpression {
   self: Product =>
 
+  def qualifiers: Seq[String]
+
+  def withQualifiers(newQualifiers: Seq[String]): Attribute
+
   def references = Set(this)
   def toAttribute = this
 }
@@ -78,9 +82,11 @@ case class Alias(child: Expression, name: String)
  * @param dataType The [[DataType]] of this attribute.
  * @param nullable True if null is a valid value for this attribute.
  * @param exprId A globally unique id used to check if different AttributeReferences refer to the same attribute.
+ * @param qualifiers a list of strings that can be used to refered to this attribute in a fully qualified way. Consider
+ *                   the examples tableName.name, subQueryAlias.name. tableName and subQueryAlias are possible qualifers.
  */
 case class AttributeReference(name: String, dataType: DataType, nullable: Boolean = true)
-                             (val exprId: ExprId = NamedExpression.newExprId)
+                             (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
   extends Attribute with trees.LeafNode[Expression] {
 
   def resolved = true
@@ -92,7 +98,16 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     if(nullable == newNullability)
       this
     else
-      AttributeReference(name, dataType, newNullability)(exprId)
+      AttributeReference(name, dataType, newNullability)(exprId, qualifiers)
+
+  /**
+   * Returns a copy of this [[AttributeReference]] with new qualifiers.
+   */
+  def withQualifiers(newQualifiers: Seq[String]) =
+    if(newQualifiers == qualifiers)
+      this
+    else
+      AttributeReference(name, dataType, nullable)(exprId, newQualifiers)
 
   override def toString(): String = s"$name#${exprId.id}"
 }

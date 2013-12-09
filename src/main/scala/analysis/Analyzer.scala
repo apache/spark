@@ -72,14 +72,21 @@ class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
    */
   object StarExpansion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p @ Project(projectList, child) if childIsFullyResolved(p) && (projectList contains Star) =>
+      case p @ Project(projectList, child) if childIsFullyResolved(p) && containsStar(projectList) =>
         Project(
           projectList.flatMap {
-            case Star => child.output
+            case Star(None) => child.output
+            case Star(Some(table)) => child.output.filter(_.qualifiers contains table)
             case o => o :: Nil
           },
           child)
     }
+
+    /**
+     * Returns true if [[exprs]] contains a star.
+     */
+    protected def containsStar(exprs: Seq[NamedExpression]): Boolean =
+      exprs.collect { case Star(_) => true }.nonEmpty
   }
 
   /**

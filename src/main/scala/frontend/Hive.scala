@@ -353,15 +353,28 @@ object HiveQl {
 
     case Token("TOK_FROM",
           Token("TOK_SUBQUERY",
-            query :: alias :: Nil) :: Nil) =>
-      nodeToPlan(query)
+            query :: Token(alias, Nil) :: Nil) :: Nil) =>
+      Subquery(alias, nodeToPlan(query))
 
     case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
+
+    /* Table, No Alias */
     case Token("TOK_FROM",
            Token("TOK_TABREF",
              Token("TOK_TABNAME",
-               Token(name, Nil) :: Nil) :: Nil) :: Nil) =>
-      UnresolvedRelation(name, None)
+               tableNameParts) :: Nil) :: Nil) =>
+      val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
+      UnresolvedRelation(tableName, None)
+
+    /* Table with Alias */
+    case Token("TOK_FROM",
+           Token("TOK_TABREF",
+             Token("TOK_TABNAME",
+               tableNameParts) ::
+               Token(alias, Nil) :: Nil) :: Nil) =>
+      val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
+      UnresolvedRelation(tableName, Some(alias))
+
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
@@ -398,14 +411,27 @@ object HiveQl {
   }
 
 
+  protected val escapedIdentifier = "`([^`]+)`".r
+  /** Strips backticks from ident if present */
+  protected def cleanIdentifier(ident: String): String = ident match {
+    case escapedIdentifier(i) => i
+    case plainIdent => plainIdent
+  }
+
   val numericAstTypes =
     Seq(HiveParser.Number, HiveParser.TinyintLiteral, HiveParser.SmallintLiteral, HiveParser.BigintLiteral)
+
   protected def nodeToExpr(node: Node): Expression = node match {
     case Token("TOK_TABLE_OR_COL",
            Token(name, Nil) :: Nil) =>
-      UnresolvedAttribute(name)
+      UnresolvedAttribute(cleanIdentifier(name))
+    case Token(".", qualifier :: Token(attr, Nil) :: Nil) =>
+      nodeToExpr(qualifier) match {
+        case UnresolvedAttribute(qualifierName) => UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
+      }
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
-    case Token("TOK_ALLCOLREF", Nil) => Star
+    case Token("TOK_ALLCOLREF", Nil) => Star(None)
+    case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) => Star(Some(name))
     case Token("TOK_FUNCTION", Token("AVG", Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token("count", Nil) :: arg :: Nil) => Count(nodeToExpr(arg))
     case Token("TOK_FUNCTIONSTAR", Token("count", Nil) :: Nil) => Count(Literal(1))

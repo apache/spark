@@ -25,20 +25,28 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   def exprId = throw new UnresolvedException(this, "exprId")
   def dataType = throw new UnresolvedException(this, "dataType")
   def nullable = throw new UnresolvedException(this, "nullable")
+  def qualifiers = throw new UnresolvedException(this, "qualifiers")
   def resolved = false
+
+  def withQualifiers(newQualifiers: Seq[String]) = this
 
   override def toString(): String = s"'$name"
 }
 
 /**
- * Represents all of the input attributes to a given relational operator, for example in "SELECT * FROM ..."
+ * Represents all of the input attributes to a given relational operator, for example in "SELECT * FROM ...".
+ *
+ * @param table an optional table that should be the target of the expansion.  If omitted all tables' columns are produced.
  */
-case object Star extends Attribute with trees.LeafNode[Expression] {
+case class Star(table: Option[String]) extends Attribute with trees.LeafNode[Expression] {
   def name = throw new UnresolvedException(this, "exprId")
   def exprId = throw new UnresolvedException(this, "exprId")
   def dataType = throw new UnresolvedException(this, "dataType")
   def nullable = throw new UnresolvedException(this, "nullable")
+  def qualifiers = throw new UnresolvedException(this, "qualifiers")
   def resolved = false
 
-  override def toString = "*"
+  def withQualifiers(newQualifiers: Seq[String]) = this
+
+  override def toString = table.map(_ + ".").getOrElse("") + "*"
 }

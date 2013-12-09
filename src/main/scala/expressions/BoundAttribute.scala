@@ -17,8 +17,13 @@ case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: Attribut
   def nullable = baseReference.nullable
   def dataType = baseReference.dataType
   def exprId = baseReference.exprId
+  def qualifiers = baseReference.qualifiers
   def name = baseReference.name
   def resolved = true
+
+  def withQualifiers(newQualifiers: Seq[String]) =
+    BoundReference(inputTuple, ordinal, baseReference.withQualifiers(newQualifiers))
+
   override def toString = s"$baseReference:$inputTuple.$ordinal"
 }
 

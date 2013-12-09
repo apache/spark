@@ -27,7 +27,18 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   def inputSet: Set[Attribute] = children.flatMap(_.output).toSet
 
   def resolve(name: String): Option[Attribute] = {
-    val options = children.flatMap(_.output).filter(_.name == name)
+    val parts = name.split("\\.")
+    val options = children.flatMap(_.output).filter {option =>
+     // If the first part of the desired name matches a qualifier for this possible match, drop it.
+     val remainingParts =
+      if(option.qualifiers contains parts.head)
+        parts.drop(1)
+      else
+        parts
+
+      option.name == remainingParts.head
+    }
+
     options match {
       case a :: Nil => Some(a) // One match, use it.
       case Nil => None         // No matches.

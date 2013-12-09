@@ -20,7 +20,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
       case Array(tableOnly) => ("default", tableOnly)
       case Array(db, table) => (db, table)
     }
-    MetastoreRelation(name)(client.getTable(databaseName, tableName))
+    MetastoreRelation(databaseName, tableName, alias)(client.getTable(databaseName, tableName))
   }
 }
 
@@ -32,7 +32,8 @@ object HiveMetatoreTypes {
     }
 }
 
-case class MetastoreRelation(tableName: String)(val table: Table) extends plans.logical.BaseRelation {
+case class MetastoreRelation(databaseName: String, tableName: String, alias: Option[String])(val table: Table)
+    extends plans.logical.BaseRelation {
   val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
   val tableDesc = new TableDesc(
     Class.forName(table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[org.apache.hadoop.hive.serde2.Deserializer]],
@@ -47,6 +48,6 @@ case class MetastoreRelation(tableName: String)(val table: Table) extends plans.
       col.getName,
       HiveMetatoreTypes.toDataType(col.getType),
       true // AHHH, who makes a metastore with no concept of nullalbility?
-    )()
+    )(qualifiers = tableName +: alias.toSeq)
   }
 }
