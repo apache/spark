@@ -134,18 +134,20 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
         case originalException: Exception =>
-          // When we encounter an error we check to see if the environment is still okay by running a simple query.
-          // If this fails then we halt testing since something must have gone seriously wrong.
-          try {
-            new testShark.SharkSqlQuery("SELECT key FROM src").stringResult()
-            testShark.runSqlHive("SELECT key FROM src")
-          } catch {
-            case e: Exception =>
-              println(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")
-              // The testing setup traps exits so wait here for a long time so the developer can see when things started
-              // to go wrong.
-              Thread.sleep(1000000)
-              System.exit(1)
+          if(System.getProperty("shark.hive.canarytest") != null) {
+            // When we encounter an error we check to see if the environment is still okay by running a simple query.
+            // If this fails then we halt testing since something must have gone seriously wrong.
+            try {
+              new testShark.SharkSqlQuery("SELECT key FROM src").stringResult()
+              testShark.runSqlHive("SELECT key FROM src")
+            } catch {
+              case e: Exception =>
+                println(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")
+                // The testing setup traps exits so wait here for a long time so the developer can see when things started
+                // to go wrong.
+                Thread.sleep(1000000)
+                System.exit(1)
+            }
           }
 
           // If the canary query didn't fail then the environment is still okay, so just throw the original exception.
