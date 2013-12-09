@@ -1,4 +1,7 @@
 target/
 .idea/
 metastore_db/
-
+TempStatsStore/
+hs_err_*.log
+derby.log
+.idea_modules/
