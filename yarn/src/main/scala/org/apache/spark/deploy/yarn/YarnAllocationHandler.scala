@@ -34,7 +34,7 @@ import org.apache.hadoop.conf.Configuration
 import java.util.{Collections, Set => JSet}
 import java.lang.{Boolean => JBoolean}
 
-object AllocationType extends Enumeration ("HOST", "RACK", "ANY") {
+object AllocationType extends Enumeration {
   type AllocationType = Value
   val HOST, RACK, ANY = Value
 }
@@ -370,7 +370,7 @@ private[yarn] class YarnAllocationHandler(val conf: Configuration, val resourceM
         createResourceRequest(AllocationType.ANY, null, numWorkers, YarnAllocationHandler.PRIORITY)
 
       val containerRequests: ArrayBuffer[ResourceRequest] =
-        new ArrayBuffer[ResourceRequest](hostContainerRequests.size() + rackContainerRequests.size() + 1)
+        new ArrayBuffer[ResourceRequest](hostContainerRequests.size + rackContainerRequests.size + 1)
 
       containerRequests ++= hostContainerRequests
       containerRequests ++= rackContainerRequests
