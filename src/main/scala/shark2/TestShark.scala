@@ -130,7 +130,7 @@ object TestShark {
 
     lazy val analyzed = {
       // Make sure any test tables referenced are loaded.
-      val referencedTables = parsed collect { case UnresolvedRelation(name, _) => name }
+      val referencedTables = parsed collect { case UnresolvedRelation(name, _) => name.split("\\.").last }
       val referencedTestTables = referencedTables.filter(testTableNames.contains)
       println(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
