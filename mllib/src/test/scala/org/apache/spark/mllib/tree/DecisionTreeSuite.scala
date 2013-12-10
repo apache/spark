@@ -27,7 +27,7 @@ import org.apache.spark.SparkContext._
 import org.jblas._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.tree.impurity.Gini
+import org.apache.spark.mllib.tree.impurity.{Entropy, Gini}
 import org.apache.spark.mllib.tree.model.Filter
 
 class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
@@ -44,7 +44,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("split and bin calculation"){
-    val arr = DecisionTreeSuite.generateReverseOrderedLabeledPoints()
+    val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy("regression",Gini,3,100,"sort")
@@ -56,8 +56,8 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     println(splits(1)(98))
   }
 
-  test("stump"){
-    val arr = DecisionTreeSuite.generateReverseOrderedLabeledPoints()
+  test("stump with fixed label 0 for Gini"){
+    val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy("regression",Gini,3,100,"sort")
@@ -69,17 +69,85 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(splits(0).length==99)
     assert(bins(0).length==100)
     println(splits(1)(98))
-    DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
+    val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
+    assert(bestSplits.length == 1)
+    println(bestSplits(0))
   }
+
+  test("stump with fixed label 1 for Gini"){
+    val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
+    assert(arr.length == 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy("regression",Gini,3,100,"sort")
+    val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
+    assert(splits.length==2)
+    assert(splits(0).length==99)
+    assert(bins.length==2)
+    assert(bins(0).length==100)
+    assert(splits(0).length==99)
+    assert(bins(0).length==100)
+    println(splits(1)(98))
+    val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
+    assert(bestSplits.length == 1)
+    println(bestSplits(0))
+  }
+
+
+  test("stump with fixed label 0 for Entropy"){
+    val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
+    assert(arr.length == 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy("regression",Entropy,3,100,"sort")
+    val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
+    assert(splits.length==2)
+    assert(splits(0).length==99)
+    assert(bins.length==2)
+    assert(bins(0).length==100)
+    assert(splits(0).length==99)
+    assert(bins(0).length==100)
+    println(splits(1)(98))
+    val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
+    assert(bestSplits.length == 1)
+    println(bestSplits(0))
+  }
+
+  test("stump with fixed label 1 for Entropy"){
+    val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
+    assert(arr.length == 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy("regression",Entropy,3,100,"sort")
+    val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
+    assert(splits.length==2)
+    assert(splits(0).length==99)
+    assert(bins.length==2)
+    assert(bins(0).length==100)
+    assert(splits(0).length==99)
+    assert(bins(0).length==100)
+    println(splits(1)(98))
+    val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
+    assert(bestSplits.length == 1)
+    println(bestSplits(0))
+  }
+
 
 }
 
 object DecisionTreeSuite {
 
-  def generateReverseOrderedLabeledPoints() : Array[LabeledPoint] = {
+  def generateOrderedLabeledPointsWithLabel0() : Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
     for (i <- 0 until 1000){
-      val lp = new LabeledPoint(1.0,Array(i.toDouble,1000.0-i))
+      val lp = new LabeledPoint(0.0,Array(i.toDouble,1000.0-i))
+      arr(i) = lp
+    }
+    arr
+  }
+
+
+  def generateOrderedLabeledPointsWithLabel1() : Array[LabeledPoint] = {
+    val arr = new Array[LabeledPoint](1000)
+    for (i <- 0 until 1000){
+      val lp = new LabeledPoint(1.0,Array(i.toDouble,999.0-i))
       arr(i) = lp
     }
     arr
