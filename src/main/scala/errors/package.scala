@@ -11,7 +11,8 @@ package object errors {
     (tree: TreeType, msg: String, cause: Throwable = null) extends Exception(msg, cause) {
 
     override def getMessage: String = {
-      s"${super.getMessage}, tree:\n$tree"
+      val treeString = tree.toString
+      s"${super.getMessage}, tree:${if(treeString contains "\n") "\n" else " "}$tree"
     }
   }
 
