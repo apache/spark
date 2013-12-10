@@ -11,13 +11,13 @@ import expressions._
 import types._
 
 import collection.JavaConversions._
-import org.apache.spark.SparkContext._
 import org.apache.hadoop.hive.ql.exec.OperatorFactory
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.fs.Path
-;
+
+import org.apache.spark.SparkContext._
 
 case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
@@ -47,80 +47,6 @@ case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) 
   def output = child.output
   // TODO: Pick num splits based on |limit|.
   def execute() = sc.makeRDD(child.execute().take(limit),1)
-}
-
-case class Aggregate(groupingExpressions: Seq[Expression],
-                     aggregateExpressions: Seq[NamedExpression],
-                     child: SharkPlan) extends UnaryNode {
-  def output = aggregateExpressions.map(_.toAttribute)
-  def execute() = attachTree(this, "execute") {
-    val grouped = child.execute().map(row => (groupingExpressions.map(Evaluate(_, Vector(row))), row)).groupByKey()
-    grouped.map {
-      case (group, rows) =>
-        // TODO: Handle other types of expressions that build on aggregate expressions.
-        aggregateExpressions.map {
-          case BoundReference(0, idx, _) => rows.head(idx) // Assume that this is an 'Any'
-          case Alias(Sum(e), _) => rows.map(r => Evaluate(e, Vector(r)).asInstanceOf[Int]).sum
-          case Alias(Count(e), _) => rows.map(r => Evaluate(e, Vector(r))).filter(_ != null).size
-          case Alias(CountDistinct(exprs), _) => rows.map(r => exprs.map(Evaluate(_, Vector(r)))).filter(_.map(_ != null).reduceLeft(_ && _)).distinct.size
-        }.toIndexedSeq
-    }
-  }
-}
-
-/**
- * Uses spark Accumulators to perform global aggregation.
- *
- * Currently supports only COUNT().
- */
-case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan)
-                         (@transient sc: SharkContext) extends UnaryNode {
-  def output = aggregateExprs.map(_.toAttribute)
-  override def otherCopyArgs = Seq(sc)
-
-  case class AverageFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
-    def this() = this(null, null) // Required for serialization.
-
-    val count  = sc.accumulable(0)
-    val sum = sc.accumulable(0)
-    def result: Any = sum.value.toDouble / count.value.toDouble
-
-    def apply(input: Seq[Seq[Any]]): Unit = {
-      count += 1
-      // TODO: Support all types here...
-      sum += Evaluate(expr, input).asInstanceOf[Int]
-    }
-  }
-
-  case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
-    def this() = this(null, null) // Required for serialization.
-
-    val count = sc.accumulable(0)
-
-    def apply(input: Seq[Seq[Any]]): Unit =
-      if(Evaluate(expr, input) != null)
-        count += 1
-
-    def result: Any = count.value.toLong
-  }
-
-  def execute() = attachTree(this, "SparkAggregate") {
-    // Replace all aggregate expressions with spark functions that will compute the result.
-    val aggImplementations = aggregateExprs.map { _ transform {
-        case base @ Average(expr) => new AverageFunction(expr, base)
-        case base @ Count(expr) => new CountFunction(expr, base)
-      } }
-    // Pull out all the functions so we can feed each row into them.
-    val aggFunctions = aggImplementations.flatMap(_ collect { case f: AggregateFunction => f })
-    assert(aggFunctions.nonEmpty)
-
-    //TOOD: println(s"Running aggregates: $aggFunctions")
-    child.execute().foreach { row =>
-      val input = Vector(row)
-      aggFunctions.foreach(_.apply(input))
-    }
-    sc.makeRDD(Seq(aggImplementations.map(Evaluate(_, Nil)).toIndexedSeq), 1)
-  }
 }
 
 case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
