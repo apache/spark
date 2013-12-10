@@ -18,7 +18,9 @@ this for any given R file to be sourced in the worker.
 1. RRDDs are distributed lists. Extend them to create a distributed data frame.
 2. Integration with ML Lib to run ML algorithms from R.
 3. Profile serialization overhead and see if there is anything better we can do.
-4. Reduce code duplication between SparkR and PySpark3. 4. .
+4. Reduce code duplication between SparkR and PySpark
+. Add more examples (machine learning ?) and some performance benchmarks.
+
 
 ## Testing plan
 
