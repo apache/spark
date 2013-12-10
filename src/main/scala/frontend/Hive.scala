@@ -250,7 +250,10 @@ object HiveQl {
     }
   }
 
-  protected def getClauses(clauseNames: Seq[String], nodeList: Seq[Node]): Seq[Option[Node]] = {
+  protected def getClauses(clauseNames: Seq[String], nodeList: Seq[ASTNode]): Seq[Option[Node]] = {
+    val unhandledClauses = nodeList.filterNot(clauseNames contains _.getText)
+    require(unhandledClauses.isEmpty, s"Unhandled parse clauses: $unhandledClauses")
+
     clauseNames.map(getClauseOption(_, nodeList))
   }
 
