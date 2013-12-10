@@ -584,7 +584,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * order of the keys).
    */
   def sortByKey(comp: Comparator[K], ascending: Boolean): JavaPairRDD[K, V] = {
-    sortByKey(comp, ascending, rdd.partitions.size)
+    // numPartitions should never be negative in practice so we can use -1 here to indicate that
+    // we want to use implementation's default value.
+    sortByKey(comp, ascending, -1)
   }
 
   /**
@@ -598,7 +600,11 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
       override def compare(b: K) = comp.compare(a, b)
     }
     implicit def toOrdered(x: K): Ordered[K] = new KeyOrdering(x)
-    fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
+    if (numPartitions < 0) {
+      fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending))
+    } else {
+      fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
+    }
   }
 
   /**
