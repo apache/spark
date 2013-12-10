@@ -10,6 +10,9 @@ class HiveQueryTests extends HiveComaparisionTest {
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
 
+  createQueryTest("Simple Average + 1",
+    "SELECT AVG(key) + 1.0 FROM src")
+
   createQueryTest("string literal",
     "SELECT 'test' FROM src")
 

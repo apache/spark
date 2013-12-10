@@ -425,6 +425,7 @@ object HiveQl {
     Seq(HiveParser.Number, HiveParser.TinyintLiteral, HiveParser.SmallintLiteral, HiveParser.BigintLiteral)
 
   protected def nodeToExpr(node: Node): Expression = node match {
+    /* Attribute References */
     case Token("TOK_TABLE_OR_COL",
            Token(name, Nil) :: Nil) =>
       UnresolvedAttribute(cleanIdentifier(name))
@@ -432,21 +433,37 @@ object HiveQl {
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) => UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
       }
-    case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
+
+    /* Stars (*) */
     case Token("TOK_ALLCOLREF", Nil) => Star(None)
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) => Star(Some(name))
+
+    /* Aggregate Functions */
     case Token("TOK_FUNCTION", Token("AVG", Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
     case Token("TOK_FUNCTION", Token("count", Nil) :: arg :: Nil) => Count(nodeToExpr(arg))
     case Token("TOK_FUNCTIONSTAR", Token("count", Nil) :: Nil) => Count(Literal(1))
     case Token("TOK_FUNCTION", Token("sum", Nil) :: arg :: Nil) => Sum(nodeToExpr(arg))
     case Token("TOK_FUNCTIONDI", Token("count", Nil) :: args) => CountDistinct(args.map(nodeToExpr))
+
+    /* Arithmetic */
+    case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
+    case Token("+", left :: right:: Nil) => Add(nodeToExpr(left), nodeToExpr(right))
+    case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
+    case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
+    case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+
+    /* Comparisons */
     case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
     case Token("<>", left :: right:: Nil) => Not(Equals(nodeToExpr(left), nodeToExpr(right)))
     case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
+
+    /* Other functions */
     case Token("TOK_FUNCTION", Token("RAND", Nil) :: Nil) => Rand
+
+    /* Literals */
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.asInstanceOf[ASTNode].getText)).mkString)
 
@@ -465,7 +482,7 @@ object HiveQl {
           v = Literal(ast.getText().substring(0, ast.getText().length() - 1).toByte, ByteType)
         } else if (ast.getText().endsWith("BD")) {
           throw new NotImplementedError("Hive Decimal not implemented yet")
-          /*
+          /* TODO: Implement!
           // Literal decimal
           val strVal = ast.getText().substring(0, ast.getText().length() - 2);
           HiveDecimal hd = HiveDecimal.create(strVal);
@@ -493,7 +510,7 @@ object HiveQl {
 
     case ast: ASTNode if ast.getType == HiveParser.StringLiteral =>
       Literal(BaseSemanticAnalyzer.unescapeSQLString(ast.getText))
-    //case Token(singleQuotedLiteral(str), Nil) => Literal(str)
+
     case a: ASTNode =>
       throw new NotImplementedError(
         s"No parse rules for ASTNode type: ${a.getType}, text: ${a.getText} :\n ${dumpTree(a).toString}")

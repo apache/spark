@@ -7,6 +7,23 @@ abstract class AggregateExpression extends Expression {
   self: Product =>
 }
 
+/**
+ * A specific implementation of an aggregate function. Used to wrap a generic [[AggregateExpression]] with an
+ * algorithm that will be used to compute the result.
+ */
+abstract class AggregateFunction extends AggregateExpression with Serializable with trees.LeafNode[Expression] {
+  self: Product =>
+
+  /** Base should return the generic aggregate expression that this function is computing */
+  val base: AggregateExpression
+  def references = base.references
+  def nullable = base.nullable
+  def dataType = base.dataType
+
+  def apply(input: Seq[Seq[Any]]): Unit
+  def result: Any
+}
+
 case class Count(child: Expression) extends AggregateExpression with trees.UnaryNode[Expression] {
   def references = child.references
   def nullable = false

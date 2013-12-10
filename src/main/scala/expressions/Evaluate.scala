@@ -86,6 +86,9 @@ object Evaluate {
       /* Alias operations do not effect evaluation */
       case Alias(c, _) => eval(c)
 
+      /* Aggregate functions are already computed so we just need to pull out the result */
+      case af: AggregateFunction => af.result
+
       /* Arithmetic */
       case Add(l, r) => n2(l,r, _.plus(_, _))
       case Subtract(l, r) => n2(l,r, _.minus(_, _))

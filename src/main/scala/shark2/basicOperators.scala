@@ -78,13 +78,8 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
   def output = aggregateExprs.map(_.toAttribute)
   override def otherCopyArgs = Seq(sc)
 
-  abstract class AggregateFunction extends Serializable {
-    def apply(input: Seq[Seq[Any]]): Unit
-    def result: Any
-  }
-
-  case class AverageFunction(expr: Expression) extends AggregateFunction {
-    def this() = this(null) // Required for serialization.
+  case class AverageFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+    def this() = this(null, null) // Required for serialization.
 
     val count  = sc.accumulable(0)
     val sum = sc.accumulable(0)
@@ -97,8 +92,8 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
     }
   }
 
-  case class CountFunction(expr: Expression) extends AggregateFunction {
-    def this() = this(null) // Required for serialization.
+  case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+    def this() = this(null, null) // Required for serialization.
 
     val count = sc.accumulable(0)
 
@@ -110,18 +105,21 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
   }
 
   def execute() = attachTree(this, "SparkAggregate") {
-    val aggFunctions = aggregateExprs.map {
-        case Alias(Average(expr), _) => new AverageFunction(expr)
-        case Alias(Count(expr), _) => new CountFunction(expr)
-        case unsupported => throw new OptimizationException(unsupported, "Aggregate not implemented in SparkAggregate")
-      }
+    // Replace all aggregate expressions with spark functions that will compute the result.
+    val aggImplementations = aggregateExprs.map { _ transform {
+        case base @ Average(expr) => new AverageFunction(expr, base)
+        case base @ Count(expr) => new CountFunction(expr, base)
+      } }
+    // Pull out all the functions so we can feed each row into them.
+    val aggFunctions = aggImplementations.flatMap(_ collect { case f: AggregateFunction => f })
+    assert(aggFunctions.nonEmpty)
 
     //TOOD: println(s"Running aggregates: $aggFunctions")
     child.execute().foreach { row =>
       val input = Vector(row)
       aggFunctions.foreach(_.apply(input))
     }
-    sc.makeRDD(Seq(aggFunctions.map(_.result).toIndexedSeq), 1)
+    sc.makeRDD(Seq(aggImplementations.map(Evaluate(_, Nil)).toIndexedSeq), 1)
   }
 }
 
