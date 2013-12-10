@@ -69,9 +69,6 @@ When building for Hadoop 2.2.X and newer, you'll need to include the additional 
     # Apache Hadoop 2.2.X and newer
     $ mvn -Dyarn.version=2.2.0 -Dhadoop.version=2.2.0 -Pnew-yarn
 
-For convenience, these variables may also be set through the `conf/spark-env.sh` file
-described below.
-
 When developing a Spark application, specify the Hadoop version by adding the
 "hadoop-client" artifact to your project's dependencies. For example, if you're
 using Hadoop 1.2.1 and build your application using SBT, add this entry to
