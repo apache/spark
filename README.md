@@ -67,9 +67,6 @@ with YARN, also set `SPARK_YARN=true`:
     # Apache Hadoop 2.2.0 with YARN
     $ SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt/sbt assembly
 
-For convenience, these variables may also be set through the `conf/spark-env.sh` file
-described below.
-
 When developing a Spark application, specify the Hadoop version by adding the
 "hadoop-client" artifact to your project's dependencies. For example, if you're
 using Hadoop 1.2.1 and build your application using SBT, add this entry to
