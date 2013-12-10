@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>0.8.1-incubating-SNAPSHOT</version>
+    <version>0.8.2-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -31,6 +31,22 @@
   <url>http://spark.incubator.apache.org/</url>
 
   <dependencies>
+    <dependency>
+      <groupId>${akka.group}</groupId>
+      <artifactId>akka-actor</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${akka.group}</groupId>
+      <artifactId>akka-remote</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${akka.group}</groupId>
+      <artifactId>akka-slf4j</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${akka.group}</groupId>
+      <artifactId>akka-zeromq</artifactId>
+    </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_2.9.3</artifactId>
