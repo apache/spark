@@ -11,7 +11,7 @@ import shark2.SharkPlan
  * efficiently.  However, since operations like column pruning can change the layout of intermediate tuples,
  * BindReferences should be run after all such transformations.
  */
-case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: AttributeReference)
+case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: Attribute)
   extends Attribute with trees.LeafNode[Expression] {
 
   def nullable = baseReference.nullable
