@@ -583,7 +583,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
    * order of the keys).
    */
-  def sortByKey(comp: Comparator[K], ascending: Boolean): JavaPairRDD[K, V] = sortByKey(comp, ascending, rdd.partitions.size)
+  def sortByKey(comp: Comparator[K], ascending: Boolean): JavaPairRDD[K, V] = {
+    sortByKey(comp, ascending, rdd.partitions.size)
+  }
 
   /**
    * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
