@@ -55,7 +55,6 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
     str.replaceAll("file:\\/.*\\/", "<PATH>")
   }
 
-
   def createQueryTest(testCaseName: String, sql: String) = {
     test(testCaseName) {
       println(
@@ -101,9 +100,15 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
           val query = new testShark.SharkSqlQuery(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Exception =>
+              val out = new java.io.ByteArrayOutputStream
+              val writer = new PrintWriter(out)
+              e.printStackTrace(writer)
+              writer.flush()
               fail(
                 s"""
                   |Failed to execute query using catalyst:
+                  |Error: ${e.getMessage}
+                  |${new String(out.toByteArray)}
                   |$query
                   |== HIVE - ${hive.size} row(s) ==
                   |${hive.mkString("\n")}
