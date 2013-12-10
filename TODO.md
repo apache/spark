@@ -19,3 +19,27 @@ this for any given R file to be sourced in the worker.
 2. Integration with ML Lib to run ML algorithms from R.
 3. Profile serialization overhead and see if there is anything better we can do.
 4. Reduce code duplication between SparkR and PySpark3. 4. .
+
+## Testing plan
+
+### sparkR, context
+
+1. Fix JAR path in sparkR.R
+2. textFile + collect -- use README.md, or some test file
+   1. Check if minSplits works correctly
+3. Check if parallelize has enough tests for tuples (+ collect)
+
+### RRDD
+
+4. Add a test for count, length
+5. Add one test for lapply, lapplyPartition
+6. Add a test for reduce
+7. Add tests for groupByKey, reduceByKey
+
+### Utils
+8. utils.R - Check if dependencies are serialized correctly
+9. convertJListToRList
+
+## Documentation
+
+1. Write Rd documentation for RRDD functions, context functions
