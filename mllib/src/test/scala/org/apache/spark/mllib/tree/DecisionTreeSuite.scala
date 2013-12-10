@@ -69,7 +69,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(splits(0).length==99)
     assert(bins(0).length==100)
     println(splits(1)(98))
-    DecisionTree.findBestSplits(rdd,strategy,0,Array[List[Filter]](),splits,bins)
+    DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
   }
 
 }
