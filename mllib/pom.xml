@@ -45,7 +45,6 @@
       <artifactId>akka-slf4j</artifactId>
     </dependency>
     <dependency>
-    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_2.9.3</artifactId>
       <version>${project.version}</version>
