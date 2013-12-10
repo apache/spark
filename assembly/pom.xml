@@ -40,6 +40,23 @@
 
   <dependencies>
     <dependency>
+      <groupId>${akka.group}</groupId>
+      <artifactId>akka-actor</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${akka.group}</groupId>
+      <artifactId>akka-remote</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${akka.group}</groupId>
+      <artifactId>akka-slf4j</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>${akka.group}</groupId>
+      <artifactId>akka-zeromq</artifactId>
+    </dependency>
+
+    <dependency>
       <groupId>org.apache.spark</groupId>
       <artifactId>spark-core_2.9.3</artifactId>
       <version>${project.version}</version>
@@ -133,6 +150,17 @@
         </dependency>
       </dependencies>
     </profile>
+    <profile>
+      <id>new-yarn</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-yarn_2.9.3</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+
     <profile>
       <id>bigtop-dist</id>
       <!-- This profile uses the assembly plugin to create a special "dist" package for BigTop
