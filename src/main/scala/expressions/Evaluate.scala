@@ -1,13 +1,14 @@
 package catalyst
 package expressions
 
+import errors._
 import types._
 
 /**
  * Performs evaluation of an expression tree, given a set of input tuples.
  */
 object Evaluate {
-  def apply(e: Expression, input: Seq[Seq[Any]]): Any = {
+  def apply(e: Expression, input: Seq[Seq[Any]]): Any = attachTree(e, "Expression Evaluation Failed") {
     def eval(e: Expression) = Evaluate(e, input)
 
     /**
@@ -111,7 +112,9 @@ object Evaluate {
       case Not(c) => !eval(c).asInstanceOf[Boolean]
 
       /* References to input tuples */
-      case BoundReference(inputTuple, ordinal, _) => input(inputTuple)(ordinal)
+      case br @ BoundReference(inputTuple, ordinal, _) => try input(inputTuple)(ordinal) catch {
+        case iob: IndexOutOfBoundsException => throw new OptimizationException(br, s"Reference not in tuple: $input")
+      }
 
       /* Functions */
       case Rand => scala.util.Random.nextDouble
