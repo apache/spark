@@ -41,27 +41,27 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala-short.version}</artifactId>
+      <artifactId>spark-core_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_${scala-short.version}</artifactId>
+      <artifactId>spark-bagel_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_${scala-short.version}</artifactId>
+      <artifactId>spark-mllib_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-repl_${scala-short.version}</artifactId>
+      <artifactId>spark-repl_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala-short.version}</artifactId>
+      <artifactId>spark-streaming_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -79,7 +79,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala-short.version}/${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</outputFile>
+          <outputFile>${project.build.directory}/scala-2.10/${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>
@@ -128,7 +128,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn_${scala-short.version}</artifactId>
+          <artifactId>spark-yarn_2.10</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

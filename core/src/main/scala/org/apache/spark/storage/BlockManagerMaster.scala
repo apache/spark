@@ -157,10 +157,9 @@ private[spark] class BlockManagerMaster(var driverActor : Either[ActorRef, Actor
     while (attempts < AKKA_RETRY_ATTEMPTS) {
       attempts += 1
       try {
-        val future = if (driverActor.isLeft ) {
-          driverActor.left.get.ask(message)(timeout)
-        } else {
-          driverActor.right.get.ask(message)(timeout)
+        val future = driverActor match {
+          case Left(a: ActorRef) => a.ask(message)(timeout)
+          case Right(b: ActorSelection) => b.ask(message)(timeout)
         }
         val result = Await.result(future, timeout)
         if (result == null) {

@@ -48,7 +48,7 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala-short.version}</artifactId>
+      <artifactId>spark-core_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -61,8 +61,8 @@
       <version>1.9.11</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka_2.9.2</artifactId>
+      <groupId>com.sksamuel.kafka</groupId>
+      <artifactId>kafka_2.10</artifactId>
       <version>0.8.0-beta1</version>
       <exclusions>
         <exclusion>
@@ -111,7 +111,7 @@
     </dependency>
     <dependency>
       <groupId>com.typesafe.akka</groupId>
-      <artifactId>akka-zeromq_${scala-short.version}</artifactId>
+      <artifactId>akka-zeromq_2.10</artifactId>
       <version>${akka.version}</version>
       <exclusions>
         <exclusion>
@@ -122,12 +122,12 @@
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala-short.version}</artifactId>
+      <artifactId>scalatest_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala-short.version}</artifactId>
+      <artifactId>scalacheck_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -151,8 +151,8 @@
     </dependency>
   </dependencies>
   <build>
-    <outputDirectory>target/scala-${scala-short.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala-short.version}/test-classes</testOutputDirectory>
+    <outputDirectory>target/scala-2.10/classes</outputDirectory>
+    <testOutputDirectory>target/scala-2.10/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
         <groupId>org.scalatest</groupId>

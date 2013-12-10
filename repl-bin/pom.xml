@@ -40,18 +40,18 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala-short.version}</artifactId>
+      <artifactId>spark-core_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_${scala-short.version}</artifactId>
+      <artifactId>spark-bagel_2.10</artifactId>
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-repl_${scala-short.version}</artifactId>
+      <artifactId>spark-repl_2.10</artifactId>
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>

@@ -72,12 +72,11 @@ private[spark] class MapOutputTracker extends Logging {
   // throw a SparkException if this fails.
   private def askTracker(message: Any): Any = {
     try {
-      val future = if (trackerActor.isLeft ) {
-        trackerActor.left.get.ask(message)(timeout)
-      } else {
-        trackerActor.right.get.ask(message)(timeout)
+      val future = trackerActor match {
+        case Left(a: ActorRef) => a.ask(message)(timeout)
+        case Right(b: ActorSelection) => b.ask(message)(timeout)
       }
-      return Await.result(future, timeout)
+      Await.result(future, timeout)
     } catch {
       case e: Exception =>
         throw new SparkException("Error communicating with MapOutputTracker", e)

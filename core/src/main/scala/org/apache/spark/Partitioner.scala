@@ -17,10 +17,10 @@
 
 package org.apache.spark
 
-import org.apache.spark.util.Utils
-import org.apache.spark.rdd.RDD
-
 import scala.reflect.ClassTag
+
+import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * An object that defines how the elements in a key-value pair RDD are partitioned by key.

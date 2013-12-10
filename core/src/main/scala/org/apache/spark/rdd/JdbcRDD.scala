@@ -20,6 +20,7 @@ package org.apache.spark.rdd
 import java.sql.{Connection, ResultSet}
 
 import scala.reflect.ClassTag
+
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.util.NextIterator
 

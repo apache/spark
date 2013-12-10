@@ -17,16 +17,13 @@
 
 package org.apache.spark.rdd
 
+import java.io.IOException
+
 import scala.reflect.ClassTag
+
+import org.apache.hadoop.fs.Path
 import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.hadoop.mapred.{FileInputFormat, SequenceFileInputFormat, JobConf, Reporter}
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.io.{NullWritable, BytesWritable}
-import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.fs.Path
-import java.io.{File, IOException, EOFException}
-import java.text.NumberFormat
 
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition {}
 
