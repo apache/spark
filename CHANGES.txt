@@ -2,6 +2,10 @@ Spark Change Log
 
 Release 0.8.1-incubating
 
+  d03589d Mon Dec 9 23:10:00 2013 -0800
+  Merge pull request #248 from colorant/branch-0.8
+  [Fix POM file for mvn assembly on hadoop 2.2 Yarn]
+
   3e1f78c Sun Dec 8 21:34:12 2013 -0800
   Merge pull request #195 from dhardy92/fix_DebScriptPackage
   [[Deb] fix package of Spark classes adding org.apache prefix in scripts embeded in .deb]
