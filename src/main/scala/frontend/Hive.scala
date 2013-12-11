@@ -8,6 +8,7 @@ import org.apache.hadoop.hive.ql.parse._
 
 import analysis._
 import expressions._
+import plans._
 import plans.logical._
 import types._
 
@@ -322,9 +323,12 @@ object HiveQl {
   }
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
-    case Token("TOK_EXPLAIN", query :: Nil) => ExplainCommand(nodeToPlan(query))
+    case Token("TOK_EXPLAIN", explainArgs) =>
+      // Ignore FORMATTED if present.
+      val Some(query) :: _ :: Nil = getClauses(Seq("TOK_QUERY", "FORMATTED"), explainArgs)
+      ExplainCommand(nodeToPlan(query))
     case Token("TOK_QUERY",
-           fromClause ::
+           Token("TOK_FROM", fromClause :: Nil) ::
            Token("TOK_INSERT", insertClauses) :: Nil) =>
 
       val (Some(destClause) ::
@@ -332,9 +336,10 @@ object HiveQl {
           whereClause ::
           groupByClause ::
           orderByClause ::
-          limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_LIMIT"), insertClauses)
+          sortByClause ::
+          limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), insertClauses)
 
-      val relations = nodeToPlan(fromClause)
+      val relations = nodeToRelation(fromClause)
       val withWhere = whereClause.map { whereNode =>
         val Seq(whereExpr) = whereNode.getChildren().toSeq
         Filter(nodeToExpr(whereExpr), relations)
@@ -347,36 +352,59 @@ object HiveQl {
         case None => Project(selectExpressions, withWhere)
       }
 
-      val withSort = orderByClause.map(_.getChildren.map(nodeToSortOrder)).map(Sort(_, withProject)).getOrElse(withProject)
+      require(!(orderByClause.isDefined && sortByClause.isDefined), "Can't have both a sort by and order by.")
+      // Right now we treat sorting and ordering as identical.
+      val withSort = (orderByClause orElse sortByClause).map(_.getChildren.map(nodeToSortOrder)).map(Sort(_, withProject)).getOrElse(withProject)
       val withLimit = limitClause.map(l => nodeToExpr(l.getChildren.head)).map(StopAfter(_, withSort)).getOrElse(withSort)
 
       nodeToDest(
         destClause,
         withLimit)
 
-    case Token("TOK_FROM",
-          Token("TOK_SUBQUERY",
-            query :: Token(alias, Nil) :: Nil) :: Nil) =>
-      Subquery(alias, nodeToPlan(query))
-
     case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
 
+    case a: ASTNode =>
+      throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
+  }
+
+  def nodeToRelation(node: Node): LogicalPlan = node match {
+    case Token("TOK_SUBQUERY",
+           query :: Token(alias, Nil) :: Nil) =>
+      Subquery(alias, nodeToPlan(query))
+
     /* Table, No Alias */
-    case Token("TOK_FROM",
-           Token("TOK_TABREF",
-             Token("TOK_TABNAME",
-               tableNameParts) :: Nil) :: Nil) =>
+    case Token("TOK_TABREF",
+           Token("TOK_TABNAME",
+             tableNameParts) :: Nil) =>
       val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
       UnresolvedRelation(tableName, None)
 
     /* Table with Alias */
-    case Token("TOK_FROM",
-           Token("TOK_TABREF",
-             Token("TOK_TABNAME",
-               tableNameParts) ::
-               Token(alias, Nil) :: Nil) :: Nil) =>
+    case Token("TOK_TABREF",
+           Token("TOK_TABNAME",
+             tableNameParts) ::
+             Token(alias, Nil) :: Nil) =>
       val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
       UnresolvedRelation(tableName, Some(alias))
+
+    /* Join no condition */
+    case Token("TOK_JOIN",
+           relation1 ::
+           relation2 :: Nil) =>
+      Join(nodeToRelation(relation1),
+        nodeToRelation(relation2),
+        Inner,
+        None)
+
+    /* Join with condition */
+    case Token("TOK_JOIN",
+          relation1 ::
+          relation2 ::
+          condition :: Nil) =>
+      Join(nodeToRelation(relation1),
+           nodeToRelation(relation2),
+           Inner,
+           Some(nodeToExpr(condition)))
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
