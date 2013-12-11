@@ -22,11 +22,20 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   val id = TreeNode.nextId()
 
   /**
-   * Faster version of equality which short-circuits when two treeNodes have the same id.
-   * We don't just override Object.Equals, as doing so prevents the scala compiler from
+   * Returns true if other is the same [[TreeNode]] instance.  Unlike [[equals]] this function will return false for
+   * different instances of structurally identical trees.
+   */
+  def sameInstance(other: TreeNode[_]): Boolean = {
+    this.id == other.id
+  }
+
+  /**
+   * Faster version of equality which short-circuits when two treeNodes are the same instance.
+   * We don't just override Object.Equals, as doing so prevents the scala compiler from from generating case class
+   * [[equals]] methods.
    */
   def fastEquals(other: TreeNode[_]): Boolean = {
-    this.id == other.id || this == other
+    sameInstance(other) || this == other
   }
 
   /**
