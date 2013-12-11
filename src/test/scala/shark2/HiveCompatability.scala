@@ -138,12 +138,15 @@ class HiveCompatability extends HiveComaparisionTest {
   val testCases = hiveQueryDir.listFiles
   val runAll = !(System.getProperty("shark.hive.alltests") == null)
 
+  // Allow the whitelist to be overriden by a system property
+  val realWhiteList = Option(System.getProperty("shark.hive.whitelist")).map(_.split(",").toSeq).getOrElse(whiteList)
+
   // Go through all the test cases and add them to scala test.
   testCases.foreach { testCase =>
     val testCaseName = testCase.getName.stripSuffix(".q")
     if(blackList contains testCaseName) {
       // Do nothing
-    } else if(whiteList.contains(testCaseName)  || runAll) {
+    } else if(realWhiteList.contains(testCaseName)  || runAll) {
       // Build a test case and submit it to scala test framework...
       val queriesString = fileToString(testCase)
       createQueryTest(testCaseName, queriesString)
