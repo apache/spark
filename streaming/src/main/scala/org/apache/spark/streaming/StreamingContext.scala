@@ -46,6 +46,7 @@ import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
 import twitter4j.Status
 import twitter4j.auth.Authorization
+import org.apache.spark.deploy.SparkHadoopUtil
 
 
 /**
@@ -84,7 +85,6 @@ class StreamingContext private (
     this(StreamingContext.createNewSparkContext(master, appName, sparkHome, jars, environment),
          null, batchDuration)
   }
-
 
   /**
    * Re-create a StreamingContext from a checkpoint file.
@@ -139,7 +139,7 @@ class StreamingContext private (
 
   protected[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
-      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(cp_.checkpointDir), true)
+      sc.setCheckpointDir(cp_.checkpointDir)
       cp_.checkpointDir
     } else {
       null
@@ -173,8 +173,12 @@ class StreamingContext private (
    */
   def checkpoint(directory: String) {
     if (directory != null) {
-      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(directory))
-      checkpointDir = directory
+      val path = new Path(directory)
+      val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+      fs.mkdirs(path)
+      val fullPath = fs.getFileStatus(path).getPath().toString
+      sc.setCheckpointDir(fullPath)
+      checkpointDir = fullPath
     } else {
       checkpointDir = null
     }
@@ -595,8 +599,9 @@ object StreamingContext {
       prefix + "-" + time.milliseconds + "." + suffix
     }
   }
-
+  /*
   protected[streaming] def getSparkCheckpointDir(sscCheckpointDir: String): String = {
     new Path(sscCheckpointDir, UUID.randomUUID.toString).toString
   }
+  */
 }

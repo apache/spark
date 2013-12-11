@@ -19,7 +19,7 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
-import java.util.Properties
+import java.util.{UUID, Properties}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.Map
@@ -857,22 +857,15 @@ class SparkContext(
 
   /**
    * Set the directory under which RDDs are going to be checkpointed. The directory must
-   * be a HDFS path if running on a cluster. If the directory does not exist, it will
-   * be created. If the directory exists and useExisting is set to true, then the
-   * exisiting directory will be used. Otherwise an exception will be thrown to
-   * prevent accidental overriding of checkpoint files in the existing directory.
+   * be a HDFS path if running on a cluster.
    */
-  def setCheckpointDir(dir: String, useExisting: Boolean = false) {
-    val path = new Path(dir)
-    val fs = path.getFileSystem(SparkHadoopUtil.get.newConfiguration())
-    if (!useExisting) {
-      if (fs.exists(path)) {
-        throw new Exception("Checkpoint directory '" + path + "' already exists.")
-      } else {
-        fs.mkdirs(path)
-      }
-    }
-    checkpointDir = Some(dir)
+  def setCheckpointDir(directory: String) {
+    checkpointDir = Option(directory).map(dir => {
+      val path = new Path(dir, UUID.randomUUID().toString)
+      val fs = path.getFileSystem(hadoopConfiguration)
+      fs.mkdirs(path)
+      fs.getFileStatus(path).getPath().toString
+    })
   }
 
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */

@@ -29,7 +29,7 @@ class Scheduler(ssc: StreamingContext) extends Logging {
   val concurrentJobs = System.getProperty("spark.streaming.concurrentJobs", "1").toInt
   val jobManager = new JobManager(ssc, concurrentJobs)
   val checkpointWriter = if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
-    new CheckpointWriter(ssc.checkpointDir)
+    new CheckpointWriter(ssc.checkpointDir, ssc.sparkContext.hadoopConfiguration)
   } else {
     null
   }
