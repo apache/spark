@@ -281,7 +281,7 @@ object SparkBuild extends Build {
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
     resolvers ++= Seq(
-      "Akka Repository" at "http://repo.akka.io/releases/",
+      "Eclipse Repository" at "https://repo.eclipse.org/content/repositories/paho-releases/",
       "Apache repo" at "https://repository.apache.org/content/repositories/releases"
     ),
 
