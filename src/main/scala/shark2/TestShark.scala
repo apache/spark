@@ -144,6 +144,8 @@ object TestShark {
 
     lazy val toRdd = executedPlan.execute()
 
+    def debugExec() = DebugQuery(executedPlan).execute().collect
+
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the execution is simply
      * passed back to Hive.
