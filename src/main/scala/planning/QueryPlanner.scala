@@ -36,7 +36,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
 
   def apply(plan: LogicalPlan): Iterator[PhysicalPlan] = {
     // Obviously a lot to do here still...
-    val iter = strategies.flatMap(_(plan)).toIterator
+    val iter = strategies.view.flatMap(_(plan)).toIterator
     assert(iter.hasNext, s"No plan for $plan")
     iter
   }
