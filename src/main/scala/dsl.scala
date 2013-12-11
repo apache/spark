@@ -61,14 +61,18 @@ package object dsl {
 
   implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
 
-  implicit class DslSymbol(s: Symbol) extends ImplicitOperators {
+  implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
+  implicit class DslString(val s: String) extends ImplicitAttribute
+
+  abstract class ImplicitAttribute extends ImplicitOperators {
+    def s: String
     def expr = attr
-    def attr = analysis.UnresolvedAttribute(s.name)
+    def attr = analysis.UnresolvedAttribute(s)
 
     /** Creates a new typed attributes of type int */
-    def int = AttributeReference(s.name, IntegerType, false)()
+    def int = AttributeReference(s, IntegerType, false)()
     /** Creates a new typed attributes of type string */
-    def string = AttributeReference(s.name, StringType, false)()
+    def string = AttributeReference(s, StringType, false)()
   }
 
   implicit class DslAttribute(a: AttributeReference) {
@@ -92,6 +96,9 @@ package object dsl {
       }
       Aggregate(groupingExprs, aliasedExprs, plan)
     }
+    def subquery(alias: Symbol) = Subquery(alias.name, plan)
+    def unionAll(otherPlan: LogicalPlan) = Union(plan, otherPlan)
+
     def analyze = analysis.SimpleAnalyzer(plan)
   }
 }
