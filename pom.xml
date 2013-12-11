@@ -104,6 +104,8 @@
     <scala.version>2.10.3</scala.version>
     <mesos.version>0.13.0</mesos.version>
     <akka.version>2.2.3</akka.version>
+    <akka.group>com.typesafe.akka</akka.group>
+    <protobuf.version>2.4.1</protobuf.version>
     <slf4j.version>1.7.2</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
@@ -200,7 +202,7 @@
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
-        <version>2.4.1</version>
+        <version>${protobuf.version}</version>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
@@ -213,7 +215,7 @@
         <version>0.3.1</version>
       </dependency>
       <dependency>
-        <groupId>com.typesafe.akka</groupId>
+        <groupId>${akka.group}</groupId>
         <artifactId>akka-actor_2.10</artifactId>
         <version>${akka.version}</version>
         <exclusions>
@@ -224,7 +226,7 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.typesafe.akka</groupId>
+        <groupId>${akka.group}</groupId>
         <artifactId>akka-remote_2.10</artifactId>
         <version>${akka.version}</version>
         <exclusions>
@@ -235,8 +237,19 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.typesafe.akka</groupId>
+        <groupId>${akka.group}</groupId>
         <artifactId>akka-slf4j_2.10</artifactId>
+        <version>${akka.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>${akka.group}</groupId>
+        <artifactId>akka-zeromq_2.10</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -254,11 +267,6 @@
         <groupId>colt</groupId>
         <artifactId>colt</artifactId>
         <version>1.2.0</version>
-      </dependency>
-      <dependency>
-        <groupId>com.github.scala-incubator.io</groupId>
-        <artifactId>scala-io-file_2.10</artifactId>
-        <version>0.4.1</version>
       </dependency>
       <dependency>
         <groupId>org.apache.mesos</groupId>
@@ -729,6 +737,41 @@
         </dependencies>
       </dependencyManagement>
     </profile>
+
+    <profile>
+      <id>new-yarn</id>
+      <properties>
+        <akka.group>org.spark-project</akka.group>
+        <akka.version>2.0.5-protobuf-2.5-java-1.5</akka.version>
+        <hadoop.major.version>2</hadoop.major.version>
+        <hadoop.version>2.2.0</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+      </properties>
+
+      <modules>
+        <module>new-yarn</module>
+      </modules>
+
+      <repositories>
+        <repository>
+          <id>maven-root</id>
+          <name>Maven root repository</name>
+          <url>http://repo1.maven.org/maven2/</url>
+          <releases>
+            <enabled>true</enabled>
+          </releases>
+          <snapshots>
+            <enabled>false</enabled>
+          </snapshots>
+        </repository>
+      </repositories>
+
+      <dependencyManagement>
+        <dependencies>
+        </dependencies>
+      </dependencyManagement>
+    </profile>
+
     <profile>
       <id>repl-bin</id>
       <activation>

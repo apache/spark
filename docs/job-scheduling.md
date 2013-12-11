@@ -91,7 +91,7 @@ The fair scheduler also supports grouping jobs into _pools_, and setting differe
 (e.g. weight) for each pool. This can be useful to create a "high-priority" pool for more important jobs,
 for example, or to group the jobs of each user together and give _users_ equal shares regardless of how
 many concurrent jobs they have instead of giving _jobs_ equal shares. This approach is modeled after the
-[Hadoop Fair Scheduler](http://hadoop.apache.org/docs/stable/fair_scheduler.html).
+[Hadoop Fair Scheduler](http://hadoop.apache.org/docs/current/hadoop-yarn/hadoop-yarn-site/FairScheduler.html).
 
 Without any intervention, newly submitted jobs go into a _default pool_, but jobs' pools can be set by
 adding the `spark.scheduler.pool` "local property" to the SparkContext in the thread that's submitting them.

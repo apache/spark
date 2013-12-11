@@ -246,12 +246,12 @@ private[spark] class MapOutputTrackerMaster extends MapOutputTracker {
         case Some(bytes) =>
           return bytes
         case None =>
-          statuses = mapStatuses(shuffleId)
+          statuses = mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
           epochGotten = epoch
       }
     }
     // If we got here, we failed to find the serialized locations in the cache, so we pulled
-    // out a snapshot of the locations as "locs"; let's serialize and return that
+    // out a snapshot of the locations as "statuses"; let's serialize and return that
     val bytes = MapOutputTracker.serializeMapStatuses(statuses)
     logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, bytes.length))
     // Add them into the table only if the epoch hasn't changed while we were working
@@ -275,6 +275,10 @@ private[spark] class MapOutputTrackerMaster extends MapOutputTracker {
 
   override def updateEpoch(newEpoch: Long) {
     // This might be called on the MapOutputTrackerMaster if we're running in local mode.
+  }
+
+  def has(shuffleId: Int): Boolean = {
+    cachedSerializedStatuses.get(shuffleId).isDefined || mapStatuses.contains(shuffleId)
   }
 }
 

@@ -605,7 +605,10 @@ class RDD(object):
         '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
         """
         def func(split, iterator):
-            return (str(x).encode("utf-8") for x in iterator)
+            for x in iterator:
+                if not isinstance(x, basestring):
+                    x = unicode(x)
+                yield x.encode("utf-8")
         keyed = PipelinedRDD(self, func)
         keyed._bypass_serializer = True
         keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)

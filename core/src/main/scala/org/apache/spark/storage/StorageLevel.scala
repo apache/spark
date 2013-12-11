@@ -101,7 +101,7 @@ class StorageLevel private(
     var result = ""
     result += (if (useDisk) "Disk " else "")
     result += (if (useMemory) "Memory " else "")
-    result += (if (deserialized) "Deserialized " else "Serialized")
+    result += (if (deserialized) "Deserialized " else "Serialized ")
     result += "%sx Replicated".format(replication)
     result
   }
