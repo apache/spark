@@ -16,7 +16,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
 
   /**
    * A globally unique id for this specific instance. Not preserved across copies.
-   * Unlike [[equals]] [[id]] be used to differentiate distinct but stucturally
+   * Unlike [[equals]] [[id]] be used to differentiate distinct but structurally
    * identical branches of a tree.
    */
   val id = TreeNode.nextId()
