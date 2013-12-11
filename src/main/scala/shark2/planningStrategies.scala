@@ -5,7 +5,7 @@ import shark.SharkContext
 
 import expressions._
 import planning._
-import plans.logical
+import plans._
 import plans.logical.LogicalPlan
 
 abstract trait PlanningStrategies {
@@ -61,6 +61,63 @@ abstract trait PlanningStrategies {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Aggregate(Nil, agg, child) if onlyAllowedAggregates(agg) =>
         shark2.SparkAggregate(agg, planLater(child))(sc) :: Nil
+      case _ => Nil
+    }
+  }
+
+  object SparkEquiInnerJoin extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
+      case FilteredOperation(predicates, logical.Join(left, right, Inner, condition)) =>
+        println(s"Considering join: ${predicates ++ condition}")
+        // Find equi-join predicates that can be evaluated before the join, and thus can be used as join keys.
+        // Note we can only mix in the conditions with other predicates because the match above ensures that this is
+        // and Inner join.
+        val (joinPredicates, otherPredicates) = (predicates ++ condition).partition {
+          case Equals(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
+                               (canEvaluate(l, right) && canEvaluate(r, left)) => true
+          case _ => false
+        }
+
+        val joinKeys = joinPredicates.map {
+          case Equals(l,r) if (canEvaluate(l, left) && canEvaluate(r, right)) => (l, r)
+          case Equals(l,r) if (canEvaluate(l, right) && canEvaluate(r, left)) => (r, l)
+        }
+
+        // Do not consider this strategy if there are no join keys.
+        if(joinKeys.nonEmpty) {
+          val leftKeys = joinKeys.map(_._1)
+          val rightKeys = joinKeys.map(_._2)
+
+          val joinOp = shark2.SparkEquiInnerJoin(leftKeys, rightKeys, planLater(left), planLater(right))
+
+          println(s"join planned ${joinOp}")
+
+          // Make sure other conditions are met if present.
+          if(otherPredicates.nonEmpty)
+            shark2.Filter(combineConjunctivePredicates(otherPredicates), joinOp) :: Nil
+          else
+            joinOp :: Nil
+        } else {
+          println("Avoiding spark join with no conditions.")
+          Nil
+        }
+      case _ => println("NO JOIN"); Nil
+    }
+
+    private def combineConjunctivePredicates(predicates: Seq[Expression]) =
+      predicates.reduceLeft(And(_, _))
+
+    /** Returns true if [[expr]] can be evaluated using only the output of [[plan]]. */
+    protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
+      expr.references subsetOf plan.outputSet
+  }
+
+  object CartesianProduct extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
+      case logical.Join(left, right, _, None) => shark2.CartesianProduct(planLater(left), planLater(right)) :: Nil
+      case logical.Join(left, right, Inner, Some(condition)) =>
+        shark2.Filter(condition,
+          shark2.CartesianProduct(planLater(left), planLater(right))) :: Nil
       case _ => Nil
     }
   }

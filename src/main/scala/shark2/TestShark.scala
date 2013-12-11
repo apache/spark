@@ -108,10 +108,12 @@ object TestShark {
   object TrivalPlanner extends QueryPlanner[SharkPlan] with PlanningStrategies {
     val sc = self.sc
     val strategies =
+      SparkEquiInnerJoin ::
       SparkAggregates ::
       HiveTableScans ::
       DataSinks ::
-      BasicOperators :: Nil
+      BasicOperators ::
+      CartesianProduct :: Nil
   }
 
   object PrepareForExecution extends RuleExecutor[SharkPlan] {
