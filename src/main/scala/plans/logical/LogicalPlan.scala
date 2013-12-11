@@ -18,7 +18,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   /**
    * Returns the set of attributes that are output by this node.
    */
-  def outputSet: Set[Attribute] = ???
+  def outputSet: Set[Attribute] = output.toSet
 
   /**
    * Returns the set of attributes that this node takes as
