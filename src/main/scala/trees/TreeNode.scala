@@ -148,8 +148,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def nodeName = getClass.getSimpleName
 
   /** Returns a string representing the arguments to this node, minus any children */
-  def argString = productIterator.flatMap {
+  def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if children contains tn => Nil
+    case tn: TreeNode[_] => s"(${tn.simpleString})" :: Nil
     case seq: Seq[_] => seq.mkString("{", ",", "}") :: Nil
     case other => other :: Nil
   }.mkString(", ")
