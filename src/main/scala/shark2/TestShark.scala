@@ -193,7 +193,7 @@ object TestShark {
   val testTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)",
-      "LOAD DATA LOCAL INPATH '/Users/marmbrus/workspace/hive/data/files/kv1.txt' INTO TABLE src")
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' INTO TABLE src")
   )
   protected val testTableNames = testTables.map(_.name).toSet
 
