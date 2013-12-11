@@ -19,6 +19,12 @@ case class Not(child: Expression) extends Predicate with trees.UnaryNode[Express
   def references = child.references
   def nullable = child.nullable
 }
+case class And(left: Expression, right: Expression) extends BinaryPredicate {
+  def symbol = "&&"
+}
+case class Or(left: Expression, right: Expression) extends BinaryPredicate {
+  def symbol = "||"
+}
 
 case class Equals(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "="
