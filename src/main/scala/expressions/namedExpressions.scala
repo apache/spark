@@ -91,6 +91,11 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
 
   def resolved = true
 
+  override def equals(other: Any) = other match {
+    case ar: AttributeReference => exprId == ar.exprId
+    case _ => false
+  }
+
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
    */
