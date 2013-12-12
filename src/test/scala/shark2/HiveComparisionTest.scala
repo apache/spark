@@ -41,7 +41,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
     val orderedAnswer = sharkQuery.parsed match {
       case _: Command => answer  // Don't attempt to modify the result of Commands since they are run by hive.
       case _ =>
-        val isOrdered = !sharkQuery.executedPlan.collect { case s: Sort => s}.isEmpty
+        val isOrdered = sharkQuery.executedPlan.collect { case s: Sort => s}.nonEmpty
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
         if(!isOrdered) answer.sorted else answer
     }
