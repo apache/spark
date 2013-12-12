@@ -13,17 +13,17 @@ import org.apache.spark.util.Utils
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from R.
  * This is used by SparkR's shuffle operations.
  */
-private class PairwiseRRDD(
-    parent: JavaPairRDD[Array[Byte], Array[Byte]],
+private class PairwiseRRDD[T: ClassManifest](
+    parent: RDD[T],
     numPartitions: Int,
     hashFunc: Array[Byte],
     dataSerialized: Boolean,
     functionDependencies: Array[Byte])
-  extends RDD[(Array[Byte], Array[Byte])](parent.rdd) {
+  extends RDD[(Int, Array[Byte])](parent) {
 
   override def getPartitions = parent.partitions
 
-  override def compute(split: Partition, context: TaskContext): Iterator[(Array[Byte], Array[Byte])] = {
+  override def compute(split: Partition, context: TaskContext): Iterator[(Int, Array[Byte])] = {
 
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
     val pb = SparkRHelper.rWorkerProcessBuilder
@@ -62,22 +62,22 @@ private class PairwiseRRDD(
         dataOut.writeInt(functionDependencies.length)
         dataOut.write(functionDependencies, 0, functionDependencies.length)
 
-        dataOut.writeInt(parent.iterator(split, context).length)
+        // Write 1 to indicate this is a pair-wise RDD
+        dataOut.writeInt(numPartitions)
 
-        // TODO: is it okay to use parent as opposed to firstParent?
-        parent.iterator(split, context).foreach {
-          case (keyBytes: Array[Byte], valBytes: Array[Byte]) =>
-            if (dataSerialized) {
-              dataOut.writeInt(keyBytes.length)
-              dataOut.write(keyBytes, 0, keyBytes.length)
-              dataOut.writeInt(valBytes.length)
-              dataOut.write(valBytes, 0, valBytes.length)
-            } else {
-              // FIXME: is it possible / do we allow that an RDD[(Array[Byte], Array[Byte])] has dataSerialized == false?
-              printOut.println(keyBytes)
-              printOut.println(valBytes)
-            }
-          case _ => throw new SparkException("PairwiseRRDD: unexpected element (not (Array[Byte], Array[Bytes]))")
+        if (!firstParent.iterator(split, context).hasNext) {
+          dataOut.writeInt(0)
+        } else {
+          dataOut.writeInt(1)
+        }
+        for (elem <- firstParent[T].iterator(split, context)) {
+          if (dataSerialized) {
+            val elemArr = elem.asInstanceOf[Array[Byte]]
+            dataOut.writeInt(elemArr.length)
+            dataOut.write(elemArr, 0, elemArr.length)
+          } else {
+            printOut.println(elem)
+          }
         }
         stream.close()
       }
@@ -89,8 +89,8 @@ private class PairwiseRRDD(
 
     val dataStream = new DataInputStream(new FileInputStream(stdOutFileName))
 
-    return new Iterator[(Array[Byte], Array[Byte])] {
-      def next(): (Array[Byte], Array[Byte]) = {
+    return new Iterator[(Int, Array[Byte])] {
+      def next(): (Int, Array[Byte]) = {
         val obj = _nextObj
         if (hasNext) {
           _nextObj = read()
@@ -98,20 +98,18 @@ private class PairwiseRRDD(
         obj
       }
 
-      private def read(): (Array[Byte], Array[Byte]) = {
+      private def read(): (Int, Array[Byte]) = {
         try {
           val length = dataStream.readInt()
 
           length match {
             case length if length == 2 =>
-              val hashedKeyLength = dataStream.readInt()
-              val hashedKey = new Array[Byte](hashedKeyLength)
-              dataStream.read(hashedKey, 0, hashedKeyLength)
+              val hashedKey = dataStream.readInt()
               val contentPairsLength = dataStream.readInt()
               val contentPairs = new Array[Byte](contentPairsLength)
               dataStream.read(contentPairs, 0, contentPairsLength)
               (hashedKey, contentPairs)
-            case _ => (new Array[Byte](0), new Array[Byte](0))   // End of input
+            case _ => (0, new Array[Byte](0))   // End of input
           }
         } catch {
           case eof: EOFException => {
@@ -122,11 +120,11 @@ private class PairwiseRRDD(
       }
       var _nextObj = read()
 
-      def hasNext = !(_nextObj._1.length == 0 && _nextObj._2.length == 0)
+      def hasNext = !(_nextObj._1 == 0 && _nextObj._2.length == 0)
     }
   }
 
-  lazy val asJavaPairRDD : JavaPairRDD[Array[Byte], Array[Byte]] = JavaPairRDD.fromRDD(this)
+  lazy val asJavaPairRDD : JavaPairRDD[Int, Array[Byte]] = JavaPairRDD.fromRDD(this)
 
 }
 
@@ -179,8 +177,14 @@ class RRDD[T: ClassManifest](
         dataOut.writeInt(functionDependencies.length)
         dataOut.write(functionDependencies, 0, functionDependencies.length)
 
-        // Special flag that tells the worker that I am a normal RRDD.
+        // Special flag that tells the worker that this is a normal RRDD.
         dataOut.writeInt(-1)
+
+        if (!firstParent.iterator(split, context).hasNext) {
+          dataOut.writeInt(0)
+        } else {
+          dataOut.writeInt(1)
+        }
 
         for (elem <- firstParent[T].iterator(split, context)) {
           if (dataSerialized) {
