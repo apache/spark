@@ -21,3 +21,7 @@ SparkR also comes with several sample programs in the `R/examples` directory.
 To run one of them, use `./sparkR <filename> <args>`. For example:
 
     ./sparkR R/examples/pi.R local[2]  
+
+You can also run the unit-tests for SparkR by running
+
+    ./sparkR R/pkg/inst/tests/run-all.R
