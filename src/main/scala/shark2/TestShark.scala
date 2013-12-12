@@ -86,7 +86,13 @@ object TestShark {
   /**
    * Runs the specified SQL query using Hive.
    */
-  def runSqlHive(sql: String) = sc.sql(rewritePaths(sql))
+  def runSqlHive(sql: String): Seq[String] = {
+    val maxResults = 100000
+    val results = sc.sql(rewritePaths(sql), 100000)
+    // It is very confusing when you only get back some of the results...
+    if(results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
+    results
+  }
 
   /** Returns the value of specified environmental variable as a [[java.io.File]] after checking to ensure it exists */
   private def envVarToFile(envVar: String): File = {
