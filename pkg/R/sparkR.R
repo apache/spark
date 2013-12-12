@@ -9,14 +9,21 @@ sparkR.onLoad <- function(libname, pkgname) {
   .jinit(classpath=classPath)
 }
 
-# Initializes and returns a JavaSparkContext
+#' Initialize a new Spark Context.
+#'
+#' This function initializes a new SparkContext.
+#'
+#' @param master The Spark master URL.
+#' @param appName Application name to register with cluster manager
+#' @param sparkHome Spark Home directory
+#' @export
+#' @examples
+#' sparkR.init("local[2]", "SparkR", "/home/spark")
+
 sparkR.init <- function(
-  master = "local[2]",
+  master = "local",
   appName = "SparkR",
-  sparkHome = Sys.getenv("SPARK_HOME"),
-  jars = NULL,
-  jarFile = NULL,
-  environment = NULL) {
+  sparkHome = Sys.getenv("SPARK_HOME")) {
 
   if (exists(".sparkRjsc", envir=.sparkREnv)) {
     return(get(".sparkRjsc", envir=.sparkREnv))

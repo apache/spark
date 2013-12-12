@@ -1,25 +1,51 @@
 # context.R: SparkContext driven functions
 
-# Read a text file from HDFS, a local file system (available on all
-# nodes), or any Hadoop-supported file system URI, and return it as an
-# RRDD of Strings.
-textFile <- function(jsc, name, minSplits=NULL) {
-  # FIXME: if execute into this if block, errors:
-  # Error in .jcall(jsc, "sc", c()) : RcallMethod: invalid method name
+#' Create an RDD from a text file.
+#'
+#' This function reads a text file from HDFS, a local file system (available on all
+#' nodes), or any Hadoop-supported file system URI, and creates an
+#' RDD of strings from it.
+#'
+#' @param sc SparkContext to use
+#' @param name Path of file to read
+#' @param minSplits Minimum number of splits to be created. If NULL, the default
+#'  value is chosen based on available parallelism.
+#' @return RRDD where each item is of type \code{character}
+#' @export
+#' @examples
+#'\dontrun{
+#'  sc <- sparkR.init()
+#'  lines <- textFile(sc, "myfile.txt")
+#'}
+
+textFile <- function(sc, path, minSplits = NULL) {
   if (is.null(minSplits)) {
-    sc <- .jcall(jsc, "Lorg/apache/spark/SparkContext;", "sc")
-    defaultParallelism <- .jcall(sc, "I", "defaultParallelism")
+    ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
+    defaultParallelism <- .jcall(ssc, "I", "defaultParallelism")
     minSplits <- min(defaultParallelism, 2)
   }
-  jrdd <- .jcall(jsc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", name,
+  jrdd <- .jcall(sc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", path,
                  as.integer(minSplits))
   RRDD(jrdd, FALSE)
 }
 
-# Distribute a local R homogeneous list to form an RRDD[Array[Byte]]. If a
-# vector is passed as `coll', as.list() will be called on it to convert it to a
-# list. 
-parallelize <- function(jsc, coll, numSlices = 1) {
+#' Create an RDD from a homogeneous list or vector.
+#'
+#' This function creates an RDD from a local homogeneous list in R. The elements
+#' in the list are split into \code{numSlices} slices and distributed to nodes
+#' in the cluster.
+#'
+#' @param sc SparkContext to use
+#' @param coll collection to parallelize
+#' @param numSlices number of partitions to create in the RDD
+#' @return an RRDD created from this collection
+#' @export
+#' @examples
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 2)
+#' # The RDD should contain 10 elements
+#' length(rdd)
+parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
@@ -48,9 +74,8 @@ parallelize <- function(jsc, coll, numSlices = 1) {
   jrdd <- .jcall("org/apache/spark/api/r/RRDD",
                  jrddType,
                  "createRDDFromArray",
-                 jsc,
+                 sc,
                  javaSerializedSlices)
 
   RRDD(jrdd, TRUE)
 }
-
