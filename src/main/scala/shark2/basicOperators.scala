@@ -39,6 +39,8 @@ case class Union(left: SharkPlan, right: SharkPlan)(@transient sc: SharkContext)
   def output = left.output
   // TODO: is it more efficient to union a bunch of rdds at once? should union be variadic?
   def execute() = sc.union(left.execute(), right.execute())
+
+  override def otherCopyArgs = sc :: Nil
 }
 
 case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) extends UnaryNode {
