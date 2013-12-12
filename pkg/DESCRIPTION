@@ -8,4 +8,4 @@ Maintainer: Shivaram Venkataraman <shivaram@cs.berkeley.edu>
 Depends: R (>= 3.0), methods, rJava
 Suggests: testthat
 Description: R frontend for Spark
-License: BSD
+License: Apache License (== 2.0)
