@@ -124,6 +124,7 @@ object TestShark {
 
   class SharkSqlQuery(sql: String) extends SharkQuery {
     lazy val parsed = HiveQl.parseSql(sql)
+    def hiveExec() = runSqlHive(sql)
     override def toString = sql + "\n" + super.toString
   }
 
