@@ -8,7 +8,6 @@ import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 
-
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from R.
  * This is used by SparkR's shuffle operations.
@@ -25,63 +24,13 @@ private class PairwiseRRDD[T: ClassManifest](
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Array[Byte])] = {
 
-    val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-    val pb = SparkRHelper.rWorkerProcessBuilder
-
+    val pb = RRDD.rWorkerProcessBuilder
     val proc = pb.start()
-    val env = SparkEnv.get
 
-    val tempDir = Utils.getLocalDir
-    val tempFile = File.createTempFile("rSpark", "out", new File(tempDir))
-    val tempFileName = tempFile.getAbsolutePath
+    RRDD.startStderrThread(proc)
 
-    // Start a thread to print the process's stderr to ours
-    new Thread("stderr reader for R") {
-      override def run() {
-        for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
-          System.err.println(line)
-        }
-      }
-    }.start()
-
-    // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for R") {
-      override def run() {
-        SparkEnv.set(env)
-        val stream = new BufferedOutputStream(proc.getOutputStream, bufferSize)
-        val printOut = new PrintStream(stream)
-        val dataOut = new DataOutputStream(stream)
-
-        printOut.println(tempFileName)
-
-        dataOut.writeInt(hashFunc.length)
-        dataOut.write(hashFunc, 0, hashFunc.length)
-
-        dataOut.writeInt(if (dataSerialized) 1 else 0)
-
-        dataOut.writeInt(functionDependencies.length)
-        dataOut.write(functionDependencies, 0, functionDependencies.length)
-
-        // Write 1 to indicate this is a pair-wise RDD
-        dataOut.writeInt(numPartitions)
-
-        if (!firstParent.iterator(split, context).hasNext) {
-          dataOut.writeInt(0)
-        } else {
-          dataOut.writeInt(1)
-        }
-        for (elem <- firstParent[T].iterator(split, context)) {
-          if (dataSerialized) {
-            val elemArr = elem.asInstanceOf[Array[Byte]]
-            dataOut.writeInt(elemArr.length)
-            dataOut.write(elemArr, 0, elemArr.length)
-          } else {
-            printOut.println(elem)
-          }
-        }
-        stream.close()
-      }
-    }.start()
+    RRDD.startStdinThread(proc, hashFunc, dataSerialized,
+      functionDependencies, firstParent[T].iterator(split, context), numPartitions)
 
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
@@ -125,10 +74,11 @@ private class PairwiseRRDD[T: ClassManifest](
   }
 
   lazy val asJavaPairRDD : JavaPairRDD[Int, Array[Byte]] = JavaPairRDD.fromRDD(this)
-
 }
 
-/** An RDD that stores serialized R objects as Array[Byte]. */
+/**
+ * An RDD that stores serialized R objects as Array[Byte].
+ */
 class RRDD[T: ClassManifest](
     parent: RDD[T],
     func: Array[Byte],
@@ -140,64 +90,15 @@ class RRDD[T: ClassManifest](
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
 
-    val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
-    val pb = SparkRHelper.rWorkerProcessBuilder
+    val pb = RRDD.rWorkerProcessBuilder
 
     val proc = pb.start()
-    val env = SparkEnv.get
 
-    val tempDir = Utils.getLocalDir
-    val tempFile =  File.createTempFile("rSpark", "out", new File(tempDir))
-    val tempFileName = tempFile.getAbsolutePath
+    RRDD.startStderrThread(proc)
 
-    // Start a thread to print the process's stderr to ours
-    new Thread("stderr reader for R") {
-      override def run() {
-        for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
-          System.err.println(line)
-        }
-      }
-    }.start()
-
-    // Start a thread to feed the process input from our parent's iterator
-    new Thread("stdin writer for R") {
-      override def run() {
-        SparkEnv.set(env)
-        val stream = new BufferedOutputStream(proc.getOutputStream, bufferSize)
-        val printOut = new PrintStream(stream)
-        val dataOut = new DataOutputStream(stream)
-
-        printOut.println(tempFileName)
-
-        dataOut.writeInt(func.length)
-        dataOut.write(func, 0, func.length)
-
-        dataOut.writeInt(if(dataSerialized) 1 else 0)
-
-        dataOut.writeInt(functionDependencies.length)
-        dataOut.write(functionDependencies, 0, functionDependencies.length)
-
-        // Special flag that tells the worker that this is a normal RRDD.
-        dataOut.writeInt(-1)
-
-        if (!firstParent.iterator(split, context).hasNext) {
-          dataOut.writeInt(0)
-        } else {
-          dataOut.writeInt(1)
-        }
-
-        for (elem <- firstParent[T].iterator(split, context)) {
-          if (dataSerialized) {
-            val elemArr = elem.asInstanceOf[Array[Byte]]
-            dataOut.writeInt(elemArr.length)
-            dataOut.write(elemArr, 0, elemArr.length)
-          } else {
-            printOut.println(elem)
-          }
-        }
-        stream.close()
-      }
-    }.start()
+    // Write -1 in numPartitions to indicate this is a normal RDD
+    RRDD.startStdinThread(proc, func, dataSerialized,
+      functionDependencies, firstParent[T].iterator(split, context), numPartitions = -1)
 
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
@@ -254,27 +155,8 @@ object RRDD {
   }
 
   /**
-   * Create an RRDD given a sequence of 2-tuples of byte arrays (key-val collections). Used to create RRDD when
-   * `parallelize` is called from R.
-   * TODO?: change return type into JavaPairRDD[Array[Byte], Array[Byte]]?
+   * ProcessBuilder used to launch worker R processes.
    */
-  def createRDDFromArray(jsc: JavaSparkContext,
-                         arr: Array[Array[Array[Array[Byte]]]]): JavaPairRDD[Array[Byte], Array[Byte]] = {
-
-    val keyValPairs: Seq[(Array[Byte], Array[Byte])] =
-      for (
-        slice <- arr;
-        tup <- slice
-      ) yield (tup(0), tup(1))
-
-    JavaPairRDD.fromRDD(jsc.sc.parallelize(keyValPairs, arr.length))
-
-  }
-
-}
-
-object SparkRHelper {
-
   lazy val rWorkerProcessBuilder = {
     val rCommand = "Rscript"
     val rOptions = "--vanilla"
@@ -286,4 +168,74 @@ object SparkRHelper {
     new ProcessBuilder(List(rCommand, rOptions, rExecScript))
   }
 
+  /**
+   * Start a thread to print the process's stderr to ours
+   */
+  def startStderrThread(proc: Process) {
+    new Thread("stderr reader for R") {
+      override def run() {
+        for (line <- Source.fromInputStream(proc.getErrorStream).getLines) {
+          System.err.println(line)
+        }
+      }
+    }.start()
+  }
+
+
+  /**
+   * Start a thread to write RDD data to the R process.
+   */
+  def startStdinThread[T](
+      proc: Process,
+      func: Array[Byte],
+      dataSerialized: Boolean,
+      functionDependencies: Array[Byte],
+      iter: Iterator[T],
+      numPartitions: Int) {
+
+    val tempDir = Utils.getLocalDir
+    val tempFile = File.createTempFile("rSpark", "out", new File(tempDir))
+    val tempFileName = tempFile.getAbsolutePath()
+    val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+    val env = SparkEnv.get
+
+    // Start a thread to feed the process input from our parent's iterator
+    new Thread("stdin writer for R") {
+      override def run() {
+        SparkEnv.set(env)
+        val stream = new BufferedOutputStream(proc.getOutputStream, bufferSize)
+        val printOut = new PrintStream(stream)
+        val dataOut = new DataOutputStream(stream)
+
+        printOut.println(tempFileName)
+
+        dataOut.writeInt(func.length)
+        dataOut.write(func, 0, func.length)
+
+        dataOut.writeInt(if (dataSerialized) 1 else 0)
+
+        dataOut.writeInt(functionDependencies.length)
+        dataOut.write(functionDependencies, 0, functionDependencies.length)
+
+        dataOut.writeInt(numPartitions)
+
+        if (!iter.hasNext) {
+          dataOut.writeInt(0)
+        } else {
+          dataOut.writeInt(1)
+        }
+
+        for (elem <- iter) {
+          if (dataSerialized) {
+            val elemArr = elem.asInstanceOf[Array[Byte]]
+            dataOut.writeInt(elemArr.length)
+            dataOut.write(elemArr, 0, elemArr.length)
+          } else {
+            printOut.println(elem)
+          }
+        }
+        stream.close()
+      }
+    }.start()
+  }
 }
