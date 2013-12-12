@@ -28,4 +28,13 @@ class HiveQueryTests extends HiveComaparisionTest {
 
   createQueryTest("IgnoreExplain",
     """EXPLAIN SELECT key FROM src""")
+
+  createQueryTest("trival join where clause",
+    "SELECT * FROM src a JOIN src b WHERE a.key = b.key")
+
+  createQueryTest("trival join ON clause",
+    "SELECT * FROM src a JOIN src b ON a.key = b.key")
+
+  createQueryTest("small.cartesian",
+    "SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a JOIN (SELECT key FROM src WHERE key = 2) b")
 }

@@ -55,6 +55,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "input11_limit",
     "insert1",
     "join_view",
+    "join0",
     "literal_double",
     "literal_ints",
     "literal_string",
