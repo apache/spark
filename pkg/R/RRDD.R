@@ -21,7 +21,7 @@ RRDD <- function(jrdd, serialized = TRUE) {
   new("RRDD", jrdd = jrdd, serialized = serialized)
 }
 
-
+# Persist this RDD with the default storage level (MEMORY_ONLY).
 setGeneric("cache", function(rrdd) { standardGeneric("cache") })
 setMethod("cache",
           signature(rrdd = "RRDD"),
@@ -43,6 +43,7 @@ setMethod("collect",
           })
 
 
+# Return the number of elements in the RDD.
 setGeneric("count", function(rrdd) { standardGeneric("count") })
 setMethod("count",
           signature(rrdd = "RRDD"),
@@ -55,6 +56,7 @@ setMethod("count",
             sum(as.integer(vals))
           })
 
+# Return the number of elements in the RDD.
 setMethod("length",
           signature(x = "RRDD"),
           function(x) {
@@ -62,6 +64,7 @@ setMethod("length",
           })
 
 
+# Return a new RDD by applying a function to all elements of this RDD.
 setMethod("lapply",
           signature(X = "RRDD", FUN = "function"),
           function(X, FUN) {
@@ -72,6 +75,7 @@ setMethod("lapply",
             lapplyPartition(X, partitionFunc)
           })
 
+# Return a new RDD by applying a function to all elements of this RDD.
 setGeneric("map", function(X, FUN) {
            standardGeneric("map") })
 setMethod("map",
@@ -80,6 +84,8 @@ setMethod("map",
             lapply(X, FUN)
           })
 
+# Return a new RDD by first applying a function to all elements of this RDD, and
+# then flattening the results.
 setGeneric("flatMap", function(X, FUN) {
            standardGeneric("flatMap") })
 setMethod("flatMap",
@@ -93,7 +99,7 @@ setMethod("flatMap",
             lapplyPartition(X, partitionFunc)
           })
 
-
+# Return a new RDD by applying a function to each partition of this RDD.
 setGeneric("lapplyPartition", function(X, FUN) {
            standardGeneric("lapplyPartition") })
 setMethod("lapplyPartition",
@@ -120,6 +126,8 @@ setMethod("lapplyPartition",
             RRDD(jrdd, TRUE)
           })
 
+# Reduces the elements of this RDD using the specified commutative and
+# associative binary operator.
 setGeneric("reduce", function(rrdd, func) { standardGeneric("reduce") })
 setMethod("reduce",
           signature(rrdd = "RRDD", func = "ANY"),
@@ -207,6 +215,7 @@ setMethod("partitionBy",
             RRDD(r, serialized=TRUE)
           })
 
+# Group the values for each key in the RDD into a single sequence.
 setGeneric("groupByKey",
            function(rrdd, numPartitions) {
              standardGeneric("groupByKey")
@@ -242,6 +251,7 @@ setMethod("groupByKey",
             lapplyPartition(shuffled, groupVals)
           })
 
+# Merge the values for each key using an associative reduce function.
 setGeneric("reduceByKey",
            function(rrdd, combineFunc, numPartitions) {
              standardGeneric("reduceByKey")
@@ -274,6 +284,8 @@ setMethod("reduceByKey",
             lapplyPartition(shuffled, reduceVals)
           })
 
+# Return a list that contains all of the elements in the specified partition of
+# the RDD.
 setGeneric("collectPartition",
            function(rrdd, partitionId) {
              standardGeneric("collectPartition")
@@ -287,47 +299,3 @@ setMethod("collectPartition",
                             as.integer(partitionId))
             convertJListToRList(jList, flatten = TRUE)
           })
-
-
-wrapInt <- function(value) {
-  if (value > .Machine$integer.max) {
-    value <- value - 2 * .Machine$integer.max - 2
-  } else if (value < -1 * .Machine$integer.max) {
-    value <- 2 * .Machine$integer.max + value + 2
-  }
-  value
-}
-
-mult31AndAdd <- function(val, addVal) {
-  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
-  Reduce(function(a, b) {
-          wrapInt(as.numeric(a) + as.numeric(b))
-         },
-         vec)
-}
-
-hashCode <- function(key) {
-  if (class(key) == "integer") {
-    as.integer(key[[1]])
-  } else if (class(key) == "numeric") {
-    # Convert the double to long and then calculate the hash code
-    rawVec <- writeBin(key[[1]], con=raw())
-    intBits <- packBits(rawToBits(rawVec), "integer")
-    as.integer(bitwXor(intBits[2], intBits[1]))
-  } else if (class(key) == "character") {
-    n <- nchar(key)
-    if (n == 0) {
-      0L
-    } else {
-      asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
-      hashC <- 0
-      for (k in 1:length(asciiVals)) {
-        hashC <- mult31AndAdd(hashC, asciiVals[k])
-      }
-      as.integer(hashC)
-    }
-  } else {
-    warning(paste("Could not hash object, returning 0", sep=""))
-    as.integer(0)
-  }
-}

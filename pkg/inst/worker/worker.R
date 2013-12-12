@@ -63,10 +63,6 @@ if (isEmpty != 0) {
     }
     output <- do.call(execFunctionName, list(data))
     writeRaw(outputCon, output)
-    # for (name in output) {
-    #   writeRaw(outputCon, name)
-    # }
-
   } else {
     if (isSerialized) {
       # Now read as many characters as described in funcLen
@@ -81,7 +77,6 @@ if (isEmpty != 0) {
     hashTupleToEnvir <- function(tuple) {
       # NOTE: execFunction is the hash function here
       hashVal <- do.call(execFunctionName, list(tuple[[1]]))
-      #hashVal <- execFunction(tuple[[1]])
       bucket <- as.character(hashVal %% numPartitions)
       acc <- res[[bucket]]
       # TODO?: http://stackoverflow.com/questions/2436688/append-an-object-to-a-list-in-r-in-amortized-constant-time

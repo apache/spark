@@ -55,11 +55,14 @@ convertJListToRList <- function(jList, flatten) {
 
 }
 
+# Returns TRUE if `name` refers to an RRDD in the given environment `env`
 isRRDD <- function(name, env) {
   obj <- get(name, envir=env)
   class(obj) == "RRDD"
 }
 
+# Returns TRUE if `name` is a function in the SparkR package.
+# TODO: Handle package-private functions as well ?
 isSparkFunction <- function(name) {
   if (is.function(name)) {
     fun <- name
@@ -81,15 +84,15 @@ isSparkFunction <- function(name) {
   packageName(environment(fun)) == "SparkR"
 }
 
+# Serialize the dependencies of the given function and return them as a raw
+# vector. Filters out RRDDs before serializing the dependencies
 getDependencies <- function(name) {
   fileName <- tempfile(pattern="spark-utils", fileext=".deps")
   funcEnv <- environment(name)
   varsToSave <- ls(funcEnv)
 
-  #print(varsToSave)
   filteredVars <- varsToSave
   filteredVars <- Filter(function(x) { !isRRDD(x, funcEnv) }, varsToSave)
-  #filteredVars <- Filter(function(x) { !isSparkFunction(x) }, filteredVars)
 
   save(list=filteredVars, file=fileName, envir=funcEnv)
   fileSize <- file.info(fileName)$size
@@ -97,4 +100,53 @@ getDependencies <- function(name) {
 
   unlink(fileName)
   binData
+}
+
+# Helper function used to wrap a 'numeric' value to integer bounds.
+# Useful for implementing C-like integer arithmetic
+wrapInt <- function(value) {
+  if (value > .Machine$integer.max) {
+    value <- value - 2 * .Machine$integer.max - 2
+  } else if (value < -1 * .Machine$integer.max) {
+    value <- 2 * .Machine$integer.max + value + 2
+  }
+  value
+}
+
+# Multiply `val` by 31 and add `addVal` to the result. Ensures that
+# integer-overflows are handled at every step.
+mult31AndAdd <- function(val, addVal) {
+  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
+  Reduce(function(a, b) {
+          wrapInt(as.numeric(a) + as.numeric(b))
+         },
+         vec)
+}
+
+# Java-style function to compute the hashCode for the given object. Returns
+# an integer value.
+hashCode <- function(key) {
+  if (class(key) == "integer") {
+    as.integer(key[[1]])
+  } else if (class(key) == "numeric") {
+    # Convert the double to long and then calculate the hash code
+    rawVec <- writeBin(key[[1]], con=raw())
+    intBits <- packBits(rawToBits(rawVec), "integer")
+    as.integer(bitwXor(intBits[2], intBits[1]))
+  } else if (class(key) == "character") {
+    n <- nchar(key)
+    if (n == 0) {
+      0L
+    } else {
+      asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
+      hashC <- 0
+      for (k in 1:length(asciiVals)) {
+        hashC <- mult31AndAdd(hashC, asciiVals[k])
+      }
+      as.integer(hashC)
+    }
+  } else {
+    warning(paste("Could not hash object, returning 0", sep=""))
+    as.integer(0)
+  }
 }
