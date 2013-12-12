@@ -24,7 +24,7 @@ import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 
-import org.apache.spark.{Dependency, Logging, Partition, SerializableWritable, SparkContext, TaskContext}
+import org.apache.spark.{InterruptibleIterator, Logging, Partition, SerializableWritable, SparkContext, TaskContext}
 
 
 private[spark]
@@ -71,49 +71,52 @@ class NewHadoopRDD[K, V](
     result
   }
 
-  override def compute(theSplit: Partition, context: TaskContext) = new Iterator[(K, V)] {
-    val split = theSplit.asInstanceOf[NewHadoopPartition]
-    logInfo("Input split: " + split.serializableHadoopSplit)
-    val conf = confBroadcast.value.value
-    val attemptId = newTaskAttemptID(jobtrackerId, id, true, split.index, 0)
-    val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
-    val format = inputFormatClass.newInstance
-    if (format.isInstanceOf[Configurable]) {
-      format.asInstanceOf[Configurable].setConf(conf)
-    }
-    val reader = format.createRecordReader(
-      split.serializableHadoopSplit.value, hadoopAttemptContext)
-    reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
-
-    // Register an on-task-completion callback to close the input stream.
-    context.addOnCompleteCallback(() => close())
-
-    var havePair = false
-    var finished = false
-
-    override def hasNext: Boolean = {
-      if (!finished && !havePair) {
-        finished = !reader.nextKeyValue
-        havePair = !finished
+  override def compute(theSplit: Partition, context: TaskContext) = {
+    val iter = new Iterator[(K, V)] {
+      val split = theSplit.asInstanceOf[NewHadoopPartition]
+      logInfo("Input split: " + split.serializableHadoopSplit)
+      val conf = confBroadcast.value.value
+      val attemptId = newTaskAttemptID(jobtrackerId, id, true, split.index, 0)
+      val hadoopAttemptContext = newTaskAttemptContext(conf, attemptId)
+      val format = inputFormatClass.newInstance
+      if (format.isInstanceOf[Configurable]) {
+        format.asInstanceOf[Configurable].setConf(conf)
       }
-      !finished
-    }
+      val reader = format.createRecordReader(
+        split.serializableHadoopSplit.value, hadoopAttemptContext)
+      reader.initialize(split.serializableHadoopSplit.value, hadoopAttemptContext)
 
-    override def next: (K, V) = {
-      if (!hasNext) {
-        throw new java.util.NoSuchElementException("End of stream")
-      }
-      havePair = false
-      return (reader.getCurrentKey, reader.getCurrentValue)
-    }
+      // Register an on-task-completion callback to close the input stream.
+      context.addOnCompleteCallback(() => close())
 
-    private def close() {
-      try {
-        reader.close()
-      } catch {
-        case e: Exception => logWarning("Exception in RecordReader.close()", e)
+      var havePair = false
+      var finished = false
+
+      override def hasNext: Boolean = {
+        if (!finished && !havePair) {
+          finished = !reader.nextKeyValue
+          havePair = !finished
+        }
+        !finished
+      }
+
+      override def next(): (K, V) = {
+        if (!hasNext) {
+          throw new java.util.NoSuchElementException("End of stream")
+        }
+        havePair = false
+        (reader.getCurrentKey, reader.getCurrentValue)
+      }
+
+      private def close() {
+        try {
+          reader.close()
+        } catch {
+          case e: Exception => logWarning("Exception in RecordReader.close()", e)
+        }
       }
     }
+    new InterruptibleIterator(context, iter)
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] = {

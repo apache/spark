@@ -17,8 +17,9 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{RangePartitioner, Logging}
 import scala.reflect.ClassTag
+
+import org.apache.spark.{Logging, RangePartitioner}
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through

@@ -26,6 +26,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.Logging
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.util.MetadataCleaner
 
 
 private[streaming]
@@ -40,6 +41,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDir = ssc.checkpointDir
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.jobManager.getPendingTimes()
+  val delaySeconds = MetadataCleaner.getDelaySeconds
 
   def validate() {
     assert(master != null, "Checkpoint.master is null")
@@ -92,7 +94,7 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
           fs.delete(file, false)
           fs.rename(writeFile, file)
 
-          val finishTime = System.currentTimeMillis();
+          val finishTime = System.currentTimeMillis()
           logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + file +
             "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " milliseconds")
           return
@@ -122,7 +124,9 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
 
   def stop() {
     synchronized {
-      if (stopped) return ;
+      if (stopped) {
+        return
+      }
       stopped = true
     }
     executor.shutdown()

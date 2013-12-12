@@ -17,13 +17,13 @@
 
 package org.apache.spark.streaming.receivers
 
+import scala.reflect.ClassTag
+
 import akka.actor.Actor
 import akka.util.ByteString
 import akka.zeromq._
 
 import org.apache.spark.Logging
-
-import scala.reflect.ClassTag
 
 /**
  * A receiver to subscribe to ZeroMQ stream.

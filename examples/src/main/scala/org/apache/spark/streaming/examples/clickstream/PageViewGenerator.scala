@@ -17,17 +17,19 @@
 
 package org.apache.spark.streaming.examples.clickstream
 
-import java.net.{InetAddress,ServerSocket,Socket,SocketException}
-import java.io.{InputStreamReader, BufferedReader, PrintWriter}
+import java.net.ServerSocket
+import java.io.PrintWriter
 import util.Random
 
 /** Represents a page view on a website with associated dimension data.*/
-class PageView(val url : String, val status : Int, val zipCode : Int, val userID : Int) {
+class PageView(val url : String, val status : Int, val zipCode : Int, val userID : Int)
+    extends Serializable {
   override def toString() : String = {
     "%s\t%s\t%s\t%s\n".format(url, status, zipCode, userID)
   }
 }
-object PageView {
+
+object PageView extends Serializable {
   def fromString(in : String) : PageView = {
     val parts = in.split("\t")
     new PageView(parts(0), parts(1).toInt, parts(2).toInt, parts(3).toInt)
@@ -39,6 +41,9 @@ object PageView {
   * This should be used in tandem with PageViewStream.scala. Example:
   * $ ./run-example spark.streaming.examples.clickstream.PageViewGenerator 44444 10
   * $ ./run-example spark.streaming.examples.clickstream.PageViewStream errorRatePerZipCode localhost 44444
+  *
+  * When running this, you may want to set the root logging level to ERROR in
+  * conf/log4j.properties to reduce the verbosity of the output.
   * */
 object PageViewGenerator {
   val pages = Map("http://foo.com/"        -> .7,

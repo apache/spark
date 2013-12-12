@@ -17,8 +17,9 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{Partition, TaskContext}
 import scala.reflect.ClassTag
+
+import org.apache.spark.{Partition, TaskContext}
 
 private[spark]
 class MappedRDD[U: ClassTag, T: ClassTag](prev: RDD[T], f: T => U)

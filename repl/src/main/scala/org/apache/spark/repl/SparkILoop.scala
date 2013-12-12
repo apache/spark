@@ -675,6 +675,20 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     Result(true, shouldReplay)
   }
 
+  def addAllClasspath(args: Seq[String]): Unit = {
+    var added = false
+    var totalClasspath = ""
+    for (arg <- args) {
+      val f = File(arg).normalize
+      if (f.exists) {
+        added = true
+        addedClasspath = ClassPath.join(addedClasspath, f.path)
+        totalClasspath = ClassPath.join(settings.classpath.value, addedClasspath)
+      }
+    }
+    if (added) replay()
+  }
+
   def addClasspath(arg: String): Unit = {
     val f = File(arg).normalize
     if (f.exists) {
@@ -915,10 +929,10 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   }
 
   def createSparkContext(): SparkContext = {
-   val uri = System.getenv("SPARK_EXECUTOR_URI")
-   if (uri != null) {
-         System.setProperty("spark.executor.uri", uri)
-   }
+    val uri = System.getenv("SPARK_EXECUTOR_URI")
+    if (uri != null) {
+      System.setProperty("spark.executor.uri", uri)
+    }
     val master = this.master match {
       case Some(m) => m
       case None => {

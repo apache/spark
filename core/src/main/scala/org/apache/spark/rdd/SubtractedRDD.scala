@@ -111,7 +111,7 @@ private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
         val iter = SparkEnv.get.shuffleFetcher.fetch[Product2[K, V]](shuffleId, partition.index,
-          context.taskMetrics, serializer)
+          context, serializer)
         iter.foreach(op)
       }
     }

@@ -29,23 +29,46 @@ private[spark] class ApplicationInfo(
     val submitDate: Date,
     val driver: ActorRef,
     val appUiUrl: String)
-{
-  var state = ApplicationState.WAITING
-  var executors = new mutable.HashMap[Int, ExecutorInfo]
-  var coresGranted = 0
-  var endTime = -1L
-  val appSource = new ApplicationSource(this)
+  extends Serializable {
 
-  private var nextExecutorId = 0
+  @transient var state: ApplicationState.Value = _
+  @transient var executors: mutable.HashMap[Int, ExecutorInfo] = _
+  @transient var coresGranted: Int = _
+  @transient var endTime: Long = _
+  @transient var appSource: ApplicationSource = _
 
-  def newExecutorId(): Int = {
-    val id = nextExecutorId
-    nextExecutorId += 1
-    id
+  @transient private var nextExecutorId: Int = _
+
+  init()
+
+  private def readObject(in: java.io.ObjectInputStream) : Unit = {
+    in.defaultReadObject()
+    init()
   }
 
-  def addExecutor(worker: WorkerInfo, cores: Int): ExecutorInfo = {
-    val exec = new ExecutorInfo(newExecutorId(), this, worker, cores, desc.memoryPerSlave)
+  private def init() {
+    state = ApplicationState.WAITING
+    executors = new mutable.HashMap[Int, ExecutorInfo]
+    coresGranted = 0
+    endTime = -1L
+    appSource = new ApplicationSource(this)
+    nextExecutorId = 0
+  }
+
+  private def newExecutorId(useID: Option[Int] = None): Int = {
+    useID match {
+      case Some(id) =>
+        nextExecutorId = math.max(nextExecutorId, id + 1)
+        id
+      case None =>
+        val id = nextExecutorId
+        nextExecutorId += 1
+        id
+    }
+  }
+
+  def addExecutor(worker: WorkerInfo, cores: Int, useID: Option[Int] = None): ExecutorInfo = {
+    val exec = new ExecutorInfo(newExecutorId(useID), this, worker, cores, desc.memoryPerSlave)
     executors(exec.id) = exec
     coresGranted += cores
     exec

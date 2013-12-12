@@ -26,41 +26,48 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-examples_${scala-short.version}</artifactId>
+  <artifactId>spark-examples_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Examples</name>
   <url>http://spark.incubator.apache.org/</url>
 
   <repositories>
-    <!-- A repository in the local filesystem for the Kafka JAR, which we modified for Scala 2.9 -->
     <repository>
-      <id>lib</id>
-      <url>file://${project.basedir}/lib</url>
+      <id>apache-repo</id>
+      <name>Apache Repository</name>
+      <url>https://repository.apache.org/content/repositories/releases</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
     </repository>
   </repositories>
+
 
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala-short.version}</artifactId>
+      <artifactId>spark-core_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala-short.version}</artifactId>
+      <artifactId>spark-streaming_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_${scala-short.version}</artifactId>
+      <artifactId>spark-mllib_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_${scala-short.version}</artifactId>
+      <artifactId>spark-bagel_2.10</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
@@ -81,9 +88,18 @@
     </dependency>
     <dependency>
       <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka</artifactId>
-      <version>0.7.2-spark</version>  <!-- Comes from our in-project repository -->
-      <scope>provided</scope>
+      <artifactId>kafka_2.10</artifactId>
+      <version>0.8.0-beta1</version>
+      <exclusions>
+        <exclusion>
+          <groupId>com.sun.jmx</groupId>
+          <artifactId>jmxri</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>com.sun.jdmk</groupId>
+          <artifactId>jmxtools</artifactId>
+        </exclusion>
+      </exclusions>
     </dependency>
     <dependency>
       <groupId>org.eclipse.jetty</groupId>
@@ -91,17 +107,17 @@
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>algebird-core_${scala-short.version}</artifactId>
+      <artifactId>algebird-core_2.10</artifactId>
       <version>0.1.11</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala-short.version}</artifactId>
+      <artifactId>scalatest_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_${scala-short.version}</artifactId>
+      <artifactId>scalacheck_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -137,13 +153,21 @@
           <groupId>org.apache.cassandra.deps</groupId>
           <artifactId>avro</artifactId>
         </exclusion>
+        <exclusion>
+          <groupId>org.sonatype.sisu.inject</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
+        <exclusion>
+          <groupId>org.xerial.snappy</groupId>
+          <artifactId>*</artifactId>
+        </exclusion>
       </exclusions>
     </dependency>
   </dependencies>
 
   <build>
-    <outputDirectory>target/scala-${scala-short.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala-short.version}/test-classes</testOutputDirectory>
+    <outputDirectory>target/scala-2.10/classes</outputDirectory>
+    <testOutputDirectory>target/scala-2.10/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

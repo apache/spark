@@ -21,6 +21,7 @@ import java.io.File
 
 import org.apache.spark.Logging
 import org.apache.spark.util.Utils
+import org.apache.spark.storage.{BlockId, FileSegment}
 
 
 private[spark] class ShuffleSender(portIn: Int, val pResolver: PathResolver) extends Logging {
@@ -53,8 +54,8 @@ private[spark] object ShuffleSender {
     val localDirs = args.drop(2).map(new File(_))
 
     val pResovler = new PathResolver {
-      override def getAbsolutePath(blockId: String): String = {
-        if (!blockId.startsWith("shuffle_")) {
+      override def getBlockLocation(blockId: BlockId): FileSegment = {
+        if (!blockId.isShuffle) {
           throw new Exception("Block " + blockId + " is not a shuffle block")
         }
         // Figure out which local directory it hashes to, and which subdirectory in that
@@ -62,8 +63,8 @@ private[spark] object ShuffleSender {
         val dirId = hash % localDirs.length
         val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
         val subDir = new File(localDirs(dirId), "%02x".format(subDirId))
-        val file = new File(subDir, blockId)
-        return file.getAbsolutePath
+        val file = new File(subDir, blockId.name)
+        return new FileSegment(file, 0, file.length())
       }
     }
     val sender = new ShuffleSender(port, pResovler)

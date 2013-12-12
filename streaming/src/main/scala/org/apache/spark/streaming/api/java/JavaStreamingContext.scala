@@ -17,9 +17,9 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.lang.{Long => JLong, Integer => JInt}
+import java.lang.{Integer => JInt}
 import java.io.InputStream
-import java.util.{Map => JMap}
+import java.util.{Map => JMap, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
@@ -36,10 +36,9 @@ import twitter4j.auth.Authorization
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
-import org.apache.spark.api.java.{JavaSparkContext, JavaRDD}
+import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.receivers.{ActorReceiver, ReceiverSupervisorStrategy}
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -144,7 +143,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     zkQuorum: String,
     groupId: String,
     topics: JMap[String, JInt])
-  : JavaDStream[String] = {
+  : JavaPairDStream[String, String] = {
     implicit val cmt: ClassTag[String] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
@@ -166,7 +165,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     groupId: String,
     topics: JMap[String, JInt],
     storageLevel: StorageLevel)
-  : JavaDStream[String] = {
+  : JavaPairDStream[String, String] = {
     implicit val cmt: ClassTag[String] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
     ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
@@ -175,25 +174,34 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
-   * @param typeClass Type of RDD
-   * @param decoderClass Type of kafka decoder
+   * @param keyTypeClass Key type of RDD
+   * @param valueTypeClass value type of RDD
+   * @param keyDecoderClass Type of kafka key decoder
+   * @param valueDecoderClass Type of kafka value decoder
    * @param kafkaParams Map of kafka configuration paramaters.
    *                    See: http://kafka.apache.org/configuration.html
    * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    * in its own thread.
    * @param storageLevel RDD storage level. Defaults to memory-only
    */
-  def kafkaStream[T, D <: kafka.serializer.Decoder[_]](
-    typeClass: Class[T],
-    decoderClass: Class[D],
+  def kafkaStream[K, V, U <: kafka.serializer.Decoder[_], T <: kafka.serializer.Decoder[_]](
+    keyTypeClass: Class[K],
+    valueTypeClass: Class[V],
+    keyDecoderClass: Class[U],
+    valueDecoderClass: Class[T],
     kafkaParams: JMap[String, String],
     topics: JMap[String, JInt],
     storageLevel: StorageLevel)
-  : JavaDStream[T] = {
-    implicit val cmt: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    implicit val cmd: Manifest[D] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[D]]
-    ssc.kafkaStream[T, D](
+  : JavaPairDStream[K, V] = {
+    implicit val keyCmt: ClassTag[K] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
+    implicit val valueCmt: ClassTag[V] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
+
+    implicit val keyCmd: Manifest[U] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[U]]
+    implicit val valueCmd: Manifest[T] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[T]]
+
+    ssc.kafkaStream[K, V, U, T](
       kafkaParams.toMap,
       Map(topics.mapValues(_.intValue()).toSeq: _*),
       storageLevel)
@@ -306,7 +314,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
     implicit val cmf: ClassTag[F] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[F]]
-    ssc.fileStream[K, V, F](directory);
+    ssc.fileStream[K, V, F](directory)
   }
 
   /**
@@ -586,6 +594,77 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     val sQueue = new scala.collection.mutable.Queue[RDD[T]]
     sQueue.enqueue(queue.map(_.rdd).toSeq: _*)
     ssc.queueStream(sQueue, oneAtATime, defaultRDD.rdd)
+  }
+
+  /**
+   * Create a unified DStream from multiple DStreams of the same type and same slide duration.
+   */
+  def union[T](first: JavaDStream[T], rest: JList[JavaDStream[T]]): JavaDStream[T] = {
+    val dstreams: Seq[DStream[T]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.dstream)
+    implicit val cm: ClassTag[T] = first.classTag
+    ssc.union(dstreams)(cm)
+  }
+
+  /**
+   * Create a unified DStream from multiple DStreams of the same type and same slide duration.
+   */
+  def union[K, V](
+      first: JavaPairDStream[K, V],
+      rest: JList[JavaPairDStream[K, V]]
+    ): JavaPairDStream[K, V] = {
+    val dstreams: Seq[DStream[(K, V)]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.dstream)
+    implicit val cm: ClassTag[(K, V)] = first.classTag
+    implicit val kcm: ClassTag[K] = first.kManifest
+    implicit val vcm: ClassTag[V] = first.vManifest
+    new JavaPairDStream[K, V](ssc.union(dstreams)(cm))(kcm, vcm)
+  }
+
+  /**
+   * Create a new DStream in which each RDD is generated by applying a function on RDDs of
+   * the DStreams. The order of the JavaRDDs in the transform function parameter will be the
+   * same as the order of corresponding DStreams in the list. Note that for adding a
+   * JavaPairDStream in the list of JavaDStreams, convert it to a JavaDStream using
+   * [[org.apache.spark.streaming.api.java.JavaPairDStream]].toJavaDStream().
+   * In the transform function, convert the JavaRDD corresponding to that JavaDStream to
+   * a JavaPairRDD using [[org.apache.spark.api.java.JavaPairRDD]].fromJavaRDD().
+   */
+  def transform[T](
+      dstreams: JList[JavaDStream[_]],
+      transformFunc: JFunction2[JList[JavaRDD[_]], Time, JavaRDD[T]]
+    ): JavaDStream[T] = {
+    implicit val cmt: ClassTag[T] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
+    val scalaDStreams = dstreams.map(_.dstream).toSeq
+    val scalaTransformFunc = (rdds: Seq[RDD[_]], time: Time) => {
+      val jrdds = rdds.map(rdd => JavaRDD.fromRDD[AnyRef](rdd.asInstanceOf[RDD[AnyRef]])).toList
+      transformFunc.call(jrdds, time).rdd
+    }
+    ssc.transform(scalaDStreams, scalaTransformFunc)
+  }
+
+  /**
+   * Create a new DStream in which each RDD is generated by applying a function on RDDs of
+   * the DStreams. The order of the JavaRDDs in the transform function parameter will be the
+   * same as the order of corresponding DStreams in the list. Note that for adding a
+   * JavaPairDStream in the list of JavaDStreams, convert it to a JavaDStream using
+   * [[org.apache.spark.streaming.api.java.JavaPairDStream]].toJavaDStream().
+   * In the transform function, convert the JavaRDD corresponding to that JavaDStream to
+   * a JavaPairRDD using [[org.apache.spark.api.java.JavaPairRDD]].fromJavaRDD().
+   */
+  def transform[K, V](
+      dstreams: JList[JavaDStream[_]],
+      transformFunc: JFunction2[JList[JavaRDD[_]], Time, JavaPairRDD[K, V]]
+    ): JavaPairDStream[K, V] = {
+    implicit val cmk: ClassTag[K] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
+    implicit val cmv: ClassTag[V] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
+    val scalaDStreams = dstreams.map(_.dstream).toSeq
+    val scalaTransformFunc = (rdds: Seq[RDD[_]], time: Time) => {
+      val jrdds = rdds.map(rdd => JavaRDD.fromRDD[AnyRef](rdd.asInstanceOf[RDD[AnyRef]])).toList
+      transformFunc.call(jrdds, time).rdd
+    }
+    ssc.transform(scalaDStreams, scalaTransformFunc)
   }
 
   /**

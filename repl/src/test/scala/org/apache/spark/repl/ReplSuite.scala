@@ -5,10 +5,13 @@ import java.net.URLClassLoader
 
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
 import com.google.common.io.Files
+import org.scalatest.FunSuite
+import org.apache.spark.SparkContext
+
 
 class ReplSuite extends FunSuite {
+
   def runInterpreter(master: String, input: String): String = {
     val in = new BufferedReader(new StringReader(input + "\n"))
     val out = new StringWriter()
@@ -46,24 +49,55 @@ class ReplSuite extends FunSuite {
       "Interpreter output contained '" + message + "':\n" + output)
   }
 
+  test("propagation of local properties") {
+    // A mock ILoop that doesn't install the SIGINT handler.
+    class ILoop(out: PrintWriter) extends SparkILoop(None, out, None) {
+      settings = new scala.tools.nsc.Settings
+      settings.usejavacp.value = true
+      org.apache.spark.repl.Main.interp = this
+      override def createInterpreter() {
+        intp = new SparkILoopInterpreter
+        intp.setContextClassLoader()
+      }
+    }
+
+    val out = new StringWriter()
+    val interp = new ILoop(new PrintWriter(out))
+    interp.sparkContext = new SparkContext("local", "repl-test")
+    interp.createInterpreter()
+    interp.intp.initialize()
+    interp.sparkContext.setLocalProperty("someKey", "someValue")
+
+    // Make sure the value we set in the caller to interpret is propagated in the thread that
+    // interprets the command.
+    interp.interpret("org.apache.spark.repl.Main.interp.sparkContext.getLocalProperty(\"someKey\")")
+    assert(out.toString.contains("someValue"))
+
+    interp.sparkContext.stop()
+    System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.hostPort")
+  }
+
   test("simple foreach with accumulator") {
-    val output = runInterpreter("local", """
-                                           |val accum = sc.accumulator(0)
-                                           |sc.parallelize(1 to 10).foreach(x => accum += x)
-                                           |accum.value
-                                         """.stripMargin)
+    val output = runInterpreter("local",
+      """
+        |val accum = sc.accumulator(0)
+        |sc.parallelize(1 to 10).foreach(x => accum += x)
+        |accum.value
+      """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res1: Int = 55", output)
   }
 
   test("external vars") {
-    val output = runInterpreter("local", """
-                                           |var v = 7
-                                           |sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
-                                           |v = 10
-                                           |sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
-                                         """.stripMargin)
+    val output = runInterpreter("local",
+      """
+        |var v = 7
+        |sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
+        |v = 10
+        |sc.parallelize(1 to 10).map(x => v).collect.reduceLeft(_+_)
+      """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 70", output)
@@ -71,35 +105,38 @@ class ReplSuite extends FunSuite {
   }
 
   test("external classes") {
-    val output = runInterpreter("local", """
-                                           |class C {
-                                           |def foo = 5
-                                           |}
-                                           |sc.parallelize(1 to 10).map(x => (new C).foo).collect.reduceLeft(_+_)
-                                         """.stripMargin)
+    val output = runInterpreter("local",
+      """
+        |class C {
+        |def foo = 5
+        |}
+        |sc.parallelize(1 to 10).map(x => (new C).foo).collect.reduceLeft(_+_)
+      """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 50", output)
   }
 
   test("external functions") {
-    val output = runInterpreter("local", """
-                                           |def double(x: Int) = x + x
-                                           |sc.parallelize(1 to 10).map(x => double(x)).collect.reduceLeft(_+_)
-                                         """.stripMargin)
+    val output = runInterpreter("local",
+      """
+        |def double(x: Int) = x + x
+        |sc.parallelize(1 to 10).map(x => double(x)).collect.reduceLeft(_+_)
+      """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 110", output)
   }
 
   test("external functions that access vars") {
-    val output = runInterpreter("local", """
-                                           |var v = 7
-                                           |def getV() = v
-                                           |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
-                                           |v = 10
-                                           |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
-                                         """.stripMargin)
+    val output = runInterpreter("local",
+      """
+        |var v = 7
+        |def getV() = v
+        |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+        |v = 10
+        |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+      """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 70", output)
@@ -110,13 +147,14 @@ class ReplSuite extends FunSuite {
     // Test that the value that a broadcast var had when it was created is used,
     // even if that variable is then modified in the driver program
     // TODO: This doesn't actually work for arrays when we run in local mode!
-    val output = runInterpreter("local", """
-                                           |var array = new Array[Int](5)
-                                           |val broadcastArray = sc.broadcast(array)
-                                           |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
-                                           |array(0) = 5
-                                           |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
-                                         """.stripMargin)
+    val output = runInterpreter("local",
+      """
+        |var array = new Array[Int](5)
+        |val broadcastArray = sc.broadcast(array)
+        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+        |array(0) = 5
+        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+      """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Array[Int] = Array(0, 0, 0, 0, 0)", output)
@@ -130,12 +168,13 @@ class ReplSuite extends FunSuite {
     out.write("What's up?\n")
     out.write("Goodbye\n")
     out.close()
-    val output = runInterpreter("local", """
-                                           |var file = sc.textFile("%s/input").cache()
-                                           |file.count()
-                                           |file.count()
-                                           |file.count()
-                                         """.stripMargin.format(tempDir.getAbsolutePath))
+    val output = runInterpreter("local",
+      """
+        |var file = sc.textFile("%s/input").cache()
+        |file.count()
+        |file.count()
+        |file.count()
+      """.stripMargin.format(tempDir.getAbsolutePath))
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Long = 3", output)
@@ -144,18 +183,19 @@ class ReplSuite extends FunSuite {
   }
 
   test("local-cluster mode") {
-    val output = runInterpreter("local-cluster[1,1,512]", """
-                                                            |var v = 7
-                                                            |def getV() = v
-                                                            |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
-                                                            |v = 10
-                                                            |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
-                                                            |var array = new Array[Int](5)
-                                                            |val broadcastArray = sc.broadcast(array)
-                                                            |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
-                                                            |array(0) = 5
-                                                            |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
-                                                          """.stripMargin)
+    val output = runInterpreter("local-cluster[1,1,512]",
+      """
+        |var v = 7
+        |def getV() = v
+        |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+        |v = 10
+        |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+        |var array = new Array[Int](5)
+        |val broadcastArray = sc.broadcast(array)
+        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+        |array(0) = 5
+        |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+      """.stripMargin)
     assertDoesNotContain("error:", output)
     assertDoesNotContain("Exception", output)
     assertContains("res0: Int = 70", output)
@@ -166,18 +206,19 @@ class ReplSuite extends FunSuite {
 
   if (System.getenv("MESOS_NATIVE_LIBRARY") != null) {
     test("running on Mesos") {
-      val output = runInterpreter("localquiet", """
-                                                  |var v = 7
-                                                  |def getV() = v
-                                                  |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
-                                                  |v = 10
-                                                  |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
-                                                  |var array = new Array[Int](5)
-                                                  |val broadcastArray = sc.broadcast(array)
-                                                  |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
-                                                  |array(0) = 5
-                                                  |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
-                                                """.stripMargin)
+      val output = runInterpreter("localquiet",
+        """
+          |var v = 7
+          |def getV() = v
+          |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+          |v = 10
+          |sc.parallelize(1 to 10).map(x => getV()).collect.reduceLeft(_+_)
+          |var array = new Array[Int](5)
+          |val broadcastArray = sc.broadcast(array)
+          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+          |array(0) = 5
+          |sc.parallelize(0 to 4).map(x => broadcastArray.value(x)).collect
+        """.stripMargin)
       assertDoesNotContain("error:", output)
       assertDoesNotContain("Exception", output)
       assertContains("res0: Int = 70", output)

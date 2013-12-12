@@ -36,11 +36,11 @@ private[spark] object ThreadingTest {
   val numBlocksPerProducer = 20000
 
   private[spark] class ProducerThread(manager: BlockManager, id: Int) extends Thread {
-    val queue = new ArrayBlockingQueue[(String, Seq[Int])](100)
+    val queue = new ArrayBlockingQueue[(BlockId, Seq[Int])](100)
 
     override def run() {
       for (i <- 1 to numBlocksPerProducer) {
-        val blockId = "b-" + id + "-" + i
+        val blockId = TestBlockId("b-" + id + "-" + i)
         val blockSize = Random.nextInt(1000)
         val block = (1 to blockSize).map(_ => Random.nextInt())
         val level = randomLevel()
@@ -64,7 +64,7 @@ private[spark] object ThreadingTest {
 
   private[spark] class ConsumerThread(
       manager: BlockManager,
-      queue: ArrayBlockingQueue[(String, Seq[Int])]
+      queue: ArrayBlockingQueue[(BlockId, Seq[Int])]
     ) extends Thread {
     var numBlockConsumed = 0
 
@@ -93,7 +93,7 @@ private[spark] object ThreadingTest {
     val actorSystem = ActorSystem("test")
     val serializer = new KryoSerializer
     val blockManagerMaster = new BlockManagerMaster(
-      actorSystem.actorOf(Props(new BlockManagerMasterActor(true))))
+      Left(actorSystem.actorOf(Props(new BlockManagerMasterActor(true)))))
     val blockManager = new BlockManager(
       "<driver>", actorSystem, blockManagerMaster, serializer, 1024 * 1024)
     val producers = (1 to numProducers).map(i => new ProducerThread(blockManager, i))

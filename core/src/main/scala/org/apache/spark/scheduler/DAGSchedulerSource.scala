@@ -40,7 +40,7 @@ private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler, sc: Spar
   })
 
   metricRegistry.register(MetricRegistry.name("job", "allJobs"), new Gauge[Int] {
-    override def getValue: Int = dagScheduler.nextJobId.get()
+    override def getValue: Int = dagScheduler.numTotalJobs
   })
 
   metricRegistry.register(MetricRegistry.name("job", "activeJobs"), new Gauge[Int] {

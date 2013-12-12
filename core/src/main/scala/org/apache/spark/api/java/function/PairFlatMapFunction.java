@@ -33,8 +33,6 @@ public abstract class PairFlatMapFunction<T, K, V>
   extends WrappedFunction1<T, Iterable<Tuple2<K, V>>>
   implements Serializable {
 
-  public abstract Iterable<Tuple2<K, V>> call(T t) throws Exception;
-
   public ClassTag<K> keyType() {
     return (ClassTag<K>) ClassTag$.MODULE$.apply(Object.class);
   }

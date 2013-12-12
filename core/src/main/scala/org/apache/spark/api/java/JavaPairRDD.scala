@@ -66,6 +66,19 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kClassTag: ClassTag[K
   def persist(newLevel: StorageLevel): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.persist(newLevel))
 
+  /**
+   * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+   * This method blocks until all blocks are deleted.
+   */
+  def unpersist(): JavaPairRDD[K, V] = wrapRDD(rdd.unpersist())
+
+  /**
+   * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+   *
+   * @param blocking Whether to block until all blocks are deleted.
+   */
+  def unpersist(blocking: Boolean): JavaPairRDD[K, V] = wrapRDD(rdd.unpersist(blocking))
+
   // Transformations (return a new RDD)
 
   /**
@@ -94,6 +107,17 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kClassTag: ClassTag[K
    */
   def coalesce(numPartitions: Int, shuffle: Boolean): JavaPairRDD[K, V] =
     fromRDD(rdd.coalesce(numPartitions, shuffle))
+
+  /**
+   * Return a new RDD that has exactly numPartitions partitions.
+   *
+   * Can increase or decrease the level of parallelism in this RDD. Internally, this uses
+   * a shuffle to redistribute data.
+   *
+   * If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
+   * which can avoid performing a shuffle.
+   */
+  def repartition(numPartitions: Int): JavaPairRDD[K, V] = fromRDD(rdd.repartition(numPartitions))
 
   /**
    * Return a sampled subset of this RDD.
@@ -599,4 +623,15 @@ object JavaPairRDD {
     new JavaPairRDD[K, V](rdd)
 
   implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
+
+
+  /** Convert a JavaRDD of key-value pairs to JavaPairRDD. */
+  def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)]): JavaPairRDD[K, V] = {
+    implicit val cmk: ClassTag[K] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
+    implicit val cmv: ClassTag[V] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
+    new JavaPairRDD[K, V](rdd.rdd)
+  }
+
 }

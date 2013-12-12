@@ -23,12 +23,11 @@ import scala.concurrent.duration._
 import scala.concurrent.Await
 
 import akka.actor._
-import akka.actor.Terminated
 import akka.pattern.AskTimeoutException
 import akka.pattern.ask
 import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent, AssociationErrorEvent}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -37,41 +36,86 @@ import org.apache.spark.deploy.master.Master
 /**
  * The main class used to talk to a Spark deploy cluster. Takes a master URL, an app description,
  * and a listener for cluster events, and calls back the listener when various events occur.
+ *
+ * @param masterUrls Each url should look like spark://host:port.
  */
 private[spark] class Client(
     actorSystem: ActorSystem,
-    masterUrl: String,
+    masterUrls: Array[String],
     appDescription: ApplicationDescription,
     listener: ClientListener)
   extends Logging {
 
+  val REGISTRATION_TIMEOUT = 20.seconds
+  val REGISTRATION_RETRIES = 3
+
+  var masterAddress: Address = null
   var actor: ActorRef = null
   var appId: String = null
+  var registered = false
+  var activeMasterUrl: String = null
 
   class ClientActor extends Actor with Logging {
-    var master: ActorRef = null
-    var masterAddress: Address = null
+    var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
+    var alreadyDead = false  // To avoid calling listener.dead() multiple times
 
     override def preStart() {
-      logInfo("Connecting to master " + masterUrl)
+      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
       try {
-        master = context.actorFor(Master.toAkkaUrl(masterUrl))
-        masterAddress = master.path.address
-        master ! RegisterApplication(appDescription)
-        context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-        context.watch(master)  // Doesn't work with remote actors, but useful for testing
+        registerWithMaster()
       } catch {
         case e: Exception =>
-          logError("Failed to connect to master", e)
+          logWarning("Failed to connect to master", e)
           markDisconnected()
           context.stop(self)
       }
     }
 
+    def tryRegisterAllMasters() {
+      for (masterUrl <- masterUrls) {
+        logInfo("Connecting to master " + masterUrl + "...")
+        val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
+        actor ! RegisterApplication(appDescription)
+      }
+    }
+
+    def registerWithMaster() {
+      tryRegisterAllMasters()
+
+      import context.dispatcher
+      var retries = 0
+      lazy val retryTimer: Cancellable =
+        context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
+          retries += 1
+          if (registered) {
+            retryTimer.cancel()
+          } else if (retries >= REGISTRATION_RETRIES) {
+            logError("All masters are unresponsive! Giving up.")
+            markDead()
+          } else {
+            tryRegisterAllMasters()
+          }
+        }
+      retryTimer // start timer
+    }
+
+    def changeMaster(url: String) {
+      activeMasterUrl = url
+      master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
+      masterAddress = activeMasterUrl match {
+        case Master.sparkUrlRegex(host, port) =>
+          Address("akka.tcp", Master.systemName, host, port.toInt)
+        case x =>
+          throw new SparkException("Invalid spark URL: " + x)
+      }
+    }
+
     override def receive = {
-      case RegisteredApplication(appId_) =>
+      case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
+        registered = true
+        changeMaster(masterUrl)
         listener.connected(appId)
 
       case ApplicationRemoved(message) =>
@@ -83,7 +127,7 @@ private[spark] class Client(
         val fullId = appId + "/" + id
         logInfo("Executor added: %s on %s (%s) with %d cores".format(fullId, workerId, hostPort, cores))
         listener.executorAdded(fullId, workerId, hostPort, cores, memory)
-
+ 
       case ExecutorUpdated(id, state, message, exitStatus) =>
         val fullId = appId + "/" + id
         val messageText = message.map(s => " (" + s + ")").getOrElse("")
@@ -92,23 +136,18 @@ private[spark] class Client(
           listener.executorRemoved(fullId, message.getOrElse(""), exitStatus)
         }
 
-      case Terminated(actor_) if actor_ == master =>
-        logError("Connection to master failed; stopping client")
-        markDisconnected()
-        context.stop(self)
+      case MasterChanged(masterUrl, masterWebUiUrl) =>
+        logInfo("Master has changed, new master is at " + masterUrl)
+        changeMaster(masterUrl)
+        alreadyDisconnected = false
+        sender ! MasterChangeAcknowledged(appId)
 
       case DisassociatedEvent(_, address, _) if address == masterAddress =>
-        logError("Connection to master failed; stopping client")
+        logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
-        context.stop(self)
-
-      case AssociationErrorEvent(_, _, address, _) if address == masterAddress =>
-        logError("Connection to master failed; stopping client")
-        markDisconnected()
-        context.stop(self)
 
       case StopClient =>
-        markDisconnected()
+        markDead()
         sender ! true
         context.stop(self)
     }
@@ -120,6 +159,13 @@ private[spark] class Client(
       if (!alreadyDisconnected) {
         listener.disconnected()
         alreadyDisconnected = true
+      }
+    }
+
+    def markDead() {
+      if (!alreadyDead) {
+        listener.dead()
+        alreadyDead = true
       }
     }
   }

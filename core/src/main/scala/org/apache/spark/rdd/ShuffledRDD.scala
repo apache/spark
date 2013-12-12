@@ -17,9 +17,10 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{Dependency, Partitioner, SparkEnv, ShuffleDependency, Partition, TaskContext}
 import scala.reflect.ClassTag
 
+import org.apache.spark.{Dependency, Partition, Partitioner, ShuffleDependency,
+  SparkEnv, TaskContext}
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
   override val index = idx
@@ -57,7 +58,7 @@ class ShuffledRDD[K, V, P <: Product2[K, V] : ClassTag](
 
   override def compute(split: Partition, context: TaskContext): Iterator[P] = {
     val shuffledId = dependencies.head.asInstanceOf[ShuffleDependency[K, V]].shuffleId
-    SparkEnv.get.shuffleFetcher.fetch[P](shuffledId, split.index, context.taskMetrics,
+    SparkEnv.get.shuffleFetcher.fetch[P](shuffledId, split.index, context,
       SparkEnv.get.serializerManager.get(serializerClass))
   }
 

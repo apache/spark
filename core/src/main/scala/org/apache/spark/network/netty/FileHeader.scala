@@ -20,17 +20,18 @@ package org.apache.spark.network.netty
 import io.netty.buffer._
 
 import org.apache.spark.Logging
+import org.apache.spark.storage.{TestBlockId, BlockId}
 
 private[spark] class FileHeader (
   val fileLen: Int,
-  val blockId: String) extends Logging {
+  val blockId: BlockId) extends Logging {
 
   lazy val buffer = {
     val buf = Unpooled.buffer()
     buf.capacity(FileHeader.HEADER_SIZE)
     buf.writeInt(fileLen)
-    buf.writeInt(blockId.length)
-    blockId.foreach((x: Char) => buf.writeByte(x))
+    buf.writeInt(blockId.name.length)
+    blockId.name.foreach((x: Char) => buf.writeByte(x))
     //padding the rest of header
     if (FileHeader.HEADER_SIZE - buf.readableBytes > 0 ) {
       buf.writeZero(FileHeader.HEADER_SIZE - buf.readableBytes)
@@ -57,18 +58,15 @@ private[spark] object FileHeader {
     for (i <- 1 to idLength) {
       idBuilder += buf.readByte().asInstanceOf[Char]
     }
-    val blockId = idBuilder.toString()
+    val blockId = BlockId(idBuilder.toString())
     new FileHeader(length, blockId)
   }
 
-
-  def main (args:Array[String]){
-
-    val header = new FileHeader(25,"block_0");
-    val buf = header.buffer;
-    val newheader = FileHeader.create(buf);
-    System.out.println("id="+newheader.blockId+",size="+newheader.fileLen)
-
+  def main (args:Array[String]) {
+    val header = new FileHeader(25, TestBlockId("my_block"))
+    val buf = header.buffer
+    val newHeader = FileHeader.create(buf)
+    System.out.println("id=" + newHeader.blockId + ",size=" + newHeader.fileLen)
   }
 }
 

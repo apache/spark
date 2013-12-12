@@ -25,7 +25,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-tools_${scala-short.version}</artifactId>
+  <artifactId>spark-tools_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Tools</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -33,24 +33,24 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_${scala-short.version}</artifactId>
+      <artifactId>spark-core_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_${scala-short.version}</artifactId>
+      <artifactId>spark-streaming_2.10</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_${scala-short.version}</artifactId>
+      <artifactId>scalatest_2.10</artifactId>
       <scope>test</scope>
     </dependency>
   </dependencies>
 
   <build>
-    <outputDirectory>target/scala-${scala-short.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala-short.version}/test-classes</testOutputDirectory>
+    <outputDirectory>target/scala-2.10/classes</outputDirectory>
+    <testOutputDirectory>target/scala-2.10/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

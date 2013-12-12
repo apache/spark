@@ -28,6 +28,11 @@ object SparkBuild extends Build {
   // "2.0.0-mr1-cdh4.2.0" for Cloudera Hadoop. Note that these variables can be set
   // through the environment variables SPARK_HADOOP_VERSION and SPARK_YARN.
   val DEFAULT_HADOOP_VERSION = "1.0.4"
+
+  // Whether the Hadoop version to build against is 2.2.x, or a variant of it. This can be set
+  // through the SPARK_IS_NEW_HADOOP environment variable.
+  val DEFAULT_IS_NEW_HADOOP = false
+
   val DEFAULT_YARN = false
 
   // HBase version; set as appropriate.
@@ -55,10 +60,10 @@ object SparkBuild extends Build {
 
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
 
-  lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn(core)
-
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
     .dependsOn(core, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*)
+
+  lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
 
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
@@ -66,16 +71,32 @@ object SparkBuild extends Build {
 
   // Allows build configuration to be set through environment variables
   lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
+  lazy val isNewHadoop = scala.util.Properties.envOrNone("SPARK_IS_NEW_HADOOP") match {
+    case None => {
+      val isNewHadoopVersion = "2.[2-9]+".r.findFirstIn(hadoopVersion).isDefined
+      (isNewHadoopVersion|| DEFAULT_IS_NEW_HADOOP)
+    }
+    case Some(v) => v.toBoolean
+  }
   lazy val isYarnEnabled = scala.util.Properties.envOrNone("SPARK_YARN") match {
     case None => DEFAULT_YARN
     case Some(v) => v.toBoolean
   }
 
+  // Build against a protobuf-2.5 compatible Akka if Hadoop 2 is used.
+  lazy val protobufVersion = if (isNewHadoop) "2.5.0" else "2.4.1"
+  lazy val akkaVersion = if (isNewHadoop) "2.0.5-protobuf-2.5-java-1.5" else "2.0.5"
+  lazy val akkaGroup = if (isNewHadoop) "org.spark-project" else "com.typesafe.akka"
+
   // Conditionally include the yarn sub-project
-  lazy val maybeYarn = if(isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
-  lazy val maybeYarnRef = if(isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
-  lazy val allProjects = Seq[ProjectReference](
-    core, repl, examples, bagel, streaming, mllib, tools, assemblyProj) ++ maybeYarnRef
+  lazy val yarn = Project("yarn", file(if (isNewHadoop) "new-yarn" else "yarn"), settings = yarnSettings) dependsOn(core)
+  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
+  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
+
+  // Everything except assembly, tools and examples belong to packageProjects
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib) ++ maybeYarnRef
+
+  lazy val allProjects = packageProjects ++ Seq[ProjectReference](examples, tools, assemblyProj)
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.apache.spark",
@@ -100,7 +121,7 @@ object SparkBuild extends Build {
     // also check the local Maven repository ~/.m2
     resolvers ++= Seq(Resolver.file("Local Maven Repo", file(Path.userHome + "/.m2/repository"))),
 
-    // For Sonatype publishing
+   // For Sonatype publishing
     resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
 
@@ -161,6 +182,7 @@ object SparkBuild extends Build {
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
         "com.novocode"      % "junit-interface" % "0.9"    % "test",
         "org.easymock"      % "easymock"        % "3.1"    % "test",
+        "org.mockito"       % "mockito-all"     % "1.8.5"  % "test",
         "commons-io"        % "commons-io"      % "2.4"    % "test"
     ),
 
@@ -199,26 +221,28 @@ object SparkBuild extends Build {
         "log4j"                    % "log4j"            % "1.2.17",
         "org.slf4j"                % "slf4j-api"        % slf4jVersion,
         "org.slf4j"                % "slf4j-log4j12"    % slf4jVersion,
+        "commons-daemon"           % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
         "com.ning"                 % "compress-lzf"     % "0.8.4",
         "org.xerial.snappy"        % "snappy-java"      % "1.0.5",
-        "commons-daemon"           % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
         "org.ow2.asm"              % "asm"              % "4.0",
         "com.google.protobuf"      % "protobuf-java"    % "2.4.1",
-        "com.typesafe.akka"       %% "akka-remote"      % "2.2.3"  excludeAll(excludeNetty), 
-        "com.typesafe.akka"       %% "akka-slf4j"       % "2.2.3"  excludeAll(excludeNetty),
+        akkaGroup                 %% "akka-remote"      % "2.2.3"  excludeAll(excludeNetty),
+        akkaGroup                 %% "akka-slf4j"       % "2.2.3"  excludeAll(excludeNetty),
         "net.liftweb"             %% "lift-json"        % "2.5.1"  excludeAll(excludeNetty),
         "it.unimi.dsi"             % "fastutil"         % "6.4.4",
         "colt"                     % "colt"             % "1.2.0",
         "org.apache.mesos"         % "mesos"            % "0.13.0",
         "net.java.dev.jets3t"      % "jets3t"           % "0.7.1",
         "org.apache.derby"         % "derby"            % "10.4.2.0"                     % "test",
-        "org.apache.hadoop"        % "hadoop-client"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm),
+        "org.apache.hadoop"        % "hadoop-client"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
         "org.apache.avro"          % "avro"             % "1.7.4",
         "org.apache.avro"          % "avro-ipc"         % "1.7.4" excludeAll(excludeNetty),
+        "org.apache.zookeeper"     % "zookeeper"        % "3.4.5" excludeAll(excludeNetty),
         "com.codahale.metrics"     % "metrics-core"     % "3.0.0",
         "com.codahale.metrics"     % "metrics-jvm"      % "3.0.0",
         "com.codahale.metrics"     % "metrics-json"     % "3.0.0",
         "com.codahale.metrics"     % "metrics-ganglia"  % "3.0.0",
+        "com.codahale.metrics"     % "metrics-graphite" % "3.0.0",
         "com.twitter"             %% "chill"            % "0.3.1",
         "com.twitter"              % "chill-java"       % "0.3.1"
       )
@@ -257,7 +281,7 @@ object SparkBuild extends Build {
 
   def toolsSettings = sharedSettings ++ Seq(
     name := "spark-tools"
-  )
+  ) ++ assemblySettings ++ extraAssemblySettings
 
   def bagelSettings = sharedSettings ++ Seq(
     name := "spark-bagel"
@@ -272,11 +296,22 @@ object SparkBuild extends Build {
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
+    resolvers ++= Seq(
+      "Eclipse Repository" at "https://repo.eclipse.org/content/repositories/paho-releases/",
+      "Apache repo" at "https://repository.apache.org/content/repositories/releases"
+    ),
+
     libraryDependencies ++= Seq(
       "org.apache.flume"      % "flume-ng-sdk"     % "1.2.0" % "compile"  excludeAll(excludeNetty, excludeSnappy),
+      "com.sksamuel.kafka"   %% "kafka"            % "0.8.0-beta1"
+        exclude("com.sun.jdmk", "jmxtools")
+        exclude("com.sun.jmx", "jmxri")
+        exclude("net.sf.jopt-simple", "jopt-simple")
+        excludeAll(excludeNetty),
+      "org.eclipse.paho"      % "mqtt-client"      % "0.4.0",
       "com.github.sgroschupf" % "zkclient"         % "0.1"                excludeAll(excludeNetty),
       "org.twitter4j"         % "twitter4j-stream" % "3.0.3"              excludeAll(excludeNetty),
-      "com.typesafe.akka"    %%  "akka-zeromq"     % "2.2.3"              excludeAll(excludeNetty)
+      akkaGroup              %% "akka-zeromq"      % "2.2.3"              excludeAll(excludeNetty)
     )
   )
 
@@ -300,7 +335,9 @@ object SparkBuild extends Build {
 
   def assemblyProjSettings = sharedSettings ++ Seq(
     name := "spark-assembly",
-    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" }
+    assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
+    jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
+    jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def extraAssemblySettings() = Seq(
@@ -308,7 +345,8 @@ object SparkBuild extends Build {
     mergeStrategy in assembly := {
       case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
       case m if m.toLowerCase.matches("meta-inf.*\\.sf$") => MergeStrategy.discard
-      case "META-INF/services/org.apache.hadoop.fs.FileSystem" => MergeStrategy.concat
+      case "log4j.properties" => MergeStrategy.discard
+      case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
       case "reference.conf" => MergeStrategy.concat
       case _ => MergeStrategy.first
     }
