@@ -452,6 +452,13 @@ object HiveQl {
   val numericAstTypes =
     Seq(HiveParser.Number, HiveParser.TinyintLiteral, HiveParser.SmallintLiteral, HiveParser.BigintLiteral)
 
+
+  /* Case insensitive matches */
+  val COUNT = "(?i)COUNT".r
+  val AVG = "(?i)AVG".r
+  val SUM = "(?i)SUM".r
+  val RAND = "(?i)RAND".r
+
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
     case Token("TOK_TABLE_OR_COL",
@@ -467,11 +474,12 @@ object HiveQl {
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) => Star(Some(name))
 
     /* Aggregate Functions */
-    case Token("TOK_FUNCTION", Token("AVG", Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
-    case Token("TOK_FUNCTION", Token("count", Nil) :: arg :: Nil) => Count(nodeToExpr(arg))
-    case Token("TOK_FUNCTIONSTAR", Token("count", Nil) :: Nil) => Count(Literal(1))
-    case Token("TOK_FUNCTION", Token("sum", Nil) :: arg :: Nil) => Sum(nodeToExpr(arg))
-    case Token("TOK_FUNCTIONDI", Token("count", Nil) :: args) => CountDistinct(args.map(nodeToExpr))
+    case Token("TOK_FUNCTION", Token(AVG(), Nil) :: arg :: Nil) => Average(nodeToExpr(arg))
+    case Token("TOK_FUNCTION", Token(COUNT(), Nil) :: arg :: Nil) => Count(nodeToExpr(arg))
+    case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) => Count(Literal(1))
+    case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
+    case Token("TOK_FUNCTION", Token(SUM(), Nil) :: arg :: Nil) => Sum(nodeToExpr(arg))
+
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
@@ -489,7 +497,7 @@ object HiveQl {
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
 
     /* Other functions */
-    case Token("TOK_FUNCTION", Token("RAND", Nil) :: Nil) => Rand
+    case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
 
     /* Literals */
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
