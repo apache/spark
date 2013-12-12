@@ -39,7 +39,7 @@ convertJListToRList <- function(jList, flatten) {
              # jElem is of a primitive Java type, is simplified to R's
              # corresponding type.
              if (class(obj) != "jobjRef")
-               res <- obj
+               res <- list(obj)
 
              res
            })
@@ -60,11 +60,36 @@ isRRDD <- function(name, env) {
   class(obj) == "RRDD"
 }
 
+isSparkFunction <- function(name) {
+  if (is.function(name)) {
+    fun <- name
+  } else {
+    if (!(is.character(name) && length(name) == 1L || is.symbol(name))) {
+      fun <- eval.parent(substitute(substitute(name)))
+      if (!is.symbol(fun))
+        stop(gettextf("'%s' is not a function, character or symbol",
+                      deparse(fun)), domain = NA)
+    } else {
+      fun <- name
+    }
+    envir <- parent.frame(2)
+    if (!exists(as.character(fun), mode = "function", envir=envir)) {
+      return(FALSE)
+    }
+    fun <- get(as.character(fun), mode = "function", envir=envir)
+  }
+  packageName(environment(fun)) == "SparkR"
+}
+
 getDependencies <- function(name) {
   fileName <- tempfile(pattern="spark-utils", fileext=".deps")
   funcEnv <- environment(name)
   varsToSave <- ls(funcEnv)
+
+  #print(varsToSave)
+  filteredVars <- varsToSave
   filteredVars <- Filter(function(x) { !isRRDD(x, funcEnv) }, varsToSave)
+  #filteredVars <- Filter(function(x) { !isSparkFunction(x) }, filteredVars)
 
   save(list=filteredVars, file=fileName, envir=funcEnv)
   fileSize <- file.info(fileName)$size
@@ -73,4 +98,3 @@ getDependencies <- function(name) {
   unlink(fileName)
   binData
 }
-

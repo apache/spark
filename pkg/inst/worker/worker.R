@@ -21,71 +21,82 @@ outputFileName <- readLines(inputCon, n = 1)
 outputCon <- file(outputFileName, open="wb")
 
 # First read the function; if used for pairwise RRDD, this is the hash function.
-execFunction <- unserialize(readRaw(inputCon))
+execLen <- readInt(inputCon)
+execFunctionName <- unserialize(readRawLen(inputCon, execLen))
 
 # read the isSerialized bit flag
 isSerialized <- readInt(inputCon)
 
 # read function dependencies
-execFunctionDeps <- readRaw(inputCon)
+depsLen <- readInt(inputCon)
+if (depsLen > 0) {
+  execFunctionDeps <- readRawLen(inputCon, depsLen)
 
-# load the dependencies into current environment
-depsFileName <- tempfile(pattern="spark-exec", fileext=".deps")
-depsFile <- file(depsFileName, open="wb")
-writeBin(execFunctionDeps, depsFile, endian="big")
-close(depsFile)
-load(depsFileName, envir=environment(execFunction))
-unlink(depsFileName)
+  # load the dependencies into current environment
+  depsFileName <- tempfile(pattern="spark-exec", fileext=".deps")
+  depsFile <- file(depsFileName, open="wb")
+  writeBin(execFunctionDeps, depsFile, endian="big")
+  close(depsFile)
+
+  load(depsFileName)
+  unlink(depsFileName)
+}
 
 # Redirect stdout to stderr to prevent print statements from
 # interfering with outputStream
 sink(stderr())
 
 # If -1: read as normal RDD; if >= 0, treat as pairwise RDD and treat the int
-# as number of elements to read next.
-dataLen <- readInt(inputCon)
+# as number of partitions to create.
+numPartitions <- readInt(inputCon)
 
-if (dataLen == -1) {
+isEmpty <- readInt(inputCon)
 
-  if (isSerialized) {
-    # Now read as many characters as described in funcLen
-    data <- unserialize(readRaw(inputCon))
-  } else {
-    data <- readLines(inputCon)
-  }
-  output <- execFunction(data)
-  writeRaw(outputCon, output)
+if (isEmpty != 0) {
 
-} else {
-
-  keyValPairs = list()
-
-  for (i in 1:dataLen) {
+  if (numPartitions == -1) {
     if (isSerialized) {
-      key <- unserialize(readRaw(inputCon))
-      val <- unserialize(readRaw(inputCon))
-      keyValPairs[[length(keyValPairs) + 1]] <- list(key, val)
+      # Now read as many characters as described in funcLen
+      data <- readDeserialize(inputCon)
     } else {
-      # FIXME?
       data <- readLines(inputCon)
     }
-  }
+    output <- do.call(execFunctionName, list(data))
+    writeRaw(outputCon, output)
+    # for (name in output) {
+    #   writeRaw(outputCon, name)
+    # }
 
-  # Step 1: convert the environment into a list of lists.
-  envirList <- as.list(execFunction(keyValPairs))
-  keyed = list()
-  for (key in names(envirList)) {
-    bucketList <- list(as.integer(key), envirList[[key]])
-    keyed[[length(keyed) + 1]] <- bucketList
-  }
+  } else {
+    if (isSerialized) {
+      # Now read as many characters as described in funcLen
+      data <- readDeserialize(inputCon)
+    } else {
+      data <- readLines(inputCon)
+    }
 
-  # Step 2: write out all of the keyed list.
-  for (keyedEntry in keyed) {
-    writeInt(outputCon, 2L)
-    writeRaw(outputCon, keyedEntry[[1]])
-    writeRaw(outputCon, keyedEntry[[2]])
-  }
+    res <- new.env()
 
+    # Step 1: hash the data to an environment
+    hashTupleToEnvir <- function(tuple) {
+      # NOTE: execFunction is the hash function here
+      hashVal <- do.call(execFunctionName, list(tuple[[1]]))
+      #hashVal <- execFunction(tuple[[1]])
+      bucket <- as.character(hashVal %% numPartitions)
+      acc <- res[[bucket]]
+      # TODO?: http://stackoverflow.com/questions/2436688/append-an-object-to-a-list-in-r-in-amortized-constant-time
+      acc[[length(acc) + 1]] <- tuple
+      res[[bucket]] <- acc
+    }
+    invisible(lapply(data, hashTupleToEnvir))
+
+    # Step 2: write out all of the environment as key-value pairs.
+    for (name in ls(res)) {
+      writeInt(outputCon, 2L)
+      writeInt(outputCon, as.integer(name))
+      writeRaw(outputCon, res[[name]])
+    }
+  }
 }
 
 # End of output

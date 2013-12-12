@@ -1,21 +1,11 @@
-# FIXME: Hardcoded spark jar
-sparkJarPath <- "assembly/target/scala-2.9.3/spark-assembly-0.8.0-SNAPSHOT-hadoop1.0.4.jar"
-
 .sparkREnv <- new.env()
 
-# TODO: Figure out classpath using bin/compute-classpath.sh
 sparkR.onLoad <- function(libname, pkgname) {
   sparkDir <- strsplit(libname, "/")
-  sparkJarAbsPath <- c(sparkDir[[1]][1:(length(sparkDir[[1]]) - 2)], sparkJarPath)
-
-  classPath <- paste(sparkJarAbsPath, collapse = "/")
-  confPath <- paste(c(sparkDir[[1]][1:(length(sparkDir[[1]]) - 2)], "conf"),
-                    collapse="/")
-  classPath <- paste(confPath, classPath, sep=":")
-  assign("sparkJar", classPath, envir=.sparkREnv)
-
+  classPathScript <- paste(c(sparkDir[[1]][1:(length(sparkDir[[1]]) - 2)],
+                             "/bin/compute-classpath.sh"), collapse="/")
+  classPath <- system(classPathScript, intern=TRUE)
   packageStartupMessage("[SparkR] Initializing with classpath ", classPath, "\n")
-
   .jinit(classpath=classPath)
 }
 
@@ -41,4 +31,3 @@ sparkR.init <- function(
 
   get(".sparkRjsc", envir=.sparkREnv)
 }
-

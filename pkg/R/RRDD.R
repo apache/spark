@@ -38,11 +38,8 @@ setMethod("collect",
           signature(rrdd = "RRDD"),
           function(rrdd, flatten = TRUE) {
             # Assumes a pairwise RRDD is backed by a JavaPairRDD.
-            isPairwise <- grep("spark.api.java.JavaPairRDD",
-                               rrdd@jrdd$getClass()$getName())
             collected <- .jcall(rrdd@jrdd, "Ljava/util/List;", "collect")
-            convertJListToRList(collected, if (length(isPairwise) == 1) FALSE
-                                           else flatten)
+            convertJListToRList(collected, flatten)
           })
 
 
@@ -75,15 +72,43 @@ setMethod("lapply",
             lapplyPartition(X, partitionFunc)
           })
 
+setGeneric("map", function(X, FUN) {
+           standardGeneric("map") })
+setMethod("map",
+          signature(X = "RRDD", FUN = "function"),
+          function(X, FUN) {
+            lapply(X, FUN)
+          })
+
+setGeneric("flatMap", function(X, FUN) {
+           standardGeneric("flatMap") })
+setMethod("flatMap",
+          signature(X = "RRDD", FUN = "function"),
+          function(X, FUN) {
+            partitionFunc <- function(part) {
+              unlist(
+                lapply(part, FUN)
+              )
+            }
+            lapplyPartition(X, partitionFunc)
+          })
+
+
 setGeneric("lapplyPartition", function(X, FUN) {
            standardGeneric("lapplyPartition") })
 setMethod("lapplyPartition",
           signature(X = "RRDD", FUN = "function"),
           function(X, FUN) {
-            serializedFunc <- serialize(FUN, connection = NULL, ascii = TRUE)
+            # TODO: This is to handle anonymous functions. Find out a
+            # better way to do this.
+            computeFunc <- function(part) {
+              FUN(part)
+            }
+            serializedFunc <- serialize("computeFunc",
+                                        connection = NULL, ascii = TRUE)
             serializedFuncArr <- .jarray(serializedFunc)
 
-            depsBin <- getDependencies(FUN)
+            depsBin <- getDependencies(computeFunc)
             depsBinArr <- .jarray(depsBin)
             rrddRef <- new(J("org.apache.spark.api.r.RRDD"),
                            X@jrdd$rdd(),
@@ -129,66 +154,48 @@ setMethod("take",
                                   "collectPartition",
                                   as.integer(index))
               elems <- convertJListToRList(partition, flatten = TRUE)
-              resList <- append(resList, head(elems, n = num - length(resList))) # O(n^2)?
+              # TODO: Check if this append is O(n^2)?
+              resList <- append(resList, head(elems, n = num - length(resList)))
             }
             resList
           })
 
 ############ Shuffle Functions ############
 
-.address <- function(x) {
-  # http://stackoverflow.com/questions/10912729/r-object-identity
-  substring(capture.output(.Internal(inspect(x)))[1], 2, 10)
-}
-
 setGeneric("partitionBy",
-           function(rrdd, numPartitions, partitionFunc) {
+           function(rrdd, numPartitions, ...) {
              standardGeneric("partitionBy")
            })
 setMethod("partitionBy",
-          signature(rrdd = "RRDD", numPartitions = "integer", partitionFunc = "function"),
-          function(rrdd, numPartitions, partitionFunc) {
+          signature(rrdd = "RRDD", numPartitions = "integer"),
+          function(rrdd, numPartitions, partitionFunc = hashCode) {
 
-            hashPairsToEnvir <- function(pairs) {
-              # pairs: list(list(_, _), ..)
-              res <- new.env()
-              HACK <- environment(partitionFunc) # FIXME
-              for (tuple in pairs) {
-                hashVal = partitionFunc(tuple[[1]])
-                bucket = as.character(hashVal %% numPartitions)
-                acc <- res[[bucket]]
-                # TODO?: http://stackoverflow.com/questions/2436688/append-an-object-to-a-list-in-r-in-amortized-constant-time
-                acc[[length(acc) + 1]] <- tuple
-                res[[bucket]] <- acc
-              }
-              res
-            }
+            #if (missing(partitionFunc)) {
+            #  partitionFunc <- hashCode
+            #}
 
-            serializedHashFunc <- serialize(hashPairsToEnvir,
+            depsBin <- getDependencies(partitionFunc)
+            depsBinArr <- .jarray(depsBin)
+
+            serializedHashFunc <- serialize(as.character(substitute(partitionFunc)),
                                             connection = NULL,
                                             ascii = TRUE)
             serializedHashFuncBytes <- .jarray(serializedHashFunc)
-            depsBin <- getDependencies(hashPairsToEnvir)
-            depsBinArr <- .jarray(depsBin)
 
-            # At this point, we have RDD[(Array[Byte], Array[Byte])],
-            # which contains the actual content, in unknown partitions order.
             # We create a PairwiseRRDD that extends RDD[(Array[Byte],
             # Array[Byte])], where the key is the hashed split, the value is
-            # the content (key-val pairs). It does not matter how the data are
-            # stored in what partitions at this point.
-
+            # the content (key-val pairs). 
             pairwiseRRDD <- new(J("org.apache.spark.api.r.PairwiseRRDD"),
-                                rrdd@jrdd,
+                                rrdd@jrdd$rdd(),
                                 as.integer(numPartitions),
                                 serializedHashFuncBytes,
                                 rrdd@serialized,
-                                depsBinArr)
+                                depsBinArr,
+                                rrdd@jrdd$classManifest())
 
-            # Create a corresponding RPartitioner.
-            rPartitioner <- new(J("org.apache.spark.api.r.RPartitioner"),
-                                as.integer(numPartitions),
-                                .address(partitionFunc)) # TODO: does this work?
+            # Create a corresponding partitioner.
+            rPartitioner <- new(J("org.apache.spark.HashPartitioner"),
+                                as.integer(numPartitions))
 
             # Call partitionBy on the obtained PairwiseRDD.
             javaPairRDD <- pairwiseRRDD$asJavaPairRDD()$partitionBy(rPartitioner)
@@ -197,9 +204,75 @@ setMethod("partitionBy",
             # shuffled acutal content key-val pairs.
             r <- javaPairRDD$values()
 
-            RRDD(r, rrdd@serialized)
+            RRDD(r, serialized=TRUE)
           })
 
+setGeneric("groupByKey",
+           function(rrdd, numPartitions) {
+             standardGeneric("groupByKey")
+           })
+setMethod("groupByKey",
+          signature(rrdd = "RRDD", numPartitions = "integer"),
+          function(rrdd, numPartitions) {
+            shuffled <- partitionBy(rrdd, numPartitions)
+            groupVals <- function(part) {
+              vals <- new.env()
+              keys <- new.env()
+              # Each item in the partition is list of (K, V)
+              lapply(part,
+                     function(item) {
+                       hashVal <- as.character(hashCode(item[[1]]))
+                       if (exists(hashVal, vals)) {
+                         acc <- vals[[hashVal]]
+                         acc[[length(acc) + 1]] <- item[[2]]
+                         vals[[hashVal]] <- acc
+                       } else {
+                         vals[[hashVal]] <- list(item[[2]])
+                         keys[[hashVal]] <- item[[1]]
+                       }
+                     })
+              # Every key in the environment contains a list
+              # Convert that to list(K, Seq[V])
+              grouped <- lapply(ls(vals),
+                                function(name) {
+                                  list(keys[[name]], vals[[name]])
+                                })
+              grouped
+            }
+            lapplyPartition(shuffled, groupVals)
+          })
+
+setGeneric("reduceByKey",
+           function(rrdd, combineFunc, numPartitions) {
+             standardGeneric("reduceByKey")
+           })
+setMethod("reduceByKey",
+          signature(rrdd = "RRDD", combineFunc = "ANY", numPartitions = "integer"),
+          function(rrdd, combineFunc, numPartitions) {
+            # TODO: Implement map-side combine 
+            shuffled <- partitionBy(rrdd, numPartitions)
+            reduceVals <- function(part) {
+              vals <- new.env()
+              keys <- new.env()
+              lapply(part,
+                     function(item) {
+                       hashVal <- as.character(hashCode(item[[1]]))
+                       if (exists(hashVal, vals)) {
+                         vals[[hashVal]] <- do.call(
+                           combineFunc, list(vals[[hashVal]], item[[2]]))
+                       } else {
+                         vals[[hashVal]] <- item[[2]]
+                         keys[[hashVal]] <- item[[1]]
+                       }
+                     })
+              combined <- lapply(ls(vals),
+                                  function(name) {
+                                    list(keys[[name]], vals[[name]])
+                                  })
+              combined
+            }
+            lapplyPartition(shuffled, reduceVals)
+          })
 
 setGeneric("collectPartition",
            function(rrdd, partitionId) {
@@ -215,3 +288,46 @@ setMethod("collectPartition",
             convertJListToRList(jList, flatten = TRUE)
           })
 
+
+wrapInt <- function(value) {
+  if (value > .Machine$integer.max) {
+    value <- value - 2 * .Machine$integer.max - 2
+  } else if (value < -1 * .Machine$integer.max) {
+    value <- 2 * .Machine$integer.max + value + 2
+  }
+  value
+}
+
+mult31AndAdd <- function(val, addVal) {
+  vec <- c(bitwShiftL(val, c(4,3,2,1,0)), addVal)
+  Reduce(function(a, b) {
+          wrapInt(as.numeric(a) + as.numeric(b))
+         },
+         vec)
+}
+
+hashCode <- function(key) {
+  if (class(key) == "integer") {
+    as.integer(key[[1]])
+  } else if (class(key) == "numeric") {
+    # Convert the double to long and then calculate the hash code
+    rawVec <- writeBin(key[[1]], con=raw())
+    intBits <- packBits(rawToBits(rawVec), "integer")
+    as.integer(bitwXor(intBits[2], intBits[1]))
+  } else if (class(key) == "character") {
+    n <- nchar(key)
+    if (n == 0) {
+      0L
+    } else {
+      asciiVals <- sapply(charToRaw(key), function(x) { strtoi(x, 16L) })
+      hashC <- 0
+      for (k in 1:length(asciiVals)) {
+        hashC <- mult31AndAdd(hashC, asciiVals[k])
+      }
+      as.integer(hashC)
+    }
+  } else {
+    warning(paste("Could not hash object, returning 0", sep=""))
+    as.integer(0)
+  }
+}

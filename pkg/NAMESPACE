@@ -5,14 +5,18 @@ exportMethods(
               "collect",
               "collectPartition",
               "count",
+              "flatMap",
+              "groupByKey",
               "length",
               "lapply",
               "lapplyPartition",
+              "map",
               "partitionBy",
               "reduce",
+              "reduceByKey",
               "take"
              )
 
 # S3 methods exported
-export("textFile", "parallelize")
+export("textFile", "parallelize", "hashCode")
 exportPattern("^sparkR")

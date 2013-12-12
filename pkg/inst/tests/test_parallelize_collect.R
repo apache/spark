@@ -69,15 +69,15 @@ test_that("collect(), following a parallelize(), gives back the original collect
 
 test_that("parallelize() and collect() work for lists of pairs (pairwise data)", {
   # use the pairwise logical to indicate pairwise data
-  numPairsRDDD1 <- parallelize(jsc, numPairs, 1, pairwise = TRUE)
-  numPairsRDDD2 <- parallelize(jsc, numPairs, 2, pairwise = TRUE)
-  numPairsRDDD3 <- parallelize(jsc, numPairs, 3, pairwise = TRUE)
+  numPairsRDDD1 <- parallelize(jsc, numPairs, 1)
+  numPairsRDDD2 <- parallelize(jsc, numPairs, 2)
+  numPairsRDDD3 <- parallelize(jsc, numPairs, 3)
   expect_equal(collect(numPairsRDDD1), numPairs)
   expect_equal(collect(numPairsRDDD2), numPairs)
   expect_equal(collect(numPairsRDDD3), numPairs)
   # can also leave out the parameter name, if the params are supplied in order
-  strPairsRDDD1 <- parallelize(jsc, strPairs, 1, TRUE)
-  strPairsRDDD2 <- parallelize(jsc, strPairs, 2, TRUE)
+  strPairsRDDD1 <- parallelize(jsc, strPairs, 1)
+  strPairsRDDD2 <- parallelize(jsc, strPairs, 2)
   expect_equal(collect(strPairsRDDD1), strPairs)
   expect_equal(collect(strPairsRDDD2), strPairs)
 })

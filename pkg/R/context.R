@@ -18,9 +18,8 @@ textFile <- function(jsc, name, minSplits=NULL) {
 
 # Distribute a local R homogeneous list to form an RRDD[Array[Byte]]. If a
 # vector is passed as `coll', as.list() will be called on it to convert it to a
-# list. Use pairwise == TRUE if coll is a collection of homogeneous key-val
-# pairs (first slot will be treated as the key, second slot the value).
-parallelize <- function(jsc, coll, numSlices = 1, pairwise = FALSE) {
+# list. 
+parallelize <- function(jsc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives
   # TODO: support matrix, data frame, etc
@@ -40,39 +39,11 @@ parallelize <- function(jsc, coll, numSlices = 1, pairwise = FALSE) {
 
   # Serialize each slice: obtain a list of raws, or a list of lists (slices) of
   # 2-tuples of raws
-  serializedSlices <- if (!pairwise) {
-    lapply(slices, serialize, connection = NULL)
-  } else {
-    tupleSerialize <- function(tuple) {
-      keyRaw <- serialize(tuple[[1]], NULL)
-      valRaw <- serialize(tuple[[2]], NULL)
-      list(keyRaw, valRaw)
-    }
-    sliceSerialize <- function(slice) {
-      lapply(slice, tupleSerialize)
-    }
-    lapply(slices, sliceSerialize)
-  }
+  serializedSlices <- lapply(slices, serialize, connection = NULL)
 
-  # If !pairwise, Array[Array[Byte]]; otherwise, _two_ more nested layers.
-  javaSerializedSlices <- if (!pairwise) {
-    .jarray(lapply(serializedSlices, .jarray), contents.class = "[B")
-  } else {
-    tupleJArray <- function(tuple) {
-      keyByteJArray <- .jarray(tuple[[1]], contents.class = "B")
-      valByteJArray <- .jarray(tuple[[2]], contents.class = "B")
-      .jarray(list(keyByteJArray, valByteJArray), contents.class = "[B")
-    }
-    sliceJArray <- function(slice) {
-      .jarray(lapply(slice, tupleJArray), contents.class = "[[B")
-    }
-    .jarray(lapply(serializedSlices, sliceJArray), contents.class = "[[[B")
-  }
+  javaSerializedSlices <- .jarray(lapply(serializedSlices, .jarray), contents.class = "[B")
 
-  jrddType = if (!pairwise)
-    "Lorg/apache/spark/api/java/JavaRDD;"
-  else
-    "Lorg/apache/spark/api/java/JavaPairRDD;"
+  jrddType = "Lorg/apache/spark/api/java/JavaRDD;"
 
   jrdd <- .jcall("org/apache/spark/api/r/RRDD",
                  jrddType,
@@ -82,3 +53,4 @@ parallelize <- function(jsc, coll, numSlices = 1, pairwise = FALSE) {
 
   RRDD(jrdd, TRUE)
 }
+

@@ -13,7 +13,7 @@ iterations <- as.integer(args[[3]])
 D <- 10
 
 readPartition <- function(part) {
-  t(sapply(part, function(line) {
+  m <- t(sapply(part, function(line) {
     as.numeric(strsplit(line, " ")[[1]])
   }))
 }

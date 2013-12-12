@@ -9,6 +9,33 @@ readRaw <- function(con) {
   data <- readBin(con, raw(), as.integer(dataLen), endian="big")
 }
 
+readRawLen <- function(con, dataLen) {
+  data <- readBin(con, raw(), as.integer(dataLen), endian="big")
+}
+
+readDeserialize <- function(con) {
+  # We have two cases that are possible - In one, the entire partition is
+  # encoded as a byte array, so we have only one value to read. If so just
+  # return firstData
+  dataLen <- readInt(con)
+  firstData <- unserialize(
+      readBin(con, raw(), as.integer(dataLen), endian="big"))
+
+  # Else, read things into a list
+  dataLen <- readInt(con)
+  if (length(dataLen) > 0 && dataLen > 0) {
+    data <- list(firstData)
+    while (length(dataLen) > 0 && dataLen > 0) {
+      data[[length(data) + 1L]] <- unserialize(
+          readBin(con, raw(), as.integer(dataLen), endian="big"))
+      dataLen <- readInt(con)
+    }
+    unlist(data, recursive = FALSE)
+  } else {
+    firstData
+  }
+}
+
 readString <- function(con) {
   stringLen <- readInt(con)
   string <- readBin(con, raw(), stringLen, endian="big")
