@@ -12,4 +12,7 @@ package catalyst
  *   <li>debugging support - pretty printing, easy splicing of trees, etc.</li>
  * </ul>
  */
-package object trees
+package object trees {
+  // Since we want tree nodes to be lightweight, we create one logger for all treenode instances.
+  protected val logger = Logger("catalyst.trees")
+}

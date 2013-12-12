@@ -11,10 +11,11 @@ libraryDependencies ++= Seq(
  //"net.hydromatic" % "optiq-core" % "0.4.16-SNAPSHOT",
  "org.apache.hive" % "hive-metastore" % "0.10.0",
  "org.apache.hive" % "hive-exec" % "0.10.0",
- "org.apache.hive" % "hive-builtins" % "0.10.0")
+ "org.apache.hive" % "hive-builtins" % "0.10.0",
+  "com.typesafe" %% "scalalogging-slf4j" % "1.0.1")
 
- // Multiple queries rely on the TestShark singleton.  See comments there for more details.
- parallelExecution in Test := false
+// Multiple queries rely on the TestShark singleton.  See comments there for more details.
+parallelExecution in Test := false
 
 resolvers ++= Seq(
     // For Optiq

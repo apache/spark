@@ -159,7 +159,7 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
     val aggFunctions = aggImplementations.flatMap(_ collect { case f: AggregateFunction => f })
     assert(aggFunctions.nonEmpty)
 
-    //TOOD: println(s"Running aggregates: $aggFunctions")
+    logger.debug(s"Running aggregates: $aggFunctions")
     child.execute().foreach { row =>
       val input = Vector(row)
       aggFunctions.foreach(_.apply(input))

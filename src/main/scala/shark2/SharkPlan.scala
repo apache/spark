@@ -4,7 +4,7 @@ package shark2
 import catalyst.plans.QueryPlan
 import org.apache.spark.rdd.RDD
 
-abstract class SharkPlan extends QueryPlan[SharkPlan] {
+abstract class SharkPlan extends QueryPlan[SharkPlan] with Logging {
   self: Product =>
 
   /**

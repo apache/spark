@@ -52,7 +52,7 @@ abstract trait PlanningStrategies {
       classOf[Average],
       classOf[Sum])
 
-    /** Returns true if [[exprs]] contains only aggregates that can be computed using Acumulators. */
+    /** Returns true if [[exprs]] contains only aggregates that can be computed using Accumulators. */
     def onlyAllowedAggregates(exprs: Seq[Expression]): Boolean = {
       val aggs = exprs.flatMap(_.collect { case a: AggregateExpression => a}).map(_.getClass)
       aggs.map(allowedAggregates contains _).reduceLeft(_ && _)
@@ -68,7 +68,7 @@ abstract trait PlanningStrategies {
   object SparkEquiInnerJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case FilteredOperation(predicates, logical.Join(left, right, Inner, condition)) =>
-        println(s"Considering join: ${predicates ++ condition}")
+        logger.debug(s"Considering join: ${predicates ++ condition}")
         // Find equi-join predicates that can be evaluated before the join, and thus can be used as join keys.
         // Note we can only mix in the conditions with other predicates because the match above ensures that this is
         // and Inner join.
@@ -90,18 +90,16 @@ abstract trait PlanningStrategies {
 
           val joinOp = shark2.SparkEquiInnerJoin(leftKeys, rightKeys, planLater(left), planLater(right))
 
-          println(s"join planned ${joinOp}")
-
           // Make sure other conditions are met if present.
           if(otherPredicates.nonEmpty)
             shark2.Filter(combineConjunctivePredicates(otherPredicates), joinOp) :: Nil
           else
             joinOp :: Nil
         } else {
-          println("Avoiding spark join with no conditions.")
+          logger.debug(s"Avoiding spark join with no join keys.")
           Nil
         }
-      case _ => println("NO JOIN"); Nil
+      case _ => Nil
     }
 
     private def combineConjunctivePredicates(predicates: Seq[Expression]) =

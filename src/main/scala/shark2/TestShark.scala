@@ -43,7 +43,7 @@ import org.apache.hadoop.hive.metastore.MetaStoreUtils
  * seems to lead to weird non-deterministic failures.  Therefore, the execution of testcases that rely on TestShark
  * must be serialized.
  */
-object TestShark {
+object TestShark extends Logging {
   self =>
 
   val WAREHOUSE_PATH = getTempFilePath("sharkWarehouse")
@@ -81,6 +81,9 @@ object TestShark {
 
     runSqlHive("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + METASTORE_PATH + ";create=true")
     runSqlHive("set hive.metastore.warehouse.dir=" + WAREHOUSE_PATH)
+
+    // HACK: Hive is too noisy by default.
+    org.apache.log4j.LogManager.getCurrentLoggers.foreach(_.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN))
   }
 
   /**
@@ -142,7 +145,7 @@ object TestShark {
       // Make sure any test tables referenced are loaded.
       val referencedTables = parsed collect { case UnresolvedRelation(name, _) => name.split("\\.").last }
       val referencedTestTables = referencedTables.filter(testTableNames.contains)
-      println(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
+      logger.debug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
       // Proceed with analysis.
       analyze(parsed)
@@ -208,7 +211,7 @@ object TestShark {
   private val loadedTables = new collection.mutable.HashSet[String]
   def loadTestTable(name: String) {
     if(!(loadedTables contains name)) {
-      println(s"Loading test table $name")
+      logger.info(s"Loading test table $name")
       val createCmds = testTables.find(_.name == name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_.q.stringResult())
       loadedTables += name
@@ -227,10 +230,9 @@ object TestShark {
       runSqlHive("set datanucleus.cache.collections=true")
       runSqlHive("set datanucleus.cache.collections.lazy=true")
 
-
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach(t => {
-        println(s"Deleting table $t")
+        logger.debug(s"Deleting table $t")
         val table = catalog.client.getTable("default", t)
 
         catalog.client.listIndexes("default", t, 255)
@@ -241,7 +243,7 @@ object TestShark {
       })
 
       catalog.client.getAllDatabases.filterNot(_ == "default").foreach {db =>
-        println(s"Dropping Database: $db")
+        logger.debug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
       }
 
@@ -250,7 +252,7 @@ object TestShark {
       runSqlHive("USE default")
     } catch {
       case e: Exception =>
-        println(s"FATAL ERROR: Failed to reset TestDB state. $e")
+        logger.error(s"FATAL ERROR: Failed to reset TestDB state. $e")
         // At this point there is really no reason to continue, but the test framework traps exits.  So instead we just
         // pause forever so that at least the developer can see where things started to go wrong.
         Thread.sleep(100000)

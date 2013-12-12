@@ -23,7 +23,7 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
    * Given a [[plan.logical.LogicalPlan]], returns a list of [[PhysicalPlans]] that can be used for execution. If this
    * strategy does not apply to the give logical operation then an empty list should be returned.
    */
-  abstract protected class Strategy {
+  abstract protected class Strategy extends Logging {
     def apply(plan: LogicalPlan): Seq[PhysicalPlan]
 
   }
