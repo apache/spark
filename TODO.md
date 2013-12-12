@@ -1,4 +1,4 @@
-# Things to do for SparkR, roughly in order of importance
+## Things to do for SparkR, roughly in order of importance
 
 ## Unit tests still TODO
 
