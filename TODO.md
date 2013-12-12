@@ -1,4 +1,15 @@
-# Things to do for SparkR
+# Things to do for SparkR, roughly in order of importance
+
+## Unit tests still TODO
+
+1. textFile + collect -- use README.md, or some test file (check if minSplits
+works correctly)
+2. utils.R - Check if dependencies are serialized correctly
+3. convertJListToRList
+
+## Documentation
+
+1. Write Rd documentation for RRDD functions, context functions
 
 ## Functions to support
 
@@ -19,14 +30,3 @@ this for any given R file to be sourced in the worker before functions are run.
 3. Profile serialization overhead and see if there is anything better we can do.
 4. Reduce code duplication between SparkR and PySpark
 5. Add more examples (machine learning ?) and some performance benchmarks.
-
-## Unit tests still TODO
-
-1. textFile + collect -- use README.md, or some test file (check if minSplits
-works correctly)
-2. utils.R - Check if dependencies are serialized correctly
-3. convertJListToRList
-
-## Documentation
-
-1. Write Rd documentation for RRDD functions, context functions
