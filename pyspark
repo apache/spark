@@ -59,8 +59,7 @@ if [ -n "$IPYTHON_OPTS" ]; then
 fi
 
 if [[ "$IPYTHON" = "1" ]] ; then
-  IPYTHON_OPTS=${IPYTHON_OPTS:--i}
-  exec ipython "$IPYTHON_OPTS" -c "%run $PYTHONSTARTUP"
+  exec ipython "$IPYTHON_OPTS" "$@"
 else
   exec "$PYSPARK_PYTHON" "$@"
 fi
