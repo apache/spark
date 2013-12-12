@@ -50,6 +50,7 @@ object TestShark {
   val METASTORE_PATH = getTempFilePath("sharkMetastore")
   val MASTER = "local"
 
+  /** A local shark context */
   protected val sc = {
     // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
     // without restarting the JVM.
@@ -61,7 +62,18 @@ object TestShark {
 
   configure()
 
-  def configure() {
+  /** The location of the compiled hive distribution */
+  lazy val hiveHome = envVarToFile("HIVE_HOME")
+  /** The location of the hive source code. */
+  lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
+
+  /* A catalyst metadata catalog that points to the Shark/Hive Metastore. */
+  val catalog = new HiveMetastoreCatalog(SharkContext.hiveconf)
+  /* An analyzer that uses the Shark/Hive metastore. */
+  val analyze = new Analyzer(catalog)
+
+  /** Sets up the system initially or after a RESET command */
+  protected def configure() {
     // Use hive natively for queries that won't be executed by catalyst. This is because
     // shark has dependencies on a custom version of hive that we are trying to avoid
     // in catalyst.
@@ -84,26 +96,15 @@ object TestShark {
     ret
   }
 
+  /**
+   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the hive test cases
+   * assume the system is set up.
+   */
   private def rewritePaths(cmd: String): String =
     if(cmd startsWith "LOAD")
       cmd.replaceAll("\\.\\.", hiveDevHome.getCanonicalPath)
     else
       cmd
-
-  /** The location of the compiled hive distribution */
-  lazy val hiveHome = envVarToFile("HIVE_HOME")
-  /** The location of the hive source code. */
-  lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
-
-  def loadKv1 {
-    //sc.runSql("DROP TABLE IF EXISTS test")
-    runSqlHive("CREATE TABLE test (key INT, val STRING)")
-    // USE ENV VARS
-    runSqlHive("""LOAD DATA LOCAL INPATH '/Users/marmbrus/workspace/hive/data/files/kv1.txt' INTO TABLE test""")
-  }
-
-  val catalog = new HiveMetastoreCatalog(SharkContext.hiveconf)
-  val analyze = new Analyzer(catalog)
 
   object TrivalPlanner extends QueryPlanner[SharkPlan] with PlanningStrategies {
     val sc = self.sc
