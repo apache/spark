@@ -96,7 +96,7 @@ object SparkBuild extends Build {
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization := "org.apache.spark",
-    version := "0.8.1-incubating",
+    version := "0.8.2-incubating-SNAPSHOT",
     scalaVersion := "2.9.3",
     scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
       "-target:" + SCALAC_JVM_VERSION),
