@@ -17,7 +17,8 @@ private class PairwiseRRDD[T: ClassManifest](
     numPartitions: Int,
     hashFunc: Array[Byte],
     dataSerialized: Boolean,
-    functionDependencies: Array[Byte])
+    functionDependencies: Array[Byte],
+    packageNames: Array[Byte])
   extends RDD[(Int, Array[Byte])](parent) {
 
   override def getPartitions = parent.partitions
@@ -30,7 +31,8 @@ private class PairwiseRRDD[T: ClassManifest](
     RRDD.startStderrThread(proc)
 
     RRDD.startStdinThread(proc, hashFunc, dataSerialized,
-      functionDependencies, firstParent[T].iterator(split, context), numPartitions)
+      functionDependencies, packageNames,
+      firstParent[T].iterator(split, context), numPartitions)
 
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
@@ -83,7 +85,8 @@ class RRDD[T: ClassManifest](
     parent: RDD[T],
     func: Array[Byte],
     dataSerialized: Boolean,
-    functionDependencies: Array[Byte])
+    functionDependencies: Array[Byte],
+    packageNames: Array[Byte])
   extends RDD[Array[Byte]](parent) with Logging {
 
   override def getPartitions = parent.partitions
@@ -98,7 +101,8 @@ class RRDD[T: ClassManifest](
 
     // Write -1 in numPartitions to indicate this is a normal RDD
     RRDD.startStdinThread(proc, func, dataSerialized,
-      functionDependencies, firstParent[T].iterator(split, context), numPartitions = -1)
+      functionDependencies, packageNames,
+      firstParent[T].iterator(split, context), numPartitions = -1)
 
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
@@ -190,6 +194,7 @@ object RRDD {
       func: Array[Byte],
       dataSerialized: Boolean,
       functionDependencies: Array[Byte],
+      packageNames: Array[Byte],
       iter: Iterator[T],
       numPartitions: Int) {
 
@@ -216,6 +221,9 @@ object RRDD {
 
         dataOut.writeInt(functionDependencies.length)
         dataOut.write(functionDependencies, 0, functionDependencies.length)
+
+        dataOut.writeInt(packageNames.length)
+        dataOut.write(packageNames, 0, packageNames.length)
 
         dataOut.writeInt(numPartitions)
 
