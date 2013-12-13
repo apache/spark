@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io._
-import java.net.URI
+import java.net.{URI, URL}
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -610,6 +610,7 @@ class SparkContext(
 
   /**
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
+   * This also makes the JAR available to this driver process.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
@@ -648,9 +649,29 @@ class SparkContext(
           case _ =>
             path
         }
+
+        // Add jar to driver class loader so it is available for driver, even if it is not on the classpath
+        uri.getScheme match {
+          case null | "file" | "local" =>
+            // Assume file exists on current (driver) node as well.  Unlike executors, driver doesn't need to
+            // download the jar since it's local.
+            addUrlToDriverLoader(new URL("file:" + uri.getPath))
+          case "http" | "https" | "ftp" =>
+            // Should be handled by the URLClassLoader, pass along entire URL
+            addUrlToDriverLoader(new URL(path))
+          case other =>
+            logWarning("This URI scheme for URI " + path + " is not supported by the driver class loader")
+        }
       }
       addedJars(key) = System.currentTimeMillis
       logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+    }
+  }
+
+  private def addUrlToDriverLoader(url: URL) {
+    if (!env.classLoader.getURLs.contains(url)) {
+      logInfo("Adding JAR " + url + " to driver class loader")
+      env.classLoader.addURL(url)
     }
   }
 
