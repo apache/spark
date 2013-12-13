@@ -108,17 +108,20 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
    * the values from `other`. The indices of `this` and `other` must be the same.
    */
   def diff(other: VertexPartition[VD]): VertexPartition[VD] = {
-    assert(index == other.index)
-
-    val newMask = mask & other.mask
-    var i = newMask.nextSetBit(0)
-    while (i >= 0) {
-      if (values(i) == other.values(i)) {
-        newMask.unset(i)
+    if (index != other.index) {
+      logWarning("Diffing two VertexPartitions with different indexes is slow.")
+      diff(createUsingIndex(other.iterator))
+    } else {
+      val newMask = mask & other.mask
+      var i = newMask.nextSetBit(0)
+      while (i >= 0) {
+        if (values(i) == other.values(i)) {
+          newMask.unset(i)
+        }
+        i = newMask.nextSetBit(i + 1)
       }
-      i = newMask.nextSetBit(i + 1)
+      new VertexPartition(index, other.values, newMask)
     }
-    new VertexPartition(index, other.values, newMask)
   }
 
   /** Inner join another VertexPartition. */
