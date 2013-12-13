@@ -14,6 +14,8 @@ source_local("serialize.R")
 sparkHome <- Sys.getenv("SPARK_HOME")
 .libPaths(c( .libPaths(), paste(sparkHome,"/R/lib", sep="")))
 
+suppressPackageStartupMessages(library(SparkR))
+
 # NOTE: We use "stdin" to get the process stdin instead of the command line
 inputCon  <- file("stdin", open = "rb")
 
@@ -26,6 +28,10 @@ execFunctionName <- unserialize(readRawLen(inputCon, execLen))
 
 # read the isSerialized bit flag
 isSerialized <- readInt(inputCon)
+
+# Redirect stdout to stderr to prevent print statements from
+# interfering with outputStream
+sink(stderr())
 
 # read function dependencies
 depsLen <- readInt(inputCon)
@@ -42,9 +48,11 @@ if (depsLen > 0) {
   unlink(depsFileName)
 }
 
-# Redirect stdout to stderr to prevent print statements from
-# interfering with outputStream
-sink(stderr())
+# Include packages as required
+packageNames <- unserialize(readRaw(inputCon))
+for (pkg in packageNames) {
+  suppressPackageStartupMessages(require(as.character(pkg), character.only=TRUE))
+}
 
 # If -1: read as normal RDD; if >= 0, treat as pairwise RDD and treat the int
 # as number of partitions to create.

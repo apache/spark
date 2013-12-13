@@ -79,3 +79,42 @@ parallelize <- function(sc, coll, numSlices = 1) {
 
   RRDD(jrdd, TRUE)
 }
+
+
+#' Include this specified package on all workers
+#'
+#' This function can be used to include a package on all workers before the
+#' user's code is executed. This is useful in scenarios where other R package
+#' functions are used in a function passed to functions like \Code{lapply}.
+#' NOTE: The package is assumed to be installed on every node in the Spark
+#' cluster.
+#'
+#' @param sc SparkContext to use
+#' @param pkg Package name
+#'
+#' @export
+#' @examples
+#'\dontrun{
+#'  library(Matrix)
+#'
+#'  sc <- sparkR.init()
+#'  # Include the matrix library we will be using
+#'  includePackage(Matrix)
+#'
+#'  generateSparse <- function(x) { 
+#'    sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3)) 
+#'  }
+#'  
+#'  rrdd <- lapplyPartition(parallelize(sc, 1:2, 2L), generateSparse)
+#'  collect(rrdd)
+#'}
+includePackage <- function(sc, pkg) {
+  pkg <- as.character(substitute(pkg))
+  if (exists(".packages", .sparkREnv)) {
+    packages <- .sparkREnv[[".packages"]]
+  } else {
+    packages <- list()
+  }
+  packages <- c(packages, pkg)
+  .sparkREnv[[".packages"]] <- packages
+}

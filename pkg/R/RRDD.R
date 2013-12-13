@@ -113,6 +113,9 @@ setMethod("lapplyPartition",
             serializedFunc <- serialize("computeFunc",
                                         connection = NULL, ascii = TRUE)
             serializedFuncArr <- .jarray(serializedFunc)
+            packageNamesArr <- .jarray(serialize(.sparkREnv[[".packages"]],
+                                                 connection = NULL,
+                                                 ascii = TRUE))
 
             depsBin <- getDependencies(computeFunc)
             depsBinArr <- .jarray(depsBin)
@@ -121,6 +124,7 @@ setMethod("lapplyPartition",
                            serializedFuncArr,
                            X@serialized,
                            depsBinArr,
+                           packageNamesArr,
                            X@jrdd$classManifest())
             jrdd <- rrddRef$asJavaRDD()
             RRDD(jrdd, TRUE)
@@ -190,6 +194,10 @@ setMethod("partitionBy",
                                             ascii = TRUE)
             serializedHashFuncBytes <- .jarray(serializedHashFunc)
 
+            packageNamesArr <- .jarray(serialize(.sparkREnv[[".packages"]],
+                                                 connection = NULL,
+                                                 ascii = TRUE))
+
             # We create a PairwiseRRDD that extends RDD[(Array[Byte],
             # Array[Byte])], where the key is the hashed split, the value is
             # the content (key-val pairs). 
@@ -199,6 +207,7 @@ setMethod("partitionBy",
                                 serializedHashFuncBytes,
                                 rrdd@serialized,
                                 depsBinArr,
+                                packageNamesArr,
                                 rrdd@jrdd$classManifest())
 
             # Create a corresponding partitioner.

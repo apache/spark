@@ -18,5 +18,5 @@ exportMethods(
              )
 
 # S3 methods exported
-export("textFile", "parallelize", "hashCode")
+export("textFile", "parallelize", "hashCode", "includePackage")
 exportPattern("^sparkR")
