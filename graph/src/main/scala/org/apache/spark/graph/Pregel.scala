@@ -107,9 +107,9 @@ object Pregel {
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
       // receive the messages
-      val changedVerts = g.vertices.deltaJoin(messages)(vprog).cache() // updating the vertices
+      val changedVerts = g.vertices.zipJoin(messages)(vprog).cache() // updating the vertices
       // replicate the changed vertices
-      g = g.deltaJoinVertices(changedVerts)
+      g = g.updateVertices(changedVerts)
 
       val oldMessages = messages
       // compute the messages

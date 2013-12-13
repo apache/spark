@@ -129,13 +129,25 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   } // end of printLineage
 
   override def reverse: Graph[VD, ED] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.reverse), vertexPlacement)
+    new GraphImpl(vertices, edges.mapEdgePartitions(_.reverse), vertexPlacement, vTableReplicated)
 
-  override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] =
-    new GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, vertexPlacement)
+  override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] = {
+    if (classManifest[VD] equals classManifest[VD2]) {
+      // The map preserves type, so we can use incremental replication
+      val newVerts = vertices.mapVertexPartitions(_.map(f))
+      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
+      val newVTableReplicated = new VTableReplicated[VD2](
+        newVerts, edges, vertexPlacement,
+        Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
+      new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
+    } else {
+      // The map does not preserve type, so we must re-replicate all vertices
+      new GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, vertexPlacement)
+    }
+  }
 
   override def mapEdges[ED2: ClassManifest](f: Edge[ED] => ED2): Graph[VD, ED2] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.map(f)), vertexPlacement)
+    new GraphImpl(vertices, edges.mapEdgePartitions(_.map(f)), vertexPlacement, vTableReplicated)
 
   override def mapTriplets[ED2: ClassManifest](f: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
     // Use an explicit manifest in PrimitiveKeyOpenHashMap init so we don't pull in the implicit
@@ -153,7 +165,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         }
         Iterator((pid, newEdgePartition))
     }
-    new GraphImpl(vertices, new EdgeRDD(newETable), vertexPlacement)
+    new GraphImpl(vertices, new EdgeRDD(newETable), vertexPlacement, vTableReplicated)
   }
 
   override def subgraph(
@@ -184,7 +196,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
     ClosureCleaner.clean(merge)
     val newETable = edges.mapEdgePartitions(_.groupEdges(merge))
-    new GraphImpl(vertices, newETable, vertexPlacement)
+    new GraphImpl(vertices, newETable, vertexPlacement, vTableReplicated)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -193,7 +205,9 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   override def mapReduceTriplets[A: ClassManifest](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
-      reduceFunc: (A, A) => A): VertexRDD[A] = {
+      reduceFunc: (A, A) => A,
+      skipStaleSrc: Boolean = false,
+      skipStaleDst: Boolean = false): VertexRDD[A] = {
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
@@ -211,14 +225,21 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       // Iterate over the partition
       val et = new EdgeTriplet[VD, ED](vertexPartition)
       val filteredEdges = edgePartition.iterator.flatMap { e =>
-        et.set(e)
-        if (mapUsesSrcAttr) {
-          et.srcAttr = vertexPartition(e.srcId)
+        // Ensure that the edge meets the requirements of skipStaleSrc and skipStaleDst
+        val srcVertexOK = !skipStaleSrc || vertexPartition.isDefined(e.srcId)
+        val dstVertexOK = !skipStaleDst || vertexPartition.isDefined(e.dstId)
+        if (srcVertexOK && dstVertexOK) {
+          et.set(e)
+          if (mapUsesSrcAttr) {
+            et.srcAttr = vertexPartition(e.srcId)
+          }
+          if (mapUsesDstAttr) {
+            et.dstAttr = vertexPartition(e.dstId)
+          }
+          mapFunc(et)
+        } else {
+          Iterator.empty
         }
-        if (mapUsesDstAttr) {
-          et.dstAttr = vertexPartition(e.dstId)
-        }
-        mapFunc(et)
       }
       // Note: This doesn't allow users to send messages to arbitrary vertices.
       vertexPartition.aggregateUsingIndex(filteredEdges, reduceFunc).iterator
@@ -229,21 +250,26 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   } // end of mapReduceTriplets
 
   override def outerJoinVertices[U: ClassManifest, VD2: ClassManifest]
-    (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2): Graph[VD2, ED] = {
-    ClosureCleaner.clean(updateF)
-    val newVTable = vertices.leftJoin(updates)(updateF)
-    new GraphImpl(newVTable, edges, vertexPlacement)
+      (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2): Graph[VD2, ED] = {
+    if (classManifest[VD] equals classManifest[VD2]) {
+      // updateF preserves type, so we can use incremental replication
+      val newVerts = vertices.leftJoin(updates)(updateF)
+      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
+      val newVTableReplicated = new VTableReplicated[VD2](
+        newVerts, edges, vertexPlacement,
+        Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
+      new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
+    } else {
+      // updateF does not preserve type, so we must re-replicate all vertices
+      val newVerts = vertices.leftJoin(updates)(updateF)
+      new GraphImpl(newVerts, edges, vertexPlacement)
+    }
   }
 
-  override def deltaJoinVertices(changedVerts: VertexRDD[VD]): Graph[VD, ED] = {
-    val newVerts = vertices.leftZipJoin(changedVerts) { (vid, oldAttr, newAttrOpt) =>
-      newAttrOpt match {
-        case Some(newAttr) => newAttr
-        case None => oldAttr
-      }
-    }
+  override def updateVertices(updates: VertexRDD[VD]): Graph[VD, ED] = {
+    val newVerts = vertices.update(updates)
     val newVTableReplicated = new VTableReplicated(
-      changedVerts, edges, vertexPlacement, Some(vTableReplicated))
+      updates, edges, vertexPlacement, Some(vTableReplicated))
     new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
   }
 } // end of class GraphImpl

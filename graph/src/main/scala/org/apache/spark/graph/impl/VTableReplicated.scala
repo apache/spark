@@ -7,26 +7,26 @@ import org.apache.spark.util.collection.{PrimitiveVector, OpenHashSet}
 import org.apache.spark.graph._
 
 /**
- * Stores the vertex attribute values after they are replicated.
+ * A view of the vertices after they are shipped to the join sites specified in
+ * `vertexPlacement`. The resulting view is co-partitioned with `edges`. If `prevVTableReplicated`
+ * is specified, `updatedVerts` are treated as incremental updates to the previous view. Otherwise,
+ * a fresh view is created.
+ *
+ * The view is always cached (i.e., once it is created, it remains materialized). This avoids
+ * constructing it twice if the user calls graph.triplets followed by graph.mapReduceTriplets, for
+ * example.
  */
 private[impl]
 class VTableReplicated[VD: ClassManifest](
-    vTable: VertexRDD[VD],
-    eTable: EdgeRDD[_],
+    updatedVerts: VertexRDD[VD],
+    edges: EdgeRDD[_],
     vertexPlacement: VertexPlacement,
     prevVTableReplicated: Option[VTableReplicated[VD]] = None) {
 
-  val bothAttrs: RDD[(Pid, VertexPartition[VD])] =
-    createVTableReplicated(vTable, eTable, vertexPlacement, true, true)
-
-  val srcAttrOnly: RDD[(Pid, VertexPartition[VD])] =
-    createVTableReplicated(vTable, eTable, vertexPlacement, true, false)
-
-  val dstAttrOnly: RDD[(Pid, VertexPartition[VD])] =
-    createVTableReplicated(vTable, eTable, vertexPlacement, false, true)
-
-  val noAttrs: RDD[(Pid, VertexPartition[VD])] =
-    createVTableReplicated(vTable, eTable, vertexPlacement, false, false)
+  val bothAttrs: RDD[(Pid, VertexPartition[VD])] = createVTableReplicated(true, true)
+  val srcAttrOnly: RDD[(Pid, VertexPartition[VD])] = createVTableReplicated(true, false)
+  val dstAttrOnly: RDD[(Pid, VertexPartition[VD])] = createVTableReplicated(false, true)
+  val noAttrs: RDD[(Pid, VertexPartition[VD])] = createVTableReplicated(false, false)
 
   def get(includeSrc: Boolean, includeDst: Boolean): RDD[(Pid, VertexPartition[VD])] = {
     (includeSrc, includeDst) match {
@@ -38,29 +38,28 @@ class VTableReplicated[VD: ClassManifest](
   }
 
   private def createVTableReplicated(
-       vTable: VertexRDD[VD],
-       eTable: EdgeRDD[_],
-       vertexPlacement: VertexPlacement,
-       includeSrcAttr: Boolean,
-       includeDstAttr: Boolean): RDD[(Pid, VertexPartition[VD])] = {
+      includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[(Pid, VertexPartition[VD])] = {
 
     val placement = vertexPlacement.get(includeSrcAttr, includeDstAttr)
     val vdManifest = classManifest[VD]
 
-    // Send each edge partition the vertex attributes it wants, as specified in
-    // vertexPlacement
-    val msgsByPartition = placement.zipPartitions(vTable.partitionsRDD)(VTableReplicated.buildBuffer(_, _)(vdManifest))
-      .partitionBy(eTable.partitioner.get).cache()
+    // Ship vertex attributes to edge partitions according to vertexPlacement
+    val shippedVerts = placement
+      .zipPartitions(updatedVerts.partitionsRDD)(VTableReplicated.buildBuffer(_, _)(vdManifest))
+      .partitionBy(edges.partitioner.get).cache()
     // TODO: Consider using a specialized shuffler.
 
     prevVTableReplicated match {
       case Some(vTableReplicated) =>
-        val prev: RDD[(Pid, VertexPartition[VD])] =
+        val prevView: RDD[(Pid, VertexPartition[VD])] =
           vTableReplicated.get(includeSrcAttr, includeDstAttr)
 
-        prev.zipPartitions(msgsByPartition) { (vTableIter, msgsIter) =>
-          val (pid, vertexPartition) = vTableIter.next()
-          val newVPart = vertexPartition.updateUsingIndex(msgsIter.flatMap(_._2.iterator))(vdManifest)
+        // Update vTableReplicated with updatedVerts, setting staleness flags in the resulting
+        // VertexPartitions
+        prevView.zipPartitions(shippedVerts) { (prevViewIter, shippedVertsIter) =>
+          val (pid, prevVPart) = prevViewIter.next()
+          val newVPart = prevVPart.updateHideUnchanged(
+            shippedVertsIter.flatMap(_._2.iterator))
           Iterator((pid, newVPart))
         }.cache().setName("VTableReplicated delta %s %s".format(includeSrcAttr, includeDstAttr))
 
@@ -70,7 +69,7 @@ class VTableReplicated[VD: ClassManifest](
         // will receive, because it stores vids from both the source and destination
         // of edges. It must always include both source and destination vids because
         // some operations, such as GraphImpl.mapReduceTriplets, rely on this.
-        val localVidMap = eTable.partitionsRDD.mapPartitions(_.map {
+        val localVidMap = edges.partitionsRDD.mapPartitions(_.map {
           case (pid, epart) =>
             val vidToIndex = new VertexIdToIndexMap
             epart.foreach { e =>
@@ -82,12 +81,12 @@ class VTableReplicated[VD: ClassManifest](
 
         // Within each edge partition, place the vertex attributes received from
         // msgsByPartition into the correct locations specified in localVidMap
-        localVidMap.zipPartitions(msgsByPartition) { (mapIter, msgsIter) =>
+        localVidMap.zipPartitions(shippedVerts) { (mapIter, shippedVertsIter) =>
           val (pid, vidToIndex) = mapIter.next()
           assert(!mapIter.hasNext)
           // Populate the vertex array using the vidToIndex map
           val vertexArray = vdManifest.newArray(vidToIndex.capacity)
-          for ((_, block) <- msgsIter) {
+          for ((_, block) <- shippedVertsIter) {
             for (i <- 0 until block.vids.size) {
               val vid = block.vids(i)
               val attr = block.attrs(i)
@@ -95,17 +94,18 @@ class VTableReplicated[VD: ClassManifest](
               vertexArray(ind) = attr
             }
           }
-          Iterator((pid, new VertexPartition(vidToIndex, vertexArray, vidToIndex.getBitSet)(vdManifest)))
+          val newVPart = new VertexPartition(
+            vidToIndex, vertexArray, vidToIndex.getBitSet)(vdManifest)
+          Iterator((pid, newVPart))
         }.cache().setName("VTableReplicated %s %s".format(includeSrcAttr, includeDstAttr))
     }
   }
-
 }
 
-
 object VTableReplicated {
-
-  def buildBuffer[VD: ClassManifest](pid2vidIter: Iterator[Array[Array[Vid]]], vertexPartIter: Iterator[VertexPartition[VD]]) = {
+  protected def buildBuffer[VD: ClassManifest](
+      pid2vidIter: Iterator[Array[Array[Vid]]],
+      vertexPartIter: Iterator[VertexPartition[VD]]) = {
     val pid2vid: Array[Array[Vid]] = pid2vidIter.next()
     val vertexPart: VertexPartition[VD] = vertexPartIter.next()
 

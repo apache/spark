@@ -242,7 +242,9 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    */
   def mapReduceTriplets[A: ClassManifest](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
-      reduceFunc: (A, A) => A)
+      reduceFunc: (A, A) => A,
+      skipStaleSrc: Boolean = false,
+      skipStaleDst: Boolean = false)
     : VertexRDD[A]
 
   /**
@@ -278,7 +280,10 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
       (mapFunc: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
 
-  def deltaJoinVertices(changedVerts: VertexRDD[VD]): Graph[VD, ED]
+  /**
+   * Replace vertices in the graph with corresponding vertices in `updates`.
+   */
+  def updateVertices(updates: VertexRDD[VD]): Graph[VD, ED]
 
   // Save a copy of the GraphOps object so there is always one unique GraphOps object
   // for a given Graph object, and thus the lazy vals in GraphOps would work as intended.

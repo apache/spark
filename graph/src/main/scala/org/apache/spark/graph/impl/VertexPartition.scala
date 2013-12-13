@@ -94,19 +94,22 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition(index, values, newMask)
   }
 
+  /**
+   * Hides vertices that are the same between this and other. For vertices that are different, keeps
+   * the values from `other`. The indices of `this` and `other` must be the same.
+   */
   def diff(other: VertexPartition[VD]): VertexPartition[VD] = {
     assert(index == other.index)
 
     val newMask = mask & other.mask
-
     var i = newMask.nextSetBit(0)
     while (i >= 0) {
       if (values(i) == other.values(i)) {
         newMask.unset(i)
       }
-      i = mask.nextSetBit(i + 1)
+      i = newMask.nextSetBit(i + 1)
     }
-    new VertexPartition[VD](index, other.values, newMask)
+    new VertexPartition(index, other.values, newMask)
   }
 
   /** Inner join another VertexPartition. */
@@ -124,30 +127,6 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
       var i = newMask.nextSetBit(0)
       while (i >= 0) {
         newValues(i) = f(index.getValue(i), values(i), other.values(i))
-        i = mask.nextSetBit(i + 1)
-      }
-      new VertexPartition(index, newValues, newMask)
-    }
-  }
-
-  /** Inner join another VertexPartition. */
-  def deltaJoin[VD2: ClassManifest, VD3: ClassManifest]
-      (other: VertexPartition[VD2])
-      (f: (Vid, VD, VD2) => VD3): VertexPartition[VD3] =
-  {
-    if (index != other.index) {
-      logWarning("Joining two VertexPartitions with different indexes is slow.")
-      join(createUsingIndex(other.iterator))(f)
-    } else {
-      val newValues = new Array[VD3](capacity)
-      val newMask = mask & other.mask
-
-      var i = newMask.nextSetBit(0)
-      while (i >= 0) {
-        newValues(i) = f(index.getValue(i), values(i), other.values(i))
-        if (newValues(i) == values(i)) {
-          newMask.unset(i)
-        }
         i = mask.nextSetBit(i + 1)
       }
       new VertexPartition(index, newValues, newMask)
@@ -196,17 +175,32 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition[VD2](index, newValues, newMask)
   }
 
-  def updateUsingIndex[VD2: ClassManifest](iter: Iterator[Product2[Vid, VD2]])
-    : VertexPartition[VD2] = {
+  /** Same effect as leftJoin(iter) { (vid, a, bOpt) => bOpt.getOrElse(a) } */
+  def update(iter: Iterator[Product2[Vid, VD]]): VertexPartition[VD] = {
+    val newValues = new Array[VD](capacity)
+    System.arraycopy(values, 0, newValues, 0, newValues.length)
+    iter.foreach { case (vid, vdata) =>
+      val pos = index.getPos(vid)
+      newValues(pos) = vdata
+    }
+    new VertexPartition(index, newValues, mask)
+  }
+
+  /**
+   * Same effect as leftJoin(iter) { (vid, a, bOpt) => bOpt.getOrElse(a) }, but unchanged vertices
+   * are hidden using the bitmask.
+   */
+  def updateHideUnchanged(iter: Iterator[Product2[Vid, VD]])
+    : VertexPartition[VD] = {
     val newMask = new BitSet(capacity)
-    val newValues = new Array[VD2](capacity)
+    val newValues = new Array[VD](capacity)
     System.arraycopy(values, 0, newValues, 0, newValues.length)
     iter.foreach { case (vid, vdata) =>
       val pos = index.getPos(vid)
       newMask.set(pos)
       newValues(pos) = vdata
     }
-    new VertexPartition[VD2](index, newValues, newMask)
+    new VertexPartition(index, newValues, newMask)
   }
 
   def aggregateUsingIndex[VD2: ClassManifest](

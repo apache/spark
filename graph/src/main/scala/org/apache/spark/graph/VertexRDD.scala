@@ -60,7 +60,7 @@ class VertexRDD[@specialized VD: ClassManifest](
 
   /**
    * Construct a new VertexRDD that is indexed by only the keys in the RDD.
-   * The resulting VertexSet will be based on a different index and can
+   * The resulting VertexRDD will be based on a different index and can
    * no longer be quickly joined with this RDD.
    */
   def reindex(): VertexRDD[VD] = new VertexRDD(partitionsRDD.map(_.reindex()))
@@ -157,7 +157,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    *
    * @param f the function applied to each value in the RDD
    * @return a new VertexRDD with values obtained by applying `f` to
-   * each of the entries in the original VertexSet.  The resulting
+   * each of the entries in the original VertexRDD.  The resulting
    * VertexRDD retains the same index.
    */
   def mapValues[VD2: ClassManifest](f: VD => VD2): VertexRDD[VD2] =
@@ -171,12 +171,16 @@ class VertexRDD[@specialized VD: ClassManifest](
    *
    * @param f the function applied to each value in the RDD
    * @return a new VertexRDD with values obtained by applying `f` to
-   * each of the entries in the original VertexSet.  The resulting
+   * each of the entries in the original VertexRDD.  The resulting
    * VertexRDD retains the same index.
    */
   def mapValues[VD2: ClassManifest](f: (Vid, VD) => VD2): VertexRDD[VD2] =
     this.mapVertexPartitions(_.map(f))
 
+  /**
+   * Hides vertices that are the same between this and other. For vertices that are different, keeps
+   * the values from `other`.
+   */
   def diff(other: VertexRDD[VD]): VertexRDD[VD] = {
     this.zipVertexPartitions(other) { (thisPart, otherPart) =>
       thisPart.diff(otherPart)
@@ -197,21 +201,11 @@ class VertexRDD[@specialized VD: ClassManifest](
    * this and the other vertex set to a new vertex attribute.
    * @return a VertexRDD containing only the vertices in both this
    * and the other VertexSet and with tuple attributes.
-   *
    */
   def zipJoin[VD2: ClassManifest, VD3: ClassManifest]
-      (other: VertexRDD[VD2])(f: (Vid, VD, VD2) => VD3): VertexRDD[VD3] =
-  {
+      (other: VertexRDD[VD2])(f: (Vid, VD, VD2) => VD3): VertexRDD[VD3] = {
     this.zipVertexPartitions(other) { (thisPart, otherPart) =>
       thisPart.join(otherPart)(f)
-    }
-  }
-
-  def deltaJoin[VD2: ClassManifest]
-      (other: VertexRDD[VD2])(f: (Vid, VD, VD2) => VD): VertexRDD[VD] =
-  {
-    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
-      thisPart.deltaJoin(otherPart)(f)
     }
   }
 
@@ -234,31 +228,30 @@ class VertexRDD[@specialized VD: ClassManifest](
    *
    */
   def leftZipJoin[VD2: ClassManifest, VD3: ClassManifest]
-      (other: VertexRDD[VD2])(f: (Vid, VD, Option[VD2]) => VD3): VertexRDD[VD3] =
-  {
+      (other: VertexRDD[VD2])(f: (Vid, VD, Option[VD2]) => VD3): VertexRDD[VD3] = {
     this.zipVertexPartitions(other) { (thisPart, otherPart) =>
       thisPart.leftJoin(otherPart)(f)
     }
   }
 
   /**
-   * Left join this VertexSet with an RDD containing vertex attribute
-   * pairs.  If the other RDD is backed by a VertexSet with the same
+   * Left join this VertexRDD with an RDD containing vertex attribute
+   * pairs.  If the other RDD is backed by a VertexRDD with the same
    * index than the efficient leftZipJoin implementation is used.  The
    * resulting vertex set contains an entry for each vertex in this
-   * set.  If the other VertexSet is missing any vertex in this
-   * VertexSet then a `None` attribute is generated.
+   * set.  If the other VertexRDD is missing any vertex in this
+   * VertexRDD then a `None` attribute is generated.
    *
    * If there are duplicates, the vertex is picked at random.
    *
-   * @tparam VD2 the attribute type of the other VertexSet
-   * @tparam VD3 the attribute type of the resulting VertexSet
+   * @tparam VD2 the attribute type of the other VertexRDD
+   * @tparam VD3 the attribute type of the resulting VertexRDD
    *
-   * @param other the other VertexSet with which to join.
+   * @param other the other VertexRDD with which to join.
    * @param f the function mapping a vertex id and its attributes in
    * this and the other vertex set to a new vertex attribute.
    * @return a VertexRDD containing all the vertices in this
-   * VertexSet with the attribute emitted by f.
+   * VertexRDD with the attribute emitted by f.
    */
   def leftJoin[VD2: ClassManifest, VD3: ClassManifest]
       (other: RDD[(Vid, VD2)])
@@ -282,13 +275,42 @@ class VertexRDD[@specialized VD: ClassManifest](
     }
   }
 
+  /**
+   * Same effect as leftJoin(other) { (vid, a, bOpt) => bOpt.getOrElse(a) }, but `this` and `other`
+   * must have the same index.
+   */
+  def zipUpdate(other: VertexRDD[VD]): VertexRDD[VD] = {
+    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
+      thisPart.update(otherPart.iterator)
+    }
+  }
+
+  /** Same effect as leftJoin(other) { (vid, a, bOpt) => bOpt.getOrElse(a) } */
+  def update(other: RDD[(Vid, VD)]): VertexRDD[VD] = {
+    // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
+    // If the other set is a VertexRDD then we use the much more efficient leftOuterZipJoin
+    other match {
+      case other: VertexRDD[_] =>
+        zipUpdate(other)
+      case _ =>
+        new VertexRDD[VD](
+          partitionsRDD.zipPartitions(
+            other.partitionBy(this.partitioner.get), preservesPartitioning = true)
+          { (part, msgs) =>
+            val vertexPartition: VertexPartition[VD] = part.next()
+            Iterator(vertexPartition.update(msgs))
+          }
+        )
+    }
+  }
+
   def aggregateUsingIndex[VD2: ClassManifest](
       messages: RDD[(Vid, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] =
   {
     val shuffled = MsgRDDFunctions.partitionForAggregation(messages, this.partitioner.get)
     val parts = partitionsRDD.zipPartitions(shuffled, true) { (thisIter, msgIter) =>
-      val vertextPartition: VertexPartition[VD] = thisIter.next()
-      Iterator(vertextPartition.aggregateUsingIndex(msgIter, reduceFunc))
+      val vertexPartition: VertexPartition[VD] = thisIter.next()
+      Iterator(vertexPartition.aggregateUsingIndex(msgIter, reduceFunc))
     }
     new VertexRDD[VD2](parts)
   }
@@ -297,7 +319,7 @@ class VertexRDD[@specialized VD: ClassManifest](
 
 
 /**
- * The VertexRDD singleton is used to construct VertexSets
+ * The VertexRDD singleton is used to construct VertexRDDs
  */
 object VertexRDD {
 
