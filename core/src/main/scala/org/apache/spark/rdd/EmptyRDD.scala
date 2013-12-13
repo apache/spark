@@ -17,9 +17,9 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{SparkContext, SparkEnv, Partition, TaskContext}
 import scala.reflect.ClassTag
 
+import org.apache.spark.{Partition, SparkContext, TaskContext}
 
 /**
  * An RDD that is empty, i.e. has no element in it.

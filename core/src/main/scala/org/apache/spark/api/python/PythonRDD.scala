@@ -148,7 +148,7 @@ private[spark] class PythonRDD[T: ClassTag](
           case eof: EOFException => {
             throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
           }
-          case e : Throwable => throw e
+          case e: Throwable => throw e
         }
       }
 
@@ -200,7 +200,7 @@ private[spark] object PythonRDD {
       }
     } catch {
       case eof: EOFException => {}
-      case e : Throwable => throw e
+      case e: Throwable => throw e
     }
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }

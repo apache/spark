@@ -865,7 +865,6 @@ private[spark] object BlockManager extends Logging {
   }
 
   def getHeartBeatFrequencyFromSystemProperties: Long =
-
     System.getProperty("spark.storage.blockManagerTimeoutIntervalMs", "60000").toLong / 4
 
   def getDisableHeartBeatsForTesting: Boolean =

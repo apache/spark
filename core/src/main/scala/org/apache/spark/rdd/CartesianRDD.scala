@@ -44,7 +44,7 @@ class CartesianPartition(
 }
 
 private[spark]
-class CartesianRDD[T: ClassTag, U:ClassTag](
+class CartesianRDD[T: ClassTag, U: ClassTag](
     sc: SparkContext,
     var rdd1 : RDD[T],
     var rdd2 : RDD[U])

@@ -25,7 +25,7 @@ import java.util.{HashMap => JHashMap}
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
-import scala.reflect.{ ClassTag, classTag}
+import scala.reflect.{ClassTag, classTag}
 
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.io.compress.CompressionCodec
