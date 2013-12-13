@@ -40,20 +40,18 @@ class EdgeRDD[@specialized ED: ClassManifest](
 
   def mapEdgePartitions[ED2: ClassManifest](f: EdgePartition[ED] => EdgePartition[ED2])
     : EdgeRDD[ED2]= {
-    val cleanF = sparkContext.clean(f)
     new EdgeRDD[ED2](partitionsRDD.mapPartitions({ iter =>
       val (pid, ep) = iter.next()
-      Iterator(Tuple2(pid, cleanF(ep)))
+      Iterator(Tuple2(pid, f(ep)))
     }, preservesPartitioning = true))
   }
 
   def zipEdgePartitions[T: ClassManifest, U: ClassManifest]
       (other: RDD[T])
       (f: (EdgePartition[ED], Iterator[T]) => Iterator[U]): RDD[U] = {
-    val cleanF = sparkContext.clean(f)
     partitionsRDD.zipPartitions(other, preservesPartitioning = true) { (ePartIter, otherIter) =>
       val (_, edgePartition) = ePartIter.next()
-      cleanF(edgePartition, otherIter)
+      f(edgePartition, otherIter)
     }
   }
 

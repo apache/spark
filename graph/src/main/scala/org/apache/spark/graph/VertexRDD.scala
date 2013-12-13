@@ -113,8 +113,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    */
   def mapVertexPartitions[VD2: ClassManifest](f: VertexPartition[VD] => VertexPartition[VD2])
     : VertexRDD[VD2] = {
-    val cleanF = sparkContext.clean(f)
-    val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(cleanF), preservesPartitioning = true)
+    val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
     new VertexRDD(newPartitionsRDD)
   }
 
@@ -125,13 +124,12 @@ class VertexRDD[@specialized VD: ClassManifest](
   private def zipVertexPartitions[VD2: ClassManifest, VD3: ClassManifest]
     (other: VertexRDD[VD2])
     (f: (VertexPartition[VD], VertexPartition[VD2]) => VertexPartition[VD3]): VertexRDD[VD3] = {
-    val cleanF = sparkContext.clean(f)
     val newPartitionsRDD = partitionsRDD.zipPartitions(
       other.partitionsRDD, preservesPartitioning = true
     ) { (thisIter, otherIter) =>
       val thisPart = thisIter.next()
       val otherPart = otherIter.next()
-      Iterator(cleanF(thisPart, otherPart))
+      Iterator(f(thisPart, otherPart))
     }
     new VertexRDD(newPartitionsRDD)
   }

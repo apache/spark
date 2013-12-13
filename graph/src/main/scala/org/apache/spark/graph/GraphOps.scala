@@ -2,7 +2,6 @@ package org.apache.spark.graph
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
-import org.apache.spark.util.ClosureCleaner
 import org.apache.spark.SparkException
 
 
@@ -116,9 +115,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       dir: EdgeDirection)
     : VertexRDD[A] = {
 
-    ClosureCleaner.clean(mapFunc)
-    ClosureCleaner.clean(reduceFunc)
-
     // Define a new map function over edge triplets
     val mf = (et: EdgeTriplet[VD,ED]) => {
       // Compute the message to the dst vertex
@@ -140,7 +136,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       }
     }
 
-    ClosureCleaner.clean(mf)
     graph.mapReduceTriplets(mf, reduceFunc)
   } // end of aggregateNeighbors
 
@@ -233,7 +228,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    */
   def joinVertices[U: ClassManifest](table: RDD[(Vid, U)])(mapFunc: (Vid, VD, U) => VD)
     : Graph[VD, ED] = {
-    ClosureCleaner.clean(mapFunc)
     val uf = (id: Vid, data: VD, o: Option[U]) => {
       o match {
         case Some(u) => mapFunc(id, data, u)
