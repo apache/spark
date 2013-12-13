@@ -15,8 +15,7 @@ works correctly)
 
 1. Similar to `stats.py` in Python, add support for mean, median, stdev etc.
 2. Broadcast variables.
-3. Allow R packages to be loaded into the run time. Also consider if we need to extend
-this for any given R file to be sourced in the worker before functions are run.
+3. Consider if we need to extend `addPackage` so that any given R file can be sourced in the worker before functions are run.
 
 ## Performance improvements
 1. Write hash functions in C and use .Call to call into them
