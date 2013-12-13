@@ -85,7 +85,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
 #'
 #' This function can be used to include a package on all workers before the
 #' user's code is executed. This is useful in scenarios where other R package
-#' functions are used in a function passed to functions like \Code{lapply}.
+#' functions are used in a function passed to functions like \code{lapply}.
 #' NOTE: The package is assumed to be installed on every node in the Spark
 #' cluster.
 #'

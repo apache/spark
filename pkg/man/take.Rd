@@ -1,0 +1,21 @@
+\name{take}
+\alias{take}
+\title{Take elements from an RDD.}
+\usage{
+take(rrdd, num)
+}
+\arguments{
+  \item{rrdd}{The RRDD to take elements from}
+
+  \item{num}{Number of elements to take}
+}
+\description{
+This function takes the first NUM elements in the RRDD and
+returns them in a list.
+}
+\examples{
+sc <- sparkR.init()
+rdd <- parallelize(sc, 1:10)
+take(rdd, 2L) # list(1, 2)
+}
+

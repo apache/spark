@@ -21,7 +21,15 @@ RRDD <- function(jrdd, serialized = TRUE) {
   new("RRDD", jrdd = jrdd, serialized = serialized)
 }
 
-# Persist this RDD with the default storage level (MEMORY_ONLY).
+#' Persist an RDD
+#'
+#' Persist this RDD with the default storage level (MEMORY_ONLY).
+#'
+#' @param rrdd The RRDD to cache
+#' @examples
+#' sc <- sparkR.init()
+#' rrdd <- parallelize(sc, 1:10, 2L)
+#' cache(rrdd)
 setGeneric("cache", function(rrdd) { standardGeneric("cache") })
 setMethod("cache",
           signature(rrdd = "RRDD"),
@@ -31,8 +39,20 @@ setMethod("cache",
           })
 
 
-# collect(): Return a list that contains all of the elements in this RRDD.
-# NOTE: supports only RRDD[Array[Byte]] and RRDD[primitive java type] for now.
+#' Collect elements of an RDD
+#'
+#' @description
+#' \code{collect} returns a list that contains all of the elements in this RRDD.
+#'
+#' @param rrdd The RRDD to collect
+#' @return a list containing elements in the RRDD.
+#' @rdname collect
+#' @export
+#' @examples
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 2L)
+#' collect(rdd) # list from 1 to 10
+#' collectPartition(rdd, 0L) # list from 1 to 5
 setGeneric("collect", function(rrdd, ...) { standardGeneric("collect") })
 setMethod("collect",
           signature(rrdd = "RRDD"),
@@ -42,8 +62,37 @@ setMethod("collect",
             convertJListToRList(collected, flatten)
           })
 
+#' @rdname collect
+#' @description
+#' \code{collectPartition} returns a list that contains all of the elements 
+#' in the specified partition of the RDD.
+#' @param partitionId the partition to collect (starts from 0)
+setGeneric("collectPartition",
+           function(rrdd, partitionId) {
+             standardGeneric("collectPartition")
+           })
+setMethod("collectPartition",
+          signature(rrdd = "RRDD", partitionId = "integer"),
+          function(rrdd, partitionId) {
+            jList <- .jcall(rrdd@jrdd,
+                            "Ljava/util/List;",
+                            "collectPartition",
+                            as.integer(partitionId))
+            convertJListToRList(jList, flatten = TRUE)
+          })
 
-# Return the number of elements in the RDD.
+
+#' Return the number of elements in the RDD.
+#'
+#' @param rrdd The RRDD to count
+#' @return number of elements in the RRDD.
+#' @rdname count
+#' @export
+#' @examples
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' count(rdd) # 10
+#' length(rdd) # Same as count
 setGeneric("count", function(rrdd) { standardGeneric("count") })
 setMethod("count",
           signature(rrdd = "RRDD"),
@@ -56,7 +105,8 @@ setMethod("count",
             sum(as.integer(vals))
           })
 
-# Return the number of elements in the RDD.
+#' Return the number of elements in the RDD.
+#' @rdname count
 setMethod("length",
           signature(x = "RRDD"),
           function(x) {
@@ -64,7 +114,21 @@ setMethod("length",
           })
 
 
-# Return a new RDD by applying a function to all elements of this RDD.
+#' Apply a function to all elements
+#'
+#' This function creates a new RRDD by applying the given transformation to all
+#' elements of the given RDD
+#'
+#' @param X The RRDD to apply the transformation.
+#' @param FUN the transformation to apply on each element
+#' @return a new RRDD created by the transformation.
+#' @rdname lapply
+#' @export
+#' @examples
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' multiplyByTwo <- lapply(rdd, function(x) { x * 2 })  
+#' collect(multiplyByTwo) # 2,4,6...
 setMethod("lapply",
           signature(X = "RRDD", FUN = "function"),
           function(X, FUN) {
@@ -75,7 +139,7 @@ setMethod("lapply",
             lapplyPartition(X, partitionFunc)
           })
 
-# Return a new RDD by applying a function to all elements of this RDD.
+#' @rdname lapply
 setGeneric("map", function(X, FUN) {
            standardGeneric("map") })
 setMethod("map",
@@ -84,8 +148,20 @@ setMethod("map",
             lapply(X, FUN)
           })
 
-# Return a new RDD by first applying a function to all elements of this RDD, and
-# then flattening the results.
+#' Flatten results after apply a function to all elements
+#'
+#' This function return a new RDD by first applying a function to all 
+#' elements of this RDD, and then flattening the results.
+#'
+#' @param X The RRDD to apply the transformation.
+#' @param FUN the transformation to apply on each element
+#' @return a new RRDD created by the transformation.
+#' @export
+#' @examples
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' multiplyByTwo <- flatMap(rdd, function(x) { list(x*2, x*10) })
+#' collect(multiplyByTwo) # 2,20,4,40,6,60...
 setGeneric("flatMap", function(X, FUN) {
            standardGeneric("flatMap") })
 setMethod("flatMap",
@@ -130,8 +206,19 @@ setMethod("lapplyPartition",
             RRDD(jrdd, TRUE)
           })
 
-# Reduces the elements of this RDD using the specified commutative and
-# associative binary operator.
+#' Reduce across elements of an RDD. 
+#'
+#' This function reduces the elements of this RDD using the 
+#' specified commutative and associative binary operator.
+#' 
+#' @param rrdd The RRDD to reduce
+#' @param func Commutative and associative function to apply on elements 
+#'             of the RRDD.
+#' @export
+#' @examples
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' reduce(rdd, "+") # 55
 setGeneric("reduce", function(rrdd, func) { standardGeneric("reduce") })
 setMethod("reduce",
           signature(rrdd = "RRDD", func = "ANY"),
@@ -146,7 +233,18 @@ setMethod("reduce",
             Reduce(func, partitionList)
           })
 
-# Take the first NUM elements in the RRDD and returns them in a list.
+#' Take elements from an RDD.
+#'
+#' This function takes the first NUM elements in the RRDD and 
+#' returns them in a list.
+#'
+#' @param rrdd The RRDD to take elements from
+#' @param num Number of elements to take
+#' @export
+#' @examples
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10)
+#' take(rdd, 2L) # list(1, 2)
 setGeneric("take", function(rrdd, num) { standardGeneric("take") })
 setMethod("take",
           signature(rrdd = "RRDD", num = "numeric"),
@@ -174,6 +272,7 @@ setMethod("take",
 
 ############ Shuffle Functions ############
 
+# Return a copy of the RDD partitioned using the specified partitioner
 setGeneric("partitionBy",
            function(rrdd, numPartitions, ...) {
              standardGeneric("partitionBy")
@@ -293,18 +392,3 @@ setMethod("reduceByKey",
             lapplyPartition(shuffled, reduceVals)
           })
 
-# Return a list that contains all of the elements in the specified partition of
-# the RDD.
-setGeneric("collectPartition",
-           function(rrdd, partitionId) {
-             standardGeneric("collectPartition")
-           })
-setMethod("collectPartition",
-          signature(rrdd = "RRDD", partitionId = "integer"),
-          function(rrdd, partitionId) {
-            jList <- .jcall(rrdd@jrdd,
-                            "Ljava/util/List;",
-                            "collectPartition",
-                            as.integer(partitionId))
-            convertJListToRList(jList, flatten = TRUE)
-          })
