@@ -1,8 +1,6 @@
 package org.apache.spark.graph
 
-
-import org.apache.spark.Partitioner
-import org.apache.spark.{TaskContext, Partition, OneToOneDependency}
+import org.apache.spark.{OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.graph.impl.EdgePartition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
