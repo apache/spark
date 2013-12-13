@@ -87,14 +87,29 @@ isSparkFunction <- function(name) {
 # Serialize the dependencies of the given function and return them as a raw
 # vector. Filters out RRDDs before serializing the dependencies
 getDependencies <- function(name) {
+  varsToSave <- c()
+  closureEnv <- environment(name)
+
+  currentEnv <- closureEnv
+  while (TRUE) {
+    #print(currentEnv)
+
+    # Don't serialize namespaces
+    if (!isNamespace(currentEnv)) {
+      varsToSave <- c(varsToSave, ls(currentEnv))
+    }
+
+    # Everything below globalenv are packages, search path stuff etc.
+    if (identical(currentEnv, globalenv()))
+       break
+    currentEnv <- parent.env(currentEnv)
+  }
+  filteredVars <- Filter(function(x) { !isRRDD(x, closureEnv) }, varsToSave)
+
+  #cat("Saving ", filteredVars, "\n", file=stderr())
+
   fileName <- tempfile(pattern="spark-utils", fileext=".deps")
-  funcEnv <- environment(name)
-  varsToSave <- ls(funcEnv)
-
-  filteredVars <- varsToSave
-  filteredVars <- Filter(function(x) { !isRRDD(x, funcEnv) }, varsToSave)
-
-  save(list=filteredVars, file=fileName, envir=funcEnv)
+  save(list=filteredVars, file=fileName, envir=closureEnv)
   fileSize <- file.info(fileName)$size
   binData <- readBin(fileName, raw(), fileSize, endian="big")
 

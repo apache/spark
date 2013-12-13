@@ -1,11 +1,11 @@
 context("basic RRDD functions")
 
 # JavaSparkContext handle
-jsc <- sparkR.init()
+sc <- sparkR.init()
 
 # Data
 nums <- 1:10
-rrdd <- parallelize(jsc, nums, 2L)
+rrdd <- parallelize(sc, nums, 2L)
 
 test_that("count and length on RRDD", {
    expect_equal(count(rrdd), 10)
@@ -31,4 +31,12 @@ test_that("reduce on RRDD", {
   # Also test with an inline function
   sumInline <- reduce(rrdd, function(x, y) { x + y })
   expect_equal(sumInline, 55)
+})
+
+test_that("lapply with dependency", {
+  fa <- 5
+  multiples <- lapply(rrdd, function(x) { fa * x })
+  actual <- collect(multiples)
+
+  expect_equal(actual,  as.list(nums * 5))
 })
