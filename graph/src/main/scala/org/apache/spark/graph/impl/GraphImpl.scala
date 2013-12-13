@@ -137,7 +137,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       val newVerts = vertices.mapVertexPartitions(_.map(f))
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newVTableReplicated = new VTableReplicated[VD2](
-        newVerts, edges, vertexPlacement,
+        changedVerts, edges, vertexPlacement,
         Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
       new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
     } else {
@@ -256,7 +256,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       val newVerts = vertices.leftJoin(updates)(updateF)
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newVTableReplicated = new VTableReplicated[VD2](
-        newVerts, edges, vertexPlacement,
+        changedVerts, edges, vertexPlacement,
         Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
       new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
     } else {
