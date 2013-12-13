@@ -223,7 +223,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       val (_, vertexPartition) = vTableReplicatedIter.next()
 
       // Iterate over the partition
-      val et = new EdgeTriplet[VD, ED](vertexPartition)
+      val et = new EdgeTriplet[VD, ED]
       val filteredEdges = edgePartition.iterator.flatMap { e =>
         // Ensure that the edge meets the requirements of skipStaleSrc and skipStaleDst
         val srcVertexOK = !skipStaleSrc || vertexPartition.isDefined(e.srcId)
