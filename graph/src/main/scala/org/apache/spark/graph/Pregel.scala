@@ -91,17 +91,9 @@ object Pregel {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 
-    def sendMsgFun(edge: EdgeTriplet[VD, ED]): Iterator[(Vid, A)] = {
-      if (edge.srcMask) {
-        sendMsg(edge)
-      } else {
-        Iterator.empty
-      }
-    }
-
     var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) )
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsgFun, mergeMsg).cache()
+    var messages = g.mapReduceTriplets(sendMsg, mergeMsg).cache()
     var activeMessages = messages.count()
     // Loop
     var i = 0
@@ -113,7 +105,7 @@ object Pregel {
 
       val oldMessages = messages
       // compute the messages
-      messages = g.mapReduceTriplets(sendMsgFun, mergeMsg).cache()
+      messages = g.mapReduceTriplets(sendMsg, mergeMsg).cache()
       activeMessages = messages.count()
       // after counting we can unpersist the old messages
       oldMessages.unpersist(blocking=false)

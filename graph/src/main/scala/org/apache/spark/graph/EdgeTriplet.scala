@@ -13,7 +13,7 @@ import org.apache.spark.graph.impl.VertexPartition
  * tried specializing I got a warning about inherenting from a type
  * that is not a trait.
  */
-class EdgeTriplet[VD, ED](vPart: VertexPartition[VD] = null) extends Edge[ED] {
+class EdgeTriplet[VD, ED] extends Edge[ED] {
 // class EdgeTriplet[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD: ClassManifest,
 //                   @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest] extends Edge[ED] {
 
@@ -27,9 +27,6 @@ class EdgeTriplet[VD, ED](vPart: VertexPartition[VD] = null) extends Edge[ED] {
    * The destination vertex attribute
    */
   var dstAttr: VD = _ //nullValue[VD]
-
-  def srcMask: Boolean = vPart.isDefined(srcId)
-  def dstMask: Boolean = vPart.isDefined(dstId)
 
   /**
    * Set the edge properties of this triplet.
