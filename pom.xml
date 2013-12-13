@@ -738,39 +738,39 @@
       </dependencyManagement>
     </profile>
 
-    <profile>
-      <id>new-yarn</id>
-      <properties>
-        <akka.group>org.spark-project</akka.group>
-        <akka.version>2.0.5-protobuf-2.5-java-1.5</akka.version>
-        <hadoop.major.version>2</hadoop.major.version>
-        <hadoop.version>2.2.0</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
-      </properties>
+    <!-- <profile> -->
+    <!--   <id>new-yarn</id> -->
+    <!--   <properties> -->
+    <!--     <akka.group>org.spark-project</akka.group> -->
+    <!--     <akka.version>2.0.5-protobuf-2.5-java-1.5</akka.version> -->
+    <!--     <hadoop.major.version>2</hadoop.major.version> -->
+    <!--     <hadoop.version>2.2.0</hadoop.version> -->
+    <!--     <protobuf.version>2.5.0</protobuf.version> -->
+    <!--   </properties> -->
 
-      <modules>
-        <module>new-yarn</module>
-      </modules>
+    <!--   <modules> -->
+    <!--     <module>new-yarn</module> -->
+    <!--   </modules> -->
 
-      <repositories>
-        <repository>
-          <id>maven-root</id>
-          <name>Maven root repository</name>
-          <url>http://repo1.maven.org/maven2/</url>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-        </repository>
-      </repositories>
+    <!--   <repositories> -->
+    <!--     <repository> -->
+    <!--       <id>maven-root</id> -->
+    <!--       <name>Maven root repository</name> -->
+    <!--       <url>http://repo1.maven.org/maven2/</url> -->
+    <!--       <releases> -->
+    <!--         <enabled>true</enabled> -->
+    <!--       </releases> -->
+    <!--       <snapshots> -->
+    <!--         <enabled>false</enabled> -->
+    <!--       </snapshots> -->
+    <!--     </repository> -->
+    <!--   </repositories> -->
 
-      <dependencyManagement>
-        <dependencies>
-        </dependencies>
-      </dependencyManagement>
-    </profile>
+    <!--   <dependencyManagement> -->
+    <!--     <dependencies> -->
+    <!--     </dependencies> -->
+    <!--   </dependencyManagement> -->
+    <!-- </profile> -->
 
     <profile>
       <id>repl-bin</id>
