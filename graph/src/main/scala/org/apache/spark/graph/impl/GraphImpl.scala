@@ -69,6 +69,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   override def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
     val numPartitions = edges.partitions.size
+    val edManifest = classManifest[ED]
     val newEdges = new EdgeRDD(edges.map { e =>
       val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
 
@@ -77,7 +78,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     }
       .partitionBy(new HashPartitioner(numPartitions))
       .mapPartitionsWithIndex( { (pid, iter) =>
-        val builder = new EdgePartitionBuilder[ED]
+        val builder = new EdgePartitionBuilder[ED]()(edManifest)
         iter.foreach { message =>
           val data = message.data
           builder.add(data._1, data._2, data._3)
