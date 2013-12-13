@@ -23,6 +23,22 @@ class VTableReplicated[VD: ClassManifest](
     vertexPlacement: VertexPlacement,
     prevVTableReplicated: Option[VTableReplicated[VD]] = None) {
 
+  // Within each edge partition, create a local map from vid to an index into
+  // the attribute array. Each map contains a superset of the vertices that it
+  // will receive, because it stores vids from both the source and destination
+  // of edges. It must always include both source and destination vids because
+  // some operations, such as GraphImpl.mapReduceTriplets, rely on this.
+  val localVidMap: RDD[(Int, VertexIdToIndexMap)] = edges.partitionsRDD.mapPartitions(_.map {
+    case (pid, epart) =>
+      val vidToIndex = new VertexIdToIndexMap
+      epart.foreach { e =>
+        vidToIndex.add(e.srcId)
+        vidToIndex.add(e.dstId)
+      }
+      (pid, vidToIndex)
+  }, preservesPartitioning = true).cache()
+
+
   val bothAttrs: RDD[(Pid, VertexPartition[VD])] = createVTableReplicated(true, true)
   val srcAttrOnly: RDD[(Pid, VertexPartition[VD])] = createVTableReplicated(true, false)
   val dstAttrOnly: RDD[(Pid, VertexPartition[VD])] = createVTableReplicated(false, true)
@@ -64,20 +80,6 @@ class VTableReplicated[VD: ClassManifest](
         }.cache().setName("VTableReplicated delta %s %s".format(includeSrcAttr, includeDstAttr))
 
       case None =>
-        // Within each edge partition, create a local map from vid to an index into
-        // the attribute array. Each map contains a superset of the vertices that it
-        // will receive, because it stores vids from both the source and destination
-        // of edges. It must always include both source and destination vids because
-        // some operations, such as GraphImpl.mapReduceTriplets, rely on this.
-        val localVidMap = edges.partitionsRDD.mapPartitions(_.map {
-          case (pid, epart) =>
-            val vidToIndex = new VertexIdToIndexMap
-            epart.foreach { e =>
-              vidToIndex.add(e.srcId)
-              vidToIndex.add(e.dstId)
-            }
-            (pid, vidToIndex)
-        }, preservesPartitioning = true).cache()
 
         // Within each edge partition, place the vertex attributes received from
         // msgsByPartition into the correct locations specified in localVidMap
