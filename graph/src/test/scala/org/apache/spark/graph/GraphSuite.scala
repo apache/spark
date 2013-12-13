@@ -100,8 +100,6 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         if (et.dstId % 2 != 0) {
           throw new Exception("map ran on edge with dst vid %d, which is odd".format(et.dstId))
         }
-        println(et.srcAttr)
-        println(et.dstAttr)
         Iterator((et.srcId, 1), (et.dstId, 1))
       }, (a: Int, b: Int) => a + b, skipStaleSrc = true, skipStaleDst = true).collect.toSet
       assert(numEvenNeighbors === (2 to n by 2).map(x => (x: Vid, n / 2 - 1)).toSet)
