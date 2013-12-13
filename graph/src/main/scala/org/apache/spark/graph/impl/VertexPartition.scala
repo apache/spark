@@ -48,6 +48,15 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   }
 
   /**
+   * A vertex is stale if it is present in the index but hidden by the mask. In contrast, a vertex
+   * is nonexistent (possibly due to join rewrite) if it is not present in the index at all.
+   */
+  def isStale(vid: Vid): Boolean = {
+    val pos = index.getPos(vid)
+    pos >= 0 && !mask.get(pos)
+  }
+
+  /**
    * Pass each vertex attribute along with the vertex id through a map
    * function and retain the original RDD's partitioning and index.
    *
