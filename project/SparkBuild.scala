@@ -84,9 +84,9 @@ object SparkBuild extends Build {
     case Some(v) => v.toBoolean
   }
 
-  if(isNewHadoop && isYarnEnabled) {
-      println("""Yarn with Hadoop version 2.2.x is not yet expected to work. 
-             Please set env SPARK_HADOOP_VERSION to appropriate version or set SPARK_YARN to false.""")
+  if (isNewHadoop && isYarnEnabled) {
+    println( """Yarn with Hadoop version 2.2.x is not yet expected to work.
+      Please set env SPARK_HADOOP_VERSION to appropriate version or set SPARK_YARN to false.""")
     throw new Exception("Yarn with Hadoop version 2.2.x is not yet expected to work.")
   }
 

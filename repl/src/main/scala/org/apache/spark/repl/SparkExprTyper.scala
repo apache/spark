@@ -12,7 +12,6 @@ import scala.reflect.internal.util.BatchSourceFile
 import scala.tools.nsc.ast.parser.Tokens.EOF
 
 import org.apache.spark.Logging
-import scala.Some
 
 trait SparkExprTyper extends Logging {
   val repl: SparkIMain

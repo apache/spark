@@ -26,8 +26,7 @@ import scala.collection.Map
 import scala.collection.generic.Growable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
-import scala.reflect.{ ClassTag, classTag}
-import scala.util.DynamicVariable
+import scala.reflect.{ClassTag, classTag}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
