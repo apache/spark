@@ -18,7 +18,9 @@ sparkR.onLoad <- function(libname, pkgname) {
 #' @param sparkHome Spark Home directory
 #' @export
 #' @examples
+#'\dontrun{
 #' sparkR.init("local[2]", "SparkR", "/home/spark")
+#'}
 
 sparkR.init <- function(
   master = "local",

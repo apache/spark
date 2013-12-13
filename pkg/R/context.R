@@ -7,7 +7,7 @@
 #' RDD of strings from it.
 #'
 #' @param sc SparkContext to use
-#' @param name Path of file to read
+#' @param path Path of file to read
 #' @param minSplits Minimum number of splits to be created. If NULL, the default
 #'  value is chosen based on available parallelism.
 #' @return RRDD where each item is of type \code{character}
@@ -41,10 +41,12 @@ textFile <- function(sc, path, minSplits = NULL) {
 #' @return an RRDD created from this collection
 #' @export
 #' @examples
+#'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10, 2)
 #' # The RDD should contain 10 elements
 #' length(rdd)
+#'}
 parallelize <- function(sc, coll, numSlices = 1) {
   # TODO: bound/safeguard numSlices
   # TODO: unit tests for if the split works for all primitives

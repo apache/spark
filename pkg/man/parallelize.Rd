@@ -22,9 +22,11 @@ in R. The elements in the list are split into
 cluster.
 }
 \examples{
+\dontrun{
 sc <- sparkR.init()
 rdd <- parallelize(sc, 1:10, 2)
 # The RDD should contain 10 elements
 length(rdd)
+}
 }
 

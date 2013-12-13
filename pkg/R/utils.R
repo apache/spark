@@ -138,8 +138,21 @@ mult31AndAdd <- function(val, addVal) {
          vec)
 }
 
-# Java-style function to compute the hashCode for the given object. Returns
-# an integer value.
+#' Compute the hashCode of an object
+#'
+#' Java-style function to compute the hashCode for the given object. Returns
+#' an integer value.
+#'
+#' @details
+#' This only works for integer, numeric and character types right now.
+#'
+#' @param key the object to be hashed
+#' @return the hash code as an integer
+#' @export
+#' @examples
+#' hashCode(1L) # 1
+#' hashCode(1.0) # 1072693248
+#' hashCode("1") # 49
 hashCode <- function(key) {
   if (class(key) == "integer") {
     as.integer(key[[1]])

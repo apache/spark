@@ -17,6 +17,8 @@ sparkR.init(master = "local", appName = "SparkR",
 This function initializes a new SparkContext.
 }
 \examples{
+\dontrun{
 sparkR.init("local[2]", "SparkR", "/home/spark")
+}
 }
 

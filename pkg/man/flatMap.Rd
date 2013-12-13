@@ -1,8 +1,12 @@
+\docType{methods}
 \name{flatMap}
 \alias{flatMap}
+\alias{flatMap,RRDD,function-method}
 \title{Flatten results after apply a function to all elements}
 \usage{
 flatMap(X, FUN)
+
+\S4method{flatMap}{RRDD,function}(X, FUN)
 }
 \arguments{
   \item{X}{The RRDD to apply the transformation.}
@@ -18,9 +22,11 @@ to all elements of this RDD, and then flattening the
 results.
 }
 \examples{
+\dontrun{
 sc <- sparkR.init()
 rdd <- parallelize(sc, 1:10)
 multiplyByTwo <- flatMap(rdd, function(x) { list(x*2, x*10) })
 collect(multiplyByTwo) # 2,20,4,40,6,60...
+}
 }
 
