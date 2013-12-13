@@ -15,31 +15,30 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming
+package org.apache.spark.streaming.scheduler
 
-import util.{ManualClock, RecurringTimer, Clock}
 import org.apache.spark.SparkEnv
 import org.apache.spark.Logging
+import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
+import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
 
 private[streaming]
-class Scheduler(ssc: StreamingContext) extends Logging {
+class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   initLogging()
-
-  val concurrentJobs = System.getProperty("spark.streaming.concurrentJobs", "1").toInt
-  val jobManager = new JobManager(ssc, concurrentJobs)
-  val checkpointWriter = if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
-    new CheckpointWriter(ssc.checkpointDir)
-  } else {
-    null
-  }
-
+  val ssc = jobScheduler.ssc
   val clockClass = System.getProperty(
     "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
   val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
   val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
     longTime => generateJobs(new Time(longTime)))
   val graph = ssc.graph
+  lazy val checkpointWriter = if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
+    new CheckpointWriter(ssc.checkpointDir)
+  } else {
+    null
+  }
+
   var latestTime: Time = null
 
   def start() = synchronized {
@@ -48,26 +47,24 @@ class Scheduler(ssc: StreamingContext) extends Logging {
     } else {
       startFirstTime()
     }
-    logInfo("Scheduler started")
+    logInfo("JobGenerator started")
   }
   
   def stop() = synchronized {
     timer.stop()
-    jobManager.stop()
     if (checkpointWriter != null) checkpointWriter.stop()
     ssc.graph.stop()
-    logInfo("Scheduler stopped")    
+    logInfo("JobGenerator stopped")
   }
 
   private def startFirstTime() {
     val startTime = new Time(timer.getStartTime())
     graph.start(startTime - graph.batchDuration)
     timer.start(startTime.milliseconds)
-    logInfo("Scheduler's timer started at " + startTime)
+    logInfo("JobGenerator's timer started at " + startTime)
   }
 
   private def restart() {
-
     // If manual clock is being used for testing, then
     // either set the manual clock to the last checkpointed time,
     // or if the property is defined set it to that time
@@ -93,35 +90,34 @@ class Scheduler(ssc: StreamingContext) extends Logging {
     val timesToReschedule = (pendingTimes ++ downTimes).distinct.sorted(Time.ordering)
     logInfo("Batches to reschedule: " + timesToReschedule.mkString(", "))
     timesToReschedule.foreach(time =>
-      graph.generateJobs(time).foreach(jobManager.runJob)
+      jobScheduler.runJobs(time, graph.generateJobs(time))
     )
 
     // Restart the timer
     timer.start(restartTime.milliseconds)
-    logInfo("Scheduler's timer restarted at " + restartTime)
+    logInfo("JobGenerator's timer restarted at " + restartTime)
   }
 
   /** Generate jobs and perform checkpoint for the given `time`.  */
-  def generateJobs(time: Time) {
+  private def generateJobs(time: Time) {
     SparkEnv.set(ssc.env)
     logInfo("\n-----------------------------------------------------\n")
-    graph.generateJobs(time).foreach(jobManager.runJob)
+    jobScheduler.runJobs(time, graph.generateJobs(time))
     latestTime = time
     doCheckpoint(time)
   }
 
   /**
-   * Clear old metadata assuming jobs of `time` have finished processing.
-   * And also perform checkpoint.
+   * On batch completion, clear old metadata and checkpoint computation.
    */
-  def clearOldMetadata(time: Time) {
+  private[streaming] def onBatchCompletion(time: Time) {
     ssc.graph.clearOldMetadata(time)
     doCheckpoint(time)
   }
 
   /** Perform checkpoint for the give `time`. */
-  def doCheckpoint(time: Time) = synchronized {
-    if (ssc.checkpointDuration != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
+  private def doCheckpoint(time: Time) = synchronized {
+    if (checkpointWriter != null && (time - graph.zeroTime).isMultipleOf(ssc.checkpointDuration)) {
       logInfo("Checkpointing graph for time " + time)
       ssc.graph.updateCheckpointData(time)
       checkpointWriter.write(new Checkpoint(ssc, time))

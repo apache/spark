@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming
+package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.streaming.dstream.{NetworkInputDStream, NetworkReceiver}
 import org.apache.spark.streaming.dstream.{StopReceiver, ReportBlock, ReportError}
@@ -31,6 +31,7 @@ import akka.pattern.ask
 import akka.util.duration._
 import akka.dispatch._
 import org.apache.spark.storage.BlockId
+import org.apache.spark.streaming.{Time, StreamingContext}
 
 private[streaming] sealed trait NetworkInputTrackerMessage
 private[streaming] case class RegisterReceiver(streamId: Int, receiverActor: ActorRef) extends NetworkInputTrackerMessage

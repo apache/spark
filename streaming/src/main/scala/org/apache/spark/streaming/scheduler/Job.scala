@@ -15,32 +15,33 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.dstream
+package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Duration, DStream, Time}
-import org.apache.spark.streaming.scheduler.Job
+import java.util.concurrent.atomic.AtomicLong
+import org.apache.spark.streaming.Time
 
 private[streaming]
-class ForEachDStream[T: ClassManifest] (
-    parent: DStream[T],
-    foreachFunc: (RDD[T], Time) => Unit
-  ) extends DStream[Unit](parent.ssc) {
+class Job(val time: Time, func: () => _) {
+  var id: String = _
 
-  override def dependencies = List(parent)
-
-  override def slideDuration: Duration = parent.slideDuration
-
-  override def compute(validTime: Time): Option[RDD[Unit]] = None
-
-  override def generateJob(time: Time): Option[Job] = {
-    parent.getOrCompute(time) match {
-      case Some(rdd) =>
-        val jobFunc = () => {
-          foreachFunc(rdd, time)
-        }
-        Some(new Job(time, jobFunc))
-      case None => None
-    }
+  def run(): Long = {
+    val startTime = System.currentTimeMillis 
+    func() 
+    val stopTime = System.currentTimeMillis
+    (stopTime - startTime)
   }
+
+  def setId(number: Int) {
+    id = "streaming job " + time + "." + number
+  }
+
+  override def toString = id
 }
+/*
+private[streaming]
+object Job {
+  val id = new AtomicLong(0)
+
+  def getNewId() = id.getAndIncrement()
+}
+*/

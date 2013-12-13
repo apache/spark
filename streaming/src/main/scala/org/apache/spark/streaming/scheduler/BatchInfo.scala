@@ -15,32 +15,24 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.dstream
+package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.{Duration, DStream, Time}
-import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.streaming.Time
 
-private[streaming]
-class ForEachDStream[T: ClassManifest] (
-    parent: DStream[T],
-    foreachFunc: (RDD[T], Time) => Unit
-  ) extends DStream[Unit](parent.ssc) {
+case class BatchInfo(
+    batchTime: Time,
+    submissionTime: Long,
+    processingStartTime: Option[Long],
+    processingEndTime: Option[Long]
+  ) {
 
-  override def dependencies = List(parent)
+  def schedulingDelay = processingStartTime.map(_ - submissionTime)
 
-  override def slideDuration: Duration = parent.slideDuration
+  def processingDelay = processingEndTime.zip(processingStartTime).map(x => x._1 - x._2).headOption
 
-  override def compute(validTime: Time): Option[RDD[Unit]] = None
-
-  override def generateJob(time: Time): Option[Job] = {
-    parent.getOrCompute(time) match {
-      case Some(rdd) =>
-        val jobFunc = () => {
-          foreachFunc(rdd, time)
-        }
-        Some(new Job(time, jobFunc))
-      case None => None
-    }
-  }
+  def totalDelay = schedulingDelay.zip(processingDelay).map(x => x._1 + x._2).headOption
 }
+
+
+
+

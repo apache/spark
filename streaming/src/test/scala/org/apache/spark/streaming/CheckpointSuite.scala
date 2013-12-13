@@ -34,30 +34,24 @@ import com.google.common.io.Files
  * the checkpointing of a DStream's RDDs as well as the checkpointing of
  * the whole DStream graph.
  */
-class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
-
-  System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
-
-  before {
-    FileUtils.deleteDirectory(new File(checkpointDir))
-  }
-
-  after {
-    if (ssc != null) ssc.stop()
-    FileUtils.deleteDirectory(new File(checkpointDir))
-
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
-  }
+class CheckpointSuite extends TestSuiteBase {
 
   var ssc: StreamingContext = null
 
-  override def framework = "CheckpointSuite"
-
   override def batchDuration = Milliseconds(500)
 
-  override def actuallyWait = true
+  override def actuallyWait = true // to allow checkpoints to be written
+
+  override def beforeFunction() {
+    super.beforeFunction()
+    FileUtils.deleteDirectory(new File(checkpointDir))
+  }
+
+  override def afterFunction() {
+    super.afterFunction()
+    if (ssc != null) ssc.stop()
+    FileUtils.deleteDirectory(new File(checkpointDir))
+  }
 
   test("basic rdd checkpoints + dstream graph checkpoint recovery") {
 
