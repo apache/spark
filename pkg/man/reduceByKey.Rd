@@ -10,8 +10,8 @@ reduceByKey(rrdd, combineFunc, numPartitions)
 \S4method{reduceByKey}{RRDD,ANY,integer}(rrdd, combineFunc, numPartitions)
 }
 \arguments{
-  \item{rrdd}{The RRDD to partition. Should be an RDD where
-  each element is list(K, V).}
+  \item{rrdd}{The RRDD to reduce by key. Should be an RDD
+  where each element is list(K, V).}
 
   \item{combineFunc}{The associative reduce function to
   use.}

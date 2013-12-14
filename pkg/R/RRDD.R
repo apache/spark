@@ -430,7 +430,7 @@ setMethod("partitionBy",
 #' This function operates on RDDs where every element is of the form list(K, V).
 #' and group values for each key in the RDD into a single sequence.
 #'
-#' @param rrdd The RRDD to partition. Should be an RDD where each element is
+#' @param rrdd The RRDD to group. Should be an RDD where each element is
 #'             list(K, V).
 #' @param numPartitions Number of partitions to create.
 #' @return An RRDD where each element is list(K, list(V))
@@ -489,7 +489,7 @@ setMethod("groupByKey",
 #' This function operates on RDDs where every element is of the form list(K, V).
 #' and merges the values for each key using an associative reduce function.
 #'
-#' @param rrdd The RRDD to partition. Should be an RDD where each element is
+#' @param rrdd The RRDD to reduce by key. Should be an RDD where each element is
 #'             list(K, V).
 #' @param combineFunc The associative reduce function to use.
 #' @param numPartitions Number of partitions to create.
@@ -542,3 +542,93 @@ setMethod("reduceByKey",
             lapplyPartition(shuffled, reduceVals)
           })
 
+#' Combine values by key
+#'
+#' Generic function to combine the elements for each key using a custom set of
+#' aggregation functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)],
+#' for a "combined type" C. Note that V and C can be different -- for example, one
+#' might group an RDD of type (Int, Int) into an RDD of type (Int, Seq[Int]). 
+
+#' Users provide three functions:
+#' \itemize{
+#'   \item createCombiner, which turns a V into a C (e.g., creates a one-element list)
+#'   \item mergeValue, to merge a V into a C (e.g., adds it to the end of a list) -
+#'   \item mergeCombiners, to combine two C's into a single one (e.g., concatentates
+#'    two lists).
+#' }
+#'
+#' @param rrdd The RRDD to combine. Should be an RDD where each element is
+#'             list(K, V).
+#' @param createCombiner Create a combiner (C) given a value (V)
+#' @param mergeValue Merge the given value (V) with an existing combiner (C)
+#' @param mergeCombiners Merge two combiners and return a new combiner
+#' @param numPartitions Number of partitions to create.
+#' @return An RRDD where each element is list(K, C) where C is the combined type
+#'
+#' @rdname combineByKey
+#' @seealso groupByKey, reduceByKey
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' pairs <- list(c(1, 2), c(1.1, 3), c(1, 4))
+#' rdd <- parallelize(sc, pairs)
+#' parts <- combineByKey(rdd, function(x) { x }, "+", "+", 2L)
+#' combined <- collect(parts)
+#' combined[[1]] # Should be a list(1, 6)
+#'}
+setGeneric("combineByKey",
+           function(rrdd, createCombiner, mergeValue, mergeCombiners, numPartitions) {
+             standardGeneric("combineByKey")
+           })
+
+#' @rdname combineByKey
+#' @aliases combineByKey,RRDD,ANY,ANY,ANY,integer-method
+setMethod("combineByKey",
+          signature(rrdd = "RRDD", createCombiner = "ANY", mergeValue = "ANY",
+                    mergeCombiners = "ANY", numPartitions = "integer"),
+          function(rrdd, createCombiner, mergeValue, mergeCombiners, numPartitions) {
+            combineLocally <- function(part) {
+              combiners <- new.env()
+              keys <- new.env()
+              lapply(part,
+                     function(item) {
+                       k <- as.character(item[[1]])
+                       if (!exists(k, keys)) {
+                         combiners[[k]] <- do.call(createCombiner,
+                                                   list(item[[2]]))
+                         keys[[k]] <- item[[1]]
+                       } else {
+                         combiners[[k]] <- do.call(mergeValue,
+                                                   list(combiners[[k]],
+                                                        item[[2]]))
+                       }
+                     })
+              lapply(ls(keys), function(k) {
+                      list(keys[[k]], combiners[[k]])
+                     })
+            }
+            locallyCombined <- lapplyPartition(rrdd, combineLocally)
+            shuffled <- partitionBy(locallyCombined, numPartitions)
+            mergeAfterShuffle <- function(part) {
+              combiners <- new.env()
+              keys <- new.env()
+              lapply(part,
+                     function(item) {
+                       k <- as.character(item[[1]])
+                       if (!exists(k, combiners)) {
+                         combiners[[k]] <- item[[2]]
+                         keys[[k]] <- item[[1]]
+                       } else {
+                         combiners[[k]] <- do.call(mergeCombiners,
+                                                   list(combiners[[k]],
+                                                        item[[2]]))
+                       }
+                     })
+              lapply(ls(keys), function(k) {
+                      list(keys[[k]], combiners[[k]])
+                     })
+            }
+            combined <-lapplyPartition(shuffled, mergeAfterShuffle)
+            combined
+          })

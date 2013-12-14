@@ -9,7 +9,7 @@ groupByKey(rrdd, numPartitions)
 \S4method{groupByKey}{RRDD,integer}(rrdd, numPartitions)
 }
 \arguments{
-  \item{rrdd}{The RRDD to partition. Should be an RDD where
+  \item{rrdd}{The RRDD to group. Should be an RDD where
   each element is list(K, V).}
 
   \item{numPartitions}{Number of partitions to create.}

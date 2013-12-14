@@ -55,6 +55,23 @@ test_that("reduceByKey for doubles", {
   expect_equal(actual, expected)
 })
 
+test_that("combineByKey for ints", {
+  reduced <- combineByKey(intRdd, function(x) { x }, "+", "+", 2L)
+
+  actual <- collect(reduced)
+
+  expected <- list(list(2L, 101), list(1L, 199))
+  expect_equal(actual, expected)
+})
+
+test_that("combineByKey for doubles", {
+  reduced <- combineByKey(doubleRdd, function(x) { x }, "+", "+", 2L)
+  actual <- collect(reduced)
+
+  expected <- list(list(1.5, 199), list(2.5, 101))
+  expect_equal(actual, expected)
+})
+
 test_that("partitionBy() partitions data correctly", {
   # Partition by magnitude
   partitionByMagnitude <- function(key) { if (key >= 3) 1 else 0 }

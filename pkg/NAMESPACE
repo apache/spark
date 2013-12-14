@@ -4,6 +4,7 @@ exportMethods(
               "cache",
               "collect",
               "collectPartition",
+              "combineByKey",
               "count",
               "flatMap",
               "groupByKey",
@@ -19,4 +20,4 @@ exportMethods(
 
 # S3 methods exported
 export("textFile", "parallelize", "hashCode", "includePackage")
-exportPattern("^sparkR")
+export("sparkR.init")
