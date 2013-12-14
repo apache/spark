@@ -113,6 +113,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         case other => other
       }
       case nonChild: AnyRef => nonChild
+      case null => null
     }.toArray
     if(changed) makeCopy(newArgs) else this
   }
