@@ -88,7 +88,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
       // activeSetOpt
       val allPairs = for (x <- 1 to n; y <- 1 to n) yield (x: Vid, y: Vid)
-      val complete = Graph.fromEdgeTuples(sc.parallelize(allPairs, 1), 0)
+      val complete = Graph.fromEdgeTuples(sc.parallelize(allPairs, 3), 0)
       val vids = complete.mapVertices((vid, attr) => vid).cache()
       val active = vids.vertices.filter { case (vid, attr) => attr % 2 == 0 }
       val numEvenNeighbors = vids.mapReduceTriplets(et => {
@@ -99,6 +99,21 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         Iterator((et.srcId, 1))
       }, (a: Int, b: Int) => a + b, Some((active, EdgeDirection.In))).collect.toSet
       assert(numEvenNeighbors === (1 to n).map(x => (x: Vid, n / 2)).toSet)
+
+      // outerJoinVertices followed by mapReduceTriplets(activeSetOpt)
+      val ring = Graph.fromEdgeTuples(sc.parallelize((0 until n).map(x => (x: Vid, (x+1) % n: Vid)), 3), 0)
+        .mapVertices((vid, attr) => vid).cache()
+      val changed = ring.vertices.filter { case (vid, attr) => attr % 2 == 1 }.mapValues(-_)
+      val changedGraph = ring.outerJoinVertices(changed) { (vid, old, newOpt) => newOpt.getOrElse(old) }
+      val numOddNeighbors = changedGraph.mapReduceTriplets(et => {
+        // Map function should only run on edges with source in the active set
+        if (et.srcId % 2 != 1) {
+          throw new Exception("map ran on edge with src vid %d, which is even".format(et.dstId))
+        }
+        Iterator((et.dstId, 1))
+      }, (a: Int, b: Int) => a + b, Some(changed, EdgeDirection.Out)).collect.toSet
+      assert(numOddNeighbors === (2 to n by 2).map(x => (x: Vid, 1)).toSet)
+
     }
   }
 
