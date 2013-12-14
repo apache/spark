@@ -22,7 +22,10 @@ class HiveCompatability extends HiveComaparisionTest {
 
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
-    "ops_comparison"
+    "ops_comparison",
+
+    // The skewjoin test seems to never complete on hive...
+    "skewjoin"
   )
 
   /**
@@ -53,17 +56,30 @@ class HiveCompatability extends HiveComaparisionTest {
     "input0",
     "input11",
     "input11_limit",
+    "input4_limit",
     "insert1",
-    "join_view",
     "join0",
+    "join1",
+    "join10",
+    "join15",
+    "join19",
+    "join22",
+    "join3",
+    "join_casesensitive",
+    "join_view",
     "literal_double",
     "literal_ints",
     "literal_string",
+    "mergejoins",
     "nestedvirtual",
     "noalias_subq1",
     "nullgroup",
     "nullgroup2",
     "nullinput",
+    "ppd_gby_join",
+    "ppd_random",
+    "ppd_udf_col",
+    "progress_1",
     "quote2",
     "rename_column",
     "select_as_omitted",
@@ -71,7 +87,9 @@ class HiveCompatability extends HiveComaparisionTest {
     "show_describe_func_quotes",
     "show_functions",
     "tablename_with_select",
+    "udf9",
     "udf_add",
+    "udf_ascii",
     "udf_avg",
     "udf_bigint",
     "udf_bitwise_and",
@@ -91,6 +109,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "udf_float",
     "udf_floor",
     "udf_from_unixtime",
+    "udf_hour",
     "udf_index",
     "udf_int",
     "udf_isnotnull",
@@ -100,20 +119,29 @@ class HiveCompatability extends HiveComaparisionTest {
     "udf_log",
     "udf_log10",
     "udf_log2",
+    "udf_lower",
+    "udf_lpad",
     "udf_ltrim",
+    "udf_minute",
     "udf_modulo",
     "udf_month",
     "udf_not",
     "udf_or",
+    "udf_parse_url",
+    "udf_pmod",
     "udf_positive",
     "udf_pow",
     "udf_power",
     "udf_rand",
     "udf_regexp_extract",
     "udf_regexp_replace",
+    "udf_repeat",
     "udf_rlike",
+    "udf_rpad",
     "udf_rtrim",
+    "udf_second",
     "udf_smallint",
+    "udf_space",
     "udf_sqrt",
     "udf_std",
     "udf_stddev",
@@ -127,11 +155,34 @@ class HiveCompatability extends HiveComaparisionTest {
     "udf_to_date",
     "udf_trim",
     "udf_ucase",
+    "udf_unhex",
+    "udf_unix_timestamp",
     "udf_upper",
     "udf_var_pop",
     "udf_var_samp",
     "udf_variance",
-    "union16"
+    "udf_weekofyear",
+    "udf_xpath_boolean",
+    "udf_xpath_double",
+    "udf_xpath_float",
+    "udf_xpath_int",
+    "udf_xpath_long",
+    "udf_xpath_short",
+    "union10",
+    "union11",
+    "union13",
+    "union15",
+    "union16",
+    "union2",
+    "union20",
+    "union28",
+    "union29",
+    "union30",
+    "union4",
+    "union5",
+    "union7",
+    "union8",
+    "union9"
   )
 
   // TODO: bundle in jar files... get from classpath
@@ -147,7 +198,7 @@ class HiveCompatability extends HiveComaparisionTest {
     val testCaseName = testCase.getName.stripSuffix(".q")
     if(blackList contains testCaseName) {
       // Do nothing
-    } else if(realWhiteList.contains(testCaseName)  || runAll) {
+    } else if(realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) || runAll) {
       // Build a test case and submit it to scala test framework...
       val queriesString = fileToString(testCase)
       createQueryTest(testCaseName, queriesString)
