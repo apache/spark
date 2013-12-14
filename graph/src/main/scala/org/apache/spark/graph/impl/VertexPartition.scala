@@ -51,8 +51,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
 
   /** Look up vid in activeSet, throwing an exception if it is None. */
   def isActive(vid: Vid): Boolean = {
-    val pos = index.getPos(vid)
-    pos >= 0 && activeSet.get.contains(pos)
+    activeSet.get.contains(vid)
   }
 
   /**
