@@ -172,6 +172,19 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     leftJoin(createUsingIndex(other))(f)
   }
 
+  /** Inner join another VertexPartition. */
+  def innerJoin[U: ClassManifest, VD2: ClassManifest](other: VertexPartition[U])
+      (f: (Vid, VD, U) => VD2): VertexPartition[VD2] = {
+    val newMask = mask & other.mask
+    val newValues = new Array[VD2](capacity)
+    var i = newMask.nextSetBit(0)
+    while (i >= 0) {
+      newValues(i) = f(index.getValue(i), values(i), other.values(i))
+      i = newMask.nextSetBit(i + 1)
+    }
+    new VertexPartition(index, newValues, newMask)
+  }
+
   /**
    * Similar effect as aggregateUsingIndex((a, b) => a)
    */
@@ -187,22 +200,11 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition[VD2](index, newValues, newMask)
   }
 
-  /** Same effect as leftJoin(iter) { (vid, a, bOpt) => bOpt.getOrElse(a) } */
-  def update(iter: Iterator[Product2[Vid, VD]]): VertexPartition[VD] = {
-    val newValues = new Array[VD](capacity)
-    System.arraycopy(values, 0, newValues, 0, newValues.length)
-    iter.foreach { case (vid, vdata) =>
-      val pos = index.getPos(vid)
-      newValues(pos) = vdata
-    }
-    new VertexPartition(index, newValues, mask)
-  }
-
   /**
-   * Same effect as leftJoin(iter) { (vid, a, bOpt) => bOpt.getOrElse(a) }, but unchanged vertices
-   * are hidden using the bitmask.
+   * Similar to innerJoin, but vertices from the left side that don't appear in iter will remain in
+   * the partition, hidden by the bitmask.
    */
-  def updateHideUnchanged(iter: Iterator[Product2[Vid, VD]])
+  def innerJoinKeepLeft(iter: Iterator[Product2[Vid, VD]])
     : VertexPartition[VD] = {
     val newMask = new BitSet(capacity)
     val newValues = new Array[VD](capacity)

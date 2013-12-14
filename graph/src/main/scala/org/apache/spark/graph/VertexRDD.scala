@@ -279,26 +279,31 @@ class VertexRDD[@specialized VD: ClassManifest](
    * Same effect as leftJoin(other) { (vid, a, bOpt) => bOpt.getOrElse(a) }, but `this` and `other`
    * must have the same index.
    */
-  def zipUpdate(other: VertexRDD[VD]): VertexRDD[VD] = {
+  def innerZipJoin[U: ClassManifest, VD2: ClassManifest](other: VertexRDD[U])
+      (f: (Vid, VD, U) => VD2): VertexRDD[VD2] = {
     this.zipVertexPartitions(other) { (thisPart, otherPart) =>
-      thisPart.update(otherPart.iterator)
+      thisPart.innerJoin(otherPart)(f)
     }
   }
 
-  /** Same effect as leftJoin(other) { (vid, a, bOpt) => bOpt.getOrElse(a) } */
-  def update(other: RDD[(Vid, VD)]): VertexRDD[VD] = {
+  /**
+   * Replace vertices with corresponding vertices in `other`, and drop vertices without a
+   * corresponding vertex in `other.
+   */
+  def innerJoin[U: ClassManifest, VD2: ClassManifest](other: RDD[(Vid, U)])
+      (f: (Vid, VD, U) => VD2): VertexRDD[VD2] = {
     // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
-    // If the other set is a VertexRDD then we use the much more efficient leftOuterZipJoin
+    // If the other set is a VertexRDD then we use the much more efficient innerZipJoin
     other match {
       case other: VertexRDD[_] =>
-        zipUpdate(other)
+        innerZipJoin(other)(f)
       case _ =>
         new VertexRDD[VD](
           partitionsRDD.zipPartitions(
             other.partitionBy(this.partitioner.get), preservesPartitioning = true)
           { (part, msgs) =>
             val vertexPartition: VertexPartition[VD] = part.next()
-            Iterator(vertexPartition.update(msgs))
+            Iterator(vertexPartition.innerJoin(msgs)(f))
           }
         )
     }

@@ -98,13 +98,14 @@ object Pregel {
     // Loop
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
-      // receive the messages
-      val changedVerts = g.vertices.zipJoin(messages)(vprog).cache() // updating the vertices
-      // replicate the changed vertices
-      g = g.updateVertices(changedVerts)
+      // Receive the messages. Vertices that didn't get any messages do not appear in changedVerts.
+      val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
+      // Update the graph with the new vertices, removing vertices that didn't get any messages.
+      g = g.innerJoinVertices(newVerts)
 
       val oldMessages = messages
-      // compute the messages
+      // Send new messages. Vertices that didn't get any messages in the previous round don't appear
+      // in the graph, so don't get to send messages.
       messages = g.mapReduceTriplets(sendMsg, mergeMsg).cache()
       activeMessages = messages.count()
       // after counting we can unpersist the old messages

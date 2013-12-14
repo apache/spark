@@ -79,8 +79,7 @@ class VTableReplicated[VD: ClassManifest](
         // VertexPartitions
         prevView.zipPartitions(shippedVerts) { (prevViewIter, shippedVertsIter) =>
           val (pid, prevVPart) = prevViewIter.next()
-          val newVPart = prevVPart.updateHideUnchanged(
-            shippedVertsIter.flatMap(_._2.iterator))
+          val newVPart = prevVPart.innerJoinKeepLeft(shippedVertsIter.flatMap(_._2.iterator))
           Iterator((pid, newVPart))
         }.cache().setName("VTableReplicated delta %s %s".format(includeSrcAttr, includeDstAttr))
 

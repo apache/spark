@@ -268,11 +268,24 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     }
   }
 
-  override def updateVertices(updates: VertexRDD[VD]): Graph[VD, ED] = {
-    val newVerts = vertices.update(updates)
-    val newVTableReplicated = new VTableReplicated(
-      updates, edges, vertexPlacement, Some(vTableReplicated))
-    new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
+  override def innerJoinVertices[U: ClassManifest, VD2: ClassManifest](table: RDD[(Vid, U)])
+      (f: (Vid, VD, U) => VD2): Graph[VD2, ED]
+    if (classManifest[VD] equals classManifest[VD2]) {
+      // f preserves type, so we can use incremental replication
+      val newVerts = vertices.innerJoin(table)(f)
+      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
+      // TODO(ankurdave): Need to resolve conflict between vertices that didn't change so are not
+      // moved but still need to run, and vertices that were deleted by the innerJoin so should not
+      // run
+      val newVTableReplicated = new VTableReplicated(
+        changedVerts, edges, vertexPlacement,
+        Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
+      new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
+    } else {
+      // updateF does not preserve type, so we must re-replicate all vertices in table
+      val newVerts = vertices.innerJoin(table)(f)
+      new GraphImpl(newVerts, edges, vertexPlacement)
+    }
   }
 } // end of class GraphImpl
 
