@@ -32,7 +32,9 @@ private[graph]
 class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     val index: VertexIdToIndexMap,
     val values: Array[VD],
-    val mask: BitSet)
+    val mask: BitSet,
+    /** A set of vids of active vertices. May contain vids not in index due to join rewrite. */
+    private val activeSet: Option[VertexSet] = None)
   extends Logging {
 
   val capacity: Int = index.capacity
@@ -47,13 +49,10 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     pos >= 0 && mask.get(pos)
   }
 
-  /**
-   * A vertex is stale if it is present in the index but hidden by the mask. In contrast, a vertex
-   * is nonexistent (possibly due to join rewrite) if it is not present in the index at all.
-   */
-  def isStale(vid: Vid): Boolean = {
+  /** Look up vid in activeSet, throwing an exception if it is None. */
+  def isActive(vid: Vid): Boolean = {
     val pos = index.getPos(vid)
-    pos >= 0 && !mask.get(pos)
+    pos >= 0 && activeSet.get.contains(pos)
   }
 
   /**
@@ -66,7 +65,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
    * attribute in the RDD
    *
    * @return a new VertexPartition with values obtained by applying `f` to
-   * each of the entries in the original VertexSet.  The resulting
+   * each of the entries in the original VertexRDD.  The resulting
    * VertexPartition retains the same index.
    */
   def map[VD2: ClassManifest](f: (Vid, VD) => VD2): VertexPartition[VD2] = {
@@ -186,6 +185,15 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   }
 
   /**
+   * Inner join an iterator of messages.
+   */
+  def innerJoin[U: ClassManifest, VD2: ClassManifest]
+      (iter: Iterator[Product2[Vid, U]])
+      (f: (Vid, VD, U) => VD2): VertexPartition[VD2] = {
+    innerJoin(createUsingIndex(iter))(f)
+  }
+
+  /**
    * Similar effect as aggregateUsingIndex((a, b) => a)
    */
   def createUsingIndex[VD2: ClassManifest](iter: Iterator[Product2[Vid, VD2]])
@@ -204,8 +212,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
    * Similar to innerJoin, but vertices from the left side that don't appear in iter will remain in
    * the partition, hidden by the bitmask.
    */
-  def innerJoinKeepLeft(iter: Iterator[Product2[Vid, VD]])
-    : VertexPartition[VD] = {
+  def innerJoinKeepLeft(iter: Iterator[Product2[Vid, VD]]): VertexPartition[VD] = {
     val newMask = new BitSet(capacity)
     val newValues = new Array[VD](capacity)
     System.arraycopy(values, 0, newValues, 0, newValues.length)
@@ -236,6 +243,12 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition[VD2](index, newValues, newMask)
   }
 
+  def replaceActives(iter: Iterator[Vid]): VertexPartition[VD] = {
+    val newActiveSet = new VertexSet
+    iter.foreach(newActiveSet.add(_))
+    new VertexPartition(index, values, mask, Some(newActiveSet))
+  }
+
   /**
    * Construct a new VertexPartition whose index contains only the vertices in the mask.
    */
@@ -249,4 +262,6 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   }
 
   def iterator: Iterator[(Vid, VD)] = mask.iterator.map(ind => (index.getValue(ind), values(ind)))
+
+  def vidIterator: Iterator[Vid] = mask.iterator.map(ind => index.getValue(ind))
 }

@@ -225,6 +225,11 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * be commutative and assosciative and is used to combine the output
    * of the map phase.
    *
+   * @param activeSet optionally, a set of "active" vertices and a direction of edges to consider
+   * when running `mapFunc`. For example, if the direction is Out, `mapFunc` will only be run on
+   * edges originating from vertices in the active set. `activeSet` must have the same index as the
+   * graph's vertices.
+   *
    * @example We can use this function to compute the inDegree of each
    * vertex
    * {{{
@@ -243,8 +248,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def mapReduceTriplets[A: ClassManifest](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
       reduceFunc: (A, A) => A,
-      skipStaleSrc: Boolean = false,
-      skipStaleDst: Boolean = false)
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None)
     : VertexRDD[A]
 
   /**
@@ -279,14 +283,6 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def outerJoinVertices[U: ClassManifest, VD2: ClassManifest](table: RDD[(Vid, U)])
       (mapFunc: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
-
-  /**
-   * Replace vertices in the graph with corresponding vertices in `updates`, and restrict vertices
-   * without a corresponding vertex in `updates`. Edges adjacent to restricted vertices will still
-   * appear in graph.edges, but not in triplets or mapReduceTriplets.
-   */
-  def innerJoinVertices[U: ClassManifest, VD2: ClassManifest](table: RDD[(Vid, U)])
-      (f: (Vid, VD, U) => VD2): Graph[VD2, ED]
 
   // Save a copy of the GraphOps object so there is always one unique GraphOps object
   // for a given Graph object, and thus the lazy vals in GraphOps would work as intended.

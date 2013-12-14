@@ -121,7 +121,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * Return a new VertexRDD by applying a function to corresponding
    * VertexPartitions of this VertexRDD and another one.
    */
-  private def zipVertexPartitions[VD2: ClassManifest, VD3: ClassManifest]
+  def zipVertexPartitions[VD2: ClassManifest, VD3: ClassManifest]
     (other: VertexRDD[VD2])
     (f: (VertexPartition[VD], VertexPartition[VD2]) => VertexPartition[VD3]): VertexRDD[VD3] = {
     val newPartitionsRDD = partitionsRDD.zipPartitions(
@@ -298,7 +298,7 @@ class VertexRDD[@specialized VD: ClassManifest](
       case other: VertexRDD[_] =>
         innerZipJoin(other)(f)
       case _ =>
-        new VertexRDD[VD](
+        new VertexRDD(
           partitionsRDD.zipPartitions(
             other.partitionBy(this.partitioner.get), preservesPartitioning = true)
           { (part, msgs) =>

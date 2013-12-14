@@ -40,14 +40,14 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     this(vertices, edges, vertexPlacement, new VTableReplicated(vertices, edges, vertexPlacement))
   }
 
-  /** Return a RDD that brings edges with its source and destination vertices together. */
+  /** Return a RDD that brings edges together with their source and destination vertices. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
     val vdManifest = classManifest[VD]
     val edManifest = classManifest[ED]
 
-    edges.zipEdgePartitions(vTableReplicated.bothAttrs) { (edgePartition, vTableReplicatedIter) =>
-      val (_, vPart) = vTableReplicatedIter.next()
-      new EdgeTripletIterator(vPart.index, vPart.values, edgePartition)(vdManifest, edManifest)
+    edges.zipEdgePartitions(vTableReplicated.get(true, true, None)) { (ePart, vPartIter) =>
+      val (_, vPart) = vPartIter.next()
+      new EdgeTripletIterator(vPart.index, vPart.values, ePart)(vdManifest, edManifest)
     }
   }
 
@@ -120,9 +120,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     println("\n\nvertexPlacement.bothAttrs -------------------------------")
     traverseLineage(vertexPlacement.bothAttrs, "  ", visited)
     visited += (vertexPlacement.bothAttrs.id -> "vertexPlacement.bothAttrs")
-    println("\n\nvTableReplicated.bothAttrs ----------------")
-    traverseLineage(vTableReplicated.bothAttrs, "  ", visited)
-    visited += (vTableReplicated.bothAttrs.id -> "vTableReplicated.bothAttrs")
     println("\n\ntriplets ----------------------------------------")
     traverseLineage(triplets, "  ", visited)
     println(visited)
@@ -154,7 +151,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // manifest from GraphImpl (which would require serializing GraphImpl).
     val vdManifest = classManifest[VD]
     val newETable =
-      edges.zipEdgePartitions(vTableReplicated.bothAttrs) { (edgePartition, vTableReplicatedIter) =>
+      edges.zipEdgePartitions(vTableReplicated.get(true, true, None)) { (edgePartition, vTableReplicatedIter) =>
         val (pid, vPart) = vTableReplicatedIter.next()
         val et = new EdgeTriplet[VD, ED]
         val newEdgePartition = edgePartition.map { e =>
@@ -206,8 +203,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   override def mapReduceTriplets[A: ClassManifest](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
       reduceFunc: (A, A) => A,
-      skipStaleSrc: Boolean = false,
-      skipStaleDst: Boolean = false): VertexRDD[A] = {
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None) = {
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
@@ -216,21 +212,27 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // in the relevant position in an edge.
     val mapUsesSrcAttr = accessesVertexAttr[VD, ED](mapFunc, "srcAttr")
     val mapUsesDstAttr = accessesVertexAttr[VD, ED](mapFunc, "dstAttr")
-    val vs = vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr)
+    val vs = vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr, activeSetOpt.map(_._1))
+    val activeDirectionOpt = activeSetOpt.map(_._2)
 
     // Map and combine.
     val preAgg = edges.zipEdgePartitions(vs) { (edgePartition, vTableReplicatedIter) =>
-      val (_, vertexPartition) = vTableReplicatedIter.next()
-
+      val (pid, vertexPartition) = vTableReplicatedIter.next()
       // Iterate over the partition
       val et = new EdgeTriplet[VD, ED]
       val filteredEdges = edgePartition.iterator.flatMap { e =>
-        // Ensure that the edge meets the requirements of skipStaleSrc and skipStaleDst
-        et.srcStale = vertexPartition.isStale(e.srcId)
-        et.dstStale = vertexPartition.isStale(e.dstId)
-        val skipDueToSrc = skipStaleSrc && et.srcStale
-        val skipDueToDst = skipStaleDst && et.dstStale
-        if (!skipDueToSrc && !skipDueToDst) {
+        // Ensure the edge is adjacent to a vertex in activeSet if necessary
+        val adjacent = activeDirectionOpt match {
+          case Some(EdgeDirection.In) =>
+            vertexPartition.isActive(e.dstId)
+          case Some(EdgeDirection.Out) =>
+            vertexPartition.isActive(e.srcId)
+          case Some(EdgeDirection.Both) =>
+            vertexPartition.isActive(e.srcId) && vertexPartition.isActive(e.dstId)
+          case None =>
+            true
+        }
+        if (adjacent) {
           et.set(e)
           if (mapUsesSrcAttr) {
             et.srcAttr = vertexPartition(e.srcId)
@@ -264,26 +266,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     } else {
       // updateF does not preserve type, so we must re-replicate all vertices
       val newVerts = vertices.leftJoin(updates)(updateF)
-      new GraphImpl(newVerts, edges, vertexPlacement)
-    }
-  }
-
-  override def innerJoinVertices[U: ClassManifest, VD2: ClassManifest](table: RDD[(Vid, U)])
-      (f: (Vid, VD, U) => VD2): Graph[VD2, ED]
-    if (classManifest[VD] equals classManifest[VD2]) {
-      // f preserves type, so we can use incremental replication
-      val newVerts = vertices.innerJoin(table)(f)
-      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
-      // TODO(ankurdave): Need to resolve conflict between vertices that didn't change so are not
-      // moved but still need to run, and vertices that were deleted by the innerJoin so should not
-      // run
-      val newVTableReplicated = new VTableReplicated(
-        changedVerts, edges, vertexPlacement,
-        Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
-      new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
-    } else {
-      // updateF does not preserve type, so we must re-replicate all vertices in table
-      val newVerts = vertices.innerJoin(table)(f)
       new GraphImpl(newVerts, edges, vertexPlacement)
     }
   }

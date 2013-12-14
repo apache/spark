@@ -86,23 +86,19 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         (a: Int, b: Int) => a + b)
       assert(neighborDegreeSums.collect().toSet === (0 to n).map(x => (x, n)).toSet)
 
-      // skipStale
-      val allPairs = for (x <- 1 to n; y <- x + 1 to n) yield (x: Vid, y: Vid)
+      // activeSetOpt
+      val allPairs = for (x <- 1 to n; y <- 1 to n) yield (x: Vid, y: Vid)
       val complete = Graph.fromEdgeTuples(sc.parallelize(allPairs, 1), 0)
       val vids = complete.mapVertices((vid, attr) => vid).cache()
-      vids.triplets.foreach(x => {}) // force replicated vertex view to be materialized
-      val vids2 = vids.mapVertices((vid, attr) => if (attr % 2 == 0) -attr else attr).cache()
-      val numEvenNeighbors = vids2.mapReduceTriplets(et => {
-        // Map function should only run on changed vertices
-        if (et.srcId % 2 != 0) {
-          throw new Exception("map ran on edge with src vid %d, which is odd".format(et.srcId))
-        }
+      val active = vids.vertices.filter { case (vid, attr) => attr % 2 == 0 }
+      val numEvenNeighbors = vids.mapReduceTriplets(et => {
+        // Map function should only run on edges with destination in the active set
         if (et.dstId % 2 != 0) {
           throw new Exception("map ran on edge with dst vid %d, which is odd".format(et.dstId))
         }
-        Iterator((et.srcId, 1), (et.dstId, 1))
-      }, (a: Int, b: Int) => a + b, skipStaleSrc = true, skipStaleDst = true).collect.toSet
-      assert(numEvenNeighbors === (2 to n by 2).map(x => (x: Vid, n / 2 - 1)).toSet)
+        Iterator((et.srcId, 1))
+      }, (a: Int, b: Int) => a + b, Some((active, EdgeDirection.In))).collect.toSet
+      assert(numEvenNeighbors === (1 to n).map(x => (x: Vid, n / 2)).toSet)
     }
   }
 
@@ -193,36 +189,6 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
       // And 4 edges.
       assert(subgraph.edges.map(_.copy()).collect().toSet === (2 to n by 2).map(x => Edge(0, x, 1)).toSet)
-    }
-  }
-
-  test("updateVertices") {
-    withSpark(new SparkContext("local", "test")) { sc =>
-      // Create a star graph of 10 vertices
-      val n = 10
-      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "v1").cache()
-
-      // Modify only vertices whose vids are even
-      val changedVerts = star.vertices.filter(_._1 % 2 == 0).mapValues((vid, attr) => "v2")
-
-      // Apply the modification to the graph
-      val changedStar = star.updateVertices(changedVerts)
-
-      val newVertices = star.vertices.leftZipJoin(changedVerts) { (vid, oldVd, newVdOpt) =>
-        newVdOpt match {
-          case Some(newVd) => newVd
-          case None => oldVd
-        }
-      }
-
-      // The graph's vertices should be correct
-      assert(changedStar.vertices.collect().toSet === newVertices.collect().toSet)
-
-      // Send the leaf attributes to the center
-      val sums = changedStar.mapReduceTriplets(
-        edge => Iterator((edge.srcId, Set(edge.dstAttr))),
-        (a: Set[String], b: Set[String]) => a ++ b)
-      assert(sums.collect().toSet === Set((0, Set("v1", "v2"))))
     }
   }
 }
