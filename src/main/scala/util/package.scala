@@ -40,4 +40,14 @@ package object util {
     out.close()
     file
   }
+
+  def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {
+    val maxLeftSize = left.map(_.size).max
+    val leftPadded = left ++ Seq.fill(if(left.size < right.size) right.size - left.size else 0)("")
+    val rightPadded = right ++ Seq.fill(if(right.size < left.size) left.size - right.size else 0)("")
+
+    leftPadded.zip(rightPadded).map {
+      case (l,r) => (if(l == r) " " else "*") + l + (" " * ((maxLeftSize - left.size) + 3)) + r
+    }
+  }
 }

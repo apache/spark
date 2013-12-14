@@ -6,8 +6,10 @@ import shark.{SharkContext, SharkEnv}
 import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
-import catalyst.frontend.hive.{ExplainCommand, Command}
+import frontend.hive.{ExplainCommand, Command}
 import util._
+
+import collection.JavaConversions._
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -15,7 +17,7 @@ import util._
  *
  * The "golden" results from Hive are cached in [[answerCache]] to speed up testing.
  */
-abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen {
+abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
   val testShark = TestShark
 
   protected val targetDir = new File("target")
@@ -57,10 +59,12 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
 
   def createQueryTest(testCaseName: String, sql: String) = {
     test(testCaseName) {
-      println(
-       s"""=============================
-          |===HIVE TEST: $testCaseName===
-          |=============================""".stripMargin)
+      logger.info(
+       s"""
+          |=============================
+          |HIVE TEST: $testCaseName
+          |=============================
+          """.stripMargin)
       val queryList = sql.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
 
       try {
@@ -72,7 +76,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
             val cachedAnswerFile = new File(answerCache, cachedAnswerName)
 
             if(cachedAnswerFile.exists) {
-              println(s"Using cached answer for: $queryString")
+              logger.info(s"Using cached answer for: $queryString")
               val cachedAnswer = fileToString(cachedAnswerFile)
               if(cachedAnswer == "")
                 Nil
@@ -116,26 +120,30 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
           }
         }.toSeq
 
-
         testShark.reset()
 
         (queryList, hiveResults, catalystResults).zipped.foreach {
           case (query, hive, (sharkQuery, catalyst)) =>
             // Check that the results match unless its an EXPLAIN query.
-            if((!sharkQuery.parsed.isInstanceOf[ExplainCommand]) && prepareAnswer(sharkQuery,hive) != catalyst) {
+            val preparedHive = prepareAnswer(sharkQuery,hive)
+
+            if((!sharkQuery.parsed.isInstanceOf[ExplainCommand]) && preparedHive != catalyst) {
+
+              val hivePrintOut = s"== HIVE - ${hive.size} row(s) ==" +: preparedHive
+              val catalystPrintOut = s"== CATALYST - ${catalyst.size} row(s) ==" +: catalyst
+
+              val resultComparision = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
+
               fail(
                 s"""
                   |Results do not match for query:
-                  |$sharkQuery\n${sharkQuery.analyzed.output.mkString("\t")}
-                  |== HIVE - ${hive.size} row(s) ==
-                  |${hive.mkString("\n")}
-                  |== CATALYST - ${catalyst.size} row(s) ==
-                  |${catalyst.mkString("\n")}
+                  |$sharkQuery\n${sharkQuery.analyzed.output.map(_.name).mkString("\t")}
+                  |$resultComparision
                 """.stripMargin)
             }
         }
 
-        passedList.println(testCaseName)
+        passedList.println(s""""$testCaseName",""")
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
         case originalException: Exception =>
@@ -147,7 +155,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
               testShark.runSqlHive("SELECT key FROM src")
             } catch {
               case e: Exception =>
-                println(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")
+                logger.error(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")
                 // The testing setup traps exits so wait here for a long time so the developer can see when things started
                 // to go wrong.
                 Thread.sleep(1000000)
