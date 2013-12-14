@@ -60,3 +60,7 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   def output = child.output.map(_.withQualifiers(alias :: Nil))
   def references = Set.empty
 }
+
+case object NoRelation extends LeafNode {
+  def output = Nil
+}
