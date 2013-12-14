@@ -69,7 +69,7 @@ class VTableReplicated[VD: ClassManifest](
     // also shipped there.
     val shippedActives = vertexPlacement.get(true, true)
       .zipPartitions(actives.partitionsRDD)(VTableReplicated.buildActiveBuffer(_, _))
-      .partitionBy(edges.partitioner.get)// .cache().setName("VTableReplicated shippedActives")
+      .partitionBy(edges.partitioner.get)
     // Update vTableReplicated with shippedActives, setting activeness flags in the resulting
     // VertexPartitions
     get(includeSrc, includeDst).zipPartitions(shippedActives) { (viewIter, shippedActivesIter) =>
@@ -87,7 +87,7 @@ class VTableReplicated[VD: ClassManifest](
     val verts = updatedVerts.partitionsRDD
     val shippedVerts = vertexPlacement.get(includeSrc, includeDst)
       .zipPartitions(verts)(VTableReplicated.buildBuffer(_, _)(vdManifest))
-      .partitionBy(edges.partitioner.get)// .cache().setName("VTableReplicated shippedVerts")
+      .partitionBy(edges.partitioner.get)
     // TODO: Consider using a specialized shuffler.
 
     prevVTableReplicated match {

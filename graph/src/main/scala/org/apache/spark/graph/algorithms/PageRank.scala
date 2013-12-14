@@ -178,7 +178,7 @@ object PageRank extends Logging {
         .mapReduceTriplets[Double](
           et => Iterator((et.dstId, et.srcAttr * et.attr * weight)),
           _ + _,
-          prevDeltas.map(d => (d, EdgeDirection.Out)))
+          prevDeltas.map((_, EdgeDirection.Out)))
         .filter { case (vid, delta) => delta > tol }
         .cache()
       prevDeltas = Some(deltas)
