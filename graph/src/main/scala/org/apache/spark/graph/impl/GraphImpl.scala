@@ -217,7 +217,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
     // Map and combine.
     val preAgg = edges.zipEdgePartitions(vs) { (edgePartition, vTableReplicatedIter) =>
-      val (pid, vertexPartition) = vTableReplicatedIter.next()
+      val (_, vertexPartition) = vTableReplicatedIter.next()
+
       // Iterate over the partition
       val et = new EdgeTriplet[VD, ED]
       val filteredEdges = edgePartition.iterator.flatMap { e =>
