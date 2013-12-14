@@ -45,7 +45,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     val vdManifest = classManifest[VD]
     val edManifest = classManifest[ED]
 
-    edges.zipEdgePartitions(vTableReplicated.get(true, true, None)) { (ePart, vPartIter) =>
+    edges.zipEdgePartitions(vTableReplicated.get(true, true)) { (ePart, vPartIter) =>
       val (_, vPart) = vPartIter.next()
       new EdgeTripletIterator(vPart.index, vPart.values, ePart)(vdManifest, edManifest)
     }
@@ -54,7 +54,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   override def persist(newLevel: StorageLevel): Graph[VD, ED] = {
     vertices.persist(newLevel)
     edges.persist(newLevel)
-    vertexPlacement.persist(newLevel)
     this
   }
 
@@ -151,7 +150,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // manifest from GraphImpl (which would require serializing GraphImpl).
     val vdManifest = classManifest[VD]
     val newETable =
-      edges.zipEdgePartitions(vTableReplicated.get(true, true, None)) { (edgePartition, vTableReplicatedIter) =>
+      edges.zipEdgePartitions(vTableReplicated.get(true, true)) { (edgePartition, vTableReplicatedIter) =>
         val (pid, vPart) = vTableReplicatedIter.next()
         val et = new EdgeTriplet[VD, ED]
         val newEdgePartition = edgePartition.map { e =>
@@ -212,7 +211,10 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // in the relevant position in an edge.
     val mapUsesSrcAttr = accessesVertexAttr[VD, ED](mapFunc, "srcAttr")
     val mapUsesDstAttr = accessesVertexAttr[VD, ED](mapFunc, "dstAttr")
-    val vs = vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr, activeSetOpt.map(_._1))
+    val vs = activeSetOpt match {
+      case Some((activeSet, _)) => vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr, activeSet)
+      case None => vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr)
+    }
     val activeDirectionOpt = activeSetOpt.map(_._2)
 
     // Map and combine.

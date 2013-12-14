@@ -41,106 +41,88 @@ class VTableReplicated[VD: ClassManifest](
             vidToIndex.add(e.dstId)
           }
           (pid, vidToIndex)
-      }, preservesPartitioning = true).cache()
+      }, preservesPartitioning = true).cache().setName("VTableReplicated localVidMap")
   }
 
-  def get(includeSrc: Boolean, includeDst: Boolean, activesOpt: Option[VertexRDD[_]] = None)
-    : RDD[(Pid, VertexPartition[VD])] = {
+  private lazy val bothAttrs: RDD[(Pid, VertexPartition[VD])] = create(true, true)
+  private lazy val srcAttrOnly: RDD[(Pid, VertexPartition[VD])] = create(true, false)
+  private lazy val dstAttrOnly: RDD[(Pid, VertexPartition[VD])] = create(false, true)
+  private lazy val noAttrs: RDD[(Pid, VertexPartition[VD])] = create(false, false)
 
+  def get(includeSrc: Boolean, includeDst: Boolean): RDD[(Pid, VertexPartition[VD])] = {
+    (includeSrc, includeDst) match {
+      case (true, true) => bothAttrs
+      case (true, false) => srcAttrOnly
+      case (false, true) => dstAttrOnly
+      case (false, false) => noAttrs
+    }
+  }
+
+  def get(
+      includeSrc: Boolean,
+      includeDst: Boolean,
+      actives: VertexRDD[_]): RDD[(Pid, VertexPartition[VD])] = {
+
+    // Ship active sets to edge partitions using vertexPlacement, but ignoring includeSrc and
+    // includeDst. These flags govern attribute shipping, but the activeness of a vertex must be
+    // shipped to all edges mentioning that vertex, regardless of whether the vertex attribute is
+    // also shipped there.
+    val shippedActives = vertexPlacement.get(true, true)
+      .zipPartitions(actives.partitionsRDD)(VTableReplicated.buildActiveBuffer(_, _))
+      .partitionBy(edges.partitioner.get)// .cache().setName("VTableReplicated shippedActives")
+    // Update vTableReplicated with shippedActives, setting activeness flags in the resulting
+    // VertexPartitions
+    get(includeSrc, includeDst).zipPartitions(shippedActives) { (viewIter, shippedActivesIter) =>
+      val (pid, vPart) = viewIter.next()
+      val newPart = vPart.replaceActives(shippedActivesIter.flatMap(_._2.iterator))
+      Iterator((pid, newPart))
+    }
+  }
+
+  private def create(includeSrc: Boolean, includeDst: Boolean)
+    : RDD[(Pid, VertexPartition[VD])] = {
     val vdManifest = classManifest[VD]
 
     // Ship vertex attributes to edge partitions according to vertexPlacement
     val verts = updatedVerts.partitionsRDD
     val shippedVerts = vertexPlacement.get(includeSrc, includeDst)
       .zipPartitions(verts)(VTableReplicated.buildBuffer(_, _)(vdManifest))
-      .partitionBy(edges.partitioner.get).cache()
+      .partitionBy(edges.partitioner.get)// .cache().setName("VTableReplicated shippedVerts")
     // TODO: Consider using a specialized shuffler.
-
-    // Ship active sets to edge partitions using vertexPlacement, but ignoring includeSrc and
-    // includeDst. These flags govern attribute shipping, but the activeness of a vertex must be
-    // shipped to all edges mentioning that vertex, regardless of whether the vertex attribute is
-    // also shipped there.
-    val shippedActivesOpt = activesOpt.map { actives =>
-      vertexPlacement.get(true, true)
-        .zipPartitions(actives.partitionsRDD)(VTableReplicated.buildActiveBuffer(_, _))
-        .partitionBy(edges.partitioner.get).cache() // TODO(ankurdave): Why do we cache this?
-    }
 
     prevVTableReplicated match {
       case Some(vTableReplicated) =>
         val prevView: RDD[(Pid, VertexPartition[VD])] =
           vTableReplicated.get(includeSrc, includeDst)
 
-        // Update vTableReplicated with updatedVerts, setting staleness and activeness flags in the
-        // resulting VertexPartitions
-        shippedActivesOpt match {
-          case Some(shippedActives) =>
-            prevView.zipPartitions(shippedVerts, shippedActives) {
-              (prevViewIter, shippedVertsIter, shippedActivesIter) =>
-                val (pid, prevVPart) = prevViewIter.next()
-                val newVPart = prevVPart
-                  .innerJoinKeepLeft(shippedVertsIter.flatMap(_._2.iterator))
-                  .replaceActives(shippedActivesIter.flatMap(_._2.iterator))
-                Iterator((pid, newVPart))
-            }.cache().setName("VTableReplicated delta actives %s %s".format(includeSrc, includeDst))
-          case None =>
-            prevView.zipPartitions(shippedVerts) {
-              (prevViewIter, shippedVertsIter) =>
-                val (pid, prevVPart) = prevViewIter.next()
-                val newVPart = prevVPart
-                  .innerJoinKeepLeft(shippedVertsIter.flatMap(_._2.iterator))
-                Iterator((pid, newVPart))
-            }.cache().setName("VTableReplicated delta %s %s".format(includeSrc, includeDst))
-        }
+        // Update vTableReplicated with shippedVerts, setting staleness flags in the resulting
+        // VertexPartitions
+        prevView.zipPartitions(shippedVerts) { (prevViewIter, shippedVertsIter) =>
+          val (pid, prevVPart) = prevViewIter.next()
+          val newVPart = prevVPart.innerJoinKeepLeft(shippedVertsIter.flatMap(_._2.iterator))
+          Iterator((pid, newVPart))
+        }.cache().setName("VTableReplicated delta %s %s".format(includeSrc, includeDst))
 
       case None =>
-        // Within each edge partition, place the vertex attributes received from
-        // msgsByPartition into the correct locations specified in localVidMap
-        shippedActivesOpt match {
-          case Some(shippedActives) =>
-            localVidMap.zipPartitions(shippedVerts, shippedActives) {
-              (mapIter, shippedVertsIter, shippedActivesIter) =>
-                val (pid, vidToIndex) = mapIter.next()
-                assert(!mapIter.hasNext)
-                // Populate the vertex array using the vidToIndex map
-                val vertexArray = vdManifest.newArray(vidToIndex.capacity)
-                for ((_, block) <- shippedVertsIter) {
-                  for (i <- 0 until block.vids.size) {
-                    val vid = block.vids(i)
-                    val attr = block.attrs(i)
-                    val ind = vidToIndex.getPos(vid) & OpenHashSet.POSITION_MASK
-                    vertexArray(ind) = attr
-                  }
-                }
-                // Populate the activeSet with the received actives
-                val activeSet = new VertexSet(vidToIndex.capacity)
-                for (activeVid <- shippedActivesIter.flatMap(_._2.iterator)) {
-                  activeSet.add(activeVid)
-                }
-                val newVPart = new VertexPartition(
-                  vidToIndex, vertexArray, vidToIndex.getBitSet, Some(activeSet))(vdManifest)
-                Iterator((pid, newVPart))
-              }.cache().setName("VTableReplicated active %s %s".format(includeSrc, includeDst))
-
-          case None =>
-            localVidMap.zipPartitions(shippedVerts) { (mapIter, shippedVertsIter) =>
-              val (pid, vidToIndex) = mapIter.next()
-              assert(!mapIter.hasNext)
-              // Populate the vertex array using the vidToIndex map
-              val vertexArray = vdManifest.newArray(vidToIndex.capacity)
-              for ((_, block) <- shippedVertsIter) {
-                for (i <- 0 until block.vids.size) {
-                  val vid = block.vids(i)
-                  val attr = block.attrs(i)
-                  val ind = vidToIndex.getPos(vid) & OpenHashSet.POSITION_MASK
-                  vertexArray(ind) = attr
-                }
-              }
-              val newVPart = new VertexPartition(
-                vidToIndex, vertexArray, vidToIndex.getBitSet)(vdManifest)
-              Iterator((pid, newVPart))
-            }.cache().setName("VTableReplicated %s %s".format(includeSrc, includeDst))
-        }
+        // Within each edge partition, place the shipped vertex attributes into the correct
+        // locations specified in localVidMap
+        localVidMap.zipPartitions(shippedVerts) { (mapIter, shippedVertsIter) =>
+          val (pid, vidToIndex) = mapIter.next()
+          assert(!mapIter.hasNext)
+          // Populate the vertex array using the vidToIndex map
+          val vertexArray = vdManifest.newArray(vidToIndex.capacity)
+          for ((_, block) <- shippedVertsIter) {
+            for (i <- 0 until block.vids.size) {
+              val vid = block.vids(i)
+              val attr = block.attrs(i)
+              val ind = vidToIndex.getPos(vid) & OpenHashSet.POSITION_MASK
+              vertexArray(ind) = attr
+            }
+          }
+          val newVPart = new VertexPartition(
+            vidToIndex, vertexArray, vidToIndex.getBitSet)(vdManifest)
+          Iterator((pid, newVPart))
+        }.cache().setName("VTableReplicated %s %s".format(includeSrc, includeDst))
     }
   }
 }
