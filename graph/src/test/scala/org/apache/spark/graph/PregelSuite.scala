@@ -33,9 +33,9 @@ class PregelSuite extends FunSuite with LocalSparkContext {
       val chainWithSeed = chain.mapVertices { (vid, attr) => if (vid == 1) 1 else 0 }
       assert(chainWithSeed.vertices.collect.toSet === Set((1: Vid, 1)) ++ (2 to n).map(x => (x: Vid, 0)).toSet)
       val result = Pregel(chainWithSeed, 0)(
-        (vid, attr, msg) => { println("vprog on " + (vid, attr, msg)); math.max(msg, attr) },
-        et => { println("sendMsg on " + ((et.srcId, et.srcAttr), (et.dstId, et.dstAttr))); Iterator((et.dstId, et.srcAttr)) },
-        (a: Int, b: Int) => { println("mergeMsg on " + (a, b)); math.max(a, b) })
+        (vid, attr, msg) => math.max(msg, attr),
+        et => Iterator((et.dstId, et.srcAttr)),
+        (a: Int, b: Int) => math.max(a, b))
       assert(result.vertices.collect.toSet ===
         chain.vertices.mapValues { (vid, attr) => attr + 1 }.collect.toSet)
     }
