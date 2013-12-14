@@ -87,7 +87,7 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.apache.kafka</groupId>
+      <groupId>com.sksamuel.kafka</groupId>
       <artifactId>kafka_2.10</artifactId>
       <version>0.8.0-beta1</version>
       <exclusions>
