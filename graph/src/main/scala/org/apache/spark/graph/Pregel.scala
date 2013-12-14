@@ -92,22 +92,29 @@ object Pregel {
     : Graph[VD, ED] = {
 
     var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) )
+    println("[pre] g: " + g.vertices.cache().collect.mkString(","))
     // compute the messages
     var messages = g.mapReduceTriplets(sendMsg, mergeMsg).cache()
+    println("[pre] messages: " + messages.collect.mkString(","))
     var activeMessages = messages.count()
+    println("Pregel pre-run, %d active messages".format(activeMessages))
     // Loop
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages. Vertices that didn't get any messages do not appear in newVerts.
       val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
+      println("newVerts: " + newVerts.collect.mkString(","))
       // Update the graph with the new vertices.
       g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }
+      println("g: " + g.vertices.cache().collect.mkString(","))
 
       val oldMessages = messages
       // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't
       // get to send messages.
       messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, EdgeDirection.Out))).cache()
+      println("messages: " + messages.collect.mkString(","))
       activeMessages = messages.count()
+      println("Pregel iter %d, %d active messages".format(i, activeMessages))
       // after counting we can unpersist the old messages
       oldMessages.unpersist(blocking=false)
       // count the iteration
