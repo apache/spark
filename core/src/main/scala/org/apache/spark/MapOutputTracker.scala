@@ -72,6 +72,13 @@ private[spark] class MapOutputTracker extends Logging {
   // throw a SparkException if this fails.
   private def askTracker(message: Any): Any = {
     try {
+      /*
+        The difference between ActorRef and ActorSelection is well explained here:
+        http://doc.akka.io/docs/akka/2.2.3/project/migration-guide-2.1.x-2.2.x.html#Use_actorSelection_instead_of_actorFor
+        In spark a map output tracker can be either started on Driver where it is created which
+        is an ActorRef or it can be on executor from where it is looked up which is an
+        actorSelection.
+       */
       val future = trackerActor match {
         case Left(a: ActorRef) => a.ask(message)(timeout)
         case Right(b: ActorSelection) => b.ask(message)(timeout)
