@@ -15,7 +15,6 @@ object Evaluate {
      * A set of helper functions that return the correct decendent of [[scala.math.Numeric]] type and do any casting
      * necessary of child evaluation.
      */
-
     @inline
     def n1(e: Expression, f: ((Numeric[Any], Any) => Any)): Any  = e.dataType match {
       case IntegerType =>
@@ -124,7 +123,10 @@ object Evaluate {
       /* Functions */
       case Rand => scala.util.Random.nextDouble
 
-      case other => throw new NotImplementedError(s"Evaluation for:\n $e")
+      /* UDFs */
+      case implementedFunction: ImplementedUdf => implementedFunction.evaluate(implementedFunction.children.map(eval))
+
+      case other => throw new OptimizationException(other, "evaluation not implemented")
     }
   }
 }

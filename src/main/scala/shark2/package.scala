@@ -1,5 +1,9 @@
 package catalyst
 
+import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
+
+import types._
+
 /**
  * A partial reimplementation of Shark, a Hive compatible SQL engine running on Spark, using Catalyst.
  *
@@ -9,4 +13,20 @@ package catalyst
  * Currently functions that are not supported by this implementation are passed back to the original Shark
  * implementation for execution.
  */
-package object shark2
+package object shark2 {
+  implicit class typeInfoConversions(dt: DataType) {
+    import org.apache.hadoop.hive.serde2.typeinfo._
+    import TypeInfoFactory._
+
+    def toTypeInfo: TypeInfo = dt match {
+      case BooleanType => booleanTypeInfo
+      case ByteType => byteTypeInfo
+      case DoubleType => doubleTypeInfo
+      case FloatType => floatTypeInfo
+      case IntegerType => intTypeInfo
+      case LongType => longTypeInfo
+      case ShortType => shortTypeInfo
+      case StringType => stringTypeInfo
+    }
+  }
+}

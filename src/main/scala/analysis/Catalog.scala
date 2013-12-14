@@ -6,7 +6,7 @@ import plans.logical.LogicalPlan
 /**
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
-abstract class Catalog {
+abstract trait Catalog {
   def lookupRelation(name: String, alias: Option[String] = None): LogicalPlan
 }
 

@@ -9,16 +9,17 @@ import rules._
  * A trivial [[Analyzer]] with an [[EmptyCatalog]]. Used for testing when all relations are
  * already filled in and the analyser needs only to resolve attribute references.
  */
-object SimpleAnalyzer extends Analyzer(EmptyCatalog)
+object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyRegistry)
 
-class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
+class Analyzer(catalog: Catalog, registry: FunctionRegistry) extends RuleExecutor[LogicalPlan] {
   val fixedPoint = FixedPoint(100)
 
   val batches = Seq(
     Batch("Resolution", fixedPoint,
       ResolveReferences,
       ResolveRelations,
-      StarExpansion),
+      StarExpansion,
+      ResolveFunctions),
     Batch("Aggregation", Once,
       GlobalAggregates),
     Batch("Type Coersion", fixedPoint,
@@ -46,6 +47,16 @@ class Analyzer(catalog: Catalog) extends RuleExecutor[LogicalPlan] {
           // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
           q.resolve(name).getOrElse(u)
       }
+    }
+  }
+
+  object ResolveFunctions extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case q: LogicalPlan =>
+        q transformExpressions {
+          case UnresolvedFunction(name, children) if children.map(_.resolved).reduceLeft(_&&_) =>
+            registry.lookupFunction(name, children)
+        }
     }
   }
 

@@ -37,4 +37,8 @@ class HiveQueryTests extends HiveComaparisionTest {
 
   createQueryTest("small.cartesian",
     "SELECT a.key, b.key FROM (SELECT key FROM src WHERE key < 1) a JOIN (SELECT key FROM src WHERE key = 2) b")
+
+  createQueryTest("length.udf",
+    "SELECT length(\"test\") FROM src LIMIT 1")
+
 }

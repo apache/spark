@@ -70,7 +70,7 @@ object TestShark extends Logging {
   /* A catalyst metadata catalog that points to the Shark/Hive Metastore. */
   val catalog = new HiveMetastoreCatalog(SharkContext.hiveconf)
   /* An analyzer that uses the Shark/Hive metastore. */
-  val analyze = new Analyzer(catalog)
+  val analyze = new Analyzer(catalog, HiveFunctionRegistry)
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {

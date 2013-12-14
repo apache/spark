@@ -88,6 +88,7 @@ object HiveQl {
     "TOK_ALTERTABLE_UNARCHIVE",
     "TOK_ANALYZE",
     "TOK_CREATEDATABASE",
+    "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
     "TOK_CREATETABLE",
     "TOK_DROPDATABASE",
@@ -323,6 +324,8 @@ object HiveQl {
   }
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
+    // Just fake explain on create function...
+    case Token("TOK_EXPLAIN", Token("TOK_CREATEFUNCTION", _) :: Nil) => NoRelation
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: Nil = getClauses(Seq("TOK_QUERY", "FORMATTED"), explainArgs)
@@ -511,7 +514,12 @@ object HiveQl {
     /* Other functions */
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
 
+    /* UDFs - Must be last otherwise will preempt built in functions */
+    case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
+      UnresolvedFunction(name, args.map(nodeToExpr))
+
     /* Literals */
+    case Token("TOK_NULL", Nil) => Literal(null, IntegerType) // TODO: What type is null?
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.asInstanceOf[ASTNode].getText)).mkString)
 

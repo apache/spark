@@ -10,6 +10,12 @@ abstract class Expression extends TreeNode[Expression] {
   def dataType: DataType
   def nullable: Boolean
   def references: Set[Attribute]
+
+  /**
+   * Returns true if this expression and all its children have been resolved to a specific schema and false if it is
+   * still contains any unresolved placeholders.
+   */
+  lazy val resolved: Boolean = children.map(_.resolved).reduceLeftOption(_&&_).getOrElse(true)
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {

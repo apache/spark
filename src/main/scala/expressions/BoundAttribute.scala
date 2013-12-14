@@ -19,7 +19,6 @@ case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: Attribut
   def exprId = baseReference.exprId
   def qualifiers = baseReference.qualifiers
   def name = baseReference.name
-  def resolved = true
 
   def withQualifiers(newQualifiers: Seq[String]) =
     BoundReference(inputTuple, ordinal, baseReference.withQualifiers(newQualifiers))

@@ -26,11 +26,21 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   def dataType = throw new UnresolvedException(this, "dataType")
   def nullable = throw new UnresolvedException(this, "nullable")
   def qualifiers = throw new UnresolvedException(this, "qualifiers")
-  def resolved = false
+  override lazy val resolved = false
 
   def withQualifiers(newQualifiers: Seq[String]) = this
 
   override def toString(): String = s"'$name"
+}
+
+case class UnresolvedFunction(name: String, children: Seq[Expression]) extends Expression {
+  def exprId = throw new UnresolvedException(this, "exprId")
+  def dataType = throw new UnresolvedException(this, "dataType")
+  def nullable = throw new UnresolvedException(this, "nullable")
+  def qualifiers = throw new UnresolvedException(this, "qualifiers")
+  def references = children.flatMap(_.references).toSet
+  override lazy val resolved = false
+  override def toString = s"'$name(${children.mkString(",")})"
 }
 
 /**
@@ -44,7 +54,7 @@ case class Star(table: Option[String]) extends Attribute with trees.LeafNode[Exp
   def dataType = throw new UnresolvedException(this, "dataType")
   def nullable = throw new UnresolvedException(this, "nullable")
   def qualifiers = throw new UnresolvedException(this, "qualifiers")
-  def resolved = false
+  override lazy val resolved = false
 
   def withQualifiers(newQualifiers: Seq[String]) = this
 

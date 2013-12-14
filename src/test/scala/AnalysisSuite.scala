@@ -11,7 +11,7 @@ import types._
 import dsl._
 
 class AnalysisSuite extends FunSuite {
-  val analyze = new Analyzer(EmptyCatalog)
+  val analyze = SimpleAnalyzer
 
   val testRelation = LocalRelation('a.int)
 
