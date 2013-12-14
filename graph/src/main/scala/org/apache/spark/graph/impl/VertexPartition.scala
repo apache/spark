@@ -174,6 +174,10 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   /** Inner join another VertexPartition. */
   def innerJoin[U: ClassManifest, VD2: ClassManifest](other: VertexPartition[U])
       (f: (Vid, VD, U) => VD2): VertexPartition[VD2] = {
+    if (index != other.index) {
+      logWarning("Joining two VertexPartitions with different indexes is slow.")
+      innerJoin(createUsingIndex(other.iterator))(f)
+    }
     val newMask = mask & other.mask
     val newValues = new Array[VD2](capacity)
     var i = newMask.nextSetBit(0)
