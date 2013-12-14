@@ -54,8 +54,6 @@ object Analytics extends Logging {
      taskType match {
        case "pagerank" => {
 
-         var numIter = Int.MaxValue
-         var isDynamic = false
          var tol:Float = 0.001F
          var outFname = ""
          var numVPart = 4
@@ -63,8 +61,6 @@ object Analytics extends Logging {
          var partitionStrategy: PartitionStrategy = RandomVertexCut
 
          options.foreach{
-           case ("numIter", v) => numIter = v.toInt
-           case ("dynamic", v) => isDynamic = v.toBoolean
            case ("tol", v) => tol = v.toFloat
            case ("output", v) => outFname = v
            case ("numVPart", v) => numVPart = v.toInt
@@ -73,40 +69,27 @@ object Analytics extends Logging {
            case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
          }
 
-         if(!isDynamic && numIter == Int.MaxValue) {
-           println("Set number of iterations!")
-           sys.exit(1)
-         }
          println("======================================")
          println("|             PageRank               |")
-         println("--------------------------------------")
-         println(" Using parameters:")
-         println(" \tDynamic:  " + isDynamic)
-         if(isDynamic) println(" \t  |-> Tolerance: " + tol)
-         println(" \tNumIter:  " + numIter)
          println("======================================")
 
          val sc = new SparkContext(host, "PageRank(" + fname + ")")
 
          val graph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
+          minEdgePartitions = numEPart, partitionStrategy = partitionStrategy).cache()
 
-         val startTime = System.currentTimeMillis
-         println("GRAPHX: starting tasks")
          println("GRAPHX: Number of vertices " + graph.vertices.count)
          println("GRAPHX: Number of edges " + graph.edges.count)
 
          //val pr = Analytics.pagerank(graph, numIter)
-          val pr = if(isDynamic) PageRank.runUntillConvergence(graph, tol, numIter)
-            else  PageRank.run(graph, numIter)
-         println("GRAPHX: Total rank: " + pr.vertices.map{ case (id,r) => r }.reduce(_+_) )
-         if (!outFname.isEmpty) {
-           println("Saving pageranks of pages to " + outFname)
-           pr.vertices.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
-         }
-         println("GRAPHX: Runtime: " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
+         val pr = PageRank.runStandalone(graph, tol)
 
-         Thread.sleep(100000)
+         println("GRAPHX: Total rank: " + pr.map(_._2).reduce(_+_))
+
+         if (!outFname.isEmpty) {
+           logWarning("Saving pageranks of pages to " + outFname)
+           pr.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
+         }
 
          sc.stop()
        }
