@@ -41,3 +41,12 @@ case class GreaterThan(left: Expression, right: Expression) extends BinaryPredic
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = ">="
 }
+
+case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
+  def references = child.references
+  def nullable = false
+}
+case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
+  def references = child.references
+  def nullable = false
+}

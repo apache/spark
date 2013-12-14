@@ -500,6 +500,13 @@ object HiveQl {
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
+    case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) => IsNotNull(nodeToExpr(child))
+    case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) => IsNull(nodeToExpr(child))
+
+    /* Boolean Logic */
+    case Token("AND", left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
+    case Token("OR", left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
+    case Token("NOT", child :: Nil) => Not(nodeToExpr(child))
 
     /* Other functions */
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand

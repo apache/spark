@@ -107,6 +107,11 @@ object Evaluate {
       case GreaterThanOrEqual(l, r) => n2(l, r, _.gteq(_, _))
       case LessThan(l, r) => n2(l, r, _.lt(_, _))
       case LessThanOrEqual(l, r) => n2(l, r, _.lteq(_, _))
+      case IsNull(e) => eval(e) == null
+      case IsNotNull(e) => eval(e) != null
+
+      /* Casts */
+      case Cast(e, StringType) => eval(e).toString
 
       /* Boolean Logic */
       case Not(c) => !eval(c).asInstanceOf[Boolean]
