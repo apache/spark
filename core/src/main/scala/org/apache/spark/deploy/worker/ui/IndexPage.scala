@@ -21,9 +21,10 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import akka.dispatch.Await
+import scala.concurrent.duration._
+import scala.concurrent.Await
+
 import akka.pattern.ask
-import akka.util.duration._
 
 import net.liftweb.json.JsonAST.JValue
 

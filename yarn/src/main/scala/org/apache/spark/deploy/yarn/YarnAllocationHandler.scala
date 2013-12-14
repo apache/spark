@@ -40,7 +40,7 @@ import org.apache.hadoop.yarn.api.protocolrecords.{AllocateRequest, AllocateResp
 import org.apache.hadoop.yarn.util.{RackResolver, Records}
 
 
-object AllocationType extends Enumeration ("HOST", "RACK", "ANY") {
+object AllocationType extends Enumeration {
   type AllocationType = Value
   val HOST, RACK, ANY = Value
 }
@@ -238,7 +238,7 @@ private[yarn] class YarnAllocationHandler(
           // Deallocate + allocate can result in reusing id's wrongly - so use a different counter
           // (workerIdCounter)
           val workerId = workerIdCounter.incrementAndGet().toString
-          val driverUrl = "akka://spark@%s:%s/user/%s".format(
+          val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
             System.getProperty("spark.driver.host"), System.getProperty("spark.driver.port"),
             CoarseGrainedSchedulerBackend.ACTOR_NAME)
 

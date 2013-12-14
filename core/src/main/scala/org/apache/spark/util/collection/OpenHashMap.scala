@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection
 
+import scala.reflect.ClassTag
 
 /**
  * A fast hash map implementation for nullable keys. This hash map supports insertions and updates,
@@ -26,7 +27,7 @@ package org.apache.spark.util.collection
  * Under the hood, it uses our OpenHashSet implementation.
  */
 private[spark]
-class OpenHashMap[K >: Null : ClassManifest, @specialized(Long, Int, Double) V: ClassManifest](
+class OpenHashMap[K >: Null : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
     initialCapacity: Int)
   extends Iterable[(K, V)]
   with Serializable {

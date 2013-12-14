@@ -70,15 +70,15 @@ class ZooKeeperPersistenceEngine(serialization: Serialization)
     (apps, workers)
   }
 
-  private def serializeIntoFile(path: String, value: Serializable) {
+  private def serializeIntoFile(path: String, value: AnyRef) {
     val serializer = serialization.findSerializerFor(value)
     val serialized = serializer.toBinary(value)
     zk.create(path, serialized, CreateMode.PERSISTENT)
   }
 
-  def deserializeFromFile[T <: Serializable](filename: String)(implicit m: Manifest[T]): T = {
+  def deserializeFromFile[T](filename: String)(implicit m: Manifest[T]): T = {
     val fileData = zk.getData("/spark/master_status/" + filename)
-    val clazz = m.erasure.asInstanceOf[Class[T]]
+    val clazz = m.runtimeClass.asInstanceOf[Class[T]]
     val serializer = serialization.serializerFor(clazz)
     serializer.fromBinary(fileData).asInstanceOf[T]
   }

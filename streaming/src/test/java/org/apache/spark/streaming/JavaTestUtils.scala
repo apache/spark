@@ -17,7 +17,9 @@
 
 package org.apache.spark.streaming
 
-import collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.collection.mutable.{SynchronizedBuffer, ArrayBuffer}
+import scala.reflect.ClassTag
+
 import java.util.{List => JList}
 import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStreamLike, JavaDStream, JavaStreamingContext}
 import org.apache.spark.streaming._
@@ -31,15 +33,15 @@ trait JavaTestBase extends TestSuiteBase {
   /**
    * Create a [[org.apache.spark.streaming.TestInputStream]] and attach it to the supplied context.
    * The stream will be derived from the supplied lists of Java objects.
-   **/
+   */
   def attachTestInputStream[T](
       ssc: JavaStreamingContext,
       data: JList[JList[T]],
       numPartitions: Int) = {
     val seqData = data.map(Seq(_:_*))
 
-    implicit val cm: ClassManifest[T] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    implicit val cm: ClassTag[T] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val dstream = new TestInputStream[T](ssc.ssc, seqData, numPartitions)
     ssc.ssc.registerInputStream(dstream)
     new JavaDStream[T](dstream)
@@ -52,8 +54,8 @@ trait JavaTestBase extends TestSuiteBase {
   def attachTestOutputStream[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T, R]](
       dstream: JavaDStreamLike[T, This, R]) =
   {
-    implicit val cm: ClassManifest[T] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    implicit val cm: ClassTag[T] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val ostream = new TestOutputStreamWithPartitions(dstream.dstream)
     dstream.dstream.ssc.registerOutputStream(ostream)
   }
@@ -67,8 +69,8 @@ trait JavaTestBase extends TestSuiteBase {
    */
   def runStreams[V](
       ssc: JavaStreamingContext, numBatches: Int, numExpectedOutput: Int): JList[JList[V]] = {
-    implicit val cm: ClassManifest[V] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[V]]
+    implicit val cm: ClassTag[V] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
     val res = runStreams[V](ssc.ssc, numBatches, numExpectedOutput)
     val out = new ArrayList[JList[V]]()
     res.map(entry => out.append(new ArrayList[V](entry)))
@@ -85,8 +87,8 @@ trait JavaTestBase extends TestSuiteBase {
    */
   def runStreamsWithPartitions[V](ssc: JavaStreamingContext, numBatches: Int,
       numExpectedOutput: Int): JList[JList[JList[V]]] = {
-    implicit val cm: ClassManifest[V] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[V]]
+    implicit val cm: ClassTag[V] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
     val res = runStreamsWithPartitions[V](ssc.ssc, numBatches, numExpectedOutput)
     val out = new ArrayList[JList[JList[V]]]()
     res.map{entry =>

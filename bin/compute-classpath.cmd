@@ -20,7 +20,7 @@ rem
 rem This script computes Spark's classpath and prints it to stdout; it's used by both the "run"
 rem script and the ExecutorRunner in standalone cluster mode.
 
-set SCALA_VERSION=2.9.3
+set SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0..\

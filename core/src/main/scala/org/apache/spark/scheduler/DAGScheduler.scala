@@ -21,9 +21,11 @@ import java.io.NotSerializableException
 import java.util.Properties
 import java.util.concurrent.atomic.AtomicInteger
 
-import akka.actor._
-import akka.util.duration._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet, Map}
+import scala.concurrent.duration._
+import scala.reflect.ClassTag
+
+import akka.actor._
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
@@ -104,7 +106,7 @@ class DAGScheduler(
   // The time, in millis, to wait for fetch failure events to stop coming in after one is detected;
   // this is a simplistic way to avoid resubmitting tasks in the non-fetchable map stage one by one
   // as more failure events come in
-  val RESUBMIT_TIMEOUT = 50L
+  val RESUBMIT_TIMEOUT = 50.milliseconds
 
   // The time, in millis, to wake up between polls of the completion queue in order to potentially
   // resubmit failed stages
@@ -177,13 +179,14 @@ class DAGScheduler(
       var resubmissionTask: Cancellable = _
 
       override def preStart() {
+        import context.dispatcher
         /**
          * A message is sent to the actor itself periodically to remind the actor to resubmit failed
          * stages.  In this way, stage resubmission can be done within the same thread context of
          * other event processing logic to avoid unnecessary synchronization overhead.
          */
         resubmissionTask = context.system.scheduler.schedule(
-          RESUBMIT_TIMEOUT.millis, RESUBMIT_TIMEOUT.millis, self, ResubmitFailedStages)
+          RESUBMIT_TIMEOUT, RESUBMIT_TIMEOUT, self, ResubmitFailedStages)
       }
 
       /**
@@ -460,7 +463,7 @@ class DAGScheduler(
     waiter
   }
 
-  def runJob[T, U: ClassManifest](
+  def runJob[T, U: ClassTag](
       rdd: RDD[T],
       func: (TaskContext, Iterator[T]) => U,
       partitions: Seq[Int],

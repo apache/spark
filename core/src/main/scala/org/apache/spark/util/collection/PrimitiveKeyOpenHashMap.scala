@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection
 
+import scala.reflect._
 
 /**
  * A fast hash map implementation for primitive, non-null keys. This hash map supports
@@ -26,15 +27,15 @@ package org.apache.spark.util.collection
  * Under the hood, it uses our OpenHashSet implementation.
  */
 private[spark]
-class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
-                              @specialized(Long, Int, Double) V: ClassManifest](
+class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
+                              @specialized(Long, Int, Double) V: ClassTag](
     initialCapacity: Int)
   extends Iterable[(K, V)]
   with Serializable {
 
   def this() = this(64)
 
-  require(classManifest[K] == classManifest[Long] || classManifest[K] == classManifest[Int])
+  require(classTag[K] == classTag[Long] || classTag[K] == classTag[Int])
 
   // Init in constructor (instead of in declaration) to work around a Scala compiler specialization
   // bug that would generate two arrays (one for Object and one for specialized T).
