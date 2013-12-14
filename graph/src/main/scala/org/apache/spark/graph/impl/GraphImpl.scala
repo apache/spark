@@ -226,8 +226,10 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       val et = new EdgeTriplet[VD, ED]
       val filteredEdges = edgePartition.iterator.flatMap { e =>
         // Ensure that the edge meets the requirements of skipStaleSrc and skipStaleDst
-        val skipDueToSrc = skipStaleSrc && vertexPartition.isStale(e.srcId)
-        val skipDueToDst = skipStaleDst && vertexPartition.isStale(e.dstId)
+        et.srcStale = vertexPartition.isStale(e.srcId)
+        et.dstStale = vertexPartition.isStale(e.dstId)
+        val skipDueToSrc = skipStaleSrc && et.srcStale
+        val skipDueToDst = skipStaleDst && et.dstStale
         if (!skipDueToSrc && !skipDueToDst) {
           et.set(e)
           if (mapUsesSrcAttr) {
