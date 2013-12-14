@@ -589,6 +589,20 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kClassTag: ClassTag[K
   }
 
   /**
+   * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
+   * `collect` or `save` on the resulting RDD will return or output an ordered list of records
+   * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
+   * order of the keys).
+   */
+  def sortByKey(comp: Comparator[K], ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
+    class KeyOrdering(val a: K) extends Ordered[K] {
+      override def compare(b: K) = comp.compare(a, b)
+    }
+    implicit def toOrdered(x: K): Ordered[K] = new KeyOrdering(x)
+    fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
+  }
+
+  /**
    * Return an RDD with the keys of each tuple.
    */
   def keys(): JavaRDD[K] = JavaRDD.fromRDD[K](rdd.map(_._1))
