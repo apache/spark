@@ -1,6 +1,8 @@
 package catalyst
 package expressions
 
+import catalyst.analysis.UnresolvedException
+
 
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   def dataType = child.dataType
@@ -11,8 +13,12 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
 abstract class BinaryArithmetic extends BinaryExpression {
   self: Product =>
 
+  override lazy val resolved = left.dataType == right.dataType
+
   def dataType = {
-    require(left.dataType == right.dataType) // TODO(marmbrus): Figure out how to handle coersions.
+    if(!resolved)
+      throw new UnresolvedException(
+        this, s"datatype. Can not resolve due to  differing types ${left.dataType}, ${right.dataType}")
     left.dataType
   }
 }
