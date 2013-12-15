@@ -15,6 +15,9 @@ object ConvertNaNs extends Rule[LogicalPlan]{
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
       /* Double Conversions */
       case b: BinaryExpression if b.left == stringNaN && b.right.dataType == DoubleType =>
         b.makeCopy(Array(b.right, Literal(Double.NaN)))
