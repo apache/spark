@@ -2,7 +2,7 @@ package catalyst
 package shark2
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.{Partition, Table}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table}
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
 
 import analysis.Catalog
@@ -52,12 +52,17 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
     hiveQlTable.getSchema
   )
 
+   implicit class SchemaAttribute(f: FieldSchema) {
+     def toAttribute =
+       AttributeReference(
+         f.getName,
+         HiveMetatoreTypes.toDataType(f.getType),
+         true // Since data can be dumped in randomly with no validation, everything is nullable.
+       )(qualifiers = tableName +: alias.toSeq)
+   }
+
+  val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
+
   // Must be a stable value since new attributes are born here.
-  val output = table.getSd.getCols.map { col =>
-    AttributeReference(
-      col.getName,
-      HiveMetatoreTypes.toDataType(col.getType),
-      true // AHHH, who makes a metastore with no concept of nullalbility?
-    )(qualifiers = tableName +: alias.toSeq)
-  }
+  val output = partitionKeys ++ table.getSd.getCols.map(_.toAttribute)
 }

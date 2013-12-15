@@ -12,6 +12,7 @@ import shark.execution.HadoopTableReader
 import shark.SharkContext
 
 import expressions.Attribute
+import util._
 
 /* Implicits */
 import collection.JavaConversions._
@@ -32,25 +33,26 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
    * The hive struct field references that correspond to the attributes to be read from this table.
    */
   @transient
-  lazy val refs = attributes.map { a =>
+  lazy val refs = attributes.flatMap { a =>
     objectInspector.getAllStructFieldRefs
       .find(_.getFieldName == a.name)
-      .getOrElse(sys.error(s"Invalid attribute ${a.name} referenced in table $relation"))
   }
 
-  def execute() = {
-    val rdd = if(!relation.hiveQlTable.isPartitioned)
+  @transient
+  def inputRdd =
+    if(!relation.hiveQlTable.isPartitioned)
       hadoopReader.makeRDDForTable(relation.hiveQlTable)
     else
       hadoopReader.makeRDDForPartitionedTable(relation.hiveQlPartitions)
 
+  def execute() = {
     def unpackStruct(struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct) =
       refs.map { ref =>
         val data = objectInspector.getStructFieldData(struct, ref)
         ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector].getPrimitiveJavaObject(data)
       }.toIndexedSeq
 
-    rdd.map {
+    inputRdd.map {
       case array: Array[Any] =>
         array.flatMap {
           case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct => unpackStruct(struct)
@@ -90,12 +92,13 @@ case class InsertIntoHiveTable(table: MetastoreRelation, child: SharkPlan)
   def output = child.output
   def execute() = {
     val childRdd = child.execute()
+    assert(childRdd != null)
 
     // TODO: write directly to hive
     val tempDir = java.io.File.createTempFile("data", "tsv")
     tempDir.delete()
     tempDir.mkdir()
-    childRdd.map(_.map(_.toString).mkString("\001")).saveAsTextFile(tempDir.getCanonicalPath)
+    childRdd.map(_.map(a => stringOrNull(a.asInstanceOf[AnyRef])).mkString("\001")).saveAsTextFile(tempDir.getCanonicalPath)
     sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName}")
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,

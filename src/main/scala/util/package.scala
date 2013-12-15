@@ -50,4 +50,6 @@ package object util {
       case (l,r) => (if(l == r) " " else "*") + l + (" " * ((maxLeftSize - left.size) + 3)) + r
     }
   }
+
+  def stringOrNull(a: AnyRef) = if(a == null) null else a.toString
 }
