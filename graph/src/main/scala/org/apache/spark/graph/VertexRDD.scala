@@ -288,7 +288,7 @@ class VertexRDD[@specialized VD: ClassManifest](
 
   /**
    * Replace vertices with corresponding vertices in `other`, and drop vertices without a
-   * corresponding vertex in `other.
+   * corresponding vertex in `other`.
    */
   def innerJoin[U: ClassManifest, VD2: ClassManifest](other: RDD[(Vid, U)])
       (f: (Vid, VD, U) => VD2): VertexRDD[VD2] = {
