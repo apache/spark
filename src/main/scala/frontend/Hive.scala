@@ -330,7 +330,8 @@ object HiveQl {
     case Token("TOK_EXPLAIN", Token("TOK_CREATEFUNCTION", _) :: Nil) => NoRelation
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
-      val Some(query) :: _ :: Nil = getClauses(Seq("TOK_QUERY", "FORMATTED"), explainArgs)
+      val Some(query) :: _ :: _ :: Nil = getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
+      // TODO: support EXTENDED?
       ExplainCommand(nodeToPlan(query))
     case Token("TOK_QUERY",
            Token("TOK_FROM", fromClause :: Nil) ::
