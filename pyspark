@@ -23,7 +23,7 @@ FWDIR="$(cd `dirname $0`; pwd)"
 # Export this as SPARK_HOME
 export SPARK_HOME="$FWDIR"
 
-SCALA_VERSION=2.9.3
+SCALA_VERSION=2.10
 
 # Exit if the user hasn't compiled Spark
 if [ ! -f "$FWDIR/RELEASE" ]; then

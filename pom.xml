@@ -99,11 +99,12 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-    <java.version>1.5</java.version>
-    <scala.version>2.9.3</scala.version>
+    <java.version>1.6</java.version>
+
+    <scala.version>2.10.3</scala.version>
     <mesos.version>0.13.0</mesos.version>
+    <akka.version>2.2.3</akka.version>
     <akka.group>com.typesafe.akka</akka.group>
-    <akka.version>2.0.5</akka.version>
     <protobuf.version>2.4.1</protobuf.version>
     <slf4j.version>1.7.2</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
@@ -116,32 +117,21 @@
   </properties>
 
   <repositories>
+    <repository> 
+      <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
+      <name>Maven Repository</name>
+      <url>http://repo.maven.apache.org/maven2/</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
     <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
       <url>http://repository.jboss.org/nexus/content/repositories/releases/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>cloudera-repo</id>
-      <name>Cloudera Repository</name>
-      <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>akka-repo</id>
-      <name>Akka Repository</name>
-      <url>http://repo.akka.io/releases/</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -161,41 +151,6 @@
       </snapshots>
     </repository>
   </repositories>
-  <pluginRepositories>
-    <pluginRepository>
-      <id>oss-sonatype-releases</id>
-      <name>OSS Sonatype</name>
-      <url>https://oss.sonatype.org/content/repositories/releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </pluginRepository>
-    <pluginRepository>
-      <id>oss-sonatype-snapshots</id>
-      <name>OSS Sonatype</name>
-      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </pluginRepository>
-    <pluginRepository>
-      <id>oss-sonatype</id>
-      <name>OSS Sonatype</name>
-      <url>https://oss.sonatype.org/content/groups/public</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </pluginRepository>
-  </pluginRepositories>
 
   <dependencyManagement>
     <dependencies>
@@ -251,7 +206,7 @@
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
-        <artifactId>chill_2.9.3</artifactId>
+        <artifactId>chill_2.10</artifactId>
         <version>0.3.1</version>
       </dependency>
       <dependency>
@@ -261,7 +216,7 @@
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
-        <artifactId>akka-actor</artifactId>
+        <artifactId>akka-actor_2.10</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -272,7 +227,7 @@
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
-        <artifactId>akka-remote</artifactId>
+        <artifactId>akka-remote_2.10</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -283,7 +238,7 @@
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
-        <artifactId>akka-slf4j</artifactId>
+        <artifactId>akka-slf4j_2.10</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -294,7 +249,7 @@
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
-        <artifactId>akka-zeromq</artifactId>
+        <artifactId>akka-zeromq_2.10</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -321,7 +276,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.0.Beta2</version>
+        <version>4.0.0.CR1</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -331,8 +286,14 @@
       </dependency>
       <dependency>
         <groupId>net.liftweb</groupId>
-        <artifactId>lift-json_2.9.2</artifactId>
-        <version>2.5</version>
+        <artifactId>lift-json_2.10</artifactId>
+        <version>2.5.1</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scalap</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
@@ -375,22 +336,20 @@
         <version>${scala.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.scala-lang</groupId>
-        <artifactId>scalap</artifactId>
-        <version>${scala.version}</version>
-      </dependency>
-
-      <dependency>
         <groupId>log4j</groupId>
         <artifactId>log4j</artifactId>
         <version>${log4j.version}</version>
       </dependency>
-
       <dependency>
         <groupId>org.scalatest</groupId>
-        <artifactId>scalatest_2.9.3</artifactId>
+        <artifactId>scalatest_2.10</artifactId>
         <version>1.9.1</version>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>2.4</version>
       </dependency>
       <dependency>
         <groupId>org.easymock</groupId>
@@ -406,7 +365,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalacheck</groupId>
-        <artifactId>scalacheck_2.9.3</artifactId>
+        <artifactId>scalacheck_2.10</artifactId>
         <version>1.10.0</version>
         <scope>test</scope>
       </dependency>
@@ -537,6 +496,10 @@
         <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
@@ -779,39 +742,39 @@
       </dependencyManagement>
     </profile>
 
-    <profile>
-      <id>new-yarn</id>
-      <properties>
-        <akka.group>org.spark-project</akka.group>
-        <akka.version>2.0.5-protobuf-2.5-java-1.5</akka.version>
-        <hadoop.major.version>2</hadoop.major.version>
-        <hadoop.version>2.2.0</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
-      </properties>
+    <!-- <profile> -->
+    <!--   <id>new-yarn</id> -->
+    <!--   <properties> -->
+    <!--     <akka.group>org.spark-project</akka.group> -->
+    <!--     <akka.version>2.0.5-protobuf-2.5-java-1.5</akka.version> -->
+    <!--     <hadoop.major.version>2</hadoop.major.version> -->
+    <!--     <hadoop.version>2.2.0</hadoop.version> -->
+    <!--     <protobuf.version>2.5.0</protobuf.version> -->
+    <!--   </properties> -->
 
-      <modules>
-        <module>new-yarn</module>
-      </modules>
+    <!--   <modules> -->
+    <!--     <module>new-yarn</module> -->
+    <!--   </modules> -->
 
-      <repositories>
-        <repository>
-          <id>maven-root</id>
-          <name>Maven root repository</name>
-          <url>http://repo1.maven.org/maven2/</url>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-        </repository>
-      </repositories>
+    <!--   <repositories> -->
+    <!--     <repository> -->
+    <!--       <id>maven-root</id> -->
+    <!--       <name>Maven root repository</name> -->
+    <!--       <url>http://repo1.maven.org/maven2/</url> -->
+    <!--       <releases> -->
+    <!--         <enabled>true</enabled> -->
+    <!--       </releases> -->
+    <!--       <snapshots> -->
+    <!--         <enabled>false</enabled> -->
+    <!--       </snapshots> -->
+    <!--     </repository> -->
+    <!--   </repositories> -->
 
-      <dependencyManagement>
-        <dependencies>
-        </dependencies>
-      </dependencyManagement>
-    </profile>
+    <!--   <dependencyManagement> -->
+    <!--     <dependencies> -->
+    <!--     </dependencies> -->
+    <!--   </dependencyManagement> -->
+    <!-- </profile> -->
 
     <profile>
       <id>repl-bin</id>

@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-core_2.9.3</artifactId>
+  <artifactId>spark-core_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Core</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -86,7 +86,7 @@
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>chill_2.9.3</artifactId>
+      <artifactId>chill_2.10</artifactId>
       <version>0.3.1</version>
     </dependency>
     <dependency>
@@ -96,19 +96,15 @@
     </dependency>
     <dependency>
       <groupId>${akka.group}</groupId>
-      <artifactId>akka-actor</artifactId>
+      <artifactId>akka-actor_2.10</artifactId>
     </dependency>
     <dependency>
       <groupId>${akka.group}</groupId>
-      <artifactId>akka-remote</artifactId>
+      <artifactId>akka-remote_2.10</artifactId>
     </dependency>
     <dependency>
       <groupId>${akka.group}</groupId>
-      <artifactId>akka-slf4j</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.scala-lang</groupId>
-      <artifactId>scalap</artifactId>
+      <artifactId>akka-slf4j_2.10</artifactId>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
@@ -116,7 +112,7 @@
     </dependency>
     <dependency>
       <groupId>net.liftweb</groupId>
-      <artifactId>lift-json_2.9.2</artifactId>
+      <artifactId>lift-json_2.10</artifactId>
     </dependency>
     <dependency>
       <groupId>it.unimi.dsi</groupId>
@@ -164,13 +160,18 @@
       <scope>test</scope>
     </dependency>
     <dependency>
+      <groupId>commons-io</groupId>
+      <artifactId>commons-io</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_2.9.3</artifactId>
+      <artifactId>scalatest_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_2.9.3</artifactId>
+      <artifactId>scalacheck_2.10</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -190,8 +191,8 @@
     </dependency>
   </dependencies>
   <build>
-    <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala.version}/test-classes</testOutputDirectory>
+    <outputDirectory>target/scala-2.10/classes</outputDirectory>
+    <testOutputDirectory>target/scala-2.10/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>

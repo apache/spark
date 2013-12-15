@@ -17,20 +17,19 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import akka.util.{Duration, Timeout}
+import java.io.File
 
-import java.io.{FileInputStream, File}
+import scala.concurrent.duration._
 
+import akka.util.Timeout
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.{Handler, Server}
-
+import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.{Logging}
-import org.apache.spark.ui.JettyUtils
+import org.apache.spark.ui.{JettyUtils, UIUtils}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
+import org.eclipse.jetty.server.{Handler, Server}
 
 /**
  * Web UI server for the standalone worker.

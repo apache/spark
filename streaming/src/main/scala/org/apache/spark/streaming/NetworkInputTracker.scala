@@ -25,10 +25,10 @@ import org.apache.spark.SparkContext._
 
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.Queue
+import scala.concurrent.duration._
 
 import akka.actor._
 import akka.pattern.ask
-import akka.util.duration._
 import akka.dispatch._
 import org.apache.spark.storage.BlockId
 
