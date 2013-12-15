@@ -102,6 +102,7 @@
     <java.version>1.6</java.version>
 
     <scala.version>2.10.3</scala.version>
+    <scala.binary.version>2.10</scala.binary.version>
     <mesos.version>0.13.0</mesos.version>
     <akka.version>2.2.3</akka.version>
     <akka.group>com.typesafe.akka</akka.group>
@@ -206,7 +207,7 @@
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
-        <artifactId>chill_2.10</artifactId>
+        <artifactId>chill_${scala.binary.version}</artifactId>
         <version>0.3.1</version>
       </dependency>
       <dependency>
@@ -216,7 +217,7 @@
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
-        <artifactId>akka-actor_2.10</artifactId>
+        <artifactId>akka-actor_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -227,7 +228,7 @@
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
-        <artifactId>akka-remote_2.10</artifactId>
+        <artifactId>akka-remote_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -238,7 +239,7 @@
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
-        <artifactId>akka-slf4j_2.10</artifactId>
+        <artifactId>akka-slf4j_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -249,7 +250,7 @@
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
-        <artifactId>akka-zeromq_2.10</artifactId>
+        <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -286,7 +287,7 @@
       </dependency>
       <dependency>
         <groupId>net.liftweb</groupId>
-        <artifactId>lift-json_2.10</artifactId>
+        <artifactId>lift-json_${scala.binary.version}</artifactId>
         <version>2.5.1</version>
         <exclusions>
           <exclusion>
@@ -342,7 +343,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalatest</groupId>
-        <artifactId>scalatest_2.10</artifactId>
+        <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>1.9.1</version>
         <scope>test</scope>
       </dependency>
@@ -365,7 +366,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalacheck</groupId>
-        <artifactId>scalacheck_2.10</artifactId>
+        <artifactId>scalacheck_${scala.binary.version}</artifactId>
         <version>1.10.0</version>
         <scope>test</scope>
       </dependency>
