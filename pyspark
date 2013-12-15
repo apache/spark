@@ -59,8 +59,12 @@ if [ -n "$IPYTHON_OPTS" ]; then
 fi
 
 if [[ "$IPYTHON" = "1" ]] ; then
-  IPYTHON_OPTS=${IPYTHON_OPTS:--i}
-  exec ipython "$IPYTHON_OPTS" -c "%run $PYTHONSTARTUP"
+  # IPython <1.0.0 doesn't honor PYTHONSTARTUP, while 1.0.0+ does. 
+  # Hence we clear PYTHONSTARTUP and use the -c "%run $IPYTHONSTARTUP" command which works on all versions
+  # We also force interactive mode with "-i"
+  IPYTHONSTARTUP=$PYTHONSTARTUP
+  PYTHONSTARTUP=
+  exec ipython "$IPYTHON_OPTS" -i -c "%run $IPYTHONSTARTUP"
 else
   exec "$PYSPARK_PYTHON" "$@"
 fi
