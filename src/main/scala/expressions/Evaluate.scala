@@ -80,7 +80,7 @@ object Evaluate extends Logging {
       }
     }
 
-    e match {
+    val result = e match {
       case Literal(v, _) => v
 
       /* Alias operations do not effect evaluation */
