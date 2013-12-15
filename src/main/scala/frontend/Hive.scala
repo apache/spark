@@ -194,34 +194,34 @@ object HiveQl {
    * Returns the AST for the given SQL string.
    */
   def getAst(sql: String): ASTNode = {
-    try {
-      ParseUtils.findRootNonNullToken(
-        (new ParseDriver()).parse(sql))
-    } catch {
-      case e: Exception => throw new ParseException(sql, e)
-    }
+    ParseUtils.findRootNonNullToken(
+      (new ParseDriver()).parse(sql))
   }
 
   def parseSql(sql: String): LogicalPlan = {
-    if(sql.toLowerCase.startsWith("set"))
-      ConfigurationAssignment(sql)
-    else if(sql.toLowerCase.startsWith("add jar"))
-      AddJar(sql.drop(8))
-    else if(sql.toLowerCase.startsWith("add file"))
-      AddFile(sql.drop(9))
-    else if(sql.startsWith("dfs"))
-      DfsCommand(sql)
-    else if(sql.startsWith("source"))
-      SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
-    else if(sql.startsWith("!"))
-      ShellCommand(sql.drop(1))
-    else {
-      val tree = getAst(sql)
+    try {
+      if(sql.toLowerCase.startsWith("set"))
+        ConfigurationAssignment(sql)
+      else if(sql.toLowerCase.startsWith("add jar"))
+        AddJar(sql.drop(8))
+      else if(sql.toLowerCase.startsWith("add file"))
+        AddFile(sql.drop(9))
+      else if(sql.startsWith("dfs"))
+        DfsCommand(sql)
+      else if(sql.startsWith("source"))
+        SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
+      else if(sql.startsWith("!"))
+        ShellCommand(sql.drop(1))
+      else {
+        val tree = getAst(sql)
 
-      if(nativeCommands contains tree.getText)
-        NativeCommand(sql)
-      else
-        nodeToPlan(tree)
+        if(nativeCommands contains tree.getText)
+          NativeCommand(sql)
+        else
+          nodeToPlan(tree)
+      }
+    } catch {
+      case e: Exception => throw new ParseException(sql, e)
     }
   }
 
