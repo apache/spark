@@ -13,6 +13,7 @@ import plans.logical._
 import types._
 
 import collection.JavaConversions._
+import scala.collection.mutable
 
 /**
  * A logical node that represent a non-query command to be executed by the system.  For example,
@@ -258,7 +259,16 @@ object HiveQl {
     val unhandledClauses = nodeList.filterNot(clauseNames contains _.getText)
     require(unhandledClauses.isEmpty, s"Unhandled parse clauses: $unhandledClauses")
 
-    clauseNames.map(getClauseOption(_, nodeList))
+    var remainingNodes = nodeList
+
+    val clauses = clauseNames.map { clauseName =>
+      val (matches, nonMatches) = remainingNodes.partition(_.getText == clauseName)
+      remainingNodes = nonMatches ++ (if(matches.nonEmpty) matches.tail else Nil)
+      matches.headOption
+    }
+
+     assert(remainingNodes.isEmpty, s"Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}")
+     clauses
   }
 
   def getClause(clauseName: String, nodeList: Seq[Node]) =
@@ -397,7 +407,7 @@ object HiveQl {
     case Token(allJoinTokens(joinToken),
            relation1 ::
            relation2 :: other) =>
-      assert(other.size <= 1, "Unhandled join child")
+      assert(other.size <= 1, s"Unhandled join child ${other}")
       val joinType = joinToken match {
         case "TOK_JOIN" => Inner
         case "TOK_RIGHTOUTERJOIN" => RightOuter
