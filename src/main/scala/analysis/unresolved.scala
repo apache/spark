@@ -14,7 +14,7 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
 /**
  * Holds the name of a relation that has yet to be looked up in a [[Catalog]].
  */
-case class UnresolvedRelation(name: String, alias: Option[String]) extends BaseRelation {
+case class UnresolvedRelation(name: String, alias: Option[String] = None) extends BaseRelation {
   def output = Nil
 }
 
