@@ -41,12 +41,14 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry) extends RuleExecuto
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan if childIsFullyResolved(q) =>
-        // logger.fine(s"resolving ${plan.simpleString}")
+        logger.trace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
         case u @ UnresolvedAttribute(name) =>
           // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-          q.resolve(name).getOrElse(u)
-      }
+          val result = q.resolve(name).getOrElse(u)
+          logger.debug(s"Resolving $u to $result")
+          result
+        }
     }
   }
 

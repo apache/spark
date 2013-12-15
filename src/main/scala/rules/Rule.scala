@@ -3,7 +3,7 @@ package rules
 
 import trees._
 
-abstract class Rule[TreeType <: TreeNode[_]] {
+abstract class Rule[TreeType <: TreeNode[_]] extends Logging {
   val name = {
     val className = getClass.getName
     if(className endsWith "$")
