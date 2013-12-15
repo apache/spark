@@ -7,7 +7,7 @@ import types._
 /**
  * Performs evaluation of an expression tree, given a set of input tuples.
  */
-object Evaluate {
+object Evaluate extends Logging {
   def apply(e: Expression, input: Seq[Seq[Any]]): Any = attachTree(e, "Expression Evaluation Failed") {
     def eval(e: Expression) = Evaluate(e, input)
 
@@ -114,8 +114,8 @@ object Evaluate {
 
       /* Boolean Logic */
       case Not(c) => !eval(c).asInstanceOf[Boolean]
-      case And(l,r) => eval(l).asInstanceOf[Boolean] && eval(l).asInstanceOf[Boolean]
-      case Or(l,r) => eval(l).asInstanceOf[Boolean] || eval(l).asInstanceOf[Boolean]
+      case And(l,r) => eval(l).asInstanceOf[Boolean] && eval(r).asInstanceOf[Boolean]
+      case Or(l,r) => eval(l).asInstanceOf[Boolean] || eval(r).asInstanceOf[Boolean]
 
       /* References to input tuples */
       case br @ BoundReference(inputTuple, ordinal, _) => try input(inputTuple)(ordinal) catch {
@@ -130,5 +130,8 @@ object Evaluate {
 
       case other => throw new OptimizationException(other, "evaluation not implemented")
     }
+
+    logger.debug(s"Evaluated $e => $result")
+    result
   }
 }
