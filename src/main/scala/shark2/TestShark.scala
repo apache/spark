@@ -207,7 +207,13 @@ object TestShark extends Logging {
       s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' INTO TABLE src"),
     TestTable("src1",
       "CREATE TABLE src1 (key INT, value STRING)",
-      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv3.txt' INTO TABLE src")
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv3.txt' INTO TABLE src1"),
+    TestTable("dest1",
+      "CREATE TABLE src (key INT, value STRING)"),
+    TestTable("dest2",
+      "CREATE TABLE src (key INT, value STRING)"),
+    TestTable("dest3",
+      "CREATE TABLE src (key INT, value STRING)")
   )
   protected val testTableNames = testTables.map(_.name).toSet
 
