@@ -22,6 +22,7 @@ import java.net._
 import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collections}
 
 import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
@@ -36,6 +37,7 @@ import org.msgpack
 import org.msgpack.ScalaMessagePack
 import org.apache.hadoop.mapred.InputFormat
 
+private[spark] class PythonRDD[T: ClassTag](
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapred.{JobConf, SequenceFileOutputFormat}
 import org.apache.hadoop.conf.Configuration
@@ -159,7 +161,7 @@ private[spark] class PythonRDD[T: ClassManifest](
           case eof: EOFException => {
             throw new SparkException("Python worker exited unexpectedly (crashed)", eof)
           }
-          case e => throw e
+          case e: Throwable => throw e
         }
       }
 
@@ -211,7 +213,7 @@ private[spark] object PythonRDD extends Logging {
       }
     } catch {
       case eof: EOFException => {}
-      case e => throw e
+      case e: Throwable => throw e
     }
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
@@ -381,7 +383,7 @@ private[spark] object PythonRDD extends Logging {
   }
 
   def takePartition[T](rdd: RDD[T], partition: Int): Iterator[T] = {
-    implicit val cm : ClassManifest[T] = rdd.elementClassManifest
+    implicit val cm : ClassTag[T] = rdd.elementClassTag
     rdd.context.runJob(rdd, ((x: Iterator[T]) => x.toArray), Seq(partition), true).head.iterator
   }
 }

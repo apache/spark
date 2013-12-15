@@ -19,9 +19,10 @@ package org.apache.spark.streaming.dstream
 
 import org.apache.spark.streaming.{Duration, DStream, Time}
 import org.apache.spark.rdd.RDD
+import scala.reflect.ClassTag
 
 private[streaming]
-class FilteredDStream[T: ClassManifest](
+class FilteredDStream[T: ClassTag](
     parent: DStream[T],
     filterFunc: T => Boolean
   ) extends DStream[T](parent.ssc) {

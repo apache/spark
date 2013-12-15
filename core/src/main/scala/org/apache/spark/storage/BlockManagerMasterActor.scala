@@ -23,10 +23,10 @@ import scala.collection.mutable
 import scala.collection.JavaConversions._
 
 import akka.actor.{Actor, ActorRef, Cancellable}
-import akka.dispatch.Future
 import akka.pattern.ask
-import akka.util.Duration
-import akka.util.duration._
+
+import scala.concurrent.duration._
+import scala.concurrent.Future
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
@@ -65,6 +65,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
   override def preStart() {
     if (!BlockManager.getDisableHeartBeatsForTesting) {
+      import context.dispatcher
       timeoutCheckingTask = context.system.scheduler.schedule(
         0.seconds, checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
     }

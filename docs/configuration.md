@@ -275,9 +275,30 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.akka.timeout</td>
-  <td>20</td>
+  <td>100</td>
   <td>
     Communication timeout between Spark nodes, in seconds.
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.heartbeat.pauses</td>
+  <td>600</td>
+  <td>
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold` if you need to.
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.failure-detector.threshold</td>
+  <td>300.0</td>
+  <td>
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). This maps to akka's `akka.remote.transport-failure-detector.threshold`. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.heartbeat.interval</td>
+  <td>1000</td>
+  <td>
+    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those. 
   </td>
 </tr>
 <tr>
@@ -331,10 +352,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.shuffle.consolidateFiles</td>
   <td>false</td>
   <td>
-    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance if you run shuffles with large numbers of reduce tasks.
+    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
   </td>
 </tr>
-<tr>
 <tr>
   <td>spark.speculation</td>
   <td>false</td>

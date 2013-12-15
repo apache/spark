@@ -19,9 +19,10 @@ package org.apache.spark.streaming.dstream
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Duration, DStream, Time}
+import scala.reflect.ClassTag
 
 private[streaming]
-class TransformedDStream[U: ClassManifest] (
+class TransformedDStream[U: ClassTag] (
     parents: Seq[DStream[_]],
     transformFunc: (Seq[RDD[_]], Time) => RDD[U]
   ) extends DStream[U](parents.head.ssc) {

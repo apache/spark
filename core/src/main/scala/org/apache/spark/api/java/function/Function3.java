@@ -17,8 +17,8 @@
 
 package org.apache.spark.api.java.function;
 
-import scala.reflect.ClassManifest;
-import scala.reflect.ClassManifest$;
+import scala.reflect.ClassTag;
+import scala.reflect.ClassTag$;
 import scala.runtime.AbstractFunction2;
 
 import java.io.Serializable;
@@ -29,8 +29,8 @@ import java.io.Serializable;
 public abstract class Function3<T1, T2, T3, R> extends WrappedFunction3<T1, T2, T3, R>
         implements Serializable {
 
-    public ClassManifest<R> returnType() {
-        return (ClassManifest<R>) ClassManifest$.MODULE$.fromClass(Object.class);
+    public ClassTag<R> returnType() {
+        return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
     }
 }
 

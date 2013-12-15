@@ -90,12 +90,13 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = {
     // Compute the minimum and the maxium
     val (max: Double, min: Double) = self.mapPartitions { items =>
-      Iterator(items.foldRight(-1/0.0, Double.NaN)((e: Double, x: Pair[Double, Double]) =>
+      Iterator(items.foldRight(Double.NegativeInfinity,
+        Double.PositiveInfinity)((e: Double, x: Pair[Double, Double]) =>
         (x._1.max(e), x._2.min(e))))
     }.reduce { (maxmin1, maxmin2) =>
       (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))
     }
-    if (max.isNaN() || max.isInfinity || min.isInfinity ) {
+    if (min.isNaN || max.isNaN || max.isInfinity || min.isInfinity ) {
       throw new UnsupportedOperationException(
         "Histogram on either an empty RDD or RDD containing +/-infinity or NaN")
     }

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.storage
 
-import akka.util.Duration
+import scala.concurrent.duration._
 
 import javax.servlet.http.HttpServletRequest
 
