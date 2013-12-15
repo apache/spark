@@ -68,10 +68,13 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length==100)
     assert(splits(0).length==99)
     assert(bins(0).length==100)
-    println(splits(1)(98))
     val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
     assert(bestSplits.length == 1)
-    println(bestSplits(0))
+    assert(0==bestSplits(0)._1.feature)
+    assert(10==bestSplits(0)._1.threshold)
+    assert(0==bestSplits(0)._2)
+    assert(10==bestSplits(0)._3)
+    assert(990==bestSplits(0)._4)
   }
 
   test("stump with fixed label 1 for Gini"){
@@ -86,10 +89,13 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length==100)
     assert(splits(0).length==99)
     assert(bins(0).length==100)
-    println(splits(1)(98))
     val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
     assert(bestSplits.length == 1)
-    println(bestSplits(0))
+    assert(0==bestSplits(0)._1.feature)
+    assert(10==bestSplits(0)._1.threshold)
+    assert(0==bestSplits(0)._2)
+    assert(10==bestSplits(0)._3)
+    assert(990==bestSplits(0)._4)
   }
 
 
@@ -105,10 +111,13 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length==100)
     assert(splits(0).length==99)
     assert(bins(0).length==100)
-    println(splits(1)(98))
     val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
     assert(bestSplits.length == 1)
-    println(bestSplits(0))
+    assert(0==bestSplits(0)._1.feature)
+    assert(10==bestSplits(0)._1.threshold)
+    assert(0==bestSplits(0)._2)
+    assert(10==bestSplits(0)._3)
+    assert(990==bestSplits(0)._4)
   }
 
   test("stump with fixed label 1 for Entropy"){
@@ -123,10 +132,13 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length==100)
     assert(splits(0).length==99)
     assert(bins(0).length==100)
-    println(splits(1)(98))
     val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
     assert(bestSplits.length == 1)
-    println(bestSplits(0))
+    assert(0==bestSplits(0)._1.feature)
+    assert(10==bestSplits(0)._1.threshold)
+    assert(0==bestSplits(0)._2)
+    assert(10==bestSplits(0)._3)
+    assert(990==bestSplits(0)._4)
   }
 
 
