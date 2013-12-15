@@ -72,9 +72,11 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bestSplits.length == 1)
     assert(0==bestSplits(0)._1.feature)
     assert(10==bestSplits(0)._1.threshold)
-    assert(0==bestSplits(0)._2)
-    assert(10==bestSplits(0)._3)
-    assert(990==bestSplits(0)._4)
+    assert(0==bestSplits(0)._2.gain)
+    assert(10==bestSplits(0)._2.leftSamples)
+    assert(0==bestSplits(0)._2.leftImpurity)
+    assert(990==bestSplits(0)._2.rightSamples)
+    assert(0==bestSplits(0)._2.rightImpurity)
   }
 
   test("stump with fixed label 1 for Gini"){
@@ -93,9 +95,11 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bestSplits.length == 1)
     assert(0==bestSplits(0)._1.feature)
     assert(10==bestSplits(0)._1.threshold)
-    assert(0==bestSplits(0)._2)
-    assert(10==bestSplits(0)._3)
-    assert(990==bestSplits(0)._4)
+    assert(0==bestSplits(0)._2.gain)
+    assert(10==bestSplits(0)._2.leftSamples)
+    assert(0==bestSplits(0)._2.leftImpurity)
+    assert(990==bestSplits(0)._2.rightSamples)
+    assert(0==bestSplits(0)._2.rightImpurity)
   }
 
 
@@ -115,9 +119,11 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bestSplits.length == 1)
     assert(0==bestSplits(0)._1.feature)
     assert(10==bestSplits(0)._1.threshold)
-    assert(0==bestSplits(0)._2)
-    assert(10==bestSplits(0)._3)
-    assert(990==bestSplits(0)._4)
+    assert(0==bestSplits(0)._2.gain)
+    assert(10==bestSplits(0)._2.leftSamples)
+    assert(0==bestSplits(0)._2.leftImpurity)
+    assert(990==bestSplits(0)._2.rightSamples)
+    assert(0==bestSplits(0)._2.rightImpurity)
   }
 
   test("stump with fixed label 1 for Entropy"){
@@ -136,9 +142,11 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bestSplits.length == 1)
     assert(0==bestSplits(0)._1.feature)
     assert(10==bestSplits(0)._1.threshold)
-    assert(0==bestSplits(0)._2)
-    assert(10==bestSplits(0)._3)
-    assert(990==bestSplits(0)._4)
+    assert(0==bestSplits(0)._2.gain)
+    assert(10==bestSplits(0)._2.leftSamples)
+    assert(0==bestSplits(0)._2.leftImpurity)
+    assert(990==bestSplits(0)._2.rightSamples)
+    assert(0==bestSplits(0)._2.rightImpurity)
   }
 
 
