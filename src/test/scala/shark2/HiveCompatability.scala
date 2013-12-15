@@ -25,7 +25,13 @@ class HiveCompatability extends HiveComaparisionTest {
     "ops_comparison",
 
     // The skewjoin test seems to never complete on hive...
-    "skewjoin"
+    "skewjoin",
+
+    // This test fails and and exits the JVM.
+    "auto_join18_multi_distinct",
+
+    // Uses a serde that isn't on the classpath... breaks other tests.
+    "bucketizedhiveinputformat"
   )
 
   /**
@@ -34,9 +40,13 @@ class HiveCompatability extends HiveComaparisionTest {
    */
   val whiteList = Seq(
     "add_part_exist",
+    "auto_join23",
+    "auto_join26",
+    "auto_join28",
     "avro_change_schema",
     "avro_schema_error_message",
     "avro_schema_literal",
+    "bucketmapjoin6",
     "count",
     "ct_case_insensitive",
     "database_properties",
@@ -50,21 +60,30 @@ class HiveCompatability extends HiveComaparisionTest {
     "drop_partitions_filter3",
     "drop_table",
     "drop_view",
-    "groupby4_map",
-    "groupby4_map_skew",
     "index_auth",
+    "index_auto_self_join",
+    "innerjoin",
     "input0",
-    "input11",
-    "input11_limit",
     "input4_limit",
     "insert1",
     "join0",
     "join1",
     "join10",
+    "join11",
+    "join12",
+    "join13",
     "join15",
+    "join16",
     "join19",
     "join22",
-    "join3",
+    "join23",
+    "join25",
+    "join29",
+    "join30",
+    "join31",
+    "join34",
+    "join36",
+    "join37",
     "join_casesensitive",
     "join_view",
     "literal_double",
@@ -72,12 +91,15 @@ class HiveCompatability extends HiveComaparisionTest {
     "literal_string",
     "mergejoins",
     "nestedvirtual",
+    "no_hooks",
     "noalias_subq1",
     "nullgroup",
     "nullgroup2",
     "nullinput",
     "ppd_gby_join",
+    "ppd_outer_join5",
     "ppd_random",
+    "ppd_repeated_alias",
     "ppd_udf_col",
     "progress_1",
     "quote2",
@@ -86,6 +108,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "set_variable_sub",
     "show_describe_func_quotes",
     "show_functions",
+    "smb_mapjoin_10",
     "tablename_with_select",
     "udf9",
     "udf_add",
@@ -115,6 +138,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "udf_isnotnull",
     "udf_isnull",
     "udf_lcase",
+    "udf_length",
     "udf_ln",
     "udf_log",
     "udf_log10",
@@ -171,7 +195,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "union10",
     "union11",
     "union13",
-    "union15",
+    "union14",
     "union16",
     "union2",
     "union20",
@@ -180,7 +204,6 @@ class HiveCompatability extends HiveComaparisionTest {
     "union30",
     "union4",
     "union5",
-    "union7",
     "union8",
     "union9"
   )
