@@ -187,6 +187,9 @@ object HiveQl {
     }
   }
 
+  class ParseException(sql: String, cause: Throwable)
+    extends Exception(s"Failed to parse: $sql", cause)
+
   /**
    * Returns the AST for the given SQL string.
    */
@@ -195,8 +198,7 @@ object HiveQl {
       ParseUtils.findRootNonNullToken(
         (new ParseDriver()).parse(sql))
     } catch {
-      case pe: org.apache.hadoop.hive.ql.parse.ParseException =>
-        throw new RuntimeException(s"Failed to parse sql: '$sql'", pe)
+      case e: Exception => throw new ParseException(sql, e)
     }
   }
 
@@ -348,7 +350,7 @@ object HiveQl {
         Filter(nodeToExpr(whereExpr), relations)
       }.getOrElse(relations)
 
-      val selectExpressions = nameExpressions(selectClause.getChildren.map(selExprNodeToExpr))
+      val selectExpressions = nameExpressions(selectClause.getChildren.flatMap(selExprNodeToExpr))
 
       val withProject = groupByClause match {
         case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
@@ -370,6 +372,7 @@ object HiveQl {
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
+  val allJoinTokens = "(TOK_.*JOIN)".r
   def nodeToRelation(node: Node): LogicalPlan = node match {
     case Token("TOK_SUBQUERY",
            query :: Token(alias, Nil) :: Nil) =>
@@ -390,24 +393,20 @@ object HiveQl {
       val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
       UnresolvedRelation(tableName, Some(alias))
 
-    /* Join no condition */
-    case Token("TOK_JOIN",
+    case Token(allJoinTokens(joinToken),
            relation1 ::
-           relation2 :: Nil) =>
+           relation2 :: other) =>
+      assert(other.size <= 1, "Unhandled join child")
+      val joinType = joinToken match {
+        case "TOK_JOIN" => Inner
+        case "TOK_RIGHTOUTERJOIN" => RightOuter
+        case "TOK_LEFTOUTERJOIN" => LeftOuter
+        case "TOK_FULLOUTERJOIN" => FullOuter
+      }
       Join(nodeToRelation(relation1),
         nodeToRelation(relation2),
-        Inner,
-        None)
-
-    /* Join with condition */
-    case Token("TOK_JOIN",
-          relation1 ::
-          relation2 ::
-          condition :: Nil) =>
-      Join(nodeToRelation(relation1),
-           nodeToRelation(relation2),
-           Inner,
-           Some(nodeToExpr(condition)))
+        joinType,
+        other.headOption.map(nodeToExpr))
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
@@ -435,13 +434,20 @@ object HiveQl {
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
-  protected def selExprNodeToExpr(node: Node): Expression = node match {
+  protected def selExprNodeToExpr(node: Node): Option[Expression] = node match {
     case Token("TOK_SELEXPR",
            e :: Nil) =>
-      nodeToExpr(e)
+      Some(nodeToExpr(e))
+
     case Token("TOK_SELEXPR",
            e :: Token(alias, Nil) :: Nil) =>
-      Alias(nodeToExpr(e), alias)()
+      Some(Alias(nodeToExpr(e), alias)())
+
+    /* Hints are ignored */
+    case Token("TOK_HINTLIST", _) => None
+
+    case a: ASTNode =>
+      throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
 
@@ -461,6 +467,9 @@ object HiveQl {
   val AVG = "(?i)AVG".r
   val SUM = "(?i)SUM".r
   val RAND = "(?i)RAND".r
+  val AND = "(?i)AND".r
+  val OR = "(?i)OR".r
+  val NOT = "(?i)Not".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -507,9 +516,9 @@ object HiveQl {
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) => IsNull(nodeToExpr(child))
 
     /* Boolean Logic */
-    case Token("AND", left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
-    case Token("OR", left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
-    case Token("NOT", child :: Nil) => Not(nodeToExpr(child))
+    case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
+    case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
+    case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
 
     /* Other functions */
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
