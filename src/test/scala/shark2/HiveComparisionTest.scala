@@ -59,7 +59,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
 
   def createQueryTest(testCaseName: String, sql: String) = {
     test(testCaseName) {
-      logger.info(
+      logger.error(
        s"""
           |=============================
           |HIVE TEST: $testCaseName
@@ -70,33 +70,50 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
       try {
         testShark.reset()
 
-        val hiveResults: Seq[Seq[String]] = queryList.zipWithIndex.map {
+        val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i)  =>
             val cachedAnswerName = s"$testCaseName-$i-${getMd5(queryString)}"
-            val cachedAnswerFile = new File(answerCache, cachedAnswerName)
+            new File(answerCache, cachedAnswerName)
+        }
 
-            if(cachedAnswerFile.exists) {
-              logger.info(s"Using cached answer for: $queryString")
-              val cachedAnswer = fileToString(cachedAnswerFile)
-              if(cachedAnswer == "")
+        val hiveCachedResults = hiveCacheFiles.flatMap { cachedAnswerFile =>
+          if(cachedAnswerFile.exists) {
+            val cachedString = fileToString(cachedAnswerFile)
+            val cachedAnswer =
+              if(cachedString == "")
                 Nil
               else
-                cachedAnswer.split("\n").toSeq
-            } else {
-              // Analyze the query with catalyst to ensure test tables are loaded.
-              val sharkQuery = (new testShark.SharkSqlQuery(queryString))
-              val answer = sharkQuery.analyzed match {
-                case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
-                case _ => testShark.runSqlHive(queryString)
-              }
+                cachedString.split("\n").toSeq
+            Some(cachedAnswer)
+          } else {
+            logger.debug(s"File $cachedAnswerFile not found")
+            None
+          }
+        }
 
-              stringToFile(cachedAnswerFile, answer.mkString("\n"))
+        val hiveResults: Seq[Seq[String]] =
+          if(hiveCachedResults.size == queryList.size) {
+            logger.warn(s"Using answer cache for test: $testCaseName")
+            hiveCachedResults
+          } else {
+            val computedResults = queryList.zip(hiveCacheFiles).zipWithIndex.map {
+              case ((queryString, cachedAnswerFile), i)=>
+                logger.warn(s"Running query ${i+1}/${queryList.size} with hive.")
+                // Analyze the query with catalyst to ensure test tables are loaded.
+                val sharkQuery = (new testShark.SharkSqlQuery(queryString))
+                val answer = sharkQuery.analyzed match {
+                  case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
+                  case _ => testShark.runSqlHive(queryString)
+                }
 
-              answer
-            }
-        }.toSeq
+                stringToFile(cachedAnswerFile, answer.mkString("\n"))
 
-        testShark.reset()
+                answer
+            }.toSeq
+            testShark.reset()
+
+            computedResults
+          }
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
@@ -119,8 +136,6 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
                 """.stripMargin)
           }
         }.toSeq
-
-        testShark.reset()
 
         (queryList, hiveResults, catalystResults).zipped.foreach {
           case (query, hive, (sharkQuery, catalyst)) =>
