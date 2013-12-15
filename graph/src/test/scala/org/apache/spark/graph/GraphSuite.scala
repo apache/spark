@@ -1,9 +1,12 @@
 package org.apache.spark.graph
 
+import scala.util.Random
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graph.LocalSparkContext._
+import org.apache.spark.graph.impl.EdgePartitionBuilder
 import org.apache.spark.rdd._
 
 class GraphSuite extends FunSuite with LocalSparkContext {
@@ -59,6 +62,13 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // mapVertices changing type
       val mappedVAttrs2 = reverseStar.mapVertices((vid, attr) => attr.length)
       assert(mappedVAttrs2.vertices.collect.toSet === (0 to n).map(x => (x: Vid, 1)).toSet)
+      // groupEdges
+      val doubleStar = Graph.fromEdgeTuples(
+        sc.parallelize((1 to n).flatMap(x => List((0: Vid, x: Vid), (0: Vid, x: Vid))), 1), "v")
+      val star2 = doubleStar.groupEdges { (a, b) => a}
+      assert(star2.edges.collect.toArray.sorted(Edge.lexicographicOrdering[Int]) ===
+        star.edges.collect.toArray.sorted(Edge.lexicographicOrdering[Int]))
+      assert(star2.vertices.collect.toSet === star.vertices.collect.toSet)
     }
   }
 
@@ -205,5 +215,20 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // And 4 edges.
       assert(subgraph.edges.map(_.copy()).collect().toSet === (2 to n by 2).map(x => Edge(0, x, 1)).toSet)
     }
+  }
+
+  test("EdgePartition.sort") {
+    val edgesFrom0 = List(Edge(0, 1, 0))
+    val edgesFrom1 = List(Edge(1, 0, 0), Edge(1, 2, 0))
+    val sortedEdges = edgesFrom0 ++ edgesFrom1
+    val builder = new EdgePartitionBuilder[Int]
+    for (e <- Random.shuffle(sortedEdges)) {
+      builder.add(e.srcId, e.dstId, e.attr)
+    }
+
+    val edgePartition = builder.toEdgePartition
+    assert(edgePartition.iterator.map(_.copy()).toList === sortedEdges)
+    assert(edgePartition.indexIterator(_ == 0).map(_.copy()).toList === edgesFrom0)
+    assert(edgePartition.indexIterator(_ == 1).map(_.copy()).toList === edgesFrom1)
   }
 }

@@ -115,7 +115,7 @@ class VTableReplicated[VD: ClassManifest](
             for (i <- 0 until block.vids.size) {
               val vid = block.vids(i)
               val attr = block.attrs(i)
-              val ind = vidToIndex.getPos(vid) & OpenHashSet.POSITION_MASK
+              val ind = vidToIndex.getPos(vid)
               vertexArray(ind) = attr
             }
           }

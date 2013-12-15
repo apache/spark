@@ -54,6 +54,9 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     activeSet.get.contains(vid)
   }
 
+  /** The number of active vertices, if any exist. */
+  def numActives: Option[Int] = activeSet.map(_.size)
+
   /**
    * Pass each vertex attribute along with the vertex id through a map
    * function and retain the original RDD's partitioning and index.
