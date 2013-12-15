@@ -55,7 +55,7 @@ case "$1" in
   'org.apache.spark.deploy.worker.Worker')
     OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_WORKER_OPTS"
     ;;
-  'org.apache.spark.executor.StandaloneExecutorBackend')
+  'org.apache.spark.executor.CoarseGrainedExecutorBackend')
     OUR_JAVA_OPTS="$OUR_JAVA_OPTS $SPARK_EXECUTOR_OPTS"
     ;;
   'org.apache.spark.executor.MesosExecutorBackend')
