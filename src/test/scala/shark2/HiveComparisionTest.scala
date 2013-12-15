@@ -99,6 +99,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
             val computedResults = queryList.zip(hiveCacheFiles).zipWithIndex.map {
               case ((queryString, cachedAnswerFile), i)=>
                 logger.warn(s"Running query ${i+1}/${queryList.size} with hive.")
+                info(s"HIVE: $queryString")
                 // Analyze the query with catalyst to ensure test tables are loaded.
                 val sharkQuery = (new testShark.SharkSqlQuery(queryString))
                 val answer = sharkQuery.analyzed match {

@@ -195,25 +195,36 @@ object TestShark extends Logging {
 
   implicit def logicalToSharkQuery(plan: LogicalPlan) = new SharkQuery { val parsed = plan }
 
-  protected case class TestTable(name: String, commands: String*)
+  protected case class TestTable(name: String, commands: (()=>Unit)*)
 
+
+  protected implicit class SqlCmd(sql: String) { def cmd = () => sql.q.stringResult(): Unit}
   /**
    * A list of test tables and the DDL required to initialize them.  A test table is loaded on demand when a query
    * are run against it.
    */
   val testTables = Seq(
     TestTable("src",
-      "CREATE TABLE src (key INT, value STRING)",
-      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' INTO TABLE src"),
+      "CREATE TABLE src (key INT, value STRING)".cmd,
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' INTO TABLE src".cmd),
     TestTable("src1",
-      "CREATE TABLE src1 (key INT, value STRING)",
-      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv3.txt' INTO TABLE src1"),
+      "CREATE TABLE src1 (key INT, value STRING)".cmd,
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv3.txt' INTO TABLE src1".cmd),
     TestTable("dest1",
-      "CREATE TABLE src (key INT, value STRING)"),
+      "CREATE TABLE src (key INT, value STRING)".cmd),
     TestTable("dest2",
-      "CREATE TABLE src (key INT, value STRING)"),
+      "CREATE TABLE src (key INT, value STRING)".cmd),
     TestTable("dest3",
-      "CREATE TABLE src (key INT, value STRING)")
+      "CREATE TABLE src (key INT, value STRING)".cmd),
+    TestTable("srcpart", () => {
+      runSqlHive("CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
+      Seq("2008-04-08", "2008-04-09").foreach { ds =>
+        Seq("11", "12").foreach { hr =>
+          val partSpec = Map("ds" -> ds, "hr" -> hr)
+          runSqlHive(s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')")
+        }
+      }
+    })
   )
   protected val testTableNames = testTables.map(_.name).toSet
 
@@ -222,7 +233,7 @@ object TestShark extends Logging {
     if(!(loadedTables contains name)) {
       logger.info(s"Loading test table $name")
       val createCmds = testTables.find(_.name == name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
-      createCmds.foreach(_.q.stringResult())
+      createCmds.foreach(_())
       loadedTables += name
     }
   }

@@ -39,12 +39,24 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
   }
 
   def execute() = {
-    hadoopReader.makeRDDForTable(relation.hiveQlTable).map {
-      case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct =>
-        refs.map { ref =>
-          val data = objectInspector.getStructFieldData(struct, ref)
-          ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector].getPrimitiveJavaObject(data)
-        }.toIndexedSeq
+    val rdd = if(!relation.hiveQlTable.isPartitioned)
+      hadoopReader.makeRDDForTable(relation.hiveQlTable)
+    else
+      hadoopReader.makeRDDForPartitionedTable(relation.hiveQlPartitions)
+
+    def unpackStruct(struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct) =
+      refs.map { ref =>
+        val data = objectInspector.getStructFieldData(struct, ref)
+        ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector].getPrimitiveJavaObject(data)
+      }.toIndexedSeq
+
+    rdd.map {
+      case array: Array[Any] =>
+        array.flatMap {
+          case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct => unpackStruct(struct)
+          case array: Array[Any] => array
+        }
+      case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct => unpackStruct(struct)
     }
   }
 

@@ -2,7 +2,7 @@ package catalyst
 package shark2
 
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.api.Table
+import org.apache.hadoop.hive.metastore.api.{Partition, Table}
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
 
 import analysis.Catalog
@@ -20,7 +20,15 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
       case Array(tableOnly) => ("default", tableOnly)
       case Array(db, table) => (db, table)
     }
-    MetastoreRelation(databaseName, tableName, alias)(client.getTable(databaseName, tableName))
+    val table = client.getTable(databaseName, tableName)
+    val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
+    val partitions =
+      if(hiveQlTable.isPartitioned)
+        client.listPartitions(databaseName, tableName, 255).toSeq
+      else
+        Nil
+
+    MetastoreRelation(databaseName, tableName, alias)(table, partitions)
   }
 }
 
@@ -32,9 +40,11 @@ object HiveMetatoreTypes {
     }
 }
 
-case class MetastoreRelation(databaseName: String, tableName: String, alias: Option[String])(val table: Table)
+case class MetastoreRelation(databaseName: String, tableName: String, alias: Option[String])(val table: Table, val partitions: Seq[Partition])
     extends plans.logical.BaseRelation {
-  val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
+
+  def hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
+  def hiveQlPartitions = partitions.map(new org.apache.hadoop.hive.ql.metadata.Partition(hiveQlTable, _))
   val tableDesc = new TableDesc(
     Class.forName(table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[org.apache.hadoop.hive.serde2.Deserializer]],
     Class.forName(table.getSd.getInputFormat).asInstanceOf[Class[org.apache.hadoop.mapred.InputFormat[_,_]]],
