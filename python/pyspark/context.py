@@ -214,17 +214,6 @@ class SparkContext(object):
                    MUTF8Deserializer())
 
     ###
-    def sequenceFileAsText(self, name):
-        """
-        Read a Hadoopp SequenceFile with arbitrary key and value class from HDFS,
-        a local file system (available on all nodes), or any Hadoop-supported file system URI,
-        and return it as an RDD of (String, String) where the key and value representations
-        are generated using the 'toString()' method of the relevant Java class.
-        """
-        #minSplits = minSplits or min(self.defaultParallelism, 2)
-        jrdd = self._jvm.PythonRDD.sequenceFileAsText(self._jsc, name)
-        return RDD(jrdd, self, MsgPackDeserializer())  # MsgPackDeserializer   PairMUTF8Deserializer
-
     def sequenceFile(self, name, keyClass="org.apache.hadoop.io.Text", valueClass="org.apache.hadoop.io.Text",
                      keyWrapper="", valueWrapper="", minSplits=None):
         """
@@ -235,6 +224,8 @@ class SparkContext(object):
 
         >>> sc.sequenceFile("test_support/data/sfint/").collect()
         [(1, 'aa'), (2, 'bb'), (2, 'aa'), (3, 'cc'), (2, 'bb'), (1, 'aa')]
+        >>> sc.sequenceFile("test_support/data/sftext/").collect()
+        [('1', 'aa'), ('2', 'bb'), ('2', 'aa'), ('3', 'cc'), ('2', 'bb'), ('1', 'aa')]
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
         jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, name, keyClass, valueClass, keyWrapper, valueWrapper,
@@ -242,7 +233,7 @@ class SparkContext(object):
         #jrdd = self._jvm.PythonRDD.sequenceFile(self._jsc, name, keyWrapper, valueWrapper, minSplits)
         return RDD(jrdd, self, MsgPackDeserializer())  # MsgPackDeserializer   PairMUTF8Deserializer
 
-    def newHadoopFile(self, name, inputFormat, keyClass, valueClass, keyWrapper="toString", valueWrapper="toString",
+    def newAPIHadoopFile(self, name, inputFormat, keyClass, valueClass, keyWrapper="toString", valueWrapper="toString",
                       conf = {}):
         """
         Read a Hadoopp file with arbitrary InputFormat, key and value class from HDFS,
@@ -253,7 +244,22 @@ class SparkContext(object):
         jconf = self._jvm.java.util.HashMap()
         for k, v in conf.iteritems():
             jconf[k] = v
-        jrdd = self._jvm.PythonRDD.newHadoopFile(self._jsc, name, inputFormat, keyClass, valueClass, keyWrapper,
+        jrdd = self._jvm.PythonRDD.newAPIHadoopFile(self._jsc, name, inputFormat, keyClass, valueClass, keyWrapper,
+                                                       valueWrapper, jconf)
+        return RDD(jrdd, self, MsgPackDeserializer())
+
+    def newAPIHadoopRDD(self, inputFormat, keyClass, valueClass, keyWrapper="toString", valueWrapper="toString",
+                      conf = {}):
+        """
+        Read a Hadoopp file with arbitrary InputFormat, key and value class from HDFS,
+        a local file system (available on all nodes), or any Hadoop-supported file system URI,
+        and return it as an RDD of (String, String), where the key and value representations
+        are generated using the 'toString()' method of the relevant Java class.
+        """
+        jconf = self._jvm.java.util.HashMap()
+        for k, v in conf.iteritems():
+            jconf[k] = v
+        jrdd = self._jvm.PythonRDD.newAPIHadoopRDD(self._jsc, inputFormat, keyClass, valueClass, keyWrapper,
                                                        valueWrapper, jconf)
         return RDD(jrdd, self, MsgPackDeserializer())
 

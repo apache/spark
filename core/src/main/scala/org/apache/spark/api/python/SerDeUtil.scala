@@ -15,43 +15,60 @@ import scala.util.Failure
  */
 private[python] object SerDeUtil extends Logging {
 
+  /** Attempts to register a class with MsgPack, only if it is not a primitive or a String */
   def register[T](clazz: Class[T], msgpack: ScalaMessagePack) {
+    //implicit val kcm = ClassManifest.fromClass(clazz)
+    //val kc = kcm.erasure
     Try {
-      log.info("%s".format(clazz))
-      clazz match {
-        case c if c.isPrimitive =>
-        case c if c.isInstanceOf[java.lang.String] =>
-        case _ => msgpack.register(clazz)
-      }
-    }.getOrElse(log.warn("Failed to register class (%s) with MsgPack. ".format(clazz.getName) +
-      "Falling back to default MsgPack serialization, or 'toString' as last resort"))
+      //if (kc.isInstance("") || kc.isPrimitive) {
+      //  log.info("Class: %s doesn't need to be registered".format(kc.getName))
+      //} else {
+      msgpack.register(clazz)
+      log.info("Registered key/value class with MsgPack: %s".format(clazz))
+      //}
+
+    } match {
+      case Failure(err)  =>
+        log.warn("Failed to register class (%s) with MsgPack. ".format(clazz.getName) +
+          "Falling back to default MsgPack serialization, or 'toString' as last resort. " +
+          "Error: %s".format(err.getMessage))
+      case Success(result) =>
+    }
   }
 
-  // serialize and RDD[(K, V)] -> RDD[Array[Byte]] using MsgPack
+  /** Serializes an RDD[(K, V)] -> RDD[Array[Byte]] using MsgPack */
   def serMsgPack[K, V](rdd: RDD[(K, V)]) = {
     import org.msgpack.ScalaMessagePack._
-    val msgpack = new ScalaMessagePack with Serializable
-    val first = rdd.first()
-    val kc = ClassManifest.fromClass(first._1.getClass).asInstanceOf[ClassManifest[K]].erasure.asInstanceOf[Class[K]]
-    val vc = ClassManifest.fromClass(first._2.getClass).asInstanceOf[ClassManifest[V]].erasure.asInstanceOf[Class[V]]
-    register(kc, msgpack)
-    register(vc, msgpack)
-    rdd.map{ pair =>
+    rdd.mapPartitions{ pairs =>
+      val mp = new ScalaMessagePack
+      var triedReg = false
+      pairs.map{ pair =>
       Try {
-        msgpack.write(pair)
+        if (!triedReg) {
+          register(pair._1.getClass, mp)
+          register(pair._2.getClass, mp)
+          triedReg = true
+        }
+        mp.write(pair)
       } match {
         case Failure(err) =>
-          Try {
-            write((pair._1.toString, pair._2.toString))
-          } match {
-            case Success(result) => result
-            case Failure(e) => throw e
-          }
+            log.debug("Failed to write", err)
+            Try {
+              write((pair._1.toString, pair._2.toString))
+            } match {
+              case Success(result) => result
+              case Failure(e) => throw e
+            }
         case Success(result) => result
       }
     }
   }
+  }
 
+  /**
+   * Converts an RDD of (K, V) pairs, where K and/or V could be instances of [[org.apache.hadoop.io.Writable]],
+   * into an RDD[(K, V)]
+   */
   def convertRDD[K, V](rdd: RDD[(K, V)]) = {
     rdd.map{
       case (k: Writable, v: Writable) => (convert(k).asInstanceOf[K], convert(v).asInstanceOf[V])
@@ -61,6 +78,7 @@ private[python] object SerDeUtil extends Logging {
     }
   }
 
+  /** Converts a [[org.apache.hadoop.io.Writable]] to the underlying primitive, String or object representation */
   def convert(writable: Writable): Any = {
     import collection.JavaConversions._
     writable match {

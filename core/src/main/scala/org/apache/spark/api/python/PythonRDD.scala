@@ -34,10 +34,10 @@ import org.apache.spark.api.java.function.PairFunction
 import scala.util.{Success, Failure, Try}
 import org.msgpack
 import org.msgpack.ScalaMessagePack
-import org.apache.hadoop.mapreduce.InputFormat
+import org.apache.hadoop.mapred.InputFormat
 
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-import org.apache.hadoop.mapred.SequenceFileOutputFormat
+import org.apache.hadoop.mapred.{JobConf, SequenceFileOutputFormat}
 import org.apache.hadoop.conf.Configuration
 import java.util
 
@@ -196,69 +196,6 @@ private object SpecialLengths {
   val TIMING_DATA = -3
 }
 
-case class TestClass(var id: String, var number: Int) {
-  def this() = this("", 0)
-}
-
-object TestHadoop extends App {
-
-  //PythonRDD.writeToStream((1, "bar"), new DataOutputStream(new FileOutputStream("/tmp/test.out")))
-
-
-  //val n = new NullWritable
-
-  import SparkContext._
-
-  val path = "/tmp/spark/test/sfarray/"
-  //val path = "/Users/Nick/workspace/java/faunus/output/job-0/"
-
-  val sc = new SparkContext("local[2]", "test")
-
-  //val rdd = sc.sequenceFile[NullWritable, FaunusVertex](path)
-  //val data = Seq((1.0, "aa"), (2.0, "bb"), (2.0, "aa"), (3.0, "cc"), (2.0, "bb"), (1.0, "aa"))
-  val data = Seq(
-    (1, Array(1.0, 2.0, 3.0)),
-    (2, Array(3.0, 4.0, 5.0)),
-    (3, Array(4.0, 5.0, 6.0))
-  )
-  val d = new DoubleWritable(5.0)
-  val a = new ArrayWritable(classOf[DoubleWritable], Array(d))
-
-  val rdd = sc.parallelize(data, numSlices = 2)
-    //.map({ case (k, v) => (new IntWritable(k), v.map(new DoubleWritable(_))) })
-    .map{ case (k, v) => (new IntWritable(k), new ArrayWritable(classOf[DoubleWritable], v.map(new DoubleWritable(_)))) }
-  rdd.saveAsNewAPIHadoopFile[org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat[IntWritable, ArrayWritable]](path)
-
-  /*
-  val data = Seq(
-    ("1", TestClass("test1", 123)),
-    ("2", TestClass("test2", 456)),
-    ("1", TestClass("test3", 123)),
-    ("3", TestClass("test56", 456)),
-    ("2", TestClass("test2", 123))
-  )
-  val rdd = sc.parallelize(data, numSlices = 2).map{ case (k, v) => (new Text(k), v) }
-  rdd.saveAsNewAPIHadoopFile(path,
-                             classOf[Text], classOf[TestClass],
-                             classOf[org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat[Text, TestClass]])
-
-  //val rdd2 = Seq((1, ))
-
-  val seq = sc.sequenceFile[Double, String](path)
-  val seqR = seq.collect()
-
-  val packed = PythonRDD.serMsgPack(rdd)
-  val packedR = packed.collect()
-  val packed2 = PythonRDD.serMsgPack(seq)
-  val packedR2 = packed2.collect()
-
-  println(seqR.mkString(","))
-  println(packedR.mkString(","))
-  println(packedR2.mkString(","))
-  */
-
-}
-
 private[spark] object PythonRDD extends Logging {
 
   def readRDDFromFile(sc: JavaSparkContext, filename: String, parallelism: Int):
@@ -281,7 +218,7 @@ private[spark] object PythonRDD extends Logging {
 
   // PySpark / Hadoop InputFormat stuff
 
-  // SequenceFile
+  /** Create and RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]] */
   def sequenceFile[K ,V](sc: JavaSparkContext,
                          path: String,
                          keyClass: String,
@@ -299,8 +236,11 @@ private[spark] object PythonRDD extends Logging {
     JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
   }
 
-  // Arbitrary Hadoop InputFormat, key class and value class
-  def newHadoopFile[K, V, F <: NewInputFormat[K, V]](sc: JavaSparkContext,
+  /**
+   * Create an RDD from a file path, using an arbitrary [[org.apache.hadoop.mapreduce.InputFormat]],
+   * key and value class
+   */
+  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](sc: JavaSparkContext,
                                                      path: String,
                                                      inputFormatClazz: String,
                                                      keyClazz: String,
@@ -312,19 +252,36 @@ private[spark] object PythonRDD extends Logging {
     val baseConf = sc.hadoopConfiguration()
     val mergedConf = PythonHadoopUtil.mergeConfs(baseConf, conf)
     val rdd =
-      newHadoopFileFromClassNames[K, V, F](sc,
-        path, inputFormatClazz, keyClazz, valueClazz, keyWrapper, valueWrapper, mergedConf)
+      newAPIHadoopRDDFromClassNames[K, V, F](sc,
+        Some(path), inputFormatClazz, keyClazz, valueClazz, mergedConf)
     val converted = SerDeUtil.convertRDD[K, V](rdd)
     JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
   }
 
-  private def newHadoopFileFromClassNames[K, V, F <: NewInputFormat[K, V]](sc: JavaSparkContext,
-                                                                           path: String,
+  /**
+   * Create an RDD from a [[org.apache.hadoop.conf.Configuration]] converted from a map that is passed in from Python,
+   * using an arbitrary [[org.apache.hadoop.mapreduce.InputFormat]], key and value class
+   */
+  def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](sc: JavaSparkContext,
+                                                       inputFormatClazz: String,
+                                                       keyClazz: String,
+                                                       valueClazz: String,
+                                                       keyWrapper: String,
+                                                       valueWrapper: String,
+                                                       confAsMap: java.util.HashMap[String, String]) = {
+    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val rdd =
+      newAPIHadoopRDDFromClassNames[K, V, F](sc,
+        None, inputFormatClazz, keyClazz, valueClazz, conf)
+    val converted = SerDeUtil.convertRDD[K, V](rdd)
+    JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
+  }
+
+  private def newAPIHadoopRDDFromClassNames[K, V, F <: NewInputFormat[K, V]](sc: JavaSparkContext,
+                                                                           path: Option[String] = None,
                                                                            inputFormatClazz: String,
                                                                            keyClazz: String,
                                                                            valueClazz: String,
-                                                                           keyWrapper: String,
-                                                                           valueWrapper: String,
                                                                            conf: Configuration) = {
     implicit val kcm = ClassManifest.fromClass(Class.forName(keyClazz)).asInstanceOf[ClassManifest[K]]
     implicit val vcm = ClassManifest.fromClass(Class.forName(valueClazz)).asInstanceOf[ClassManifest[V]]
@@ -332,10 +289,66 @@ private[spark] object PythonRDD extends Logging {
     val kc = kcm.erasure.asInstanceOf[Class[K]]
     val vc = vcm.erasure.asInstanceOf[Class[V]]
     val fc = fcm.erasure.asInstanceOf[Class[F]]
-    sc.sc.newAPIHadoopFile(path, fc, kc, vc, conf)
+    val rdd = if (path.isDefined) {
+      sc.sc.newAPIHadoopFile[K, V, F](path.get, fc, kc, vc, conf)
+    } else {
+      sc.sc.newAPIHadoopRDD[K, V, F](conf, fc, kc, vc)
+    }
+    rdd
   }
 
-  //
+  def hadoopFile[K, V, F <: InputFormat[K, V]](sc: JavaSparkContext,
+                                               path: String,
+                                               inputFormatClazz: String,
+                                               keyClazz: String,
+                                               valueClazz: String,
+                                               keyWrapper: String,
+                                               valueWrapper: String,
+                                               confAsMap: java.util.HashMap[String, String]) = {
+    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val baseConf = sc.hadoopConfiguration()
+    val mergedConf = PythonHadoopUtil.mergeConfs(baseConf, conf)
+    val rdd =
+      hadoopRDDFromClassNames[K, V, F](sc,
+        Some(path), inputFormatClazz, keyClazz, valueClazz, mergedConf)
+    val converted = SerDeUtil.convertRDD[K, V](rdd)
+    JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
+  }
+
+  def hadoopRDD[K, V, F <: InputFormat[K, V]](sc: JavaSparkContext,
+                                              inputFormatClazz: String,
+                                              keyClazz: String,
+                                              valueClazz: String,
+                                              keyWrapper: String,
+                                              valueWrapper: String,
+                                              confAsMap: java.util.HashMap[String, String]) = {
+    val conf = PythonHadoopUtil.mapToConf(confAsMap)
+    val rdd =
+      hadoopRDDFromClassNames[K, V, F](sc,
+        None, inputFormatClazz, keyClazz, valueClazz, conf)
+    val converted = SerDeUtil.convertRDD[K, V](rdd)
+    JavaRDD.fromRDD(SerDeUtil.serMsgPack[K, V](converted))
+  }
+
+  private def hadoopRDDFromClassNames[K, V, F <: InputFormat[K, V]](sc: JavaSparkContext,
+                                                                             path: Option[String] = None,
+                                                                             inputFormatClazz: String,
+                                                                             keyClazz: String,
+                                                                             valueClazz: String,
+                                                                             conf: Configuration) = {
+    implicit val kcm = ClassManifest.fromClass(Class.forName(keyClazz)).asInstanceOf[ClassManifest[K]]
+    implicit val vcm = ClassManifest.fromClass(Class.forName(valueClazz)).asInstanceOf[ClassManifest[V]]
+    implicit val fcm = ClassManifest.fromClass(Class.forName(inputFormatClazz)).asInstanceOf[ClassManifest[F]]
+    val kc = kcm.erasure.asInstanceOf[Class[K]]
+    val vc = vcm.erasure.asInstanceOf[Class[V]]
+    val fc = fcm.erasure.asInstanceOf[Class[F]]
+    val rdd = if (path.isDefined) {
+      sc.sc.hadoopFile(path.get, fc, kc, vc)
+    } else {
+      sc.sc.hadoopRDD(new JobConf(conf), fc, kc, vc)
+    }
+    rdd
+  }
 
   def writeToStream(elem: Any, dataOut: DataOutputStream)(implicit m: ClassManifest[Any]) {
     elem match {
