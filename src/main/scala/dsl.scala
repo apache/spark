@@ -36,6 +36,12 @@ package object dsl {
     def expr: Expression
 
     def +(other: Expression) = Add(expr, other)
+    def -(other: Expression) = Subtract(expr, other)
+    def *(other: Expression) = Multiply(expr, other)
+    def /(other: Expression) = Divide(expr, other)
+
+    def &&(other: Expression) = And(expr, other)
+    def ||(other: Expression) = Or(expr, other)
 
     def <(other: Expression) = LessThan(expr, other)
     def <=(other: Expression) = LessThanOrEqual(expr, other)

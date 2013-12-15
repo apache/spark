@@ -114,6 +114,8 @@ object Evaluate {
 
       /* Boolean Logic */
       case Not(c) => !eval(c).asInstanceOf[Boolean]
+      case And(l,r) => eval(l).asInstanceOf[Boolean] && eval(l).asInstanceOf[Boolean]
+      case Or(l,r) => eval(l).asInstanceOf[Boolean] || eval(l).asInstanceOf[Boolean]
 
       /* References to input tuples */
       case br @ BoundReference(inputTuple, ordinal, _) => try input(inputTuple)(ordinal) catch {
