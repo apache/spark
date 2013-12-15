@@ -265,7 +265,7 @@ setMethod("lapplyPartition",
                            X@serialized,
                            depsBinArr,
                            packageNamesArr,
-                           X@jrdd$classManifest())
+                           X@jrdd$classTag())
             jrdd <- rrddRef$asJavaRDD()
             RRDD(jrdd, TRUE)
           })
@@ -409,7 +409,7 @@ setMethod("partitionBy",
                                 rrdd@serialized,
                                 depsBinArr,
                                 packageNamesArr,
-                                rrdd@jrdd$classManifest())
+                                rrdd@jrdd$classTag())
 
             # Create a corresponding partitioner.
             rPartitioner <- new(J("org.apache.spark.HashPartitioner"),
