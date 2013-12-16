@@ -122,7 +122,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
       sc.parallelize(1 to 10, 10).foreach(x => println(x / 0))
     }
     assert(thrown.getClass === classOf[SparkException])
-    assert(thrown.getMessage.contains("more than 4 times"))
+    assert(thrown.getMessage.contains("failed 4 times"))
   }
 
   test("caching") {
