@@ -565,7 +565,7 @@ def ssh(host, opts, command):
   while True:
     try:
       return subprocess.check_call(
-        "ssh -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
+        "ssh -t -t -o StrictHostKeyChecking=no -i %s %s@%s '%s'" %
         (opts.identity_file, opts.user, host, command), shell=True)
     except subprocess.CalledProcessError as e:
       if (tries > 2):
