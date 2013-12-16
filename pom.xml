@@ -120,7 +120,7 @@
     <repository> 
       <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <url>http://repo.maven.apache.org/maven2/</url>
+      <url>http://repo.maven.apache.org/maven2</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -131,7 +131,7 @@
     <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
-      <url>http://repository.jboss.org/nexus/content/repositories/releases/</url>
+      <url>http://repository.jboss.org/nexus/content/repositories/releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -142,7 +142,7 @@
     <repository>
       <id>mqtt-repo</id>
       <name>MQTT Repository</name>
-      <url>https://repo.eclipse.org/content/repositories/paho-releases/</url>
+      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -739,7 +739,7 @@
         <repository>
           <id>maven-root</id>
           <name>Maven root repository</name>
-          <url>http://repo1.maven.org/maven2/</url>
+          <url>http://repo1.maven.org/maven2</url>
           <releases>
             <enabled>true</enabled>
           </releases>
@@ -771,7 +771,7 @@
          <repository>
            <id>maven-root</id>
            <name>Maven root repository</name>
-           <url>http://repo1.maven.org/maven2/</url>
+           <url>http://repo1.maven.org/maven2</url>
            <releases>
              <enabled>true</enabled>
            </releases>
