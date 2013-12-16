@@ -101,6 +101,11 @@ private[spark] class StagePage(parent: JobProgressUI) {
           None
         }
         else {
+          val serializationTimes = validTasks.map{case (info, metrics, exception) =>
+            metrics.get.serializationTime.toDouble}
+          val serializationQuantiles = "Serialization Time" +: Distribution(serializationTimes).get.getQuantiles().map(
+            ms => parent.formatDuration(ms.toLong))
+
           val serviceTimes = validTasks.map{case (info, metrics, exception) =>
             metrics.get.executorRunTime.toDouble}
           val serviceQuantiles = "Duration" +: Distribution(serviceTimes).get.getQuantiles().map(
@@ -149,6 +154,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
           val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
           val listings: Seq[Seq[String]] = Seq(
+            serializationQuantiles,
             serviceQuantiles,
             gettingResultQuantiles,
             schedulerDelayQuantiles,
