@@ -135,6 +135,11 @@ object DecisionTree extends Serializable {
     */
     def isSampleValid(parentFilters: List[Filter], labeledPoint: LabeledPoint): Boolean = {
 
+      //Leaf
+      if (parentFilters.length == 0 ){
+        return false
+      }
+
       for (filter <- parentFilters) {
         val features = labeledPoint.features
         val featureIndex = filter.split.feature
