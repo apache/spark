@@ -589,7 +589,7 @@ def ssh(host, opts, command):
   while True:
     try:
       return subprocess.check_call(
-        ssh_command(opts) + ['-t', '%s@%s' % (opts.user, host), stringify_command(command)])
+        ssh_command(opts) + ['-t', '-t', '%s@%s' % (opts.user, host), stringify_command(command)])
     except subprocess.CalledProcessError as e:
       if (tries > 2):
         # If this was an ssh failure, provide the user with hints.
@@ -730,7 +730,7 @@ def real_main():
     if opts.proxy_port != None:
       proxy_opt = ['-D', opts.proxy_port]
     subprocess.check_call(
-        ssh_command(opts) + proxy_opt + ['-t', "%s@%s" % (opts.user, master)])
+        ssh_command(opts) + proxy_opt + ['-t', '-t', "%s@%s" % (opts.user, master)])
 
   elif action == "get-master":
     (master_nodes, slave_nodes) = get_existing_cluster(conn, opts, cluster_name)
