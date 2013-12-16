@@ -295,7 +295,7 @@ abstract class ShuffleDeserializationStream(s: InputStream) extends Deserializat
     var i: Int = 0
     def readOrThrow(): Int = {
       val in = s.read()
-      if (in < 0) throw new java.io.EOFException
+      if (in < 0) throw new EOFException
       in & 0xFF
     }
     var b: Int = readOrThrow()
@@ -309,21 +309,45 @@ abstract class ShuffleDeserializationStream(s: InputStream) extends Deserializat
   }
 
   def readVarLong(optimizePositive: Boolean): Long = {
-    // TODO: unroll the while loop.
-    var value: Long = 0L
     def readOrThrow(): Int = {
       val in = s.read()
-      if (in < 0) throw new java.io.EOFException
+      if (in < 0) throw new EOFException
       in & 0xFF
     }
-    var i: Int = 0
-    var b: Int = readOrThrow()
-    while (i < 56 && (b & 0x80) != 0) {
-      value |= (b & 0x7F).toLong << i
-      i += 7
+    var b = readOrThrow()
+    var ret: Long = b & 0x7F
+    if ((b & 0x80) != 0) {
       b = readOrThrow()
+      ret |= (b & 0x7F) << 7
+      if ((b & 0x80) != 0) {
+        b = readOrThrow()
+        ret |= (b & 0x7F) << 14
+        if ((b & 0x80) != 0) {
+          b = readOrThrow()
+          ret |= (b & 0x7F) << 21
+          if ((b & 0x80) != 0) {
+            b = readOrThrow()
+            ret |= (b & 0x7F).toLong << 28
+            if ((b & 0x80) != 0) {
+              b = readOrThrow()
+              ret |= (b & 0x7F).toLong << 35
+              if ((b & 0x80) != 0) {
+                b = readOrThrow()
+                ret |= (b & 0x7F).toLong << 42
+                if ((b & 0x80) != 0) {
+                  b = readOrThrow()
+                  ret |= (b & 0x7F).toLong << 49
+                  if ((b & 0x80) != 0) {
+                    b = readOrThrow()
+                    ret |= b.toLong << 56
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
-    val ret = value | (b.toLong << i)
     if (!optimizePositive) (ret >>> 1) ^ -(ret & 1) else ret
   }
 
