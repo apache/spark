@@ -1,7 +1,6 @@
 package org.apache.spark.graph
 
-
-import org.apache.spark.{TaskContext, Partition, OneToOneDependency}
+import org.apache.spark.{OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.graph.impl.EdgePartition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -13,9 +12,15 @@ class EdgeRDD[@specialized ED: ClassManifest](
 
   partitionsRDD.setName("EdgeRDD")
 
-  override val partitioner = partitionsRDD.partitioner
-
   override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
+
+  /**
+   * If partitionsRDD already has a partitioner, use it. Otherwise assume that the Pids in
+   * partitionsRDD correspond to the actual partitions and create a new partitioner that allows
+   * co-partitioning with partitionsRDD.
+   */
+  override val partitioner =
+    partitionsRDD.partitioner.orElse(Some(Partitioner.defaultPartitioner(partitionsRDD)))
 
   override def compute(split: Partition, context: TaskContext): Iterator[Edge[ED]] = {
     val edgePartition = partitionsRDD.compute(split, context).next()._2
@@ -55,6 +60,10 @@ class EdgeRDD[@specialized ED: ClassManifest](
       val (_, edgePartition) = ePartIter.next()
       cleanF(edgePartition, otherIter)
     }
+  }
+
+  def collectVids(): RDD[Vid] = {
+    partitionsRDD.flatMap { case (_, p) => Array.concat(p.srcIds, p.dstIds) }
   }
 
 }
