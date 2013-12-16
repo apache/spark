@@ -313,6 +313,8 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {
-    new DirectTaskResult[Int](id, mutable.Map.empty, new TaskMetrics)
+    val objectSer = SparkEnv.get.serializer.newInstance()
+    new DirectTaskResult[Int](objectSer.serialize(id), mutable.Map.empty,
+        new TaskMetrics)
   }
 }

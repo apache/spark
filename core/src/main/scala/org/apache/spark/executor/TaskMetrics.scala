@@ -44,6 +44,11 @@ class TaskMetrics extends Serializable {
   var jvmGCTime: Long = _
 
   /**
+   * Amount of time spent serializing the result of the task
+   */
+  var serializationTime: Long = _
+
+  /**
    * If this task reads from shuffle output, metrics on getting shuffle data will be collected here
    */
   var shuffleReadMetrics: Option[ShuffleReadMetrics] = None
