@@ -23,7 +23,11 @@
 # if those two env vars are set in spark-env.sh but MASTER is not.
 # Options:
 #    -c <cores>    Set the number of cores for REPL to use
-#
+
+cygwin=false
+case "`uname`" in
+    CYGWIN*) cygwin=true;;
+esac
 
 # Enter posix mode for bash
 set -o posix
@@ -79,7 +83,18 @@ if [[ ! $? ]]; then
   saved_stty=""
 fi
 
-$FWDIR/spark-class $OPTIONS org.apache.spark.repl.Main "$@"
+if $cygwin; then
+    # Workaround for issue involving JLine and Cygwin
+    # (see http://sourceforge.net/p/jline/bugs/40/).
+    # If you're using the Mintty terminal emulator in Cygwin, may need to set the
+    # "Backspace sends ^H" setting in "Keys" section of the Mintty options
+    # (see https://github.com/sbt/sbt/issues/562).
+    stty -icanon min 1 -echo > /dev/null 2>&1
+    $FWDIR/spark-class -Djline.terminal=unix $OPTIONS org.apache.spark.repl.Main "$@"
+    stty icanon echo > /dev/null 2>&1
+else
+    $FWDIR/spark-class $OPTIONS org.apache.spark.repl.Main "$@"
+fi
 
 # record the exit status lest it be overwritten:
 # then reenable echo and propagate the code.
