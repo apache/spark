@@ -12,9 +12,8 @@ This README file only contains basic setup instructions.
 
 ## Building
 
-Spark requires Scala 2.9.3 (Scala 2.10 is not yet supported). The project is
-built using Simple Build Tool (SBT), which is packaged with it. To build
-Spark and its example programs, run:
+Spark requires Scala 2.10. The project is built using Simple Build Tool (SBT),
+which is packaged with it. To build Spark and its example programs, run:
 
     sbt/sbt assembly
 
@@ -68,9 +67,6 @@ When building for Hadoop 2.2.X and newer, you'll need to include the additional 
 
     # Apache Hadoop 2.2.X and newer
     $ mvn -Dyarn.version=2.2.0 -Dhadoop.version=2.2.0 -Pnew-yarn
-
-For convenience, these variables may also be set through the `conf/spark-env.sh` file
-described below.
 
 When developing a Spark application, specify the Hadoop version by adding the
 "hadoop-client" artifact to your project's dependencies. For example, if you're

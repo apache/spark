@@ -121,7 +121,7 @@ private[spark] class Executor(
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
   private val akkaFrameSize = {
-    env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
+    env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size")
   }
 
   // Start worker thread pool

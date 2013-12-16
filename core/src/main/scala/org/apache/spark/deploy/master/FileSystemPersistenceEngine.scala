@@ -65,7 +65,7 @@ private[spark] class FileSystemPersistenceEngine(
     (apps, workers)
   }
 
-  private def serializeIntoFile(file: File, value: Serializable) {
+  private def serializeIntoFile(file: File, value: AnyRef) {
     val created = file.createNewFile()
     if (!created) { throw new IllegalStateException("Could not create file: " + file) }
 
@@ -77,13 +77,13 @@ private[spark] class FileSystemPersistenceEngine(
     out.close()
   }
 
-  def deserializeFromFile[T <: Serializable](file: File)(implicit m: Manifest[T]): T = {
+  def deserializeFromFile[T](file: File)(implicit m: Manifest[T]): T = {
     val fileData = new Array[Byte](file.length().asInstanceOf[Int])
     val dis = new DataInputStream(new FileInputStream(file))
     dis.readFully(fileData)
     dis.close()
 
-    val clazz = m.erasure.asInstanceOf[Class[T]]
+    val clazz = m.runtimeClass.asInstanceOf[Class[T]]
     val serializer = serialization.serializerFor(clazz)
     serializer.fromBinary(fileData).asInstanceOf[T]
   }

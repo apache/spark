@@ -19,6 +19,7 @@ package org.apache.spark.rdd
 
 import org.apache.spark.{OneToOneDependency, SparkContext, Partition, TaskContext}
 import java.io.{ObjectOutputStream, IOException}
+import scala.reflect.ClassTag
 
 private[spark] class ZippedPartitionsPartition(
     idx: Int,
@@ -38,7 +39,7 @@ private[spark] class ZippedPartitionsPartition(
   }
 }
 
-abstract class ZippedPartitionsBaseRDD[V: ClassManifest](
+abstract class ZippedPartitionsBaseRDD[V: ClassTag](
     sc: SparkContext,
     var rdds: Seq[RDD[_]],
     preservesPartitioning: Boolean = false)
@@ -71,7 +72,7 @@ abstract class ZippedPartitionsBaseRDD[V: ClassManifest](
   }
 }
 
-class ZippedPartitionsRDD2[A: ClassManifest, B: ClassManifest, V: ClassManifest](
+class ZippedPartitionsRDD2[A: ClassTag, B: ClassTag, V: ClassTag](
     sc: SparkContext,
     f: (Iterator[A], Iterator[B]) => Iterator[V],
     var rdd1: RDD[A],
@@ -92,7 +93,7 @@ class ZippedPartitionsRDD2[A: ClassManifest, B: ClassManifest, V: ClassManifest]
 }
 
 class ZippedPartitionsRDD3
-  [A: ClassManifest, B: ClassManifest, C: ClassManifest, V: ClassManifest](
+  [A: ClassTag, B: ClassTag, C: ClassTag, V: ClassTag](
     sc: SparkContext,
     f: (Iterator[A], Iterator[B], Iterator[C]) => Iterator[V],
     var rdd1: RDD[A],
@@ -117,7 +118,7 @@ class ZippedPartitionsRDD3
 }
 
 class ZippedPartitionsRDD4
-  [A: ClassManifest, B: ClassManifest, C: ClassManifest, D:ClassManifest, V: ClassManifest](
+  [A: ClassTag, B: ClassTag, C: ClassTag, D:ClassTag, V: ClassTag](
     sc: SparkContext,
     f: (Iterator[A], Iterator[B], Iterator[C], Iterator[D]) => Iterator[V],
     var rdd1: RDD[A],

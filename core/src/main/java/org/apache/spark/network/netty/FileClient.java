@@ -19,8 +19,6 @@ package org.apache.spark.network.netty;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelOption;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.oio.OioSocketChannel;

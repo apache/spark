@@ -17,13 +17,14 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{SparkContext, SparkEnv, Partition, TaskContext}
+import scala.reflect.ClassTag
 
+import org.apache.spark.{Partition, SparkContext, TaskContext}
 
 /**
  * An RDD that is empty, i.e. has no element in it.
  */
-class EmptyRDD[T: ClassManifest](sc: SparkContext) extends RDD[T](sc, Nil) {
+class EmptyRDD[T: ClassTag](sc: SparkContext) extends RDD[T](sc, Nil) {
 
   override def getPartitions: Array[Partition] = Array.empty
 

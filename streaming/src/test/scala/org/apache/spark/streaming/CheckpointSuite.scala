@@ -20,13 +20,19 @@ package org.apache.spark.streaming
 import dstream.FileInputDStream
 import org.apache.spark.streaming.StreamingContext._
 import java.io.File
-import runtime.RichInt
-import org.scalatest.BeforeAndAfter
+
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
 import org.apache.commons.io.FileUtils
-import collection.mutable.{SynchronizedBuffer, ArrayBuffer}
-import util.{Clock, ManualClock}
-import scala.util.Random
+import org.scalatest.BeforeAndAfter
+
 import com.google.common.io.Files
+
+import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
+import org.apache.spark.streaming.dstream.FileInputDStream
+import org.apache.spark.streaming.util.ManualClock
+
 
 
 /**
@@ -74,13 +80,13 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     // Setup the streams
     val input = (1 to 10).map(_ => Seq("a")).toSeq
     val operation = (st: DStream[String]) => {
-      val updateFunc = (values: Seq[Int], state: Option[RichInt]) => {
-        Some(new RichInt(values.foldLeft(0)(_ + _) + state.map(_.self).getOrElse(0)))
+      val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+        Some((values.foldLeft(0)(_ + _) + state.getOrElse(0)))
       }
       st.map(x => (x, 1))
-      .updateStateByKey[RichInt](updateFunc)
+      .updateStateByKey(updateFunc)
       .checkpoint(stateStreamCheckpointInterval)
-      .map(t => (t._1, t._2.self))
+      .map(t => (t._1, t._2))
     }
     var ssc = setupStreams(input, operation)
     var stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
@@ -180,13 +186,13 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     val input = (1 to 10).map(_ => Seq("a")).toSeq
     val output = (1 to 10).map(x => Seq(("a", x))).toSeq
     val operation = (st: DStream[String]) => {
-      val updateFunc = (values: Seq[Int], state: Option[RichInt]) => {
-        Some(new RichInt(values.foldLeft(0)(_ + _) + state.map(_.self).getOrElse(0)))
+      val updateFunc = (values: Seq[Int], state: Option[Int]) => {
+        Some((values.foldLeft(0)(_ + _) + state.getOrElse(0)))
       }
       st.map(x => (x, 1))
-        .updateStateByKey[RichInt](updateFunc)
+        .updateStateByKey(updateFunc)
         .checkpoint(batchDuration * 2)
-        .map(t => (t._1, t._2.self))
+        .map(t => (t._1, t._2))
     }
     testCheckpointedOperation(input, operation, output, 7)
   }
@@ -312,7 +318,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
    * NOTE: This takes into consideration that the last batch processed before
    * master failure will be re-processed after restart/recovery.
    */
-  def testCheckpointedOperation[U: ClassManifest, V: ClassManifest](
+  def testCheckpointedOperation[U: ClassTag, V: ClassTag](
     input: Seq[Seq[U]],
     operation: DStream[U] => DStream[V],
     expectedOutput: Seq[Seq[V]],
@@ -356,7 +362,7 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
    * Advances the manual clock on the streaming scheduler by given number of batches.
    * It also waits for the expected amount of time for each batch.
    */
-  def advanceTimeWithRealDelay[V: ClassManifest](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
+  def advanceTimeWithRealDelay[V: ClassTag](ssc: StreamingContext, numBatches: Long): Seq[Seq[V]] = {
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]
     logInfo("Manual clock before advancing = " + clock.time)
     for (i <- 1 to numBatches.toInt) {

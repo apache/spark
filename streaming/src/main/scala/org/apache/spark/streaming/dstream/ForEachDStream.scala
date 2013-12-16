@@ -19,9 +19,10 @@ package org.apache.spark.streaming.dstream
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Duration, DStream, Job, Time}
+import scala.reflect.ClassTag
 
 private[streaming]
-class ForEachDStream[T: ClassManifest] (
+class ForEachDStream[T: ClassTag] (
     parent: DStream[T],
     foreachFunc: (RDD[T], Time) => Unit
   ) extends DStream[Unit](parent.ssc) {

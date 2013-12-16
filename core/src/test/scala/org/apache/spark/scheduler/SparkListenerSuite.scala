@@ -145,7 +145,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     // Make a task whose result is larger than the akka frame size
     System.setProperty("spark.akka.frameSize", "1")
     val akkaFrameSize =
-      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size").toInt
+      sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x,y) => x)
     assert(result === 1.to(akkaFrameSize).toArray)
 

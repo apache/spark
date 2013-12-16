@@ -37,6 +37,7 @@ import org.eclipse.paho.client.mqttv3.MqttTopic
 import scala.collection.Map
 import scala.collection.mutable.HashMap
 import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 
 /**
  * Input stream that subscribe messages from a Mqtt Broker.
@@ -47,7 +48,7 @@ import scala.collection.JavaConversions._
  */
 
 private[streaming] 
-class MQTTInputDStream[T: ClassManifest](
+class MQTTInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
   brokerUrl: String,
   topic: String,

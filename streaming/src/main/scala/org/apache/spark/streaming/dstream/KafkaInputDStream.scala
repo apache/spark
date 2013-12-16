@@ -31,11 +31,11 @@ import kafka.utils.ZKStringSerializer
 import org.I0Itec.zkclient._
 
 import scala.collection.Map
-
+import scala.reflect.ClassTag
 
 /**
  * Input stream that pulls messages from a Kafka Broker.
- * 
+ *
  * @param kafkaParams Map of kafka configuration paramaters. See: http://kafka.apache.org/configuration.html
  * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
  * in its own thread.
@@ -43,8 +43,8 @@ import scala.collection.Map
  */
 private[streaming]
 class KafkaInputDStream[
-  K: ClassManifest,
-  V: ClassManifest,
+  K: ClassTag,
+  V: ClassTag,
   U <: Decoder[_]: Manifest,
   T <: Decoder[_]: Manifest](
     @transient ssc_ : StreamingContext,
@@ -61,8 +61,8 @@ class KafkaInputDStream[
 
 private[streaming]
 class KafkaReceiver[
-  K: ClassManifest,
-  V: ClassManifest,
+  K: ClassTag,
+  V: ClassTag,
   U <: Decoder[_]: Manifest,
   T <: Decoder[_]: Manifest](
     kafkaParams: Map[String, String],
@@ -104,16 +104,17 @@ class KafkaReceiver[
       tryZookeeperConsumerGroupCleanup(kafkaParams("zookeeper.connect"), kafkaParams("group.id"))
     }
 
-    // Create Threads for each Topic/Message Stream we are listening
-    val keyDecoder = manifest[U].erasure.getConstructor(classOf[VerifiableProperties])
+    val keyDecoder = manifest[U].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[K]]
-    val valueDecoder = manifest[T].erasure.getConstructor(classOf[VerifiableProperties])
+    val valueDecoder = manifest[T].runtimeClass.getConstructor(classOf[VerifiableProperties])
       .newInstance(consumerConfig.props)
       .asInstanceOf[Decoder[V]]
 
+    // Create Threads for each Topic/Message Stream we are listening
     val topicMessageStreams = consumerConnector.createMessageStreams(
       topics, keyDecoder, valueDecoder)
+
 
     // Start the messages handler for each partition
     topicMessageStreams.values.foreach { streams =>
@@ -122,7 +123,7 @@ class KafkaReceiver[
   }
 
   // Handles Kafka Messages
-  private class MessageHandler[K: ClassManifest, V: ClassManifest](stream: KafkaStream[K, V])
+  private class MessageHandler[K: ClassTag, V: ClassTag](stream: KafkaStream[K, V])
     extends Runnable {
     def run() {
       logInfo("Starting MessageHandler.")
@@ -146,7 +147,7 @@ class KafkaReceiver[
       zk.deleteRecursive(dir)
       zk.close()
     } catch {
-      case _ => // swallow
+      case _ : Throwable => // swallow
     }
   }
 }

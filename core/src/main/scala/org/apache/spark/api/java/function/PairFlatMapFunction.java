@@ -18,8 +18,8 @@
 package org.apache.spark.api.java.function;
 
 import scala.Tuple2;
-import scala.reflect.ClassManifest;
-import scala.reflect.ClassManifest$;
+import scala.reflect.ClassTag;
+import scala.reflect.ClassTag$;
 
 import java.io.Serializable;
 
@@ -33,11 +33,11 @@ public abstract class PairFlatMapFunction<T, K, V>
   extends WrappedFunction1<T, Iterable<Tuple2<K, V>>>
   implements Serializable {
 
-  public ClassManifest<K> keyType() {
-    return (ClassManifest<K>) ClassManifest$.MODULE$.fromClass(Object.class);
+  public ClassTag<K> keyType() {
+    return (ClassTag<K>) ClassTag$.MODULE$.apply(Object.class);
   }
 
-  public ClassManifest<V> valueType() {
-    return (ClassManifest<V>) ClassManifest$.MODULE$.fromClass(Object.class);
+  public ClassTag<V> valueType() {
+    return (ClassTag<V>) ClassTag$.MODULE$.apply(Object.class);
   }
 }
