@@ -84,21 +84,10 @@ object SparkBuild extends Build {
     case Some(v) => v.toBoolean
   }
 
-  if (isNewHadoop && isYarnEnabled) {
-    println( """Yarn with Hadoop version 2.2.x is not yet expected to work.
-      Please set env SPARK_HADOOP_VERSION to appropriate version or set SPARK_YARN to false.""")
-    throw new Exception("Yarn with Hadoop version 2.2.x is not yet expected to work.")
-  }
-
-  // Build against a protobuf-2.5 compatible Akka if Hadoop 2 is used.
-  // lazy val protobufVersion = if (isNewHadoop) "2.5.0" else "2.4.1"
-  // lazy val akkaVersion = if (isNewHadoop) "2.0.5-protobuf-2.5-java-1.5" else "2.0.5"
-  // lazy val akkaGroup = if (isNewHadoop) "org.spark-project" else "com.typesafe.akka"
-
   // Conditionally include the yarn sub-project
-  //lazy val yarn = Project("yarn", file(if (isNewHadoop) "new-yarn" else "yarn"), settings = yarnSettings) dependsOn(core)
+  lazy val yarn = Project("yarn", file(if (isNewHadoop) "new-yarn" else "yarn"), settings = yarnSettings) dependsOn(core)
 
-  lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn(core)
+  //lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn(core)
 
   lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
   lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
@@ -235,9 +224,8 @@ object SparkBuild extends Build {
         "com.ning"                 % "compress-lzf"     % "0.8.4",
         "org.xerial.snappy"        % "snappy-java"      % "1.0.5",
         "org.ow2.asm"              % "asm"              % "4.0",
-        "com.google.protobuf"      % "protobuf-java"    % "2.4.1",
-        "com.typesafe.akka"       %% "akka-remote"      % "2.2.3"  excludeAll(excludeNetty),
-        "com.typesafe.akka"       %% "akka-slf4j"       % "2.2.3"  excludeAll(excludeNetty),
+        "org.spark-project.akka"  %% "akka-remote"      % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
+        "org.spark-project.akka"  %% "akka-slf4j"       % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
         "net.liftweb"             %% "lift-json"        % "2.5.1"  excludeAll(excludeNetty),
         "it.unimi.dsi"             % "fastutil"         % "6.4.4",
         "colt"                     % "colt"             % "1.2.0",
@@ -312,16 +300,16 @@ object SparkBuild extends Build {
     ),
 
     libraryDependencies ++= Seq(
-      "org.apache.flume"      % "flume-ng-sdk"     % "1.2.0" % "compile"  excludeAll(excludeNetty, excludeSnappy),
-      "com.sksamuel.kafka"   %% "kafka"            % "0.8.0-beta1"
+      "org.apache.flume"        % "flume-ng-sdk"     % "1.2.0" % "compile"     excludeAll(excludeNetty, excludeSnappy),
+      "com.sksamuel.kafka"     %% "kafka"            % "0.8.0-beta1"
         exclude("com.sun.jdmk", "jmxtools")
         exclude("com.sun.jmx", "jmxri")
         exclude("net.sf.jopt-simple", "jopt-simple")
         excludeAll(excludeNetty),
-      "org.eclipse.paho"      % "mqtt-client"      % "0.4.0",
-      "com.github.sgroschupf" % "zkclient"         % "0.1"                excludeAll(excludeNetty),
-      "org.twitter4j"         % "twitter4j-stream" % "3.0.3"              excludeAll(excludeNetty),
-      "com.typesafe.akka"    %% "akka-zeromq"      % "2.2.3"              excludeAll(excludeNetty)
+      "org.eclipse.paho"        % "mqtt-client"      % "0.4.0",
+      "com.github.sgroschupf"   % "zkclient"         % "0.1"                   excludeAll(excludeNetty),
+      "org.twitter4j"           % "twitter4j-stream" % "3.0.3"                 excludeAll(excludeNetty),
+      "org.spark-project.akka" %% "akka-zeromq"      % "2.2.3-shaded-protobuf" excludeAll(excludeNetty)
     )
   )
 

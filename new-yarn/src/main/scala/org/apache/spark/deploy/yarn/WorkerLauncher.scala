@@ -26,7 +26,7 @@ import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import akka.actor._
-import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
+import akka.remote._
 import akka.actor.Terminated
 import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.util.{Utils, AkkaUtils}
@@ -59,12 +59,12 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration) exte
     override def preStart() {
       logInfo("Listen to driver: " + driverUrl)
       driver = context.actorFor(driverUrl)
-      context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-      context.watch(driver) // Doesn't work with remote actors, but useful for testing
+      driver ! "hello"
+      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     }
 
     override def receive = {
-      case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
+      case x: DisassociatedEvent =>
         logInfo("Driver terminated or disconnected! Shutting down.")
         driverClosed = true
     }
@@ -140,7 +140,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration) exte
     System.setProperty("spark.driver.host", driverHost)
     System.setProperty("spark.driver.port", driverPort.toString)
 
-    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+    val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       driverHost, driverPort.toString, CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
     actor = actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")

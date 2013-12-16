@@ -81,10 +81,6 @@
       <artifactId>asm</artifactId>
     </dependency>
     <dependency>
-      <groupId>com.google.protobuf</groupId>
-      <artifactId>protobuf-java</artifactId>
-    </dependency>
-    <dependency>
       <groupId>com.twitter</groupId>
       <artifactId>chill_${scala.binary.version}</artifactId>
       <version>0.3.1</version>
@@ -96,15 +92,12 @@
     </dependency>
     <dependency>
       <groupId>${akka.group}</groupId>
-      <artifactId>akka-actor_${scala.binary.version}</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>${akka.group}</groupId>
       <artifactId>akka-remote_${scala.binary.version}</artifactId>
     </dependency>
     <dependency>
       <groupId>${akka.group}</groupId>
       <artifactId>akka-slf4j_${scala.binary.version}</artifactId>
+      <groupId>org.spark-project.akka</groupId>
     </dependency>
     <dependency>
       <groupId>org.scala-lang</groupId>
