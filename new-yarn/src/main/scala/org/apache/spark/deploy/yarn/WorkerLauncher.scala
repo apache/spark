@@ -58,7 +58,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration) exte
 
     override def preStart() {
       logInfo("Listen to driver: " + driverUrl)
-      driver = context.actorFor(driverUrl)
+      driver = context.actorSelection(driverUrl)
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     }
 
