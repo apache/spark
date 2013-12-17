@@ -102,8 +102,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
         }
         else {
           val serializationTimes = validTasks.map{case (info, metrics, exception) =>
-            metrics.get.serializationTime.toDouble}
-          val serializationQuantiles = "Serialization Time" +: Distribution(serializationTimes).get.getQuantiles().map(
+            metrics.get.resultSerializationTime.toDouble}
+          val serializationQuantiles = "Result serialization time" +: Distribution(serializationTimes).get.getQuantiles().map(
             ms => parent.formatDuration(ms.toLong))
 
           val serviceTimes = validTasks.map{case (info, metrics, exception) =>

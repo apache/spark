@@ -222,9 +222,9 @@ private[spark] class Executor(
           return
         }
 
-        val objectSer = SparkEnv.get.serializer.newInstance()
+        val resultSer = SparkEnv.get.serializer.newInstance()
         val beforeSerialization = System.currentTimeMillis()
-        val valueBytes = objectSer.serialize(value)
+        val valueBytes = resultSer.serialize(value)
         val afterSerialization = System.currentTimeMillis()
 
         for (m <- task.metrics) {
@@ -232,7 +232,7 @@ private[spark] class Executor(
           m.executorDeserializeTime = (taskStart - startTime).toInt
           m.executorRunTime = (taskFinish - taskStart).toInt
           m.jvmGCTime = gcTime - startGCTime
-          m.serializationTime = (afterSerialization - beforeSerialization).toInt
+          m.resultSerializationTime = (afterSerialization - beforeSerialization).toInt
         }
 
         val accumUpdates = Accumulators.values
