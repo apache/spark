@@ -51,7 +51,7 @@ class WorkerRunnable(
   extends Runnable with Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
-  var cm: ContainerManager = null
+  var cm: ContainerManager = _
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
 
   def run = {

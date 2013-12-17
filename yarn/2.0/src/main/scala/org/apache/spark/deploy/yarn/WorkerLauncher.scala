@@ -39,28 +39,27 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration) exte
   def this(args: ApplicationMasterArguments) = this(args, new Configuration())
 
   private val rpc: YarnRPC = YarnRPC.create(conf)
-  private var resourceManager: AMRMProtocol = null
-  private var appAttemptId: ApplicationAttemptId = null
-  private var reporterThread: Thread = null
+  private var resourceManager: AMRMProtocol = _
+  private var appAttemptId: ApplicationAttemptId = _
+  private var reporterThread: Thread = _
   private val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
 
-  private var yarnAllocator: YarnAllocationHandler = null
+  private var yarnAllocator: YarnAllocationHandler = _
   private var driverClosed:Boolean = false
   private val sparkConf = new SparkConf
 
   val actorSystem : ActorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
     conf = sparkConf)._1
-  var actor: ActorRef = null
+  var actor: ActorRef = _
 
   // This actor just working as a monitor to watch on Driver Actor.
   class MonitorActor(driverUrl: String) extends Actor {
 
-    var driver: ActorSelection = null
+    var driver: ActorSelection = _
 
     override def preStart() {
       logInfo("Listen to driver: " + driverUrl)
       driver = context.actorSelection(driverUrl)
-      driver ! "hello"
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     }
 
