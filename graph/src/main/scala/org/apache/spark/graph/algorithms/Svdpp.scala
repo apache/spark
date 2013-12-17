@@ -1,6 +1,7 @@
 package org.apache.spark.graph.algorithms
 
 import org.apache.spark._
+import org.apache.spark.rdd._
 import org.apache.spark.graph._
 import scala.util.Random
 import org.apache.commons.math.linear._
@@ -21,10 +22,10 @@ class Msg (
 object Svdpp {
   // implement SVD++ based on http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf
 
-  def run(sc: SparkContext, input: String): Graph[VD,Double] = {
+  def run(edges: RDD[Edge[Double]]): Graph[VD,Double] = {
     // defalut parameters
-    val rank = 4
-    val maxIters = 15
+    val rank = 10
+    val maxIters = 20
     val minVal = 0.0
     val maxVal = 5.0
     val gamma1 = 0.007
@@ -33,13 +34,13 @@ object Svdpp {
     val gamma7 = 0.015
 	
     def defaultF(rank: Int) = {
-      val p = new ArrayRealVector(rank)
-      val w = new ArrayRealVector(rank)
+      val v1 = new ArrayRealVector(rank)
+      val v2 = new ArrayRealVector(rank)
       for (i <- 0 until rank) {
-        p.setEntry(i, Random.nextDouble)
-        w.setEntry(i, Random.nextDouble)
+        v1.setEntry(i, Random.nextDouble)
+        v2.setEntry(i, Random.nextDouble)
       }
-      var vd = new VD(p, w, 0.0, 0.0)
+      var vd = new VD(v1, v2, 0.0, 0.0)
       vd
     }
 
@@ -57,12 +58,6 @@ object Svdpp {
         vd.norm = 1.0 / scala.math.sqrt(msg.get._1)
       }
       vd
-    }
-	
-    // read textfile
-    val edges = sc.textFile(input).map { line => 
-      val fields = line.split(",")
-      Edge(fields(0).toLong * 2, fields(1).toLong * 2 + 1, fields(2).toDouble)
     }
 
     // calculate global rating mean
@@ -101,12 +96,9 @@ object Svdpp {
       val itmBias = 0.0
       val usrBias = 0.0
       var pred = u + usr.bias + itm.bias + q.dotProduct(usr.v2)
-      if (pred < minVal) {
-        pred = minVal
-      }
-      if (pred > maxVal) {
-        pred = maxVal
-      }
+      println(pred)
+      pred = math.max(pred, minVal)
+      pred = math.min(pred, maxVal)
       val err = et.attr - pred
       val y = (q.mapMultiply(err*usr.norm)).subtract((usr.v2).mapMultiply(gamma7))
       val newP = (q.mapMultiply(err)).subtract(p.mapMultiply(gamma7)) // for each connected item q
@@ -138,6 +130,30 @@ object Svdpp {
       val t2: VertexRDD[Msg] = g.mapReduceTriplets(mapF2, reduceF2)
       g.outerJoinVertices(t2) {updateF2}
     }
+	
+    // calculate error on training set
+    def mapF3(et: EdgeTriplet[VD, Double]): Iterator[(Vid, Double)] = {
+      assert(et.srcAttr != null && et.dstAttr != null)
+      val usr = et.srcAttr
+      val itm = et.dstAttr
+      var p = usr.v1
+      var q = itm.v1
+      val itmBias = 0.0
+      val usrBias = 0.0
+      var pred = u + usr.bias + itm.bias + q.dotProduct(usr.v2)
+      pred = math.max(pred, minVal)
+      pred = math.min(pred, maxVal)
+      val err = (et.attr - pred)*(et.attr - pred)
+      Iterator((et.dstId, err))
+    }
+    def updateF3(vid: Vid, vd: VD, msg: Option[Double]) = {
+      if (msg.isDefined && vid % 2 == 1) { // item sum up the errors
+        vd.norm = msg.get
+      }
+      vd
+    }
+    val t3: VertexRDD[Double] = g.mapReduceTriplets(mapF3, _ + _)
+    g.outerJoinVertices(t3) {updateF3}
   g
   }
 }
