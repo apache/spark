@@ -245,37 +245,44 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
     // Map and combine.
     val preAgg = edges.zipEdgePartitions(vs) { (edgePartition, vTableReplicatedIter) =>
-      val (_, vertexPartition) = vTableReplicatedIter.next()
+      val (_, vPart) = vTableReplicatedIter.next()
 
-      // Iterate over the partition
+      // Choose scan method
+      val activeFraction = vPart.numActives.getOrElse(0) / edgePartition.indexSize.toFloat
+      val edgeIter = activeDirectionOpt match {
+        case Some(EdgeDirection.Both) =>
+          if (activeFraction < 0.8) {
+            edgePartition.indexIterator(srcVid => vPart.isActive(srcVid))
+              .filter(e => vPart.isActive(e.dstId))
+          } else {
+            edgePartition.iterator.filter(e => vPart.isActive(e.srcId) && vPart.isActive(e.dstId))
+          }
+        case Some(EdgeDirection.Out) =>
+          if (activeFraction < 0.8) {
+            edgePartition.indexIterator(srcVid => vPart.isActive(srcVid))
+          } else {
+            edgePartition.iterator.filter(e => vPart.isActive(e.srcId))
+          }
+        case Some(EdgeDirection.In) =>
+          edgePartition.iterator.filter(e => vPart.isActive(e.dstId))
+        case None =>
+          edgePartition.iterator
+      }
+
+      // Scan edges and run the map function
       val et = new EdgeTriplet[VD, ED]
-      val filteredEdges = edgePartition.iterator.flatMap { e =>
-        // Ensure the edge is adjacent to a vertex in activeSet if necessary
-        val adjacent = activeDirectionOpt match {
-          case Some(EdgeDirection.In) =>
-            vertexPartition.isActive(e.dstId)
-          case Some(EdgeDirection.Out) =>
-            vertexPartition.isActive(e.srcId)
-          case Some(EdgeDirection.Both) =>
-            vertexPartition.isActive(e.srcId) && vertexPartition.isActive(e.dstId)
-          case None =>
-            true
+      val mapOutputs = edgeIter.flatMap { e =>
+        et.set(e)
+        if (mapUsesSrcAttr) {
+          et.srcAttr = vPart(e.srcId)
         }
-        if (adjacent) {
-          et.set(e)
-          if (mapUsesSrcAttr) {
-            et.srcAttr = vertexPartition(e.srcId)
-          }
-          if (mapUsesDstAttr) {
-            et.dstAttr = vertexPartition(e.dstId)
-          }
-          mapFunc(et)
-        } else {
-          Iterator.empty
+        if (mapUsesDstAttr) {
+          et.dstAttr = vPart(e.dstId)
         }
+        mapFunc(et)
       }
       // Note: This doesn't allow users to send messages to arbitrary vertices.
-      vertexPartition.aggregateUsingIndex(filteredEdges, reduceFunc).iterator
+      vPart.aggregateUsingIndex(mapOutputs, reduceFunc).iterator
     }
 
     // do the final reduction reusing the index map
