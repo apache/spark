@@ -54,7 +54,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration) exte
   // This actor just working as a monitor to watch on Driver Actor.
   class MonitorActor(driverUrl: String) extends Actor {
 
-    var driver: ActorRef = null
+    var driver: ActorSelection = null
 
     override def preStart() {
       logInfo("Listen to driver: " + driverUrl)
