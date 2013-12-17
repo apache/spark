@@ -5,7 +5,9 @@ import scala.util.Random
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
+import org.apache.spark.graph.Graph._
 import org.apache.spark.graph.LocalSparkContext._
+import org.apache.spark.graph.impl.EdgePartition
 import org.apache.spark.graph.impl.EdgePartitionBuilder
 import org.apache.spark.rdd._
 
@@ -183,7 +185,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("projectGraph") {
+  test("mask") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 5
       val vertices = sc.parallelize((0 to n).map(x => (x:Vid, x)))
@@ -207,7 +209,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test ("filterGraph") {
+  test ("filter") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 5
       val vertices = sc.parallelize((0 to n).map(x => (x:Vid, x)))
@@ -215,7 +217,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val graph: Graph[Int, Int] = Graph(vertices, edges)
       val filteredGraph = graph.filter(
         graph => {
-          val degrees: VertexSetRDD[Int] = graph.outDegrees
+          val degrees: VertexRDD[Int] = graph.outDegrees
           graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
         },
         vpred = (vid: Vid, deg:Int) => deg > 0
@@ -277,5 +279,20 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     assert(edgePartition.iterator.map(_.copy()).toList === sortedEdges)
     assert(edgePartition.indexIterator(_ == 0).map(_.copy()).toList === edgesFrom0)
     assert(edgePartition.indexIterator(_ == 1).map(_.copy()).toList === edgesFrom1)
+  }
+
+  test("EdgePartition.innerJoin") {
+    def makeEdgePartition[A: ClassManifest](xs: Iterable[(Int, Int, A)]): EdgePartition[A] = {
+      val builder = new EdgePartitionBuilder[A]
+      for ((src, dst, attr) <- xs) { builder.add(src: Vid, dst: Vid, attr) }
+      builder.toEdgePartition
+    }
+    val aList = List((0, 1, 0), (1, 0, 0), (1, 2, 0), (5, 4, 0), (5, 5, 0))
+    val bList = List((0, 1, 0), (1, 0, 0), (1, 1, 0), (3, 4, 0), (5, 5, 0))
+    val a = makeEdgePartition(aList)
+    val b = makeEdgePartition(bList)
+
+    assert(a.innerJoin(b) { (src, dst, a, b) => a }.iterator.map(_.copy()).toList ===
+      List(Edge(0, 1, 0), Edge(1, 0, 0), Edge(5, 5, 0)))
   }
 }

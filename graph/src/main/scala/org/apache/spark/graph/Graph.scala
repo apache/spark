@@ -48,7 +48,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * along with their vertex data.
    *
    */
-  val edges: RDD[Edge[ED]]
+  val edges: EdgeRDD[ED]
 
   /**
    * Get the edges with the vertex data associated with the adjacent

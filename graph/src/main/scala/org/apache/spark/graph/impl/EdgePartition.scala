@@ -99,6 +99,40 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
   }
 
   /**
+   * Apply `f` to all edges present in both `this` and `other` and return a new EdgePartition
+   * containing the resulting edges.
+   *
+   * If there are multiple edges with the same src and dst in `this`, `f` will be invoked once for
+   * each edge, but each time it may be invoked on any corresponding edge in `other`.
+   *
+   * If there are multiple edges with the same src and dst in `other`, `f` will only be invoked
+   * once.
+   */
+  def innerJoin[ED2: ClassManifest, ED3: ClassManifest]
+      (other: EdgePartition[ED2])
+      (f: (Vid, Vid, ED, ED2) => ED3): EdgePartition[ED3] = {
+    val builder = new EdgePartitionBuilder[ED3]
+    var i = 0
+    var j = 0
+    // For i = index of each edge in `this`...
+    while (i < size && j < other.size) {
+      val srcId = this.srcIds(i)
+      val dstId = this.dstIds(i)
+      // ... forward j to the index of the corresponding edge in `other`, and...
+      while (j < other.size && other.srcIds(j) < srcId) { j += 1 }
+      if (j < other.size && other.srcIds(j) == srcId) {
+        while (j < other.size && other.srcIds(j) == srcId && other.dstIds(j) < dstId) { j += 1 }
+        if (j < other.size && other.srcIds(j) == srcId && other.dstIds(j) == dstId) {
+          // ... run `f` on the matching edge
+          builder.add(srcId, dstId, f(srcId, dstId, this.data(i), other.data(j)))
+        }
+      }
+      i += 1
+    }
+    builder.toEdgePartition
+  }
+
+  /**
    * The number of edges in this partition
    *
    * @return size of the partition
