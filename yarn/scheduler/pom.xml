@@ -19,7 +19,7 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-yarn-aggregator_${scala.binary.version}</artifactId>
+    <artifactId>spark-yarn-aggregator_2.10</artifactId>
     <version>0.9.0-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>

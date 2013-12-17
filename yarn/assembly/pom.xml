@@ -19,7 +19,7 @@
   <modelVersion>4.0.0</modelVersion>
   <parent>
     <groupId>org.apache.spark</groupId>
-    <artifactId>spark-yarn-aggregator_${scala.binary.version}</artifactId>
+    <artifactId>spark-yarn-aggregator_2.10</artifactId>
     <version>0.9.0-incubating-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
@@ -70,7 +70,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn-2.0-api_2.10</artifactId>
+          <artifactId>spark-yarn-2.0-api_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
@@ -81,7 +81,7 @@
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn-2.2-api_2.10</artifactId>
+          <artifactId>spark-yarn-2.2-api_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>
