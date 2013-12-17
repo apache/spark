@@ -19,9 +19,8 @@ package org.apache.spark.ui.jobs
 
 private[spark] class ExecutorSummary() {
   var duration : Long = 0
-  var totalTasks : Int = 0
   var failedTasks : Int = 0
-  var succeedTasks : Int = 0
+  var succeededTasks : Int = 0
   var shuffleRead : Long = 0
   var shuffleWrite : Long = 0
 }

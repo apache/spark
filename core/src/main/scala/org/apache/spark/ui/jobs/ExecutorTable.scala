@@ -17,14 +17,13 @@
 
 package org.apache.spark.ui.jobs
 
-
 import scala.xml.Node
 
 import org.apache.spark.scheduler.SchedulingMode
-
+import org.apache.spark.util.Utils
 
 /** Page showing executor summary */
-private[spark] class ExecutorTable(val parent: JobProgressUI) {
+private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) {
 
   val listener = parent.listener
   val dateFmt = parent.dateFmt
@@ -42,9 +41,9 @@ private[spark] class ExecutorTable(val parent: JobProgressUI) {
       <thead>
         <th>Executor ID</th>
         <th>Duration</th>
-        <th>#Tasks</th>
-        <th>#Failed Tasks</th>
-        <th>#Succeed Tasks</th>
+        <th>Total Tasks</th>
+        <th>Failed Tasks</th>
+        <th>Succeeded Tasks</th>
         <th>Shuffle Read</th>
         <th>Shuffle Write</th>
       </thead>
@@ -55,19 +54,24 @@ private[spark] class ExecutorTable(val parent: JobProgressUI) {
   }
 
   private def createExecutorTable() : Seq[Node] = {
-    val executorIdToSummary = listener.executorIdToSummary
-    executorIdToSummary.toSeq.sortBy(_._1).map{
-      case (k,v) => {
-      <tr>
-        <td>{k}</td>
-        <td>{v.duration} ms</td>
-        <td>{v.totalTasks}</td>
-        <td>{v.failedTasks}</td>
-        <td>{v.succeedTasks}</td>
-        <td>{v.shuffleRead}</td>
-        <td>{v.shuffleWrite}</td>
-      </tr>
+    val executorIdToSummary = listener.stageIdToExecutorSummaries.get(stageId)
+    executorIdToSummary match {
+      case Some(x) => {
+        x.toSeq.sortBy(_._1).map{
+          case (k,v) => {
+            <tr>
+              <td>{k}</td>
+              <td>{parent.formatDuration(v.duration)}</td>
+              <td>{v.failedTasks + v.succeededTasks}</td>
+              <td>{v.failedTasks}</td>
+              <td>{v.succeededTasks}</td>
+              <td>{Utils.bytesToString(v.shuffleRead)}</td>
+              <td>{Utils.bytesToString(v.shuffleWrite)}</td>
+            </tr>
+          }
+        }
       }
+      case _ => { Seq[Node]() }
     }
   }
 }

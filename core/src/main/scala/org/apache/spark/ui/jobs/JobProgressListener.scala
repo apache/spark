@@ -57,7 +57,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   val stageIdToTasksFailed = HashMap[Int, Int]()
   val stageIdToTaskInfos =
     HashMap[Int, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
-  val executorIdToSummary = HashMap[String, ExecutorSummary]()
+  val stageIdToExecutorSummaries = HashMap[Int, HashMap[String, ExecutorSummary]]()
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
@@ -115,9 +115,6 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
       sid, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList += ((taskStart.taskInfo, None, None))
     stageIdToTaskInfos(sid) = taskList
-    val executorSummary = executorIdToSummary.getOrElseUpdate(key = taskStart.taskInfo.executorId,
-      op = new ExecutorSummary())
-    executorSummary.totalTasks += 1
   }
 
   override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult)
@@ -127,32 +124,39 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
-    // update executor summary
-    val executorSummary = executorIdToSummary.get(taskEnd.taskInfo.executorId)
+    val sid = taskEnd.task.stageId
+
+    // create executor summary map if necessary
+    val executorSummaryMap = stageIdToExecutorSummaries.getOrElseUpdate(key = sid,
+      op = new HashMap[String, ExecutorSummary]())
+    executorSummaryMap.getOrElseUpdate(key = taskEnd.taskInfo.executorId,
+      op = new ExecutorSummary())
+
+    val executorSummary = executorSummaryMap.get(taskEnd.taskInfo.executorId)
     executorSummary match {
-      case Some(x) => {
+      case Some(y) => {
         // first update failed-task, succeed-task
         taskEnd.reason match {
-          case e: ExceptionFailure =>
-            x.failedTasks += 1
+          case Success =>
+            y.succeededTasks += 1
           case _ =>
-            x.succeedTasks += 1
+            y.failedTasks += 1
         }
 
         // update duration
-        x.duration += taskEnd.taskInfo.duration
+        y.duration += taskEnd.taskInfo.duration
 
         // update shuffle read/write
         val shuffleRead = taskEnd.taskMetrics.shuffleReadMetrics
         shuffleRead match {
           case Some(s) =>
-            x.shuffleRead += s.remoteBytesRead
+            y.shuffleRead += s.remoteBytesRead
           case _ => {}
         }
         val shuffleWrite = taskEnd.taskMetrics.shuffleWriteMetrics
         shuffleWrite match {
           case Some(s) => {
-            x.shuffleWrite += s.shuffleBytesWritten
+            y.shuffleWrite += s.shuffleBytesWritten
           }
           case _ => {}
         }
@@ -160,7 +164,6 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
       case _ => {}
     }
 
-    val sid = taskEnd.task.stageId
     val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive -= taskEnd.taskInfo
 

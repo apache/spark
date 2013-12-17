@@ -160,9 +160,10 @@ private[spark] class StagePage(parent: JobProgressUI) {
           def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
           Some(listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
-
+      val executorTable = new ExecutorTable(parent, stageId)
       val content =
         summary ++
+        <h4>Summary Metrics for Executors</h4> ++ executorTable.toNodeSeq() ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
         <h4>Tasks</h4> ++ taskTable

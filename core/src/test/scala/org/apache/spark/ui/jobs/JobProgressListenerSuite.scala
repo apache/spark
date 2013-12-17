@@ -19,26 +19,19 @@ package org.apache.spark.ui.jobs
 
 import org.scalatest.FunSuite
 import org.apache.spark.scheduler._
-import org.apache.spark.SparkContext
-import org.apache.spark.Success
+import org.apache.spark.{LocalSparkContext, SparkContext, Success}
 import org.apache.spark.scheduler.SparkListenerTaskStart
 import org.apache.spark.executor.{ShuffleReadMetrics, TaskMetrics}
 
-class JobProgressListenerSuite extends FunSuite {
+class JobProgressListenerSuite extends FunSuite with LocalSparkContext {
   test("test executor id to summary") {
-    val sc = new SparkContext("local", "joblogger")
+    val sc = new SparkContext("local", "test")
     val listener = new JobProgressListener(sc)
     val taskMetrics = new TaskMetrics()
     val shuffleReadMetrics = new ShuffleReadMetrics()
 
     // nothing in it
-    assert(listener.executorIdToSummary.size == 0)
-
-    // launched a task, should get an item in map
-    listener.onTaskStart(new SparkListenerTaskStart(
-      new ShuffleMapTask(0, null, null, 0, null),
-      new TaskInfo(1234L, 0, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL)))
-    assert(listener.executorIdToSummary.size == 1)
+    assert(listener.stageIdToExecutorSummaries.size == 0)
 
     // finish this task, should get updated shuffleRead
     shuffleReadMetrics.remoteBytesRead = 1000
@@ -47,20 +40,15 @@ class JobProgressListenerSuite extends FunSuite {
     taskInfo.finishTime = 1
     listener.onTaskEnd(new SparkListenerTaskEnd(
       new ShuffleMapTask(0, null, null, 0, null), Success, taskInfo, taskMetrics))
-    assert(listener.executorIdToSummary.getOrElse("exe-1", fail()).shuffleRead == 1000)
+    assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-1", fail())
+      .shuffleRead == 1000)
 
     // finish a task with unknown executor-id, nothing should happen
     taskInfo = new TaskInfo(1234L, 0, 1000L, "exe-unknown", "host1", TaskLocality.NODE_LOCAL)
     taskInfo.finishTime = 1
     listener.onTaskEnd(new SparkListenerTaskEnd(
       new ShuffleMapTask(0, null, null, 0, null), Success, taskInfo, taskMetrics))
-    assert(listener.executorIdToSummary.size == 1)
-
-    // launched a task
-    listener.onTaskStart(new SparkListenerTaskStart(
-      new ShuffleMapTask(0, null, null, 0, null),
-      new TaskInfo(1235L, 0, 0L, "exe-1", "host1", TaskLocality.NODE_LOCAL)))
-    assert(listener.executorIdToSummary.size == 1)
+    assert(listener.stageIdToExecutorSummaries.size == 1)
 
     // finish this task, should get updated duration
     shuffleReadMetrics.remoteBytesRead = 1000
@@ -69,13 +57,8 @@ class JobProgressListenerSuite extends FunSuite {
     taskInfo.finishTime = 1
     listener.onTaskEnd(new SparkListenerTaskEnd(
       new ShuffleMapTask(0, null, null, 0, null), Success, taskInfo, taskMetrics))
-    assert(listener.executorIdToSummary.getOrElse("exe-1", fail()).shuffleRead == 2000)
-
-    // launched a task in another exec
-    listener.onTaskStart(new SparkListenerTaskStart(
-      new ShuffleMapTask(0, null, null, 0, null),
-      new TaskInfo(1236L, 0, 0L, "exe-2", "host1", TaskLocality.NODE_LOCAL)))
-    assert(listener.executorIdToSummary.size == 2)
+    assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-1", fail())
+      .shuffleRead == 2000)
 
     // finish this task, should get updated duration
     shuffleReadMetrics.remoteBytesRead = 1000
@@ -84,13 +67,7 @@ class JobProgressListenerSuite extends FunSuite {
     taskInfo.finishTime = 1
     listener.onTaskEnd(new SparkListenerTaskEnd(
       new ShuffleMapTask(0, null, null, 0, null), Success, taskInfo, taskMetrics))
-    assert(listener.executorIdToSummary.getOrElse("exe-2", fail()).shuffleRead == 1000)
-
-    // do finalize
-    sc.stop()
-
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
+    assert(listener.stageIdToExecutorSummaries.getOrElse(0, fail()).getOrElse("exe-2", fail())
+      .shuffleRead == 1000)
   }
 }
