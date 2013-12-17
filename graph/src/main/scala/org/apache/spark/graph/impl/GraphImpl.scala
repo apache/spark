@@ -1,5 +1,6 @@
 package org.apache.spark.graph.impl
 
+import org.apache.spark.util.collection.PrimitiveVector
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.SparkContext._
 import org.apache.spark.graph._
@@ -40,6 +41,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     this(vertices, edges, vertexPlacement, new VTableReplicated(vertices, edges, vertexPlacement))
   }
 
+  def this(
+      vertices: VertexRDD[VD],
+      edges: EdgeRDD[ED]) = {
+    this(vertices, edges, new VertexPlacement(edges, vertices))
+  }
+
   /** Return a RDD that brings edges together with their source and destination vertices. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
     val vdManifest = classManifest[VD]
@@ -58,6 +65,28 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
   override def cache(): Graph[VD, ED] = persist(StorageLevel.MEMORY_ONLY)
+
+  override def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
+    val numPartitions = edges.partitions.size
+    val edManifest = classManifest[ED]
+    val newEdges = new EdgeRDD(edges.map { e =>
+      val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
+
+      // Should we be using 3-tuple or an optimized class
+      new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
+    }
+      .partitionBy(new HashPartitioner(numPartitions))
+      .mapPartitionsWithIndex( { (pid, iter) =>
+        val builder = new EdgePartitionBuilder[ED]()(edManifest)
+        iter.foreach { message =>
+          val data = message.data
+          builder.add(data._1, data._2, data._3)
+        }
+        val edgePartition = builder.toEdgePartition
+        Iterator((pid, edgePartition))
+      }, preservesPartitioning = true).cache())
+    new GraphImpl(vertices, newEdges)
+  }
 
   override def statistics: Map[String, Any] = {
     // Get the total number of vertices after replication, used to compute the replication ratio.
@@ -183,10 +212,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       Iterator((pid, edgePartition))
     }, preservesPartitioning = true)).cache()
 
-    // Construct the VertexPlacement map
-    val newVertexPlacement = new VertexPlacement(newETable, newVTable)
-
-    new GraphImpl(newVTable, newETable, newVertexPlacement)
+    new GraphImpl(newVTable, newETable)
   } // end of subgraph
 
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
@@ -272,6 +298,14 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       new GraphImpl(newVerts, edges, vertexPlacement)
     }
   }
+
+  private def accessesVertexAttr[VD, ED](closure: AnyRef, attrName: String): Boolean = {
+    try {
+      BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
+    } catch {
+      case _: ClassNotFoundException => true // if we don't know, be conservative
+    }
+  }
 } // end of class GraphImpl
 
 
@@ -279,54 +313,35 @@ object GraphImpl {
 
   def apply[VD: ClassManifest, ED: ClassManifest](
       edges: RDD[Edge[ED]],
-      defaultValue: VD,
-      partitionStrategy: PartitionStrategy): GraphImpl[VD, ED] =
+      defaultVertexAttr: VD): GraphImpl[VD, ED] =
   {
-    val etable = createETable(edges, partitionStrategy).cache()
+    fromEdgeRDD(createETable(edges), defaultVertexAttr)
+  }
 
-    // Get the set of all vids
-    val vids = etable.flatMap { e =>
-      Iterator((e.srcId, 0), (e.dstId, 0))
-    }
-
-    // Shuffle the vids and create the VertexRDD.
-    // TODO: Consider doing map side distinct before shuffle.
-    val shuffled = new ShuffledRDD[Vid, Int, (Vid, Int)](
-      vids, new HashPartitioner(edges.partitions.size))
-    shuffled.setSerializer(classOf[VidMsgSerializer].getName)
-    val vtable = VertexRDD(shuffled.mapValues(x => defaultValue))
-
-    val vertexPlacement = new VertexPlacement(etable, vtable)
-    new GraphImpl(vtable, etable, vertexPlacement)
+  def fromEdgePartitions[VD: ClassManifest, ED: ClassManifest](
+      edges: RDD[(Pid, EdgePartition[ED])],
+      defaultVertexAttr: VD): GraphImpl[VD, ED] = {
+    fromEdgeRDD(createETableFromEdgePartitions(edges), defaultVertexAttr)
   }
 
   def apply[VD: ClassManifest, ED: ClassManifest](
       vertices: RDD[(Vid, VD)],
       edges: RDD[Edge[ED]],
-      defaultVertexAttr: VD,
-      partitionStrategy: PartitionStrategy): GraphImpl[VD, ED] =
+      defaultVertexAttr: VD): GraphImpl[VD, ED] =
   {
-    vertices.cache()
-    val etable = createETable(edges, partitionStrategy).cache()
+    val etable = createETable(edges).cache()
+
     // Get the set of all vids
     val partitioner = Partitioner.defaultPartitioner(vertices)
-
     val vPartitioned = vertices.partitionBy(partitioner)
-
-    val vidsFromEdges = {
-      etable.partitionsRDD.flatMap { case (_, p) => Array.concat(p.srcIds, p.dstIds) }
-        .map(vid => (vid, 0))
-        .partitionBy(partitioner)
-    }
-
+    val vidsFromEdges = collectVidsFromEdges(etable, partitioner)
     val vids = vPartitioned.zipPartitions(vidsFromEdges) { (vertexIter, vidsFromEdgesIter) =>
       vertexIter.map(_._1) ++ vidsFromEdgesIter.map(_._1)
     }
 
     val vtable = VertexRDD(vids, vPartitioned, defaultVertexAttr)
 
-    val vertexPlacement = new VertexPlacement(etable, vtable)
-    new GraphImpl(vtable, etable, vertexPlacement)
+    new GraphImpl(vtable, etable)
   }
 
   /**
@@ -337,37 +352,41 @@ object GraphImpl {
    * key-value pair: the key is the partition id, and the value is an EdgePartition object
    * containing all the edges in a partition.
    */
-  protected def createETable[ED: ClassManifest](
-      edges: RDD[Edge[ED]],
-    partitionStrategy: PartitionStrategy): EdgeRDD[ED] = {
-      // Get the number of partitions
-      val numPartitions = edges.partitions.size
-
-      val eTable = edges.map { e =>
-        val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
-
-        // Should we be using 3-tuple or an optimized class
-        new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
-      }
-    .partitionBy(new HashPartitioner(numPartitions))
-    .mapPartitionsWithIndex( { (pid, iter) =>
+  private def createETable[ED: ClassManifest](
+      edges: RDD[Edge[ED]]): EdgeRDD[ED] = {
+    val eTable = edges.mapPartitionsWithIndex { (pid, iter) =>
       val builder = new EdgePartitionBuilder[ED]
-      iter.foreach { message =>
-        val data = message.data
-        builder.add(data._1, data._2, data._3)
+      iter.foreach { e =>
+        builder.add(e.srcId, e.dstId, e.attr)
       }
-      val edgePartition = builder.toEdgePartition
-      Iterator((pid, edgePartition))
-    }, preservesPartitioning = true).cache()
+      Iterator((pid, builder.toEdgePartition))
+    }
     new EdgeRDD(eTable)
   }
 
-  private def accessesVertexAttr[VD, ED](closure: AnyRef, attrName: String): Boolean = {
-    try {
-      BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
-    } catch {
-      case _: ClassNotFoundException => true // if we don't know, be conservative
-    }
+  private def createETableFromEdgePartitions[ED: ClassManifest](
+      edges: RDD[(Pid, EdgePartition[ED])]): EdgeRDD[ED] = {
+    new EdgeRDD(edges)
   }
 
+  private def fromEdgeRDD[VD: ClassManifest, ED: ClassManifest](
+      edges: EdgeRDD[ED],
+      defaultVertexAttr: VD): GraphImpl[VD, ED] = {
+    edges.cache()
+    // Get the set of all vids
+    val vids = collectVidsFromEdges(edges, new HashPartitioner(edges.partitions.size))
+    // Create the VertexRDD.
+    val vtable = VertexRDD(vids.mapValues(x => defaultVertexAttr))
+    new GraphImpl(vtable, edges)
+  }
+
+  /** Collects all vids mentioned in edges and partitions them by partitioner. */
+  private def collectVidsFromEdges(
+      edges: EdgeRDD[_],
+      partitioner: Partitioner): RDD[(Vid, Int)] = {
+    // TODO: Consider doing map side distinct before shuffle.
+    new ShuffledRDD[Vid, Int, (Vid, Int)](
+      edges.collectVids.map(vid => (vid, 0)), partitioner)
+      .setSerializer(classOf[VidMsgSerializer].getName)
+  }
 } // end of object GraphImpl
