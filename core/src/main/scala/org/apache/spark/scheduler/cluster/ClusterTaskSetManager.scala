@@ -529,10 +529,10 @@ private[spark] class ClusterTaskSetManager(
       addPendingTask(index)
       if (state != TaskState.KILLED) {
         numFailures(index) += 1
-        if (numFailures(index) > MAX_TASK_FAILURES) {
-          logError("Task %s:%d failed more than %d times; aborting job".format(
+        if (numFailures(index) >= MAX_TASK_FAILURES) {
+          logError("Task %s:%d failed %d times; aborting job".format(
             taskSet.id, index, MAX_TASK_FAILURES))
-          abort("Task %s:%d failed more than %d times".format(taskSet.id, index, MAX_TASK_FAILURES))
+          abort("Task %s:%d failed %d times".format(taskSet.id, index, MAX_TASK_FAILURES))
         }
       }
     } else {
