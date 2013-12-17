@@ -220,7 +220,6 @@
         <version>0.3.1</version>
       </dependency>
       <dependency>
-<<<<<<< HEAD
         <groupId>${akka.group}</groupId>
         <artifactId>akka-actor_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
@@ -254,13 +253,8 @@
         </exclusions>
       </dependency>
       <dependency>
-<<<<<<< HEAD
         <groupId>${akka.group}</groupId>
         <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
-=======
-        <groupId>org.spark-project.akka</groupId>
-        <artifactId>akka-zeromq_2.10</artifactId>
->>>>>>> Attempt with extra repositories
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
