@@ -150,7 +150,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       activeTasks += taskStart.taskInfo
     }
 
-    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
       val eid = taskEnd.taskInfo.executorId
       val activeTasks = executorToTasksActive.getOrElseUpdate(eid, new HashSet[TaskInfo]())
       val newDuration = executorToDuration.getOrElse(eid, 0L) + taskEnd.taskInfo.duration
@@ -168,20 +168,22 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
         }
 
       // update shuffle read/write
-      val shuffleRead = taskEnd.taskMetrics.shuffleReadMetrics
-      shuffleRead match {
-        case Some(s) =>
-          val newShuffleRead = executorToShuffleRead.getOrElse(eid, 0L) + s.remoteBytesRead
-          executorToShuffleRead.put(eid, newShuffleRead)
-        case _ => {}
-      }
-      val shuffleWrite = taskEnd.taskMetrics.shuffleWriteMetrics
-      shuffleWrite match {
-        case Some(s) => {
-          val newShuffleWrite = executorToShuffleWrite.getOrElse(eid, 0L) + s.shuffleBytesWritten
-          executorToShuffleWrite.put(eid, newShuffleWrite)
+      if (null != taskEnd.taskMetrics) {
+        val shuffleRead = taskEnd.taskMetrics.shuffleReadMetrics
+        shuffleRead match {
+          case Some(s) =>
+            val newShuffleRead = executorToShuffleRead.getOrElse(eid, 0L) + s.remoteBytesRead
+            executorToShuffleRead.put(eid, newShuffleRead)
+          case _ => {}
         }
-        case _ => {}
+        val shuffleWrite = taskEnd.taskMetrics.shuffleWriteMetrics
+        shuffleWrite match {
+          case Some(s) => {
+            val newShuffleWrite = executorToShuffleWrite.getOrElse(eid, 0L) + s.shuffleBytesWritten
+            executorToShuffleWrite.put(eid, newShuffleWrite)
+          }
+          case _ => {}
+        }
       }
     }
   }
