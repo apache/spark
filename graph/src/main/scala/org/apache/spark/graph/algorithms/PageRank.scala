@@ -166,24 +166,29 @@ object PageRank extends Logging {
       .mapVertices((vid, degree) => resetProb).cache()
     var numDeltas: Long = ranks.count()
 
+    var prevDeltas: Option[VertexRDD[Double]] = None
+
     var i = 0
     val weight = (1.0 - resetProb)
     while (numDeltas > 0) {
-      // Compute new deltas
+      // Compute new deltas. Only deltas that existed in the last round (i.e., were greater than
+      // `tol`) get to send messages; those that were less than `tol` would send messages less than
+      // `tol` as well.
       val deltas = deltaGraph
         .mapReduceTriplets[Double](
-          et => {
-            if (et.srcMask) Iterator((et.dstId, et.srcAttr * et.attr * weight))
-            else Iterator.empty
-          },
-          _ + _)
+          et => Iterator((et.dstId, et.srcAttr * et.attr * weight)),
+          _ + _,
+          prevDeltas.map((_, EdgeDirection.Out)))
         .filter { case (vid, delta) => delta > tol }
         .cache()
+      prevDeltas = Some(deltas)
       numDeltas = deltas.count()
       logInfo("Standalone PageRank: iter %d has %d deltas".format(i, numDeltas))
 
-      // Apply deltas. Sets the mask for each vertex to false if it does not appear in deltas.
-      deltaGraph = deltaGraph.deltaJoinVertices(deltas).cache()
+      // Update deltaGraph with the deltas
+      deltaGraph = deltaGraph.outerJoinVertices(deltas) { (vid, old, newOpt) =>
+        newOpt.getOrElse(old)
+      }.cache()
 
       // Update ranks
       ranks = ranks.leftZipJoin(deltas) { (vid, oldRank, deltaOpt) =>

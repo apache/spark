@@ -91,29 +91,22 @@ object Pregel {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 
-    def sendMsgFun(edge: EdgeTriplet[VD, ED]): Iterator[(Vid, A)] = {
-      if (edge.srcMask) {
-        sendMsg(edge)
-      } else {
-        Iterator.empty
-      }
-    }
-
     var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) )
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsgFun, mergeMsg).cache()
+    var messages = g.mapReduceTriplets(sendMsg, mergeMsg).cache()
     var activeMessages = messages.count()
     // Loop
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
-      // receive the messages
-      val changedVerts = g.vertices.deltaJoin(messages)(vprog).cache() // updating the vertices
-      // replicate the changed vertices
-      g = g.deltaJoinVertices(changedVerts)
+      // Receive the messages. Vertices that didn't get any messages do not appear in newVerts.
+      val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
+      // Update the graph with the new vertices.
+      g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }
 
       val oldMessages = messages
-      // compute the messages
-      messages = g.mapReduceTriplets(sendMsgFun, mergeMsg).cache()
+      // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't
+      // get to send messages.
+      messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, EdgeDirection.Out))).cache()
       activeMessages = messages.count()
       // after counting we can unpersist the old messages
       oldMessages.unpersist(blocking=false)

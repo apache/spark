@@ -47,21 +47,20 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     this(vertices, edges, new VertexPlacement(edges, vertices))
   }
 
-  /** Return a RDD that brings edges with its source and destination vertices together. */
+  /** Return a RDD that brings edges together with their source and destination vertices. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
     val vdManifest = classManifest[VD]
     val edManifest = classManifest[ED]
 
-    edges.zipEdgePartitions(vTableReplicated.bothAttrs) { (edgePartition, vTableReplicatedIter) =>
-      val (_, vPart) = vTableReplicatedIter.next()
-      new EdgeTripletIterator(vPart.index, vPart.values, edgePartition)(vdManifest, edManifest)
+    edges.zipEdgePartitions(vTableReplicated.get(true, true)) { (ePart, vPartIter) =>
+      val (_, vPart) = vPartIter.next()
+      new EdgeTripletIterator(vPart.index, vPart.values, ePart)(vdManifest, edManifest)
     }
   }
 
   override def persist(newLevel: StorageLevel): Graph[VD, ED] = {
     vertices.persist(newLevel)
     edges.persist(newLevel)
-    vertexPlacement.persist(newLevel)
     this
   }
 
@@ -149,29 +148,38 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     println("\n\nvertexPlacement.bothAttrs -------------------------------")
     traverseLineage(vertexPlacement.bothAttrs, "  ", visited)
     visited += (vertexPlacement.bothAttrs.id -> "vertexPlacement.bothAttrs")
-    println("\n\nvTableReplicated.bothAttrs ----------------")
-    traverseLineage(vTableReplicated.bothAttrs, "  ", visited)
-    visited += (vTableReplicated.bothAttrs.id -> "vTableReplicated.bothAttrs")
     println("\n\ntriplets ----------------------------------------")
     traverseLineage(triplets, "  ", visited)
     println(visited)
   } // end of printLineage
 
   override def reverse: Graph[VD, ED] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.reverse), vertexPlacement)
+    new GraphImpl(vertices, edges.mapEdgePartitions(_.reverse), vertexPlacement, vTableReplicated)
 
-  override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] =
-    new GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, vertexPlacement)
+  override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] = {
+    if (classManifest[VD] equals classManifest[VD2]) {
+      // The map preserves type, so we can use incremental replication
+      val newVerts = vertices.mapVertexPartitions(_.map(f))
+      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
+      val newVTableReplicated = new VTableReplicated[VD2](
+        changedVerts, edges, vertexPlacement,
+        Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
+      new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
+    } else {
+      // The map does not preserve type, so we must re-replicate all vertices
+      new GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, vertexPlacement)
+    }
+  }
 
   override def mapEdges[ED2: ClassManifest](f: Edge[ED] => ED2): Graph[VD, ED2] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.map(f)), vertexPlacement)
+    new GraphImpl(vertices, edges.mapEdgePartitions(_.map(f)), vertexPlacement, vTableReplicated)
 
   override def mapTriplets[ED2: ClassManifest](f: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
     // Use an explicit manifest in PrimitiveKeyOpenHashMap init so we don't pull in the implicit
     // manifest from GraphImpl (which would require serializing GraphImpl).
     val vdManifest = classManifest[VD]
     val newETable =
-      edges.zipEdgePartitions(vTableReplicated.bothAttrs) { (edgePartition, vTableReplicatedIter) =>
+      edges.zipEdgePartitions(vTableReplicated.get(true, true)) { (edgePartition, vTableReplicatedIter) =>
         val (pid, vPart) = vTableReplicatedIter.next()
         val et = new EdgeTriplet[VD, ED]
         val newEdgePartition = edgePartition.map { e =>
@@ -182,7 +190,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         }
         Iterator((pid, newEdgePartition))
     }
-    new GraphImpl(vertices, new EdgeRDD(newETable), vertexPlacement)
+    new GraphImpl(vertices, new EdgeRDD(newETable), vertexPlacement, vTableReplicated)
   }
 
   override def subgraph(
@@ -210,7 +218,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
     ClosureCleaner.clean(merge)
     val newETable = edges.mapEdgePartitions(_.groupEdges(merge))
-    new GraphImpl(vertices, newETable, vertexPlacement)
+    new GraphImpl(vertices, newETable, vertexPlacement, vTableReplicated)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -219,7 +227,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
 
   override def mapReduceTriplets[A: ClassManifest](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
-      reduceFunc: (A, A) => A): VertexRDD[A] = {
+      reduceFunc: (A, A) => A,
+      activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None) = {
 
     ClosureCleaner.clean(mapFunc)
     ClosureCleaner.clean(reduceFunc)
@@ -228,23 +237,42 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // in the relevant position in an edge.
     val mapUsesSrcAttr = accessesVertexAttr[VD, ED](mapFunc, "srcAttr")
     val mapUsesDstAttr = accessesVertexAttr[VD, ED](mapFunc, "dstAttr")
-    val vs = vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr)
+    val vs = activeSetOpt match {
+      case Some((activeSet, _)) => vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr, activeSet)
+      case None => vTableReplicated.get(mapUsesSrcAttr, mapUsesDstAttr)
+    }
+    val activeDirectionOpt = activeSetOpt.map(_._2)
 
     // Map and combine.
     val preAgg = edges.zipEdgePartitions(vs) { (edgePartition, vTableReplicatedIter) =>
       val (_, vertexPartition) = vTableReplicatedIter.next()
 
       // Iterate over the partition
-      val et = new EdgeTriplet[VD, ED](vertexPartition)
+      val et = new EdgeTriplet[VD, ED]
       val filteredEdges = edgePartition.iterator.flatMap { e =>
-        et.set(e)
-        if (mapUsesSrcAttr) {
-          et.srcAttr = vertexPartition(e.srcId)
+        // Ensure the edge is adjacent to a vertex in activeSet if necessary
+        val adjacent = activeDirectionOpt match {
+          case Some(EdgeDirection.In) =>
+            vertexPartition.isActive(e.dstId)
+          case Some(EdgeDirection.Out) =>
+            vertexPartition.isActive(e.srcId)
+          case Some(EdgeDirection.Both) =>
+            vertexPartition.isActive(e.srcId) && vertexPartition.isActive(e.dstId)
+          case None =>
+            true
         }
-        if (mapUsesDstAttr) {
-          et.dstAttr = vertexPartition(e.dstId)
+        if (adjacent) {
+          et.set(e)
+          if (mapUsesSrcAttr) {
+            et.srcAttr = vertexPartition(e.srcId)
+          }
+          if (mapUsesDstAttr) {
+            et.dstAttr = vertexPartition(e.dstId)
+          }
+          mapFunc(et)
+        } else {
+          Iterator.empty
         }
-        mapFunc(et)
       }
       // Note: This doesn't allow users to send messages to arbitrary vertices.
       vertexPartition.aggregateUsingIndex(filteredEdges, reduceFunc).iterator
@@ -255,22 +283,20 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   } // end of mapReduceTriplets
 
   override def outerJoinVertices[U: ClassManifest, VD2: ClassManifest]
-    (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2): Graph[VD2, ED] = {
-    ClosureCleaner.clean(updateF)
-    val newVTable = vertices.leftJoin(updates)(updateF)
-    new GraphImpl(newVTable, edges, vertexPlacement)
-  }
-
-  override def deltaJoinVertices(changedVerts: VertexRDD[VD]): Graph[VD, ED] = {
-    val newVerts = vertices.leftZipJoin(changedVerts) { (vid, oldAttr, newAttrOpt) =>
-      newAttrOpt match {
-        case Some(newAttr) => newAttr
-        case None => oldAttr
-      }
+      (updates: RDD[(Vid, U)])(updateF: (Vid, VD, Option[U]) => VD2): Graph[VD2, ED] = {
+    if (classManifest[VD] equals classManifest[VD2]) {
+      // updateF preserves type, so we can use incremental replication
+      val newVerts = vertices.leftJoin(updates)(updateF)
+      val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
+      val newVTableReplicated = new VTableReplicated[VD2](
+        changedVerts, edges, vertexPlacement,
+        Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
+      new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
+    } else {
+      // updateF does not preserve type, so we must re-replicate all vertices
+      val newVerts = vertices.leftJoin(updates)(updateF)
+      new GraphImpl(newVerts, edges, vertexPlacement)
     }
-    val newVTableReplicated = new VTableReplicated(
-      changedVerts, edges, vertexPlacement, Some(vTableReplicated))
-    new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
   }
 
   private def accessesVertexAttr[VD, ED](closure: AnyRef, attrName: String): Boolean = {

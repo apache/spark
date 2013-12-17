@@ -7,8 +7,10 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.PrimitiveVector
 
 /**
- * Stores the layout of replicated vertex attributes for GraphImpl. Tells each
- * partition of the vertex data where it should go.
+ * Stores the locations of edge-partition join sites for each vertex attribute in `vTable`; that is,
+ * the routing information for shipping vertex attributes to edge partitions. This is always cached
+ * because it may be used multiple times in VTableReplicated -- once to ship the vertex attributes
+ * and (possibly) once to ship the active-set information.
  */
 class VertexPlacement(eTable: EdgeRDD[_], vTable: VertexRDD[_]) {
 
@@ -24,13 +26,6 @@ class VertexPlacement(eTable: EdgeRDD[_], vTable: VertexRDD[_]) {
       case (false, true) => dstAttrOnly
       case (false, false) => noAttrs
     }
-
-  def persist(newLevel: StorageLevel) {
-    bothAttrs.persist(newLevel)
-    srcAttrOnly.persist(newLevel)
-    dstAttrOnly.persist(newLevel)
-    noAttrs.persist(newLevel)
-  }
 
   private def createPid2Vid(
       includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[Vid]]] = {

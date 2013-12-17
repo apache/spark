@@ -32,7 +32,9 @@ private[graph]
 class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     val index: VertexIdToIndexMap,
     val values: Array[VD],
-    val mask: BitSet)
+    val mask: BitSet,
+    /** A set of vids of active vertices. May contain vids not in index due to join rewrite. */
+    private val activeSet: Option[VertexSet] = None)
   extends Logging {
 
   val capacity: Int = index.capacity
@@ -47,6 +49,11 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     pos >= 0 && mask.get(pos)
   }
 
+  /** Look up vid in activeSet, throwing an exception if it is None. */
+  def isActive(vid: Vid): Boolean = {
+    activeSet.get.contains(vid)
+  }
+
   /**
    * Pass each vertex attribute along with the vertex id through a map
    * function and retain the original RDD's partitioning and index.
@@ -57,7 +64,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
    * attribute in the RDD
    *
    * @return a new VertexPartition with values obtained by applying `f` to
-   * each of the entries in the original VertexSet.  The resulting
+   * each of the entries in the original VertexRDD.  The resulting
    * VertexPartition retains the same index.
    */
   def map[VD2: ClassManifest](f: (Vid, VD) => VD2): VertexPartition[VD2] = {
@@ -94,19 +101,25 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition(index, values, newMask)
   }
 
+  /**
+   * Hides vertices that are the same between this and other. For vertices that are different, keeps
+   * the values from `other`. The indices of `this` and `other` must be the same.
+   */
   def diff(other: VertexPartition[VD]): VertexPartition[VD] = {
-    assert(index == other.index)
-
-    val newMask = mask & other.mask
-
-    var i = newMask.nextSetBit(0)
-    while (i >= 0) {
-      if (values(i) == other.values(i)) {
-        newMask.unset(i)
+    if (index != other.index) {
+      logWarning("Diffing two VertexPartitions with different indexes is slow.")
+      diff(createUsingIndex(other.iterator))
+    } else {
+      val newMask = mask & other.mask
+      var i = newMask.nextSetBit(0)
+      while (i >= 0) {
+        if (values(i) == other.values(i)) {
+          newMask.unset(i)
+        }
+        i = newMask.nextSetBit(i + 1)
       }
-      i = mask.nextSetBit(i + 1)
+      new VertexPartition(index, other.values, newMask)
     }
-    new VertexPartition[VD](index, other.values, newMask)
   }
 
   /** Inner join another VertexPartition. */
@@ -124,30 +137,6 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
       var i = newMask.nextSetBit(0)
       while (i >= 0) {
         newValues(i) = f(index.getValue(i), values(i), other.values(i))
-        i = mask.nextSetBit(i + 1)
-      }
-      new VertexPartition(index, newValues, newMask)
-    }
-  }
-
-  /** Inner join another VertexPartition. */
-  def deltaJoin[VD2: ClassManifest, VD3: ClassManifest]
-      (other: VertexPartition[VD2])
-      (f: (Vid, VD, VD2) => VD3): VertexPartition[VD3] =
-  {
-    if (index != other.index) {
-      logWarning("Joining two VertexPartitions with different indexes is slow.")
-      join(createUsingIndex(other.iterator))(f)
-    } else {
-      val newValues = new Array[VD3](capacity)
-      val newMask = mask & other.mask
-
-      var i = newMask.nextSetBit(0)
-      while (i >= 0) {
-        newValues(i) = f(index.getValue(i), values(i), other.values(i))
-        if (newValues(i) == values(i)) {
-          newMask.unset(i)
-        }
         i = mask.nextSetBit(i + 1)
       }
       new VertexPartition(index, newValues, newMask)
@@ -181,6 +170,32 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     leftJoin(createUsingIndex(other))(f)
   }
 
+  /** Inner join another VertexPartition. */
+  def innerJoin[U: ClassManifest, VD2: ClassManifest](other: VertexPartition[U])
+      (f: (Vid, VD, U) => VD2): VertexPartition[VD2] = {
+    if (index != other.index) {
+      logWarning("Joining two VertexPartitions with different indexes is slow.")
+      innerJoin(createUsingIndex(other.iterator))(f)
+    }
+    val newMask = mask & other.mask
+    val newValues = new Array[VD2](capacity)
+    var i = newMask.nextSetBit(0)
+    while (i >= 0) {
+      newValues(i) = f(index.getValue(i), values(i), other.values(i))
+      i = newMask.nextSetBit(i + 1)
+    }
+    new VertexPartition(index, newValues, newMask)
+  }
+
+  /**
+   * Inner join an iterator of messages.
+   */
+  def innerJoin[U: ClassManifest, VD2: ClassManifest]
+      (iter: Iterator[Product2[Vid, U]])
+      (f: (Vid, VD, U) => VD2): VertexPartition[VD2] = {
+    innerJoin(createUsingIndex(iter))(f)
+  }
+
   /**
    * Similar effect as aggregateUsingIndex((a, b) => a)
    */
@@ -196,17 +211,20 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition[VD2](index, newValues, newMask)
   }
 
-  def updateUsingIndex[VD2: ClassManifest](iter: Iterator[Product2[Vid, VD2]])
-    : VertexPartition[VD2] = {
+  /**
+   * Similar to innerJoin, but vertices from the left side that don't appear in iter will remain in
+   * the partition, hidden by the bitmask.
+   */
+  def innerJoinKeepLeft(iter: Iterator[Product2[Vid, VD]]): VertexPartition[VD] = {
     val newMask = new BitSet(capacity)
-    val newValues = new Array[VD2](capacity)
+    val newValues = new Array[VD](capacity)
     System.arraycopy(values, 0, newValues, 0, newValues.length)
     iter.foreach { case (vid, vdata) =>
       val pos = index.getPos(vid)
       newMask.set(pos)
       newValues(pos) = vdata
     }
-    new VertexPartition[VD2](index, newValues, newMask)
+    new VertexPartition(index, newValues, newMask)
   }
 
   def aggregateUsingIndex[VD2: ClassManifest](
@@ -228,6 +246,12 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition[VD2](index, newValues, newMask)
   }
 
+  def replaceActives(iter: Iterator[Vid]): VertexPartition[VD] = {
+    val newActiveSet = new VertexSet
+    iter.foreach(newActiveSet.add(_))
+    new VertexPartition(index, values, mask, Some(newActiveSet))
+  }
+
   /**
    * Construct a new VertexPartition whose index contains only the vertices in the mask.
    */
@@ -241,4 +265,6 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   }
 
   def iterator: Iterator[(Vid, VD)] = mask.iterator.map(ind => (index.getValue(ind), values(ind)))
+
+  def vidIterator: Iterator[Vid] = mask.iterator.map(ind => index.getValue(ind))
 }
