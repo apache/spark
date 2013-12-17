@@ -96,7 +96,6 @@ object Svdpp {
       val itmBias = 0.0
       val usrBias = 0.0
       var pred = u + usr.bias + itm.bias + q.dotProduct(usr.v2)
-      println(pred)
       pred = math.max(pred, minVal)
       pred = math.min(pred, maxVal)
       val err = et.attr - pred
