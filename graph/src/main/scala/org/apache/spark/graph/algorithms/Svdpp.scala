@@ -65,7 +65,7 @@ object Svdpp {
     val u = rs / rc // global rating mean
 
     // make graph
-    var g = Graph.fromEdges(edges, defaultF(rank), RandomVertexCut).cache()
+    var g = Graph.fromEdges(edges, defaultF(rank)).cache()
 
     // calculate initial norm and bias
     val t0 = g.mapReduceTriplets(mapF0, reduceF0)
