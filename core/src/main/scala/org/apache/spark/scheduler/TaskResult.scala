@@ -73,7 +73,7 @@ class DirectTaskResult[T](var valueBytes: ByteBuffer, var accumUpdates: Map[Long
   }
 
   def value(): T = {
-    val objectSer = SparkEnv.get.serializer.newInstance()
-    return objectSer.deserialize(valueBytes)
+    val resultSer = SparkEnv.get.serializer.newInstance()
+    return resultSer.deserialize(valueBytes)
   }
 }
