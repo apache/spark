@@ -8,6 +8,9 @@ object TreeNode {
   protected def nextId() = currentId.getAndIncrement()
 }
 
+/** Used when traversing the tree for a node at a given depth */
+private class MutableInt(var i: Int)
+
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   self: BaseType with Product =>
 
@@ -163,6 +166,26 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
 
   /** Returns a string representation of the nodes in this tree */
   def treeString = generateTreeString(0, new StringBuilder).toString
+
+  /**
+   * Returns a string representation of the nodes in this tree, where each operator is numbered.  The numbers can be
+   * used with [[apply]] to easily access specific subtrees.
+   */
+  def numberedTreeString =
+    treeString.split("\n").zipWithIndex.map { case (line,i) => f"$i%02d $line" }.mkString("\n")
+
+  def apply(depth: Int): BaseType = getNodeAtDepth(new MutableInt(depth))
+
+  protected def getNodeAtDepth(depth: MutableInt): BaseType = {
+    if(depth.i < 0)
+      return null.asInstanceOf[BaseType]
+    else if(depth.i == 0)
+      this
+    else {
+      depth.i -= 1
+      children.map(_.getNodeAtDepth(depth)).collectFirst { case n if n != null => n }.getOrElse(sys.error("Invalid depth"))
+    }
+  }
 
   /** Appends the string represent of this node and its children to [[builder]]. */
   protected def generateTreeString(depth: Int, builder: StringBuilder): StringBuilder = {
