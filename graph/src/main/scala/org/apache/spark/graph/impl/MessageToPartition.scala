@@ -19,17 +19,6 @@ class VertexBroadcastMsg[@specialized(Int, Long, Double, Boolean) T](
 }
 
 
-class AggregationMsg[@specialized(Int, Long, Double, Boolean) T](var vid: Vid, var data: T)
-  extends Product2[Vid, T] {
-
-  override def _1 = vid
-
-  override def _2 = data
-
-  override def canEqual(that: Any): Boolean = that.isInstanceOf[AggregationMsg[_]]
-}
-
-
 /**
  * A message used to send a specific value to a partition.
  * @param partition index of the target partition.
@@ -65,23 +54,6 @@ class VertexBroadcastMsgRDDFunctions[T: ClassManifest](self: RDD[VertexBroadcast
 }
 
 
-class AggregationMessageRDDFunctions[T: ClassManifest](self: RDD[AggregationMsg[T]]) {
-  def partitionBy(partitioner: Partitioner): RDD[AggregationMsg[T]] = {
-    val rdd = new ShuffledRDD[Vid, T, AggregationMsg[T]](self, partitioner)
-
-    // Set a custom serializer if the data is of int or double type.
-    if (classManifest[T] == ClassManifest.Int) {
-      rdd.setSerializer(classOf[IntAggMsgSerializer].getName)
-    } else if (classManifest[T] == ClassManifest.Long) {
-      rdd.setSerializer(classOf[LongAggMsgSerializer].getName)
-    } else if (classManifest[T] == ClassManifest.Double) {
-      rdd.setSerializer(classOf[DoubleAggMsgSerializer].getName)
-    }
-    rdd
-  }
-}
-
-
 class MsgRDDFunctions[T: ClassManifest](self: RDD[MessageToPartition[T]]) {
 
   /**
@@ -103,7 +75,17 @@ object MsgRDDFunctions {
     new VertexBroadcastMsgRDDFunctions(rdd)
   }
 
-  implicit def rdd2aggMessageRDDFunctions[T: ClassManifest](rdd: RDD[AggregationMsg[T]]) = {
-    new AggregationMessageRDDFunctions(rdd)
+  def partitionForAggregation[T: ClassManifest](msgs: RDD[(Vid, T)], partitioner: Partitioner) = {
+    val rdd = new ShuffledRDD[Vid, T, (Vid, T)](msgs, partitioner)
+
+    // Set a custom serializer if the data is of int or double type.
+    if (classManifest[T] == ClassManifest.Int) {
+      rdd.setSerializer(classOf[IntAggMsgSerializer].getName)
+    } else if (classManifest[T] == ClassManifest.Long) {
+      rdd.setSerializer(classOf[LongAggMsgSerializer].getName)
+    } else if (classManifest[T] == ClassManifest.Double) {
+      rdd.setSerializer(classOf[DoubleAggMsgSerializer].getName)
+    }
+    rdd
   }
 }

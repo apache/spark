@@ -1,12 +1,13 @@
 package org.apache.spark.graph
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
-import org.apache.spark.graph.impl.GraphImpl
+import java.util.{Arrays => JArrays}
+import org.apache.spark.graph.impl.EdgePartitionBuilder
+import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.graph.impl.{EdgePartition, GraphImpl}
+import org.apache.spark.util.collection.PrimitiveVector
 
 
-object GraphLoader {
+object GraphLoader extends Logging {
 
   /**
    * Load an edge list from file initializing the Graph
@@ -25,8 +26,7 @@ object GraphLoader {
       sc: SparkContext,
       path: String,
       edgeParser: Array[String] => ED,
-      minEdgePartitions: Int = 1,
-      partitionStrategy: PartitionStrategy = RandomVertexCut()):
+      minEdgePartitions: Int = 1):
     Graph[Int, ED] = {
     // Parse the edge data table
     val edges = sc.textFile(path, minEdgePartitions).mapPartitions( iter =>
@@ -43,7 +43,7 @@ object GraphLoader {
         Edge(source, target, edata)
       })
     val defaultVertexAttr = 1
-    Graph(edges, defaultVertexAttr, partitionStrategy)
+    Graph.fromEdges(edges, defaultVertexAttr)
   }
 
   /**
@@ -73,31 +73,39 @@ object GraphLoader {
    * @tparam ED
    * @return
    */
-  def edgeListFile[ED: ClassManifest](
+  def edgeListFile(
       sc: SparkContext,
       path: String,
       canonicalOrientation: Boolean = false,
-      minEdgePartitions: Int = 1,
-      partitionStrategy: PartitionStrategy = RandomVertexCut()):
+      minEdgePartitions: Int = 1):
     Graph[Int, Int] = {
-    // Parse the edge data table
-    val edges = sc.textFile(path, minEdgePartitions).mapPartitions( iter =>
-      iter.filter(line => !line.isEmpty && line(0) != '#').map { line =>
-        val lineArray = line.split("\\s+")
-        if(lineArray.length < 2) {
-          println("Invalid line: " + line)
-          assert(false)
+    val startTime = System.currentTimeMillis
+
+    // Parse the edge data table directly into edge partitions
+    val edges = sc.textFile(path, minEdgePartitions).mapPartitionsWithIndex { (pid, iter) =>
+      val builder = new EdgePartitionBuilder[Int]
+      iter.foreach { line =>
+        if (!line.isEmpty && line(0) != '#') {
+          val lineArray = line.split("\\s+")
+          if (lineArray.length < 2) {
+            logWarning("Invalid line: " + line)
+          }
+          val srcId = lineArray(0).toLong
+          val dstId = lineArray(1).toLong
+          if (canonicalOrientation && dstId > srcId) {
+            builder.add(dstId, srcId, 1)
+          } else {
+            builder.add(srcId, dstId, 1)
+          }
         }
-        val source = lineArray(0).trim.toLong
-        val target = lineArray(1).trim.toLong
-        if (canonicalOrientation && target > source) {
-          Edge(target, source, 1)
-        } else {
-          Edge(source, target, 1)
-        }
-      })
-    val defaultVertexAttr = 1
-    Graph(edges, defaultVertexAttr, partitionStrategy)
+      }
+      Iterator((pid, builder.toEdgePartition))
+    }.cache()
+    edges.count()
+
+    logInfo("It took %d ms to load the edges".format(System.currentTimeMillis - startTime))
+
+    GraphImpl.fromEdgePartitions(edges, defaultVertexAttr = 1)
   } // end of edgeListFile
 
 }

@@ -2,7 +2,6 @@ package org.apache.spark.graph
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
-import org.apache.spark.util.ClosureCleaner
 import org.apache.spark.SparkException
 
 
@@ -35,14 +34,14 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * RDD.
    * @note Vertices with no in edges are not returned in the resulting RDD.
    */
-  lazy val inDegrees: VertexSetRDD[Int] = degreesRDD(EdgeDirection.In)
+  lazy val inDegrees: VertexRDD[Int] = degreesRDD(EdgeDirection.In)
 
 
   /**
    * Compute the out-degree of each vertex in the Graph returning an RDD.
    * @note Vertices with no out edges are not returned in the resulting RDD.
    */
-  lazy val outDegrees: VertexSetRDD[Int] = degreesRDD(EdgeDirection.Out)
+  lazy val outDegrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Out)
 
 
   /**
@@ -50,7 +49,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * @note Vertices with no edges are not returned in the resulting
    * RDD.
    */
-  lazy val degrees: VertexSetRDD[Int] = degreesRDD(EdgeDirection.Both)
+  lazy val degrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Both)
 
 
   /**
@@ -59,7 +58,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * @param edgeDirection the direction along which to collect
    * neighboring vertex attributes.
    */
-  private def degreesRDD(edgeDirection: EdgeDirection): VertexSetRDD[Int] = {
+  private def degreesRDD(edgeDirection: EdgeDirection): VertexRDD[Int] = {
     if (edgeDirection == EdgeDirection.In) {
       graph.mapReduceTriplets(et => Iterator((et.dstId,1)), _ + _)
     } else if (edgeDirection == EdgeDirection.Out) {
@@ -114,10 +113,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
       reduceFunc: (A, A) => A,
       dir: EdgeDirection)
-    : VertexSetRDD[A] = {
-
-    ClosureCleaner.clean(mapFunc)
-    ClosureCleaner.clean(reduceFunc)
+    : VertexRDD[A] = {
 
     // Define a new map function over edge triplets
     val mf = (et: EdgeTriplet[VD,ED]) => {
@@ -140,7 +136,6 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
       }
     }
 
-    ClosureCleaner.clean(mf)
     graph.mapReduceTriplets(mf, reduceFunc)
   } // end of aggregateNeighbors
 
@@ -154,7 +149,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * @return the vertex set of neighboring ids for each vertex.
    */
   def collectNeighborIds(edgeDirection: EdgeDirection) :
-    VertexSetRDD[Array[Vid]] = {
+    VertexRDD[Array[Vid]] = {
     val nbrs =
       if (edgeDirection == EdgeDirection.Both) {
         graph.mapReduceTriplets[Array[Vid]](
@@ -190,7 +185,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * vertex.
    */
   def collectNeighbors(edgeDirection: EdgeDirection) :
-    VertexSetRDD[ Array[(Vid, VD)] ] = {
+    VertexRDD[ Array[(Vid, VD)] ] = {
     val nbrs = graph.aggregateNeighbors[Array[(Vid,VD)]](
       (vid, edge) =>
         Some(Array( (edge.otherVertexId(vid), edge.otherVertexAttr(vid)) )),
@@ -233,14 +228,12 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    */
   def joinVertices[U: ClassManifest](table: RDD[(Vid, U)])(mapFunc: (Vid, VD, U) => VD)
     : Graph[VD, ED] = {
-    ClosureCleaner.clean(mapFunc)
     val uf = (id: Vid, data: VD, o: Option[U]) => {
       o match {
         case Some(u) => mapFunc(id, data, u)
         case None => data
       }
     }
-    ClosureCleaner.clean(uf)
     graph.outerJoinVertices(table)(uf)
   }
 

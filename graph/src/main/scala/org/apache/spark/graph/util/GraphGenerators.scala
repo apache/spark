@@ -268,14 +268,14 @@ object GraphGenerators {
    * Create a star graph with vertex 0 being the center.
    *
    * @param sc the spark context in which to construct the graph
-   * @param the number of vertices in the star
+   * @param nverts the number of vertices in the star
    *
    * @return A star graph containing `nverts` vertices with vertex 0
    * being the center vertex.
    */
   def starGraph(sc: SparkContext, nverts: Int): Graph[Int, Int] = {
     val edges: RDD[(Vid, Vid)] = sc.parallelize(1 until nverts).map(vid => (vid, 0))
-    Graph(edges, 1)
+    Graph.fromEdgeTuples(edges, 1)
   } // end of starGraph
 
 

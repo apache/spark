@@ -1,6 +1,8 @@
 package org.apache.spark.graph
 
 import org.apache.spark._
+import org.apache.spark.graph.algorithms._
+
 
 /**
  * The Analytics object contains a collection of basic graph analytics
@@ -11,272 +13,6 @@ import org.apache.spark._
  * formats.
  */
 object Analytics extends Logging {
-
-  /**
-   * Run PageRank for a fixed number of iterations returning a graph
-   * with vertex attributes containing the PageRank and edge
-   * attributes the normalized edge weight.
-   *
-   * The following PageRank fixed point is computed for each vertex.
-   *
-   * {{{
-   * var PR = Array.fill(n)( 1.0 )
-   * val oldPR = Array.fill(n)( 1.0 )
-   * for( iter <- 0 until numIter ) {
-   *   swap(oldPR, PR)
-   *   for( i <- 0 until n ) {
-   *     PR[i] = alpha + (1 - alpha) * inNbrs[i].map(j => oldPR[j] / outDeg[j]).sum
-   *   }
-   * }
-   * }}}
-   *
-   * where `alpha` is the random reset probability (typically 0.15),
-   * `inNbrs[i]` is the set of neighbors whick link to `i` and
-   * `outDeg[j]` is the out degree of vertex `j`.
-   *
-   * Note that this is not the "normalized" PageRank and as a
-   * consequence pages that have no inlinks will have a PageRank of
-   * alpha.
-   *
-   * @tparam VD the original vertex attribute (not used)
-   * @tparam ED the original edge attribute (not used)
-   *
-   * @param graph the graph on which to compute PageRank
-   * @param numIter the number of iterations of PageRank to run
-   * @param resetProb the random reset probability (alpha)
-   *
-   * @return the graph containing with each vertex containing the
-   * PageRank and each edge containing the normalized weight.
-   *
-   */
-  def pagerank[VD: Manifest, ED: Manifest](
-    graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15):
-    Graph[Double, Double] = {
-
-    /**
-     * Initialize the pagerankGraph with each edge attribute having
-     * weight 1/outDegree and each vertex with attribute 1.0.
-     */
-    val pagerankGraph: Graph[Double, Double] = graph
-      // Associate the degree with each vertex
-      .outerJoinVertices(graph.outDegrees){
-        (vid, vdata, deg) => deg.getOrElse(0)
-      }
-      // Set the weight on the edges based on the degree
-      .mapTriplets( e => 1.0 / e.srcAttr )
-      // Set the vertex attributes to the initial pagerank values
-      .mapVertices( (id, attr) => 1.0 )
-
-    // Display statistics about pagerank
-    println(pagerankGraph.statistics)
-
-    // Define the three functions needed to implement PageRank in the GraphX
-    // version of Pregel
-    def vertexProgram(id: Vid, attr: Double, msgSum: Double): Double =
-      resetProb + (1.0 - resetProb) * msgSum
-    def sendMessage(edge: EdgeTriplet[Double, Double]) =
-      Iterator((edge.dstId, edge.srcAttr * edge.attr))
-    def messageCombiner(a: Double, b: Double): Double = a + b
-    // The initial message received by all vertices in PageRank
-    val initialMessage = 0.0
-
-    // Execute pregel for a fixed number of iterations.
-    Pregel(pagerankGraph, initialMessage, numIter)(
-      vertexProgram, sendMessage, messageCombiner)
-  }
-
-
-  /**
-   * Run a dynamic version of PageRank returning a graph with vertex
-   * attributes containing the PageRank and edge attributes containing
-   * the normalized edge weight.
-   *
-   * {{{
-   * var PR = Array.fill(n)( 1.0 )
-   * val oldPR = Array.fill(n)( 0.0 )
-   * while( max(abs(PR - oldPr)) > tol ) {
-   *   swap(oldPR, PR)
-   *   for( i <- 0 until n if abs(PR[i] - oldPR[i]) > tol ) {
-   *     PR[i] = alpha + (1 - \alpha) * inNbrs[i].map(j => oldPR[j] / outDeg[j]).sum
-   *   }
-   * }
-   * }}}
-   *
-   * where `alpha` is the random reset probability (typically 0.15),
-   * `inNbrs[i]` is the set of neighbors whick link to `i` and
-   * `outDeg[j]` is the out degree of vertex `j`.
-   *
-   * Note that this is not the "normalized" PageRank and as a
-   * consequence pages that have no inlinks will have a PageRank of
-   * alpha.
-   *
-   * @tparam VD the original vertex attribute (not used)
-   * @tparam ED the original edge attribute (not used)
-   *
-   * @param graph the graph on which to compute PageRank
-   * @param tol the tolerance allowed at convergence (smaller => more
-   * accurate).
-   * @param resetProb the random reset probability (alpha)
-   *
-   * @return the graph containing with each vertex containing the
-   * PageRank and each edge containing the normalized weight.
-   */
-  def deltaPagerank[VD: Manifest, ED: Manifest](
-    graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15):
-    Graph[Double, Double] = {
-
-    /**
-     * Initialize the pagerankGraph with each edge attribute
-     * having weight 1/outDegree and each vertex with attribute 1.0.
-     */
-    val pagerankGraph: Graph[(Double, Double), Double] = graph
-      // Associate the degree with each vertex
-      .outerJoinVertices(graph.outDegrees){
-        (vid, vdata, deg) => deg.getOrElse(0)
-      }
-      // Set the weight on the edges based on the degree
-      .mapTriplets( e => 1.0 / e.srcAttr )
-      // Set the vertex attributes to (initalPR, delta = 0)
-      .mapVertices( (id, attr) => (0.0, 0.0) )
-
-    // Display statistics about pagerank
-    println(pagerankGraph.statistics)
-
-    // Define the three functions needed to implement PageRank in the GraphX
-    // version of Pregel
-    def vertexProgram(id: Vid, attr: (Double, Double), msgSum: Double): (Double, Double) = {
-      val (oldPR, lastDelta) = attr
-      val newPR = oldPR + (1.0 - resetProb) * msgSum
-      (newPR, newPR - oldPR)
-    }
-    def sendMessage(edge: EdgeTriplet[(Double, Double), Double]) = {
-      if (edge.srcAttr._2 > tol) {
-        Iterator((edge.dstId, edge.srcAttr._2 * edge.attr))
-      } else {
-        Iterator.empty
-      }
-    }
-    def messageCombiner(a: Double, b: Double): Double = a + b
-    // The initial message received by all vertices in PageRank
-    val initialMessage = resetProb / (1.0 - resetProb)
-
-    // Execute a dynamic version of Pregel.
-    Pregel(pagerankGraph, initialMessage)(
-      vertexProgram, sendMessage, messageCombiner)
-      .mapVertices( (vid, attr) => attr._1 )
-  } // end of deltaPageRank
-
-
-  /**
-   * Compute the connected component membership of each vertex and
-   * return an RDD with the vertex value containing the lowest vertex
-   * id in the connected component containing that vertex.
-   *
-   * @tparam VD the vertex attribute type (discarded in the
-   * computation)
-   * @tparam ED the edge attribute type (preserved in the computation)
-   *
-   * @param graph the graph for which to compute the connected
-   * components
-   *
-   * @return a graph with vertex attributes containing the smallest
-   * vertex in each connected component
-   */
-  def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]):
-    Graph[Vid, ED] = {
-    val ccGraph = graph.mapVertices { case (vid, _) => vid }
-
-    def sendMessage(edge: EdgeTriplet[Vid, ED]) = {
-      if (edge.srcAttr < edge.dstAttr) {
-        Iterator((edge.dstId, edge.srcAttr))
-      } else if (edge.srcAttr > edge.dstAttr) {
-        Iterator((edge.srcId, edge.dstAttr))
-      } else {
-        Iterator.empty
-      }
-    }
-    val initialMessage = Long.MaxValue
-    Pregel(ccGraph, initialMessage)(
-      (id, attr, msg) => math.min(attr, msg),
-      sendMessage,
-      (a,b) => math.min(a,b)
-      )
-  } // end of connectedComponents
-
-
-  /**
-   * Compute the number of triangles passing through each vertex.
-   *
-   * The algorithm is relatively straightforward and can be computed in
-   * three steps:
-   *
-   * 1) Compute the set of neighbors for each vertex
-   * 2) For each edge compute the intersection of the sets and send the
-   *    count to both vertices.
-   * 3) Compute the sum at each vertex and divide by two since each
-   *    triangle is counted twice.
-   *
-   *
-   * @param graph a graph with `sourceId` less than `destId`
-   * @tparam VD
-   * @tparam ED
-   * @return
-   */
-  def triangleCount[VD: ClassManifest, ED: ClassManifest](rawGraph: Graph[VD,ED]):
-    Graph[Int, ED] = {
-    // Remove redundant edges
-    val graph = rawGraph.groupEdges( (a,b) => a ).cache
-
-    // Construct set representations of the neighborhoods
-    val nbrSets: VertexSetRDD[VertexSet] =
-      graph.collectNeighborIds(EdgeDirection.Both).mapValuesWithKeys { (vid, nbrs) =>
-      val set = new VertexSet(4)
-      var i = 0
-      while (i < nbrs.size) {
-        // prevent self cycle
-        if(nbrs(i) != vid) {
-          set.add(nbrs(i))
-        }
-        i += 1
-      }
-      set
-    }
-    // join the sets with the graph
-    val setGraph: Graph[VertexSet, ED] = graph.outerJoinVertices(nbrSets) {
-      (vid, _, optSet) => optSet.getOrElse(null)
-    }
-    // Edge function computes intersection of smaller vertex with larger vertex
-    def edgeFunc(et: EdgeTriplet[VertexSet, ED]): Iterator[(Vid, Int)] = {
-      assert(et.srcAttr != null)
-      assert(et.dstAttr != null)
-      val (smallSet, largeSet) = if (et.srcAttr.size < et.dstAttr.size) {
-        (et.srcAttr, et.dstAttr)
-      } else {
-        (et.dstAttr, et.srcAttr)
-      }
-      val iter = smallSet.iterator()
-      var counter: Int = 0
-      while (iter.hasNext) {
-        val vid = iter.next
-        if (vid != et.srcId && vid != et.dstId && largeSet.contains(vid)) { counter += 1 }
-      }
-      Iterator((et.srcId, counter), (et.dstId, counter))
-    }
-    // compute the intersection along edges
-    val counters: VertexSetRDD[Int] = setGraph.mapReduceTriplets(edgeFunc, _ + _)
-    // Merge counters with the graph and divide by two since each triangle is counted twice
-    graph.outerJoinVertices(counters) {
-      (vid, _, optCounter: Option[Int]) =>
-      val dblCount = optCounter.getOrElse(0)
-      // double count should be even (divisible by two)
-      assert((dblCount & 1) == 0)
-      dblCount / 2
-    }
-
-  } // end of TriangleCount
-
-
-
 
   def main(args: Array[String]) = {
     val host = args(0)
@@ -301,10 +37,10 @@ object Analytics extends Logging {
 
     def pickPartitioner(v: String): PartitionStrategy = {
       v match {
-         case "RandomVertexCut" => RandomVertexCut()
-         case "EdgePartition1D" => EdgePartition1D()
-         case "EdgePartition2D" => EdgePartition2D()
-         case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut()
+         case "RandomVertexCut" => RandomVertexCut
+         case "EdgePartition1D" => EdgePartition1D
+         case "EdgePartition2D" => EdgePartition2D
+         case "CanonicalRandomVertexCut" => CanonicalRandomVertexCut
          case _ => throw new IllegalArgumentException("Invalid Partition Strategy: " + v)
        }
     }
@@ -318,102 +54,91 @@ object Analytics extends Logging {
      taskType match {
        case "pagerank" => {
 
-         var numIter = Int.MaxValue
-         var isDynamic = false
          var tol:Float = 0.001F
          var outFname = ""
          var numVPart = 4
          var numEPart = 4
-         var partitionStrategy: PartitionStrategy = RandomVertexCut()
+         var partitionStrategy: Option[PartitionStrategy] = None
 
          options.foreach{
-           case ("numIter", v) => numIter = v.toInt
-           case ("dynamic", v) => isDynamic = v.toBoolean
            case ("tol", v) => tol = v.toFloat
            case ("output", v) => outFname = v
            case ("numVPart", v) => numVPart = v.toInt
            case ("numEPart", v) => numEPart = v.toInt
-           case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
+           case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
            case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
          }
 
-         if(!isDynamic && numIter == Int.MaxValue) {
-           println("Set number of iterations!")
-           sys.exit(1)
-         }
          println("======================================")
          println("|             PageRank               |")
-         println("--------------------------------------")
-         println(" Using parameters:")
-         println(" \tDynamic:  " + isDynamic)
-         if(isDynamic) println(" \t  |-> Tolerance: " + tol)
-         println(" \tNumIter:  " + numIter)
          println("======================================")
 
          val sc = new SparkContext(host, "PageRank(" + fname + ")")
 
-         val graph = GraphLoader.edgeListFile(sc, fname,
-          minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
+         val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
+           minEdgePartitions = numEPart).cache()
+         val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
 
-         val startTime = System.currentTimeMillis
-         logInfo("GRAPHX: starting tasks")
-         logInfo("GRAPHX: Number of vertices " + graph.vertices.count)
-         logInfo("GRAPHX: Number of edges " + graph.edges.count)
+         println("GRAPHX: Number of vertices " + graph.vertices.count)
+         println("GRAPHX: Number of edges " + graph.edges.count)
 
          //val pr = Analytics.pagerank(graph, numIter)
-          val pr = if(isDynamic) Analytics.deltaPagerank(graph, tol, numIter)
-            else  Analytics.pagerank(graph, numIter)
-         logInfo("GRAPHX: Total rank: " + pr.vertices.map{ case (id,r) => r }.reduce(_+_) )
+         val pr = PageRank.runStandalone(graph, tol)
+
+         println("GRAPHX: Total rank: " + pr.map(_._2).reduce(_+_))
+
          if (!outFname.isEmpty) {
-           println("Saving pageranks of pages to " + outFname)
-           pr.vertices.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
+           logWarning("Saving pageranks of pages to " + outFname)
+           pr.map{case (id, r) => id + "\t" + r}.saveAsTextFile(outFname)
          }
-         logInfo("GRAPHX: Runtime:    " + ((System.currentTimeMillis - startTime)/1000.0) + " seconds")
 
          sc.stop()
        }
 
         case "cc" => {
 
-           var numIter = Int.MaxValue
-           var numVPart = 4
-           var numEPart = 4
-           var isDynamic = false
-           var partitionStrategy: PartitionStrategy = RandomVertexCut()
+          var numIter = Int.MaxValue
+          var numVPart = 4
+          var numEPart = 4
+          var isDynamic = false
+          var partitionStrategy: Option[PartitionStrategy] = None
 
-           options.foreach{
-             case ("numIter", v) => numIter = v.toInt
-             case ("dynamic", v) => isDynamic = v.toBoolean
-             case ("numEPart", v) => numEPart = v.toInt
-             case ("numVPart", v) => numVPart = v.toInt
-             case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
-             case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
-           }
+          options.foreach{
+            case ("numIter", v) => numIter = v.toInt
+            case ("dynamic", v) => isDynamic = v.toBoolean
+            case ("numEPart", v) => numEPart = v.toInt
+            case ("numVPart", v) => numVPart = v.toInt
+            case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
+            case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
+          }
 
-           if(!isDynamic && numIter == Int.MaxValue) {
-             println("Set number of iterations!")
-             sys.exit(1)
-           }
-           println("======================================")
-           println("|      Connected Components          |")
-           println("--------------------------------------")
-           println(" Using parameters:")
-           println(" \tDynamic:  " + isDynamic)
-           println(" \tNumIter:  " + numIter)
-           println("======================================")
+          if(!isDynamic && numIter == Int.MaxValue) {
+            println("Set number of iterations!")
+            sys.exit(1)
+          }
+          println("======================================")
+          println("|      Connected Components          |")
+          println("--------------------------------------")
+          println(" Using parameters:")
+          println(" \tDynamic:  " + isDynamic)
+          println(" \tNumIter:  " + numIter)
+          println("======================================")
 
-           val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")")
-           val graph = GraphLoader.edgeListFile(sc, fname,
-            minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
-           val cc = Analytics.connectedComponents(graph)
-           println("Components: " + cc.vertices.map{ case (vid,data) => data}.distinct())
-           sc.stop()
-         }
+          val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")")
+          val unpartitionedGraph = GraphLoader.edgeListFile(sc, fname,
+            minEdgePartitions = numEPart).cache()
+          val graph = partitionStrategy.foldLeft(unpartitionedGraph)(_.partitionBy(_))
+
+          val cc = ConnectedComponents.run(graph)
+          println("Components: " + cc.vertices.map{ case (vid,data) => data}.distinct())
+          sc.stop()
+        }
 
        case "triangles" => {
          var numVPart = 4
          var numEPart = 4
-         var partitionStrategy: PartitionStrategy = RandomVertexCut()
+         // TriangleCount requires the graph to be partitioned
+         var partitionStrategy: PartitionStrategy = RandomVertexCut
 
          options.foreach{
            case ("numEPart", v) => numEPart = v.toInt
@@ -426,8 +151,8 @@ object Analytics extends Logging {
          println("--------------------------------------")
          val sc = new SparkContext(host, "TriangleCount(" + fname + ")")
          val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
-           minEdgePartitions = numEPart, partitionStrategy=partitionStrategy).cache()
-         val triangles = Analytics.triangleCount(graph)
+           minEdgePartitions = numEPart).partitionBy(partitionStrategy).cache()
+         val triangles = TriangleCount.run(graph)
          println("Triangles: " + triangles.vertices.map {
             case (vid,data) => data.toLong
           }.reduce(_+_) / 3)
@@ -535,42 +260,6 @@ object Analytics extends Logging {
        }
      }
    }
-
-  // /**
-  //  * Compute the PageRank of a graph returning the pagerank of each vertex as an RDD
-  //  */
-  // def dynamicPagerank[VD: Manifest, ED: Manifest](graph: Graph[VD, ED],
-  //   tol: Double, maxIter: Int = 10) = {
-  //   // Compute the out degree of each vertex
-  //   val pagerankGraph = graph.updateVertices[Int, (Int, Double, Double)](graph.outDegrees,
-  //     (vertex, degIter) => (degIter.sum, 1.0, 1.0)
-  //   )
-
-  //   // Run PageRank
-  //   GraphLab.iterateGAS(pagerankGraph)(
-  //     (me_id, edge) => edge.src.data._2 / edge.src.data._1, // gather
-  //     (a: Double, b: Double) => a + b,
-  //     (vertex, a: Option[Double]) =>
-  //       (vertex.data._1, (0.15 + 0.85 * a.getOrElse(0.0)), vertex.data._2), // apply
-  //     (me_id, edge) => math.abs(edge.src.data._2 - edge.dst.data._1) > tol, // scatter
-  //     maxIter).mapVertices { case Vertex(vid, data) => Vertex(vid, data._2) }
-  // }
-
-  // /**
-  //  * Compute the connected component membership of each vertex
-  //  * and return an RDD with the vertex value containing the
-  //  * lowest vertex id in the connected component containing
-  //  * that vertex.
-  //  */
-  // def connectedComponents[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int) = {
-  //   val ccGraph = graph.mapVertices { case Vertex(vid, _) => Vertex(vid, vid) }
-  //   GraphLab.iterateGA[Int, ED, Int](ccGraph)(
-  //     (me_id, edge) => edge.otherVertex(me_id).data, // gather
-  //     (a: Int, b: Int) => math.min(a, b), // merge
-  //     (v, a: Option[Int]) => math.min(v.data, a.getOrElse(Integer.MAX_VALUE)), // apply
-  //     numIter,
-  //     gatherDirection = EdgeDirection.Both)
-  // }
 
   // /**
   //  * Compute the shortest path to a set of markers

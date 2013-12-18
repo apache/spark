@@ -3,8 +3,27 @@ package org.apache.spark.graph.impl
 import java.io.{EOFException, InputStream, OutputStream}
 import java.nio.ByteBuffer
 
+import org.apache.spark.graph._
 import org.apache.spark.serializer._
 
+class VidMsgSerializer extends Serializer {
+  override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
+
+    override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
+      def writeObject[T](t: T) = {
+        val msg = t.asInstanceOf[(Vid, _)]
+        writeVarLong(msg._1, optimizePositive = false)
+        this
+      }
+    }
+
+    override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
+      override def readObject[T](): T = {
+        (readVarLong(optimizePositive = false), null).asInstanceOf[T]
+      }
+    }
+  }
+}
 
 /** A special shuffle serializer for VertexBroadcastMessage[Int]. */
 class IntVertexBroadcastMsgSerializer extends Serializer {
@@ -13,7 +32,7 @@ class IntVertexBroadcastMsgSerializer extends Serializer {
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
         val msg = t.asInstanceOf[VertexBroadcastMsg[Int]]
-        writeLong(msg.vid)
+        writeVarLong(msg.vid, optimizePositive = false)
         writeInt(msg.data)
         this
       }
@@ -21,7 +40,9 @@ class IntVertexBroadcastMsgSerializer extends Serializer {
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
       override def readObject[T](): T = {
-        new VertexBroadcastMsg[Int](0, readLong(), readInt()).asInstanceOf[T]
+        val a = readVarLong(optimizePositive = false)
+        val b = readInt()
+        new VertexBroadcastMsg[Int](0, a, b).asInstanceOf[T]
       }
     }
   }
@@ -34,7 +55,7 @@ class LongVertexBroadcastMsgSerializer extends Serializer {
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
         val msg = t.asInstanceOf[VertexBroadcastMsg[Long]]
-        writeLong(msg.vid)
+        writeVarLong(msg.vid, optimizePositive = false)
         writeLong(msg.data)
         this
       }
@@ -42,7 +63,7 @@ class LongVertexBroadcastMsgSerializer extends Serializer {
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
       override def readObject[T](): T = {
-        val a = readLong()
+        val a = readVarLong(optimizePositive = false)
         val b = readLong()
         new VertexBroadcastMsg[Long](0, a, b).asInstanceOf[T]
       }
@@ -57,7 +78,7 @@ class DoubleVertexBroadcastMsgSerializer extends Serializer {
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
         val msg = t.asInstanceOf[VertexBroadcastMsg[Double]]
-        writeLong(msg.vid)
+        writeVarLong(msg.vid, optimizePositive = false)
         writeDouble(msg.data)
         this
       }
@@ -65,7 +86,7 @@ class DoubleVertexBroadcastMsgSerializer extends Serializer {
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
       def readObject[T](): T = {
-        val a = readLong()
+        val a = readVarLong(optimizePositive = false)
         val b = readDouble()
         new VertexBroadcastMsg[Double](0, a, b).asInstanceOf[T]
       }
@@ -73,25 +94,24 @@ class DoubleVertexBroadcastMsgSerializer extends Serializer {
   }
 }
 
-
 /** A special shuffle serializer for AggregationMessage[Int]. */
 class IntAggMsgSerializer extends Serializer {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[AggregationMsg[Int]]
-        writeLong(msg.vid)
-        writeUnsignedVarInt(msg.data)
+        val msg = t.asInstanceOf[(Vid, Int)]
+        writeVarLong(msg._1, optimizePositive = false)
+        writeUnsignedVarInt(msg._2)
         this
       }
     }
 
     override def deserializeStream(s: InputStream) = new ShuffleDeserializationStream(s) {
       override def readObject[T](): T = {
-        val a = readLong()
+        val a = readVarLong(optimizePositive = false)
         val b = readUnsignedVarInt()
-        new AggregationMsg[Int](a, b).asInstanceOf[T]
+        (a, b).asInstanceOf[T]
       }
     }
   }
@@ -103,9 +123,9 @@ class LongAggMsgSerializer extends Serializer {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[AggregationMsg[Long]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeVarLong(msg.data, optimizePositive = true)
+        val msg = t.asInstanceOf[(Vid, Long)]
+        writeVarLong(msg._1, optimizePositive = false)
+        writeVarLong(msg._2, optimizePositive = true)
         this
       }
     }
@@ -114,12 +134,11 @@ class LongAggMsgSerializer extends Serializer {
       override def readObject[T](): T = {
         val a = readVarLong(optimizePositive = false)
         val b = readVarLong(optimizePositive = true)
-        new AggregationMsg[Long](a, b).asInstanceOf[T]
+        (a, b).asInstanceOf[T]
       }
     }
   }
 }
-
 
 /** A special shuffle serializer for AggregationMessage[Double]. */
 class DoubleAggMsgSerializer extends Serializer {
@@ -127,9 +146,9 @@ class DoubleAggMsgSerializer extends Serializer {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[AggregationMsg[Double]]
-        writeVarLong(msg.vid, optimizePositive = false)
-        writeDouble(msg.data)
+        val msg = t.asInstanceOf[(Vid, Double)]
+        writeVarLong(msg._1, optimizePositive = false)
+        writeDouble(msg._2)
         this
       }
     }
@@ -138,7 +157,7 @@ class DoubleAggMsgSerializer extends Serializer {
       def readObject[T](): T = {
         val a = readVarLong(optimizePositive = false)
         val b = readDouble()
-        new AggregationMsg[Double](a, b).asInstanceOf[T]
+        (a, b).asInstanceOf[T]
       }
     }
   }
@@ -148,7 +167,7 @@ class DoubleAggMsgSerializer extends Serializer {
 // Helper classes to shorten the implementation of those special serializers.
 ////////////////////////////////////////////////////////////////////////////////
 
-sealed abstract class ShuffleSerializationStream(s: OutputStream) extends SerializationStream {
+abstract class ShuffleSerializationStream(s: OutputStream) extends SerializationStream {
   // The implementation should override this one.
   def writeObject[T](t: T): SerializationStream
 
@@ -261,8 +280,7 @@ sealed abstract class ShuffleSerializationStream(s: OutputStream) extends Serial
   override def close(): Unit = s.close()
 }
 
-
-sealed abstract class ShuffleDeserializationStream(s: InputStream) extends DeserializationStream {
+abstract class ShuffleDeserializationStream(s: InputStream) extends DeserializationStream {
   // The implementation should override this one.
   def readObject[T](): T
 
@@ -277,7 +295,7 @@ sealed abstract class ShuffleDeserializationStream(s: InputStream) extends Deser
     var i: Int = 0
     def readOrThrow(): Int = {
       val in = s.read()
-      if (in < 0) throw new java.io.EOFException
+      if (in < 0) throw new EOFException
       in & 0xFF
     }
     var b: Int = readOrThrow()
@@ -291,22 +309,45 @@ sealed abstract class ShuffleDeserializationStream(s: InputStream) extends Deser
   }
 
   def readVarLong(optimizePositive: Boolean): Long = {
-    // TODO: unroll the while loop.
-    var value: Long = 0L
-    var i: Int = 0
     def readOrThrow(): Int = {
       val in = s.read()
-      if (in < 0) throw new java.io.EOFException
+      if (in < 0) throw new EOFException
       in & 0xFF
     }
-    var b: Int = readOrThrow()
-    while ((b & 0x80) != 0) {
-      value |= (b & 0x7F).toLong << i
-      i += 7
-      if (i > 63) throw new IllegalArgumentException("Variable length quantity is too long")
+    var b = readOrThrow()
+    var ret: Long = b & 0x7F
+    if ((b & 0x80) != 0) {
       b = readOrThrow()
+      ret |= (b & 0x7F) << 7
+      if ((b & 0x80) != 0) {
+        b = readOrThrow()
+        ret |= (b & 0x7F) << 14
+        if ((b & 0x80) != 0) {
+          b = readOrThrow()
+          ret |= (b & 0x7F) << 21
+          if ((b & 0x80) != 0) {
+            b = readOrThrow()
+            ret |= (b & 0x7F).toLong << 28
+            if ((b & 0x80) != 0) {
+              b = readOrThrow()
+              ret |= (b & 0x7F).toLong << 35
+              if ((b & 0x80) != 0) {
+                b = readOrThrow()
+                ret |= (b & 0x7F).toLong << 42
+                if ((b & 0x80) != 0) {
+                  b = readOrThrow()
+                  ret |= (b & 0x7F).toLong << 49
+                  if ((b & 0x80) != 0) {
+                    b = readOrThrow()
+                    ret |= b.toLong << 56
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
     }
-    val ret = value | (b.toLong << i)
     if (!optimizePositive) (ret >>> 1) ^ -(ret & 1) else ret
   }
 
@@ -328,7 +369,6 @@ sealed abstract class ShuffleDeserializationStream(s: InputStream) extends Deser
 
   override def close(): Unit = s.close()
 }
-
 
 sealed trait ShuffleSerializerInstance extends SerializerInstance {
 
