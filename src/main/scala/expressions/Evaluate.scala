@@ -111,6 +111,7 @@ object Evaluate extends Logging {
 
       /* Casts */
       case Cast(e, StringType) => eval(e).toString
+      case Cast(e, IntegerType) if e.dataType == StringType => eval(e).asInstanceOf[String].toInt
 
       /* Boolean Logic */
       case Not(c) => !eval(c).asInstanceOf[Boolean]
