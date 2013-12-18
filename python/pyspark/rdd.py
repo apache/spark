@@ -577,7 +577,7 @@ class RDD(object):
         mapped = self.mapPartitions(takeUpToNum)
         items = []
         for partition in range(mapped._jrdd.splits().size()):
-            iterator = self.ctx._takePartition(mapped._jrdd.rdd(), partition)
+            iterator = mapped._jrdd.collectPartition(partition).iterator()
             items.extend(mapped._collect_iterator_through_file(iterator))
             if len(items) >= num:
                 break
