@@ -17,14 +17,22 @@
 
 package org.apache.spark.streaming.scheduler
 
+import scala.collection.mutable.Queue
+import org.apache.spark.util.Distribution
+
+/** Base trait for events related to StreamingListener */
 sealed trait StreamingListenerEvent
 
 case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
 case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
-trait StreamingListener {
 
+/**
+ * A listener interface for receiving information about an ongoing streaming
+ * computation.
+ */
+trait StreamingListener {
   /**
    * Called when processing of a batch has completed
    */
@@ -34,4 +42,39 @@ trait StreamingListener {
    * Called when processing of a batch has started
    */
   def onBatchStarted(batchStarted: StreamingListenerBatchStarted) { }
+}
+
+
+/**
+ * A simple StreamingListener that logs summary statistics across Spark Streaming batches
+ * @param numBatchInfos Number of last batches to consider for generating statistics (default: 10)
+ */
+class StatsReportListener(numBatchInfos: Int = 10) extends StreamingListener {
+
+  import org.apache.spark
+
+  val batchInfos = new Queue[BatchInfo]()
+
+  override def onBatchCompleted(batchStarted: StreamingListenerBatchCompleted) {
+    addToQueue(batchStarted.batchInfo)
+    printStats()
+  }
+
+  def addToQueue(newPoint: BatchInfo) {
+    batchInfos.enqueue(newPoint)
+    if (batchInfos.size > numBatchInfos) batchInfos.dequeue()
+  }
+
+  def printStats() {
+    showMillisDistribution("Total delay: ", _.totalDelay)
+    showMillisDistribution("Processing time: ", _.processingDelay)
+  }
+
+  def showMillisDistribution(heading: String, getMetric: BatchInfo => Option[Long]) {
+    spark.scheduler.StatsReportListener.showMillisDistribution(heading, extractDistribution(getMetric))
+  }
+
+  def extractDistribution(getMetric: BatchInfo => Option[Long]): Option[Distribution] = {
+    Distribution(batchInfos.flatMap(getMetric(_)).map(_.toDouble))
+  }
 }

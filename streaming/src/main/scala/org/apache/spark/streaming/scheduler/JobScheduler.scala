@@ -79,13 +79,13 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     jobSet.afterJobStop(job)
     logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
     if (jobSet.hasCompleted) {
-      listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo()))
       jobSets.remove(jobSet.time)
       generator.onBatchCompletion(jobSet.time)
       logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
         jobSet.totalDelay / 1000.0, jobSet.time.toString,
         jobSet.processingDelay / 1000.0
       ))
+      listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo()))
     }
   }
 
