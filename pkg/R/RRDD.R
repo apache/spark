@@ -327,7 +327,8 @@ setMethod("take",
           function(rrdd, num) {
             resList <- list()
             index <- -1
-            numPartitions <- .jcall(rrdd@jrdd, "I", "numPartitions")
+            partitions <- .jcall(rrdd@jrdd, "Ljava/util/List;", "splits")
+            numPartitions <- .jcall(partitions, "I", "size")
             while (TRUE) {
               index <- index + 1
 
