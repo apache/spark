@@ -124,7 +124,7 @@ fi
 
 # Compute classpath using external script
 CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
-CLASSPATH="$SPARK_TOOLS_JAR:$CLASSPATH"
+CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"
 export CLASSPATH
 
 if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
