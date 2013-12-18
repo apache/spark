@@ -1,8 +1,10 @@
 package catalyst
 package shark2
 
-import expressions._
 import org.apache.spark.rdd.RDD
+
+import errors._
+import expressions._
 
 /* Implicits */
 import org.apache.spark.SparkContext._
@@ -15,23 +17,31 @@ case class SparkEquiInnerJoin(
 
   def output = left.output ++ right.output
 
-  def execute() = {
-    val leftWithKeys = generateKeys(leftKeys, left.execute())
-    val rightWithKeys = generateKeys(rightKeys, right.execute())
+  def execute() = attachTree(this, "execute") {
+    val leftWithKeys = left.execute .map { row =>
+      val joinKeys = leftKeys.map(Evaluate(_, Vector(row)))
+      logger.debug(s"Generated left join keys ($leftKeys) => ($joinKeys) given row $row")
+      (joinKeys, row)
+    }
+
+    val rightWithKeys = right.execute().map { row =>
+      val joinKeys = rightKeys.map(Evaluate(_, Vector(Nil, row)))
+      logger.debug(s"Generated right join keys ($rightKeys) => ($joinKeys) given row $row")
+      (joinKeys, row)
+    }
+
     // Do the join.
-    val joined = leftWithKeys.join(rightWithKeys)
+    val joined = filterNulls(leftWithKeys).join(filterNulls(rightWithKeys))
     // Drop join keys and merge input tuples.
     joined.map { case (_, (leftTuple, rightTuple)) => leftTuple ++ rightTuple }
   }
 
   /**
-   * Turns row into (joinKeys, row). Filters any rows where the any of the join keys is null, ensuring three-valued
+   * Filters any rows where the any of the join keys is null, ensuring three-valued
    * logic for the equi-join conditions.
    */
-  protected def generateKeys(keys: Seq[Expression], rdd: RDD[IndexedSeq[Any]]) =
-    rdd.map {
-      case row => (leftKeys.map(Evaluate(_, Vector(row))), row)
-    }.filter {
+  protected def filterNulls(rdd: RDD[(Seq[Any], IndexedSeq[Any])]) =
+    rdd.filter {
       case (key: Seq[_], _) => !key.map(_ == null).reduceLeft(_ || _)
     }
 }
