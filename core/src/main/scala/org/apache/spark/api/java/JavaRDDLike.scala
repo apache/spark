@@ -25,7 +25,7 @@ import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
 
 import org.apache.spark.{SparkContext, Partition, TaskContext}
-import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.{RDD, PartitionPruningRDD}
 import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.api.java.function.{Function2 => JFunction2, Function => JFunction, _}
 import org.apache.spark.partial.{PartialResult, BoundedDouble}
@@ -244,6 +244,15 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     import scala.collection.JavaConversions._
     val arr: java.util.Collection[T] = rdd.collect().toSeq
     new java.util.ArrayList(arr)
+  }
+
+  /**
+   * Return an array that contains all of the elements in a specific partition of this RDD.
+   */
+  def collectPartition(partitionId: Int): JList[T] = {
+    import scala.collection.JavaConversions._
+    val partition = new PartitionPruningRDD[T](rdd, _ == partitionId)
+    new java.util.ArrayList(partition.collect().toSeq)
   }
 
   /**
