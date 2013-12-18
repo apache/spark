@@ -1,9 +1,14 @@
 package org.apache.spark.graph
 
+import scala.util.Random
+
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
+import org.apache.spark.graph.Graph._
 import org.apache.spark.graph.LocalSparkContext._
+import org.apache.spark.graph.impl.EdgePartition
+import org.apache.spark.graph.impl.EdgePartitionBuilder
 import org.apache.spark.rdd._
 
 class GraphSuite extends FunSuite with LocalSparkContext {
@@ -15,7 +20,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val rawEdges = (0L to 100L).zip((1L to 99L) :+ 0L)
       val edges = sc.parallelize(rawEdges)
-      val graph = Graph(edges, 1.0F)
+      val graph = Graph.fromEdgeTuples(edges, 1.0F)
       assert(graph.edges.count() === rawEdges.size)
     }
   }
@@ -35,10 +40,45 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
+  test("core operations") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      val n = 5
+      val star = Graph.fromEdgeTuples(
+        sc.parallelize((1 to n).map(x => (0: Vid, x: Vid)), 3), "v")
+      // triplets
+      assert(star.triplets.map(et => (et.srcId, et.dstId, et.srcAttr, et.dstAttr)).collect.toSet ===
+        (1 to n).map(x => (0: Vid, x: Vid, "v", "v")).toSet)
+      // reverse
+      val reverseStar = star.reverse
+      assert(reverseStar.outDegrees.collect.toSet === (1 to n).map(x => (x: Vid, 1)).toSet)
+      // outerJoinVertices
+      val reverseStarDegrees =
+        reverseStar.outerJoinVertices(reverseStar.outDegrees) { (vid, a, bOpt) => bOpt.getOrElse(0) }
+      val neighborDegreeSums = reverseStarDegrees.mapReduceTriplets(
+        et => Iterator((et.srcId, et.dstAttr), (et.dstId, et.srcAttr)),
+        (a: Int, b: Int) => a + b).collect.toSet
+      assert(neighborDegreeSums === Set((0: Vid, n)) ++ (1 to n).map(x => (x: Vid, 0)))
+      // mapVertices preserving type
+      val mappedVAttrs = reverseStar.mapVertices((vid, attr) => attr + "2")
+      assert(mappedVAttrs.vertices.collect.toSet === (0 to n).map(x => (x: Vid, "v2")).toSet)
+      // mapVertices changing type
+      val mappedVAttrs2 = reverseStar.mapVertices((vid, attr) => attr.length)
+      assert(mappedVAttrs2.vertices.collect.toSet === (0 to n).map(x => (x: Vid, 1)).toSet)
+      // groupEdges
+      val doubleStar = Graph.fromEdgeTuples(
+        sc.parallelize((1 to n).flatMap(x => List((0: Vid, x: Vid), (0: Vid, x: Vid))), 1), "v")
+      val star2 = doubleStar.groupEdges { (a, b) => a}
+      assert(star2.edges.collect.toArray.sorted(Edge.lexicographicOrdering[Int]) ===
+        star.edges.collect.toArray.sorted(Edge.lexicographicOrdering[Int]))
+      assert(star2.vertices.collect.toSet === star.vertices.collect.toSet)
+    }
+  }
+
   test("mapEdges") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "defaultValue")
+      val star = Graph.fromEdgeTuples(
+        sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "v")
       val starWithEdgeAttrs = star.mapEdges(e => e.dstId)
 
       // map(_.copy()) is a workaround for https://github.com/amplab/graphx/issues/25
@@ -50,20 +90,49 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
   test("mapReduceTriplets") {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val n = 3
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 0)
+      val n = 5
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 0)
       val starDeg = star.joinVertices(star.degrees){ (vid, oldV, deg) => deg }
       val neighborDegreeSums = starDeg.mapReduceTriplets(
         edge => Iterator((edge.srcId, edge.dstAttr), (edge.dstId, edge.srcAttr)),
         (a: Int, b: Int) => a + b)
       assert(neighborDegreeSums.collect().toSet === (0 to n).map(x => (x, n)).toSet)
+
+      // activeSetOpt
+      val allPairs = for (x <- 1 to n; y <- 1 to n) yield (x: Vid, y: Vid)
+      val complete = Graph.fromEdgeTuples(sc.parallelize(allPairs, 3), 0)
+      val vids = complete.mapVertices((vid, attr) => vid).cache()
+      val active = vids.vertices.filter { case (vid, attr) => attr % 2 == 0 }
+      val numEvenNeighbors = vids.mapReduceTriplets(et => {
+        // Map function should only run on edges with destination in the active set
+        if (et.dstId % 2 != 0) {
+          throw new Exception("map ran on edge with dst vid %d, which is odd".format(et.dstId))
+        }
+        Iterator((et.srcId, 1))
+      }, (a: Int, b: Int) => a + b, Some((active, EdgeDirection.In))).collect.toSet
+      assert(numEvenNeighbors === (1 to n).map(x => (x: Vid, n / 2)).toSet)
+
+      // outerJoinVertices followed by mapReduceTriplets(activeSetOpt)
+      val ring = Graph.fromEdgeTuples(sc.parallelize((0 until n).map(x => (x: Vid, (x+1) % n: Vid)), 3), 0)
+        .mapVertices((vid, attr) => vid).cache()
+      val changed = ring.vertices.filter { case (vid, attr) => attr % 2 == 1 }.mapValues(-_)
+      val changedGraph = ring.outerJoinVertices(changed) { (vid, old, newOpt) => newOpt.getOrElse(old) }
+      val numOddNeighbors = changedGraph.mapReduceTriplets(et => {
+        // Map function should only run on edges with source in the active set
+        if (et.srcId % 2 != 1) {
+          throw new Exception("map ran on edge with src vid %d, which is even".format(et.dstId))
+        }
+        Iterator((et.dstId, 1))
+      }, (a: Int, b: Int) => a + b, Some(changed, EdgeDirection.Out)).collect.toSet
+      assert(numOddNeighbors === (2 to n by 2).map(x => (x: Vid, 1)).toSet)
+
     }
   }
 
   test("aggregateNeighbors") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 3
-      val star = Graph(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 1)
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 1)
 
       val indegrees = star.aggregateNeighbors(
         (vid, edge) => Some(1),
@@ -103,7 +172,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark(new SparkContext("local", "test")) { sc =>
       val chain = (0 until 100).map(x => (x, (x+1)%100) )
       val rawEdges = sc.parallelize(chain, 3).map { case (s,d) => (s.toLong, d.toLong) }
-      val graph = Graph(rawEdges, 1.0)
+      val graph = Graph.fromEdgeTuples(rawEdges, 1.0)
       val nbrs = graph.collectNeighborIds(EdgeDirection.Both)
       assert(nbrs.count === chain.size)
       assert(graph.numVertices === nbrs.count)
@@ -116,7 +185,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test("projectGraph") {
+  test("mask") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 5
       val vertices = sc.parallelize((0 to n).map(x => (x:Vid, x)))
@@ -140,7 +209,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     }
   }
 
-  test ("filterGraph") {
+  test ("filter") {
     withSpark(new SparkContext("local", "test")) { sc =>
       val n = 5
       val vertices = sc.parallelize((0 to n).map(x => (x:Vid, x)))
@@ -148,7 +217,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val graph: Graph[Int, Int] = Graph(vertices, edges)
       val filteredGraph = graph.filter(
         graph => {
-          val degrees: VertexSetRDD[Int] = graph.outDegrees
+          val degrees: VertexRDD[Int] = graph.outDegrees
           graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
         },
         vpred = (vid: Vid, deg:Int) => deg > 0
@@ -165,18 +234,65 @@ class GraphSuite extends FunSuite with LocalSparkContext {
 
   test("VertexSetRDD") {
     withSpark(new SparkContext("local", "test")) { sc =>
-      val a = sc.parallelize((0 to 100).map(x => (x.toLong, x.toLong)), 5)
-      val b = VertexSetRDD(a).mapValues(x => -x)
-      assert(b.count === 101)
+      val n = 100
+      val a = sc.parallelize((0 to n).map(x => (x.toLong, x.toLong)), 5)
+      val b = VertexRDD(a).mapValues(x => -x).cache() // Allow joining b with a derived RDD of b
+      assert(b.count === n + 1)
       assert(b.leftJoin(a){ (id, a, bOpt) => a + bOpt.get }.map(x=> x._2).reduce(_+_) === 0)
-      val c = VertexSetRDD(a, b.index)
+      val c = b.aggregateUsingIndex[Long](a, (x, y) => x)
       assert(b.leftJoin(c){ (id, b, cOpt) => b + cOpt.get }.map(x=> x._2).reduce(_+_) === 0)
       val d = c.filter(q => ((q._2 % 2) == 0))
       val e = a.filter(q => ((q._2 % 2) == 0))
       assert(d.count === e.count)
       assert(b.zipJoin(c)((id, b, c) => b + c).map(x => x._2).reduce(_+_) === 0)
-
+      val f = b.mapValues(x => if (x % 2 == 0) -x else x)
+      assert(b.diff(f).collect().toSet === (2 to n by 2).map(x => (x.toLong, x.toLong)).toSet)
     }
   }
 
+  test("subgraph") {
+    withSpark(new SparkContext("local", "test")) { sc =>
+      // Create a star graph of 10 veritces.
+      val n = 10
+      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), "v")
+      // Take only vertices whose vids are even
+      val subgraph = star.subgraph(vpred = (vid, attr) => vid % 2 == 0)
+
+      // We should have 5 vertices.
+      assert(subgraph.vertices.collect().toSet === (0 to n by 2).map(x => (x, "v")).toSet)
+
+      // And 4 edges.
+      assert(subgraph.edges.map(_.copy()).collect().toSet === (2 to n by 2).map(x => Edge(0, x, 1)).toSet)
+    }
+  }
+
+  test("EdgePartition.sort") {
+    val edgesFrom0 = List(Edge(0, 1, 0))
+    val edgesFrom1 = List(Edge(1, 0, 0), Edge(1, 2, 0))
+    val sortedEdges = edgesFrom0 ++ edgesFrom1
+    val builder = new EdgePartitionBuilder[Int]
+    for (e <- Random.shuffle(sortedEdges)) {
+      builder.add(e.srcId, e.dstId, e.attr)
+    }
+
+    val edgePartition = builder.toEdgePartition
+    assert(edgePartition.iterator.map(_.copy()).toList === sortedEdges)
+    assert(edgePartition.indexIterator(_ == 0).map(_.copy()).toList === edgesFrom0)
+    assert(edgePartition.indexIterator(_ == 1).map(_.copy()).toList === edgesFrom1)
+  }
+
+  test("EdgePartition.innerJoin") {
+    def makeEdgePartition[A: ClassManifest](xs: Iterable[(Int, Int, A)]): EdgePartition[A] = {
+      val builder = new EdgePartitionBuilder[A]
+      for ((src, dst, attr) <- xs) { builder.add(src: Vid, dst: Vid, attr) }
+      builder.toEdgePartition
+    }
+    val aList = List((0, 1, 0), (1, 0, 0), (1, 2, 0), (5, 4, 0), (5, 5, 0))
+    val bList = List((0, 1, 0), (1, 0, 0), (1, 1, 0), (3, 4, 0), (5, 5, 0))
+    val a = makeEdgePartition(aList)
+    val b = makeEdgePartition(bList)
+
+    assert(a.innerJoin(b) { (src, dst, a, b) => a }.iterator.map(_.copy()).toList ===
+      List(Edge(0, 1, 0), Edge(1, 0, 0), Edge(5, 5, 0)))
+  }
 }
