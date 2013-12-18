@@ -36,3 +36,18 @@ object ConvertNaNs extends Rule[LogicalPlan]{
     }
   }
 }
+
+object PromoteTypes extends Rule[LogicalPlan] {
+  // TODO: Do this generically given some list of type precedence.
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressions {
+      // Skip nodes who's children have not been resolved yet.
+      case e if !e.childrenResolved => e
+
+      case b: BinaryExpression if b.left.dataType == StringType && b.right.dataType == IntegerType =>
+        b.makeCopy(Array(Cast(b.left, IntegerType), b.right))
+      case b: BinaryExpression if b.left.dataType == IntegerType && b.right.dataType == StringType =>
+        b.makeCopy(Array(b.left, Cast(b.right, IntegerType)))
+    }
+  }
+}

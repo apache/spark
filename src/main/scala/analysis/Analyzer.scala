@@ -23,6 +23,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry) extends RuleExecuto
     Batch("Aggregation", Once,
       GlobalAggregates),
     Batch("Type Coersion", fixedPoint,
+      PromoteTypes,
       ConvertNaNs)
   )
 
