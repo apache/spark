@@ -32,10 +32,12 @@ object BindReferences extends Rule[SharkPlan] {
     plan.transform {
       case leafNode: SharkPlan if leafNode.children.isEmpty => leafNode
       case nonLeaf: SharkPlan => attachTree(nonLeaf, "Binding references in operator") {
+        logger.debug(s"Binding references in node ${nonLeaf.simpleString}")
         nonLeaf.transformExpressions {
           case a: AttributeReference => attachTree(a, "Binding attribute") {
             val inputTuple = nonLeaf.children.indexWhere(_.output contains a)
             val ordinal = nonLeaf.children(inputTuple).output.indexWhere(_ == a)
+            logger.debug(s"Binding $a to $inputTuple.$ordinal given input ${nonLeaf.children.map(_.output.mkString("{", ",", "}")).mkString(",")}")
             assert(ordinal != -1, "Reference not found in child plan")
             BoundReference(inputTuple, ordinal, a)
           }
