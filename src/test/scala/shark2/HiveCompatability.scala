@@ -29,6 +29,7 @@ class HiveCompatability extends HiveComaparisionTest {
 
     // This test fails and and exits the JVM.
     "auto_join18_multi_distinct",
+    "join18_multi_distinct",
 
     // Uses a serde that isn't on the classpath... breaks other tests.
     "bucketizedhiveinputformat"
