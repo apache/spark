@@ -44,6 +44,7 @@ object PromoteTypes extends Rule[LogicalPlan] {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
+      // Int <op> String or String <op> Int => Int <op> Int
       case b: BinaryExpression if b.left.dataType == StringType && b.right.dataType == IntegerType =>
         b.makeCopy(Array(Cast(b.left, IntegerType), b.right))
       case b: BinaryExpression if b.left.dataType == IntegerType && b.right.dataType == StringType =>
