@@ -899,7 +899,7 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
-  public void collectPartition() {
+  public void collectPartitions() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7), 3);
 
     JavaPairRDD<Integer, Integer> rdd2 = rdd1.map(new PairFunction<Integer, Integer, Integer>() {
@@ -909,20 +909,25 @@ public class JavaAPISuite implements Serializable {
       }
     });
 
-    Assert.assertEquals(Arrays.asList(1, 2), rdd1.collectPartition(0));
-    Assert.assertEquals(Arrays.asList(3, 4), rdd1.collectPartition(1));
-    Assert.assertEquals(Arrays.asList(5, 6, 7), rdd1.collectPartition(2));
+    List[] parts = rdd1.collectPartitions(new int[] {0});
+    Assert.assertEquals(Arrays.asList(1, 2), parts[0]);
+
+    parts = rdd1.collectPartitions(new int[] {1, 2});
+    Assert.assertEquals(Arrays.asList(3, 4), parts[0]);
+    Assert.assertEquals(Arrays.asList(5, 6, 7), parts[1]);
 
     Assert.assertEquals(Arrays.asList(new Tuple2<Integer, Integer>(1, 1),
                                       new Tuple2<Integer, Integer>(2, 0)),
-                        rdd2.collectPartition(0));
+                        rdd2.collectPartitions(new int[] {0})[0]);
+
+    parts = rdd2.collectPartitions(new int[] {1, 2});
     Assert.assertEquals(Arrays.asList(new Tuple2<Integer, Integer>(3, 1),
                                       new Tuple2<Integer, Integer>(4, 0)),
-                        rdd2.collectPartition(1));
+                        parts[0]);
     Assert.assertEquals(Arrays.asList(new Tuple2<Integer, Integer>(5, 1),
                                       new Tuple2<Integer, Integer>(6, 0),
                                       new Tuple2<Integer, Integer>(7, 1)),
-                        rdd2.collectPartition(2));
+                        parts[1]);
   }
 
 }
