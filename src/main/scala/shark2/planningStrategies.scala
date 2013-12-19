@@ -110,6 +110,14 @@ abstract trait PlanningStrategies {
       expr.references subsetOf plan.outputSet
   }
 
+  object BroadcastNestedLoopJoin extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
+      case logical.Join(left, right, joinType, condition) =>
+        shark2.BroadcastNestedLoopJoin(planLater(left), planLater(right), joinType, condition)(sc) :: Nil
+      case _ => Nil
+    }
+  }
+
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Join(left, right, _, None) => shark2.CartesianProduct(planLater(left), planLater(right)) :: Nil

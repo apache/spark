@@ -123,7 +123,8 @@ object TestShark extends Logging {
       HiveTableScans ::
       DataSinks ::
       BasicOperators ::
-      CartesianProduct :: Nil
+      CartesianProduct ::
+      BroadcastNestedLoopJoin :: Nil
   }
 
   object PrepareForExecution extends RuleExecutor[SharkPlan] {

@@ -37,7 +37,6 @@ object TestData {
 
   val upperCaseData =
     logical.LocalRelation('N.int, 'L.string).loadData(
-      (null, "") ::
         (1, "A") ::
         (2, "B") ::
         (3, "C") ::
@@ -48,7 +47,6 @@ object TestData {
 
   val lowerCaseData =
     logical.LocalRelation('n.int, 'l.string).loadData(
-      (null, "") ::
         (1, "a") ::
         (2, "b") ::
         (3, "c") ::
@@ -191,6 +189,42 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
         (1, null, 2, 2) ::
         (2, 2, 1, null) ::
         (2, 2, 2, 2) :: Nil)
+  }
+
+  test("left outer join") {
+    checkAnswer(
+      upperCaseData.join(lowerCaseData, LeftOuter, Some('n === 'N)),
+      (1, "A", 1, "a") ::
+      (2, "B", 2, "b") ::
+      (3, "C", 3, "c") ::
+      (4, "D", 4, "d") ::
+      (5, "E", null, null) ::
+      (6, "F", null, null) :: Nil)
+  }
+
+  test("right outer join") {
+    checkAnswer(
+      lowerCaseData.join(upperCaseData, RightOuter, Some('n === 'N)),
+      (1, "a", 1, "A") ::
+      (2, "b", 2, "B") ::
+      (3, "c", 3, "C") ::
+      (4, "d", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
+  }
+
+  test("full outer join") {
+    val left = upperCaseData.where('N <= 4).subquery('left)
+    val right = upperCaseData.where('N >= 3).subquery('right)
+
+    checkAnswer(
+      left.join(right, FullOuter, Some("left.N".attr === "right.N".attr)),
+      (1, "A", null, null) ::
+      (2, "B", null, null) ::
+      (3, "C", 3, "C") ::
+      (4, "D", 4, "D") ::
+      (null, null, 5, "E") ::
+      (null, null, 6, "F") :: Nil)
   }
 
   /**
