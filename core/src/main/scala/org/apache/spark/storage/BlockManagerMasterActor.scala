@@ -21,17 +21,15 @@ import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
 import scala.collection.JavaConversions._
+import scala.concurrent.Future
+import scala.concurrent.duration._
 
 import akka.actor.{Actor, ActorRef, Cancellable}
 import akka.pattern.ask
 
-import scala.concurrent.duration._
-import scala.concurrent.Future
-
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
-import org.apache.spark.util.Utils
-
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of
@@ -50,8 +48,7 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
   // Mapping from block id to the set of block managers that have the block.
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
-  val akkaTimeout = Duration.create(
-    System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
+  private val akkaTimeout = AkkaUtils.askTimeout
 
   initLogging()
 
