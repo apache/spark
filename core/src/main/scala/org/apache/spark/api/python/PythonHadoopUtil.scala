@@ -14,11 +14,12 @@ private[python] object PythonHadoopUtil {
     conf
   }
 
-  /* Merges two configurations, keys from right overwrite any matching keys in left */
+  /* Merges two configurations, returns a copy of left with keys from right overwriting any matching keys in left */
   def mergeConfs(left: Configuration, right: Configuration) = {
     import collection.JavaConversions._
-    right.iterator().foreach(entry => left.set(entry.getKey, entry.getValue))
-    left
+    val copy = new Configuration(left)
+    right.iterator().foreach(entry => copy.set(entry.getKey, entry.getValue))
+    copy
   }
 
 }
