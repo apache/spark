@@ -349,9 +349,7 @@ private[spark] object PythonRDD extends Logging {
     rdd
   }
 
-  // **** //
-
-  def writeToStream(elem: Any, dataOut: DataOutputStream)(implicit m: ClassManifest[Any]) {
+  def writeToStream(elem: Any, dataOut: DataOutputStream) {
     elem match {
       case bytes: Array[Byte] =>
         dataOut.writeInt(bytes.length)
