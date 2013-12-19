@@ -46,6 +46,7 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
       hadoopReader.makeRDDForPartitionedTable(relation.hiveQlPartitions)
 
   def execute() = {
+    // TODO: THIS DOES NOT CORRECTLY RETURN PARTITION ATTRIBUTES.
     def unpackStruct(struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct) =
       refs.map { ref =>
         val data = objectInspector.getStructFieldData(struct, ref)
