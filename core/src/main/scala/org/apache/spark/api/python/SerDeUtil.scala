@@ -43,15 +43,15 @@ private[python] object SerDeUtil extends Logging {
       val mp = new ScalaMessagePack
       var triedReg = false
       pairs.map{ pair =>
-      Try {
-        if (!triedReg) {
-          register(pair._1.getClass, mp)
-          register(pair._2.getClass, mp)
-          triedReg = true
-        }
-        mp.write(pair)
-      } match {
-        case Failure(err) =>
+        Try {
+          if (!triedReg) {
+            register(pair._1.getClass, mp)
+            register(pair._2.getClass, mp)
+            triedReg = true
+          }
+          mp.write(pair)
+        } match {
+          case Failure(err) =>
             log.debug("Failed to write", err)
             Try {
               write((pair._1.toString, pair._2.toString))
@@ -59,10 +59,10 @@ private[python] object SerDeUtil extends Logging {
               case Success(result) => result
               case Failure(e) => throw e
             }
-        case Success(result) => result
+          case Success(result) => result
+        }
       }
     }
-  }
   }
 
   /**
