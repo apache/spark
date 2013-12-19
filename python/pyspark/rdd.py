@@ -54,6 +54,9 @@ class RDD(object):
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
 
+    def __repr__(self):
+        return self._jrdd.toString()
+
     @property
     def context(self):
         """
