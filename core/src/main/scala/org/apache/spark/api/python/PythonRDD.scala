@@ -235,10 +235,6 @@ private[spark] object PythonRDD {
     file.close()
   }
 
-  def takePartition[T](rdd: RDD[T], partition: Int): Iterator[T] = {
-    implicit val cm : ClassTag[T] = rdd.elementClassTag
-    rdd.context.runJob(rdd, ((x: Iterator[T]) => x.toArray), Seq(partition), true).head.iterator
-  }
 }
 
 private class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
