@@ -215,6 +215,14 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     new GraphImpl(newVTable, newETable)
   } // end of subgraph
 
+  override def mask[VD2: ClassManifest, ED2: ClassManifest] (
+      other: Graph[VD2, ED2]): Graph[VD, ED] = {
+    val newVerts = vertices.innerJoin(other.vertices) { (vid, v, w) => v }
+    val newEdges = edges.innerJoin(other.edges) { (src, dst, v, w) => v }
+    new GraphImpl(newVerts, newEdges)
+
+  }
+
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
     ClosureCleaner.clean(merge)
     val newETable = edges.mapEdgePartitions(_.groupEdges(merge))

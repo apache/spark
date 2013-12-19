@@ -48,7 +48,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * along with their vertex data.
    *
    */
-  val edges: RDD[Edge[ED]]
+  val edges: EdgeRDD[ED]
 
   /**
    * Get the edges with the vertex data associated with the adjacent
@@ -196,6 +196,14 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    */
   def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
     vpred: (Vid, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
+
+  /**
+   * Subgraph of this graph with only vertices and edges from the other graph.
+   * @param other the graph to project this graph onto
+   * @return a graph with vertices and edges that exists in both the current graph and other,
+   * with vertex and edge data from the current graph.
+   */
+  def mask[VD2: ClassManifest, ED2: ClassManifest](other: Graph[VD2, ED2]): Graph[VD, ED]
 
   /**
    * This function merges multiple edges between two vertices into a single Edge. For correct

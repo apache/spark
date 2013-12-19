@@ -237,4 +237,35 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
     graph.outerJoinVertices(table)(uf)
   }
 
+  /**
+   * Filter the graph by computing some values to filter on, and applying the predicates.
+   *
+   * @param preprocess a function to compute new vertex and edge data before filtering
+   * @param epred edge pred to filter on after preprocess, see more details under Graph#subgraph
+   * @param vpred vertex pred to filter on after prerocess, see more details under Graph#subgraph
+   * @tparam VD2 vertex type the vpred operates on
+   * @tparam ED2 edge type the epred operates on
+   * @return a subgraph of the orginal graph, with its data unchanged
+   *
+   * @example This function can be used to filter the graph based on some property, without
+   * changing the vertex and edge values in your program. For example, we could remove the vertices
+   * in a graph with 0 outdegree
+   *
+   * {{{
+   * graph.filter(
+   *   graph => {
+   *     val degrees: VertexSetRDD[Int] = graph.outDegrees
+   *     graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
+   *   },
+   *   vpred = (vid: Vid, deg:Int) => deg > 0
+   * )
+   * }}}
+   *
+   */
+  def filter[VD2: ClassManifest, ED2: ClassManifest](
+      preprocess: Graph[VD, ED] => Graph[VD2, ED2],
+      epred: (EdgeTriplet[VD2, ED2]) => Boolean = (x: EdgeTriplet[VD2, ED2]) => true,
+      vpred: (Vid, VD2) => Boolean = (v:Vid, d:VD2) => true): Graph[VD, ED] = {
+    graph.mask(preprocess(graph).subgraph(epred, vpred))
+  }
 } // end of GraphOps
