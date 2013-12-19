@@ -18,19 +18,16 @@
 package org.apache.spark.deploy.master
 
 import java.text.SimpleDateFormat
-import java.util.concurrent.TimeUnit
 import java.util.Date
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
-import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import akka.actor._
 import akka.pattern.ask
-import akka.remote._
+import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
-import akka.util.Timeout
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
@@ -38,7 +35,7 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.util.{Utils, AkkaUtils}
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   import context.dispatcher
@@ -537,12 +534,10 @@ private[spark] object Master {
 
   def startSystemAndActor(host: String, port: Int, webUiPort: Int): (ActorSystem, Int, Int) = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
-    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort), name = actorName)
-    val timeoutDuration: FiniteDuration = Duration.create(
-      System.getProperty("spark.akka.askTimeout", "10").toLong, TimeUnit.SECONDS)
-    implicit val timeout = Timeout(timeoutDuration)
-    val respFuture = actor ? RequestWebUIPort   // ask pattern
-    val resp = Await.result(respFuture, timeoutDuration).asInstanceOf[WebUIPortResponse]
+    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort), actorName)
+    val timeout = AkkaUtils.askTimeout
+    val respFuture = actor.ask(RequestWebUIPort)(timeout)
+    val resp = Await.result(respFuture, timeout).asInstanceOf[WebUIPortResponse]
     (actorSystem, boundPort, resp.webUIBoundPort)
   }
 }

@@ -23,14 +23,14 @@ import scala.concurrent.duration._
 import scala.concurrent.Await
 
 import akka.actor._
-import akka.pattern.AskTimeoutException
 import akka.pattern.ask
-import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent, AssociationErrorEvent}
+import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
 
 import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
+import org.apache.spark.util.AkkaUtils
 
 
 /**
@@ -178,7 +178,7 @@ private[spark] class Client(
   def stop() {
     if (actor != null) {
       try {
-        val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
+        val timeout = AkkaUtils.askTimeout
         val future = actor.ask(StopClient)(timeout)
         Await.result(future, timeout)
       } catch {

@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.concurrent.duration.{Duration, FiniteDuration}
+
 import akka.actor.{ActorSystem, ExtendedActorSystem, IndestructibleActorSystem}
 import com.typesafe.config.ConfigFactory
 
@@ -84,4 +86,8 @@ private[spark] object AkkaUtils {
     (actorSystem, boundPort)
   }
 
+  /** Returns the default Spark timeout to use for Akka ask operations. */
+  def askTimeout: FiniteDuration = {
+    Duration.create(System.getProperty("spark.akka.askTimeout", "30").toLong, "seconds")
+  }
 }

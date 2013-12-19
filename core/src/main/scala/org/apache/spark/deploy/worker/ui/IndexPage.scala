@@ -42,13 +42,13 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
 
   def renderJson(request: HttpServletRequest): JValue = {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
-    val workerState = Await.result(stateFuture, 30 seconds)
+    val workerState = Await.result(stateFuture, timeout)
     JsonProtocol.writeWorkerState(workerState)
   }
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val stateFuture = (workerActor ? RequestWorkerState)(timeout).mapTo[WorkerStateResponse]
-    val workerState = Await.result(stateFuture, 30 seconds)
+    val workerState = Await.result(stateFuture, timeout)
 
     val executorHeaders = Seq("ExecutorID", "Cores", "Memory", "Job Details", "Logs")
     val runningExecutorTable =
