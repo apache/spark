@@ -22,6 +22,7 @@ import java.io.{ObjectInput, ObjectOutput, Externalizable}
 import java.nio.ByteBuffer
 
 import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 
 import org.apache.flume.source.avro.AvroSourceProtocol
 import org.apache.flume.source.avro.AvroFlumeEvent
@@ -34,7 +35,7 @@ import org.apache.spark.util.Utils
 import org.apache.spark.storage.StorageLevel
 
 private[streaming]
-class FlumeInputDStream[T: ClassManifest](
+class FlumeInputDStream[T: ClassTag](
   @transient ssc_ : StreamingContext,
   host: String,
   port: Int,
@@ -137,8 +138,8 @@ class FlumeReceiver(
 
   protected override def onStart() {
     val responder = new SpecificResponder(
-      classOf[AvroSourceProtocol], new FlumeEventServer(this));
-    val server = new NettyServer(responder, new InetSocketAddress(host, port));
+      classOf[AvroSourceProtocol], new FlumeEventServer(this))
+    val server = new NettyServer(responder, new InetSocketAddress(host, port))
     blockGenerator.start()
     server.start()
     logInfo("Flume receiver started")

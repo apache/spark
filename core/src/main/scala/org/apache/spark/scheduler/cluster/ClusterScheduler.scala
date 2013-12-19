@@ -24,8 +24,7 @@ import java.util.{TimerTask, Timer}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-
-import akka.util.duration._
+import scala.concurrent.duration._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -100,8 +99,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     this.dagScheduler = dagScheduler
   }
 
-  def initialize(context: SchedulerBackend) {
-    backend = context
+  def initialize(backend: SchedulerBackend) {
+    this.backend = backend
     // temporarily set rootPool name to empty
     rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
@@ -122,7 +121,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
     if (System.getProperty("spark.speculation", "false").toBoolean) {
       logInfo("Starting speculative execution thread")
-
+      import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
             SPECULATION_INTERVAL milliseconds) {
         checkSpeculatableTasks()
@@ -173,7 +172,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           backend.killTask(tid, execId)
         }
       }
-      tsm.error("Stage %d was cancelled".format(stageId))
+      logInfo("Stage %d was cancelled".format(stageId))
+      tsm.removeAllRunningTasks()
+      taskSetFinished(tsm)
     }
   }
 

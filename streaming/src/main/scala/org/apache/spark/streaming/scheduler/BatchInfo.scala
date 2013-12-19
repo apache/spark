@@ -15,27 +15,23 @@
  * limitations under the License.
  */
 
-package org.apache.spark.rdd
+package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.{Partition, TaskContext}
-
+import org.apache.spark.streaming.Time
 
 /**
- * A variant of the MapPartitionsRDD that passes the TaskContext into the closure. From the
- * TaskContext, the closure can either get access to the interruptible flag or get the index
- * of the partition in the RDD.
+ * Class having information on completed batches.
  */
-private[spark]
-class MapPartitionsWithContextRDD[U: ClassManifest, T: ClassManifest](
-    prev: RDD[T],
-    f: (TaskContext, Iterator[T]) => Iterator[U],
-    preservesPartitioning: Boolean
-  ) extends RDD[U](prev) {
+case class BatchInfo(
+    batchTime: Time,
+    submissionTime: Long,
+    processingStartTime: Option[Long],
+    processingEndTime: Option[Long]
+  ) {
 
-  override def getPartitions: Array[Partition] = firstParent[T].partitions
+  def schedulingDelay = processingStartTime.map(_ - submissionTime)
 
-  override val partitioner = if (preservesPartitioning) prev.partitioner else None
+  def processingDelay = processingEndTime.zip(processingStartTime).map(x => x._1 - x._2).headOption
 
-  override def compute(split: Partition, context: TaskContext) =
-    f(context, firstParent[T].iterator(split, context))
+  def totalDelay = schedulingDelay.zip(processingDelay).map(x => x._1 + x._2).headOption
 }

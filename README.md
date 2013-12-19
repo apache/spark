@@ -12,9 +12,8 @@ This README file only contains basic setup instructions.
 
 ## Building
 
-Spark requires Scala 2.9.3 (Scala 2.10 is not yet supported). The project is
-built using Simple Build Tool (SBT), which is packaged with it. To build
-Spark and its example programs, run:
+Spark requires Scala 2.10. The project is built using Simple Build Tool (SBT),
+which is packaged with it. To build Spark and its example programs, run:
 
     sbt/sbt assembly
 
@@ -55,7 +54,7 @@ versions without YARN, use:
     # Cloudera CDH 4.2.0 with MapReduce v1
     $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt/sbt assembly
 
-For Apache Hadoop 2.x, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
+For Apache Hadoop 2.2.X, 2.1.X, 2.0.X, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
 with YARN, also set `SPARK_YARN=true`:
 
     # Apache Hadoop 2.0.5-alpha
@@ -64,8 +63,8 @@ with YARN, also set `SPARK_YARN=true`:
     # Cloudera CDH 4.2.0 with MapReduce v2
     $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_YARN=true sbt/sbt assembly
 
-For convenience, these variables may also be set through the `conf/spark-env.sh` file
-described below.
+    # Apache Hadoop 2.2.X and newer
+    $ SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt/sbt assembly
 
 When developing a Spark application, specify the Hadoop version by adding the
 "hadoop-client" artifact to your project's dependencies. For example, if you're

@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import scala.reflect.ClassTag
 import java.util.Random
 
 import cern.jet.random.Poisson
@@ -29,9 +30,9 @@ class SampledRDDPartition(val prev: Partition, val seed: Int) extends Partition 
   override val index: Int = prev.index
 }
 
-class SampledRDD[T: ClassManifest](
+class SampledRDD[T: ClassTag](
     prev: RDD[T],
-    withReplacement: Boolean, 
+    withReplacement: Boolean,
     frac: Double,
     seed: Int)
   extends RDD[T](prev) {

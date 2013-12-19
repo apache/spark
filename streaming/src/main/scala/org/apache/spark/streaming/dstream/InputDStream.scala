@@ -19,6 +19,8 @@ package org.apache.spark.streaming.dstream
 
 import org.apache.spark.streaming.{Time, Duration, StreamingContext, DStream}
 
+import scala.reflect.ClassTag
+
 /**
  * This is the abstract base class for all input streams. This class provides to methods
  * start() and stop() which called by the scheduler to start and stop receiving data/
@@ -30,7 +32,7 @@ import org.apache.spark.streaming.{Time, Duration, StreamingContext, DStream}
  * that requires running a receiver on the worker nodes, use NetworkInputDStream
  * as the parent class.
  */
-abstract class InputDStream[T: ClassManifest] (@transient ssc_ : StreamingContext)
+abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   extends DStream[T](ssc_) {
 
   var lastValidTime: Time = null

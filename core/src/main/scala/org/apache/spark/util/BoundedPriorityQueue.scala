@@ -34,6 +34,8 @@ class BoundedPriorityQueue[A](maxSize: Int)(implicit ord: Ordering[A])
 
   override def iterator: Iterator[A] = underlying.iterator.asScala
 
+  override def size: Int = underlying.size
+
   override def ++=(xs: TraversableOnce[A]): this.type = {
     xs.foreach { this += _ }
     this

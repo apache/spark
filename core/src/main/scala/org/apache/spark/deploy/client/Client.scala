@@ -19,17 +19,15 @@ package org.apache.spark.deploy.client
 
 import java.util.concurrent.TimeoutException
 
-import akka.actor._
-import akka.actor.Terminated
-import akka.pattern.ask
-import akka.util.Duration
-import akka.util.duration._
-import akka.remote.RemoteClientDisconnected
-import akka.remote.RemoteClientLifeCycleEvent
-import akka.remote.RemoteClientShutdown
-import akka.dispatch.Await
+import scala.concurrent.duration._
+import scala.concurrent.Await
 
-import org.apache.spark.Logging
+import akka.actor._
+import akka.pattern.AskTimeoutException
+import akka.pattern.ask
+import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent, AssociationErrorEvent}
+
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -51,18 +49,19 @@ private[spark] class Client(
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
 
+  var masterAddress: Address = null
   var actor: ActorRef = null
   var appId: String = null
   var registered = false
   var activeMasterUrl: String = null
 
   class ClientActor extends Actor with Logging {
-    var master: ActorRef = null
-    var masterAddress: Address = null
+    var master: ActorSelection = null
     var alreadyDisconnected = false  // To avoid calling listener.disconnected() multiple times
     var alreadyDead = false  // To avoid calling listener.dead() multiple times
 
     override def preStart() {
+      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
       try {
         registerWithMaster()
       } catch {
@@ -76,7 +75,7 @@ private[spark] class Client(
     def tryRegisterAllMasters() {
       for (masterUrl <- masterUrls) {
         logInfo("Connecting to master " + masterUrl + "...")
-        val actor = context.actorFor(Master.toAkkaUrl(masterUrl))
+        val actor = context.actorSelection(Master.toAkkaUrl(masterUrl))
         actor ! RegisterApplication(appDescription)
       }
     }
@@ -84,6 +83,7 @@ private[spark] class Client(
     def registerWithMaster() {
       tryRegisterAllMasters()
 
+      import context.dispatcher
       var retries = 0
       lazy val retryTimer: Cancellable =
         context.system.scheduler.schedule(REGISTRATION_TIMEOUT, REGISTRATION_TIMEOUT) {
@@ -102,10 +102,13 @@ private[spark] class Client(
 
     def changeMaster(url: String) {
       activeMasterUrl = url
-      master = context.actorFor(Master.toAkkaUrl(url))
-      masterAddress = master.path.address
-      context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-      context.watch(master)  // Doesn't work with remote actors, but useful for testing
+      master = context.actorSelection(Master.toAkkaUrl(activeMasterUrl))
+      masterAddress = activeMasterUrl match {
+        case Master.sparkUrlRegex(host, port) =>
+          Address("akka.tcp", Master.systemName, host, port.toInt)
+        case x =>
+          throw new SparkException("Invalid spark URL: " + x)
+      }
     }
 
     override def receive = {
@@ -135,21 +138,12 @@ private[spark] class Client(
 
       case MasterChanged(masterUrl, masterWebUiUrl) =>
         logInfo("Master has changed, new master is at " + masterUrl)
-        context.unwatch(master)
         changeMaster(masterUrl)
         alreadyDisconnected = false
         sender ! MasterChangeAcknowledged(appId)
 
-      case Terminated(actor_) if actor_ == master =>
-        logWarning("Connection to master failed; waiting for master to reconnect...")
-        markDisconnected()
-
-      case RemoteClientDisconnected(transport, address) if address == masterAddress =>
-        logWarning("Connection to master failed; waiting for master to reconnect...")
-        markDisconnected()
-
-      case RemoteClientShutdown(transport, address) if address == masterAddress =>
-        logWarning("Connection to master failed; waiting for master to reconnect...")
+      case DisassociatedEvent(_, address, _) if address == masterAddress =>
+        logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
 
       case StopClient =>

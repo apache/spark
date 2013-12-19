@@ -20,14 +20,12 @@ package org.apache.spark.streaming.dstream
 import org.apache.spark.rdd.{PartitionerAwareUnionRDD, RDD, UnionRDD}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
-import org.apache.spark._
-import scala.Some
-import scala.Some
-import scala.Some
 import org.apache.spark.streaming.Duration
 
+import scala.reflect.ClassTag
+
 private[streaming]
-class WindowedDStream[T: ClassManifest](
+class WindowedDStream[T: ClassTag](
     parent: DStream[T],
     _windowDuration: Duration,
     _slideDuration: Duration)
@@ -66,4 +64,3 @@ class WindowedDStream[T: ClassManifest](
     Some(windowRDD)
   }
 }
-

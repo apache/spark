@@ -99,13 +99,17 @@
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
     <project.reporting.outputEncoding>UTF-8</project.reporting.outputEncoding>
 
-    <java.version>1.5</java.version>
-    <scala.version>2.9.3</scala.version>
+    <java.version>1.6</java.version>
+
+    <scala.version>2.10.3</scala.version>
+    <scala.binary.version>2.10</scala.binary.version>
     <mesos.version>0.13.0</mesos.version>
-    <akka.version>2.0.5</akka.version>
+    <akka.group>org.spark-project.akka</akka.group>
+    <akka.version>2.2.3-shaded-protobuf</akka.version>
     <slf4j.version>1.7.2</slf4j.version>
     <log4j.version>1.2.17</log4j.version>
     <hadoop.version>1.0.4</hadoop.version>
+    <protobuf.version>2.4.1</protobuf.version>
     <yarn.version>0.23.7</yarn.version>
     <hbase.version>0.94.6</hbase.version>
 
@@ -114,32 +118,21 @@
   </properties>
 
   <repositories>
+    <repository> 
+      <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
+      <name>Maven Repository</name>
+      <url>http://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
     <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
-      <url>http://repository.jboss.org/nexus/content/repositories/releases/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>cloudera-repo</id>
-      <name>Cloudera Repository</name>
-      <url>https://repository.cloudera.com/artifactory/cloudera-repos/</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-    <repository>
-      <id>akka-repo</id>
-      <name>Akka Repository</name>
-      <url>http://repo.akka.io/releases/</url>
+      <url>http://repository.jboss.org/nexus/content/repositories/releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -150,7 +143,7 @@
     <repository>
       <id>mqtt-repo</id>
       <name>MQTT Repository</name>
-      <url>https://repo.eclipse.org/content/repositories/paho-releases/</url>
+      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -159,41 +152,6 @@
       </snapshots>
     </repository>
   </repositories>
-  <pluginRepositories>
-    <pluginRepository>
-      <id>oss-sonatype-releases</id>
-      <name>OSS Sonatype</name>
-      <url>https://oss.sonatype.org/content/repositories/releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </pluginRepository>
-    <pluginRepository>
-      <id>oss-sonatype-snapshots</id>
-      <name>OSS Sonatype</name>
-      <url>https://oss.sonatype.org/content/repositories/snapshots</url>
-      <releases>
-        <enabled>false</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </pluginRepository>
-    <pluginRepository>
-      <id>oss-sonatype</id>
-      <name>OSS Sonatype</name>
-      <url>https://oss.sonatype.org/content/groups/public</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>true</enabled>
-      </snapshots>
-    </pluginRepository>
-  </pluginRepositories>
 
   <dependencyManagement>
     <dependencies>
@@ -242,14 +200,19 @@
         <artifactId>asm</artifactId>
         <version>4.0</version>
       </dependency>
+      <!-- In theory we need not directly depend on protobuf since Spark does not directly
+           use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
+           the protobuf version up from the one Mesos gives. For now we include this variable 
+           to explicitly bump the version when building with YARN. It would be nice to figure
+           out why Maven can't resolve this correctly (like SBT does). -->
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
-        <version>2.4.1</version>
+        <version>${protobuf.version}</version>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
-        <artifactId>chill_2.9.3</artifactId>
+        <artifactId>chill_${scala.binary.version}</artifactId>
         <version>0.3.1</version>
       </dependency>
       <dependency>
@@ -258,8 +221,8 @@
         <version>0.3.1</version>
       </dependency>
       <dependency>
-        <groupId>com.typesafe.akka</groupId>
-        <artifactId>akka-actor</artifactId>
+        <groupId>${akka.group}</groupId>
+        <artifactId>akka-actor_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -269,8 +232,8 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.typesafe.akka</groupId>
-        <artifactId>akka-remote</artifactId>
+        <groupId>${akka.group}</groupId>
+        <artifactId>akka-remote_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -280,8 +243,19 @@
         </exclusions>
       </dependency>
       <dependency>
-        <groupId>com.typesafe.akka</groupId>
-        <artifactId>akka-slf4j</artifactId>
+        <groupId>${akka.group}</groupId>
+        <artifactId>akka-slf4j_${scala.binary.version}</artifactId>
+        <version>${akka.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
+        <groupId>${akka.group}</groupId>
+        <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -301,11 +275,6 @@
         <version>1.2.0</version>
       </dependency>
       <dependency>
-        <groupId>com.github.scala-incubator.io</groupId>
-        <artifactId>scala-io-file_2.9.2</artifactId>
-        <version>0.4.1</version>
-      </dependency>
-      <dependency>
         <groupId>org.apache.mesos</groupId>
         <artifactId>mesos</artifactId>
         <version>${mesos.version}</version>
@@ -313,7 +282,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.0.Beta2</version>
+        <version>4.0.0.CR1</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -323,8 +292,14 @@
       </dependency>
       <dependency>
         <groupId>net.liftweb</groupId>
-        <artifactId>lift-json_2.9.2</artifactId>
-        <version>2.5</version>
+        <artifactId>lift-json_${scala.binary.version}</artifactId>
+        <version>2.5.1</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.scala-lang</groupId>
+            <artifactId>scalap</artifactId>
+          </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.codahale.metrics</groupId>
@@ -347,6 +322,11 @@
         <version>3.0.0</version>
       </dependency>
       <dependency>
+        <groupId>com.codahale.metrics</groupId>
+        <artifactId>metrics-graphite</artifactId>
+        <version>3.0.0</version>
+      </dependency>
+      <dependency>
         <groupId>org.scala-lang</groupId>
         <artifactId>scala-compiler</artifactId>
         <version>${scala.version}</version>
@@ -362,22 +342,20 @@
         <version>${scala.version}</version>
       </dependency>
       <dependency>
-        <groupId>org.scala-lang</groupId>
-        <artifactId>scalap</artifactId>
-        <version>${scala.version}</version>
-      </dependency>
-
-      <dependency>
         <groupId>log4j</groupId>
         <artifactId>log4j</artifactId>
         <version>${log4j.version}</version>
       </dependency>
-
       <dependency>
         <groupId>org.scalatest</groupId>
-        <artifactId>scalatest_2.9.3</artifactId>
+        <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>1.9.1</version>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+        <groupId>commons-io</groupId>
+        <artifactId>commons-io</artifactId>
+        <version>2.4</version>
       </dependency>
       <dependency>
         <groupId>org.easymock</groupId>
@@ -393,7 +371,7 @@
       </dependency>
       <dependency>
         <groupId>org.scalacheck</groupId>
-        <artifactId>scalacheck_2.9.3</artifactId>
+        <artifactId>scalacheck_${scala.binary.version}</artifactId>
         <version>1.10.0</version>
         <scope>test</scope>
       </dependency>
@@ -488,6 +466,7 @@
           </exclusion>
         </exclusions>
       </dependency>
+
       <dependency>
         <groupId>org.apache.hadoop</groupId>
         <artifactId>hadoop-yarn-client</artifactId>
@@ -524,6 +503,10 @@
         <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>io.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
         </exclusions>
@@ -739,6 +722,7 @@
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
         <hadoop.version>0.23.7</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
         <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
 
@@ -750,7 +734,7 @@
         <repository>
           <id>maven-root</id>
           <name>Maven root repository</name>
-          <url>http://repo1.maven.org/maven2/</url>
+          <url>http://repo1.maven.org/maven2</url>
           <releases>
             <enabled>true</enabled>
           </releases>
@@ -765,6 +749,39 @@
         </dependencies>
       </dependencyManagement>
     </profile>
+
+    <profile>
+      <id>new-yarn</id>
+       <properties>
+         <hadoop.major.version>2</hadoop.major.version>
+         <hadoop.version>2.2.0</hadoop.version>
+         <protobuf.version>2.5.0</protobuf.version>
+       </properties>
+
+       <modules>
+         <module>new-yarn</module>
+       </modules>
+
+       <repositories>
+         <repository>
+           <id>maven-root</id>
+           <name>Maven root repository</name>
+           <url>http://repo1.maven.org/maven2</url>
+           <releases>
+             <enabled>true</enabled>
+           </releases>
+           <snapshots>
+             <enabled>false</enabled>
+           </snapshots>
+         </repository>
+       </repositories>
+
+       <dependencyManagement>
+         <dependencies>
+         </dependencies>
+       </dependencyManagement>
+     </profile>
+
     <profile>
       <id>repl-bin</id>
       <activation>

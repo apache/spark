@@ -74,7 +74,7 @@ class LocalActor(localScheduler: LocalScheduler, private var freeCores: Int)
   }
 }
 
-private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: SparkContext)
+private[spark] class LocalScheduler(val threads: Int, val maxFailures: Int, val sc: SparkContext)
   extends TaskScheduler
   with ExecutorBackend
   with Logging {
@@ -144,7 +144,8 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
           localActor ! KillTask(tid)
         }
       }
-      tsm.error("Stage %d was cancelled".format(stageId))
+      logInfo("Stage %d was cancelled".format(stageId))
+      taskSetFinished(tsm)
     }
   }
 
@@ -192,17 +193,19 @@ private[spark] class LocalScheduler(threads: Int, val maxFailures: Int, val sc: 
       synchronized {
         taskIdToTaskSetId.get(taskId) match {
           case Some(taskSetId) =>
-            val taskSetManager = activeTaskSets(taskSetId)
-            taskSetTaskIds(taskSetId) -= taskId
+            val taskSetManager = activeTaskSets.get(taskSetId)
+            taskSetManager.foreach { tsm =>
+              taskSetTaskIds(taskSetId) -= taskId
 
-            state match {
-              case TaskState.FINISHED =>
-                taskSetManager.taskEnded(taskId, state, serializedData)
-              case TaskState.FAILED =>
-                taskSetManager.taskFailed(taskId, state, serializedData)
-              case TaskState.KILLED =>
-                taskSetManager.error("Task %d was killed".format(taskId))
-              case _ => {}
+              state match {
+                case TaskState.FINISHED =>
+                  tsm.taskEnded(taskId, state, serializedData)
+                case TaskState.FAILED =>
+                  tsm.taskFailed(taskId, state, serializedData)
+                case TaskState.KILLED =>
+                  tsm.error("Task %d was killed".format(taskId))
+                case _ => {}
+              }
             }
           case None =>
             logInfo("Ignoring update from TID " + taskId + " because its task set is gone")

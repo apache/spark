@@ -39,7 +39,7 @@ class BlockIdSuite extends FunSuite {
       fail()
     } catch {
       case e: IllegalStateException => // OK
-      case _ => fail()
+      case _: Throwable => fail()
     }
   }
 
