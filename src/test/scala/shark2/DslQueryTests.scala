@@ -158,7 +158,7 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
     val x = testData2.where('a === 1).subquery('x)
     val y = testData2.where('a === 1).subquery('y)
     checkAnswer(
-      x.join(y).where("x.a" === "y.a"),
+      x.join(y).where("x.a".attr === "y.a".attr),
       (1,1,1,1) ::
       (1,1,1,2) ::
       (1,2,1,1) ::
@@ -170,7 +170,7 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
     val x = testData2.where('a === 1).subquery('x)
     val y = testData2.where('a === 2).subquery('y)
     checkAnswer(
-      x.join(y).where("x.a" === "y.a"),
+      x.join(y).where("x.a".attr === "y.a".attr),
       Nil)
   }
 
@@ -180,7 +180,7 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
     val bigDataY = bigData.subquery('y)
 
     checkAnswer(
-      bigDataX.join(bigDataY).where("x.key" === "y.key"),
+      bigDataX.join(bigDataY).where("x.key".attr === "y.key".attr),
       testData.data.flatMap(row => Seq.fill(16)((row.productIterator ++ row.productIterator).toSeq)))
   }
 
