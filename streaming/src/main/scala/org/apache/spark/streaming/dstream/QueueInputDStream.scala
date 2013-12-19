@@ -19,13 +19,13 @@ package org.apache.spark.streaming.dstream
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.UnionRDD
-
 import scala.collection.mutable.Queue
 import scala.collection.mutable.ArrayBuffer
 import org.apache.spark.streaming.{Time, StreamingContext}
+import scala.reflect.ClassTag
 
 private[streaming]
-class QueueInputDStream[T: ClassManifest](
+class QueueInputDStream[T: ClassTag](
     @transient ssc: StreamingContext,
     val queue: Queue[RDD[T]],
     oneAtATime: Boolean,

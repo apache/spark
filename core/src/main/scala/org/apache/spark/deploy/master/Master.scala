@@ -17,19 +17,20 @@
 
 package org.apache.spark.deploy.master
 
-import java.util.Date
 import java.text.SimpleDateFormat
+import java.util.concurrent.TimeUnit
+import java.util.Date
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import akka.actor._
-import akka.actor.Terminated
-import akka.dispatch.Await
 import akka.pattern.ask
-import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientDisconnected, RemoteClientShutdown}
+import akka.remote._
 import akka.serialization.SerializationExtension
-import akka.util.duration._
-import akka.util.{Duration, Timeout}
+import akka.util.Timeout
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
@@ -37,9 +38,11 @@ import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.{Utils, AkkaUtils}
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
+  import context.dispatcher
+
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
   val WORKER_TIMEOUT = System.getProperty("spark.worker.timeout", "60").toLong * 1000
   val RETAINED_APPLICATIONS = System.getProperty("spark.deploy.retainedApplications", "200").toInt
@@ -93,7 +96,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
-    context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.start()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort.get
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
@@ -113,13 +116,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         new BlackHolePersistenceEngine()
     }
 
-    leaderElectionAgent = context.actorOf(Props(
-      RECOVERY_MODE match {
+    leaderElectionAgent = RECOVERY_MODE match {
         case "ZOOKEEPER" =>
-          new ZooKeeperLeaderElectionAgent(self, masterUrl)
+          context.actorOf(Props(classOf[ZooKeeperLeaderElectionAgent], self, masterUrl))
         case _ =>
-          new MonarchyLeaderAgent(self)
-      }))
+          context.actorOf(Props(classOf[MonarchyLeaderAgent], self))
+      }
   }
 
   override def preRestart(reason: Throwable, message: Option[Any]) {
@@ -142,9 +144,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         RecoveryState.ALIVE
       else
         RecoveryState.RECOVERING
-
       logInfo("I have been elected leader! New state: " + state)
-
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedWorkers)
         context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis) { completeRecovery() }
@@ -156,7 +156,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       System.exit(0)
     }
 
-    case RegisterWorker(id, host, workerPort, cores, memory, webUiPort, publicAddress) => {
+    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerWebUiPort, publicAddress) => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         host, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -164,9 +164,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       } else if (idToWorker.contains(id)) {
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {
-        val worker = new WorkerInfo(id, host, port, cores, memory, sender, webUiPort, publicAddress)
+        val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
+          sender, workerWebUiPort, publicAddress)
         registerWorker(worker)
-        context.watch(sender)  // This doesn't work with remote actors but helps for testing
         persistenceEngine.addWorker(worker)
         sender ! RegisteredWorker(masterUrl, masterWebUiUrl)
         schedule()
@@ -181,7 +181,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         val app = createApplication(description, sender)
         registerApplication(app)
         logInfo("Registered app " + description.name + " with ID " + app.id)
-        context.watch(sender)  // This doesn't work with remote actors but helps for testing
         persistenceEngine.addApplication(app)
         sender ! RegisteredApplication(app.id, masterUrl)
         schedule()
@@ -257,23 +256,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       if (canCompleteRecovery) { completeRecovery() }
     }
 
-    case Terminated(actor) => {
-      // The disconnected actor could've been either a worker or an app; remove whichever of
-      // those we have an entry for in the corresponding actor hashmap
-      actorToWorker.get(actor).foreach(removeWorker)
-      actorToApp.get(actor).foreach(finishApplication)
-      if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
-    }
-
-    case RemoteClientDisconnected(transport, address) => {
+    case DisassociatedEvent(_, address, _) => {
       // The disconnected client could've been either a worker or an app; remove whichever it was
-      addressToWorker.get(address).foreach(removeWorker)
-      addressToApp.get(address).foreach(finishApplication)
-      if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
-    }
-
-    case RemoteClientShutdown(transport, address) => {
-      // The disconnected client could've been either a worker or an app; remove whichever it was
+      logInfo(s"$address got disassociated, removing it.")
       addressToWorker.get(address).foreach(removeWorker)
       addressToApp.get(address).foreach(finishApplication)
       if (state == RecoveryState.RECOVERING && canCompleteRecovery) { completeRecovery() }
@@ -530,9 +515,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 }
 
 private[spark] object Master {
-  private val systemName = "sparkMaster"
+  val systemName = "sparkMaster"
   private val actorName = "Master"
-  private val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
+  val sparkUrlRegex = "spark://([^:]+):([0-9]+)".r
 
   def main(argStrings: Array[String]) {
     val args = new MasterArguments(argStrings)
@@ -540,11 +525,11 @@ private[spark] object Master {
     actorSystem.awaitTermination()
   }
 
-  /** Returns an `akka://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
+  /** Returns an `akka.tcp://...` URL for the Master actor given a sparkUrl `spark://host:ip`. */
   def toAkkaUrl(sparkUrl: String): String = {
     sparkUrl match {
       case sparkUrlRegex(host, port) =>
-        "akka://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
+        "akka.tcp://%s@%s:%s/user/%s".format(systemName, host, port, actorName)
       case _ =>
         throw new SparkException("Invalid master URL: " + sparkUrl)
     }
@@ -552,9 +537,9 @@ private[spark] object Master {
 
   def startSystemAndActor(host: String, port: Int, webUiPort: Int): (ActorSystem, Int, Int) = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
-    val actor = actorSystem.actorOf(Props(new Master(host, boundPort, webUiPort)), name = actorName)
-    val timeoutDuration = Duration.create(
-      System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
+    val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort), name = actorName)
+    val timeoutDuration: FiniteDuration = Duration.create(
+      System.getProperty("spark.akka.askTimeout", "10").toLong, TimeUnit.SECONDS)
     implicit val timeout = Timeout(timeoutDuration)
     val respFuture = actor ? RequestWebUIPort   // ask pattern
     val resp = Await.result(respFuture, timeoutDuration).asInstanceOf[WebUIPortResponse]

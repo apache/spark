@@ -22,7 +22,7 @@ package org.apache.spark.scheduler
  *    to order tasks amongst a Schedulable's sub-queues
  *  "NONE" is used when the a Schedulable has no sub-queues.
  */
-object SchedulingMode extends Enumeration("FAIR", "FIFO", "NONE") {
+object SchedulingMode extends Enumeration {
 
   type SchedulingMode = Value
   val FAIR,FIFO,NONE = Value

@@ -21,8 +21,6 @@ import java.io.Serializable;
 import java.util.List;
 import java.lang.Math;
 
-import scala.Tuple2;
-
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;

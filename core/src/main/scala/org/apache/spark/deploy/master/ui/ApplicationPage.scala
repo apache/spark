@@ -19,9 +19,10 @@ package org.apache.spark.deploy.master.ui
 
 import scala.xml.Node
 
-import akka.dispatch.Await
 import akka.pattern.ask
-import akka.util.duration._
+
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 import javax.servlet.http.HttpServletRequest
 

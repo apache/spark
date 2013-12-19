@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-repl-bin_2.9.3</artifactId>
+  <artifactId>spark-repl-bin_2.10</artifactId>
   <packaging>pom</packaging>
   <name>Spark Project REPL binary packaging</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -40,18 +40,18 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_2.9.3</artifactId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_2.9.3</artifactId>
+      <artifactId>spark-bagel_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-repl_2.9.3</artifactId>
+      <artifactId>spark-repl_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>runtime</scope>
     </dependency>

@@ -22,8 +22,11 @@ import org.apache.spark.rdd.RDD
 import collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.UnionRDD
 
+import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
 private[streaming]
-class UnionDStream[T: ClassManifest](parents: Array[DStream[T]])
+class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
   extends DStream[T](parents.head.ssc) {
 
   if (parents.length == 0) {

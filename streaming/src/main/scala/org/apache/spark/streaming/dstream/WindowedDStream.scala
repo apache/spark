@@ -22,8 +22,10 @@ import org.apache.spark.rdd.UnionRDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.{Duration, Interval, Time, DStream}
 
+import scala.reflect.ClassTag
+
 private[streaming]
-class WindowedDStream[T: ClassManifest](
+class WindowedDStream[T: ClassTag](
     parent: DStream[T],
     _windowDuration: Duration,
     _slideDuration: Duration)
@@ -52,6 +54,3 @@ class WindowedDStream[T: ClassManifest](
     Some(new UnionRDD(ssc.sc, parent.slice(currentWindow)))
   }
 }
-
-
-

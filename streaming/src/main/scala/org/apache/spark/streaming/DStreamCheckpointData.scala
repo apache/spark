@@ -20,13 +20,16 @@ package org.apache.spark.streaming
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.conf.Configuration
+
 import collection.mutable.HashMap
 import org.apache.spark.Logging
 
+import scala.collection.mutable.HashMap
+import scala.reflect.ClassTag
 
 
 private[streaming]
-class DStreamCheckpointData[T: ClassManifest] (dstream: DStream[T])
+class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   extends Serializable with Logging {
   protected val data = new HashMap[Time, AnyRef]()
 
@@ -107,4 +110,3 @@ class DStreamCheckpointData[T: ClassManifest] (dstream: DStream[T])
     "[\n" + checkpointFiles.size + " checkpoint files \n" + checkpointFiles.mkString("\n") + "\n]"
   }
 }
-
