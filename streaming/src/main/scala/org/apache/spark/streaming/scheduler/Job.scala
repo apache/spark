@@ -17,9 +17,11 @@
 
 package org.apache.spark.streaming.scheduler
 
-import java.util.concurrent.atomic.AtomicLong
 import org.apache.spark.streaming.Time
 
+/**
+ * Class representing a Spark computation. It may contain multiple Spark jobs.
+ */
 private[streaming]
 class Job(val time: Time, func: () => _) {
   var id: String = _
@@ -37,11 +39,3 @@ class Job(val time: Time, func: () => _) {
 
   override def toString = id
 }
-/*
-private[streaming]
-object Job {
-  val id = new AtomicLong(0)
-
-  def getNewId() = id.getAndIncrement()
-}
-*/

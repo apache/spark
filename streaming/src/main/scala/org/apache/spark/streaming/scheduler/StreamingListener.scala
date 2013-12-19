@@ -50,19 +50,13 @@ trait StreamingListener {
  * @param numBatchInfos Number of last batches to consider for generating statistics (default: 10)
  */
 class StatsReportListener(numBatchInfos: Int = 10) extends StreamingListener {
-
-  import org.apache.spark
-
+  // Queue containing latest completed batches
   val batchInfos = new Queue[BatchInfo]()
 
   override def onBatchCompleted(batchStarted: StreamingListenerBatchCompleted) {
-    addToQueue(batchStarted.batchInfo)
-    printStats()
-  }
-
-  def addToQueue(newPoint: BatchInfo) {
-    batchInfos.enqueue(newPoint)
+    batchInfos.enqueue(batchStarted.batchInfo)
     if (batchInfos.size > numBatchInfos) batchInfos.dequeue()
+    printStats()
   }
 
   def printStats() {
@@ -71,7 +65,8 @@ class StatsReportListener(numBatchInfos: Int = 10) extends StreamingListener {
   }
 
   def showMillisDistribution(heading: String, getMetric: BatchInfo => Option[Long]) {
-    spark.scheduler.StatsReportListener.showMillisDistribution(heading, extractDistribution(getMetric))
+    org.apache.spark.scheduler.StatsReportListener.showMillisDistribution(
+      heading, extractDistribution(getMetric))
   }
 
   def extractDistribution(getMetric: BatchInfo => Option[Long]): Option[Distribution] = {

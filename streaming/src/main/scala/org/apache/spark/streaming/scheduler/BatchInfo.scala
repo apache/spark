@@ -19,6 +19,9 @@ package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.streaming.Time
 
+/**
+ * Class having information on completed batches.
+ */
 case class BatchInfo(
     batchTime: Time,
     submissionTime: Long,
@@ -32,7 +35,3 @@ case class BatchInfo(
 
   def totalDelay = schedulingDelay.zip(processingDelay).map(x => x._1 + x._2).headOption
 }
-
-
-
-

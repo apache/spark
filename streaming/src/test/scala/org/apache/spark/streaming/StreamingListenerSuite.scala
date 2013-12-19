@@ -34,7 +34,7 @@ class StreamingListenerSuite extends TestSuiteBase with ShouldMatchers{
   test("basic BatchInfo generation") {
     val ssc = setupStreams(input, operation)
     val collector = new BatchInfoCollector
-    ssc.addListener(collector)
+    ssc.addStreamingListener(collector)
     runStreams(ssc, input.size, input.size)
     val batchInfos = collector.batchInfos
     batchInfos should have size 4

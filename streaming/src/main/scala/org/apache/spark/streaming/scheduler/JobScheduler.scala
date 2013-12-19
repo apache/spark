@@ -23,7 +23,9 @@ import java.util.concurrent.{TimeUnit, ConcurrentHashMap, Executors}
 import scala.collection.mutable.HashSet
 import org.apache.spark.streaming._
 
-
+/**
+ * This class drives the generation of Spark jobs from the DStreams.
+ */
 private[streaming]
 class JobScheduler(val ssc: StreamingContext) extends Logging {
 
