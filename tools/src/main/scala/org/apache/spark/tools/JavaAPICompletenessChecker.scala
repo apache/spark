@@ -199,7 +199,7 @@ object JavaAPICompletenessChecker {
 
   private def toJavaMethod(method: SparkMethod): SparkMethod = {
     val params = method.parameters
-      .filterNot(_.name == "scala.reflect.ClassManifest")
+      .filterNot(_.name == "scala.reflect.ClassTag")
       .map(toJavaType(_, isReturnType = false))
     SparkMethod(method.name, toJavaType(method.returnType, isReturnType = true), params)
   }
@@ -212,7 +212,7 @@ object JavaAPICompletenessChecker {
     // internal Spark components.
     val excludedNames = Seq(
       "org.apache.spark.rdd.RDD.origin",
-      "org.apache.spark.rdd.RDD.elementClassManifest",
+      "org.apache.spark.rdd.RDD.elementClassTag",
       "org.apache.spark.rdd.RDD.checkpointData",
       "org.apache.spark.rdd.RDD.partitioner",
       "org.apache.spark.rdd.RDD.partitions",

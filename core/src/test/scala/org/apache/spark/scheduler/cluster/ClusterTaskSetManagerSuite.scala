@@ -283,7 +283,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
 
     // Fail the task MAX_TASK_FAILURES times, and check that the task set is aborted
     // after the last failure.
-    (0 until manager.MAX_TASK_FAILURES).foreach { index =>
+    (1 to manager.MAX_TASK_FAILURES).foreach { index =>
       val offerResult = manager.resourceOffer("exec1", "host1", 1, ANY)
       assert(offerResult != None,
         "Expect resource offer on iteration %s to return a task".format(index))

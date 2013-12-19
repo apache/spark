@@ -92,6 +92,7 @@ class ClientArguments(val args: Array[String]) {
 
         case ("--name") :: value :: tail =>
           appName = value
+          args = tail
 
         case ("--addJars") :: value :: tail =>
           addJars = value

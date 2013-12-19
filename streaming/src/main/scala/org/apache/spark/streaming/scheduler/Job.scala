@@ -15,13 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming
+package org.apache.spark.streaming.scheduler
 
-import java.util.concurrent.atomic.AtomicLong
+import org.apache.spark.streaming.Time
 
+/**
+ * Class representing a Spark computation. It may contain multiple Spark jobs.
+ */
 private[streaming]
 class Job(val time: Time, func: () => _) {
-  val id = Job.getNewId()
+  var id: String = _
+
   def run(): Long = {
     val startTime = System.currentTimeMillis 
     func() 
@@ -29,13 +33,9 @@ class Job(val time: Time, func: () => _) {
     (stopTime - startTime)
   }
 
-  override def toString = "streaming job " + id + " @ " + time 
+  def setId(number: Int) {
+    id = "streaming job " + time + "." + number
+  }
+
+  override def toString = id
 }
-
-private[streaming]
-object Job {
-  val id = new AtomicLong(0)
-
-  def getNewId() = id.getAndIncrement()
-}
-

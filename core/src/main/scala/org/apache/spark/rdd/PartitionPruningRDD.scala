@@ -17,6 +17,8 @@
 
 package org.apache.spark.rdd
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{NarrowDependency, SparkEnv, Partition, TaskContext}
 
 
@@ -49,7 +51,7 @@ class PruneDependency[T](rdd: RDD[T], @transient partitionFilterFunc: Int => Boo
  * and the execution DAG has a filter on the key, we can avoid launching tasks
  * on partitions that don't have the range covering the key.
  */
-class PartitionPruningRDD[T: ClassManifest](
+class PartitionPruningRDD[T: ClassTag](
     @transient prev: RDD[T],
     @transient partitionFilterFunc: Int => Boolean)
   extends RDD[T](prev.context, List(new PruneDependency(prev, partitionFilterFunc))) {
@@ -69,6 +71,6 @@ object PartitionPruningRDD {
    * when its type T is not known at compile time.
    */
   def create[T](rdd: RDD[T], partitionFilterFunc: Int => Boolean) = {
-    new PartitionPruningRDD[T](rdd, partitionFilterFunc)(rdd.elementClassManifest)
+    new PartitionPruningRDD[T](rdd, partitionFilterFunc)(rdd.elementClassTag)
   }
 }

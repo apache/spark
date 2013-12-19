@@ -91,4 +91,3 @@ private[spark] class SparkListenerBus() extends Logging {
     return true
   }
 }
-

@@ -18,10 +18,13 @@
 package org.apache.spark.rdd
 
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
 import org.apache.spark.{Dependency, RangeDependency, SparkContext, Partition, TaskContext}
+
 import java.io.{ObjectOutputStream, IOException}
 
-private[spark] class UnionPartition[T: ClassManifest](idx: Int, rdd: RDD[T], splitIndex: Int)
+private[spark] class UnionPartition[T: ClassTag](idx: Int, rdd: RDD[T], splitIndex: Int)
   extends Partition {
 
   var split: Partition = rdd.partitions(splitIndex)
@@ -40,7 +43,7 @@ private[spark] class UnionPartition[T: ClassManifest](idx: Int, rdd: RDD[T], spl
   }
 }
 
-class UnionRDD[T: ClassManifest](
+class UnionRDD[T: ClassTag](
     sc: SparkContext,
     @transient var rdds: Seq[RDD[T]])
   extends RDD[T](sc, Nil) {  // Nil since we implement getDependencies

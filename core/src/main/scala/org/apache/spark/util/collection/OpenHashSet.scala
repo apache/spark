@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection
 
+import scala.reflect._
 
 /**
  * A simple, fast hash set optimized for non-null insertion-only use case, where keys are never
@@ -36,7 +37,7 @@ package org.apache.spark.util.collection
  * to explore all spaces for each key (see http://en.wikipedia.org/wiki/Quadratic_probing).
  */
 private[spark]
-class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
+class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     initialCapacity: Int,
     loadFactor: Double)
   extends Serializable {
@@ -62,14 +63,14 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
     // throws:
     // scala.tools.nsc.symtab.Types$TypeError: type mismatch;
     //  found   : scala.reflect.AnyValManifest[Long]
-    //  required: scala.reflect.ClassManifest[Int]
+    //  required: scala.reflect.ClassTag[Int]
     //         at scala.tools.nsc.typechecker.Contexts$Context.error(Contexts.scala:298)
     //         at scala.tools.nsc.typechecker.Infer$Inferencer.error(Infer.scala:207)
     //         ...
-    val mt = classManifest[T]
-    if (mt == ClassManifest.Long) {
+    val mt = classTag[T]
+    if (mt == ClassTag.Long) {
       (new LongHasher).asInstanceOf[Hasher[T]]
-    } else if (mt == ClassManifest.Int) {
+    } else if (mt == ClassTag.Int) {
       (new IntHasher).asInstanceOf[Hasher[T]]
     } else {
       new Hasher[T]

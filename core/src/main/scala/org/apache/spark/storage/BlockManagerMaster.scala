@@ -17,16 +17,17 @@
 
 package org.apache.spark.storage
 
-import akka.actor.ActorRef
-import akka.dispatch.{Await, Future}
+import scala.concurrent.{Await, Future}
+import scala.concurrent.duration._
+import scala.concurrent.ExecutionContext.Implicits.global
+
+import akka.actor._
 import akka.pattern.ask
-import akka.util.Duration
 
 import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
 
-
-private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Logging {
+private[spark] class BlockManagerMaster(var driverActor : Either[ActorRef, ActorSelection]) extends Logging {
 
   val AKKA_RETRY_ATTEMPTS: Int = System.getProperty("spark.akka.num.retries", "3").toInt
   val AKKA_RETRY_INTERVAL_MS: Int = System.getProperty("spark.akka.retry.wait", "3000").toInt
@@ -156,7 +157,10 @@ private[spark] class BlockManagerMaster(var driverActor: ActorRef) extends Loggi
     while (attempts < AKKA_RETRY_ATTEMPTS) {
       attempts += 1
       try {
-        val future = driverActor.ask(message)(timeout)
+        val future = driverActor match {
+          case Left(a: ActorRef) => a.ask(message)(timeout)
+          case Right(b: ActorSelection) => b.ask(message)(timeout)
+        }
         val result = Await.result(future, timeout)
         if (result == null) {
           throw new SparkException("BlockManagerMaster returned null")
