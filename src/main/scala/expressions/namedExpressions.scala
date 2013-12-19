@@ -33,6 +33,7 @@ abstract class Attribute extends NamedExpression {
 
   def references = Set(this)
   def toAttribute = this
+  def newInstance: Attribute
 }
 
 /**
@@ -71,8 +72,8 @@ case class Alias(child: Expression, name: String)
  * @param dataType The [[DataType]] of this attribute.
  * @param nullable True if null is a valid value for this attribute.
  * @param exprId A globally unique id used to check if different AttributeReferences refer to the same attribute.
- * @param qualifiers a list of strings that can be used to refered to this attribute in a fully qualified way. Consider
- *                   the examples tableName.name, subQueryAlias.name. tableName and subQueryAlias are possible qualifers.
+ * @param qualifiers a list of strings that can be used to referred to this attribute in a fully qualified way. Consider
+ *                   the examples tableName.name, subQueryAlias.name. tableName and subQueryAlias are possible qualifiers.
  */
 case class AttributeReference(name: String, dataType: DataType, nullable: Boolean = true)
                              (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
@@ -82,6 +83,9 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     case ar: AttributeReference => exprId == ar.exprId
     case _ => false
   }
+
+  def newInstance =
+    AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.

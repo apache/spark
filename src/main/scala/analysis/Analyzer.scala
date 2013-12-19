@@ -15,6 +15,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry) extends RuleExecuto
   val fixedPoint = FixedPoint(100)
 
   val batches = Seq(
+    Batch("LocalRelations", Once,
+      NewLocalRelationInstances),
     Batch("Resolution", fixedPoint,
       ResolveReferences,
       ResolveRelations,

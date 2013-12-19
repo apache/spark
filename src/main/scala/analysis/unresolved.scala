@@ -28,6 +28,7 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   def qualifiers = throw new UnresolvedException(this, "qualifiers")
   override lazy val resolved = false
 
+  def newInstance = this
   def withQualifiers(newQualifiers: Seq[String]) = this
 
   override def toString(): String = s"'$name"
@@ -56,6 +57,7 @@ case class Star(table: Option[String]) extends Attribute with trees.LeafNode[Exp
   def qualifiers = throw new UnresolvedException(this, "qualifiers")
   override lazy val resolved = false
 
+  def newInstance = this
   def withQualifiers(newQualifiers: Seq[String]) = this
 
   override def toString = table.map(_ + ".").getOrElse("") + "*"

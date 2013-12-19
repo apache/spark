@@ -151,6 +151,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   /** Returns the name of this type of TreeNode.  Defaults to the class name. */
   def nodeName = getClass.getSimpleName
 
+  /** The arguments that should be included in the arg string.  Defaults to the [[productIterator]] */
+  protected def stringArgs = productIterator
+
   /** Returns a string representing the arguments to this node, minus any children */
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if children contains tn => Nil
