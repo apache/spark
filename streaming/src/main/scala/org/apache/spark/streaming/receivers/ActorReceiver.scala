@@ -20,6 +20,10 @@ package org.apache.spark.streaming.receivers
 import akka.actor.{ Actor, PoisonPill, Props, SupervisorStrategy }
 import akka.actor.{ actorRef2Scala, ActorRef }
 import akka.actor.{ PossiblyHarmful, OneForOneStrategy }
+import akka.actor.SupervisorStrategy._
+
+import scala.concurrent.duration._
+import scala.reflect.ClassTag
 
 import org.apache.spark.storage.{StorageLevel, StreamBlockId}
 import org.apache.spark.streaming.dstream.NetworkReceiver
@@ -28,11 +32,8 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.ArrayBuffer
 
-/** A helper with set of defaults for supervisor strategy **/
+/** A helper with set of defaults for supervisor strategy */
 object ReceiverSupervisorStrategy {
-
-  import akka.util.duration._
-  import akka.actor.SupervisorStrategy._
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
     15 millis) {
@@ -48,10 +49,10 @@ object ReceiverSupervisorStrategy {
  * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
  * 
  * @example {{{
- * 	class MyActor extends Actor with Receiver{
- * 		def receive {
- * 			case anything :String ⇒ pushBlock(anything)
- * 		}
+ *  class MyActor extends Actor with Receiver{
+ *      def receive {
+ *          case anything :String => pushBlock(anything)
+ *      }
  *  }
  *  //Can be plugged in actorStream as follows
  *  ssc.actorStream[String](Props(new MyActor),"MyActorReceiver")
@@ -65,11 +66,11 @@ object ReceiverSupervisorStrategy {
  *
  */
 trait Receiver { self: Actor ⇒
-  def pushBlock[T: ClassManifest](iter: Iterator[T]) {
+  def pushBlock[T: ClassTag](iter: Iterator[T]) {
     context.parent ! Data(iter)
   }
 
-  def pushBlock[T: ClassManifest](data: T) {
+  def pushBlock[T: ClassTag](data: T) {
     context.parent ! Data(data)
   }
 
@@ -83,8 +84,8 @@ case class Statistics(numberOfMsgs: Int,
   numberOfHiccups: Int,
   otherInfo: String)
 
-/** Case class to receive data sent by child actors **/
-private[streaming] case class Data[T: ClassManifest](data: T)
+/** Case class to receive data sent by child actors */
+private[streaming] case class Data[T: ClassTag](data: T)
 
 /**
  * Provides Actors as receivers for receiving stream.
@@ -95,19 +96,19 @@ private[streaming] case class Data[T: ClassManifest](data: T)
  * his own Actor to run as receiver for Spark Streaming input source.
  *
  * This starts a supervisor actor which starts workers and also provides
- * 	[http://doc.akka.io/docs/akka/2.0.5/scala/fault-tolerance.html fault-tolerance].
- * 
+ *  [http://doc.akka.io/docs/akka/2.0.5/scala/fault-tolerance.html fault-tolerance].
+ *
  *  Here's a way to start more supervisor/workers as its children.
  *
  * @example {{{
- * 	context.parent ! Props(new Supervisor)
+ *  context.parent ! Props(new Supervisor)
  * }}} OR {{{
  *  context.parent ! Props(new Worker,"Worker")
  * }}}
  *
  *
  */
-private[streaming] class ActorReceiver[T: ClassManifest](
+private[streaming] class ActorReceiver[T: ClassTag](
   props: Props,
   name: String,
   storageLevel: StorageLevel,
@@ -120,7 +121,7 @@ private[streaming] class ActorReceiver[T: ClassManifest](
   protected lazy val supervisor = env.actorSystem.actorOf(Props(new Supervisor),
     "Supervisor" + streamId)
 
-  private class Supervisor extends Actor {
+  class Supervisor extends Actor {
 
     override val supervisorStrategy = receiverSupervisorStrategy
     val worker = context.actorOf(props, name)

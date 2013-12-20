@@ -34,11 +34,11 @@ import scala.collection.mutable.ArrayBuffer
  */
 private[spark]
 class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: Int) extends Logging {
-  
+
   private val localHostname = Utils.localHostName()
   private val masterActorSystems = ArrayBuffer[ActorSystem]()
   private val workerActorSystems = ArrayBuffer[ActorSystem]()
-  
+
   def start(): Array[String] = {
     logInfo("Starting a local Spark cluster with " + numWorkers + " workers.")
 
@@ -61,10 +61,13 @@ class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: I
   def stop() {
     logInfo("Shutting down local Spark cluster.")
     // Stop the workers before the master so they don't get upset that it disconnected
+    // TODO: In Akka 2.1.x, ActorSystem.awaitTermination hangs when you have remote actors!
+    //       This is unfortunate, but for now we just comment it out.
     workerActorSystems.foreach(_.shutdown())
-    workerActorSystems.foreach(_.awaitTermination())
-
+    //workerActorSystems.foreach(_.awaitTermination())
     masterActorSystems.foreach(_.shutdown())
-    masterActorSystems.foreach(_.awaitTermination())
+    //masterActorSystems.foreach(_.awaitTermination())
+    masterActorSystems.clear()
+    workerActorSystems.clear()
   }
 }

@@ -58,7 +58,7 @@ By default, Spark links to Hadoop 1.0.4. You can change this by setting the
 
     SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
 
-In addition, if you wish to run Spark on [YARN](running-on-yarn.md), set
+In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
 `SPARK_YARN` to `true`:
 
     SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly

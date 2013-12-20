@@ -83,7 +83,7 @@ object MFDataGenerator{
       scala.math.round(.99 * m * n)).toInt
     val rand = new Random()
     val mn = m * n
-    val shuffled = rand.shuffle(1 to mn toIterable)
+    val shuffled = rand.shuffle(1 to mn toList)
 
     val omega = shuffled.slice(0, sampSize)
     val ordered = omega.sortWith(_ < _).toArray

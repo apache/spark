@@ -24,8 +24,7 @@ import java.util.{TimerTask, Timer}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
-
-import akka.util.duration._
+import scala.concurrent.duration._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -123,7 +122,7 @@ private[spark] class ClusterScheduler(
 
     if (!isLocal && System.getProperty("spark.speculation", "false").toBoolean) {
       logInfo("Starting speculative execution thread")
-
+      import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
             SPECULATION_INTERVAL milliseconds) {
         checkSpeculatableTasks()

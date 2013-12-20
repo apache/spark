@@ -283,7 +283,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
     // Fail the task MAX_TASK_FAILURES times, and check that the task set is aborted
     // after the last failure.
-    (0 until MAX_TASK_FAILURES).foreach { index =>
+    (1 to manager.MAX_TASK_FAILURES).foreach { index =>
       val offerResult = manager.resourceOffer("exec1", "host1", 1, ANY)
       assert(offerResult != None,
         "Expect resource offer on iteration %s to return a task".format(index))
@@ -313,6 +313,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
   }
 
   def createTaskResult(id: Int): DirectTaskResult[Int] = {
-    new DirectTaskResult[Int](id, mutable.Map.empty, new TaskMetrics)
+    val valueSer = SparkEnv.get.serializer.newInstance()
+    new DirectTaskResult[Int](valueSer.serialize(id), mutable.Map.empty, new TaskMetrics)
   }
 }

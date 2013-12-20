@@ -537,8 +537,8 @@ private[spark] class TaskSetManager(
       addPendingTask(index)
       if (state != TaskState.KILLED) {
         numFailures(index) += 1
-        if (numFailures(index) > maxTaskFailures) {
-          logError("Task %s:%d failed more than %d times; aborting job".format(
+        if (numFailures(index) >= maxTaskFailures) {
+          logError("Task %s:%d failed %d times; aborting job".format(
             taskSet.id, index, maxTaskFailures))
           abort("Task %s:%d failed more than %d times (most recent failure: %s)".format(
             taskSet.id, index, maxTaskFailures, failureReason))

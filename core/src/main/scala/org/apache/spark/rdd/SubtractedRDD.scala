@@ -18,8 +18,11 @@
 package org.apache.spark.rdd
 
 import java.util.{HashMap => JHashMap}
+
 import scala.collection.JavaConversions._
 import scala.collection.mutable.ArrayBuffer
+import scala.reflect.ClassTag
+
 import org.apache.spark.Partitioner
 import org.apache.spark.Dependency
 import org.apache.spark.TaskContext
@@ -45,7 +48,7 @@ import org.apache.spark.OneToOneDependency
  * you can use `rdd1`'s partitioner/partition size and not worry about running
  * out of memory because of the size of `rdd2`.
  */
-private[spark] class SubtractedRDD[K: ClassManifest, V: ClassManifest, W: ClassManifest](
+private[spark] class SubtractedRDD[K: ClassTag, V: ClassTag, W: ClassTag](
     @transient var rdd1: RDD[_ <: Product2[K, V]],
     @transient var rdd2: RDD[_ <: Product2[K, W]],
     part: Partitioner)

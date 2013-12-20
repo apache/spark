@@ -17,12 +17,27 @@
 # limitations under the License.
 #
 
-EXTRA_ARGS=""
+cygwin=false
+case "`uname`" in
+    CYGWIN*) cygwin=true;;
+esac
+
+EXTRA_ARGS="-Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m"
 if [ "$MESOS_HOME" != "" ]; then
-  EXTRA_ARGS="-Djava.library.path=$MESOS_HOME/lib/java"
+  EXTRA_ARGS="$EXTRA_ARGS -Djava.library.path=$MESOS_HOME/lib/java"
 fi
 
 export SPARK_HOME=$(cd "$(dirname $0)/.." 2>&1 >/dev/null ; pwd)
 export SPARK_TESTING=1  # To put test classes on classpath
 
-java -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m $EXTRA_ARGS $SBT_OPTS -jar "$SPARK_HOME"/sbt/sbt-launch-*.jar "$@"
+SBT_JAR="$SPARK_HOME"/sbt/sbt-launch-*.jar
+if $cygwin; then
+    SBT_JAR=`cygpath -w $SBT_JAR`
+    export SPARK_HOME=`cygpath -w $SPARK_HOME`
+    EXTRA_ARGS="$EXTRA_ARGS -Djline.terminal=jline.UnixTerminal -Dsbt.cygwin=true"
+    stty -icanon min 1 -echo > /dev/null 2>&1
+    java $EXTRA_ARGS $SBT_OPTS -jar $SBT_JAR "$@"
+    stty icanon echo > /dev/null 2>&1
+else
+    java $EXTRA_ARGS $SBT_OPTS -jar $SBT_JAR "$@"
+fi

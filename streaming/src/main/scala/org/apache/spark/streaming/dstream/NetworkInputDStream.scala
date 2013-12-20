@@ -21,11 +21,12 @@ import java.util.concurrent.ArrayBlockingQueue
 import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.Await
+import scala.concurrent.duration._
+import scala.reflect.ClassTag
 
 import akka.actor.{Props, Actor}
 import akka.pattern.ask
-import akka.dispatch.Await
-import akka.util.duration._
 
 import org.apache.spark.streaming.util.{RecurringTimer, SystemClock}
 import org.apache.spark.streaming._
@@ -42,7 +43,7 @@ import org.apache.spark.storage.{BlockId, StorageLevel, StreamBlockId}
  * @param ssc_ Streaming context that will execute this input stream
  * @tparam T Class type of the object of this stream
  */
-abstract class NetworkInputDStream[T: ClassManifest](@transient ssc_ : StreamingContext)
+abstract class NetworkInputDStream[T: ClassTag](@transient ssc_ : StreamingContext)
   extends InputDStream[T](ssc_) {
 
   // This is an unique identifier that is used to match the network receiver with the
@@ -84,7 +85,7 @@ private[streaming] case class ReportError(msg: String) extends NetworkReceiverMe
  * Abstract class of a receiver that can be run on worker nodes to receive external data. See
  * [[org.apache.spark.streaming.dstream.NetworkInputDStream]] for an explanation.
  */
-abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Logging {
+abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging {
 
   initLogging()
 
@@ -176,8 +177,8 @@ abstract class NetworkReceiver[T: ClassManifest]() extends Serializable with Log
     logInfo("Attempting to register with tracker")
     val ip = System.getProperty("spark.driver.host", "localhost")
     val port = System.getProperty("spark.driver.port", "7077").toInt
-    val url = "akka://spark@%s:%s/user/NetworkInputTracker".format(ip, port)
-    val tracker = env.actorSystem.actorFor(url)
+    val url = "akka.tcp://spark@%s:%s/user/NetworkInputTracker".format(ip, port)
+    val tracker = env.actorSystem.actorSelection(url)
     val timeout = 5.seconds
 
     override def preStart() {

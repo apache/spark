@@ -21,9 +21,10 @@ import org.apache.spark.Partitioner
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{Duration, DStream, Time}
+import scala.reflect.ClassTag
 
 private[streaming]
-class ShuffledDStream[K: ClassManifest, V: ClassManifest, C: ClassManifest](
+class ShuffledDStream[K: ClassTag, V: ClassTag, C: ClassTag](
     parent: DStream[(K,V)],
     createCombiner: V => C,
     mergeValue: (C, V) => C,

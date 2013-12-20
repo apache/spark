@@ -17,31 +17,28 @@
 
 package org.apache.spark.deploy.master.ui
 
+import scala.concurrent.Await
 import scala.xml.Node
 
-import akka.dispatch.Await
 import akka.pattern.ask
-import akka.util.duration._
-
 import javax.servlet.http.HttpServletRequest
-
 import net.liftweb.json.JsonAST.JValue
 
-import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.JsonProtocol
+import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.ExecutorInfo
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 private[spark] class ApplicationPage(parent: MasterWebUI) {
   val master = parent.masterActorRef
-  implicit val timeout = parent.timeout
+  val timeout = parent.timeout
 
   /** Executor details for a particular application */
   def renderJson(request: HttpServletRequest): JValue = {
     val appId = request.getParameter("appId")
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, 30 seconds)
+    val state = Await.result(stateFuture, timeout)
     val app = state.activeApps.find(_.id == appId).getOrElse({
       state.completedApps.find(_.id == appId).getOrElse(null)
     })
@@ -52,7 +49,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
   def render(request: HttpServletRequest): Seq[Node] = {
     val appId = request.getParameter("appId")
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, 30 seconds)
+    val state = Await.result(stateFuture, timeout)
     val app = state.activeApps.find(_.id == appId).getOrElse({
       state.completedApps.find(_.id == appId).getOrElse(null)
     })

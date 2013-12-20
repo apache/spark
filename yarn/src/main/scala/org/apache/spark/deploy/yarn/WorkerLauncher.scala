@@ -27,10 +27,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import akka.actor._
-import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
-import akka.remote.RemoteClientShutdown
+import akka.remote._
 import akka.actor.Terminated
-import akka.remote.RemoteClientDisconnected
 import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
@@ -55,19 +53,18 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration) exte
   // This actor just working as a monitor to watch on Driver Actor.
   class MonitorActor(driverUrl: String) extends Actor {
 
-    var driver: ActorRef = null
+    var driver: ActorSelection = null
 
     override def preStart() {
       logInfo("Listen to driver: " + driverUrl)
-      driver = context.actorFor(driverUrl)
+      driver = context.actorSelection(driverUrl)
       driver ! "hello"
-      context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-      context.watch(driver) // Doesn't work with remote actors, but useful for testing
+      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     }
 
     override def receive = {
-      case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
-        logInfo("Driver terminated or disconnected! Shutting down.")
+      case x: DisassociatedEvent =>
+        logInfo(s"Driver terminated or disconnected! Shutting down. $x")
         driverClosed = true
     }
   }
@@ -168,7 +165,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration) exte
     System.setProperty("spark.driver.host", driverHost)
     System.setProperty("spark.driver.port", driverPort.toString)
 
-    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+    val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       driverHost, driverPort.toString, CoarseGrainedSchedulerBackend.ACTOR_NAME)
 
     actor = actorSystem.actorOf(Props(new MonitorActor(driverUrl)), name = "YarnAM")

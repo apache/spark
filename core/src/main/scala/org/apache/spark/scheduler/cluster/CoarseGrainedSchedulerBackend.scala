@@ -20,19 +20,19 @@ package org.apache.spark.scheduler.cluster
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 import akka.actor._
-import akka.dispatch.Await
 import akka.pattern.ask
-import akka.remote.{RemoteClientShutdown, RemoteClientDisconnected, RemoteClientLifeCycleEvent}
-import akka.util.Duration
-import akka.util.duration._
+import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
 import org.apache.spark.{SparkException, Logging, TaskState}
+import org.apache.spark.{Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{ClusterScheduler, SchedulerBackend, SlaveLost, TaskDescription,
   WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
@@ -49,20 +49,22 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
 
+  private val timeout = AkkaUtils.askTimeout
+
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
     private val executorActor = new HashMap[String, ActorRef]
     private val executorAddress = new HashMap[String, Address]
     private val executorHost = new HashMap[String, String]
     private val freeCores = new HashMap[String, Int]
-    private val actorToExecutorId = new HashMap[ActorRef, String]
     private val addressToExecutorId = new HashMap[Address, String]
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
-      context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
+      context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
       // Periodically revive offers to allow delay scheduling to work
       val reviveInterval = System.getProperty("spark.scheduler.revive.interval", "1000").toLong
+      import context.dispatcher
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
 
@@ -74,12 +76,10 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
         } else {
           logInfo("Registered executor: " + sender + " with ID " + executorId)
           sender ! RegisteredExecutor(sparkProperties)
-          context.watch(sender)
           executorActor(executorId) = sender
           executorHost(executorId) = Utils.parseHostPort(hostPort)._1
           freeCores(executorId) = cores
           executorAddress(executorId) = sender.path.address
-          actorToExecutorId(sender) = executorId
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           makeOffers()
@@ -119,14 +119,9 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
         removeExecutor(executorId, reason)
         sender ! true
 
-      case Terminated(actor) =>
-        actorToExecutorId.get(actor).foreach(removeExecutor(_, "Akka actor terminated"))
+      case DisassociatedEvent(_, address, _) => 
+        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client disassociated"))
 
-      case RemoteClientDisconnected(transport, address) =>
-        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client disconnected"))
-
-      case RemoteClientShutdown(transport, address) =>
-        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client shutdown"))
     }
 
     // Make fake resource offers on all executors
@@ -154,7 +149,6 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
       if (executorActor.contains(executorId)) {
         logInfo("Executor " + executorId + " disconnected, so removing it")
         val numCores = freeCores(executorId)
-        actorToExecutorId -= executorActor(executorId)
         addressToExecutorId -= executorAddress(executorId)
         executorActor -= executorId
         executorHost -= executorId
@@ -180,10 +174,6 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
     }
     driverActor = actorSystem.actorOf(
       Props(new DriverActor(properties)), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
-  }
-
-  private val timeout = {
-    Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
   }
 
   def stopExecutors() {

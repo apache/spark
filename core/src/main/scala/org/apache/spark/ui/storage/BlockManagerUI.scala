@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.storage
 
-import akka.util.Duration
+import scala.concurrent.duration._
 
 import javax.servlet.http.HttpServletRequest
 
@@ -28,9 +28,6 @@ import org.apache.spark.ui.JettyUtils._
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
-  implicit val timeout = Duration.create(
-    System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
-
   val indexPage = new IndexPage(this)
   val rddPage = new RDDPage(this)
 
