@@ -1,4 +1,5 @@
 from numpy import *
+from pyspark import SparkContext
 
 # Double vector format:
 #
@@ -7,44 +8,106 @@ from numpy import *
 # Double matrix format:
 #
 # [8-byte 2] [8-byte rows] [8-byte cols] [rows*cols*8 bytes of data]
-# 
+#
 # This is all in machine-endian.  That means that the Java interpreter and the
 # Python interpreter must agree on what endian the machine is.
 
 def _deserialize_byte_array(shape, ba, offset):
+    """Wrapper around ndarray aliasing hack.
+
+    >>> x = array([1.0, 2.0, 3.0, 4.0, 5.0])
+    >>> array_equal(x, _deserialize_byte_array(x.shape, x.data, 0))
+    True
+    >>> x = array([1.0, 2.0, 3.0, 4.0]).reshape(2,2)
+    >>> array_equal(x, _deserialize_byte_array(x.shape, x.data, 0))
+    True
+    """
     ar = ndarray(shape=shape, buffer=ba, offset=offset, dtype="float64",
             order='C')
     return ar.copy()
 
 def _serialize_double_vector(v):
-    if (type(v) == ndarray and v.dtype == float64 and v.ndim == 1):
-        length = v.shape[0]
-        ba = bytearray(16 + 8*length)
-        header = ndarray(shape=[2], buffer=ba, dtype="int64")
-        header[0] = 1
-        header[1] = length
-        copyto(ndarray(shape=[length], buffer=ba, offset=16,
-                dtype="float64"), v)
-        return ba
-    else:
-        raise TypeError("_serialize_double_vector called on a "
-                        "non-double-vector")
+    """Serialize a double vector into a mutually understood format.
+
+    >>> _serialize_double_vector(array([]))
+    bytearray(b'\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00')
+    >>> _serialize_double_vector(array([0.0, 1.0]))
+    bytearray(b'\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x02\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\xf0?')
+    >>> _serialize_double_vector("hello, world")
+    Traceback (most recent call last):
+      File "/usr/lib/python2.7/doctest.py", line 1289, in __run
+        compileflags, 1) in test.globs
+      File "<doctest __main__._serialize_double_vector[1]>", line 1, in <module>
+        _serialize_double_vector("hello, world")
+      File "python/pyspark/mllib.py", line 41, in _serialize_double_vector
+        raise TypeError("_serialize_double_vector called on a %s; wanted ndarray" % type(v))
+    TypeError: _serialize_double_vector called on a <type 'str'>; wanted ndarray
+    >>> _serialize_double_vector(array([0, 1]))
+    Traceback (most recent call last):
+      File "/usr/lib/python2.7/doctest.py", line 1289, in __run
+        compileflags, 1) in test.globs
+      File "<doctest __main__._serialize_double_vector[2]>", line 1, in <module>
+        _serialize_double_vector(array([0, 1]))
+      File "python/pyspark/mllib.py", line 51, in _serialize_double_vector
+        "wanted ndarray of float64" % v.dtype)
+    TypeError: _serialize_double_vector called on an ndarray of int64; wanted ndarray of float64
+    >>> _serialize_double_vector(array([0.0, 1.0, 2.0, 3.0]).reshape(2,2))
+    Traceback (most recent call last):
+      File "/usr/lib/python2.7/doctest.py", line 1289, in __run
+        compileflags, 1) in test.globs
+      File "<doctest __main__._serialize_double_vector[3]>", line 1, in <module>
+        _serialize_double_vector(array([0.0, 1.0, 2.0, 3.0]).reshape(2,2))
+      File "python/pyspark/mllib.py", line 62, in _serialize_double_vector
+        "wanted a 1darray" % v.ndim)
+    TypeError: _serialize_double_vector called on a 2darray; wanted a 1darray
+    """
+    if type(v) != ndarray:
+        raise TypeError("_serialize_double_vector called on a %s; "
+                "wanted ndarray" % type(v))
+    if v.dtype != float64:
+        raise TypeError("_serialize_double_vector called on an ndarray of %s; "
+                "wanted ndarray of float64" % v.dtype)
+    if v.ndim != 1:
+        raise TypeError("_serialize_double_vector called on a %ddarray; "
+                "wanted a 1darray" % v.ndim)
+    length = v.shape[0]
+    ba = bytearray(16 + 8*length)
+    header = ndarray(shape=[2], buffer=ba, dtype="int64")
+    header[0] = 1
+    header[1] = length
+    copyto(ndarray(shape=[length], buffer=ba, offset=16,
+            dtype="float64"), v)
+    return ba
 
 def _deserialize_double_vector(ba):
-    if (type(ba) == bytearray and len(ba) >= 16 and (len(ba) & 7 == 0)):
-        header = ndarray(shape=[2], buffer=ba, dtype="int64")
-        if (header[0] != 1):
-            raise TypeError("_deserialize_double_vector called on bytearray "
-                            "with wrong magic")
-        length = header[1]
-        if (len(ba) != 8*length + 16):
-            raise TypeError("_deserialize_double_vector called on bytearray "
-                            "with wrong length")
-        return _deserialize_byte_array([length], ba, 16)
-    else:
-        raise TypeError("_deserialize_double_vector called on a non-bytearray")
+    """Deserialize a double vector from a mutually understood format.
+
+    >>> x = array([1.0, 2.0, 3.0, 4.0, -1.0, 0.0, -0.0])
+    >>> array_equal(x, _deserialize_double_vector(_serialize_double_vector(x)))
+    True
+    """
+    if type(ba) != bytearray:
+        raise TypeError("_deserialize_double_vector called on a %s; "
+                "wanted bytearray" % type(ba))
+    if len(ba) < 16:
+        raise TypeError("_deserialize_double_vector called on a %d-byte array, "
+                "which is too short" % len(ba))
+    if (len(ba) & 7) != 0:
+        raise TypeError("_deserialize_double_vector called on a %d-byte array, "
+                "which is not a multiple of 8" % len(ba))
+    header = ndarray(shape=[2], buffer=ba, dtype="int64")
+    if header[0] != 1:
+        raise TypeError("_deserialize_double_vector called on bytearray "
+                        "with wrong magic")
+    length = header[1]
+    if len(ba) != 8*length + 16:
+        raise TypeError("_deserialize_double_vector called on bytearray "
+                        "with wrong length")
+    return _deserialize_byte_array([length], ba, 16)
 
 def _serialize_double_matrix(m):
+    """Serialize a double matrix into a mutually understood format.
+    """
     if (type(m) == ndarray and m.dtype == float64 and m.ndim == 2):
         rows = m.shape[0]
         cols = m.shape[1]
@@ -61,22 +124,31 @@ def _serialize_double_matrix(m):
                         "non-double-matrix")
 
 def _deserialize_double_matrix(ba):
-    if (type(ba) == bytearray and len(ba) >= 24 and (len(ba) & 7 == 0)):
-        header = ndarray(shape=[3], buffer=ba, dtype="int64")
-        if (header[0] != 2):
-            raise TypeError("_deserialize_double_matrix called on bytearray "
-                            "with wrong magic")
-        rows = header[1]
-        cols = header[2]
-        if (len(ba) != 8*rows*cols + 24):
-            raise TypeError("_deserialize_double_matrix called on bytearray "
-                            "with wrong length")
-        return _deserialize_byte_array([rows, cols], ba, 24)
-    else:
-        raise TypeError("_deserialize_double_matrix called on a non-bytearray")
+    """Deserialize a double matrix from a mutually understood format.
+    """
+    if type(ba) != bytearray:
+        raise TypeError("_deserialize_double_matrix called on a %s; "
+                "wanted bytearray" % type(ba))
+    if len(ba) < 24:
+        raise TypeError("_deserialize_double_matrix called on a %d-byte array, "
+                "which is too short" % len(ba))
+    if (len(ba) & 7) != 0:
+        raise TypeError("_deserialize_double_matrix called on a %d-byte array, "
+                "which is not a multiple of 8" % len(ba))
+    header = ndarray(shape=[3], buffer=ba, dtype="int64")
+    if (header[0] != 2):
+        raise TypeError("_deserialize_double_matrix called on bytearray "
+                        "with wrong magic")
+    rows = header[1]
+    cols = header[2]
+    if (len(ba) != 8*rows*cols + 24):
+        raise TypeError("_deserialize_double_matrix called on bytearray "
+                        "with wrong length")
+    return _deserialize_byte_array([rows, cols], ba, 24)
 
 def _linear_predictor_typecheck(x, coeffs):
-    """Predict the class of the vector x."""
+    """Check that x is a one-dimensional vector of the right shape.
+    This is a temporary hackaround until I actually implement bulk predict."""
     if type(x) == ndarray:
         if x.ndim == 1:
             if x.shape == coeffs.shape:
@@ -98,12 +170,17 @@ class LinearModel(object):
         self._intercept = intercept
 
 class LinearRegressionModelBase(LinearModel):
-    """A linear regression model."""
+    """A linear regression model.
+
+    >>> lrmb = LinearRegressionModelBase(array([1.0, 2.0]), 0.1)
+    >>> abs(lrmb.predict(array([-1.03, 7.777])) - 14.624) < 1e-6
+    True
+    """
     def predict(self, x):
         """Predict the value of the dependent variable given a vector x"""
         """containing values for the independent variables."""
-        _linear_predictor_typecheck(x, _coeff)
-        return dot(_coeff, x) + _intercept
+        _linear_predictor_typecheck(x, self._coeff)
+        return dot(self._coeff, x) + self._intercept
 
 # Map a pickled Python RDD of numpy double vectors to a Java RDD of
 # _serialized_double_vectors
@@ -145,7 +222,11 @@ def _regression_train_wrapper(sc, train_func, klass, data, initial_weights):
     return klass(_deserialize_double_vector(ans[0]), ans[1]);
 
 class LinearRegressionModel(LinearRegressionModelBase):
-    """A linear regression model derived from a least-squares fit."""
+    """A linear regression model derived from a least-squares fit.
+
+    >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
+    >>> lrm = LinearRegressionModel.train(sc, sc.parallelize(data), initial_weights=array([1.0]))
+    """
     @classmethod
     def train(cls, sc, data, iterations=100, step=1.0,
               mini_batch_fraction=1.0, initial_weights=None):
@@ -156,8 +237,12 @@ class LinearRegressionModel(LinearRegressionModelBase):
                 LinearRegressionModel, data, initial_weights)
 
 class LassoModel(LinearRegressionModelBase):
-    """A linear regression model derived from a least-squares fit with an """
-    """l_1 penalty term."""
+    """A linear regression model derived from a least-squares fit with an
+    l_1 penalty term.
+
+    >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
+    >>> lrm = LassoModel.train(sc, sc.parallelize(data), initial_weights=array([1.0]))
+    """
     @classmethod
     def train(cls, sc, data, iterations=100, step=1.0, reg_param=1.0,
               mini_batch_fraction=1.0, initial_weights=None):
@@ -168,8 +253,12 @@ class LassoModel(LinearRegressionModelBase):
                 LassoModel, data, initial_weights)
 
 class RidgeRegressionModel(LinearRegressionModelBase):
-    """A linear regression model derived from a least-squares fit with an """
-    """l_2 penalty term."""
+    """A linear regression model derived from a least-squares fit with an
+    l_2 penalty term.
+
+    >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
+    >>> lrm = RidgeRegressionModel.train(sc, sc.parallelize(data), initial_weights=array([1.0]))
+    """
     @classmethod
     def train(cls, sc, data, iterations=100, step=1.0, reg_param=1.0,
               mini_batch_fraction=1.0, initial_weights=None):
@@ -180,7 +269,11 @@ class RidgeRegressionModel(LinearRegressionModelBase):
                 RidgeRegressionModel, data, initial_weights)
 
 class LogisticRegressionModel(LinearModel):
-    """A linear binary classification model derived from logistic regression."""
+    """A linear binary classification model derived from logistic regression.
+
+    >>> data = array([0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0, 3.0]).reshape(4,2)
+    >>> lrm = LogisticRegressionModel.train(sc, sc.parallelize(data))
+    """
     def predict(self, x):
         _linear_predictor_typecheck(x, _coeff)
         margin = dot(x, _coeff) + intercept
@@ -197,7 +290,11 @@ class LogisticRegressionModel(LinearModel):
                 LogisticRegressionModel, data, initial_weights)
 
 class SVMModel(LinearModel):
-    """A support vector machine."""
+    """A support vector machine.
+
+    >>> data = array([0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0, 3.0]).reshape(4,2)
+    >>> svm = SVMModel.train(sc, sc.parallelize(data))
+    """
     def predict(self, x):
         _linear_predictor_typecheck(x, _coeff)
         margin = dot(x, _coeff) + intercept
@@ -212,15 +309,24 @@ class SVMModel(LinearModel):
                 SVMModel, data, initial_weights)
 
 class KMeansModel(object):
-    """A clustering model derived from the k-means method."""
+    """A clustering model derived from the k-means method.
+
+    >>> data = array([0.0, 0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4,2)
+    >>> clusters = KMeansModel.train(sc, sc.parallelize(data), 2, maxIterations=10, runs=30, initialization_mode="random")
+    >>> clusters.predict(array([0.0, 0.0])) == clusters.predict(array([1.0, 1.0]))
+    True
+    >>> clusters.predict(array([8.0, 9.0])) == clusters.predict(array([9.0, 8.0]))
+    True
+    >>> clusters = KMeansModel.train(sc, sc.parallelize(data), 2)
+    """
     def __init__(self, centers_):
         self.centers = centers_
 
     def predict(self, x):
         best = 0
         best_distance = 1e75
-        for i in range(0, centers.shape[0]):
-            diff = x - centers[i]
+        for i in range(0, self.centers.shape[0]):
+            diff = x - self.centers[i]
             distance = sqrt(dot(diff, diff))
             if distance < best_distance:
                 best = i
@@ -239,3 +345,17 @@ class KMeansModel(object):
             raise RuntimeError("JVM call result had first element of type "
                     + type(ans[0]) + " which is not bytearray");
         return KMeansModel(_deserialize_double_matrix(ans[0]));
+
+def _test():
+    import doctest
+    globs = globals().copy()
+    globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
+    (failure_count, test_count) = doctest.testmod(globs=globs,
+        optionflags=doctest.ELLIPSIS)
+    globs['sc'].stop()
+    print failure_count,"failures among",test_count,"tests"
+    if failure_count:
+        exit(-1)
+
+if __name__ == "__main__":
+    _test()
