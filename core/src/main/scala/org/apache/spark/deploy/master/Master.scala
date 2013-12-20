@@ -61,8 +61,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
 
-  var firstApp: Option[ApplicationInfo] = None
-
   Utils.checkHost(host, "Expected hostname")
 
   val masterMetricsSystem = MetricsSystem.createMetricsSystem("master")
@@ -441,14 +439,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     idToApp(app.id) = app
     actorToApp(app.driver) = app
     addressToApp(appAddress) = app
-    if (firstApp == None) {
-      firstApp = Some(app)
-    }
-    // TODO: What is firstApp?? Can we remove it?
-    val workersAlive = workers.filter(_.state == WorkerState.ALIVE).toArray
-    if (workersAlive.size > 0 && !workersAlive.exists(_.memoryFree >= app.desc.memoryPerSlave)) {
-      logWarning("Could not find any workers with enough memory for " + firstApp.get.id)
-    }
     waitingApps += app
   }
 
