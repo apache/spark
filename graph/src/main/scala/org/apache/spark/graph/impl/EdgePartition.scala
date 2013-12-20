@@ -56,16 +56,6 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
     new EdgePartition(srcIds, dstIds, newData, index)
   }
 
-  def filter(pred: Edge[ED] => Boolean): EdgePartition[ED] = {
-    val builder = new EdgePartitionBuilder[ED]
-    iterator.foreach { e =>
-      if (pred(e)) {
-        builder.add(e.srcId, e.dstId, e.attr)
-      }
-    }
-    builder.toEdgePartition
-  }
-
   /**
    * Apply the function f to all edges in this partition.
    *

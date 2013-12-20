@@ -31,17 +31,6 @@ class EdgePartitionSuite extends FunSuite {
       edges.map(e => e.copy(attr = e.srcId + e.dstId)))
   }
 
-  test("filter") {
-    val edges = List(Edge(0, 1, 0), Edge(1, 2, 0), Edge(2, 0, 0))
-    val builder = new EdgePartitionBuilder[Int]
-    for (e <- edges) {
-      builder.add(e.srcId, e.dstId, e.attr)
-    }
-    val edgePartition = builder.toEdgePartition
-    assert(edgePartition.filter(e => e.srcId <= 1).iterator.map(_.copy()).toList ===
-      edges.filter(e => e.srcId <= 1))
-  }
-
   test("groupEdges") {
     val edges = List(
       Edge(0, 1, 1), Edge(1, 2, 2), Edge(2, 0, 4), Edge(0, 1, 8), Edge(1, 2, 16), Edge(2, 0, 32))
