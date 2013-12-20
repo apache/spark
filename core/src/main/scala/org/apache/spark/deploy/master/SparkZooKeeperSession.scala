@@ -103,6 +103,7 @@ private[spark] class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher) ext
           connectToZooKeeper()
         case KeeperState.Disconnected =>
           logWarning("ZooKeeper disconnected, will retry...")
+        case s => // Do nothing
       }
     }
   }
