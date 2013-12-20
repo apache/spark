@@ -27,40 +27,7 @@ def _deserialize_byte_array(shape, ba, offset):
     return ar.copy()
 
 def _serialize_double_vector(v):
-    """Serialize a double vector into a mutually understood format.
-
-    >>> _serialize_double_vector(array([]))
-    bytearray(b'\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00')
-    >>> _serialize_double_vector(array([0.0, 1.0]))
-    bytearray(b'\\x01\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x02\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\x00\\xf0?')
-    >>> _serialize_double_vector("hello, world")
-    Traceback (most recent call last):
-      File "/usr/lib/python2.7/doctest.py", line 1289, in __run
-        compileflags, 1) in test.globs
-      File "<doctest __main__._serialize_double_vector[1]>", line 1, in <module>
-        _serialize_double_vector("hello, world")
-      File "python/pyspark/mllib.py", line 41, in _serialize_double_vector
-        raise TypeError("_serialize_double_vector called on a %s; wanted ndarray" % type(v))
-    TypeError: _serialize_double_vector called on a <type 'str'>; wanted ndarray
-    >>> _serialize_double_vector(array([0, 1]))
-    Traceback (most recent call last):
-      File "/usr/lib/python2.7/doctest.py", line 1289, in __run
-        compileflags, 1) in test.globs
-      File "<doctest __main__._serialize_double_vector[2]>", line 1, in <module>
-        _serialize_double_vector(array([0, 1]))
-      File "python/pyspark/mllib.py", line 51, in _serialize_double_vector
-        "wanted ndarray of float64" % v.dtype)
-    TypeError: _serialize_double_vector called on an ndarray of int64; wanted ndarray of float64
-    >>> _serialize_double_vector(array([0.0, 1.0, 2.0, 3.0]).reshape(2,2))
-    Traceback (most recent call last):
-      File "/usr/lib/python2.7/doctest.py", line 1289, in __run
-        compileflags, 1) in test.globs
-      File "<doctest __main__._serialize_double_vector[3]>", line 1, in <module>
-        _serialize_double_vector(array([0.0, 1.0, 2.0, 3.0]).reshape(2,2))
-      File "python/pyspark/mllib.py", line 62, in _serialize_double_vector
-        "wanted a 1darray" % v.ndim)
-    TypeError: _serialize_double_vector called on a 2darray; wanted a 1darray
-    """
+    """Serialize a double vector into a mutually understood format."""
     if type(v) != ndarray:
         raise TypeError("_serialize_double_vector called on a %s; "
                 "wanted ndarray" % type(v))
@@ -106,8 +73,7 @@ def _deserialize_double_vector(ba):
     return _deserialize_byte_array([length], ba, 16)
 
 def _serialize_double_matrix(m):
-    """Serialize a double matrix into a mutually understood format.
-    """
+    """Serialize a double matrix into a mutually understood format."""
     if (type(m) == ndarray and m.dtype == float64 and m.ndim == 2):
         rows = m.shape[0]
         cols = m.shape[1]
@@ -124,8 +90,7 @@ def _serialize_double_matrix(m):
                         "non-double-matrix")
 
 def _deserialize_double_matrix(ba):
-    """Deserialize a double matrix from a mutually understood format.
-    """
+    """Deserialize a double matrix from a mutually understood format."""
     if type(ba) != bytearray:
         raise TypeError("_deserialize_double_matrix called on a %s; "
                 "wanted bytearray" % type(ba))
