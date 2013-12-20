@@ -3,6 +3,8 @@ package org.apache.spark.api.r
 import java.io._
 import scala.io.Source
 import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
+
 import org.apache.spark._
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
 import org.apache.spark.rdd.RDD
@@ -12,7 +14,7 @@ import org.apache.spark.util.Utils
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from R.
  * This is used by SparkR's shuffle operations.
  */
-private class PairwiseRRDD[T: ClassManifest](
+private class PairwiseRRDD[T: ClassTag](
     parent: RDD[T],
     numPartitions: Int,
     hashFunc: Array[Byte],
@@ -81,7 +83,7 @@ private class PairwiseRRDD[T: ClassManifest](
 /**
  * An RDD that stores serialized R objects as Array[Byte].
  */
-class RRDD[T: ClassManifest](
+class RRDD[T: ClassTag](
     parent: RDD[T],
     func: Array[Byte],
     dataSerialized: Boolean,
