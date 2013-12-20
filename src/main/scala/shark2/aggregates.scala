@@ -45,12 +45,10 @@ case class Aggregate(groupingExpressions: Seq[Expression],
   case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
     def this() = this(null, null) // Required for serialization.
 
-    // TODO: Support other types.
-    require(expr.dataType == IntegerType)
-    var sum: Int = _
+    var sum = Evaluate(Cast(Literal(0), expr.dataType), Nil)
 
     def apply(input: Seq[Seq[Any]]): Unit =
-      sum += Evaluate(expr, input).asInstanceOf[Int]
+      sum = Evaluate(Add(Literal(sum), expr), input)
 
     def result: Any = sum
   }
@@ -90,9 +88,16 @@ case class Aggregate(groupingExpressions: Seq[Expression],
           // If any references exist that are not inside agg functions then the must be grouping exprs in this case
           // we must rebind them to the grouping tuple.
           if(remainingAttributes.nonEmpty) {
-            val ordinal = groupingExpressions.indexOf(agg)
-            if(ordinal == -1) sys.error(s"$agg is not in grouping expressions: $groupingExpressions")
-            BoundReference(0, ordinal, Alias(impl, "AGGEXPR")().toAttribute)
+            val unaliasedAggregateExpr = agg transform { case Alias(c, _) => c }
+
+            // An exact match with a grouping expression
+            val exactGroupingExpr = groupingExpressions.indexOf(unaliasedAggregateExpr) match {
+              case -1 => None
+              case ordinal => Some(BoundReference(0, ordinal, Alias(impl, "AGGEXPR")().toAttribute)
+              )
+            }
+
+            exactGroupingExpr.getOrElse(sys.error(s"$agg is not in grouping expressions: $groupingExpressions"))
           } else {
             impl
           }
