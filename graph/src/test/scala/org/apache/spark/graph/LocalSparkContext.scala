@@ -6,39 +6,23 @@ import org.scalatest.BeforeAndAfterEach
 import org.apache.spark.SparkContext
 
 
-/** Manages a local `sc` {@link SparkContext} variable, correctly stopping it after each test. */
-trait LocalSparkContext extends BeforeAndAfterEach { self: Suite =>
+/**
+ * Provides a method to run tests against a {@link SparkContext} variable that is correctly stopped
+ * after each test.
+*/
+trait LocalSparkContext {
+  System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+  System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
 
-  @transient var sc: SparkContext = _
-
-  override def afterEach() {
-    resetSparkContext()
-    super.afterEach()
-  }
-
-  def resetSparkContext() = {
-    if (sc != null) {
-      LocalSparkContext.stop(sc)
-      sc = null
-    }
-  }
-
-}
-
-object LocalSparkContext {
-  def stop(sc: SparkContext) {
-    sc.stop()
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
-  }
-
-  /** Runs `f` by passing in `sc` and ensures that `sc` is stopped. */
-  def withSpark[T](sc: SparkContext)(f: SparkContext => T) = {
+  /** Runs `f` on a new SparkContext and ensures that it is stopped afterwards. */
+  def withSpark[T](f: SparkContext => T) = {
+    val sc = new SparkContext("local", "test")
     try {
       f(sc)
     } finally {
-      stop(sc)
+      sc.stop()
+      // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+      System.clearProperty("spark.driver.port")
     }
   }
-
 }

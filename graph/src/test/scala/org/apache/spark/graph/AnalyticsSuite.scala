@@ -7,8 +7,6 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.graph.algorithms._
 import org.apache.spark.rdd._
 
-import org.apache.spark.graph.LocalSparkContext._
-
 import org.apache.spark.graph.util.GraphGenerators
 
 
@@ -48,16 +46,13 @@ object GridPageRank {
 
 class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
-  System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-  System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
-
   def compareRanks(a: VertexRDD[Double], b: VertexRDD[Double]): Double = {
     a.leftJoin(b) { case (id, a, bOpt) => (a - bOpt.getOrElse(0.0)) * (a - bOpt.getOrElse(0.0)) }
       .map { case (id, error) => error }.sum
   }
 
   test("Star PageRank") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val nVertices = 100
       val starGraph = GraphGenerators.starGraph(sc, nVertices).cache()
       val resetProb = 0.15
@@ -89,7 +84,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
 
   test("Grid PageRank") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val rows = 10
       val cols = 10
       val resetProb = 0.15
@@ -111,7 +106,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
 
   test("Chain PageRank") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val chain1 = (0 until 9).map(x => (x, x+1) )
       val rawEdges = sc.parallelize(chain1, 1).map { case (s,d) => (s.toLong, d.toLong) }
       val chain = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
@@ -131,7 +126,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
 
   test("Grid Connected Components") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).cache()
       val ccGraph = ConnectedComponents.run(gridGraph).cache()
       val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
@@ -141,7 +136,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
 
   test("Reverse Grid Connected Components") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).reverse.cache()
       val ccGraph = ConnectedComponents.run(gridGraph).cache()
       val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
@@ -151,7 +146,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
 
 
   test("Chain Connected Components") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val chain1 = (0 until 9).map(x => (x, x+1) )
       val chain2 = (10 until 20).map(x => (x, x+1) )
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
@@ -174,7 +169,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   } // end of chain connected components
 
   test("Reverse Chain Connected Components") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val chain1 = (0 until 9).map(x => (x, x+1) )
       val chain2 = (10 until 20).map(x => (x, x+1) )
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
@@ -200,7 +195,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   } // end of reverse chain connected components
 
   test("Island Strongly Connected Components") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val vertices = sc.parallelize((1L to 5L).map(x => (x, -1)))
       val edges = sc.parallelize(Seq.empty[Edge[Int]])
       val graph = Graph(vertices, edges)
@@ -212,7 +207,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Cycle Strongly Connected Components") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val rawEdges = sc.parallelize((0L to 6L).map(x => (x, (x + 1) % 7)))
       val graph = Graph.fromEdgeTuples(rawEdges, -1)
       val sccGraph = StronglyConnectedComponents.run(graph, 20)
@@ -223,7 +218,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   }
 
   test("2 Cycle Strongly Connected Components") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val edges =
         Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(3L -> 4L, 4L -> 5L, 5L -> 3L) ++
@@ -243,7 +238,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Count a single triangle") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val rawEdges = sc.parallelize(Array( 0L->1L, 1L->2L, 2L->0L ), 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
       val triangleCount = TriangleCount.run(graph)
@@ -253,7 +248,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Count two triangles") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val triangles = Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(0L -> -1L, -1L -> -2L, -2L -> 0L)
       val rawEdges = sc.parallelize(triangles, 2)
@@ -271,7 +266,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Count two triangles with bi-directed edges") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val triangles =
         Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(0L -> -1L, -1L -> -2L, -2L -> 0L)
@@ -291,7 +286,7 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Count a single triangle with duplicate edges") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val rawEdges = sc.parallelize(Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(0L -> 1L, 1L -> 2L, 2L -> 0L), 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true, uniqueEdges = Some(RandomVertexCut)).cache()
@@ -302,14 +297,14 @@ class AnalyticsSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Test SVD++ with mean square error on training set") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val SvdppErr = 0.01
-      val edges = sc.textFile("mllib/data/als/test.data").map { line => 
+      val edges = sc.textFile("mllib/data/als/test.data").map { line =>
         val fields = line.split(",")
         Edge(fields(0).toLong * 2, fields(1).toLong * 2 + 1, fields(2).toDouble)
       }
       val graph = Svdpp.run(edges)
-      val err = graph.vertices.collect.map{ case (vid, vd) => 
+      val err = graph.vertices.collect.map{ case (vid, vd) =>
         if (vid % 2 == 1) { vd.norm } else { 0.0 }
       }.reduce(_ + _) / graph.triplets.collect.size
       assert(err < SvdppErr)
