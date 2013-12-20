@@ -21,6 +21,7 @@ class Msg ( // message
 
 object Svdpp {
   // implement SVD++ based on http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf
+  // model (15) on page 6
 
   def run(edges: RDD[Edge[Double]]): Graph[VT, Double] = {
     // defalut parameters
@@ -91,15 +92,13 @@ object Svdpp {
       assert(et.srcAttr != null && et.dstAttr != null)
       val usr = et.srcAttr
       val itm = et.dstAttr
-      var p = usr.v1
-      var q = itm.v1
-      val itmBias = 0.0
-      val usrBias = 0.0
+      val p = usr.v1
+      val q = itm.v1
       var pred = u + usr.bias + itm.bias + q.dotProduct(usr.v2)
       pred = math.max(pred, minVal)
       pred = math.min(pred, maxVal)
       val err = et.attr - pred
-      val y = (q.mapMultiply(err*usr.norm)).subtract((usr.v2).mapMultiply(gamma7))
+      val y = (q.mapMultiply(err*usr.norm)).subtract((itm.v2).mapMultiply(gamma7))
       val newP = (q.mapMultiply(err)).subtract(p.mapMultiply(gamma7)) // for each connected item q
       val newQ = (usr.v2.mapMultiply(err)).subtract(q.mapMultiply(gamma7))
       Iterator((et.srcId, new Msg(newP, y, err - gamma6*usr.bias)), (et.dstId, new Msg(newQ, y, err - gamma6*itm.bias)))
@@ -135,10 +134,8 @@ object Svdpp {
       assert(et.srcAttr != null && et.dstAttr != null)
       val usr = et.srcAttr
       val itm = et.dstAttr
-      var p = usr.v1
-      var q = itm.v1
-      val itmBias = 0.0
-      val usrBias = 0.0
+      val p = usr.v1
+      val q = itm.v1
       var pred = u + usr.bias + itm.bias + q.dotProduct(usr.v2)
       pred = math.max(pred, minVal)
       pred = math.min(pred, maxVal)
