@@ -188,8 +188,10 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     val newValues = new Array[VD2](capacity)
     iter.foreach { case (vid, vdata) =>
       val pos = index.getPos(vid)
-      newMask.set(pos)
-      newValues(pos) = vdata
+      if (pos >= 0) {
+        newMask.set(pos)
+        newValues(pos) = vdata
+      }
     }
     new VertexPartition[VD2](index, newValues, newMask)
   }
@@ -204,8 +206,10 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     System.arraycopy(values, 0, newValues, 0, newValues.length)
     iter.foreach { case (vid, vdata) =>
       val pos = index.getPos(vid)
-      newMask.set(pos)
-      newValues(pos) = vdata
+      if (pos >= 0) {
+        newMask.set(pos)
+        newValues(pos) = vdata
+      }
     }
     new VertexPartition(index, newValues, newMask)
   }
@@ -219,11 +223,13 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
       val vid = product._1
       val vdata = product._2
       val pos = index.getPos(vid)
-      if (newMask.get(pos)) {
-        newValues(pos) = reduceFunc(newValues(pos), vdata)
-      } else { // otherwise just store the new value
-        newMask.set(pos)
-        newValues(pos) = vdata
+      if (pos >= 0) {
+        if (newMask.get(pos)) {
+          newValues(pos) = reduceFunc(newValues(pos), vdata)
+        } else { // otherwise just store the new value
+          newMask.set(pos)
+          newValues(pos) = vdata
+        }
       }
     }
     new VertexPartition[VD2](index, newValues, newMask)
