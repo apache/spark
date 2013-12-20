@@ -39,4 +39,24 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     if(changed) makeCopy(newArgs) else this
   }
+
+  /** Returns the result of running [[transformExpressions]] on this node and all its children */
+  def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
+    transform {
+      case q: QueryPlan[_] => q.transformExpressions(rule).asInstanceOf[PlanType]
+    }.asInstanceOf[this.type]
+  }
+
+  /** Returns all of the expressions present in this query plan operator. */
+  def expressions: Seq[Expression] = {
+    productIterator.flatMap {
+      case e: Expression => e :: Nil
+      case Some(e: Expression) => e :: Nil
+      case seq: Seq[_] => seq.flatMap {
+        case e: Expression => e :: Nil
+        case other => Nil
+      }
+      case other => Nil
+    }.toSeq
+  }
 }
