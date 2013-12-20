@@ -21,8 +21,8 @@ import akka.actor.ActorRef
 import org.apache.zookeeper._
 import org.apache.zookeeper.Watcher.Event.EventType
 
-import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.Logging
+import org.apache.spark.deploy.master.MasterMessages._
 
 private[spark] class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef, masterUrl: String)
   extends LeaderElectionAgent with SparkZooKeeperWatcher with Logging  {
@@ -105,7 +105,7 @@ private[spark] class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef, mas
         // We found a different master file pointing to this process.
         // This can happen in the following two cases:
         // (1) The master process was restarted on the same node.
-        // (2) The ZK server died between creating the node and returning the name of the node.
+        // (2) The ZK server died between creating the file and returning the name of the file.
         //     For this case, we will end up creating a second file, and MUST explicitly delete the
         //     first one, since our ZK session is still open.
         // Note that this deletion will cause a NodeDeleted event to be fired so we check again for
