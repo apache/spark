@@ -30,21 +30,13 @@ import org.apache.spark.util.ClosureCleaner
 class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     @transient val vertices: VertexRDD[VD],
     @transient val edges: EdgeRDD[ED],
-    @transient val vertexPlacement: VertexPlacement,
     @transient val vTableReplicated: VTableReplicated[VD])
   extends Graph[VD, ED] {
 
   def this(
       vertices: VertexRDD[VD],
-      edges: EdgeRDD[ED],
-      vertexPlacement: VertexPlacement) = {
-    this(vertices, edges, vertexPlacement, new VTableReplicated(vertices, edges, vertexPlacement))
-  }
-
-  def this(
-      vertices: VertexRDD[VD],
       edges: EdgeRDD[ED]) = {
-    this(vertices, edges, new VertexPlacement(edges, vertices))
+    this(vertices, edges, new VTableReplicated(vertices, edges))
   }
 
   /** Return a RDD that brings edges together with their source and destination vertices. */
@@ -89,16 +81,8 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
   override def statistics: Map[String, Any] = {
-    // Get the total number of vertices after replication, used to compute the replication ratio.
-    def numReplicatedVertices(vid2pids: RDD[Array[Array[Vid]]]): Double = {
-      vid2pids.map(_.map(_.size).sum.toLong).reduce(_ + _).toDouble
-    }
-
     val numVertices = this.ops.numVertices
     val numEdges = this.ops.numEdges
-    val replicationRatioBoth = numReplicatedVertices(vertexPlacement.bothAttrs) / numVertices
-    val replicationRatioSrcOnly = numReplicatedVertices(vertexPlacement.srcAttrOnly) / numVertices
-    val replicationRatioDstOnly = numReplicatedVertices(vertexPlacement.dstAttrOnly) / numVertices
     // One entry for each partition, indicate the total number of edges on that partition.
     val loadArray = edges.partitionsRDD.map(_._2.size).collect().map(_.toDouble / numEdges)
     val minLoad = loadArray.min
@@ -106,9 +90,6 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     Map(
       "Num Vertices" -> numVertices,
       "Num Edges" -> numEdges,
-      "Replication (both)" -> replicationRatioBoth,
-      "Replication (src only)" -> replicationRatioSrcOnly,
-      "Replication (dest only)" -> replicationRatioDstOnly,
       "Load Array" -> loadArray,
       "Min Load" -> minLoad,
       "Max Load" -> maxLoad)
@@ -145,16 +126,13 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     println("\n\nvTable ------------------------------------------")
     traverseLineage(vertices, "  ", visited)
     visited += (vertices.id -> "vTable")
-    println("\n\nvertexPlacement.bothAttrs -------------------------------")
-    traverseLineage(vertexPlacement.bothAttrs, "  ", visited)
-    visited += (vertexPlacement.bothAttrs.id -> "vertexPlacement.bothAttrs")
     println("\n\ntriplets ----------------------------------------")
     traverseLineage(triplets, "  ", visited)
     println(visited)
   } // end of printLineage
 
   override def reverse: Graph[VD, ED] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.reverse), vertexPlacement, vTableReplicated)
+    new GraphImpl(vertices, edges.mapEdgePartitions(_.reverse), vTableReplicated)
 
   override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] = {
     if (classManifest[VD] equals classManifest[VD2]) {
@@ -162,17 +140,16 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       val newVerts = vertices.mapVertexPartitions(_.map(f))
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newVTableReplicated = new VTableReplicated[VD2](
-        changedVerts, edges, vertexPlacement,
-        Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
-      new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
+        changedVerts, edges, Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
+      new GraphImpl(newVerts, edges, newVTableReplicated)
     } else {
       // The map does not preserve type, so we must re-replicate all vertices
-      new GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, vertexPlacement)
+      new GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges)
     }
   }
 
   override def mapEdges[ED2: ClassManifest](f: Edge[ED] => ED2): Graph[VD, ED2] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.map(f)), vertexPlacement, vTableReplicated)
+    new GraphImpl(vertices, edges.mapEdgePartitions(_.map(f)), vTableReplicated)
 
   override def mapTriplets[ED2: ClassManifest](f: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
     // Use an explicit manifest in PrimitiveKeyOpenHashMap init so we don't pull in the implicit
@@ -190,7 +167,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         }
         Iterator((pid, newEdgePartition))
     }
-    new GraphImpl(vertices, new EdgeRDD(newETable), vertexPlacement, vTableReplicated)
+    new GraphImpl(vertices, new EdgeRDD(newETable), vTableReplicated)
   }
 
   override def subgraph(
@@ -210,23 +187,26 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       Iterator((pid, edgePartition))
     }, preservesPartitioning = true)).cache()
 
-    // Reuse the previous VTableReplicated unmodified. It will contain extra vertices, which is
-    // fine.
-    new GraphImpl(newVerts, newEdges, new VertexPlacement(newEdges, newVerts), vTableReplicated)
+    // Reuse the previous VTableReplicated unmodified. The replicated vertices that have been
+    // removed will be ignored, since we only refer to replicated vertices when they are adjacent to
+    // an edge.
+    new GraphImpl(newVerts, newEdges, vTableReplicated)
   } // end of subgraph
 
   override def mask[VD2: ClassManifest, ED2: ClassManifest] (
       other: Graph[VD2, ED2]): Graph[VD, ED] = {
     val newVerts = vertices.innerJoin(other.vertices) { (vid, v, w) => v }
     val newEdges = edges.innerJoin(other.edges) { (src, dst, v, w) => v }
-    new GraphImpl(newVerts, newEdges)
-
+    // Reuse the previous VTableReplicated unmodified. The replicated vertices that have been
+    // removed will be ignored, since we only refer to replicated vertices when they are adjacent to
+    // an edge.
+    new GraphImpl(newVerts, newEdges, vTableReplicated)
   }
 
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
     ClosureCleaner.clean(merge)
     val newETable = edges.mapEdgePartitions(_.groupEdges(merge))
-    new GraphImpl(vertices, newETable, vertexPlacement, vTableReplicated)
+    new GraphImpl(vertices, newETable, vTableReplicated)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -304,13 +284,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       val newVerts = vertices.leftJoin(updates)(updateF)
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newVTableReplicated = new VTableReplicated[VD2](
-        changedVerts, edges, vertexPlacement,
-        Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
-      new GraphImpl(newVerts, edges, vertexPlacement, newVTableReplicated)
+        changedVerts, edges, Some(vTableReplicated.asInstanceOf[VTableReplicated[VD2]]))
+      new GraphImpl(newVerts, edges, newVTableReplicated)
     } else {
       // updateF does not preserve type, so we must re-replicate all vertices
       val newVerts = vertices.leftJoin(updates)(updateF)
-      new GraphImpl(newVerts, edges, vertexPlacement)
+      new GraphImpl(newVerts, edges)
     }
   }
 
