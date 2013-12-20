@@ -4,15 +4,46 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext
-import org.apache.spark.graph.Graph._
 import org.apache.spark.graph._
-import org.apache.spark.rdd._
-
 
 class EdgePartitionSuite extends FunSuite {
 
-  test("sort") {
+  test("reverse") {
+    val edges = List(Edge(0, 1, 0), Edge(1, 2, 0), Edge(2, 0, 0))
+    val reversedEdges = List(Edge(0, 2, 0), Edge(1, 0, 0), Edge(2, 1, 0))
+    val builder = new EdgePartitionBuilder[Int]
+    for (e <- edges) {
+      builder.add(e.srcId, e.dstId, e.attr)
+    }
+    val edgePartition = builder.toEdgePartition
+    assert(edgePartition.reverse.iterator.map(_.copy()).toList === reversedEdges)
+    assert(edgePartition.reverse.reverse.iterator.map(_.copy()).toList === edges)
+  }
+
+  test("map") {
+    val edges = List(Edge(0, 1, 0), Edge(1, 2, 0), Edge(2, 0, 0))
+    val builder = new EdgePartitionBuilder[Int]
+    for (e <- edges) {
+      builder.add(e.srcId, e.dstId, e.attr)
+    }
+    val edgePartition = builder.toEdgePartition
+    assert(edgePartition.map(e => e.srcId + e.dstId).iterator.map(_.copy()).toList ===
+      edges.map(e => e.copy(attr = e.srcId + e.dstId)))
+  }
+
+  test("groupEdges") {
+    val edges = List(
+      Edge(0, 1, 1), Edge(1, 2, 2), Edge(2, 0, 4), Edge(0, 1, 8), Edge(1, 2, 16), Edge(2, 0, 32))
+    val groupedEdges = List(Edge(0, 1, 9), Edge(1, 2, 18), Edge(2, 0, 36))
+    val builder = new EdgePartitionBuilder[Int]
+    for (e <- edges) {
+      builder.add(e.srcId, e.dstId, e.attr)
+    }
+    val edgePartition = builder.toEdgePartition
+    assert(edgePartition.groupEdges(_ + _).iterator.map(_.copy()).toList === groupedEdges)
+  }
+
+  test("indexIterator") {
     val edgesFrom0 = List(Edge(0, 1, 0))
     val edgesFrom1 = List(Edge(1, 0, 0), Edge(1, 2, 0))
     val sortedEdges = edgesFrom0 ++ edgesFrom1
