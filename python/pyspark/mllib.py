@@ -143,7 +143,7 @@ def _linear_predictor_typecheck(x, coeffs):
     elif (type(x) == RDD):
         raise RuntimeError("Bulk predict not yet supported.")
     else:
-        raise TypeError("Argument of type " + type(x) + " unsupported");
+        raise TypeError("Argument of type " + type(x) + " unsupported")
 
 class LinearModel(object):
     """Something that has a vector of coefficients and an intercept."""
@@ -170,7 +170,7 @@ def _get_unmangled_double_vector_rdd(data):
     dataBytes = data.map(_serialize_double_vector)
     dataBytes._bypass_serializer = True
     dataBytes.cache()
-    return dataBytes;
+    return dataBytes
 
 # If we weren't given initial weights, take a zero vector of the appropriate
 # length.
@@ -183,8 +183,8 @@ def _get_initial_weights(initial_weights, data):
         if initial_weights.ndim != 1:
             raise TypeError("At least one data element has "
                     + initial_weights.ndim + " dimensions, which is not 1")
-        initial_weights = zeros([initial_weights.shape[0] - 1]);
-    return initial_weights;
+        initial_weights = zeros([initial_weights.shape[0] - 1])
+    return initial_weights
 
 # train_func should take two parameters, namely data and initial_weights, and
 # return the result of a call to the appropriate JVM stub.
@@ -194,14 +194,14 @@ def _regression_train_wrapper(sc, train_func, klass, data, initial_weights):
     dataBytes = _get_unmangled_double_vector_rdd(data)
     ans = train_func(dataBytes, _serialize_double_vector(initial_weights))
     if len(ans) != 2:
-        raise RuntimeError("JVM call result had unexpected length");
+        raise RuntimeError("JVM call result had unexpected length")
     elif type(ans[0]) != bytearray:
         raise RuntimeError("JVM call result had first element of type "
-                + type(ans[0]) + " which is not bytearray");
+                + type(ans[0]) + " which is not bytearray")
     elif type(ans[1]) != float:
         raise RuntimeError("JVM call result had second element of type "
-                + type(ans[0]) + " which is not float");
-    return klass(_deserialize_double_vector(ans[0]), ans[1]);
+                + type(ans[0]) + " which is not float")
+    return klass(_deserialize_double_vector(ans[0]), ans[1])
 
 class LinearRegressionModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit.
@@ -324,11 +324,11 @@ class KMeansModel(object):
         ans = sc._jvm.PythonMLLibAPI().trainKMeansModel(dataBytes._jrdd,
                 k, maxIterations, runs, initialization_mode)
         if len(ans) != 1:
-            raise RuntimeError("JVM call result had unexpected length");
+            raise RuntimeError("JVM call result had unexpected length")
         elif type(ans[0]) != bytearray:
             raise RuntimeError("JVM call result had first element of type "
-                    + type(ans[0]) + " which is not bytearray");
-        return KMeansModel(_deserialize_double_matrix(ans[0]));
+                    + type(ans[0]) + " which is not bytearray")
+        return KMeansModel(_deserialize_double_matrix(ans[0]))
 
 def _test():
     import doctest
