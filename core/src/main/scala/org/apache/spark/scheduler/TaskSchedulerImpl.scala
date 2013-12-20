@@ -45,7 +45,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
-private[spark] class ClusterScheduler(
+private[spark] class TaskSchedulerImpl(
   val sc: SparkContext,
   val maxTaskFailures : Int = System.getProperty("spark.task.maxFailures", "4").toInt,
   isLocal: Boolean = false) extends TaskScheduler with Logging {
@@ -429,7 +429,7 @@ private[spark] class ClusterScheduler(
 }
 
 
-private[spark] object ClusterScheduler {
+private[spark] object TaskSchedulerImpl {
   /**
    * Used to balance containers across hosts.
    *

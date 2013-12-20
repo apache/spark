@@ -30,7 +30,7 @@ import org.apache.spark.storage.TaskResultBlockId
  * Used to test the case where a BlockManager evicts the task result (or dies) before the
  * TaskResult is retrieved.
  */
-class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterScheduler)
+class ResultDeletingTaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedulerImpl)
   extends TaskResultGetter(sparkEnv, scheduler) {
   var removedResult = false
 
@@ -92,8 +92,8 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
     sc = new SparkContext("local[1,1]", "test")
     // If this test hangs, it's probably because no resource offers were made after the task
     // failed.
-    val scheduler: ClusterScheduler = sc.taskScheduler match {
-      case clusterScheduler: ClusterScheduler =>
+    val scheduler: TaskSchedulerImpl = sc.taskScheduler match {
+      case clusterScheduler: TaskSchedulerImpl =>
         clusterScheduler
       case _ =>
         assert(false, "Expect local cluster to use ClusterScheduler")

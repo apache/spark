@@ -24,7 +24,7 @@ import akka.actor.{Actor, ActorRef, Props}
 import org.apache.spark.{Logging, SparkContext, SparkEnv, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.{Executor, ExecutorBackend}
-import org.apache.spark.scheduler.{SchedulerBackend, ClusterScheduler, WorkerOffer}
+import org.apache.spark.scheduler.{SchedulerBackend, TaskSchedulerImpl, WorkerOffer}
 
 private case class ReviveOffers()
 
@@ -38,7 +38,7 @@ private case class KillTask(taskId: Long)
  * and the ClusterScheduler.
  */
 private[spark] class LocalActor(
-  scheduler: ClusterScheduler,
+  scheduler: TaskSchedulerImpl,
   executorBackend: LocalBackend,
   private val totalCores: Int) extends Actor with Logging {
 
@@ -78,7 +78,7 @@ private[spark] class LocalActor(
  * master all run in the same JVM. It sits behind a ClusterScheduler and handles launching tasks
  * on a single Executor (created by the LocalBackend) running locally.
  */
-private[spark] class LocalBackend(scheduler: ClusterScheduler, val totalCores: Int)
+private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
   extends SchedulerBackend with ExecutorBackend {
 
   var localActor: ActorRef = null

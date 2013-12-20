@@ -48,7 +48,7 @@ import java.io.NotSerializableException
  *                        task set will be aborted
  */
 private[spark] class TaskSetManager(
-    sched: ClusterScheduler,
+    sched: TaskSchedulerImpl,
     val taskSet: TaskSet,
     val maxTaskFailures: Int,
     clock: Clock = SystemClock)

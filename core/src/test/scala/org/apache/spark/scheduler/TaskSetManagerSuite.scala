@@ -58,7 +58,7 @@ class FakeDAGScheduler(taskScheduler: FakeClusterScheduler) extends DAGScheduler
  * to work, and these are required for locality in TaskSetManager.
  */
 class FakeClusterScheduler(sc: SparkContext, liveExecutors: (String, String)* /* execId, host */)
-  extends ClusterScheduler(sc)
+  extends TaskSchedulerImpl(sc)
 {
   val startedTasks = new ArrayBuffer[Long]
   val endedTasks = new mutable.HashMap[Long, TaskEndReason]

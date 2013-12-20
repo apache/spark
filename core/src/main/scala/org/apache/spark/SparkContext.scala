@@ -1044,25 +1044,25 @@ object SparkContext {
 
     master match {
       case "local" =>
-        val scheduler = new ClusterScheduler(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
+        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(scheduler, 1)
         scheduler.initialize(backend)
         scheduler
 
       case LOCAL_N_REGEX(threads) =>
-        val scheduler = new ClusterScheduler(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
+        val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
         val backend = new LocalBackend(scheduler, threads.toInt)
         scheduler.initialize(backend)
         scheduler
 
       case LOCAL_N_FAILURES_REGEX(threads, maxFailures) =>
-        val scheduler = new ClusterScheduler(sc, maxFailures.toInt, isLocal = true)
+        val scheduler = new TaskSchedulerImpl(sc, maxFailures.toInt, isLocal = true)
         val backend = new LocalBackend(scheduler, threads.toInt)
         scheduler.initialize(backend)
         scheduler
 
       case SPARK_REGEX(sparkUrl) =>
-        val scheduler = new ClusterScheduler(sc)
+        val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
         val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, appName)
         scheduler.initialize(backend)
@@ -1077,7 +1077,7 @@ object SparkContext {
               memoryPerSlaveInt, SparkContext.executorMemoryRequested))
         }
 
-        val scheduler = new ClusterScheduler(sc)
+        val scheduler = new TaskSchedulerImpl(sc)
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val masterUrls = localCluster.start()
@@ -1092,7 +1092,7 @@ object SparkContext {
         val scheduler = try {
           val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
-          cons.newInstance(sc).asInstanceOf[ClusterScheduler]
+          cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
         } catch {
           // TODO: Enumerate the exact reasons why it can fail
           // But irrespective of it, it means we cannot proceed !
@@ -1108,7 +1108,7 @@ object SparkContext {
         val scheduler = try {
           val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
-          cons.newInstance(sc).asInstanceOf[ClusterScheduler]
+          cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
 
         } catch {
           case th: Throwable => {
@@ -1118,7 +1118,7 @@ object SparkContext {
 
         val backend = try {
           val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend")
-          val cons = clazz.getConstructor(classOf[ClusterScheduler], classOf[SparkContext])
+          val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {
           case th: Throwable => {
@@ -1131,7 +1131,7 @@ object SparkContext {
 
       case mesosUrl @ MESOS_REGEX(_) =>
         MesosNativeLibrary.load()
-        val scheduler = new ClusterScheduler(sc)
+        val scheduler = new TaskSchedulerImpl(sc)
         val coarseGrained = System.getProperty("spark.mesos.coarse", "false").toBoolean
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
@@ -1143,7 +1143,7 @@ object SparkContext {
         scheduler
 
       case SIMR_REGEX(simrUrl) =>
-        val scheduler = new ClusterScheduler(sc)
+        val scheduler = new TaskSchedulerImpl(sc)
         val backend = new SimrSchedulerBackend(scheduler, sc, simrUrl)
         scheduler.initialize(backend)
         scheduler
