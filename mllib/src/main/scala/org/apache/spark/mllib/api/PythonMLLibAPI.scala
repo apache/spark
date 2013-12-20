@@ -24,8 +24,11 @@ import java.nio.ByteBuffer
 import java.nio.ByteOrder
 import java.nio.DoubleBuffer
 
+/**
+ * The Java stubs necessary for the Python mllib bindings.
+ */
 class PythonMLLibAPI extends Serializable {
-  def deserializeDoubleVector(bytes: Array[Byte]): Array[Double] = {
+  private def deserializeDoubleVector(bytes: Array[Byte]): Array[Double] = {
     val packetLength = bytes.length
     if (packetLength < 16) {
       throw new IllegalArgumentException("Byte array too short.")
@@ -46,7 +49,7 @@ class PythonMLLibAPI extends Serializable {
     return ans
   }
 
-  def serializeDoubleVector(doubles: Array[Double]): Array[Byte] = {
+  private def serializeDoubleVector(doubles: Array[Double]): Array[Byte] = {
     val len = doubles.length
     val bytes = new Array[Byte](16 + 8 * len)
     val bb = ByteBuffer.wrap(bytes)
@@ -58,7 +61,7 @@ class PythonMLLibAPI extends Serializable {
     return bytes
   }
 
-  def deserializeDoubleMatrix(bytes: Array[Byte]): Array[Array[Double]] = {
+  private def deserializeDoubleMatrix(bytes: Array[Byte]): Array[Array[Double]] = {
     val packetLength = bytes.length
     if (packetLength < 24) {
       throw new IllegalArgumentException("Byte array too short.")
@@ -84,7 +87,7 @@ class PythonMLLibAPI extends Serializable {
     return ans
   }
 
-  def serializeDoubleMatrix(doubles: Array[Array[Double]]): Array[Byte] = {
+  private def serializeDoubleMatrix(doubles: Array[Array[Double]]): Array[Byte] = {
     val rows = doubles.length
     var cols = 0
     if (rows > 0) {
@@ -104,7 +107,7 @@ class PythonMLLibAPI extends Serializable {
     return bytes
   }
 
-  def trainRegressionModel(trainFunc: (RDD[LabeledPoint], Array[Double]) => GeneralizedLinearModel,
+  private def trainRegressionModel(trainFunc: (RDD[LabeledPoint], Array[Double]) => GeneralizedLinearModel,
       dataBytesJRDD: JavaRDD[Array[Byte]], initialWeightsBA: Array[Byte]):
       java.util.LinkedList[java.lang.Object] = {
     val data = dataBytesJRDD.rdd.map(xBytes => {
@@ -119,6 +122,9 @@ class PythonMLLibAPI extends Serializable {
     return ret
   }
 
+  /**
+   * Java stub for Python mllib LinearRegressionModel.train()
+   */
   def trainLinearRegressionModel(dataBytesJRDD: JavaRDD[Array[Byte]],
       numIterations: Int, stepSize: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
@@ -128,6 +134,9 @@ class PythonMLLibAPI extends Serializable {
         dataBytesJRDD, initialWeightsBA)
   }
 
+  /**
+   * Java stub for Python mllib LassoModel.train()
+   */
   def trainLassoModel(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
       stepSize: Double, regParam: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
@@ -137,6 +146,9 @@ class PythonMLLibAPI extends Serializable {
         dataBytesJRDD, initialWeightsBA)
   }
 
+  /**
+   * Java stub for Python mllib RidgeRegressionModel.train()
+   */
   def trainRidgeModel(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
       stepSize: Double, regParam: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
@@ -146,6 +158,9 @@ class PythonMLLibAPI extends Serializable {
         dataBytesJRDD, initialWeightsBA)
   }
 
+  /**
+   * Java stub for Python mllib SVMModel.train()
+   */
   def trainSVMModel(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
       stepSize: Double, regParam: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
@@ -155,6 +170,9 @@ class PythonMLLibAPI extends Serializable {
         dataBytesJRDD, initialWeightsBA)
   }
 
+  /**
+   * Java stub for Python mllib LogisticRegressionModel.train()
+   */
   def trainLogisticRegressionModel(dataBytesJRDD: JavaRDD[Array[Byte]],
       numIterations: Int, stepSize: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
@@ -164,6 +182,9 @@ class PythonMLLibAPI extends Serializable {
         dataBytesJRDD, initialWeightsBA)
   }
 
+  /**
+   * Java stub for Python mllib KMeansModel.train()
+   */
   def trainKMeansModel(dataBytesJRDD: JavaRDD[Array[Byte]], k: Int,
       maxIterations: Int, runs: Int, initializationMode: String):
       java.util.List[java.lang.Object] = {
