@@ -31,9 +31,11 @@ Other dependencies
 ------------------
 In order to run all of the test cases or interact with sample data, you will need to set several environmental variables.
 
+```
 export HIVE_HOME="<path to>/hive/build/dist"
 export HIVE_DEV_HOME="<path to>/hive/"
 export HADOOP_HOME="<path to>/hadoop-1.0.4"
+```
 
 Using the console
 =================
@@ -71,7 +73,7 @@ Project {key#0,value#1}
  HiveTableScan {key#0,value#1}, (MetastoreRelation default, src, None)
 ```
 
-From the console you can even write rules that transform query plans.  For example, the above query has redundant project operators that aren't doing anything.  This redundancy can be eliminated using the `transform` function that is available on all [`TreeNode`s](http://marmbrus.github.io/catalyst/api/current/index.html#catalyst.trees.TreeNode).
+From the console you can even write rules that transform query plans.  For example, the above query has redundant project operators that aren't doing anything.  This redundancy can be eliminated using the `transform` function that is available on all [`TreeNode`](http://marmbrus.github.io/catalyst/api/current/index.html#catalyst.trees.TreeNode) objects.
 ```scala
 scala> query.optimizedPlan
 res1: catalyst.plans.logical.LogicalPlan = 
