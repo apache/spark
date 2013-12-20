@@ -329,6 +329,8 @@ setMethod("take",
             index <- -1
             partitions <- .jcall(rrdd@jrdd, "Ljava/util/List;", "splits")
             numPartitions <- .jcall(partitions, "I", "size")
+            # TODO(shivaram): Collect more than one partition based on size
+            # estimates similar to the scala version of `take`.
             while (TRUE) {
               index <- index + 1
 
@@ -336,10 +338,11 @@ setMethod("take",
                 break
 
               # a JList of byte arrays
-              partition <- .jcall(rrdd@jrdd,
-                                  "Ljava/util/List;",
-                                  "collectPartition",
-                                  as.integer(index))
+              partitionArr <- .jcall(rrdd@jrdd,
+                                  "[Ljava/util/List;",
+                                  "collectPartitions",
+                                  .jarray(as.integer(index)))
+              partition <- partitionArr[[1]]
               elems <- convertJListToRList(partition, flatten = TRUE)
               # TODO: Check if this append is O(n^2)?
               resList <- append(resList, head(elems, n = num - length(resList)))
