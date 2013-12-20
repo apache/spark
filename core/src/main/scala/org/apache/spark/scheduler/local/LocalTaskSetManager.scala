@@ -176,15 +176,18 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     val task = taskSet.tasks(index)
     info.markFailed()
     decreaseRunningTasks(1)
+    var failureReason = "unknown"
     ser.deserialize[TaskEndReason](serializedData, getClass.getClassLoader) match {
       case ef: ExceptionFailure =>
+        failureReason = "Exception failure: %s".format(ef.description)
         val locs = ef.stackTrace.map(loc => "\tat %s".format(loc.toString))
         logInfo("Task loss due to %s\n%s\n%s".format(
           ef.className, ef.description, locs.mkString("\n")))
         sched.dagScheduler.taskEnded(task, ef, null, null, info, ef.metrics.getOrElse(null))
 
       case TaskResultLost =>
-        logWarning("Lost result for TID %s".format(tid))
+        failureReason = "Lost result for TID %s".format(tid)
+        logWarning(failureReason)
         sched.dagScheduler.taskEnded(task, TaskResultLost, null, null, info, null)
 
       case _ => {}
@@ -193,8 +196,8 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
       copiesRunning(index) -= 1
       numFailures(index) += 1
       if (numFailures(index) > MAX_TASK_FAILURES) {
-        val errorMessage = "Task %s:%d failed more than %d times; aborting job".format(
-          taskSet.id, index, MAX_TASK_FAILURES)
+        val errorMessage = ("Task %s:%d failed more than %d times; aborting job" +
+          "(most recent failure: %s").format(taskSet.id, index, MAX_TASK_FAILURES, failureReason)
         decreaseRunningTasks(runningTasks)
         sched.dagScheduler.taskSetFailed(taskSet, errorMessage)
         // need to delete failed Taskset from schedule queue
