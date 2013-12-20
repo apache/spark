@@ -146,7 +146,7 @@ def _linear_predictor_typecheck(x, coeffs):
         raise TypeError("Argument of type " + type(x) + " unsupported");
 
 class LinearModel(object):
-    """Something containing a vector of coefficients and an intercept."""
+    """Something that has a vector of coefficients and an intercept."""
     def __init__(self, coeff, intercept):
         self._coeff = coeff
         self._intercept = intercept
@@ -305,6 +305,7 @@ class KMeansModel(object):
         self.centers = centers_
 
     def predict(self, x):
+        """Find the cluster to which x belongs in this model."""
         best = 0
         best_distance = 1e75
         for i in range(0, self.centers.shape[0]):
@@ -318,6 +319,7 @@ class KMeansModel(object):
     @classmethod
     def train(cls, sc, data, k, maxIterations = 100, runs = 1,
             initialization_mode="k-means||"):
+        """Train a k-means clustering model."""
         dataBytes = _get_unmangled_double_vector_rdd(data)
         ans = sc._jvm.PythonMLLibAPI().trainKMeansModel(dataBytes._jrdd,
                 k, maxIterations, runs, initialization_mode)
