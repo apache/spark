@@ -7,16 +7,12 @@ import scala.util.Random
 import org.scalatest.FunSuite
 
 import org.apache.spark._
-import org.apache.spark.graph.LocalSparkContext._
 import org.apache.spark.graph.impl._
 import org.apache.spark.graph.impl.MsgRDDFunctions._
 import org.apache.spark.serializer.SerializationStream
 
 
 class SerializerSuite extends FunSuite with LocalSparkContext {
-
-  System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-  System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
 
   test("IntVertexBroadcastMsgSerializer") {
     val outMsg = new VertexBroadcastMsg[Int](3, 4, 5)
@@ -139,7 +135,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("TestShuffleVertexBroadcastMsg") {
-    withSpark(new SparkContext("local[2]", "test")) { sc =>
+    withSpark { sc =>
       val bmsgs = sc.parallelize(0 until 100, 10).map { pid =>
         new VertexBroadcastMsg[Int](pid, pid, pid)
       }

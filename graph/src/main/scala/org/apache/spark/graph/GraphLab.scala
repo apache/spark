@@ -1,12 +1,13 @@
 package org.apache.spark.graph
 
+import org.apache.spark.Logging
 import scala.collection.JavaConversions._
 import org.apache.spark.rdd.RDD
 
 /**
  * This object implements the GraphLab gather-apply-scatter api.
  */
-object GraphLab {
+object GraphLab extends Logging {
 
   /**
    * Execute the GraphLab Gather-Apply-Scatter API
@@ -119,7 +120,7 @@ object GraphLab {
       numActive = activeGraph.vertices.map{
         case (vid, data) => if (data._1) 1 else 0
         }.reduce(_ + _)
-      println("Number active vertices: " + numActive)
+      logInfo("Number active vertices: " + numActive)
       i += 1
     }
 

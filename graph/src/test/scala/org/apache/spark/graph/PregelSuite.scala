@@ -3,16 +3,12 @@ package org.apache.spark.graph
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.graph.LocalSparkContext._
 import org.apache.spark.rdd._
 
 class PregelSuite extends FunSuite with LocalSparkContext {
 
-  System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-  System.setProperty("spark.kryo.registrator", "org.apache.spark.graph.GraphKryoRegistrator")
-
   test("1 iteration") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val n = 5
       val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid)), 3), "v")
       val result = Pregel(star, 0)(
@@ -24,7 +20,7 @@ class PregelSuite extends FunSuite with LocalSparkContext {
   }
 
   test("chain propagation") {
-    withSpark(new SparkContext("local", "test")) { sc =>
+    withSpark { sc =>
       val n = 5
       val chain = Graph.fromEdgeTuples(
         sc.parallelize((1 until n).map(x => (x: Vid, x + 1: Vid)), 3),
