@@ -276,7 +276,7 @@ class SVMModel(LinearModel):
 class KMeansModel(object):
     """A clustering model derived from the k-means method.
 
-    >>> data = array([0.0, 0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4,2)
+    >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4,2)
     >>> clusters = KMeansModel.train(sc, sc.parallelize(data), 2, maxIterations=10, runs=30, initialization_mode="random")
     >>> clusters.predict(array([0.0, 0.0])) == clusters.predict(array([1.0, 1.0]))
     True
