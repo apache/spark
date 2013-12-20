@@ -43,8 +43,9 @@ from pyspark.rdd import RDD
 from pyspark.files import SparkFiles
 from pyspark.storagelevel import StorageLevel
 from pyspark.mllib import LinearRegressionModel, LassoModel, \
-    RidgeRegressionModel
+    RidgeRegressionModel, LogisticRegressionModel, SVMModel, KMeansModel
 
 
-__all__ = ["SparkContext", "RDD", "SparkFiles", "StorageLevel", \
-    "LinearRegressionModel", "LassoModel", "RidgeRegressionModel"];
+__all__ = ["SparkContext", "RDD", "SparkFiles", "StorageLevel",
+    "LinearRegressionModel", "LassoModel", "RidgeRegressionModel",
+    "LogisticRegressionModel", "SVMModel", "KMeansModel"];
