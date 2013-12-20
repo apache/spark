@@ -102,10 +102,12 @@ setGeneric("collectPartition",
 setMethod("collectPartition",
           signature(rrdd = "RRDD", partitionId = "integer"),
           function(rrdd, partitionId) {
-            jList <- .jcall(rrdd@jrdd,
-                            "Ljava/util/List;",
-                            "collectPartition",
-                            as.integer(partitionId))
+            jPartitionsList <- .jcall(rrdd@jrdd,
+                                      "[Ljava/util/List;",
+                                      "collectPartitions",
+                                      .jarray(as.integer(partitionId)))
+
+            jList <- jPartitionsList[[1]]
             convertJListToRList(jList, flatten = TRUE)
           })
 
@@ -339,9 +341,9 @@ setMethod("take",
 
               # a JList of byte arrays
               partitionArr <- .jcall(rrdd@jrdd,
-                                  "[Ljava/util/List;",
-                                  "collectPartitions",
-                                  .jarray(as.integer(index)))
+                                     "[Ljava/util/List;",
+                                     "collectPartitions",
+                                     .jarray(as.integer(index)))
               partition <- partitionArr[[1]]
               elems <- convertJListToRList(partition, flatten = TRUE)
               # TODO: Check if this append is O(n^2)?
