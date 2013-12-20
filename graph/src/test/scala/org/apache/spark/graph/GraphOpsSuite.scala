@@ -1,14 +1,10 @@
 package org.apache.spark.graph
 
-import scala.util.Random
-
-import org.scalatest.FunSuite
-
 import org.apache.spark.SparkContext
 import org.apache.spark.graph.Graph._
 import org.apache.spark.graph.impl.EdgePartition
-import org.apache.spark.graph.impl.EdgePartitionBuilder
 import org.apache.spark.rdd._
+import org.scalatest.FunSuite
 
 class GraphOpsSuite extends FunSuite with LocalSparkContext {
 

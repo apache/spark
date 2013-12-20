@@ -9,9 +9,10 @@ import org.apache.spark.graph.Graph._
 import org.apache.spark.graph._
 import org.apache.spark.rdd._
 
+
 class EdgePartitionSuite extends FunSuite {
 
-  test("EdgePartition.sort") {
+  test("sort") {
     val edgesFrom0 = List(Edge(0, 1, 0))
     val edgesFrom1 = List(Edge(1, 0, 0), Edge(1, 2, 0))
     val sortedEdges = edgesFrom0 ++ edgesFrom1
@@ -26,7 +27,7 @@ class EdgePartitionSuite extends FunSuite {
     assert(edgePartition.indexIterator(_ == 1).map(_.copy()).toList === edgesFrom1)
   }
 
-  test("EdgePartition.innerJoin") {
+  test("innerJoin") {
     def makeEdgePartition[A: ClassManifest](xs: Iterable[(Int, Int, A)]): EdgePartition[A] = {
       val builder = new EdgePartitionBuilder[A]
       for ((src, dst, attr) <- xs) { builder.add(src: Vid, dst: Vid, attr) }
