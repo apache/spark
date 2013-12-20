@@ -21,7 +21,8 @@ import java.nio.ByteBuffer
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.{ExceptionFailure, Logging, SparkEnv, SparkException, Success, TaskState}
+import org.apache.spark.{ExceptionFailure, Logging, SparkEnv, SparkException, Success,
+  TaskEndReason, TaskResultLost, TaskState}
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.{DirectTaskResult, IndirectTaskResult, Pool, Schedulable, Task,
   TaskDescription, TaskInfo, TaskLocality, TaskResult, TaskSet, TaskSetManager}
@@ -144,7 +145,18 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     val result = ser.deserialize[TaskResult[_]](serializedData, getClass.getClassLoader) match {
       case directResult: DirectTaskResult[_] => directResult
       case IndirectTaskResult(blockId) => {
-        throw new SparkException("Expect only DirectTaskResults when using LocalScheduler")
+        logDebug("Fetching indirect task result for TID %s".format(tid))
+        val serializedTaskResult = env.blockManager.getRemoteBytes(blockId)
+        if (!serializedTaskResult.isDefined) {
+          /* We won't be able to get the task result if the block manager had to flush the
+           * result. */
+          taskFailed(tid, state, serializedData)
+          return
+        }
+        val deserializedResult = ser.deserialize[DirectTaskResult[_]](
+          serializedTaskResult.get)
+        env.blockManager.master.removeBlock(blockId)
+        deserializedResult
       }
     }
     result.metrics.resultSize = serializedData.limit()
@@ -164,18 +176,25 @@ private[spark] class LocalTaskSetManager(sched: LocalScheduler, val taskSet: Tas
     val task = taskSet.tasks(index)
     info.markFailed()
     decreaseRunningTasks(1)
-    val reason: ExceptionFailure = ser.deserialize[ExceptionFailure](
-      serializedData, getClass.getClassLoader)
-    sched.dagScheduler.taskEnded(task, reason, null, null, info, reason.metrics.getOrElse(null))
+    ser.deserialize[TaskEndReason](serializedData, getClass.getClassLoader) match {
+      case ef: ExceptionFailure =>
+        val locs = ef.stackTrace.map(loc => "\tat %s".format(loc.toString))
+        logInfo("Task loss due to %s\n%s\n%s".format(
+          ef.className, ef.description, locs.mkString("\n")))
+        sched.dagScheduler.taskEnded(task, ef, null, null, info, ef.metrics.getOrElse(null))
+
+      case TaskResultLost =>
+        logWarning("Lost result for TID %s".format(tid))
+        sched.dagScheduler.taskEnded(task, TaskResultLost, null, null, info, null)
+
+      case _ => {}
+    }
     if (!finished(index)) {
       copiesRunning(index) -= 1
       numFailures(index) += 1
-      val locs = reason.stackTrace.map(loc => "\tat %s".format(loc.toString))
-      logInfo("Loss was due to %s\n%s\n%s".format(
-        reason.className, reason.description, locs.mkString("\n")))
       if (numFailures(index) > MAX_TASK_FAILURES) {
-        val errorMessage = "Task %s:%d failed more than %d times; aborting job %s".format(
-          taskSet.id, index, MAX_TASK_FAILURES, reason.description)
+        val errorMessage = "Task %s:%d failed more than %d times; aborting job".format(
+          taskSet.id, index, MAX_TASK_FAILURES)
         decreaseRunningTasks(runningTasks)
         sched.dagScheduler.taskSetFailed(taskSet, errorMessage)
         // need to delete failed Taskset from schedule queue
