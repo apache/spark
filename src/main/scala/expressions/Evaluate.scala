@@ -12,8 +12,11 @@ object Evaluate extends Logging {
     def eval(e: Expression) = Evaluate(e, input)
 
     /**
-     * A set of helper functions that return the correct decendent of [[scala.math.Numeric]] type and do any casting
+     * A set of helper functions that return the correct descendant of [[scala.math.Numeric]] type and do any casting
      * necessary of child evaluation.
+     *
+     * Instead of matching here we could consider pushing the appropriate Fractional/Integral type into the type objects
+     * themselves.
      */
     @inline
     def n1(e: Expression, f: ((Numeric[Any], Any) => Any)): Any  = e.dataType match {
@@ -102,6 +105,16 @@ object Evaluate extends Logging {
 
       /* Comparisons */
       case Equals(l, r) => eval(l) == eval(r)
+      // Strings
+      case GreaterThan(l, r) if l.dataType == StringType && r.dataType == StringType =>
+        eval(l).asInstanceOf[String] > eval(r).asInstanceOf[String]
+      case GreaterThanOrEqual(l, r) if l.dataType == StringType && r.dataType == StringType =>
+        eval(l).asInstanceOf[String] >= eval(r).asInstanceOf[String]
+      case LessThan(l, r) if l.dataType == StringType && r.dataType == StringType =>
+        eval(l).asInstanceOf[String] < eval(r).asInstanceOf[String]
+      case LessThanOrEqual(l, r) if l.dataType == StringType && r.dataType == StringType =>
+        eval(l).asInstanceOf[String] <= eval(r).asInstanceOf[String]
+      // Numerics
       case GreaterThan(l, r) => n2(l, r, _.gt(_, _))
       case GreaterThanOrEqual(l, r) => n2(l, r, _.gteq(_, _))
       case LessThan(l, r) => n2(l, r, _.lt(_, _))
@@ -110,8 +123,18 @@ object Evaluate extends Logging {
       case IsNotNull(e) => eval(e) != null
 
       /* Casts */
+      // toString
       case Cast(e, StringType) => eval(e).toString
+      // String => Numeric Types
       case Cast(e, IntegerType) if e.dataType == StringType => eval(e).asInstanceOf[String].toInt
+      case Cast(e, IntegerType) if e.dataType == StringType => eval(e).asInstanceOf[String].toDouble
+      // Numeric Type => Numeric Type
+      case Cast(e, IntegerType) => n1(e, _.toInt(_))
+      case Cast(e, DoubleType) => n1(e, _.toDouble(_))
+      case Cast(e, FloatType) => n1(e, _.toFloat(_))
+      case Cast(e, LongType) => n1(e, _.toLong(_))
+      case Cast(e, ShortType) => n1(e, _.toInt(_).toShort)
+      case Cast(e, ByteType) => n1(e, _.toInt(_).toByte)
 
       /* Boolean Logic */
       case Not(c) => !eval(c).asInstanceOf[Boolean]
