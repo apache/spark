@@ -114,7 +114,12 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   }
 
   test("mapTriplets") {
-    // TODO(ankurdave): Write the test
+    withSpark { sc =>
+      val n = 5
+      val star = starGraph(sc, n)
+      assert(star.mapTriplets(et => et.srcAttr + et.dstAttr).edges.collect.toSet ===
+        (1L to n).map(x => Edge(0, x, "vv")).toSet)
+    }
   }
 
   test("reverse") {
@@ -223,12 +228,19 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val n = 5
       val reverseStar = starGraph(sc, n).reverse
+      // outerJoinVertices changing type
       val reverseStarDegrees =
         reverseStar.outerJoinVertices(reverseStar.outDegrees) { (vid, a, bOpt) => bOpt.getOrElse(0) }
       val neighborDegreeSums = reverseStarDegrees.mapReduceTriplets(
         et => Iterator((et.srcId, et.dstAttr), (et.dstId, et.srcAttr)),
         (a: Int, b: Int) => a + b).collect.toSet
       assert(neighborDegreeSums === Set((0: Vid, n)) ++ (1 to n).map(x => (x: Vid, 0)))
+      // outerJoinVertices preserving type
+      val messages = reverseStar.vertices.mapValues { (vid, attr) => vid.toString }
+      val newReverseStar =
+        reverseStar.outerJoinVertices(messages) { (vid, a, bOpt) => a + bOpt.getOrElse("") }
+      assert(newReverseStar.vertices.map(_._2).collect.toSet ===
+        (0 to n).map(x => "v%d".format(x)).toSet)
     }
   }
 
