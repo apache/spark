@@ -101,8 +101,8 @@ private[spark] class ClusterScheduler(
     this.dagScheduler = dagScheduler
   }
 
-  def initialize(context: SchedulerBackend) {
-    backend = context
+  def initialize(backend: SchedulerBackend) {
+    this.backend = backend
     // temporarily set rootPool name to empty
     rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
@@ -174,7 +174,9 @@ private[spark] class ClusterScheduler(
           backend.killTask(tid, execId)
         }
       }
-      tsm.error("Stage %d was cancelled".format(stageId))
+      logInfo("Stage %d was cancelled".format(stageId))
+      tsm.removeAllRunningTasks()
+      taskSetFinished(tsm)
     }
   }
 

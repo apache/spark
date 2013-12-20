@@ -2,8 +2,20 @@ package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 import org.scalatest.FunSuite
+import org.scalatest.matchers.ShouldMatchers
+import org.apache.spark.util.SizeEstimator
 
-class PrimitiveKeyOpenHashSetSuite extends FunSuite {
+class PrimitiveKeyOpenHashMapSuite extends FunSuite with ShouldMatchers {
+
+  test("size for specialized, primitive key, value (int, int)") {
+    val capacity = 1024
+    val map = new PrimitiveKeyOpenHashMap[Int, Int](capacity)
+    val actualSize = SizeEstimator.estimate(map)
+    // 32 bit for keys, 32 bit for values, and 1 bit for the bitset.
+    val expectedSize = capacity * (32 + 32 + 1) / 8
+    // Make sure we are not allocating a significant amount of memory beyond our expected.
+    actualSize should be <= (expectedSize * 1.1).toLong
+  }
 
   test("initialization") {
     val goodMap1 = new PrimitiveKeyOpenHashMap[Int, Int](1)

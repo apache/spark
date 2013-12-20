@@ -19,6 +19,8 @@ package org.apache.spark.rdd
 
 import java.util.concurrent.Semaphore
 
+import scala.concurrent.{Await, TimeoutException}
+import scala.concurrent.duration.Duration
 import scala.concurrent.ExecutionContext.Implicits.global
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
@@ -171,6 +173,30 @@ class AsyncRDDActionsSuite extends FunSuite with BeforeAndAfterAll with Timeouts
 
     failAfter(10 seconds) {
       sem.acquire(2)
+    }
+  }
+
+  /**
+   * Awaiting FutureAction results
+   */
+  test("FutureAction result, infinite wait") {
+    val f = sc.parallelize(1 to 100, 4)
+              .countAsync()
+    assert(Await.result(f, Duration.Inf) === 100)
+  }
+
+  test("FutureAction result, finite wait") {
+    val f = sc.parallelize(1 to 100, 4)
+              .countAsync()
+    assert(Await.result(f, Duration(30, "seconds")) === 100)
+  }
+
+  test("FutureAction result, timeout") {
+    val f = sc.parallelize(1 to 100, 4)
+              .mapPartitions(itr => { Thread.sleep(20); itr })
+              .countAsync()
+    intercept[TimeoutException] {
+      Await.result(f, Duration(20, "milliseconds"))
     }
   }
 }

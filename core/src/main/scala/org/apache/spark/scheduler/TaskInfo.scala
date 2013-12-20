@@ -46,6 +46,8 @@ class TaskInfo(
 
   var failed = false
 
+  var serializedSize: Int = 0
+
   def markGettingResult(time: Long = System.currentTimeMillis) {
     gettingResultTime = time
   }

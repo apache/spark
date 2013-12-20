@@ -33,11 +33,13 @@ class PruneDependency[T](rdd: RDD[T], @transient partitionFilterFunc: Int => Boo
   extends NarrowDependency[T](rdd) {
 
   @transient
-  val partitions: Array[Partition] = rdd.partitions.zipWithIndex
-    .filter(s => partitionFilterFunc(s._2))
+  val partitions: Array[Partition] = rdd.partitions
+    .filter(s => partitionFilterFunc(s.index)).zipWithIndex
     .map { case(split, idx) => new PartitionPruningRDDPartition(idx, split) : Partition }
 
-  override def getParents(partitionId: Int) = List(partitions(partitionId).index)
+  override def getParents(partitionId: Int) = {
+    List(partitions(partitionId).asInstanceOf[PartitionPruningRDDPartition].parentSplit.index)
+  }
 }
 
 

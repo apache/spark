@@ -78,7 +78,7 @@ private[spark] class LocalActor(
  * master all run in the same JVM. It sits behind a ClusterScheduler and handles launching tasks
  * on a single Executor (created by the LocalBackend) running locally.
  */
-private[spark] class LocalBackend(scheduler: ClusterScheduler, private val totalCores: Int)
+private[spark] class LocalBackend(scheduler: ClusterScheduler, val totalCores: Int)
   extends SchedulerBackend with ExecutorBackend {
 
   var localActor: ActorRef = null
