@@ -125,27 +125,6 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     }
   }
 
-  /** Inner join another VertexPartition. */
-  def join[VD2: ClassManifest, VD3: ClassManifest]
-      (other: VertexPartition[VD2])
-      (f: (Vid, VD, VD2) => VD3): VertexPartition[VD3] =
-  {
-    if (index != other.index) {
-      logWarning("Joining two VertexPartitions with different indexes is slow.")
-      join(createUsingIndex(other.iterator))(f)
-    } else {
-      val newValues = new Array[VD3](capacity)
-      val newMask = mask & other.mask
-
-      var i = newMask.nextSetBit(0)
-      while (i >= 0) {
-        newValues(i) = f(index.getValue(i), values(i), other.values(i))
-        i = mask.nextSetBit(i + 1)
-      }
-      new VertexPartition(index, newValues, newMask)
-    }
-  }
-
   /** Left outer join another VertexPartition. */
   def leftJoin[VD2: ClassManifest, VD3: ClassManifest]
       (other: VertexPartition[VD2])
@@ -179,15 +158,16 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     if (index != other.index) {
       logWarning("Joining two VertexPartitions with different indexes is slow.")
       innerJoin(createUsingIndex(other.iterator))(f)
+    } else {
+      val newMask = mask & other.mask
+      val newValues = new Array[VD2](capacity)
+      var i = newMask.nextSetBit(0)
+      while (i >= 0) {
+        newValues(i) = f(index.getValue(i), values(i), other.values(i))
+        i = newMask.nextSetBit(i + 1)
+      }
+      new VertexPartition(index, newValues, newMask)
     }
-    val newMask = mask & other.mask
-    val newValues = new Array[VD2](capacity)
-    var i = newMask.nextSetBit(0)
-    while (i >= 0) {
-      newValues(i) = f(index.getValue(i), values(i), other.values(i))
-      i = newMask.nextSetBit(i + 1)
-    }
-    new VertexPartition(index, newValues, newMask)
   }
 
   /**

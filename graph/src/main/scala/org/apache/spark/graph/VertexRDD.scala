@@ -188,28 +188,6 @@ class VertexRDD[@specialized VD: ClassManifest](
   }
 
   /**
-   * Inner join this VertexSet with another VertexSet which has the
-   * same Index.  This function will fail if both VertexSets do not
-   * share the same index.  The resulting vertex set will only contain
-   * vertices that are in both this and the other vertex set.
-   *
-   * @tparam VD2 the attribute type of the other VertexSet
-   * @tparam VD3 the attribute type of the resulting VertexSet
-   *
-   * @param other the other VertexSet with which to join.
-   * @param f the function mapping a vertex id and its attributes in
-   * this and the other vertex set to a new vertex attribute.
-   * @return a VertexRDD containing only the vertices in both this
-   * and the other VertexSet and with tuple attributes.
-   */
-  def zipJoin[VD2: ClassManifest, VD3: ClassManifest]
-      (other: VertexRDD[VD2])(f: (Vid, VD, VD2) => VD3): VertexRDD[VD3] = {
-    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
-      thisPart.join(otherPart)(f)
-    }
-  }
-
-  /**
    * Left join this VertexSet with another VertexSet which has the
    * same Index.  This function will fail if both VertexSets do not
    * share the same index.  The resulting vertex set contains an entry
@@ -309,6 +287,10 @@ class VertexRDD[@specialized VD: ClassManifest](
     }
   }
 
+  /**
+   * Aggregate messages with the same ids using `reduceFunc`, returning a VertexRDD that is
+   * co-indexed with this one.
+   */
   def aggregateUsingIndex[VD2: ClassManifest](
       messages: RDD[(Vid, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] =
   {

@@ -1,32 +1,85 @@
 package org.apache.spark.graph
 
-import scala.util.Random
-
-import org.scalatest.FunSuite
-
 import org.apache.spark.SparkContext
 import org.apache.spark.graph.Graph._
 import org.apache.spark.graph.impl.EdgePartition
-import org.apache.spark.graph.impl.EdgePartitionBuilder
 import org.apache.spark.rdd._
+import org.scalatest.FunSuite
 
 class VertexRDDSuite extends FunSuite with LocalSparkContext {
 
-  test("VertexRDD") {
+  def vertices(sc: SparkContext, n: Int) = {
+    VertexRDD(sc.parallelize((0 to n).map(x => (x.toLong, x)), 5))
+  }
+
+  test("filter") {
     withSpark { sc =>
       val n = 100
-      val a = sc.parallelize((0 to n).map(x => (x.toLong, x.toLong)), 5)
-      val b = VertexRDD(a).mapValues(x => -x).cache() // Allow joining b with a derived RDD of b
-      assert(b.count === n + 1)
-      assert(b.leftJoin(a){ (id, a, bOpt) => a + bOpt.get }.map(x=> x._2).reduce(_+_) === 0)
-      val c = b.aggregateUsingIndex[Long](a, (x, y) => x)
-      assert(b.leftJoin(c){ (id, b, cOpt) => b + cOpt.get }.map(x=> x._2).reduce(_+_) === 0)
-      val d = c.filter(q => ((q._2 % 2) == 0))
-      val e = a.filter(q => ((q._2 % 2) == 0))
-      assert(d.count === e.count)
-      assert(b.zipJoin(c)((id, b, c) => b + c).map(x => x._2).reduce(_+_) === 0)
-      val f = b.mapValues(x => if (x % 2 == 0) -x else x)
-      assert(b.diff(f).collect().toSet === (2 to n by 2).map(x => (x.toLong, x.toLong)).toSet)
+      val verts = vertices(sc, n)
+      val evens = verts.filter(q => ((q._2 % 2) == 0))
+      assert(evens.count === (0 to n).filter(_ % 2 == 0).size)
     }
   }
+
+  test("mapValues") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n)
+      val negatives = verts.mapValues(x => -x).cache() // Allow joining b with a derived RDD of b
+      assert(negatives.count === n + 1)
+    }
+  }
+
+  test("diff") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n)
+      val flipEvens = verts.mapValues(x => if (x % 2 == 0) -x else x)
+      // diff should keep only the changed vertices
+      assert(verts.diff(flipEvens).map(_._2).collect().toSet === (2 to n by 2).map(-_).toSet)
+      // diff should keep the vertex values from `other`
+      assert(flipEvens.diff(verts).map(_._2).collect().toSet === (2 to n by 2).toSet)
+    }
+  }
+
+  test("leftJoin") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n)
+      val evens = verts.filter(q => ((q._2 % 2) == 0))
+      // leftJoin with another VertexRDD
+      assert(verts.leftJoin(evens) { (id, a, bOpt) => a - bOpt.getOrElse(0) }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, 0)).toSet ++ (1 to n by 2).map(x => (x.toLong, x)).toSet)
+      // leftJoin with an RDD
+      val evensRDD = evens.map(identity)
+      assert(verts.leftJoin(evensRDD) { (id, a, bOpt) => a - bOpt.getOrElse(0) }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, 0)).toSet ++ (1 to n by 2).map(x => (x.toLong, x)).toSet)
+    }
+  }
+
+  test("innerJoin") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n)
+      val evens = verts.filter(q => ((q._2 % 2) == 0))
+      // innerJoin with another VertexRDD
+      assert(verts.innerJoin(evens) { (id, a, b) => a - b }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, 0)).toSet)
+      // innerJoin with an RDD
+      val evensRDD = evens.map(identity)
+      assert(verts.innerJoin(evensRDD) { (id, a, b) => a - b }.collect.toSet ===
+        (0 to n by 2).map(x => (x.toLong, 0)).toSet)    }
+  }
+
+  test("aggregateUsingIndex") {
+    withSpark { sc =>
+      val n = 100
+      val verts = vertices(sc, n)
+      val messageTargets = (0 to n) ++ (0 to n by 2)
+      val messages = sc.parallelize(messageTargets.map(x => (x.toLong, 1)))
+      assert(verts.aggregateUsingIndex[Int](messages, _ + _).collect.toSet ===
+        (0 to n).map(x => (x.toLong, if (x % 2 == 0) 2 else 1)).toSet)
+    }
+  }
+
 }

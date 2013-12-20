@@ -1,13 +1,9 @@
 package org.apache.spark.graph
 
-import scala.util.Random
-
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graph.Graph._
-import org.apache.spark.graph.impl.EdgePartition
-import org.apache.spark.graph.impl.EdgePartitionBuilder
 import org.apache.spark.rdd._
 
 class GraphSuite extends FunSuite with LocalSparkContext {
@@ -118,6 +114,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   }
 
   test("mapTriplets") {
+    // TODO(ankurdave): Write the test
   }
 
   test("reverse") {
