@@ -82,7 +82,9 @@ Project {key#0,value#1}
   MetastoreRelation default, src, None
 
 
-scala> query.optimizedPlan transform { case Project(projectList, child) if projectList == child.output => child }
+scala> res0.optimizedPlan transform {
+     |   case Project(projectList, child) if projectList == child.output => child
+     | }
 res2: catalyst.plans.logical.LogicalPlan = 
 Project {key#0,value#1}
  MetastoreRelation default, src, None
