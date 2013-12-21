@@ -24,7 +24,8 @@ import scala.collection.mutable.HashSet
 import org.apache.spark.streaming._
 
 /**
- * This class drives the generation of Spark jobs from the DStreams.
+ * This class schedules jobs to be run on Spark. It uses the JobGenerator to generate
+ * the jobs and runs them using a thread pool. Number of threads 
  */
 private[streaming]
 class JobScheduler(val ssc: StreamingContext) extends Logging {
@@ -91,6 +92,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
   }
 
+  private[streaming]
   class JobHandler(job: Job) extends Runnable {
     def run() {
       beforeJobStart(job)
