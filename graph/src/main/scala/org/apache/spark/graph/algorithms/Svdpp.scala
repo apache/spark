@@ -98,17 +98,15 @@ object Svdpp {
     // phase 2
     def mapF2(et: EdgeTriplet[VT, Double]): Iterator[(Vid, Msg)] = {
       assert(et.srcAttr != null && et.dstAttr != null)
-      val usr = et.srcAttr
-      val itm = et.dstAttr
-      val p = usr.v1
-      val q = itm.v1
+      val (usr, itm) = (et.srcAttr, et.dstAttr)
+      val (p, q) = (usr.v1, itm.v1)
       var pred = u + usr.bias + itm.bias + q.dotProduct(usr.v2)
       pred = math.max(pred, minVal)
       pred = math.min(pred, maxVal)
       val err = et.attr - pred
-      val updateY = (q.mapMultiply(err*usr.norm)).subtract((itm.v2).mapMultiply(gamma7))
       val updateP = (q.mapMultiply(err)).subtract(p.mapMultiply(gamma7))
       val updateQ = (usr.v2.mapMultiply(err)).subtract(q.mapMultiply(gamma7))
+      val updateY = (q.mapMultiply(err*usr.norm)).subtract((itm.v2).mapMultiply(gamma7))
       Iterator((et.srcId, new Msg(updateP, updateY, err - gamma6*usr.bias)), (et.dstId, new Msg(updateQ, updateY, err - gamma6*itm.bias)))
     }	
     def reduceF2(g1: Msg, g2: Msg):Msg = {
@@ -140,10 +138,8 @@ object Svdpp {
     // calculate error on training set
     def mapF3(et: EdgeTriplet[VT, Double]): Iterator[(Vid, Double)] = {
       assert(et.srcAttr != null && et.dstAttr != null)
-      val usr = et.srcAttr
-      val itm = et.dstAttr
-      val p = usr.v1
-      val q = itm.v1
+      val (usr, item) = (et.srcAttr, et.dstAttr)
+      val (p, q) = (usr.v1, itm.v1)
       var pred = u + usr.bias + itm.bias + q.dotProduct(usr.v2)
       pred = math.max(pred, minVal)
       pred = math.min(pred, maxVal)
