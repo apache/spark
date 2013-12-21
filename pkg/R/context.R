@@ -73,7 +73,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
 
   jrddType = "Lorg/apache/spark/api/java/JavaRDD;"
 
-  jrdd <- .jcall("org/apache/spark/api/r/RRDD",
+  jrdd <- .jcall("sparkr/RRDD",
                  jrddType,
                  "createRDDFromArray",
                  sc,

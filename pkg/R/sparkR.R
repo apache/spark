@@ -1,12 +1,12 @@
 .sparkREnv <- new.env()
 
+assemblyJarName <- "SparkR-assembly-0.1.jar"
+
 sparkR.onLoad <- function(libname, pkgname) {
-  sparkDir <- strsplit(libname, "/")
-  classPathScript <- paste(c(sparkDir[[1]][1:(length(sparkDir[[1]]) - 2)],
-                             "/bin/compute-classpath.sh"), collapse="/")
-  classPath <- system(classPathScript, intern=TRUE)
-  packageStartupMessage("[SparkR] Initializing with classpath ", classPath, "\n")
-  .jinit(classpath=classPath)
+  assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep="")
+  packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
+  .sparkREnv[["libname"]] <- libname
+  .jinit(classpath=assemblyJarPath)
 }
 
 #' Initialize a new Spark Context.

@@ -8,19 +8,19 @@ source_local <- function(fname) {
 
 source_local("serialize.R")
 
-# Set libPaths to include SparkR package as loadNamespace needs this
-# TODO: Figure out if we can avoid this by not loading any objects that require
-# SparkR namespace
-sparkHome <- Sys.getenv("SPARK_HOME")
-.libPaths(c( .libPaths(), paste(sparkHome,"/R/lib", sep="")))
-
-suppressPackageStartupMessages(library(SparkR))
-
 # NOTE: We use "stdin" to get the process stdin instead of the command line
 inputCon  <- file("stdin", open = "rb")
 
 outputFileName <- readLines(inputCon, n = 1)
 outputCon <- file(outputFileName, open="wb")
+
+# Set libPaths to include SparkR package as loadNamespace needs this
+# TODO: Figure out if we can avoid this by not loading any objects that require
+# SparkR namespace
+rLibDir <- readLines(inputCon, n = 1)
+.libPaths(c(.libPaths(), rLibDir))
+
+suppressPackageStartupMessages(library(SparkR))
 
 # First read the function; if used for pairwise RRDD, this is the hash function.
 execLen <- readInt(inputCon)

@@ -1,14 +1,14 @@
-package org.apache.spark.api.r
+package sparkr
 
 import java.io._
-import scala.io.Source
+
 import scala.collection.JavaConversions._
+import scala.io.Source
 import scala.reflect.ClassTag
 
-import org.apache.spark._
+import org.apache.spark.{SparkEnv, Partition, Logging, SparkException, TaskContext}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
 import org.apache.spark.rdd.RDD
-import org.apache.spark.util.Utils
 
 /**
  * Form an RDD[(Array[Byte], Array[Byte])] from key-value pairs returned from R.
@@ -20,19 +20,20 @@ private class PairwiseRRDD[T: ClassTag](
     hashFunc: Array[Byte],
     dataSerialized: Boolean,
     functionDependencies: Array[Byte],
-    packageNames: Array[Byte])
+    packageNames: Array[Byte],
+    rLibDir: String)
   extends RDD[(Int, Array[Byte])](parent) {
 
   override def getPartitions = parent.partitions
 
   override def compute(split: Partition, context: TaskContext): Iterator[(Int, Array[Byte])] = {
 
-    val pb = RRDD.rWorkerProcessBuilder
+    val pb = RRDD.rWorkerProcessBuilder(rLibDir)
     val proc = pb.start()
 
     RRDD.startStderrThread(proc)
 
-    RRDD.startStdinThread(proc, hashFunc, dataSerialized,
+    RRDD.startStdinThread(rLibDir, proc, hashFunc, dataSerialized,
       functionDependencies, packageNames,
       firstParent[T].iterator(split, context), numPartitions)
 
@@ -68,7 +69,6 @@ private class PairwiseRRDD[T: ClassTag](
           case eof: EOFException => {
             throw new SparkException("R worker exited unexpectedly (crashed)", eof)
           }
-          case e => throw e
         }
       }
       var _nextObj = read()
@@ -88,21 +88,22 @@ class RRDD[T: ClassTag](
     func: Array[Byte],
     dataSerialized: Boolean,
     functionDependencies: Array[Byte],
-    packageNames: Array[Byte])
+    packageNames: Array[Byte],
+    rLibDir: String)
   extends RDD[Array[Byte]](parent) with Logging {
 
   override def getPartitions = parent.partitions
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
 
-    val pb = RRDD.rWorkerProcessBuilder
+    val pb = RRDD.rWorkerProcessBuilder(rLibDir)
 
     val proc = pb.start()
 
     RRDD.startStderrThread(proc)
 
     // Write -1 in numPartitions to indicate this is a normal RDD
-    RRDD.startStdinThread(proc, func, dataSerialized,
+    RRDD.startStdinThread(rLibDir, proc, func, dataSerialized,
       functionDependencies, packageNames,
       firstParent[T].iterator(split, context), numPartitions = -1)
 
@@ -137,7 +138,6 @@ class RRDD[T: ClassTag](
           case eof: EOFException => {
             throw new SparkException("R worker exited unexpectedly (crashed)", eof)
           }
-          case e => throw e
         }
       }
       var _nextObj = read()
@@ -163,14 +163,10 @@ object RRDD {
   /**
    * ProcessBuilder used to launch worker R processes.
    */
-  lazy val rWorkerProcessBuilder = {
+  def rWorkerProcessBuilder(rLibDir: String) = {
     val rCommand = "Rscript"
     val rOptions = "--vanilla"
-    val sparkHome = Option(new ProcessBuilder().environment().get("SPARK_HOME")) match {
-      case Some(path) => path
-      case None => sys.error("SPARK_HOME not set as an environment variable.")
-    }
-    val rExecScript = sparkHome + "/R/pkg/inst/worker/worker.R"
+    val rExecScript = rLibDir + "/SparkR/worker/worker.R"
     new ProcessBuilder(List(rCommand, rOptions, rExecScript))
   }
 
@@ -192,6 +188,7 @@ object RRDD {
    * Start a thread to write RDD data to the R process.
    */
   def startStdinThread[T](
+      rLibDir: String,
       proc: Process,
       func: Array[Byte],
       dataSerialized: Boolean,
@@ -200,7 +197,8 @@ object RRDD {
       iter: Iterator[T],
       numPartitions: Int) {
 
-    val tempDir = Utils.getLocalDir
+    val tempDir =
+      System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")).split(',')(0)
     val tempFile = File.createTempFile("rSpark", "out", new File(tempDir))
     val tempFileName = tempFile.getAbsolutePath()
     val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
@@ -215,6 +213,7 @@ object RRDD {
         val dataOut = new DataOutputStream(stream)
 
         printOut.println(tempFileName)
+        printOut.println(rLibDir)
 
         dataOut.writeInt(func.length)
         dataOut.write(func, 0, func.length)
