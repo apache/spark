@@ -138,7 +138,7 @@ object Svdpp {
     // calculate error on training set
     def mapF3(et: EdgeTriplet[VT, Double]): Iterator[(Vid, Double)] = {
       assert(et.srcAttr != null && et.dstAttr != null)
-      val (usr, item) = (et.srcAttr, et.dstAttr)
+      val (usr, itm) = (et.srcAttr, et.dstAttr)
       val (p, q) = (usr.v1, itm.v1)
       var pred = u + usr.bias + itm.bias + q.dotProduct(usr.v2)
       pred = math.max(pred, minVal)
