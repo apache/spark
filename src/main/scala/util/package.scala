@@ -41,7 +41,7 @@ package object util {
     file
   }
 
-  def sideBySide(left: String, right: String) = sideBySide(left.split("\n"), right.split("\n"))
+  def sideBySide(left: String, right: String): Seq[String] = sideBySide(left.split("\n"), right.split("\n"))
 
   def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {
     val maxLeftSize = left.map(_.size).max
