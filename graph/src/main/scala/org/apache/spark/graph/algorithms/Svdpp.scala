@@ -10,7 +10,7 @@ class VT ( // vertex type
   var v1: RealVector, // v1: p for user node, q for item node
   var v2: RealVector, // v2: pu + |N(u)|^(-0.5)*sum(y) for user node, y for item node
   var bias: Double,
-  var norm: Double // only for user node
+  var norm: Double // |N(u)|^(-0.5) for user node
 ) extends Serializable
 
 class Msg ( // message
