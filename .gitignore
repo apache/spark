@@ -1,0 +1,13 @@
+*.class
+
+# Package Files #
+*.jar
+*.war
+*.ear
+
+.RData
+.Rhistory
+
+target/
+lib/
+
