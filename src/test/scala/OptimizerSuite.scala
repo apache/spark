@@ -110,7 +110,7 @@ class OptimizerSuite extends FunSuite {
     }
     val optimized = Optimize(originalQuery.analyze)
 
-    comparePlans(originalQuery, optimized)
+    comparePlans(optimizer.EliminateSubqueries(originalQuery), optimized)
   }
 
   test("joins: conjunctive predicates") {
