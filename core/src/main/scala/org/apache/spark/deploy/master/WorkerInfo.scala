@@ -36,6 +36,7 @@ private[spark] class WorkerInfo(
   assert (port > 0)
 
   @transient var executors: mutable.HashMap[String, ExecutorInfo] = _ // fullId => info
+  @transient var drivers: mutable.HashMap[String, DriverInfo] = _
   @transient var state: WorkerState.Value = _
   @transient var coresUsed: Int = _
   @transient var memoryUsed: Int = _
@@ -54,6 +55,7 @@ private[spark] class WorkerInfo(
 
   private def init() {
     executors = new mutable.HashMap
+    drivers = new mutable.HashMap
     state = WorkerState.ALIVE
     coresUsed = 0
     memoryUsed = 0
@@ -81,6 +83,18 @@ private[spark] class WorkerInfo(
 
   def hasExecutor(app: ApplicationInfo): Boolean = {
     executors.values.exists(_.application == app)
+  }
+
+  def addDriver(driver: DriverInfo) {
+    drivers(driver.id) = driver
+    memoryUsed += driver.desc.mem
+    coresUsed += 1
+  }
+
+  def removeDriver(driver: DriverInfo) {
+    drivers -= driver.id
+    memoryUsed -= driver.desc.mem
+    coresUsed -= 1
   }
 
   def webUiAddress : String = {

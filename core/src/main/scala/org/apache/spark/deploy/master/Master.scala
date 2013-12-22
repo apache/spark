@@ -30,7 +30,7 @@ import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
 
 import org.apache.spark.{Logging, SparkException}
-import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
+import org.apache.spark.deploy.{DriverDescription, ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
@@ -47,7 +47,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val RECOVERY_DIR = System.getProperty("spark.deploy.recoveryDirectory", "")
   val RECOVERY_MODE = System.getProperty("spark.deploy.recoveryMode", "NONE")
 
-  var nextAppNumber = 0
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
   val actorToWorker = new HashMap[ActorRef, WorkerInfo]
@@ -57,9 +56,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val idToApp = new HashMap[String, ApplicationInfo]
   val actorToApp = new HashMap[ActorRef, ApplicationInfo]
   val addressToApp = new HashMap[Address, ApplicationInfo]
-
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
+  var nextAppNumber = 0
+
+  val drivers = new HashSet[DriverInfo]
+  val completedDrivers = new ArrayBuffer[DriverInfo]
+  val waitingDrivers = new ArrayBuffer[DriverInfo] // Drivers currently spooled for scheduling
+  var nextDriverNumber = 0
 
   Utils.checkHost(host, "Expected hostname")
 
@@ -134,14 +138,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   override def receive = {
     case ElectedLeader => {
-      val (storedApps, storedWorkers) = persistenceEngine.readPersistedData()
-      state = if (storedApps.isEmpty && storedWorkers.isEmpty)
+      val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData()
+      state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty)
         RecoveryState.ALIVE
       else
         RecoveryState.RECOVERING
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
-        beginRecovery(storedApps, storedWorkers)
+        beginRecovery(storedApps, storedDrivers, storedWorkers)
         context.system.scheduler.scheduleOnce(WORKER_TIMEOUT millis) { completeRecovery() }
       }
     }
@@ -165,6 +169,52 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         persistenceEngine.addWorker(worker)
         sender ! RegisteredWorker(masterUrl, masterWebUiUrl)
         schedule()
+      }
+    }
+
+    case RequestSubmitDriver(description) => {
+      if (state == RecoveryState.STANDBY) {
+        sender ! SubmitDriverResponse(false, "Standby master cannot accept driver submission")
+      } else {
+        logInfo("Driver submitted " + description.mainClass)
+        val driver = createDriver(description)
+        persistenceEngine.addDriver(driver)
+        waitingDrivers += driver
+        drivers.add(driver)
+        schedule()
+
+        // TODO: It might be good to instead have the submission client poll the master to determine
+        //       the current status of the driver. Since we may already want to expose this.
+
+        sender ! SubmitDriverResponse(true, "Driver successfully submitted")
+      }
+    }
+
+    case RequestKillDriver(driverId) => {
+      if (state == RecoveryState.STANDBY) {
+        sender ! KillDriverResponse(false, "Standby master cannot kill drivers")
+      } else {
+        logInfo("Asked to kill driver " + driverId)
+        val driver = drivers.find(_.id == driverId)
+        driver match {
+          case Some(d) =>
+            if (waitingDrivers.contains(d)) { waitingDrivers -= d }
+            else {
+              // We just notify the worker to kill the driver here. The final bookkeeping occurs
+              // on the return path when the worker submits a state change back to the master
+              // to notify it that the driver was successfully killed.
+              d.worker.foreach { w =>
+                w.actor ! KillDriver(driverId)
+              }
+            }
+            val msg = s"Kill request for $driverId submitted"
+            logInfo(msg)
+            sender ! KillDriverResponse(true, msg)
+          case None =>
+            val msg = s"Could not find running driver $driverId"
+            logWarning(msg)
+            sender ! KillDriverResponse(false, msg)
+        }
       }
     }
 
@@ -210,6 +260,25 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       }
     }
 
+    case DriverStateChanged(driverId, state, exception) => {
+      if (!(state == DriverState.FAILED || state == DriverState.FINISHED ||
+          state == DriverState.KILLED)) {
+        throw new Exception(s"Received unexpected state update for driver $driverId: $state")
+      }
+      drivers.find(_.id == driverId) match {
+        case Some(driver) => {
+          drivers -= driver
+          completedDrivers += driver
+          persistenceEngine.removeDriver(driver)
+          driver.state = state
+          driver.exception = exception
+          driver.worker.foreach(w => w.removeDriver(driver))
+        }
+        case None =>
+          logWarning(s"Got driver update for unknown driver $driverId")
+      }
+    }
+
     case Heartbeat(workerId) => {
       idToWorker.get(workerId) match {
         case Some(workerInfo) =>
@@ -231,7 +300,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       if (canCompleteRecovery) { completeRecovery() }
     }
 
-    case WorkerSchedulerStateResponse(workerId, executors) => {
+    case WorkerSchedulerStateResponse(workerId, executors, driverIds) => {
       idToWorker.get(workerId) match {
         case Some(worker) =>
           logInfo("Worker has been re-registered: " + workerId)
@@ -243,6 +312,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
             val execInfo = app.addExecutor(worker, exec.cores, Some(exec.execId))
             worker.addExecutor(execInfo)
             execInfo.copyState(exec)
+          }
+
+          for (driverId <- driverIds) {
+            drivers.find(_.id == driverId).foreach { driver =>
+              driver.worker = Some(worker)
+              driver.state = DriverState.RUNNING
+              worker.drivers(driverId) = driver
+            }
           }
         case None =>
           logWarning("Scheduler state from unknown worker: " + workerId)
@@ -260,8 +337,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
 
     case RequestMasterState => {
-      sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
-        state)
+      sender ! MasterStateResponse(host, port, workers.toArray, drivers.toArray,
+        completedDrivers.toArray ,apps.toArray, completedApps.toArray, state)
     }
 
     case CheckForWorkerTimeOut => {
@@ -277,7 +354,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     workers.count(_.state == WorkerState.UNKNOWN) == 0 &&
       apps.count(_.state == ApplicationState.UNKNOWN) == 0
 
-  def beginRecovery(storedApps: Seq[ApplicationInfo], storedWorkers: Seq[WorkerInfo]) {
+  def beginRecovery(storedApps: Seq[ApplicationInfo], storedDrivers: Seq[DriverInfo],
+      storedWorkers: Seq[WorkerInfo]) {
     for (app <- storedApps) {
       logInfo("Trying to recover app: " + app.id)
       try {
@@ -287,6 +365,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       } catch {
         case e: Exception => logInfo("App " + app.id + " had exception on reconnect")
       }
+    }
+
+    for (driver <- storedDrivers) {
+      // Here we just read in the list of drivers. Any drivers associated with now-lost workers
+      // will be re-launched when we detect that the worker is missing.
+      drivers += driver
     }
 
     for (worker <- storedWorkers) {
@@ -312,6 +396,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     workers.filter(_.state == WorkerState.UNKNOWN).foreach(removeWorker)
     apps.filter(_.state == ApplicationState.UNKNOWN).foreach(finishApplication)
 
+    // Reschedule drivers which were not claimed by any workers
+    drivers.filter(_.worker.isEmpty).foreach { d =>
+      logWarning(s"Driver ${d.id} was not found after master recovery, re-launching")
+      relaunchDriver(d)
+    }
+
     state = RecoveryState.ALIVE
     schedule()
     logInfo("Recovery complete - resuming operations!")
@@ -332,6 +422,16 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
    */
   def schedule() {
     if (state != RecoveryState.ALIVE) { return }
+    // First schedule drivers, they take strict precedence over applications
+    for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
+      for (driver <- Seq(waitingDrivers: _*)) {
+        if (worker.memoryFree > driver.desc.mem) {
+          launchDriver(worker, driver)
+          waitingDrivers -= driver
+        }
+      }
+    }
+
     // Right now this is a very simple FIFO scheduler. We keep trying to fit in the first app
     // in the queue, then the second app, etc.
     if (spreadOutApps) {
@@ -418,7 +518,17 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         exec.id, ExecutorState.LOST, Some("worker lost"), None)
       exec.application.removeExecutor(exec)
     }
+    for (driver <- worker.drivers.values) {
+      relaunchDriver(driver)
+    }
     persistenceEngine.removeWorker(worker)
+  }
+
+  def relaunchDriver(driver: DriverInfo) {
+    driver.worker = None
+    driver.state = DriverState.RELAUNCHING
+    waitingDrivers += driver
+    schedule()
   }
 
   def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
@@ -498,6 +608,28 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
           workers -= worker // we've seen this DEAD worker in the UI, etc. for long enough; cull it 
       }
     }
+  }
+
+  /** Generate a new driver ID given a driver's submission date */
+  def newDriverId(submitDate: Date): String = {
+    val appId = "driver-%s-%04d".format(DATE_FORMAT.format(submitDate), nextDriverNumber)
+    nextDriverNumber += 1
+    appId
+  }
+
+  def createDriver(desc: DriverDescription): DriverInfo = {
+    val now = System.currentTimeMillis()
+    val date = new Date(now)
+    new DriverInfo(now, newDriverId(date), desc, date)
+  }
+
+  def launchDriver(worker: WorkerInfo, driver: DriverInfo) {
+    logInfo("Launching driver " + driver.id + " on worker " + worker.id)
+    worker.addDriver(driver)
+    driver.worker = Some(worker)
+    worker.actor ! LaunchDriver(driver.id, driver.desc.jarUrl, driver.desc.mainClass,
+      driver.desc.mem)
+    driver.state = DriverState.RUNNING
   }
 }
 

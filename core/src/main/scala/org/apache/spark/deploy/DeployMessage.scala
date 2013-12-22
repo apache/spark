@@ -20,10 +20,11 @@ package org.apache.spark.deploy
 import scala.collection.immutable.List
 
 import org.apache.spark.deploy.ExecutorState.ExecutorState
-import org.apache.spark.deploy.master.{WorkerInfo, ApplicationInfo}
+import org.apache.spark.deploy.master.{DriverInfo, WorkerInfo, ApplicationInfo}
 import org.apache.spark.deploy.master.RecoveryState.MasterState
-import org.apache.spark.deploy.worker.ExecutorRunner
+import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.util.Utils
+import org.apache.spark.deploy.master.DriverState.DriverState
 
 
 private[deploy] sealed trait DeployMessage extends Serializable
@@ -54,7 +55,14 @@ private[deploy] object DeployMessages {
       exitStatus: Option[Int])
     extends DeployMessage
 
-  case class WorkerSchedulerStateResponse(id: String, executors: List[ExecutorDescription])
+  case class DriverStateChanged(
+      driverId: String,
+      state: DriverState,
+      exception: Option[Exception])
+    extends DeployMessage
+
+  case class WorkerSchedulerStateResponse(id: String, executors: List[ExecutorDescription],
+     driverIds: Seq[String])
 
   case class Heartbeat(workerId: String) extends DeployMessage
 
@@ -76,14 +84,19 @@ private[deploy] object DeployMessages {
       sparkHome: String)
     extends DeployMessage
 
-  // Client to Master
+  case class LaunchDriver(driverId: String, jarUrl: String, mainClass: String, mem: Int)
+    extends DeployMessage
+
+  case class KillDriver(driverId: String) extends DeployMessage
+
+  // AppClient to Master
 
   case class RegisterApplication(appDescription: ApplicationDescription)
     extends DeployMessage
 
   case class MasterChangeAcknowledged(appId: String)
 
-  // Master to Client
+  // Master to AppClient
 
   case class RegisteredApplication(appId: String, masterUrl: String) extends DeployMessage
 
@@ -97,11 +110,21 @@ private[deploy] object DeployMessages {
 
   case class ApplicationRemoved(message: String)
 
-  // Internal message in Client
+  // DriverClient <-> Master
 
-  case object StopClient
+  case class RequestSubmitDriver(driverDescription: DriverDescription) extends DeployMessage
 
-  // Master to Worker & Client
+  case class SubmitDriverResponse(success: Boolean, message: String) extends DeployMessage
+
+  case class RequestKillDriver(driverId: String) extends DeployMessage
+
+  case class KillDriverResponse(success: Boolean, message: String) extends DeployMessage
+
+  // Internal message in AppClient
+
+  case object StopAppClient
+
+  // Master to Worker & AppClient
 
   case class MasterChanged(masterUrl: String, masterWebUiUrl: String)
 
@@ -112,6 +135,7 @@ private[deploy] object DeployMessages {
   // Master to MasterWebUI
 
   case class MasterStateResponse(host: String, port: Int, workers: Array[WorkerInfo],
+    activeDrivers: Array[DriverInfo], completedDrivers: Array[DriverInfo],
     activeApps: Array[ApplicationInfo], completedApps: Array[ApplicationInfo],
     status: MasterState) {
 
@@ -128,7 +152,8 @@ private[deploy] object DeployMessages {
   // Worker to WorkerWebUI
 
   case class WorkerStateResponse(host: String, port: Int, workerId: String,
-    executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner], masterUrl: String,
+    executors: List[ExecutorRunner], finishedExecutors: List[ExecutorRunner],
+    drivers: List[DriverRunner], finishedDrivers: List[DriverRunner], masterUrl: String,
     cores: Int, memory: Int, coresUsed: Int, memoryUsed: Int, masterWebUiUrl: String) {
 
     Utils.checkHost(host, "Required hostname")

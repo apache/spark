@@ -35,11 +35,15 @@ private[spark] trait PersistenceEngine {
 
   def removeWorker(worker: WorkerInfo)
 
+  def addDriver(driver: DriverInfo)
+
+  def removeDriver(driver: DriverInfo)
+
   /**
    * Returns the persisted data sorted by their respective ids (which implies that they're
    * sorted by time of creation).
    */
-  def readPersistedData(): (Seq[ApplicationInfo], Seq[WorkerInfo])
+  def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo])
 
   def close() {}
 }
@@ -49,5 +53,8 @@ private[spark] class BlackHolePersistenceEngine extends PersistenceEngine {
   override def removeApplication(app: ApplicationInfo) {}
   override def addWorker(worker: WorkerInfo) {}
   override def removeWorker(worker: WorkerInfo) {}
-  override def readPersistedData() = (Nil, Nil)
+  override def addDriver(driver: DriverInfo) {}
+  override def removeDriver(driver: DriverInfo) {}
+
+  override def readPersistedData() = (Nil, Nil, Nil)
 }

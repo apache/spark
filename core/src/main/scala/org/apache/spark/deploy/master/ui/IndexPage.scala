@@ -26,7 +26,8 @@ import net.liftweb.json.JsonAST.JValue
 
 import org.apache.spark.deploy.{DeployWebUI, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
-import org.apache.spark.deploy.master.{ApplicationInfo, WorkerInfo}
+import org.apache.spark.deploy.JsonProtocol
+import org.apache.spark.deploy.master.{DriverInfo, ApplicationInfo, WorkerInfo}
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
@@ -56,6 +57,12 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
+    val driverHeaders = Seq("ID", "Submitted Time", "Worker", "State", "Memory", "Main Class")
+    val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
+    val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
+    val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
+    val completedDriversTable = UIUtils.listingTable(driverHeaders, driverRow, completedDrivers)
+
     val content =
         <div class="row-fluid">
           <div class="span12">
@@ -70,6 +77,9 @@ private[spark] class IndexPage(parent: MasterWebUI) {
               <li><strong>Applications:</strong>
                 {state.activeApps.size} Running,
                 {state.completedApps.size} Completed </li>
+              <li><strong>Drivers:</strong>
+                {state.activeDrivers.size} Running,
+                {state.completedDrivers.size} Completed </li>
             </ul>
           </div>
         </div>
@@ -94,7 +104,22 @@ private[spark] class IndexPage(parent: MasterWebUI) {
             <h4> Completed Applications </h4>
             {completedAppsTable}
           </div>
-        </div>;
+        </div>
+
+          <div class="row-fluid">
+            <div class="span12">
+              <h4> Active Drivers </h4>
+
+              {activeDriversTable}
+            </div>
+          </div>
+
+          <div class="row-fluid">
+            <div class="span12">
+              <h4> Completed Drivers </h4>
+              {completedDriversTable}
+            </div>
+          </div>;
     UIUtils.basicSparkPage(content, "Spark Master at " + state.uri)
   }
 
@@ -132,6 +157,19 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td>{app.desc.user}</td>
       <td>{app.state.toString}</td>
       <td>{DeployWebUI.formatDuration(app.duration)}</td>
+    </tr>
+  }
+
+  def driverRow(driver: DriverInfo): Seq[Node] = {
+    <tr>
+      <td>{driver.id} </td>
+      <td>{driver.submitDate}</td>
+      <td>{driver.worker.map(w => w.id.toString).getOrElse("None")}</td>
+      <td>{driver.state}</td>
+      <td sorttable_customkey={driver.desc.mem.toString}>
+        {Utils.megabytesToString(driver.desc.mem.toLong)}
+      </td>
+      <td>{driver.desc.mainClass}</td>
     </tr>
   }
 }

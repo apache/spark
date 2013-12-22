@@ -147,7 +147,7 @@ private[spark] class AppClient(
         logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
 
-      case StopClient =>
+      case StopAppClient =>
         markDead()
         sender ! true
         context.stop(self)

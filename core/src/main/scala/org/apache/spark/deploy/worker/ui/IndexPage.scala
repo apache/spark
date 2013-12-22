@@ -30,7 +30,7 @@ import net.liftweb.json.JsonAST.JValue
 
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
-import org.apache.spark.deploy.worker.ExecutorRunner
+import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
@@ -55,6 +55,12 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
       UIUtils.listingTable(executorHeaders, executorRow, workerState.executors)
     val finishedExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, workerState.finishedExecutors)
+
+    val driverHeaders = Seq("DriverID", "Main Class", "Memory", "Logs")
+    val runningDriverTable =
+      UIUtils.listingTable(driverHeaders, driverRow, workerState.drivers)
+    def finishedDriverTable =
+      UIUtils.listingTable(driverHeaders, driverRow, workerState.finishedDrivers)
 
     val content =
         <div class="row-fluid"> <!-- Worker Details -->
@@ -84,6 +90,20 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
             <h4> Finished Executors </h4>
             {finishedExecutorTable}
           </div>
+        </div>
+
+        <div class="row-fluid"> <!-- Running Drivers -->
+          <div class="span12">
+            <h4> Running Drivers {workerState.drivers.size} </h4>
+            {runningDriverTable}
+          </div>
+        </div>
+
+        <div class="row-fluid"> <!-- Finished Drivers  -->
+          <div class="span12">
+            <h4> Finished Drivers </h4>
+            {finishedDriverTable}
+          </div>
         </div>;
 
     UIUtils.basicSparkPage(content, "Spark Worker at %s:%s".format(
@@ -111,6 +131,20 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
           .format(executor.appId, executor.execId)}>stderr</a>
       </td> 
     </tr>
+
   }
 
+  def driverRow(driver: DriverRunner): Seq[Node] = {
+    <tr>
+      <td>{driver.driverId}</td>
+      <td>{driver.mainClass}</td>
+      <td sorttable_customkey={driver.memory.toString}>
+        {Utils.megabytesToString(driver.memory)}
+      </td>
+      <td>
+        <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
+        <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
+      </td>
+    </tr>
+  }
 }

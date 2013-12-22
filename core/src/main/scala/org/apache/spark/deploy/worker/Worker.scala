@@ -30,18 +30,10 @@ import akka.remote.{ DisassociatedEvent, RemotingLifecycleEvent}
 import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.master.Master
+import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{Utils, AkkaUtils}
-import org.apache.spark.deploy.DeployMessages.WorkerStateResponse
-import org.apache.spark.deploy.DeployMessages.RegisterWorkerFailed
-import org.apache.spark.deploy.DeployMessages.KillExecutor
-import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import org.apache.spark.deploy.DeployMessages.Heartbeat
-import org.apache.spark.deploy.DeployMessages.RegisteredWorker
-import org.apache.spark.deploy.DeployMessages.LaunchExecutor
-import org.apache.spark.deploy.DeployMessages.RegisterWorker
 
 /**
   * @param masterUrls Each url should look like spark://host:port.
@@ -83,6 +75,9 @@ private[spark] class Worker(
   var workDir: File = null
   val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]
+  val drivers = new HashMap[String, DriverRunner]
+  val finishedDrivers = new HashMap[String, DriverRunner]
+
   val publicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
@@ -193,7 +188,7 @@ private[spark] class Worker(
 
       val execs = executors.values.
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
-      sender ! WorkerSchedulerStateResponse(workerId, execs.toList)
+      sender ! WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq)
 
     case RegisterWorkerFailed(message) =>
       if (!registered) {
@@ -247,13 +242,56 @@ private[spark] class Worker(
         }
       }
 
+    case LaunchDriver(driverId, jarUrl, mainClass, memory) => {
+      logInfo(s"Asked to launch driver $driverId")
+      val driver = new DriverRunner(driverId, jarUrl, mainClass, workDir, memory, self)
+      drivers(driverId) = driver
+      driver.start()
+
+      coresUsed += 1
+      memoryUsed += memory
+    }
+
+    case KillDriver(driverId) => {
+      logInfo(s"Asked to kill driver $driverId")
+
+      drivers.find(_._1 == driverId) match {
+        case Some((id, runner)) =>
+          runner.kill()
+        case None =>
+          logError(s"Asked to kill unknown driver $driverId")
+      }
+
+    }
+
+
+    case DriverStateChanged(driverId, state, exception) => {
+      state match {
+        case DriverState.FAILED =>
+          logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+        case DriverState.FINISHED =>
+          logInfo(s"Driver $driverId exited successfully")
+        case DriverState.KILLED =>
+          logInfo(s"Driver $driverId was killed")
+      }
+      masterLock.synchronized {
+        master ! DriverStateChanged(driverId, state, exception)
+      }
+      val driver = drivers(driverId)
+      memoryUsed -= driver.memory
+      coresUsed -= 1
+      drivers -= driverId
+      finishedDrivers(driverId) = driver
+    }
+
     case x: DisassociatedEvent if x.remoteAddress == masterAddress =>
       logInfo(s"$x Disassociated !")
       masterDisconnected()
 
     case RequestWorkerState => {
       sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
-        finishedExecutors.values.toList, activeMasterUrl, cores, memory,
+        finishedExecutors.values.toList, drivers.values.toList,
+        finishedDrivers.values.toList, activeMasterUrl, cores, memory,
         coresUsed, memoryUsed, activeMasterWebUiUrl)
     }
   }
