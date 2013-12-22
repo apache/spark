@@ -285,7 +285,7 @@ object DecisionTree extends Serializable with Logging {
 
     /*Combines the aggregates from partitions
     @param agg1 Array containing aggregates from one or more partitions
-    @param agg2 Array contianing aggregates from one or more partitions
+    @param agg2 Array containing aggregates from one or more partitions
 
     @return Combined aggregate from agg1 and agg2
      */
