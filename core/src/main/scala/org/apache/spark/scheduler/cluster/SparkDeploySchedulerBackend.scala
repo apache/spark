@@ -20,7 +20,7 @@ package org.apache.spark.scheduler.cluster
 import scala.collection.mutable.HashMap
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.deploy.client.{Client, ClientListener}
+import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.deploy.{Command, ApplicationDescription}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.util.Utils
@@ -31,10 +31,10 @@ private[spark] class SparkDeploySchedulerBackend(
     masters: Array[String],
     appName: String)
   extends CoarseGrainedSchedulerBackend(scheduler, sc.env.actorSystem)
-  with ClientListener
+  with AppClientListener
   with Logging {
 
-  var client: Client = null
+  var client: AppClient = null
   var stopping = false
   var shutdownCallback : (SparkDeploySchedulerBackend) => Unit = _
 
@@ -54,7 +54,7 @@ private[spark] class SparkDeploySchedulerBackend(
     val appDesc = new ApplicationDescription(appName, maxCores, executorMemory, command, sparkHome,
         "http://" + sc.ui.appUIAddress)
 
-    client = new Client(sc.env.actorSystem, masters, appDesc, this)
+    client = new AppClient(sc.env.actorSystem, masters, appDesc, this)
     client.start()
   }
 

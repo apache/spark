@@ -23,7 +23,7 @@ import org.apache.spark.deploy.{Command, ApplicationDescription}
 
 private[spark] object TestClient {
 
-  class TestListener extends ClientListener with Logging {
+  class TestListener extends AppClientListener with Logging {
     def connected(id: String) {
       logInfo("Connected to master, got app ID " + id)
     }
@@ -49,7 +49,7 @@ private[spark] object TestClient {
     val desc = new ApplicationDescription(
       "TestClient", 1, 512, Command("spark.deploy.client.TestExecutor", Seq(), Map()), "dummy-spark-home", "ignored")
     val listener = new TestListener
-    val client = new Client(actorSystem, Array(url), desc, listener)
+    val client = new AppClient(actorSystem, Array(url), desc, listener)
     client.start()
     actorSystem.awaitTermination()
   }
