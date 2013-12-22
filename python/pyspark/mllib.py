@@ -357,8 +357,8 @@ class ALSModel(object):
         self._context = sc
         self._java_model = java_model
 
-    #def __del__(self):
-        #self._gateway.detach(self._java_model)
+    def __del__(self):
+        self._context._gateway.detach(self._java_model)
 
     def predict(self, user, product):
         return self._java_model.predict(user, product)
