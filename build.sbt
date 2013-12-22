@@ -1,3 +1,11 @@
+name := "catalyst"
+
+organization := "com.databricks"
+
+version := "0.1-SNAPSHOT"
+
+scalaVersion := "2.10.3"
+
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
 libraryDependencies += "edu.berkeley.cs.amplab" %% "shark" % "0.9.0-SNAPSHOT"
@@ -24,8 +32,6 @@ resolvers ++= Seq(
     "Datanucleus Repository" at "http://www.datanucleus.org/downloads/maven2")
 
 
-scalaVersion := "2.10.3"
-
 initialCommands in console := """
 import catalyst.analysis._
 import catalyst.dsl._
@@ -37,3 +43,13 @@ import catalyst.rules._
 import catalyst.types._
 import catalyst.util._
 import catalyst.shark2.TestShark._"""
+
+site.settings
+
+ghpages.settings
+
+git.remoteRepo := "git@github.com:marmbrus/catalyst.git"
+
+site.settings
+
+site.includeScaladoc()
