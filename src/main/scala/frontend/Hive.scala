@@ -361,11 +361,34 @@ object HiveQl {
         Filter(nodeToExpr(whereExpr), relations)
       }.getOrElse(relations)
 
-      val selectExpressions = nameExpressions(selectClause.getChildren.flatMap(selExprNodeToExpr))
+      // Script transformations are expressed as a select clause with a single expression of type TOK_TRANSFORM
+      val transformation = selectClause.getChildren.head match {
+        case Token("TOK_SELEXPR",
+               Token("TOK_TRANSFORM",
+                 Token("TOK_EXPLIST", inputExprs) ::
+                 Token("TOK_SERDE", Nil) ::
+                 Token("TOK_RECORDWRITER", Nil) :: // TODO: Need to support other types of (in/out)put
+                 Token(script, Nil)::
+                 Token("TOK_SERDE", Nil) ::
+                 Token("TOK_RECORDREADER", Nil) ::
+                 Token("TOK_ALIASLIST", aliases) :: Nil) :: Nil) =>
 
-      val withProject = groupByClause match {
-        case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
-        case None => Project(selectExpressions, withWhere)
+          val output = aliases.map { case Token(n, Nil) => AttributeReference(n, StringType)() }
+          val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
+          Some(Transform(inputExprs.map(nodeToExpr), unescapedScript, output, withWhere))
+        case _ => None
+      }
+
+      // The projection of the query can either be a normal projection, an aggregation (if there is a group by) or
+      // a script transformation.
+      val withProject = transformation.getOrElse {
+        // Not a transformation so must be either project or aggregation.
+        val selectExpressions = nameExpressions(selectClause.getChildren.flatMap(selExprNodeToExpr))
+
+        groupByClause match {
+          case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
+          case None => Project(selectExpressions, withWhere)
+        }
       }
 
       require(!(orderByClause.isDefined && sortByClause.isDefined), "Can't have both a sort by and order by.")

@@ -145,6 +145,8 @@ abstract trait PlanningStrategies {
         shark2.StopAfter(Evaluate(limit, Nil).asInstanceOf[Int], planLater(child))(sc) :: Nil
       case logical.Union(left, right) =>
         shark2.Union(planLater(left), planLater(right))(sc) :: Nil
+      case logical.Transform(input, script, output, child) =>
+        shark2.Transform(input, script, output, planLater(child))(sc) :: Nil
       case _ => Nil
     }
   }
