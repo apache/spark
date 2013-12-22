@@ -151,7 +151,7 @@ object TestShark extends Logging {
       // Proceed with analysis.
       analyze(parsed)
     }
-    lazy val optimizedPlan = Optimize(analyzed)
+    lazy val optimizedPlan = Optimize(catalog.CreateTables(analyzed))
     // TODO: Don't just pick the first one...
     lazy val sharkPlan = TrivalPlanner(optimizedPlan).next()
     lazy val executedPlan = PrepareForExecution(sharkPlan)

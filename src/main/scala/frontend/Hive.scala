@@ -25,6 +25,12 @@ abstract class Command extends LeafNode {
 }
 
 /**
+ * Used when we need to start parsing the AST before deciding that we are going to pass the command back for Hive to
+ * execute natively.  Will be replaced with a native command that contains the cmd string.
+ */
+case object NativePlaceholder extends Command
+
+/**
  * Returned for commands supported by the parser, but not catalyst.  In general these are DDL
  * commands that are passed directly to Hive.
  */
@@ -91,7 +97,6 @@ object HiveQl {
     "TOK_CREATEDATABASE",
     "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
-    "TOK_CREATETABLE",
     "TOK_DROPDATABASE",
     "TOK_DROPINDEX",
     "TOK_DROPTABLE",
@@ -219,7 +224,10 @@ object HiveQl {
         if(nativeCommands contains tree.getText)
           NativeCommand(sql)
         else
-          nodeToPlan(tree)
+          nodeToPlan(tree) match {
+            case NativePlaceholder => NativeCommand(sql)
+            case other => other
+          }
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
@@ -343,6 +351,16 @@ object HiveQl {
       val Some(query) :: _ :: _ :: Nil = getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
       // TODO: support EXTENDED?
       ExplainCommand(nodeToPlan(query))
+
+    case Token("TOK_CREATETABLE", children) if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
+      val (Some(Token("TOK_TABNAME", Token(tableName, Nil) :: Nil)) ::
+          _ /* likeTable */ ::
+          Some(query) :: Nil) = getClauses(Seq("TOK_TABNAME", "TOK_LIKETABLE", "TOK_QUERY"), children)
+      InsertIntoCreatedTable(tableName, nodeToPlan(query))
+
+    // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
+    case Token("TOK_CREATETABLE", _) => NativePlaceholder
+
     case Token("TOK_QUERY",
            Token("TOK_FROM", fromClause :: Nil) ::
            Token("TOK_INSERT", insertClauses) :: Nil) =>
