@@ -1,6 +1,5 @@
 package org.apache.spark.graph.algorithms
 
-import org.apache.spark._
 import org.apache.spark.rdd._
 import org.apache.spark.graph._
 import scala.util.Random
@@ -53,7 +52,7 @@ object Svdpp {
       vd
     }
 
-    // calculate initial norm and bias
+    // calculate initial bias and norm
     def mapF0(et: EdgeTriplet[VT, Double]): Iterator[(Vid, (Long, Double))] = {
       assert(et.srcAttr != null && et.dstAttr != null)
       Iterator((et.srcId, (1L, et.attr)), (et.dstId, (1L, et.attr)))
@@ -76,7 +75,7 @@ object Svdpp {
     // make graph
     var g = Graph.fromEdges(edges, defaultF(rank)).cache()
 
-    // calculate initial norm and bias
+    // calculate initial bias and norm
     val t0 = g.mapReduceTriplets(mapF0, reduceF0)
     g.outerJoinVertices(t0) {updateF0}
 
@@ -107,8 +106,9 @@ object Svdpp {
       val updateP = (q.mapMultiply(err)).subtract(p.mapMultiply(gamma7))
       val updateQ = (usr.v2.mapMultiply(err)).subtract(q.mapMultiply(gamma7))
       val updateY = (q.mapMultiply(err*usr.norm)).subtract((itm.v2).mapMultiply(gamma7))
-      Iterator((et.srcId, new Msg(updateP, updateY, err - gamma6*usr.bias)), (et.dstId, new Msg(updateQ, updateY, err - gamma6*itm.bias)))
-    }	
+      Iterator((et.srcId, new Msg(updateP, updateY, err - gamma6*usr.bias)),
+        (et.dstId, new Msg(updateQ, updateY, err - gamma6*itm.bias)))
+    }
     def reduceF2(g1: Msg, g2: Msg):Msg = {
       g1.v1 = g1.v1.add(g2.v1)
       g1.v2 = g1.v2.add(g2.v2)
