@@ -6,11 +6,11 @@ import java.io._
 import util._
 
 /**
- * A framework for running the query tests that are included in hive distribution.
+ * Runs the test cases that are included in the hive distribution.
  */
-class HiveCompatability extends HiveComaparisionTest {
+class HiveCompatability extends HiveQueryFileTest {
   /** A list of tests deemed out of scope and thus completely disregarded */
-  val blackList = Seq(
+  override def blackList = Seq(
     "hook_order", // These tests use hooks that are not on the classpath and thus break all subsequent SQL execution.
     "hook_context",
     "mapjoin_hook",
@@ -32,14 +32,16 @@ class HiveCompatability extends HiveComaparisionTest {
     "join18_multi_distinct",
 
     // Uses a serde that isn't on the classpath... breaks other tests.
-    "bucketizedhiveinputformat"
+    "bucketizedhiveinputformat"//,
+   // "udaf_covar_pop"
+
   )
 
   /**
    * The set of tests that are believed to be working in catalyst. Tests not in whiteList
    * blacklist are implicitly marked as ignored.
    */
-  val whiteList = Seq(
+  override def whiteList = Seq(
     "add_part_exist",
     "auto_join23",
     "auto_join26",
@@ -75,10 +77,13 @@ class HiveCompatability extends HiveComaparisionTest {
     "input0",
     "input11",
     "input11_limit",
+    "input22",
     "input24",
     "input25",
     "input41",
+    "input4_cb_delim",
     "input4_limit",
+    "input7",
     "insert1",
     "join0",
     "join1",
@@ -89,6 +94,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "join15",
     "join16",
     "join17",
+    "join18",
     "join19",
     "join2",
     "join22",
@@ -100,6 +106,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "join30",
     "join31",
     "join34",
+    "join35",
     "join36",
     "join37",
     "join_casesensitive",
@@ -112,9 +119,12 @@ class HiveCompatability extends HiveComaparisionTest {
     "literal_ints",
     "literal_string",
     "mergejoins",
-    "nestedvirtual",
+    // "nestedvirtual",
     "no_hooks",
     "noalias_subq1",
+    "nomore_ambiguous_table_col",
+    "notable_alias1",
+    "notable_alias2",
     "nullgroup",
     "nullgroup2",
     "nullgroup3",
@@ -122,6 +132,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "nullinput2",
     "ppd1",
     "ppd_gby_join",
+    "ppd_join",
     "ppd_join3",
     "ppd_outer_join1",
     "ppd_outer_join2",
@@ -131,6 +142,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "ppd_random",
     "ppd_repeated_alias",
     "ppd_udf_col",
+    "ppd_union",
     "progress_1",
     "quote2",
     "rename_column",
@@ -139,6 +151,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "show_describe_func_quotes",
     "show_functions",
     "smb_mapjoin_10",
+    "subq2",
     "tablename_with_select",
     "udf2",
     "udf9",
@@ -232,6 +245,7 @@ class HiveCompatability extends HiveComaparisionTest {
     "union16",
     "union2",
     "union20",
+    "union27",
     "union28",
     "union29",
     "union30",
@@ -243,24 +257,6 @@ class HiveCompatability extends HiveComaparisionTest {
   )
 
   // TODO: bundle in jar files... get from classpath
-  val hiveQueryDir = new File(testShark.hiveDevHome, "ql/src/test/queries/clientpositive")
-  val testCases = hiveQueryDir.listFiles
-  val runAll = !(System.getProperty("shark.hive.alltests") == null)
-
-  // Allow the whitelist to be overriden by a system property
-  val realWhiteList = Option(System.getProperty("shark.hive.whitelist")).map(_.split(",").toSeq).getOrElse(whiteList)
-
-  // Go through all the test cases and add them to scala test.
-  testCases.foreach { testCase =>
-    val testCaseName = testCase.getName.stripSuffix(".q")
-    if(blackList contains testCaseName) {
-      // Do nothing
-    } else if(realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) || runAll) {
-      // Build a test case and submit it to scala test framework...
-      val queriesString = fileToString(testCase)
-      createQueryTest(testCaseName, queriesString)
-    } else {
-      ignore(testCaseName) {}
-    }
-  }
+  lazy val hiveQueryDir = new File(testShark.hiveDevHome, "ql/src/test/queries/clientpositive")
+  def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f).toMap
 }
