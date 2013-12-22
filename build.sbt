@@ -31,6 +31,7 @@ resolvers ++= Seq(
     // For jdo-2 required by Hive < 0.12.0
     "Datanucleus Repository" at "http://www.datanucleus.org/downloads/maven2")
 
+resolvers += "Databees" at "http://repository-databricks.forge.cloudbees.com/snapshot/"
 
 initialCommands in console := """
 import catalyst.analysis._
