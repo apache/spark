@@ -16,6 +16,7 @@ import org.apache.spark.rdd.RDD
 
 import collection.JavaConversions._
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
+import scala.collection.mutable
 
 /**
  * A locally running test instance of spark.  The lifecycle for a given query is managed by the inner class
@@ -145,7 +146,7 @@ object TestShark extends Logging {
     lazy val analyzed = {
       // Make sure any test tables referenced are loaded.
       val referencedTables = parsed collect { case UnresolvedRelation(name, _) => name.split("\\.").last }
-      val referencedTestTables = referencedTables.filter(testTableNames.contains)
+      val referencedTestTables = referencedTables.filter(testTables.contains)
       logger.debug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
       // Proceed with analysis.
@@ -200,15 +201,20 @@ object TestShark extends Logging {
 
   implicit def logicalToSharkQuery(plan: LogicalPlan) = new CaseSensitiveSharkQuery { val parsed = plan }
 
-  protected case class TestTable(name: String, commands: (()=>Unit)*)
+  case class TestTable(name: String, commands: (()=>Unit)*)
 
+  implicit class SqlCmd(sql: String) { def cmd = () => sql.q.stringResult(): Unit}
 
-  protected implicit class SqlCmd(sql: String) { def cmd = () => sql.q.stringResult(): Unit}
   /**
    * A list of test tables and the DDL required to initialize them.  A test table is loaded on demand when a query
    * are run against it.
    */
-  val testTables = Seq(
+  val testTables = new mutable.HashMap[String, TestTable]()
+  def registerTestTable(testTable: TestTable) = testTables += (testTable.name -> testTable)
+
+  // The test tables that are defined in the Hive QTestUtil.
+  // https://github.com/apache/hive/blob/trunk/itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
+  val hiveQTestUtilTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)".cmd,
       s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' INTO TABLE src".cmd),
@@ -231,13 +237,14 @@ object TestShark extends Logging {
       }
     })
   )
-  protected val testTableNames = testTables.map(_.name).toSet
+
+  hiveQTestUtilTables.foreach(registerTestTable)
 
   private val loadedTables = new collection.mutable.HashSet[String]
   def loadTestTable(name: String) {
     if(!(loadedTables contains name)) {
       logger.info(s"Loading test table $name")
-      val createCmds = testTables.find(_.name == name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
+      val createCmds = testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
       loadedTables += name
     }
