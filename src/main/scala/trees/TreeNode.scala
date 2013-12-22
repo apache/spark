@@ -132,6 +132,49 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Returns a copy of this node where [[rule]] has been recursively
+   * applied first to all of its children and then itself.
+   * When [[rule]] does not apply to a given node, it is left unchanged.
+   * @param rule the function use to transform this nodes children
+   */
+  def transformPostOrder(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    val afterRuleOnChildren = transformChildrenPostOrder(rule);
+    if (this fastEquals afterRuleOnChildren) {
+      rule.applyOrElse(this, identity[BaseType])
+    } else {
+      rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+    }
+  }
+
+  def transformChildrenPostOrder(rule: PartialFunction[BaseType, BaseType]): this.type = {
+    var changed = false
+    val newArgs = productIterator.map {
+      case arg: TreeNode[_] if(children contains arg) =>
+        val newChild = arg.asInstanceOf[BaseType].transformPostOrder(rule)
+        if(!(newChild fastEquals arg)) {
+          changed = true
+          newChild
+        } else {
+          arg
+        }
+      case args: Seq[_] => args.map {
+        case arg: TreeNode[_] if(children contains arg) =>
+          val newChild = arg.asInstanceOf[BaseType].transformPostOrder(rule)
+          if(!(newChild fastEquals arg)) {
+            changed = true
+            newChild
+          } else {
+            arg
+          }
+        case other => other
+      }
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }.toArray
+    if(changed) makeCopy(newArgs) else this
+  }
+
+  /**
    * Args to the constructor that should be copied, but not transformed.
    * These are appended to the transformed args automatically by makeCopy
    * @return
