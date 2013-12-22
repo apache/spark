@@ -12,6 +12,7 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(s, StringType)
+    case b: Boolean => Literal(b, BooleanType)
   }
 }
 
