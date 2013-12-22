@@ -57,10 +57,6 @@ private[spark] class IndexPage(parent: JobProgressUI) {
            </li>
            <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
            <li>
-             <a href="#executors"><strong>Executor Summary:</strong></a>
-             {listener.stageIdToExecutorSummaries.size}
-           </li>
-           <li>
              <a href="#active"><strong>Active Stages:</strong></a>
              {activeStages.size}
            </li>

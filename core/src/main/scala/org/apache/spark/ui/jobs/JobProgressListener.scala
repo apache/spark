@@ -144,23 +144,14 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         }
 
         // update duration
-        y.duration += taskEnd.taskInfo.duration
+        y.taskTime += taskEnd.taskInfo.duration
 
-        // update shuffle read/write
-        if (null != taskEnd.taskMetrics) {
-          val shuffleRead = taskEnd.taskMetrics.shuffleReadMetrics
-          shuffleRead match {
-            case Some(s) =>
-              y.shuffleRead += s.remoteBytesRead
-            case _ => {}
-          }
-          val shuffleWrite = taskEnd.taskMetrics.shuffleWriteMetrics
-          shuffleWrite match {
-            case Some(s) => {
-              y.shuffleWrite += s.shuffleBytesWritten
-            }
-            case _ => {}
-          }
+        taskEnd.taskMetrics.shuffleReadMetrics.foreach { shuffleRead =>
+          y.shuffleRead += shuffleRead.remoteBytesRead
+        }
+
+        taskEnd.taskMetrics.shuffleWriteMetrics.foreach { shuffleWrite =>
+          y.shuffleWrite += shuffleWrite.shuffleBytesWritten
         }
       }
       case _ => {}

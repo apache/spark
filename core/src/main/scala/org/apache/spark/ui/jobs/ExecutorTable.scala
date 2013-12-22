@@ -40,7 +40,7 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
     <table class="table table-bordered table-striped table-condensed sortable">
       <thead>
         <th>Executor ID</th>
-        <th>Duration</th>
+        <th>Task Time</th>
         <th>Total Tasks</th>
         <th>Failed Tasks</th>
         <th>Succeeded Tasks</th>
@@ -61,7 +61,7 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
           case (k,v) => {
             <tr>
               <td>{k}</td>
-              <td>{parent.formatDuration(v.duration)}</td>
+              <td>{parent.formatDuration(v.taskTime)}</td>
               <td>{v.failedTasks + v.succeededTasks}</td>
               <td>{v.failedTasks}</td>
               <td>{v.succeededTasks}</td>
