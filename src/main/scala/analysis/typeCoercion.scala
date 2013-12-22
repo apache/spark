@@ -49,6 +49,9 @@ object PromoteTypes extends Rule[LogicalPlan] {
         b.makeCopy(Array(Cast(b.left, IntegerType), b.right))
       case b: BinaryExpression if b.left.dataType == IntegerType && b.right.dataType == StringType =>
         b.makeCopy(Array(b.left, Cast(b.right, IntegerType)))
+
+      case Sum(e) if e.dataType == StringType =>
+        Sum(Cast(e, IntegerType))
     }
   }
 }
