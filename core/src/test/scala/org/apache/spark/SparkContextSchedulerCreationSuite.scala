@@ -53,7 +53,7 @@ class SparkContextSchedulerCreationSuite
 
   test("local-n") {
     val sched = createTaskScheduler("local[5]")
-    assert(sched.maxTaskFailures === 0)
+    assert(sched.maxTaskFailures === 1)
     sched.backend match {
       case s: LocalBackend => assert(s.totalCores === 5)
       case _ => fail()

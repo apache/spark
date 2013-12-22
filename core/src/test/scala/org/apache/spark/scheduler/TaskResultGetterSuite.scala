@@ -89,7 +89,7 @@ class TaskResultGetterSuite extends FunSuite with BeforeAndAfter with BeforeAndA
   test("task retried if result missing from block manager") {
     // Set the maximum number of task failures to > 0, so that the task set isn't aborted
     // after the result is missing.
-    sc = new SparkContext("local[1,1]", "test")
+    sc = new SparkContext("local[1,2]", "test")
     // If this test hangs, it's probably because no resource offers were made after the task
     // failed.
     val scheduler: TaskSchedulerImpl = sc.taskScheduler match {
