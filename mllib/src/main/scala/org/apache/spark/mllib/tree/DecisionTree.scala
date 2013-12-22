@@ -24,9 +24,10 @@ import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.Split
 import org.apache.spark.mllib.tree.impurity.Gini
+import scala.util.control.Breaks._
 
 
-class DecisionTree(val strategy : Strategy) extends Logging {
+class DecisionTree(val strategy : Strategy) extends Serializable with Logging {
 
   def train(input : RDD[LabeledPoint]) : DecisionTreeModel = {
 
@@ -36,6 +37,8 @@ class DecisionTree(val strategy : Strategy) extends Logging {
     //TODO: Find all splits and bins using quantiles including support for categorical features, single-pass
     //TODO: Think about broadcasting this
     val (splits, bins) = DecisionTree.find_splits_bins(input, strategy)
+    logDebug("numSplits = " + bins(0).length)
+    strategy.numBins = bins(0).length
 
     //TODO: Level-wise training of tree and obtain Decision Tree model
     val maxDepth = strategy.maxDepth
@@ -44,47 +47,86 @@ class DecisionTree(val strategy : Strategy) extends Logging {
     val filters = new Array[List[Filter]](maxNumNodes)
     filters(0) = List()
     val parentImpurities = new Array[Double](maxNumNodes)
-    //Dummy value for top node (calculate from scratch during first split calculation)
-    parentImpurities(0) = Double.MinValue
+    //Dummy value for top node (updated during first split calculation)
+    //parentImpurities(0) = Double.MinValue
+    val nodes = new Array[Node](maxNumNodes)
 
-    for (level <- 0 until maxDepth){
 
-      println("#####################################")
-      println("level = " + level)
-      println("#####################################")
+    breakable {
+      for (level <- 0 until maxDepth){
 
-      //Find best split for all nodes at a level
-      val numNodes= scala.math.pow(2,level).toInt
-      val splitsStatsForLevel = DecisionTree.findBestSplits(input, parentImpurities, strategy, level, filters,splits,bins)
-      for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex){
-        for (i <- 0 to 1){
-          val nodeIndex = (scala.math.pow(2,level+1)).toInt - 1 + 2*index + i
-          if(level < maxDepth - 1){
-            val impurity = if (i == 0) nodeSplitStats._2.leftImpurity else nodeSplitStats._2.rightImpurity
-            println("nodeIndex = " + nodeIndex + ", impurity = " + impurity)
-            parentImpurities(nodeIndex) = impurity
-            println("updating nodeIndex = " + nodeIndex)
-            filters(nodeIndex) = new Filter(nodeSplitStats._1, if(i == 0) - 1 else 1) :: filters((nodeIndex-1)/2)
-            for (filter <- filters(nodeIndex)){
-              println(filter)
-            }
-          }
+        logDebug("#####################################")
+        logDebug("level = " + level)
+        logDebug("#####################################")
+
+        //Find best split for all nodes at a level
+        val numNodes= scala.math.pow(2,level).toInt
+        val splitsStatsForLevel = DecisionTree.findBestSplits(input, parentImpurities, strategy, level, filters,splits,bins)
+
+        for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex){
+
+          extractNodeInfo(nodeSplitStats, level, index, nodes)
+          extractInfoForLowerLevels(level, index, maxDepth, nodeSplitStats, parentImpurities, filters)
+          logDebug("final best split = " + nodeSplitStats._1)
+
         }
-        println("final best split = " + nodeSplitStats._1)
+        require(scala.math.pow(2,level)==splitsStatsForLevel.length)
+
+        val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0 )
+        logDebug("all leaf = " + allLeaf)
+        if (allLeaf) break
+
       }
-      require(scala.math.pow(2,level)==splitsStatsForLevel.length)
-
-
     }
 
-    //TODO: Extract decision tree model
+    val topNode = nodes(0)
+    topNode.build(nodes)
 
-    return new DecisionTreeModel()
+    val decisionTreeModel = {
+      return new DecisionTreeModel(topNode)
+    }
+
+    return decisionTreeModel
   }
 
+
+  private def extractNodeInfo(nodeSplitStats: (Split, InformationGainStats), level: Int, index: Int, nodes: Array[Node]) {
+    val split = nodeSplitStats._1
+    val stats = nodeSplitStats._2
+    val nodeIndex = scala.math.pow(2, level).toInt - 1 + index
+    val predict = {
+      val leftSamples = nodeSplitStats._2.leftSamples.toDouble
+      val rightSamples = nodeSplitStats._2.rightSamples.toDouble
+      val totalSamples = leftSamples + rightSamples
+      leftSamples / totalSamples
+    }
+    val isLeaf = (stats.gain <= 0) || (level == strategy.maxDepth - 1)
+    val node = new Node(nodeIndex, predict, isLeaf, Some(split), None, None, Some(stats))
+    logDebug("Node = " + node)
+    nodes(nodeIndex) = node
+  }
+
+  private def extractInfoForLowerLevels(level: Int, index: Int, maxDepth: Int, nodeSplitStats: (Split, InformationGainStats), parentImpurities: Array[Double], filters: Array[List[Filter]]) {
+    for (i <- 0 to 1) {
+
+      val nodeIndex = (scala.math.pow(2, level + 1)).toInt - 1 + 2 * index + i
+
+      if (level < maxDepth - 1) {
+
+        val impurity = if (i == 0) nodeSplitStats._2.leftImpurity else nodeSplitStats._2.rightImpurity
+        logDebug("nodeIndex = " + nodeIndex + ", impurity = " + impurity)
+        parentImpurities(nodeIndex) = impurity
+        filters(nodeIndex) = new Filter(nodeSplitStats._1, if (i == 0) -1 else 1) :: filters((nodeIndex - 1) / 2)
+        for (filter <- filters(nodeIndex)) {
+          logDebug("Filter = " + filter)
+        }
+
+      }
+    }
+  }
 }
 
-object DecisionTree extends Serializable {
+object DecisionTree extends Serializable with Logging {
 
   /*
   Returns an Array[Split] of optimal splits for all nodes at a given level
@@ -110,12 +152,12 @@ object DecisionTree extends Serializable {
 
     //Common calculations for multiple nested methods
     val numNodes = scala.math.pow(2, level).toInt
-    println("numNodes = " + numNodes)
+    logDebug("numNodes = " + numNodes)
     //Find the number of features by looking at the first sample
     val numFeatures = input.take(1)(0).features.length
-    println("numFeatures = " + numFeatures)
-    val numSplits = strategy.numSplits
-    println("numSplits = " + numSplits)
+    logDebug("numFeatures = " + numFeatures)
+    val numSplits = strategy.numBins
+    logDebug("numSplits = " + numSplits)
 
     /*Find the filters used before reaching the current code*/
     def findParentFilters(nodeIndex: Int): List[Filter] = {
@@ -136,7 +178,7 @@ object DecisionTree extends Serializable {
     def isSampleValid(parentFilters: List[Filter], labeledPoint: LabeledPoint): Boolean = {
 
       //Leaf
-      if (parentFilters.length == 0 ){
+      if ((level > 0) & (parentFilters.length == 0) ){
         return false
       }
 
@@ -156,9 +198,9 @@ object DecisionTree extends Serializable {
 
     /*Finds the right bin for the given feature*/
     def findBin(featureIndex: Int, labeledPoint: LabeledPoint) : Int = {
-      //println("finding bin for labeled point " + labeledPoint.features(featureIndex))
+      //logDebug("finding bin for labeled point " + labeledPoint.features(featureIndex))
       //TODO: Do binary search
-      for (binIndex <- 0 until strategy.numSplits) {
+      for (binIndex <- 0 until strategy.numBins) {
         val bin = bins(featureIndex)(binIndex)
         //TODO: Remove this requirement post basic functional
         val lowThreshold = bin.lowSplit.threshold
@@ -196,7 +238,7 @@ object DecisionTree extends Serializable {
           }
         } else {
           for (featureIndex <- 0 until numFeatures) {
-            //println("shift+featureIndex =" + (shift+featureIndex))
+            //logDebug("shift+featureIndex =" + (shift+featureIndex))
             arr(shift + featureIndex) = findBin(featureIndex, labeledPoint)
           }
         }
@@ -239,7 +281,7 @@ object DecisionTree extends Serializable {
 
     //TODO: This length if different for regression
     val binAggregateLength = 2*numSplits * numFeatures * numNodes
-    println("binAggregageLength = " + binAggregateLength)
+    logDebug("binAggregageLength = " + binAggregateLength)
 
     /*Combines the aggregates from partitions
     @param agg1 Array containing aggregates from one or more partitions
@@ -255,14 +297,14 @@ object DecisionTree extends Serializable {
       combinedAggregate
     }
 
-    println("input = " + input.count)
+    logDebug("input = " + input.count)
     val binMappedRDD = input.map(x => findBinsForLevel(x))
-    println("binMappedRDD.count = " + binMappedRDD.count)
+    logDebug("binMappedRDD.count = " + binMappedRDD.count)
     //calculate bin aggregates
 
     val binAggregates = binMappedRDD.aggregate(Array.fill[Double](2*numSplits*numFeatures*numNodes)(0))(binSeqOp,binCombOp)
-    println("binAggregates.length = " + binAggregates.length)
-    //binAggregates.foreach(x => println(x))
+    logDebug("binAggregates.length = " + binAggregates.length)
+    //binAggregates.foreach(x => logDebug(x))
 
 
     def calculateGainForSplit(leftNodeAgg: Array[Array[Double]],
@@ -312,21 +354,21 @@ object DecisionTree extends Serializable {
     def extractLeftRightNodeAggregates(binData: Array[Double]): (Array[Array[Double]], Array[Array[Double]]) = {
       val leftNodeAgg = Array.ofDim[Double](numFeatures, 2 * (numSplits - 1))
       val rightNodeAgg = Array.ofDim[Double](numFeatures, 2 * (numSplits - 1))
-      //println("binData.length = " + binData.length)
-      //println("binData.sum = " + binData.sum)
+      //logDebug("binData.length = " + binData.length)
+      //logDebug("binData.sum = " + binData.sum)
       for (featureIndex <- 0 until numFeatures) {
-        //println("featureIndex = " + featureIndex)
+        //logDebug("featureIndex = " + featureIndex)
         val shift = 2*featureIndex*numSplits
         leftNodeAgg(featureIndex)(0) = binData(shift + 0)
-        //println("binData(shift + 0) = " + binData(shift + 0))
+        //logDebug("binData(shift + 0) = " + binData(shift + 0))
         leftNodeAgg(featureIndex)(1) = binData(shift + 1)
-        //println("binData(shift + 1) = " + binData(shift + 1))
+        //logDebug("binData(shift + 1) = " + binData(shift + 1))
         rightNodeAgg(featureIndex)(2 * (numSplits - 2)) = binData(shift + (2 * (numSplits - 1)))
-        //println(binData(shift + (2 * (numSplits - 1))))
+        //logDebug(binData(shift + (2 * (numSplits - 1))))
         rightNodeAgg(featureIndex)(2 * (numSplits - 2) + 1) = binData(shift + (2 * (numSplits - 1)) + 1)
-        //println(binData(shift + (2 * (numSplits - 1)) + 1))
+        //logDebug(binData(shift + (2 * (numSplits - 1)) + 1))
         for (splitIndex <- 1 until numSplits - 1) {
-          //println("splitIndex = " + splitIndex)
+          //logDebug("splitIndex = " + splitIndex)
           leftNodeAgg(featureIndex)(2 * splitIndex)
             = binData(shift + 2*splitIndex) + leftNodeAgg(featureIndex)(2 * splitIndex - 2)
           leftNodeAgg(featureIndex)(2 * splitIndex + 1)
@@ -347,7 +389,7 @@ object DecisionTree extends Serializable {
 
       for (featureIndex <- 0 until numFeatures) {
         for (index <- 0 until numSplits -1) {
-          //println("splitIndex = " + index)
+          //logDebug("splitIndex = " + index)
           gains(featureIndex)(index) = calculateGainForSplit(leftNodeAgg, featureIndex, index, rightNodeAgg, nodeImpurity)
         }
       }
@@ -360,12 +402,12 @@ object DecisionTree extends Serializable {
         @param binData Array[Double] of size 2*numSplits*numFeatures
         */
     def binsToBestSplit(binData : Array[Double], nodeImpurity : Double) : (Split, InformationGainStats) = {
-      println("node impurity = " + nodeImpurity)
+      logDebug("node impurity = " + nodeImpurity)
       val (leftNodeAgg, rightNodeAgg) = extractLeftRightNodeAggregates(binData)
       val gains = calculateGainsForAllNodeSplits(leftNodeAgg, rightNodeAgg, nodeImpurity)
 
-      //println("gains.size = " + gains.size)
-      //println("gains(0).size = " + gains(0).size)
+      //logDebug("gains.size = " + gains.size)
+      //logDebug("gains(0).size = " + gains(0).size)
 
       val (bestFeatureIndex,bestSplitIndex, gainStats) = {
         var bestFeatureIndex = 0
@@ -378,13 +420,13 @@ object DecisionTree extends Serializable {
         for (featureIndex <- 0 until numFeatures) {
           for (splitIndex <- 0 until numSplits - 1){
             val gainStats =  gains(featureIndex)(splitIndex)
-            //println("featureIndex =  " + featureIndex + ", splitIndex =  " + splitIndex + ", gain = " + gain)
+            //logDebug("featureIndex =  " + featureIndex + ", splitIndex =  " + splitIndex + ", gain = " + gain)
             if(gainStats.gain > bestGainStats.gain) {
               bestGainStats = gainStats
               bestFeatureIndex = featureIndex
               bestSplitIndex = splitIndex
-              //println("bestFeatureIndex =  " + bestFeatureIndex + ", bestSplitIndex =  " + bestSplitIndex)
-              //println( "gain stats = " + bestGainStats)
+              //logDebug("bestFeatureIndex =  " + bestFeatureIndex + ", bestSplitIndex =  " + bestSplitIndex)
+              //logDebug( "gain stats = " + bestGainStats)
             }
           }
         }
@@ -400,9 +442,9 @@ object DecisionTree extends Serializable {
       val nodeImpurityIndex = scala.math.pow(2, level).toInt - 1 + node
       val shift = 2*node*numSplits*numFeatures
       val binsForNode = binAggregates.slice(shift,shift+2*numSplits*numFeatures)
-      println("nodeImpurityIndex = " + nodeImpurityIndex)
+      logDebug("nodeImpurityIndex = " + nodeImpurityIndex)
       val parentNodeImpurity = parentImpurities(nodeImpurityIndex)
-      println("node impurity = " + parentNodeImpurity)
+      logDebug("node impurity = " + parentNodeImpurity)
       bestSplits(node) = binsToBestSplit(binsForNode, parentNodeImpurity)
     }
 
@@ -419,47 +461,42 @@ object DecisionTree extends Serializable {
    */
   def find_splits_bins(input : RDD[LabeledPoint], strategy : Strategy) : (Array[Array[Split]], Array[Array[Bin]]) = {
 
-    val numSplits = strategy.numSplits
-    println("numSplits = " + numSplits)
-
-    //Calculate the number of sample for approximate quantile calculation
-    //TODO: Justify this calculation
-    val requiredSamples = numSplits*numSplits
     val count = input.count()
-    val fraction = if (requiredSamples < count) requiredSamples.toDouble / count else 1.0
-    println("fraction of data used for calculating quantiles = " + fraction)
-
-    //sampled input for RDD calculation
-    val sampledInput = input.sample(false, fraction, 42).collect()
-    val numSamples = sampledInput.length
 
     //Find the number of features by looking at the first sample
     val numFeatures = input.take(1)(0).features.length
 
+    val maxBins = strategy.maxBins
+    val numBins = if (maxBins <= count) maxBins else count.toInt
+
+    logDebug("maxBins = " + numBins)
+    //Calculate the number of sample for approximate quantile calculation
+    //TODO: Justify this calculation
+    val requiredSamples = numBins*numBins
+    val fraction = if (requiredSamples < count) requiredSamples.toDouble / count else 1.0
+    logDebug("fraction of data used for calculating quantiles = " + fraction)
+    //sampled input for RDD calculation
+    val sampledInput = input.sample(false, fraction, 42).collect()
+    val numSamples = sampledInput.length
+
+    val stride : Double = numSamples.toDouble/numBins
+    logDebug("stride = " + stride)
+
     strategy.quantileCalculationStrategy match {
       case "sort" => {
-        val splits =  Array.ofDim[Split](numFeatures,numSplits-1)
-        val bins = Array.ofDim[Bin](numFeatures,numSplits)
+        val splits =  Array.ofDim[Split](numFeatures,numBins-1)
+        val bins = Array.ofDim[Bin](numFeatures,numBins)
 
         //Find all splits
         for (featureIndex <- 0 until numFeatures){
           val featureSamples  = sampledInput.map(lp => lp.features(featureIndex)).sorted
 
-          if (numSamples < numSplits) {
-            //TODO: Test this
-            println("numSamples = " + numSamples + ", less than numSplits = " + numSplits)
-            for (index <- 0 until numSplits-1) {
-              val split = new Split(featureIndex,featureSamples(index),"continuous")
-              splits(featureIndex)(index) = split
-            }
-          } else {
-            val stride : Double = numSamples.toDouble/numSplits
-            println("stride = " + stride)
-            for (index <- 0 until numSplits-1) {
-              val sampleIndex = (index+1)*stride.toInt
-              val split = new Split(featureIndex,featureSamples(sampleIndex),"continuous")
-              splits(featureIndex)(index) = split
-            }
+          val stride : Double = numSamples.toDouble/numBins
+          logDebug("stride = " + stride)
+          for (index <- 0 until numBins-1) {
+            val sampleIndex = (index+1)*stride.toInt
+            val split = new Split(featureIndex,featureSamples(sampleIndex),"continuous")
+            splits(featureIndex)(index) = split
           }
         }
 
@@ -467,54 +504,23 @@ object DecisionTree extends Serializable {
         for (featureIndex <- 0 until numFeatures){
           bins(featureIndex)(0)
             = new Bin(new DummyLowSplit("continuous"),splits(featureIndex)(0),"continuous")
-          for (index <- 1 until numSplits - 1){
+          for (index <- 1 until numBins - 1){
             val bin = new Bin(splits(featureIndex)(index-1),splits(featureIndex)(index),"continuous")
             bins(featureIndex)(index) = bin
           }
-          bins(featureIndex)(numSplits-1)
-            = new Bin(splits(featureIndex)(numSplits-3),new DummyHighSplit("continuous"),"continuous")
+          bins(featureIndex)(numBins-1)
+            = new Bin(splits(featureIndex)(numBins-3),new DummyHighSplit("continuous"),"continuous")
         }
 
         (splits,bins)
       }
       case "minMax" => {
-        (Array.ofDim[Split](numFeatures,numSplits),Array.ofDim[Bin](numFeatures,numSplits+2))
+        (Array.ofDim[Split](numFeatures,numBins),Array.ofDim[Bin](numFeatures,numBins+2))
       }
       case "approximateHistogram" => {
         throw new UnsupportedOperationException("approximate histogram not supported yet.")
       }
 
-    }
-  }
-
-  def main(args: Array[String]) {
-
-    val sc = new SparkContext(args(0), "DecisionTree")
-    val data = loadLabeledData(sc, args(1))
-    val maxDepth = args(2).toInt
-
-    val strategy = new Strategy(kind = "classification", impurity = Gini, maxDepth = maxDepth, numSplits = 569)
-    val model = new DecisionTree(strategy).train(data)
-
-    sc.stop()
-  }
-
-  /**
-   * Load labeled data from a file. The data format used here is
-   * <L>, <f1> <f2> ...
-   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
-   *
-   * @param sc SparkContext
-   * @param dir Directory to the input data files.
-   * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
-   *         the label, and the second element represents the feature values (an array of Double).
-   */
-  def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
-    sc.textFile(dir).map { line =>
-      val parts = line.trim().split(",")
-      val label = parts(0).toDouble
-      val features = parts.slice(1,parts.length).map(_.toDouble)
-      LabeledPoint(label, features)
     }
   }
 

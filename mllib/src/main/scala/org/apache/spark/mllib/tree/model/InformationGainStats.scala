@@ -21,7 +21,7 @@ class InformationGainStats(val gain : Double,
                            val leftImpurity : Double,
                            val leftSamples : Long,
                            val rightImpurity : Double,
-                           val rightSamples : Long) {
+                           val rightSamples : Long) extends Serializable {
 
   override def toString =
     "gain = " + gain + ", impurity = " + impurity + ", left impurity = "

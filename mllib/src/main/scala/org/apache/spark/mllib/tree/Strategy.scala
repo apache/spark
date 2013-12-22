@@ -18,11 +18,13 @@ package org.apache.spark.mllib.tree
 
 import org.apache.spark.mllib.tree.impurity.Impurity
 
-case class Strategy (
+class Strategy  (
                 val kind : String,
                 val impurity : Impurity,
                 val maxDepth : Int,
-                val numSplits : Int,
-                val quantileCalculationStrategy : String = "sort") {
+                val maxBins : Int,
+                val quantileCalculationStrategy : String = "sort") extends Serializable {
+
+  var numBins : Int  = Int.MinValue
 
 }
