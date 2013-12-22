@@ -53,7 +53,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins.length==2)
     assert(splits(0).length==99)
     assert(bins(0).length==100)
-    println(splits(1)(98))
+    //println(splits(1)(98))
   }
 
   test("stump with fixed label 0 for Gini"){
@@ -68,7 +68,10 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length==100)
     assert(splits(0).length==99)
     assert(bins(0).length==100)
-    val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
+
+    strategy.numBins = 100
+    val bestSplits = DecisionTree.findBestSplits(rdd,new Array(7),strategy,0,Array[List[Filter]](),splits,bins)
+    println("here")
     assert(bestSplits.length == 1)
     assert(0==bestSplits(0)._1.feature)
     assert(10==bestSplits(0)._1.threshold)
@@ -91,6 +94,8 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length==100)
     assert(splits(0).length==99)
     assert(bins(0).length==100)
+
+    strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
     assert(bestSplits.length == 1)
     assert(0==bestSplits(0)._1.feature)
@@ -115,6 +120,8 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length==100)
     assert(splits(0).length==99)
     assert(bins(0).length==100)
+
+    strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
     assert(bestSplits.length == 1)
     assert(0==bestSplits(0)._1.feature)
@@ -138,6 +145,8 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(bins(0).length==100)
     assert(splits(0).length==99)
     assert(bins(0).length==100)
+
+    strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd,Array(0.0),strategy,0,Array[List[Filter]](),splits,bins)
     assert(bestSplits.length == 1)
     assert(0==bestSplits(0)._1.feature)
