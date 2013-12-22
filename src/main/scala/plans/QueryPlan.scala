@@ -40,6 +40,37 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     if(changed) makeCopy(newArgs) else this
   }
 
+  /**
+   * Runs [[transformPostOrder]] with [[rule]] on all expressions present in this query operator.
+   * @param rule the rule to be applied to every expression in this operator.
+   * @return
+   */
+  def transformExpressionsPostOrder(rule: PartialFunction[Expression, Expression]): this.type = {
+    var changed = false
+
+    @inline def transformExpressionPostOrder(e: Expression) = {
+      val newE = e.transformPostOrder(rule)
+      if(newE.id != e.id && newE != e) {
+        changed = true
+        newE
+      } else {
+        e
+      }
+    }
+
+    val newArgs = productIterator.map {
+      case e: Expression => transformExpressionPostOrder(e)
+      case Some(e: Expression) => Some(transformExpressionPostOrder(e))
+      case seq: Seq[_] => seq.map {
+        case e: Expression => transformExpressionPostOrder(e)
+        case other => other
+      }
+      case other: AnyRef => other
+    }.toArray
+
+    if(changed) makeCopy(newArgs) else this
+  }
+
   /** Returns the result of running [[transformExpressions]] on this node and all its children */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     transform {
