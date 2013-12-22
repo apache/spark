@@ -20,9 +20,15 @@ object EliminateSubqueries extends Rule[LogicalPlan] {
   }
 }
 
+/*
+* An optimization rule to evaluate literals appearing in expressions.
+* It traverses the expressions in a post order to visit BinaryExpression.
+* When it finds both the left child and right child of a node are literals,
+* it evaluates the current visiting BinaryExpression.
+* */
 object EvaluateLiterals extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case project @ Project(projectList, child) => project transformExpressionsPostOrder {
+    case q: LogicalPlan => q transformExpressionsPostOrder {
       case b: BinaryExpression
         if b.left.isInstanceOf[Literal] && b.right.isInstanceOf[Literal] => {
         Literal(Evaluate(b, Nil))
