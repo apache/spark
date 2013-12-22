@@ -70,7 +70,7 @@ object TestShark extends Logging {
   /* A catalyst metadata catalog that points to the Shark/Hive Metastore. */
   val catalog = new HiveMetastoreCatalog(SharkContext.hiveconf)
   /* An analyzer that uses the Shark/Hive metastore. */
-  val analyze = new Analyzer(catalog, HiveFunctionRegistry)
+  val analyze = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
@@ -190,11 +190,15 @@ object TestShark extends Logging {
       """.stripMargin.trim
   }
 
+  abstract class CaseSensitiveSharkQuery extends SharkQuery {
+    override lazy val analyzed = SimpleAnalyzer(parsed)
+  }
+
   implicit class stringToQuery(str: String) {
     def q = new SharkSqlQuery(str)
   }
 
-  implicit def logicalToSharkQuery(plan: LogicalPlan) = new SharkQuery { val parsed = plan }
+  implicit def logicalToSharkQuery(plan: LogicalPlan) = new CaseSensitiveSharkQuery { val parsed = plan }
 
   protected case class TestTable(name: String, commands: (()=>Unit)*)
 
