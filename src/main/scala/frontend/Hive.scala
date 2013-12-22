@@ -449,6 +449,8 @@ object HiveQl {
   def nodeToSortOrder(node: Node): SortOrder = node match {
     case Token("TOK_TABSORTCOLNAMEASC", sortExpr :: Nil) =>
       SortOrder(nodeToExpr(sortExpr), Ascending)
+    case Token("TOK_TABSORTCOLNAMEDESC", sortExpr :: Nil) =>
+      SortOrder(nodeToExpr(sortExpr), Descending)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
