@@ -23,8 +23,9 @@ import org.apache.spark.mllib.tree.model._
 import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.Split
-import org.apache.spark.mllib.tree.impurity.Gini
 import scala.util.control.Breaks._
+import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 
 
 class DecisionTree(val strategy : Strategy) extends Serializable with Logging {
@@ -34,8 +35,6 @@ class DecisionTree(val strategy : Strategy) extends Serializable with Logging {
     //Cache input RDD for speedup during multiple passes
     input.cache()
 
-    //TODO: Find all splits and bins using quantiles including support for categorical features, single-pass
-    //TODO: Think about broadcasting this
     val (splits, bins) = DecisionTree.find_splits_bins(input, strategy)
     logDebug("numSplits = " + bins(0).length)
     strategy.numBins = bins(0).length
@@ -133,7 +132,7 @@ object DecisionTree extends Serializable with Logging {
 
   @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data for DecisionTree
   @param parentImpurities Impurities for all parent nodes for the current level
-  @param strategy [[org.apache.spark.mllib.tree.Strategy]] instance containing parameters for construction the DecisionTree
+  @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing parameters for construction the DecisionTree
   @param level Level of the tree
   @param filters Filter for all nodes at a given level
   @param splits possible splits for all features
@@ -406,27 +405,18 @@ object DecisionTree extends Serializable with Logging {
       val (leftNodeAgg, rightNodeAgg) = extractLeftRightNodeAggregates(binData)
       val gains = calculateGainsForAllNodeSplits(leftNodeAgg, rightNodeAgg, nodeImpurity)
 
-      //logDebug("gains.size = " + gains.size)
-      //logDebug("gains(0).size = " + gains(0).size)
-
       val (bestFeatureIndex,bestSplitIndex, gainStats) = {
         var bestFeatureIndex = 0
         var bestSplitIndex = 0
         //Initialization with infeasible values
         var bestGainStats = new InformationGainStats(Double.MinValue,-1.0,-1.0,0,-1.0,0)
-//        var maxGain = Double.MinValue
-//        var leftSamples = Long.MinValue
-//        var rightSamples = Long.MinValue
         for (featureIndex <- 0 until numFeatures) {
           for (splitIndex <- 0 until numSplits - 1){
             val gainStats =  gains(featureIndex)(splitIndex)
-            //logDebug("featureIndex =  " + featureIndex + ", splitIndex =  " + splitIndex + ", gain = " + gain)
             if(gainStats.gain > bestGainStats.gain) {
               bestGainStats = gainStats
               bestFeatureIndex = featureIndex
               bestSplitIndex = splitIndex
-              //logDebug("bestFeatureIndex =  " + bestFeatureIndex + ", bestSplitIndex =  " + bestSplitIndex)
-              //logDebug( "gain stats = " + bestGainStats)
             }
           }
         }
@@ -455,7 +445,7 @@ object DecisionTree extends Serializable with Logging {
   Returns split and bins for decision tree calculation.
 
   @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data for DecisionTree
-  @param strategy [[org.apache.spark.mllib.tree.Strategy]] instance containing parameters for construction the DecisionTree
+  @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing parameters for construction the DecisionTree
   @return a tuple of (splits,bins) where Split is an Array[Array[Split]] of size (numFeatures,numSplits-1) and bins is an
    Array[Array[Bin]] of size (numFeatures,numSplits1)
    */
@@ -483,7 +473,7 @@ object DecisionTree extends Serializable with Logging {
     logDebug("stride = " + stride)
 
     strategy.quantileCalculationStrategy match {
-      case "sort" => {
+      case Sort => {
         val splits =  Array.ofDim[Split](numFeatures,numBins-1)
         val bins = Array.ofDim[Bin](numFeatures,numBins)
 
@@ -514,10 +504,10 @@ object DecisionTree extends Serializable with Logging {
 
         (splits,bins)
       }
-      case "minMax" => {
+      case MinMax => {
         (Array.ofDim[Split](numFeatures,numBins),Array.ofDim[Bin](numFeatures,numBins+2))
       }
-      case "approximateHistogram" => {
+      case ApproxHist => {
         throw new UnsupportedOperationException("approximate histogram not supported yet.")
       }
 

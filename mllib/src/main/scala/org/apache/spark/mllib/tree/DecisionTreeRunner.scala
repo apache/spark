@@ -21,11 +21,14 @@ import org.apache.spark.mllib.tree.impurity.{Gini,Entropy,Variance}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.DecisionTreeModel
+import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.configuration.Algo._
+
 
 object DecisionTreeRunner extends Logging {
 
   val usage = """
-    Usage: DecisionTreeRunner <master>[slices] --kind <Classification,Regression> --trainDataDir path --testDataDir path [--maxDepth num] [--impurity <Gini,Entropy,Variance>] [--maxBins num]
+    Usage: DecisionTreeRunner <master>[slices] --algo <Classification,Regression> --trainDataDir path --testDataDir path --maxDepth num [--impurity <Gini,Entropy,Variance>] [--maxBins num]
               """
 
 
@@ -46,39 +49,49 @@ object DecisionTreeRunner extends Logging {
       def isSwitch(s : String) = (s(0) == '-')
       list match {
         case Nil => map
-        case "--kind" :: string :: tail => nextOption(map ++ Map('kind -> string), tail)
+        case "--algo" :: string :: tail => nextOption(map ++ Map('algo -> string), tail)
         case "--impurity" :: string :: tail => nextOption(map ++ Map('impurity -> string), tail)
         case "--maxDepth" :: string :: tail => nextOption(map ++ Map('maxDepth -> string), tail)
         case "--maxBins" :: string :: tail => nextOption(map ++ Map('maxBins -> string), tail)
         case "--trainDataDir" :: string :: tail => nextOption(map ++ Map('trainDataDir -> string), tail)
         case "--testDataDir" :: string :: tail => nextOption(map ++ Map('testDataDir -> string), tail)
         case string :: Nil =>  nextOption(map ++ Map('infile -> string), list.tail)
-        case option :: tail => println("Unknown option "+option)
-          exit(1)
+        case option :: tail => logError("Unknown option "+option)
+          sys.exit(1)
       }
     }
     val options = nextOption(Map(),arglist)
     logDebug(options.toString())
+    //TODO: Add validation for input parameters
 
+    //Load training data
     val trainData = loadLabeledData(sc, options.get('trainDataDir).get.toString)
 
-    val typeStr =  options.get('type).toString
-    //TODO: Create enum
-    val impurityStr = options.getOrElse('impurity,if (typeStr == "classification") "Gini" else "Variance").toString
-    val impurity = {
-      impurityStr match {
+    //Figure out the type of algorithm
+    val algoStr =  options.get('algo).get.toString
+    val algo = algoStr match {
+        case "Classification" => Classification
+        case "Regression" => Regression
+    }
+
+    //Identify the type of impurity
+    val impurityStr = options.getOrElse('impurity,if (algo == Classification) "Gini" else "Variance").toString
+    val impurity = impurityStr match {
         case "Gini" => Gini
         case "Entropy" => Entropy
         case "Variance" => Variance
       }
-    }
+
     val maxDepth = options.getOrElse('maxDepth,"1").toString.toInt
     val maxBins = options.getOrElse('maxBins,"100").toString.toInt
 
-    val strategy = new Strategy(kind = typeStr, impurity = Gini, maxDepth = maxDepth, maxBins = maxBins)
+    val strategy = new Strategy(algo = algo, impurity = impurity, maxDepth = maxDepth, maxBins = maxBins)
     val model = new DecisionTree(strategy).train(trainData)
 
+    //Load test data
     val testData = loadLabeledData(sc, options.get('testDataDir).get.toString)
+
+    //Measure algorithm accuracy
     val accuracy = accuracyScore(model, testData)
     logDebug("accuracy = " + accuracy)
 
