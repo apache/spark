@@ -58,71 +58,83 @@ class OptimizerSuite extends FunSuite {
     comparePlans(optimized, correctAnswer)
   }
 
-  // After this line is unimplemented.
-  test("simple push down") {
+  /*
+  * Unit tests for evaluating literals in expressions.
+  * */
+  test("Evaluating Literals Test 1: expressions only have literals") {
     val originalQuery =
       testRelation
-        .select('a)
-        .where('a === 1)
+        .select(Literal(2) + Literal(3) + Literal(4) as Symbol("2+3+4"),
+                Literal(2) * Literal(3) + Literal(4) as Symbol("2*3+4"),
+                Literal(2) * (Literal(3) + Literal(4)) as Symbol("2*(3+4)"))
+        .where(Literal(1) === Literal(1) &&
+               Literal(2) > Literal(3) ||
+               Literal(3) > Literal(2) )
+        .groupBy(Literal(2) * Literal(3) - Literal(6) / (Literal(4) - Literal(2)))(Literal(9) / Literal(3) as Symbol("9/3"))
 
     val optimized = Optimize(originalQuery.analyze)
+
     val correctAnswer =
       testRelation
-        .where('a === 1)
-        .select('a)
+        .select(Literal(9) as Symbol("2+3+4"),
+          Literal(10) as Symbol("2*3+4"),
+          Literal(14) as Symbol("2*(3+4)"))
+        .where(Literal(true))
+        .groupBy(Literal(3))(Literal(3) as Symbol("9/3"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
   }
 
-  test("can't push without rewrite") {
+  test("Evaluating Literals Test 2: expressions have attribute references and literals in" +
+    "arithmetic operations") {
     val originalQuery =
       testRelation
-        .select('a + 'b as 'e)
-        .where('e === 1)
+        .select(Literal(2) + Literal(3) + 'a as Symbol("c1"),
+                'a + Literal(2) + Literal(3) as Symbol("c2"),
+                Literal(2) * 'a + Literal(4) as Symbol("c3"),
+                'a * (Literal(3) + Literal(4)) as Symbol("c4"))
 
-    /* Your code here */
-    fail("not implemented")
-  }
-
-  test("joins: push to either side") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
-
-    val originalQuery = {
-      x.join(y)
-        .where("x.b".attr === 1)
-        .where("y.b".attr === 2)
-        .analyze
-    }
-
-    fail("not implemented")
-  }
-
-  test("joins: can't push down") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
-
-    val originalQuery = {
-      x.join(y)
-        .where("x.b".attr === "y.b".attr)
-        .analyze
-    }
     val optimized = Optimize(originalQuery.analyze)
 
-    comparePlans(optimizer.EliminateSubqueries(originalQuery), optimized)
+    val correctAnswer =
+      testRelation
+        .select(Literal(5) + 'a as Symbol("c1"),
+                'a + Literal(2) + Literal(3) as Symbol("c2"),
+                Literal(2) * 'a + Literal(4) as Symbol("c3"),
+                'a * (Literal(7)) as Symbol("c4"))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
   }
 
-  test("joins: conjunctive predicates") {
-    val x = testRelation.subquery('x)
-    val y = testRelation.subquery('y)
+  test("Evaluating Literals Test 3: expressions have attribute references and literals in" +
+    "predicates") {
+    val originalQuery =
+      testRelation
+        .where((('a > 1 && Literal(1) === Literal(1)) ||
+               ('a < 10 && Literal(1) === Literal(2)) ||
+               (Literal(1) === Literal(1) && 'b > 1) ||
+               (Literal(1) === Literal(2) && 'b < 10)) &&
+               (('a > 1 || Literal(1) === Literal(1)) &&
+               ('a < 10 || Literal(1) === Literal(2)) &&
+               (Literal(1) === Literal(1) || 'b > 1) &&
+               (Literal(1) === Literal(2) || 'b < 10)))
 
-    val originalQuery = {
-      x.join(y)
-        .where(("x.b".attr === "y.b".attr) && ("x.a".attr === 1) && ("y.a".attr === 1))
+    println(originalQuery.analyze)
+
+    val optimized = Optimize(originalQuery.analyze)
+
+    println(optimized)
+
+    val correctAnswer =
+      testRelation
+        .where(('a > 1 ||
+               'b > 1) &&
+               ('a < 10 &&
+               'b < 10))
         .analyze
-    }
 
-    fail("not implemented")
+    comparePlans(optimized, correctAnswer)
   }
 }

@@ -57,7 +57,7 @@ class BigDataBenchmarkTests extends HiveComaparisionTest {
         |LOCATION "${new File(testDataDirectory, "crawl").getCanonicalPath}"
       """.stripMargin.cmd))
 
-  testTables.foreach(registerTestTable)
+  // testTables.foreach(registerTestTable)
 
   createQueryTest("query1",
     "SELECT pageURL, pageRank FROM rankings WHERE pageRank > 1")

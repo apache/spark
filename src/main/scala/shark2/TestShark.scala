@@ -196,10 +196,10 @@ object TestShark extends Logging {
 
   implicit def logicalToSharkQuery(plan: LogicalPlan) = new SharkQuery { val parsed = plan }
 
-  protected case class TestTable(name: String, commands: (()=>Unit)*)
+  case class TestTable(name: String, commands: (()=>Unit)*)
 
 
-  protected implicit class SqlCmd(sql: String) { def cmd = () => sql.q.stringResult(): Unit}
+  implicit class SqlCmd(sql: String) { def cmd = () => sql.q.stringResult(): Unit}
   /**
    * A list of test tables and the DDL required to initialize them.  A test table is loaded on demand when a query
    * are run against it.

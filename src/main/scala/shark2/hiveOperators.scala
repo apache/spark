@@ -85,7 +85,8 @@ case class InsertIntoHiveTable(table: MetastoreRelation, child: SharkPlan)
     table.tableDesc,
     outputClass,
     desc,
-    new Path((new org.apache.hadoop.fs.RawLocalFileSystem).getWorkingDirectory(), "test.out"))
+    new Path((new org.apache.hadoop.fs.RawLocalFileSystem).getWorkingDirectory(), "test.out"),
+    null)
 
   override def otherCopyArgs = sc :: Nil
 
