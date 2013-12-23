@@ -57,6 +57,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   val stageIdToTasksFailed = HashMap[Int, Int]()
   val stageIdToTaskInfos =
     HashMap[Int, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
+  val stageIdToExecutorSummaries = HashMap[Int, HashMap[String, ExecutorSummary]]()
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
@@ -124,8 +125,41 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val sid = taskEnd.task.stageId
+
+    // create executor summary map if necessary
+    val executorSummaryMap = stageIdToExecutorSummaries.getOrElseUpdate(key = sid,
+      op = new HashMap[String, ExecutorSummary]())
+    executorSummaryMap.getOrElseUpdate(key = taskEnd.taskInfo.executorId,
+      op = new ExecutorSummary())
+
+    val executorSummary = executorSummaryMap.get(taskEnd.taskInfo.executorId)
+    executorSummary match {
+      case Some(y) => {
+        // first update failed-task, succeed-task
+        taskEnd.reason match {
+          case Success =>
+            y.succeededTasks += 1
+          case _ =>
+            y.failedTasks += 1
+        }
+
+        // update duration
+        y.taskTime += taskEnd.taskInfo.duration
+
+        taskEnd.taskMetrics.shuffleReadMetrics.foreach { shuffleRead =>
+          y.shuffleRead += shuffleRead.remoteBytesRead
+        }
+
+        taskEnd.taskMetrics.shuffleWriteMetrics.foreach { shuffleWrite =>
+          y.shuffleWrite += shuffleWrite.shuffleBytesWritten
+        }
+      }
+      case _ => {}
+    }
+
     val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive -= taskEnd.taskInfo
+
     val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
       taskEnd.reason match {
         case e: ExceptionFailure =>
