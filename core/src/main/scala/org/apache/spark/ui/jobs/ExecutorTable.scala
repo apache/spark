@@ -21,6 +21,7 @@ import scala.xml.Node
 
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.util.Utils
+import scala.collection.mutable
 
 /** Page showing executor summary */
 private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) {
@@ -40,6 +41,7 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
     <table class="table table-bordered table-striped table-condensed sortable">
       <thead>
         <th>Executor ID</th>
+        <th>Address</th>
         <th>Task Time</th>
         <th>Total Tasks</th>
         <th>Failed Tasks</th>
@@ -54,6 +56,16 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
   }
 
   private def createExecutorTable() : Seq[Node] = {
+    // make a executor-id -> address map
+    val executorIdToAddress = mutable.HashMap[String, String]()
+    val storageStatusList = parent.sc.getExecutorStorageStatus
+    for (statusId <- 0 until storageStatusList.size) {
+      val blockManagerId = parent.sc.getExecutorStorageStatus(statusId).blockManagerId
+      val address = blockManagerId.hostPort
+      val executorId = blockManagerId.executorId
+      executorIdToAddress.put(executorId, address)
+    }
+
     val executorIdToSummary = listener.stageIdToExecutorSummaries.get(stageId)
     executorIdToSummary match {
       case Some(x) => {
@@ -61,6 +73,7 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
           case (k,v) => {
             <tr>
               <td>{k}</td>
+              <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
               <td>{parent.formatDuration(v.taskTime)}</td>
               <td>{v.failedTasks + v.succeededTasks}</td>
               <td>{v.failedTasks}</td>
