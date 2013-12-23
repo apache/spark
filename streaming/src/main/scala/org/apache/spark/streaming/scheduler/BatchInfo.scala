@@ -26,7 +26,6 @@ import org.apache.spark.streaming.Time
  *                        the streaming scheduler queue
  * @param processingStartTime Clock time of when the first job of this batch started processing
  * @param processingEndTime Clock time of when the last job of this batch finished processing
- *
  */
 case class BatchInfo(
     batchTime: Time,
@@ -48,9 +47,9 @@ case class BatchInfo(
    */
   def processingDelay = processingEndTime.zip(processingStartTime).map(x => x._1 - x._2).headOption
 
-    /**
-     * Time taken for all the jobs of this batch to finish processing from the time they
-     * were submitted.  Essentially, it is `processingDelay` + `schedulingDelay`.
-     */
+  /**
+   * Time taken for all the jobs of this batch to finish processing from the time they
+   * were submitted.  Essentially, it is `processingDelay` + `schedulingDelay`.
+   */
   def totalDelay = schedulingDelay.zip(processingDelay).map(x => x._1 + x._2).headOption
 }
