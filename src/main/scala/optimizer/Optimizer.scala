@@ -11,9 +11,13 @@ object Optimize extends RuleExecutor[LogicalPlan] {
     Batch("Subqueries", Once,
       EliminateSubqueries) ::
     Batch("EvaluateLiterals", Once,
+<<<<<<< HEAD
       EvaluateLiterals,
       EvaluateLiteralsInAndOr
       ) :: Nil
+=======
+      EvaluateLiterals) :: Nil
+>>>>>>> origin/evalauteLiteralsInExpressions
 
 }
 
