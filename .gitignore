@@ -11,3 +11,5 @@
 target/
 lib/
 
+# vim tmps
+.*.swp
