@@ -21,7 +21,7 @@ import java.io._
 import java.util.concurrent.Executors
 import java.util.concurrent.RejectedExecutionException
 
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.Logging
@@ -55,31 +55,29 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
 
 
 /**
- * Convenience class to speed up the writing of graph checkpoint to file
+ * Convenience class to handle the writing of graph checkpoint to file
  */
 private[streaming]
 class CheckpointWriter(checkpointDir: String, hadoopConf: Configuration) extends Logging {
   val file = new Path(checkpointDir, "graph")
-  // The file to which we actually write - and then "move" to file.
-  private val writeFile = new Path(file.getParent, file.getName + ".next")
-  private val bakFile = new Path(file.getParent, file.getName + ".bk")
+  val MAX_ATTEMPTS = 3
+  val executor = Executors.newFixedThreadPool(1)
+  val compressionCodec = CompressionCodec.createCodec()
+  // The file to which we actually write - and then "move" to file
+  val writeFile = new Path(file.getParent, file.getName + ".next")
+  // The file to which existing checkpoint is backed up (i.e. "moved")
+  val bakFile = new Path(file.getParent, file.getName + ".bk")
 
   private var stopped = false
+  private var fs_ : FileSystem = _
 
-  var fs = file.getFileSystem(hadoopConf)
-  val maxAttempts = 3
-  val executor = Executors.newFixedThreadPool(1)
-
-  private val compressionCodec = CompressionCodec.createCodec()
-
-  // Removed code which validates whether there is only one CheckpointWriter per path 'file' since 
+  // Removed code which validates whether there is only one CheckpointWriter per path 'file' since
   // I did not notice any errors - reintroduce it ?
-
   class CheckpointWriteHandler(checkpointTime: Time, bytes: Array[Byte]) extends Runnable {
     def run() {
       var attempts = 0
       val startTime = System.currentTimeMillis()
-      while (attempts < maxAttempts) {
+      while (attempts < MAX_ATTEMPTS && !stopped) {
         attempts += 1
         try {
           logDebug("Saving checkpoint for time " + checkpointTime + " to file '" + file + "'")
@@ -101,6 +99,7 @@ class CheckpointWriter(checkpointDir: String, hadoopConf: Configuration) extends
         } catch {
           case ioe: IOException =>
             logWarning("Error writing checkpoint to file in " + attempts + " attempts", ioe)
+            reset()
         }
       }
       logError("Could not write checkpoint for time " + checkpointTime + " to file '" + file + "'")
@@ -134,6 +133,15 @@ class CheckpointWriter(checkpointDir: String, hadoopConf: Configuration) extends
     val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
     val endTime = System.currentTimeMillis()
     logInfo("CheckpointWriter executor terminated ? " + terminated + ", waited for " + (endTime - startTime) + " ms.")
+  }
+
+  private def fs = synchronized {
+    if (fs_ == null) fs_ = file.getFileSystem(hadoopConf)
+    fs_
+  }
+
+  private def reset() = synchronized {
+    fs_ = null
   }
 }
 

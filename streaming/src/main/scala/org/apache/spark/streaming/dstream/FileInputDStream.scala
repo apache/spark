@@ -40,6 +40,9 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
 
+  // Max attempts to try if listing files fail
+  val MAX_ATTEMPTS = 10
+
   // Latest file mod time seen till any point of time
   private val prevModTimeFiles = new HashSet[String]()
   private var prevModTime = 0L
@@ -108,14 +111,16 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   private def findNewFiles(currentTime: Long): (Seq[String], Long, Seq[String]) = {
     logDebug("Trying to get new files for time " + currentTime)
     var attempts = 0
-    while (attempts < FileInputDStream.MAX_ATTEMPTS) {
+    while (attempts < MAX_ATTEMPTS) {
       attempts += 1
       try {
         val filter = new CustomPathFilter(currentTime)
         val newFiles = fs.listStatus(path, filter)
         return (newFiles.map(_.getPath.toString), filter.latestModTime, filter.latestModTimeFiles.toSeq)
       } catch {
-        case ioe: IOException => logWarning("Attempt " + attempts + " to get new files failed", ioe)
+        case ioe: IOException =>
+          logWarning("Attempt " + attempts + " to get new files failed", ioe)
+          reset()
       }
     }
     (Seq(), -1, Seq())
@@ -137,6 +142,10 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   private def fs: FileSystem = {
     if (fs_ == null) fs_ = path.getFileSystem(new Configuration())
     fs_
+  }
+
+  private def reset()  {
+    fs_ = null
   }
 
   @throws(classOf[IOException])
@@ -224,6 +233,5 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
 private[streaming]
 object FileInputDStream {
-  val MAX_ATTEMPTS = 10
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 }
