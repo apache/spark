@@ -1,6 +1,7 @@
 # R on Spark
 
-SparkR is an R package that provides a light-weight fronted to use Spark from R.
+SparkR is an R package that provides a light-weight frontend to use Spark from
+R.
 
 ## Building
 
@@ -24,7 +25,8 @@ Following that compile the R package by running
     make
 
 ## Running sparkR
-Once you have built SparkR, you can start using it by launching the SparkR shell with
+Once you have built SparkR, you can start using it by launching the SparkR
+shell with
 
     ./sparkR
 
