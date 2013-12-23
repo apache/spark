@@ -85,11 +85,11 @@ object SparkBuild extends Build {
   }
 
   // Conditionally include the yarn sub-project
-  lazy val yarnCommon = Project("yarn-common", file("yarn/common"), settings = yarnCommonSettings) dependsOn(core)
-  lazy val yarnAPI = Project("yarn-api", file(if (isNewHadoop) "yarn/2.2" else "yarn/2.0"), settings = yarnAPISettings) dependsOn(yarnCommon)
-  lazy val yarnScheduler = Project("yarn", file("yarn/scheduler"), settings = yarnSchedulerSettings) dependsOn(yarnAPI)
-  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](yarnCommon, yarnAPI, yarnScheduler) else Seq[ClasspathDependency]()
-  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](yarnCommon, yarnAPI, yarnScheduler) else Seq[ProjectReference]()
+  lazy val yarn20 = Project("yarn2-alpha", file("yarn/2.0"), settings = yarn20Settings) dependsOn(core)
+  lazy val yarn22 = Project("yarn2-stable", file("yarn/2.2"), settings = yarn22Settings) dependsOn(core)
+
+  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](if (isNewHadoop) yarn22 else yarn20) else Seq[ClasspathDependency]()
+  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](if (isNewHadoop) yarn22 else yarn20) else Seq[ProjectReference]()
 
   // Everything except assembly, tools and examples belong to packageProjects
   lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib) ++ maybeYarnRef
@@ -319,16 +319,20 @@ object SparkBuild extends Build {
     )
   )
 
-  def yarnAPISettings = sharedSettings ++ Seq(
-    name := "spark-yarn-api"
+  def yarnCommonSettings = sharedSettings ++ Seq(
+    unmanagedSourceDirectories in Compile <++= baseDirectory { base =>
+      Seq(
+         base / "../common/src/main/scala"
+      )
+    }
   ) ++ extraYarnSettings
 
-  def yarnCommonSettings = sharedSettings ++ Seq(
-    name := "spark-yarn-common"
+  def yarn20Settings = yarnCommonSettings ++ Seq(
+    name := "spark-yarn-2.0"
   )
 
-  def yarnSchedulerSettings = sharedSettings ++ Seq(
-    name := "spark-yarn"
+  def yarn22Settings = yarnCommonSettings ++ Seq(
+    name := "spark-yarn-2.2"
   )
 
   // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain
