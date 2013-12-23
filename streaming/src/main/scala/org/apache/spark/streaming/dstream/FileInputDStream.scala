@@ -128,10 +128,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
   /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
-    new UnionRDD(
-      context.sparkContext,
-      files.map(file => context.sparkContext.newAPIHadoopFile[K, V, F](file))
-    )
+    val fileRDDs = files.map(file => context.sparkContext.newAPIHadoopFile[K, V, F](file))
+    new UnionRDD(context.sparkContext, fileRDDs)
   }
 
   private def path: Path = {
@@ -191,15 +189,20 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   /**
-   * PathFilter to find new files that have modification timestamps <= current time, but have not
+   * Custom PathFilter class to find new files that have modification timestamps <= current time, but have not
    * been seen before (i.e. the file should not be in lastModTimeFiles)
-   * @param currentTime
    */
   private[streaming]
   class CustomPathFilter(currentTime: Long) extends PathFilter() {
     // Latest file mod time seen in this round of fetching files and its corresponding files
     var latestModTime = 0L
     val latestModTimeFiles = new HashSet[String]()
+
+    // Creating an RDD from a HDFS file immediately after the file is created sometime returns
+    // an RDD with 0 partitions. To avoid that, we introduce a slack time - files that are older
+    // than slack time from current time is considered for processing.
+    val slackTime = System.getProperty("spark.streaming.filestream.slackTime", "2000").toLong
+    val maxModTime = currentTime - slackTime
 
     def accept(path: Path): Boolean = {
       if (!filter(path)) {  // Reject file if it does not satisfy filter
@@ -214,9 +217,9 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
         } else if (modTime == prevModTime && prevModTimeFiles.contains(path.toString)) {
           logDebug("Mod time equal to last mod time, but file considered already")
           return false  // If the file was created exactly as lastModTime but not reported yet
-        } else if (modTime > currentTime) {
-          logDebug("Mod time more than valid time")
-          return false  // If the file was created after the time this function call requires
+        } else if (modTime > maxModTime) {
+          logDebug("Mod time more than ")
+          return false  // If the file is too new that considering it may give errors
         }
         if (modTime > latestModTime) {
           latestModTime = modTime
