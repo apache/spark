@@ -61,7 +61,7 @@ class OptimizerSuite extends FunSuite {
   /*
   * Unit tests for evaluating literals in expressions.
   * */
-  test("Evaluating Literals Test 1: expressions only have literals") {
+  test("Evaluating Literals Test: expressions only have literals") {
     val originalQuery =
       testRelation
         .select(Literal(2) + Literal(3) + Literal(4) as Symbol("2+3+4"),
@@ -86,7 +86,7 @@ class OptimizerSuite extends FunSuite {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Evaluating Literals Test 2: expressions have attribute references and literals in" +
+  test("Evaluating Literals Test: expressions have attribute references and literals in" +
     "arithmetic operations") {
     val originalQuery =
       testRelation
@@ -108,7 +108,7 @@ class OptimizerSuite extends FunSuite {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Evaluating Literals Test 3: expressions have attribute references and literals in" +
+  test("Evaluating Literals Test: expressions have attribute references and literals in" +
     "predicates") {
     val originalQuery =
       testRelation
