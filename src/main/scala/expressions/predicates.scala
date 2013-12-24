@@ -18,6 +18,7 @@ abstract class BinaryPredicate extends BinaryExpression with Predicate {
 case class Not(child: Expression) extends Predicate with trees.UnaryNode[Expression]{
   def references = child.references
   def nullable = child.nullable
+  override def toString = s"NOT $child"
 }
 case class And(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "&&"
