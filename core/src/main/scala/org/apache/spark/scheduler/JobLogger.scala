@@ -41,7 +41,7 @@ import org.apache.spark.storage.StorageLevel
 class JobLogger(val user: String, val logDirName: String)
   extends SparkListener with Logging {
 
-  def this() = this(System.getProperty("user.name", "<unknown>"),
+  def this() = this(System.getProperty("user.name",  "<unknown>"),
     String.valueOf(System.currentTimeMillis()))
 
   private val logDir =

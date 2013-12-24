@@ -17,15 +17,18 @@
 
 package org.apache.spark.storage
 
-import java.io.{FileWriter, File}
+import java.io.{File, FileWriter}
 
 import scala.collection.mutable
 
 import com.google.common.io.Files
+import org.apache.spark.SparkConf
 import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
+import scala.util.Try
+import akka.actor.{Props, ActorSelection, ActorSystem}
 
 class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
-
+  private val testConf = new SparkConf
   val rootDir0 = Files.createTempDir()
   rootDir0.deleteOnExit()
   val rootDir1 = Files.createTempDir()
@@ -36,10 +39,11 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   // This suite focuses primarily on consolidation features,
   // so we coerce consolidation if not already enabled.
   val consolidateProp = "spark.shuffle.consolidateFiles"
-  val oldConsolidate = Option(System.getProperty(consolidateProp))
-  System.setProperty(consolidateProp, "true")
+  val oldConsolidate = Try(testConf.get(consolidateProp)).toOption
+  testConf.set(consolidateProp, "true")
 
   val shuffleBlockManager = new ShuffleBlockManager(null) {
+    override def conf = testConf.clone
     var idToSegmentMap = mutable.Map[ShuffleBlockId, FileSegment]()
     override def getBlockLocation(id: ShuffleBlockId) = idToSegmentMap(id)
   }

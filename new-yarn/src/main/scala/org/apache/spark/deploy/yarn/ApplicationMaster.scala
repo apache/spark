@@ -61,13 +61,13 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   private var amClient: AMRMClient[ContainerRequest] = _
 
   // Default to numWorkers * 2, with minimum of 3
-  private val maxNumWorkerFailures = System.getProperty("spark.yarn.max.worker.failures",
+  private val maxNumWorkerFailures = conf.getOrElse("spark.yarn.max.worker.failures",
     math.max(args.numWorkers * 2, 3).toString()).toInt
 
   def run() {
     // Setup the directories so things go to YARN approved directories rather
     // than user specified and /tmp.
-    System.setProperty("spark.local.dir", getLocalDirs())
+    conf.set("spark.local.dir",  getLocalDirs())
 
     // Use priority 30 as it's higher then HDFS. It's same priority as MapReduce is using.
     ShutdownHookManager.get().addShutdownHook(new AppMasterShutdownHook(this), 30)
@@ -138,10 +138,10 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
     logInfo("Waiting for Spark driver to be reachable.")
     var driverUp = false
     var tries = 0
-    val numTries = System.getProperty("spark.yarn.applicationMaster.waitTries", "10").toInt
+    val numTries = conf.getOrElse("spark.yarn.applicationMaster.waitTries",  "10").toInt
     while (!driverUp && tries < numTries) {
-      val driverHost = System.getProperty("spark.driver.host")
-      val driverPort = System.getProperty("spark.driver.port")
+      val driverHost = conf.get("spark.driver.host")
+      val driverPort = conf.get("spark.driver.port")
       try {
         val socket = new Socket(driverHost, driverPort.toInt)
         socket.close()
@@ -199,7 +199,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
       ApplicationMaster.sparkContextRef.synchronized {
         var numTries = 0
         val waitTime = 10000L
-        val maxNumTries = System.getProperty("spark.yarn.ApplicationMaster.waitTries", "10").toInt
+        val maxNumTries = conf.getOrElse("spark.yarn.ApplicationMaster.waitTries",  "10").toInt
         while (ApplicationMaster.sparkContextRef.get() == null && numTries < maxNumTries) {
           logInfo("Waiting for Spark context initialization ... " + numTries)
           numTries = numTries + 1
@@ -265,7 +265,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
 
       // we want to be reasonably responsive without causing too many requests to RM.
       val schedulerInterval =
-        System.getProperty("spark.yarn.scheduler.heartbeat.interval-ms", "5000").toLong
+        conf.getOrElse("spark.yarn.scheduler.heartbeat.interval-ms",  "5000").toLong
 
       // must be <= timeoutInterval / 2.
       val interval = math.min(timeoutInterval / 2, schedulerInterval)
@@ -343,7 +343,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration) e
   private def cleanupStagingDir() { 
     var stagingDirPath: Path = null
     try {
-      val preserveFiles = System.getProperty("spark.yarn.preserve.staging.files", "false").toBoolean
+      val preserveFiles = conf.getOrElse("spark.yarn.preserve.staging.files",  "false").toBoolean
       if (!preserveFiles) {
         stagingDirPath = new Path(System.getenv("SPARK_YARN_STAGING_DIR"))
         if (stagingDirPath == null) {

@@ -30,7 +30,7 @@ import java.lang.management.ManagementFactory
 import scala.collection.mutable.ArrayBuffer
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, SparkContext, Logging}
 
 /**
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in 
@@ -41,6 +41,7 @@ import org.apache.spark.Logging
  */
 private[spark] object SizeEstimator extends Logging {
 
+  private def conf = SparkContext.globalConf
   // Sizes of primitive types
   private val BYTE_SIZE    = 1
   private val BOOLEAN_SIZE = 1
@@ -90,8 +91,8 @@ private[spark] object SizeEstimator extends Logging {
   }
 
   private def getIsCompressedOops : Boolean = {
-    if (System.getProperty("spark.test.useCompressedOops") != null) {
-      return System.getProperty("spark.test.useCompressedOops").toBoolean 
+    if (conf.getOrElse("spark.test.useCompressedOops", null) != null) {
+      return conf.get("spark.test.useCompressedOops").toBoolean 
     }
 
     try {

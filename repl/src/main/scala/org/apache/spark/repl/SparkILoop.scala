@@ -930,9 +930,6 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   def createSparkContext(): SparkContext = {
     val uri = System.getenv("SPARK_EXECUTOR_URI")
-    if (uri != null) {
-      System.setProperty("spark.executor.uri", uri)
-    }
     val master = this.master match {
       case Some(m) => m
       case None => {
@@ -942,6 +939,10 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     }
     val jars = SparkILoop.getAddedJars.map(new java.io.File(_).getAbsolutePath)
     sparkContext = new SparkContext(master, "Spark shell", System.getenv("SPARK_HOME"), jars)
+    if (uri != null) {
+      sparkContext.conf.set("spark.executor.uri",  uri)
+    }
+    sparkContext.conf.set("spark.repl.class.uri",  intp.classServer.uri)
     echo("Created spark context..")
     sparkContext
   }

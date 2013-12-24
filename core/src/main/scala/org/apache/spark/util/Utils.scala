@@ -36,7 +36,7 @@ import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.deploy.SparkHadoopUtil
 import java.nio.ByteBuffer
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.{SparkContext, SparkException, Logging}
 
 
 /**
@@ -44,6 +44,7 @@ import org.apache.spark.{SparkException, Logging}
  */
 private[spark] object Utils extends Logging {
 
+  private lazy val conf = SparkContext.globalConf
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
@@ -312,7 +313,7 @@ private[spark] object Utils extends Logging {
    * multiple paths.
    */
   def getLocalDir: String = {
-    System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")).split(',')(0)
+    conf.getOrElse("spark.local.dir",  System.getProperty("java.io.tmpdir")).split(',')(0)
   }
 
   /**
@@ -398,7 +399,7 @@ private[spark] object Utils extends Logging {
   }
 
   def localHostPort(): String = {
-    val retval = System.getProperty("spark.hostPort", null)
+    val retval = conf.getOrElse("spark.hostPort",  null)
     if (retval == null) {
       logErrorWithStack("spark.hostPort not set but invoking localHostPort")
       return localHostName()

@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicInteger
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.util.Try
 
 import akka.actor._
 import akka.pattern.ask
@@ -46,8 +47,8 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
 {
   // Use an atomic variable to track total number of cores in the cluster for simplicity and speed
   var totalCoreCount = new AtomicInteger(0)
-
-  private val timeout = AkkaUtils.askTimeout
+  val conf = scheduler.sc.conf
+  private val timeout = AkkaUtils.askTimeout(conf)
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
     private val executorActor = new HashMap[String, ActorRef]
@@ -61,7 +62,7 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
       // Periodically revive offers to allow delay scheduling to work
-      val reviveInterval = System.getProperty("spark.scheduler.revive.interval", "1000").toLong
+      val reviveInterval = conf.getOrElse("spark.scheduler.revive.interval",  "1000").toLong
       import context.dispatcher
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
@@ -162,7 +163,7 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
 
   override def start() {
     val properties = new ArrayBuffer[(String, String)]
-    val iterator = System.getProperties.entrySet.iterator
+    val iterator = scheduler.sc.conf.getAllConfiguration
     while (iterator.hasNext) {
       val entry = iterator.next
       val (key, value) = (entry.getKey.toString, entry.getValue.toString)
@@ -170,6 +171,7 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
         properties += ((key, value))
       }
     }
+    //TODO (prashant) send conf instead of properties
     driverActor = actorSystem.actorOf(
       Props(new DriverActor(properties)), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
   }
@@ -208,7 +210,7 @@ class CoarseGrainedSchedulerBackend(scheduler: ClusterScheduler, actorSystem: Ac
     driverActor ! KillTask(taskId, executorId)
   }
 
-  override def defaultParallelism() = Option(System.getProperty("spark.default.parallelism"))
+  override def defaultParallelism() = Try(conf.get("spark.default.parallelism")).toOption
       .map(_.toInt).getOrElse(math.max(totalCoreCount.get(), 2))
 
   // Called by subclasses when notified of a lost worker

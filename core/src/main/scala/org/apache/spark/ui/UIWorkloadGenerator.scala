@@ -30,6 +30,8 @@ import org.apache.spark.scheduler.SchedulingMode
  * Usage: ./run spark.ui.UIWorkloadGenerator [master]
  */
 private[spark] object UIWorkloadGenerator {
+
+  import SparkContext.{globalConf => conf}
   val NUM_PARTITIONS = 100
   val INTER_JOB_WAIT_MS = 5000
 
@@ -43,7 +45,7 @@ private[spark] object UIWorkloadGenerator {
     val appName = "Spark UI Tester"
 
     if (schedulingMode == SchedulingMode.FAIR) {
-      System.setProperty("spark.scheduler.mode", "FAIR")
+      conf.set("spark.scheduler.mode",  "FAIR")
     }
     val sc = new SparkContext(master, appName)
 

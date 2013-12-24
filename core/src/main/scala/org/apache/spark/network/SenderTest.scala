@@ -21,7 +21,7 @@ import java.nio.ByteBuffer
 import java.net.InetAddress
 
 private[spark] object SenderTest {
-
+  import org.apache.spark.SparkContext.globalConf
   def main(args: Array[String]) {
     
     if (args.length < 2) {
@@ -33,7 +33,7 @@ private[spark] object SenderTest {
     val targetPort = args(1).toInt
     val targetConnectionManagerId = new ConnectionManagerId(targetHost, targetPort)
 
-    val manager = new ConnectionManager(0)
+    val manager = new ConnectionManager(0, globalConf)
     println("Started connection manager with id = " + manager.id)
 
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => { 

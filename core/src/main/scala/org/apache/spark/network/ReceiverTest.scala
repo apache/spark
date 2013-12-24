@@ -21,9 +21,9 @@ import java.nio.ByteBuffer
 import java.net.InetAddress
 
 private[spark] object ReceiverTest {
-
+  import org.apache.spark.SparkContext.globalConf
   def main(args: Array[String]) {
-    val manager = new ConnectionManager(9999)
+    val manager = new ConnectionManager(9999, globalConf)
     println("Started connection manager with id = " + manager.id)
     
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => { 
