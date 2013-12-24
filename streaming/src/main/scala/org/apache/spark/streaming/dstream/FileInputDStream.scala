@@ -201,7 +201,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     // Creating an RDD from a HDFS file immediately after the file is created sometime returns
     // an RDD with 0 partitions. To avoid that, we introduce a slack time - files that are older
     // than slack time from current time is considered for processing.
-    val slackTime = System.getProperty("spark.streaming.filestream.slackTime", "2000").toLong
+    val slackTime = System.getProperty("spark.streaming.fileStream.slackTime", "2000").toLong
     val maxModTime = currentTime - slackTime
 
     def accept(path: Path): Boolean = {
@@ -237,4 +237,12 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 private[streaming]
 object FileInputDStream {
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
+
+  private[streaming] def disableSlackTime() {
+    System.setProperty("spark.streaming.fileStream.slackTime", "0")
+  }
+
+  private[streaming] def restoreSlackTime() {
+    System.clearProperty("spark.streaming.fileStream.slackTime")
+  }
 }

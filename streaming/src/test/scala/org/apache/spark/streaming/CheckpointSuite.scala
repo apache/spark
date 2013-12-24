@@ -200,6 +200,9 @@ class CheckpointSuite extends TestSuiteBase {
     val clockProperty = System.getProperty("spark.streaming.clock")
     System.clearProperty("spark.streaming.clock")
 
+    // Disable slack time of file stream when testing with local file system
+    FileInputDStream.disableSlackTime()
+
     // Set up the streaming context and input streams
     val testDir = Files.createTempDir()
     var ssc = new StreamingContext(master, framework, Seconds(1))
@@ -300,6 +303,9 @@ class CheckpointSuite extends TestSuiteBase {
     // Enable manual clock back again for other tests
     if (clockProperty != null)
       System.setProperty("spark.streaming.clock", clockProperty)
+
+    // Restore the default slack time
+    FileInputDStream.restoreSlackTime()
   }
 
 

@@ -23,7 +23,7 @@ import akka.actor.IOManager
 import akka.actor.Props
 import akka.util.ByteString
 
-import org.apache.spark.streaming.dstream.{NetworkReceiver, SparkFlumeEvent}
+import org.apache.spark.streaming.dstream.{FileInputDStream, NetworkReceiver, SparkFlumeEvent}
 import java.net.{InetSocketAddress, SocketException, Socket, ServerSocket}
 import java.io.{File, BufferedWriter, OutputStreamWriter}
 import java.util.concurrent.{Executors, TimeUnit, ArrayBlockingQueue}
@@ -152,6 +152,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // Disable manual clock as FileInputDStream does not work with manual clock
     System.clearProperty("spark.streaming.clock")
 
+    // Disable slack time of file stream when testing with local file system
+    FileInputDStream.disableSlackTime()
+
     // Set up the streaming context and input streams
     val testDir = Files.createTempDir()
     val ssc = new StreamingContext(master, framework, batchDuration)
@@ -196,6 +199,9 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
     // Enable manual clock back again for other tests
     System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+
+    // Restore the default slack time
+    FileInputDStream.restoreSlackTime()
   }
 
 
