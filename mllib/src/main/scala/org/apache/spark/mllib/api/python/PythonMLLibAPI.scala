@@ -15,6 +15,7 @@
  * limitations under the License.
  */
 
+package org.apache.spark.mllib.api.python
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.mllib.regression._
 import org.apache.spark.mllib.classification._
