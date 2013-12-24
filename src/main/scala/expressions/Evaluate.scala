@@ -8,7 +8,7 @@ import types._
  * Performs evaluation of an expression tree, given a set of input tuples.
  */
 object Evaluate extends Logging {
-  def apply(e: Expression, input: Seq[Seq[Any]]): Any = attachTree(e, "Expression Evaluation Failed") {
+  def apply(e: Expression, input: Seq[Row]): Any = attachTree(e, "Expression Evaluation Failed") {
     def eval(e: Expression) = Evaluate(e, input)
 
     /**

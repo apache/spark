@@ -31,12 +31,12 @@ case class Transform(
       val reader = new BufferedReader(new InputStreamReader(inputStream))
 
       // TODO: This should be exposed as an iterator instead of reading in all the data at once for a partition.
-      val outputLines = collection.mutable.ArrayBuffer[IndexedSeq[Any]]()
+      val outputLines = collection.mutable.ArrayBuffer[Row]()
       val readerThread = new Thread("Transform OutoutReader") {
         override def run() {
           var curLine = reader.readLine()
           while(curLine != null) {
-            outputLines += curLine.split("\t")
+            outputLines += buildRow(curLine.split("\t"))
             curLine = reader.readLine()
           }
         }

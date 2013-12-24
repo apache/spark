@@ -10,7 +10,9 @@ abstract class SharkPlan extends QueryPlan[SharkPlan] with Logging {
   /**
    * Runs this query returning the result as an RDD.
    */
-  def execute(): RDD[IndexedSeq[Any]]
+  def execute(): RDD[Row]
+
+  protected def buildRow(values: Seq[Any]): Row = new catalyst.expressions.GenericRow(values)
 }
 
 abstract trait LeafNode extends SharkPlan with trees.LeafNode[SharkPlan] {

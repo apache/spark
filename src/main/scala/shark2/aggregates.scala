@@ -21,7 +21,7 @@ case class Aggregate(groupingExpressions: Seq[Expression],
 
     def result: Any = sum.toDouble / count.toDouble
 
-    def apply(input: Seq[Seq[Any]]): Unit = {
+    def apply(input: Seq[Row]): Unit = {
       count += 1
       // TODO: Support all types here...
       sum += Evaluate(expr, input).asInstanceOf[Int]
@@ -33,7 +33,7 @@ case class Aggregate(groupingExpressions: Seq[Expression],
 
     var count: Long = _
 
-    def apply(input: Seq[Seq[Any]]): Unit = {
+    def apply(input: Seq[Row]): Unit = {
       val evaluatedExpr = expr.map(Evaluate(_, input))
       if(evaluatedExpr.map(_ != null).reduceLeft(_ || _))
           count += 1
@@ -47,7 +47,7 @@ case class Aggregate(groupingExpressions: Seq[Expression],
 
     var sum = Evaluate(Cast(Literal(0), expr.dataType), Nil)
 
-    def apply(input: Seq[Seq[Any]]): Unit =
+    def apply(input: Seq[Row]): Unit =
       sum = Evaluate(Add(Literal(sum), expr), input)
 
     def result: Any = sum
@@ -58,7 +58,7 @@ case class Aggregate(groupingExpressions: Seq[Expression],
 
     val seen = new scala.collection.mutable.HashSet[Any]()
 
-    def apply(input: Seq[Seq[Any]]): Unit = {
+    def apply(input: Seq[Row]): Unit = {
       val evaluatedExpr = expr.map(Evaluate(_, input))
       if(evaluatedExpr.map(_ != null).reduceLeft(_ && _))
         seen += evaluatedExpr
@@ -72,7 +72,7 @@ case class Aggregate(groupingExpressions: Seq[Expression],
 
 
   def execute() = attachTree(this, "execute") {
-    val grouped = child.execute().map(row => (groupingExpressions.map(Evaluate(_, Vector(row))), row)).groupByKey()
+    val grouped = child.execute().map(row => (buildRow(groupingExpressions.map(Evaluate(_, Vector(row)))), row)).groupByKey()
     grouped.map {
       case (group, rows) =>
         // Replace all aggregate expressions with spark functions that will compute the result.
@@ -111,8 +111,7 @@ case class Aggregate(groupingExpressions: Seq[Expression],
           val input = Vector(row)
           aggFunctions.foreach(_.apply(input))
         }
-        // IS THIS RIGHT?
-        aggImplementations.map(Evaluate(_, Vector(group))).toIndexedSeq
+        buildRow(aggImplementations.map(Evaluate(_, Vector(group))))
     }
   }
 }
@@ -134,7 +133,7 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
     val sum = sc.accumulable(0)
     def result: Any = sum.value.toDouble / count.value.toDouble
 
-    def apply(input: Seq[Seq[Any]]): Unit = {
+    def apply(input: Seq[Row]): Unit = {
       count += 1
       // TODO: Support all types here...
       sum += Evaluate(expr, input).asInstanceOf[Int]
@@ -146,7 +145,7 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
 
     val count = sc.accumulable(0)
 
-    def apply(input: Seq[Seq[Any]]): Unit =
+    def apply(input: Seq[Row]): Unit =
       if(Evaluate(expr, input) != null)
         count += 1
 
@@ -169,6 +168,6 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
       val input = Vector(row)
       aggFunctions.foreach(_.apply(input))
     }
-    sc.makeRDD(Seq(aggImplementations.map(Evaluate(_, Nil)).toIndexedSeq), 1)
+    sc.makeRDD(Seq(buildRow(aggImplementations.map(Evaluate(_, Nil)))), 1)
   }
 }

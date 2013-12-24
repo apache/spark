@@ -14,6 +14,8 @@ import types._
  * implementation for execution.
  */
 package object shark2 {
+  type Row = catalyst.expressions.Row
+
   implicit class typeInfoConversions(dt: DataType) {
     import org.apache.hadoop.hive.serde2.typeinfo._
     import TypeInfoFactory._
