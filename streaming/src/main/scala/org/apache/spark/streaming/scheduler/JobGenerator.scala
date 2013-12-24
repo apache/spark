@@ -17,16 +17,17 @@
 
 package org.apache.spark.streaming.scheduler
 
+import akka.actor.{Props, Actor}
 import org.apache.spark.SparkEnv
 import org.apache.spark.Logging
 import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
 import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
-import akka.actor.{Props, Actor}
 
-sealed trait JobGeneratorEvent
-case class GenerateJobs(time: Time) extends JobGeneratorEvent
-case class ClearOldMetadata(time: Time) extends JobGeneratorEvent
-case class DoCheckpoint(time: Time) extends JobGeneratorEvent
+/** Event classes for JobGenerator */
+private[scheduler] sealed trait JobGeneratorEvent
+private[scheduler] case class GenerateJobs(time: Time) extends JobGeneratorEvent
+private[scheduler] case class ClearOldMetadata(time: Time) extends JobGeneratorEvent
+private[scheduler] case class DoCheckpoint(time: Time) extends JobGeneratorEvent
 
 /**
  * This class generates jobs from DStreams as well as drives checkpointing and cleaning

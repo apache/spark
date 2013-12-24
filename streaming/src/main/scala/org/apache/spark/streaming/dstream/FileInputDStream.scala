@@ -123,7 +123,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
           reset()
       }
     }
-    (Seq(), -1, Seq())
+    (Seq.empty, -1, Seq.empty)
   }
 
   /** Generate one RDD from an array of files */
@@ -193,7 +193,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
    * been seen before (i.e. the file should not be in lastModTimeFiles)
    */
   private[streaming]
-  class CustomPathFilter(currentTime: Long) extends PathFilter() {
+  class CustomPathFilter(currentTime: Long) extends PathFilter {
     // Latest file mod time seen in this round of fetching files and its corresponding files
     var latestModTime = 0L
     val latestModTimeFiles = new HashSet[String]()
@@ -209,7 +209,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
         logDebug("Rejected by filter " + path)
         return false
       } else {              // Accept file only if
-      val modTime = fs.getFileStatus(path).getModificationTime()
+        val modTime = fs.getFileStatus(path).getModificationTime()
         logDebug("Mod time for " + path + " is " + modTime)
         if (modTime < prevModTime) {
           logDebug("Mod time less than last mod time")

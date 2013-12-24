@@ -861,12 +861,12 @@ class SparkContext(
    * be a HDFS path if running on a cluster.
    */
   def setCheckpointDir(directory: String) {
-    checkpointDir = Option(directory).map(dir => {
+    checkpointDir = Option(directory).map { dir =>
       val path = new Path(dir, UUID.randomUUID().toString)
       val fs = path.getFileSystem(hadoopConfiguration)
       fs.mkdirs(path)
       fs.getFileStatus(path).getPath().toString
-    })
+    }
   }
 
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */

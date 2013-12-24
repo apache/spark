@@ -18,9 +18,7 @@
 package org.apache.spark.rdd
 
 import java.io.IOException
-
 import scala.reflect.ClassTag
-import java.io.{IOException}
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil

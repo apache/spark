@@ -95,7 +95,7 @@ private[spark] class RDDCheckpointData[T: ClassTag](rdd: RDD[T])
     rdd.context.runJob(rdd, CheckpointRDD.writeToFile(path.toString, broadcastedConf) _)
     val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
     if (newRDD.partitions.size != rdd.partitions.size) {
-      throw new Exception(
+      throw new SparkException(
         "Checkpoint RDD " + newRDD + "("+ newRDD.partitions.size + ") has different " +
           "number of partitions than original RDD " + rdd + "(" + rdd.partitions.size + ")")
     }
