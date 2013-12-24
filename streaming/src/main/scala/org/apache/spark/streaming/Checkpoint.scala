@@ -81,7 +81,8 @@ class CheckpointWriter(checkpointDir: String, hadoopConf: Configuration) extends
         attempts += 1
         try {
           logDebug("Saving checkpoint for time " + checkpointTime + " to file '" + file + "'")
-          // This is inherently thread unsafe .. so alleviating it by writing to '.new' and then doing moves : which should be pretty fast.
+          // This is inherently thread unsafe .. so alleviating it by writing to '.new' and
+          // then doing moves : which should be pretty fast.
           val fos = fs.create(writeFile)
           fos.write(bytes)
           fos.close()
@@ -132,7 +133,8 @@ class CheckpointWriter(checkpointDir: String, hadoopConf: Configuration) extends
     val startTime = System.currentTimeMillis()
     val terminated = executor.awaitTermination(10, java.util.concurrent.TimeUnit.SECONDS)
     val endTime = System.currentTimeMillis()
-    logInfo("CheckpointWriter executor terminated ? " + terminated + ", waited for " + (endTime - startTime) + " ms.")
+    logInfo("CheckpointWriter executor terminated ? " + terminated +
+      ", waited for " + (endTime - startTime) + " ms.")
   }
 
   private def fs = synchronized {
@@ -151,7 +153,8 @@ object CheckpointReader extends Logging {
 
   def read(path: String): Checkpoint = {
     val fs = new Path(path).getFileSystem(new Configuration())
-    val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"), new Path(path), new Path(path + ".bk"))
+    val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"),
+      new Path(path), new Path(path + ".bk"))
 
     val compressionCodec = CompressionCodec.createCodec()
 
@@ -166,7 +169,8 @@ object CheckpointReader extends Logging {
           // loader to find and load classes. This is a well know Java issue and has popped up
           // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
           val zis = compressionCodec.compressedInputStream(fis)
-          val ois = new ObjectInputStreamWithLoader(zis, Thread.currentThread().getContextClassLoader)
+          val ois = new ObjectInputStreamWithLoader(zis,
+            Thread.currentThread().getContextClassLoader)
           val cp = ois.readObject.asInstanceOf[Checkpoint]
           ois.close()
           fs.close()

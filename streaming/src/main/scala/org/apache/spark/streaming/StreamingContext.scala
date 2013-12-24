@@ -50,8 +50,6 @@ import org.apache.hadoop.fs.Path
 import twitter4j.Status
 import twitter4j.auth.Authorization
 
-
-
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
  * information (such as, cluster URL and job name) to internally create a SparkContext, it provides

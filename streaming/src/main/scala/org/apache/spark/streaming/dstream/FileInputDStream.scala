@@ -73,7 +73,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
    */
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
     assert(validTime.milliseconds >= prevModTime,
-      "Trying to get new files for really old time [" + validTime + " < " + prevModTime)
+      "Trying to get new files for really old time [" + validTime + " < " + prevModTime + "]")
 
     // Find new files
     val (newFiles, latestModTime, latestModTimeFiles) = findNewFiles(validTime.milliseconds)
@@ -115,8 +115,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       attempts += 1
       try {
         val filter = new CustomPathFilter(currentTime)
-        val newFiles = fs.listStatus(path, filter)
-        return (newFiles.map(_.getPath.toString), filter.latestModTime, filter.latestModTimeFiles.toSeq)
+        val newFiles = fs.listStatus(path, filter).map(_.getPath.toString)
+        return (newFiles, filter.latestModTime, filter.latestModTimeFiles.toSeq)
       } catch {
         case ioe: IOException =>
           logWarning("Attempt " + attempts + " to get new files failed", ioe)
@@ -238,10 +238,12 @@ private[streaming]
 object FileInputDStream {
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 
+  // Disable slack time (i.e. set it to zero)
   private[streaming] def disableSlackTime() {
     System.setProperty("spark.streaming.fileStream.slackTime", "0")
   }
 
+  // Restore default value of slack time
   private[streaming] def restoreSlackTime() {
     System.clearProperty("spark.streaming.fileStream.slackTime")
   }
