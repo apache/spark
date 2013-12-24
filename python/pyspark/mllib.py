@@ -384,7 +384,6 @@ def _test():
     (failure_count, test_count) = doctest.testmod(globs=globs,
             optionflags=doctest.ELLIPSIS)
     globs['sc'].stop()
-    print failure_count,"failures among",test_count,"tests"
     if failure_count:
         exit(-1)
 
