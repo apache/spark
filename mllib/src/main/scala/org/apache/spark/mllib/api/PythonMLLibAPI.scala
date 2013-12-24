@@ -42,7 +42,7 @@ class PythonMLLibAPI extends Serializable {
     }
     val length = bb.getLong()
     if (packetLength != 16 + 8 * length) {
-      throw new IllegalArgumentException("Length " + length + "is wrong.")
+      throw new IllegalArgumentException("Length " + length + " is wrong.")
     }
     val db = bb.asDoubleBuffer()
     val ans = new Array[Double](length.toInt)
@@ -76,7 +76,7 @@ class PythonMLLibAPI extends Serializable {
     val rows = bb.getLong()
     val cols = bb.getLong()
     if (packetLength != 24 + 8 * rows * cols) {
-      throw new IllegalArgumentException("Size " + rows + "x" + cols + "is wrong.")
+      throw new IllegalArgumentException("Size " + rows + "x" + cols + " is wrong.")
     }
     val db = bb.asDoubleBuffer()
     val ans = new Array[Array[Double]](rows.toInt)
