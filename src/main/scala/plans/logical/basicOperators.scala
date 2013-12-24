@@ -30,11 +30,16 @@ case class Join(
   def output = left.output ++ right.output
 }
 
-case class InsertIntoTable(table: BaseRelation, child: logical.LogicalPlan) extends LogicalPlan {
+case class InsertIntoTable(table: BaseRelation, child: LogicalPlan) extends LogicalPlan {
   // The table being inserted into is a child for the purposes of transformations.
   def children = table :: child :: Nil
   def references = Set.empty
-  def output = Seq.empty
+  def output = child.output
+}
+
+case class InsertIntoCreatedTable(tableName: String, child: LogicalPlan) extends UnaryNode {
+  def references = Set.empty
+  def output = child.output
 }
 
 case class Sort(order: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {

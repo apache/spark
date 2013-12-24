@@ -25,6 +25,12 @@ abstract class Command extends LeafNode {
 }
 
 /**
+ * Used when we need to start parsing the AST before deciding that we are going to pass the command back for Hive to
+ * execute natively.  Will be replaced with a native command that contains the cmd string.
+ */
+case object NativePlaceholder extends Command
+
+/**
  * Returned for commands supported by the parser, but not catalyst.  In general these are DDL
  * commands that are passed directly to Hive.
  */
@@ -91,7 +97,6 @@ object HiveQl {
     "TOK_CREATEDATABASE",
     "TOK_CREATEFUNCTION",
     "TOK_CREATEINDEX",
-    "TOK_CREATETABLE",
     "TOK_DROPDATABASE",
     "TOK_DROPINDEX",
     "TOK_DROPTABLE",
@@ -219,7 +224,10 @@ object HiveQl {
         if(nativeCommands contains tree.getText)
           NativeCommand(sql)
         else
-          nodeToPlan(tree)
+          nodeToPlan(tree) match {
+            case NativePlaceholder => NativeCommand(sql)
+            case other => other
+          }
       }
     } catch {
       case e: Exception => throw new ParseException(sql, e)
@@ -343,6 +351,16 @@ object HiveQl {
       val Some(query) :: _ :: _ :: Nil = getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
       // TODO: support EXTENDED?
       ExplainCommand(nodeToPlan(query))
+
+    case Token("TOK_CREATETABLE", children) if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
+      val (Some(Token("TOK_TABNAME", Token(tableName, Nil) :: Nil)) ::
+          _ /* likeTable */ ::
+          Some(query) :: Nil) = getClauses(Seq("TOK_TABNAME", "TOK_LIKETABLE", "TOK_QUERY"), children)
+      InsertIntoCreatedTable(tableName, nodeToPlan(query))
+
+    // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
+    case Token("TOK_CREATETABLE", _) => NativePlaceholder
+
     case Token("TOK_QUERY",
            Token("TOK_FROM", fromClause :: Nil) ::
            Token("TOK_INSERT", insertClauses) :: Nil) =>
@@ -361,11 +379,34 @@ object HiveQl {
         Filter(nodeToExpr(whereExpr), relations)
       }.getOrElse(relations)
 
-      val selectExpressions = nameExpressions(selectClause.getChildren.flatMap(selExprNodeToExpr))
+      // Script transformations are expressed as a select clause with a single expression of type TOK_TRANSFORM
+      val transformation = selectClause.getChildren.head match {
+        case Token("TOK_SELEXPR",
+               Token("TOK_TRANSFORM",
+                 Token("TOK_EXPLIST", inputExprs) ::
+                 Token("TOK_SERDE", Nil) ::
+                 Token("TOK_RECORDWRITER", Nil) :: // TODO: Need to support other types of (in/out)put
+                 Token(script, Nil)::
+                 Token("TOK_SERDE", Nil) ::
+                 Token("TOK_RECORDREADER", Nil) ::
+                 Token("TOK_ALIASLIST", aliases) :: Nil) :: Nil) =>
 
-      val withProject = groupByClause match {
-        case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
-        case None => Project(selectExpressions, withWhere)
+          val output = aliases.map { case Token(n, Nil) => AttributeReference(n, StringType)() }
+          val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
+          Some(Transform(inputExprs.map(nodeToExpr), unescapedScript, output, withWhere))
+        case _ => None
+      }
+
+      // The projection of the query can either be a normal projection, an aggregation (if there is a group by) or
+      // a script transformation.
+      val withProject = transformation.getOrElse {
+        // Not a transformation so must be either project or aggregation.
+        val selectExpressions = nameExpressions(selectClause.getChildren.flatMap(selExprNodeToExpr))
+
+        groupByClause match {
+          case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
+          case None => Project(selectExpressions, withWhere)
+        }
       }
 
       require(!(orderByClause.isDefined && sortByClause.isDefined), "Can't have both a sort by and order by.")
@@ -426,6 +467,8 @@ object HiveQl {
   def nodeToSortOrder(node: Node): SortOrder = node match {
     case Token("TOK_TABSORTCOLNAMEASC", sortExpr :: Nil) =>
       SortOrder(nodeToExpr(sortExpr), Ascending)
+    case Token("TOK_TABSORTCOLNAMEDESC", sortExpr :: Nil) =>
+      SortOrder(nodeToExpr(sortExpr), Descending)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")

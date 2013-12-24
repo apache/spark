@@ -8,15 +8,19 @@ import rules._
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]]. Used for testing when all relations are
  * already filled in and the analyser needs only to resolve attribute references.
+ *
  */
-object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyRegistry)
+object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyRegistry, true)
 
-class Analyzer(catalog: Catalog, registry: FunctionRegistry) extends RuleExecutor[LogicalPlan] {
+class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Boolean)
+    extends RuleExecutor[LogicalPlan] {
   val fixedPoint = FixedPoint(100)
 
   val batches = Seq(
     Batch("LocalRelations", Once,
       NewLocalRelationInstances),
+    Batch("CaseInsensitiveAttributeReferences", Once,
+      (if(caseSensitive) Nil else LowercaseAttributeReferences :: Nil):_*),
     Batch("Resolution", fixedPoint,
       ResolveReferences,
       ResolveRelations,
@@ -35,6 +39,21 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry) extends RuleExecuto
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case UnresolvedRelation(name, alias) => catalog.lookupRelation(name, alias)
+    }
+  }
+
+  /**
+   * Makes attribute naming case insensitive by turning all UnresolvedAttributes to lowercase.
+   */
+  object LowercaseAttributeReferences extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case UnresolvedRelation(name, alias) => UnresolvedRelation(name, alias.map(_.toLowerCase))
+      case Subquery(alias, child) => Subquery(alias.toLowerCase, child)
+      case q: LogicalPlan => q transformExpressions {
+        case Star(name) => Star(name.map(_.toLowerCase))
+        case UnresolvedAttribute(name) => UnresolvedAttribute(name.toLowerCase)
+        case Alias(c, name) => Alias(c, name.toLowerCase)()
+      }
     }
   }
 

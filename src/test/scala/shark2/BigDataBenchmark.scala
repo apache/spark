@@ -11,6 +11,7 @@ class BigDataBenchmarkTests extends HiveComaparisionTest {
   import TestShark._
 
   val testDataDirectory = new File("target/big-data-benchmark-testdata")
+  require(testDataDirectory.exists())
 
   val testTables = Seq(
     TestTable(
@@ -57,7 +58,7 @@ class BigDataBenchmarkTests extends HiveComaparisionTest {
         |LOCATION "${new File(testDataDirectory, "crawl").getCanonicalPath}"
       """.stripMargin.cmd))
 
-  // testTables.foreach(registerTestTable)
+  testTables.foreach(registerTestTable)
 
   createQueryTest("query1",
     "SELECT pageURL, pageRank FROM rankings WHERE pageRank > 1")
@@ -82,22 +83,22 @@ class BigDataBenchmarkTests extends HiveComaparisionTest {
       |LIMIT 1
     """.stripMargin)
 
-  /*
-  createQueryTest("documents sanity check",
-    "SELECT line FROM documents ORDER BY line DESC LIMIT 1000")
-
   createQueryTest("query4",
     """
       |DROP TABLE IF EXISTS url_counts_partial;
       |CREATE TABLE url_counts_partial AS
       |  SELECT TRANSFORM (line)
-      |  USING "python /root/url_count.py" as (sourcePage,
+      |  USING 'python target/url_count.py' as (sourcePage,
       |    destPage, count) from documents;
       |DROP TABLE IF EXISTS url_counts_total;
       |CREATE TABLE url_counts_total AS
       |  SELECT SUM(count) AS totalCount, destpage
-      |  FROM url_counts_partial GROUP BY destpage;
-      |SELECT * FROM url_counts_partial;
-      |SELECT * FROM url_counts_total;
-    """.stripMargin)    */
+      |  FROM url_counts_partial GROUP BY destpage
+      |-- The following queries run, but generate different results in HIVE likely because the UDF is not deterministic
+      |-- given different input splits.
+      |-- SELECT CAST(SUM(count) AS INT) FROM url_counts_partial
+      |-- SELECT COUNT(*) FROM url_counts_partial
+      |-- SELECT * FROM url_counts_partial
+      |-- SELECT * FROM url_counts_total
+    """.stripMargin)
 }

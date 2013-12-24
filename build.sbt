@@ -1,7 +1,14 @@
+name := "catalyst"
+
+organization := "com.databricks"
+
+version := "0.1-SNAPSHOT"
+
+scalaVersion := "2.10.3"
+
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
-// Downloaded as giant jar for easy compiling during interview question.
-libraryDependencies += "edu.berkeley.cs.amplab" %% "shark" % "0.9.0-SNAPSHOT" from "http://www.eecs.berkeley.edu/~marmbrus/tmp/shark-assembly-0.9.0-SNAPSHOT-hadoop1.0.4.jar"
+libraryDependencies += "edu.berkeley.cs.amplab" %% "shark" % "0.9.0-SNAPSHOT"
 
 // Hive 0.10.0 relies on a weird version of jdo that is not published anywhere... Remove when we upgrade to 0.11.0
 libraryDependencies += "javax.jdo" % "jdo2-api" % "2.3-ec" from "http://www.datanucleus.org/downloads/maven2/javax/jdo/jdo2-api/2.3-ec/jdo2-api-2.3-ec.jar"
@@ -24,8 +31,7 @@ resolvers ++= Seq(
     // For jdo-2 required by Hive < 0.12.0
     "Datanucleus Repository" at "http://www.datanucleus.org/downloads/maven2")
 
-
-scalaVersion := "2.10.3"
+resolvers += "Databees" at "http://repository-databricks.forge.cloudbees.com/snapshot/"
 
 initialCommands in console := """
 import catalyst.analysis._
@@ -38,3 +44,13 @@ import catalyst.rules._
 import catalyst.types._
 import catalyst.util._
 import catalyst.shark2.TestShark._"""
+
+site.settings
+
+ghpages.settings
+
+git.remoteRepo := "git@github.com:marmbrus/catalyst.git"
+
+site.settings
+
+site.includeScaladoc()

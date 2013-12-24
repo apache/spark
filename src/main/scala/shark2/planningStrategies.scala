@@ -49,8 +49,7 @@ abstract trait PlanningStrategies {
   object SparkAggregates extends Strategy {
     val allowedAggregates = Set[Class[_]](
       classOf[Count],
-      classOf[Average],
-      classOf[Sum])
+      classOf[Average])
 
     /** Returns true if [[exprs]] contains only aggregates that can be computed using Accumulators. */
     def onlyAllowedAggregates(exprs: Seq[Expression]): Boolean = {
@@ -145,6 +144,8 @@ abstract trait PlanningStrategies {
         shark2.StopAfter(Evaluate(limit, Nil).asInstanceOf[Int], planLater(child))(sc) :: Nil
       case logical.Union(left, right) =>
         shark2.Union(planLater(left), planLater(right))(sc) :: Nil
+      case logical.Transform(input, script, output, child) =>
+        shark2.Transform(input, script, output, planLater(child))(sc) :: Nil
       case _ => Nil
     }
   }

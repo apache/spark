@@ -37,10 +37,14 @@ object BindReferences extends Rule[SharkPlan] {
         nonLeaf.transformExpressions {
           case a: AttributeReference => attachTree(a, "Binding attribute") {
             val inputTuple = nonLeaf.children.indexWhere(_.output contains a)
-            val ordinal = nonLeaf.children(inputTuple).output.indexWhere(_ == a)
-            logger.debug(s"Binding $a to $inputTuple.$ordinal given input ${nonLeaf.children.map(_.output.mkString("{", ",", "}")).mkString(",")}")
-            assert(ordinal != -1, "Reference not found in child plan")
-            BoundReference(inputTuple, ordinal, a)
+            val ordinal = if(inputTuple == -1) -1 else nonLeaf.children(inputTuple).output.indexWhere(_ == a)
+            if(ordinal == -1) {
+              logger.debug(s"No binding found for $a given input ${nonLeaf.children.map(_.output.mkString("{", ",", "}")).mkString(",")}")
+              a
+            } else {
+              logger.debug(s"Binding $a to $inputTuple.$ordinal given input ${nonLeaf.children.map(_.output.mkString("{", ",", "}")).mkString(",")}")
+              BoundReference(inputTuple, ordinal, a)
+            }
           }
         }
       }

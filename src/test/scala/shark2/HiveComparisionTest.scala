@@ -41,7 +41,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
 
   protected def prepareAnswer(sharkQuery: TestShark.type#SharkSqlQuery, answer: Seq[String]): Seq[String] = {
     val orderedAnswer = sharkQuery.parsed match {
-      case _: Command => answer  // Don't attempt to modify the result of Commands since they are run by hive.
+      case _: Command => answer.filterNot(nonDeterministicLine) // Clean out nondeterministic time schema info.
       case _ =>
         val isOrdered = sharkQuery.executedPlan.collect { case s: Sort => s}.nonEmpty
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
@@ -49,6 +49,9 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
     }
     orderedAnswer.map(cleanPaths)
   }
+
+  protected def nonDeterministicLine(line: String) =
+    Seq("CreateTime","transient_lastDdlTime", "grantTime").map(line contains _).reduceLeft(_||_)
 
   /**
    * Removes non-deterministic paths from [[str]] so cached answers will still pass.
