@@ -44,4 +44,12 @@ class HiveQueryTests extends HiveComaparisionTest {
   createQueryTest("partitioned table scan",
     "SELECT * FROM srcpart")
 
+  createQueryTest("create table as",
+    """
+      |CREATE TABLE createdtable AS SELECT * FROM src;
+      |SELECT * FROM createdtable
+    """.stripMargin)
+
+  createQueryTest("transform",
+    "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 }

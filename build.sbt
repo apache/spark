@@ -1,3 +1,11 @@
+name := "catalyst"
+
+organization := "com.databricks"
+
+version := "0.1-SNAPSHOT"
+
+scalaVersion := "2.10.3"
+
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
 // Downloaded as giant jar for easy compiling during interview question.
@@ -24,8 +32,7 @@ resolvers ++= Seq(
     // For jdo-2 required by Hive < 0.12.0
     "Datanucleus Repository" at "http://www.datanucleus.org/downloads/maven2")
 
-
-scalaVersion := "2.10.3"
+resolvers += "Databees" at "http://repository-databricks.forge.cloudbees.com/snapshot/"
 
 initialCommands in console := """
 import catalyst.analysis._
@@ -38,3 +45,13 @@ import catalyst.rules._
 import catalyst.types._
 import catalyst.util._
 import catalyst.shark2.TestShark._"""
+
+site.settings
+
+ghpages.settings
+
+git.remoteRepo := "git@github.com:marmbrus/catalyst.git"
+
+site.settings
+
+site.includeScaladoc()
