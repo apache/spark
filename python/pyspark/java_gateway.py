@@ -62,6 +62,6 @@ def launch_gateway():
     # Import the classes used by PySpark
     java_import(gateway.jvm, "org.apache.spark.api.java.*")
     java_import(gateway.jvm, "org.apache.spark.api.python.*")
-    java_import(gateway.jvm, "org.apache.spark.mllib.api.*")
+    java_import(gateway.jvm, "org.apache.spark.mllib.api.python.*")
     java_import(gateway.jvm, "scala.Tuple2")
     return gateway
