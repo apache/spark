@@ -101,14 +101,16 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   override val partitioner = Some(part)
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, Seq[Seq[_]])] = {
-    println("Computing in CoGroupedRDD!")
     // e.g. for `(k, a) cogroup (k, b)`, K -> Seq(ArrayBuffer as, ArrayBuffer bs)
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
-    val combineFunction: (Seq[ArrayBuffer[Any]], Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] =
-      (x, y) => { x ++ y }
+    def combine(x: Seq[ArrayBuffer[Any]], y: Seq[ArrayBuffer[Any]]) = {
+      x.zipAll(y, ArrayBuffer[Any](), ArrayBuffer[Any]()).map {
+        case (a, b) => a ++ b
+      }
+    }
     //val map = new AppendOnlyMap[K, Seq[ArrayBuffer[Any]]]
-    val map = new ExternalAppendOnlyMap[K, Seq[ArrayBuffer[Any]]](combineFunction)
+    val map = new ExternalAppendOnlyMap[K, Seq[ArrayBuffer[Any]]](combine)
 
     val ser = SparkEnv.get.serializerManager.get(serializerClass)
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
@@ -128,22 +130,18 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     }
 
     def addToMap(key: K, value: Any, depNum: Int) {
-      val updateFunction: (Boolean, Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] =
-        (hadVal, oldVal) => {
-          var newVal = oldVal
-          if (!hadVal){
-            newVal = Array.fill(numRdds)(new ArrayBuffer[Any])
-          }
-          newVal(depNum) += value
-          newVal
+      def update(hadVal: Boolean, oldVal: Seq[ArrayBuffer[Any]]): Seq[ArrayBuffer[Any]] = {
+        var newVal = oldVal
+        if (!hadVal){
+          newVal = Array.fill(numRdds)(new ArrayBuffer[Any])
         }
-      map.changeValue(key, updateFunction)
+        newVal(depNum) += value
+        newVal
+      }
+      map.changeValue(key, update)
     }
 
-    println("About to construct CoGroupedRDD iterator!")
-    val theIterator = map.iterator
-    println("Returning CoGroupedRDD iterator!")
-    new InterruptibleIterator(context, theIterator)
+    new InterruptibleIterator(context, map.iterator)
   }
 
   override def clearDependencies() {

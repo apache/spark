@@ -25,36 +25,32 @@ import scala.collection.mutable
  * A simple map that spills sorted content to disk when the memory threshold is exceeded. A combiner
  * function must be specified to merge values back into memory during read.
  */
-class ExternalAppendOnlyMap[K,V](combinerFunction: (V, V) => V,
+class ExternalAppendOnlyMap[K, V](combineFunction: (V, V) => V,
                                  memoryThresholdMB: Int = 1024)
-  extends Iterable[(K,V)] with Serializable {
+  extends Iterable[(K, V)] with Serializable {
 
-  var currentMap = new AppendOnlyMap[K,V]
+  var currentMap = new AppendOnlyMap[K, V]
   var oldMaps = new ArrayBuffer[DiskKVIterator]
 
   def changeValue(key: K, updateFunc: (Boolean, V) => V): Unit = {
     currentMap.changeValue(key, updateFunc)
     val mapSize = SizeEstimator.estimate(currentMap)
-    //if (mapSize > memoryThresholdMB * math.pow(1024, 2)) {
-    if (mapSize > 1024 * 10) {
+    if (mapSize > memoryThresholdMB * math.pow(1024, 2)) {
       spill()
     }
   }
 
   def spill(): Unit = {
-    println("SPILL")
     val file = File.createTempFile("external_append_only_map", "")  // Add spill location
     val out = new ObjectOutputStream(new FileOutputStream(file))
     val sortedMap = currentMap.iterator.toList.sortBy(kv => kv._1.hashCode())
-    sortedMap foreach {
-      out.writeObject( _ )
-    }
+    sortedMap.foreach { out.writeObject( _ ) }
     out.close()
-    currentMap = new AppendOnlyMap[K,V]
+    currentMap = new AppendOnlyMap[K, V]
     oldMaps.append(new DiskKVIterator(file))
   }
 
-  override def iterator: Iterator[(K,V)] = new ExternalIterator()
+  override def iterator: Iterator[(K, V)] = new ExternalIterator()
 
   /**
    *  An iterator that merges KV pairs from memory and disk in sorted order
@@ -67,49 +63,62 @@ class ExternalAppendOnlyMap[K,V](combinerFunction: (V, V) => V,
     }
     val pq = mutable.PriorityQueue[KVITuple]()
     val inputStreams = Seq(new MemoryKVIterator(currentMap)) ++ oldMaps
-    inputStreams foreach { readFromIterator }
+    inputStreams.foreach { readFromIterator( _ ) }
 
     override def hasNext: Boolean = !pq.isEmpty
 
+    // Combine all values from all input streams corresponding to the same key
     override def next(): (K,V) = {
-      println("ExternalIterator.next - How many left? "+pq.length)
       val minKVI = pq.dequeue()
-      var (minKey, minValue, minIter) = (minKVI.key, minKVI.value, minKVI.iter)
-//      println("Min key = "+minKey)
-      readFromIterator(minIter)
-      while (!pq.isEmpty && pq.head.key == minKey) {
-        val newKVI = pq.dequeue()
-        val (newValue, newIter) = (newKVI.value, newKVI.iter)
-//        println("\tfound new value to merge! "+newValue)
-//        println("\tcombinerFunction("+minValue+" <====> "+newValue+")")
-        minValue = combinerFunction(minValue, newValue)
-//        println("\tCombine complete! New value = "+minValue)
-        readFromIterator(newIter)
+      var (minKey, minValue) = (minKVI.key, minKVI.value)
+      val minHash = minKey.hashCode()
+      readFromIterator(minKVI.iter)
+
+      var collidedKVI = ArrayBuffer[KVITuple]()
+      while (!pq.isEmpty && pq.head.key.hashCode() == minHash) {
+        val newKVI: KVITuple = pq.dequeue()
+        if (newKVI.key == minKey){
+          minValue = combineFunction(minValue, newKVI.value)
+          readFromIterator(newKVI.iter)
+        } else {
+          // Collision
+          collidedKVI += newKVI
+        }
       }
-      println("Returning minKey = "+minKey+", minValue = "+minValue)
+      collidedKVI.foreach { pq.enqueue( _ ) }
       (minKey, minValue)
     }
 
-    def readFromIterator(iter: Iterator[(K,V)]): Unit = {
-      if (iter.hasNext) {
+    // Read from the given iterator until a key of different hash is retrieved,
+    // Add each KV pair read from this iterator to the heap
+    def readFromIterator(iter: Iterator[(K, V)]): Unit = {
+      var minHash : Option[Int] = None
+      while (iter.hasNext) {
         val (k, v) = iter.next()
         pq.enqueue(KVITuple(k, v, iter))
+        minHash match {
+          case None => minHash = Some(k.hashCode())
+          case Some(expectedHash) =>
+            if (k.hashCode() != expectedHash){
+              return
+            }
+        }
       }
     }
 
-    case class KVITuple(key:K, value:V, iter:Iterator[(K,V)])
+    case class KVITuple(key:K, value:V, iter:Iterator[(K, V)])
   }
 
-  class MemoryKVIterator(map: AppendOnlyMap[K,V]) extends Iterator[(K,V)] {
+  class MemoryKVIterator(map: AppendOnlyMap[K, V]) extends Iterator[(K, V)] {
     val sortedMap = currentMap.iterator.toList.sortBy(kv => kv._1.hashCode())
     val it = sortedMap.iterator
     override def hasNext: Boolean = it.hasNext
-    override def next(): (K,V) = it.next()
+    override def next(): (K, V) = it.next()
   }
 
-  class DiskKVIterator(file: File) extends Iterator[(K,V)] {
+  class DiskKVIterator(file: File) extends Iterator[(K, V)] {
     val in = new ObjectInputStream(new FileInputStream(file))
-    var nextItem:(K,V) = _
+    var nextItem:(K, V) = _
     var eof = false
 
     override def hasNext: Boolean = {
@@ -117,7 +126,7 @@ class ExternalAppendOnlyMap[K,V](combinerFunction: (V, V) => V,
         return false
       }
       try {
-        nextItem = in.readObject().asInstanceOf[(K,V)]
+        nextItem = in.readObject().asInstanceOf[(K, V)]
       } catch {
         case e: EOFException =>
           eof = true
@@ -126,7 +135,7 @@ class ExternalAppendOnlyMap[K,V](combinerFunction: (V, V) => V,
       true
     }
 
-    override def next(): (K,V) = {
+    override def next(): (K, V) = {
       if (eof) {
         throw new NoSuchElementException
       }

@@ -32,7 +32,6 @@ case class Aggregator[K, V, C] (
     mergeCombiners: (C, C) => C) {
 
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
-    println("Combining values by key!!")
     //val combiners = new AppendOnlyMap[K, C]
     val combiners = new ExternalAppendOnlyMap[K, C](mergeCombiners)
     var kv: Product2[K, V] = null
@@ -47,7 +46,6 @@ case class Aggregator[K, V, C] (
   }
 
   def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] = {
-    println("Combining combiners by key!!")
     //val combiners = new AppendOnlyMap[K, C]
     val combiners = new ExternalAppendOnlyMap[K, C](mergeCombiners)
     var kc: (K, C) = null
