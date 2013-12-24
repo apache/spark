@@ -75,7 +75,7 @@ rem Compute classpath using external script
 set DONT_PRINT_CLASSPATH=1
 call "%FWDIR%bin\compute-classpath.cmd"
 set DONT_PRINT_CLASSPATH=0
-set CLASSPATH=%SPARK_TOOLS_JAR%;%CLASSPATH%
+set CLASSPATH=%CLASSPATH%;%SPARK_TOOLS_JAR%
 
 rem Figure out where java is.
 set RUNNER=java
