@@ -15,24 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui.storage
+package org.apache.spark.ui.jobs
 
-import scala.concurrent.duration._
-
-import javax.servlet.http.HttpServletRequest
-
-import org.eclipse.jetty.server.Handler
-
-import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.ui.JettyUtils._
-
-/** Web UI showing storage status of all RDD's in the given SparkContext. */
-private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
-  val indexPage = new IndexPage(this)
-  val rddPage = new RDDPage(this)
-
-  def getHandlers = Seq[(String, Handler)](
-    ("/storage/rdd", (request: HttpServletRequest) => rddPage.render(request)),
-    ("/storage", (request: HttpServletRequest) => indexPage.render(request))
-  )
+/** class for reporting aggregated metrics for each executors in stageUI */
+private[spark] class ExecutorSummary {
+  var taskTime : Long = 0
+  var failedTasks : Int = 0
+  var succeededTasks : Int = 0
+  var shuffleRead : Long = 0
+  var shuffleWrite : Long = 0
 }

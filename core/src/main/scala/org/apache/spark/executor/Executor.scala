@@ -222,18 +222,22 @@ private[spark] class Executor(
           return
         }
 
+        val resultSer = SparkEnv.get.serializer.newInstance()
+        val beforeSerialization = System.currentTimeMillis()
+        val valueBytes = resultSer.serialize(value)
+        val afterSerialization = System.currentTimeMillis()
+
         for (m <- task.metrics) {
           m.hostname = Utils.localHostName()
           m.executorDeserializeTime = (taskStart - startTime).toInt
           m.executorRunTime = (taskFinish - taskStart).toInt
           m.jvmGCTime = gcTime - startGCTime
+          m.resultSerializationTime = (afterSerialization - beforeSerialization).toInt
         }
-        // TODO I'd also like to track the time it takes to serialize the task results, but that is
-        // huge headache, b/c we need to serialize the task metrics first.  If TaskMetrics had a
-        // custom serialized format, we could just change the relevants bytes in the byte buffer
+
         val accumUpdates = Accumulators.values
 
-        val directResult = new DirectTaskResult(value, accumUpdates, task.metrics.getOrElse(null))
+        val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.getOrElse(null))
         val serializedDirectResult = ser.serialize(directResult)
         logInfo("Serialized size of result for " + taskId + " is " + serializedDirectResult.limit)
         val serializedResult = {
