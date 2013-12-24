@@ -46,9 +46,10 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * we are holding a lock on ourselves.
  */
 private[spark] class TaskSchedulerImpl(
-  val sc: SparkContext,
-  val maxTaskFailures : Int = System.getProperty("spark.task.maxFailures", "4").toInt,
-  isLocal: Boolean = false) extends TaskScheduler with Logging {
+    val sc: SparkContext,
+    val maxTaskFailures : Int = System.getProperty("spark.task.maxFailures", "4").toInt,
+    isLocal: Boolean = false)
+  extends TaskScheduler with Logging {
 
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL = System.getProperty("spark.speculation.interval", "100").toLong

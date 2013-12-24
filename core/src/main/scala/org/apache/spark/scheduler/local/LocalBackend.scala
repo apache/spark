@@ -93,7 +93,7 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: 
   }
 
   override def reviveOffers() {
-   localActor ! ReviveOffers
+    localActor ! ReviveOffers
   }
 
   override def defaultParallelism() = totalCores

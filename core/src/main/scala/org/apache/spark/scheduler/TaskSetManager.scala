@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler
 
+import java.io.NotSerializableException
 import java.util.Arrays
 
 import scala.collection.mutable.ArrayBuffer
@@ -28,8 +29,7 @@ import scala.math.min
 import org.apache.spark.{ExceptionFailure, FetchFailed, Logging, Resubmitted, SparkEnv,
   Success, TaskEndReason, TaskKilled, TaskResultLost, TaskState}
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.util.{SystemClock, Clock}
-import java.io.NotSerializableException
+import org.apache.spark.util.{Clock, SystemClock}
 
 
 /**
