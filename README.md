@@ -6,7 +6,7 @@ More documentation can be found in the project's [scaladoc](http://marmbrus.gith
 
 Getting Started
 ===============
-SCADS is built using [SBT](https://github.com/harrah/xsbt).  The SBT launcher is included in the distribution (bin/sbt) and is responsible for downloading all other required jars (scala compiler and other dependencies).
+Catalyst is built using [SBT](https://github.com/harrah/xsbt).  The SBT launcher is included in the distribution (bin/sbt) and is responsible for downloading all other required jars (scala compiler and other dependencies).
 
 SBT commands can be invoked from the command line.  For example, to clean and build a jar, you would run the following command:
 
