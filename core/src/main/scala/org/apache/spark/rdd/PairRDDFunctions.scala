@@ -85,10 +85,12 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     }
     val aggregator = new Aggregator[K, V, C](createCombiner, mergeValue, mergeCombiners)
     if (self.partitioner == Some(partitioner)) {
+      println("Partitioner is some partitioner! In fact, it is " + self.partitioner.toString())
       self.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter))
       }, preservesPartitioning = true)
     } else if (mapSideCombine) {
+      println("Otherwise, combining on map side.")
       val combined = self.mapPartitions(aggregator.combineValuesByKey, preservesPartitioning = true)
       val partitioned = new ShuffledRDD[K, C, (K, C)](combined, partitioner)
         .setSerializer(serializerClass)
@@ -96,6 +98,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
         new InterruptibleIterator(context, aggregator.combineCombinersByKey(iter))
       }, preservesPartitioning = true)
     } else {
+      println("Else. No combining on map side!")
       // Don't apply map-side combiner.
       // A sanity check to make sure mergeCombiners is not defined.
       assert(mergeCombiners == null)
@@ -647,6 +650,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * MapReduce job.
    */
   def saveAsHadoopDataset(conf: JobConf) {
+    println("SAVE AS HADOOP DATASET")
     val outputFormatClass = conf.getOutputFormat
     val keyClass = conf.getOutputKeyClass
     val valueClass = conf.getOutputValueClass
@@ -666,6 +670,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     writer.preSetup()
 
     def writeToFile(context: TaskContext, iter: Iterator[(K, V)]) {
+      println("WRITE TO FILE")
       // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
@@ -673,13 +678,17 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       writer.setup(context.stageId, context.partitionId, attemptNumber)
       writer.open()
 
+      println("START LOOP\n\n\n")
       var count = 0
       while(iter.hasNext) {
+        println("Before next()")
         val record = iter.next()
         count += 1
+        println("Before write. Record = "+record)
         writer.write(record._1.asInstanceOf[AnyRef], record._2.asInstanceOf[AnyRef])
+        println("After write. Record = "+record)
       }
-
+      println("ALL DONE! Woohoo.")
       writer.close()
       writer.commit()
     }

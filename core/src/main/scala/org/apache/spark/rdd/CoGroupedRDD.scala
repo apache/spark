@@ -23,7 +23,7 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
-import org.apache.spark.util.AppendOnlyMap
+import org.apache.spark.util.{AppendOnlyMap, ExternalAppendOnlyMap}
 
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
@@ -101,36 +101,49 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   override val partitioner = Some(part)
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, Seq[Seq[_]])] = {
+    println("Computing in CoGroupedRDD!")
+    // e.g. for `(k, a) cogroup (k, b)`, K -> Seq(ArrayBuffer as, ArrayBuffer bs)
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
-    // e.g. for `(k, a) cogroup (k, b)`, K -> Seq(ArrayBuffer as, ArrayBuffer bs)
-    val map = new AppendOnlyMap[K, Seq[ArrayBuffer[Any]]]
-
-    val update: (Boolean, Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] = (hadVal, oldVal) => {
-      if (hadVal) oldVal else Array.fill(numRdds)(new ArrayBuffer[Any])
-    }
-
-    val getSeq = (k: K) => {
-      map.changeValue(k, update)
-    }
+    val combineFunction: (Seq[ArrayBuffer[Any]], Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] =
+      (x, y) => { x ++ y }
+    //val map = new AppendOnlyMap[K, Seq[ArrayBuffer[Any]]]
+    val map = new ExternalAppendOnlyMap[K, Seq[ArrayBuffer[Any]]](combineFunction)
 
     val ser = SparkEnv.get.serializerManager.get(serializerClass)
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         // Read them from the parent
-        rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]].foreach { kv =>
-          getSeq(kv._1)(depNum) += kv._2
+        rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]].foreach {
+          kv => addToMap(kv._1, kv._2, depNum)
         }
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
         val fetcher = SparkEnv.get.shuffleFetcher
         fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser).foreach {
-          kv => getSeq(kv._1)(depNum) += kv._2
+          kv => addToMap(kv._1, kv._2, depNum)
         }
       }
     }
-    new InterruptibleIterator(context, map.iterator)
+
+    def addToMap(key: K, value: Any, depNum: Int) {
+      val updateFunction: (Boolean, Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] =
+        (hadVal, oldVal) => {
+          var newVal = oldVal
+          if (!hadVal){
+            newVal = Array.fill(numRdds)(new ArrayBuffer[Any])
+          }
+          newVal(depNum) += value
+          newVal
+        }
+      map.changeValue(key, updateFunction)
+    }
+
+    println("About to construct CoGroupedRDD iterator!")
+    val theIterator = map.iterator
+    println("Returning CoGroupedRDD iterator!")
+    new InterruptibleIterator(context, theIterator)
   }
 
   override def clearDependencies() {
