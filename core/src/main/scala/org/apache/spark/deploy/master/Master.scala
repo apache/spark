@@ -425,7 +425,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     // First schedule drivers, they take strict precedence over applications
     for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
       for (driver <- Seq(waitingDrivers: _*)) {
-        if (worker.memoryFree > driver.desc.mem) {
+        if (worker.memoryFree > driver.desc.mem && worker.coresFree > driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
         }

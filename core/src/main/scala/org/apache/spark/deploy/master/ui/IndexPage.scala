@@ -57,7 +57,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
-    val driverHeaders = Seq("ID", "Submitted Time", "Worker", "State", "Memory", "Main Class")
+    val driverHeaders = Seq("ID", "Submitted Time", "Worker", "State", "Cores", "Memory", "Main Class")
     val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
     val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
     val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
@@ -166,6 +166,9 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td>{driver.submitDate}</td>
       <td>{driver.worker.map(w => w.id.toString).getOrElse("None")}</td>
       <td>{driver.state}</td>
+      <td sorttable_customkey={driver.desc.cores.toString}>
+        {driver.desc.cores.toString}
+      </td>
       <td sorttable_customkey={driver.desc.mem.toString}>
         {Utils.megabytesToString(driver.desc.mem.toLong)}
       </td>

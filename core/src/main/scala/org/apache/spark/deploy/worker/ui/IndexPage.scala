@@ -56,7 +56,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
     val finishedExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, workerState.finishedExecutors)
 
-    val driverHeaders = Seq("DriverID", "Main Class", "Memory", "Logs")
+    val driverHeaders = Seq("DriverID", "Main Class", "Cores", "Memory", "Logs")
     val runningDriverTable =
       UIUtils.listingTable(driverHeaders, driverRow, workerState.drivers)
     def finishedDriverTable =
@@ -138,6 +138,9 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
     <tr>
       <td>{driver.driverId}</td>
       <td>{driver.driverDesc.mainClass}</td>
+      <td sorttable_customkey={driver.driverDesc.cores.toString}>
+        {driver.driverDesc.cores.toString}
+      </td>
       <td sorttable_customkey={driver.driverDesc.mem.toString}>
         {Utils.megabytesToString(driver.driverDesc.mem)}
       </td>

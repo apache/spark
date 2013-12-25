@@ -279,7 +279,7 @@ private[spark] class Worker(
       }
       val driver = drivers(driverId)
       memoryUsed -= driver.driverDesc.mem
-      coresUsed -= 1
+      coresUsed -= driver.driverDesc.cores
       drivers -= driverId
       finishedDrivers(driverId) = driver
     }

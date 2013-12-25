@@ -88,13 +88,13 @@ private[spark] class WorkerInfo(
   def addDriver(driver: DriverInfo) {
     drivers(driver.id) = driver
     memoryUsed += driver.desc.mem
-    coresUsed += 1
+    coresUsed += driver.desc.cores
   }
 
   def removeDriver(driver: DriverInfo) {
     drivers -= driver.id
     memoryUsed -= driver.desc.mem
-    coresUsed -= 1
+    coresUsed -= driver.desc.cores
   }
 
   def webUiAddress : String = {
