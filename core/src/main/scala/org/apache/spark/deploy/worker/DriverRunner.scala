@@ -19,17 +19,17 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 
+import akka.actor.ActorRef
 import com.google.common.base.Charsets
 import com.google.common.io.Files
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{FileUtil, Path}
 
 import org.apache.spark.Logging
-import org.apache.spark.util.Utils
-import org.apache.hadoop.fs.{FileUtil, Path}
-import org.apache.hadoop.conf.Configuration
-import akka.actor.{ActorRef, ActorSelection}
+import org.apache.spark.deploy.DriverDescription
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
-import org.apache.spark.deploy.DriverDescription
+import org.apache.spark.util.Utils
 
 /**
  * Manages the execution of one driver process.

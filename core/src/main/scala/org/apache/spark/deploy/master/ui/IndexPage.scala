@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.master.ui
 
 import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.xml.Node
 
 import akka.pattern.ask
@@ -26,8 +27,7 @@ import net.liftweb.json.JsonAST.JValue
 
 import org.apache.spark.deploy.{DeployWebUI, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
-import org.apache.spark.deploy.JsonProtocol
-import org.apache.spark.deploy.master.{DriverInfo, ApplicationInfo, WorkerInfo}
+import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 

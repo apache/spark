@@ -19,8 +19,6 @@ package org.apache.spark.deploy.master
 
 import java.io._
 
-import scala.Serializable
-
 import akka.serialization.Serialization
 import org.apache.spark.Logging
 

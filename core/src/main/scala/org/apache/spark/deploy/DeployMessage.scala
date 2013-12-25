@@ -20,12 +20,11 @@ package org.apache.spark.deploy
 import scala.collection.immutable.List
 
 import org.apache.spark.deploy.ExecutorState.ExecutorState
-import org.apache.spark.deploy.master.{DriverInfo, WorkerInfo, ApplicationInfo}
+import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}
+import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.RecoveryState.MasterState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.util.Utils
-import org.apache.spark.deploy.master.DriverState.DriverState
-
 
 private[deploy] sealed trait DeployMessage extends Serializable
 

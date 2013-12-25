@@ -17,10 +17,9 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.deploy.{DriverDescription, ApplicationDescription}
 import java.util.Date
-import akka.actor.ActorRef
-import scala.collection.mutable
+
+import org.apache.spark.deploy.DriverDescription
 
 private[spark] class DriverInfo(
     val startTime: Long,

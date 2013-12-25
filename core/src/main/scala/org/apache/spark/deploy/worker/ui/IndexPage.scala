@@ -17,15 +17,12 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import javax.servlet.http.HttpServletRequest
-
+import scala.concurrent.Await
+import scala.concurrent.duration._
 import scala.xml.Node
 
-import scala.concurrent.duration._
-import scala.concurrent.Await
-
 import akka.pattern.ask
-
+import javax.servlet.http.HttpServletRequest
 import net.liftweb.json.JsonAST.JValue
 
 import org.apache.spark.deploy.JsonProtocol
@@ -33,7 +30,6 @@ import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateRe
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
-
 
 private[spark] class IndexPage(parent: WorkerWebUI) {
   val workerActor = parent.worker.self

@@ -17,21 +17,21 @@
 
 package org.apache.spark.deploy.client
 
-import akka.actor._
-import akka.remote.{RemotingLifecycleEvent}
+import java.util.concurrent.TimeUnit
 
-import org.apache.spark.{SparkException, Logging}
+import scala.concurrent.Await
+import scala.concurrent.duration.{Duration, FiniteDuration}
+
+import akka.actor._
+import akka.actor.Actor.emptyBehavior
+import akka.pattern.ask
+import akka.remote.RemotingLifecycleEvent
+
+import org.apache.spark.Logging
 import org.apache.spark.deploy.{DeployMessage, DriverDescription}
 import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.master.{MasterArguments, Master}
-import akka.pattern.ask
-
-import org.apache.spark.util.{Utils, AkkaUtils}
-import scala.concurrent.duration.{FiniteDuration, Duration}
-import java.util.concurrent.TimeUnit
-import akka.util.Timeout
-import scala.concurrent.Await
-import akka.actor.Actor.emptyBehavior
+import org.apache.spark.deploy.master.Master
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Actor that sends a single message to the standalone master and then shuts down.

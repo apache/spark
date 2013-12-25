@@ -17,8 +17,10 @@
 
 package org.apache.spark.deploy.master
 
-import akka.actor.ActorRef
 import scala.collection.mutable
+
+import akka.actor.ActorRef
+
 import org.apache.spark.util.Utils
 
 private[spark] class WorkerInfo(
