@@ -96,6 +96,11 @@ object PromoteStrings extends Rule[LogicalPlan] {
     case a: BinaryArithmetic if a.right.dataType == StringType =>
       a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
 
+    case p: BinaryPredicate if p.left.dataType ==  StringType && p.right.dataType != StringType =>
+      p.makeCopy(Array(Cast(p.left, DoubleType), p.right))
+    case p: BinaryPredicate if p.left.dataType != StringType && p.right.dataType == StringType =>
+      p.makeCopy(Array(p.left, Cast(p.right, DoubleType)))
+
     case Sum(e) if e.dataType == StringType =>
       Sum(Cast(e, DoubleType))
     case Average(e) if e.dataType == StringType =>
