@@ -254,16 +254,13 @@ private[spark] class Worker(
 
     case KillDriver(driverId) => {
       logInfo(s"Asked to kill driver $driverId")
-
       drivers.find(_._1 == driverId) match {
         case Some((id, runner)) =>
           runner.kill()
         case None =>
           logError(s"Asked to kill unknown driver $driverId")
       }
-
     }
-
 
     case DriverStateChanged(driverId, state, exception) => {
       state match {

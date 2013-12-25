@@ -185,7 +185,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         schedule()
 
         // TODO: It might be good to instead have the submission client poll the master to determine
-        //       the current status of the driver. Since we may already want to expose this.
+        //       the current status of the driver. For now it's simply "fire and forget".
 
         sender ! SubmitDriverResponse(true, "Driver successfully submitted")
       }
@@ -611,7 +611,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
   }
 
-  /** Generate a new driver ID given a driver's submission date */
   def newDriverId(submitDate: Date): String = {
     val appId = "driver-%s-%04d".format(DATE_FORMAT.format(submitDate), nextDriverNumber)
     nextDriverNumber += 1

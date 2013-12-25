@@ -32,7 +32,7 @@ import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.util.Utils
 
 /**
- * Manages the execution of one driver process.
+ * Manages the execution of one driver, including automatically restarting the driver on failure.
  */
 private[spark] class DriverRunner(
     val driverId: String,
@@ -133,7 +133,7 @@ private[spark] class DriverRunner(
     localJarFilename
   }
 
-  /** Continue launching the supplied command until it exits zero. */
+  /** Continue launching the supplied command until it exits zero or is killed. */
   def runCommandWithRetry(command: Seq[String], envVars: Seq[(String, String)], baseDir: File) = {
     // Time to wait between submission retries.
     var waitSeconds = 1

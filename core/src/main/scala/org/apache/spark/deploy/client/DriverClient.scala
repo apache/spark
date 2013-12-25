@@ -101,6 +101,8 @@ object DriverClient {
   def main(args: Array[String]) {
     val driverArgs = new DriverClientArguments(args)
 
+    // TODO: See if we can initialize akka so return messages are sent back using the same TCP
+    //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
       "driverClient", Utils.localHostName(), 0)
 

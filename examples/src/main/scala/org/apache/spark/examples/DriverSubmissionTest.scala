@@ -39,6 +39,7 @@ object DriverSubmissionTest {
     properties.filter{case (k, v) => k.toString.contains("spark.test")}.foreach(println)
 
     for (i <- 1 until numSecondsToSleep) {
+      println(s"Alive for $i out of $numSecondsToSleep seconds")
       Thread.sleep(1000)
     }
   }

@@ -106,20 +106,20 @@ private[spark] class IndexPage(parent: MasterWebUI) {
           </div>
         </div>
 
-          <div class="row-fluid">
-            <div class="span12">
-              <h4> Active Drivers </h4>
+        <div class="row-fluid">
+          <div class="span12">
+            <h4> Active Drivers </h4>
 
-              {activeDriversTable}
-            </div>
+            {activeDriversTable}
           </div>
+        </div>
 
-          <div class="row-fluid">
-            <div class="span12">
-              <h4> Completed Drivers </h4>
-              {completedDriversTable}
-            </div>
-          </div>;
+        <div class="row-fluid">
+          <div class="span12">
+            <h4> Completed Drivers </h4>
+            {completedDriversTable}
+          </div>
+        </div>;
     UIUtils.basicSparkPage(content, "Spark Master at " + state.uri)
   }
 
