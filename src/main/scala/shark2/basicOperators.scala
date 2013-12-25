@@ -69,7 +69,13 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
         logger.debug(s"Comparing $left, $right as $curDataType order $curDirection")
         // TODO: Use numeric here too?
         val comparison =
-          if(curDataType == IntegerType)
+          if(left == null && right == null)
+            0
+          else if(left == null)
+            -1
+          else if(right == null)
+            1
+          else if(curDataType == IntegerType)
             if(curDirection == Ascending)
               left.asInstanceOf[Int] compare right.asInstanceOf[Int]
             else

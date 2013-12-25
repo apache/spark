@@ -104,7 +104,14 @@ object Evaluate extends Logging {
       case UnaryMinus(child) => n1(child, _.negate(_))
 
       /* Comparisons */
-      case Equals(l, r) => eval(l) == eval(r)
+      case Equals(l, r) =>
+        val left = eval(l)
+        val right = eval(r)
+        if(left == null || right == null)
+          null
+        else
+          left == right
+
       // Strings
       case GreaterThan(l, r) if l.dataType == StringType && r.dataType == StringType =>
         eval(l).asInstanceOf[String] > eval(r).asInstanceOf[String]
@@ -137,9 +144,30 @@ object Evaluate extends Logging {
       case Cast(e, ByteType) => n1(e, _.toInt(_).toByte)
 
       /* Boolean Logic */
-      case Not(c) => !eval(c).asInstanceOf[Boolean]
-      case And(l,r) => eval(l).asInstanceOf[Boolean] && eval(r).asInstanceOf[Boolean]
-      case Or(l,r) => eval(l).asInstanceOf[Boolean] || eval(r).asInstanceOf[Boolean]
+      case Not(c) =>
+        val child = eval(c)
+        if(child == null)
+          null
+        else
+          !child.asInstanceOf[Boolean]
+      case And(l,r) =>
+        val left = eval(l)
+        val right = eval(r)
+        if(left == false || right == false)
+          false
+        else if(left == null || right == null )
+          null
+        else
+          true
+      case Or(l,r) =>
+        val left = eval(l)
+        val right = eval(r)
+        if(left == true || right == true)
+          true
+        else if(left == null || right == null)
+          null
+        else
+          false
 
       /* References to input tuples */
       case br @ BoundReference(inputTuple, ordinal, _) => try input(inputTuple)(ordinal) catch {
