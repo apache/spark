@@ -16,31 +16,13 @@
 #
 
 """
-PySpark is the Python API for Spark.
-
-Public classes:
-
-    - L{SparkContext<pyspark.context.SparkContext>}
-        Main entry point for Spark functionality.
-    - L{RDD<pyspark.rdd.RDD>}
-        A Resilient Distributed Dataset (RDD), the basic abstraction in Spark.
-    - L{Broadcast<pyspark.broadcast.Broadcast>}
-        A broadcast variable that gets reused across tasks.
-    - L{Accumulator<pyspark.accumulators.Accumulator>}
-        An "add-only" shared variable that tasks can only add values to.
-    - L{SparkFiles<pyspark.files.SparkFiles>}
-        Access files shipped with jobs.
-    - L{StorageLevel<pyspark.storagelevel.StorageLevel>}
-        Finer-grained cache persistence levels.
+Python bindings for MLlib.
 """
-import sys
-import os
-sys.path.insert(0, os.path.join(os.environ["SPARK_HOME"], "python/lib/py4j0.7.egg"))
 
-from pyspark.mllib.regression import LinearRegressionModel, LassoModel, RidgeRegressionModel, LinearRegressionWithSGD, LassoWithSGD, RidgeRegressionWithSGD
-from pyspark.mllib.classification import LogisticRegressionModel, SVMModel, LogisticRegressionWithSGD, SVMWithSGD
-from pyspark.mllib.recommendation import MatrixFactorizationModel, ALS
-from pyspark.mllib.clustering import KMeansModel, KMeans
-
-
-__all__ = ["LinearRegressionModel", "LassoModel", "RidgeRegressionModel", "LinearRegressionWithSGD", "LassoWithSGD", "RidgeRegressionWithSGD", "LogisticRegressionModel", "SVMModel", "LogisticRegressionWithSGD", "SVMWithSGD", "MatrixFactorizationModel", "ALS", "KMeansModel", "KMeans"]
+#from pyspark.mllib.regression import LinearRegressionModel, LassoModel, RidgeRegressionModel, LinearRegressionWithSGD, LassoWithSGD, RidgeRegressionWithSGD
+#from pyspark.mllib.classification import LogisticRegressionModel, SVMModel, LogisticRegressionWithSGD, SVMWithSGD
+#from pyspark.mllib.recommendation import MatrixFactorizationModel, ALS
+#from pyspark.mllib.clustering import KMeansModel, KMeans
+#
+#
+#__all__ = ["LinearRegressionModel", "LassoModel", "RidgeRegressionModel", "LinearRegressionWithSGD", "LassoWithSGD", "RidgeRegressionWithSGD", "LogisticRegressionModel", "SVMModel", "LogisticRegressionWithSGD", "SVMWithSGD", "MatrixFactorizationModel", "ALS", "KMeansModel", "KMeans"]
