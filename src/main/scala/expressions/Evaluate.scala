@@ -37,7 +37,7 @@ object Evaluate extends Logging {
 
     @inline
     def n2(e1: Expression, e2: Expression, f: ((Numeric[Any], Any, Any) => Any)): Any  = {
-      assert(e1.dataType == e2.dataType, s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+      if (e1.dataType != e2.dataType) throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
       e1.dataType match {
         case IntegerType =>
           f.asInstanceOf[(Numeric[Int], Int, Int) => Int](implicitly[Numeric[Int]], eval(e1).asInstanceOf[Int], eval(e2).asInstanceOf[Int])
@@ -57,7 +57,7 @@ object Evaluate extends Logging {
 
     @inline
     def f2(e1: Expression, e2: Expression, f: ((Fractional[Any], Any, Any) => Any)): Any  = {
-      assert(e1.dataType == e2.dataType, s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+      if (e1.dataType != e2.dataType) throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
       e1.dataType match {
         case DoubleType =>
           f.asInstanceOf[(Fractional[Double], Double, Double) => Double](implicitly[Fractional[Double]], eval(e1).asInstanceOf[Double], eval(e2).asInstanceOf[Double])
@@ -69,7 +69,7 @@ object Evaluate extends Logging {
 
     @inline
     def i2(e1: Expression, e2: Expression, f: ((Integral[Any], Any, Any) => Any)): Any  = {
-      assert(e1.dataType == e2.dataType, s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+      if (e1.dataType != e2.dataType) throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
       e1.dataType match {
         case IntegerType =>
           f.asInstanceOf[(Integral[Int], Int, Int) => Int](implicitly[Integral[Int]], eval(e1).asInstanceOf[Int], eval(e2).asInstanceOf[Int])
