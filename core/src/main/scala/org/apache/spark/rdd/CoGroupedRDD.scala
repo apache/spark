@@ -126,7 +126,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     new InterruptibleIterator(context, combiners.iterator)
   }
 
-  def createExternalMap(numRdds:Int): ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner] = {
+  private def createExternalMap(numRdds:Int): ExternalAppendOnlyMap [K, CoGroupValue, CoGroupCombiner] = {
     def createCombiner(v: CoGroupValue): CoGroupCombiner = {
       val newCombiner = Array.fill(numRdds)(new CoGroup)
       mergeValue(newCombiner, v)
