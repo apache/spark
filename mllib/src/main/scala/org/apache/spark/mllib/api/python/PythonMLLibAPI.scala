@@ -125,9 +125,9 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib LinearRegressionModel.train()
+   * Java stub for Python mllib LinearRegressionWithSGD.train()
    */
-  def trainLinearRegressionModel(dataBytesJRDD: JavaRDD[Array[Byte]],
+  def trainLinearRegressionModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]],
       numIterations: Int, stepSize: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
     return trainRegressionModel((data, initialWeights) =>
@@ -137,9 +137,9 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib LassoModel.train()
+   * Java stub for Python mllib LassoWithSGD.train()
    */
-  def trainLassoModel(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
+  def trainLassoModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
       stepSize: Double, regParam: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
     return trainRegressionModel((data, initialWeights) =>
@@ -149,9 +149,9 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib RidgeRegressionModel.train()
+   * Java stub for Python mllib RidgeRegressionWithSGD.train()
    */
-  def trainRidgeModel(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
+  def trainRidgeModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
       stepSize: Double, regParam: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
     return trainRegressionModel((data, initialWeights) =>
@@ -161,9 +161,9 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib SVMModel.train()
+   * Java stub for Python mllib SVMWithSGD.train()
    */
-  def trainSVMModel(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
+  def trainSVMModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
       stepSize: Double, regParam: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
     return trainRegressionModel((data, initialWeights) =>
@@ -173,9 +173,9 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib LogisticRegressionModel.train()
+   * Java stub for Python mllib LogisticRegressionWithSGD.train()
    */
-  def trainLogisticRegressionModel(dataBytesJRDD: JavaRDD[Array[Byte]],
+  def trainLogisticRegressionModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]],
       numIterations: Int, stepSize: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
     return trainRegressionModel((data, initialWeights) =>
@@ -185,7 +185,7 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib KMeansModel.train()
+   * Java stub for Python mllib KMeans.train()
    */
   def trainKMeansModel(dataBytesJRDD: JavaRDD[Array[Byte]], k: Int,
       maxIterations: Int, runs: Int, initializationMode: String):
@@ -207,7 +207,7 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib ALSModel.train().  This stub returns a handle
+   * Java stub for Python mllib ALS.train().  This stub returns a handle
    * to the Java object instead of the content of the Java object.  Extra care
    * needs to be taken in the Python code to ensure it gets freed on exit; see
    * the Py4J documentation.
@@ -219,7 +219,7 @@ class PythonMLLibAPI extends Serializable {
   }
 
   /**
-   * Java stub for Python mllib ALSModel.trainImplicit().  This stub returns a
+   * Java stub for Python mllib ALS.trainImplicit().  This stub returns a
    * handle to the Java object instead of the content of the Java object.
    * Extra care needs to be taken in the Python code to ensure it gets freed on
    * exit; see the Py4J documentation.
