@@ -18,11 +18,3 @@
 """
 Python bindings for MLlib.
 """
-
-#from pyspark.mllib.regression import LinearRegressionModel, LassoModel, RidgeRegressionModel, LinearRegressionWithSGD, LassoWithSGD, RidgeRegressionWithSGD
-#from pyspark.mllib.classification import LogisticRegressionModel, SVMModel, LogisticRegressionWithSGD, SVMWithSGD
-#from pyspark.mllib.recommendation import MatrixFactorizationModel, ALS
-#from pyspark.mllib.clustering import KMeansModel, KMeans
-#
-#
-#__all__ = ["LinearRegressionModel", "LassoModel", "RidgeRegressionModel", "LinearRegressionWithSGD", "LassoWithSGD", "RidgeRegressionWithSGD", "LogisticRegressionModel", "SVMModel", "LogisticRegressionWithSGD", "SVMWithSGD", "MatrixFactorizationModel", "ALS", "KMeansModel", "KMeans"]
