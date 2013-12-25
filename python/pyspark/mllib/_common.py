@@ -15,7 +15,7 @@
 # limitations under the License.
 #
 
-from numpy import *
+from numpy import ndarray, copyto, float64, int64, int32, zeros, array_equal, array, dot, shape
 from pyspark import SparkContext
 
 # Double vector format:
@@ -137,13 +137,24 @@ def _linear_predictor_typecheck(x, coeffs):
                 pass
             else:
                 raise RuntimeError("Got array of %d elements; wanted %d"
-                        % shape(x)[0] % shape(coeffs)[0])
+                        % (shape(x)[0], shape(coeffs)[0]))
         else:
             raise RuntimeError("Bulk predict not yet supported.")
     elif (type(x) == RDD):
         raise RuntimeError("Bulk predict not yet supported.")
     else:
         raise TypeError("Argument of type " + type(x) + " unsupported")
+
+def _get_unmangled_rdd(data, serializer):
+    dataBytes = data.map(serializer)
+    dataBytes._bypass_serializer = True
+    dataBytes.cache()
+    return dataBytes
+
+# Map a pickled Python RDD of numpy double vectors to a Java RDD of
+# _serialized_double_vectors
+def _get_unmangled_double_vector_rdd(data):
+    return _get_unmangled_rdd(data, _serialize_double_vector)
 
 class LinearModel(object):
     """Something that has a vector of coefficients and an intercept."""
@@ -163,17 +174,6 @@ class LinearRegressionModelBase(LinearModel):
         """containing values for the independent variables."""
         _linear_predictor_typecheck(x, self._coeff)
         return dot(self._coeff, x) + self._intercept
-
-def _get_unmangled_rdd(data, serializer):
-    dataBytes = data.map(serializer)
-    dataBytes._bypass_serializer = True
-    dataBytes.cache()
-    return dataBytes
-
-# Map a pickled Python RDD of numpy double vectors to a Java RDD of
-# _serialized_double_vectors
-def _get_unmangled_double_vector_rdd(data):
-    return _get_unmangled_rdd(data, _serialize_double_vector)
 
 # If we weren't given initial weights, take a zero vector of the appropriate
 # length.
@@ -206,176 +206,12 @@ def _regression_train_wrapper(sc, train_func, klass, data, initial_weights):
                 + type(ans[0]) + " which is not float")
     return klass(_deserialize_double_vector(ans[0]), ans[1])
 
-class LinearRegressionModel(LinearRegressionModelBase):
-    """A linear regression model derived from a least-squares fit.
-
-    >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
-    >>> lrm = LinearRegressionModel.train(sc, sc.parallelize(data), initial_weights=array([1.0]))
-    """
-    @classmethod
-    def train(cls, sc, data, iterations=100, step=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
-        """Train a linear regression model on the given data."""
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainLinearRegressionModel(
-                        d._jrdd, iterations, step, mini_batch_fraction, i),
-                LinearRegressionModel, data, initial_weights)
-
-class LassoModel(LinearRegressionModelBase):
-    """A linear regression model derived from a least-squares fit with an
-    l_1 penalty term.
-
-    >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
-    >>> lrm = LassoModel.train(sc, sc.parallelize(data), initial_weights=array([1.0]))
-    """
-    @classmethod
-    def train(cls, sc, data, iterations=100, step=1.0, reg_param=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
-        """Train a Lasso regression model on the given data."""
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainLassoModel(d._jrdd,
-                        iterations, step, reg_param, mini_batch_fraction, i),
-                LassoModel, data, initial_weights)
-
-class RidgeRegressionModel(LinearRegressionModelBase):
-    """A linear regression model derived from a least-squares fit with an
-    l_2 penalty term.
-
-    >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
-    >>> lrm = RidgeRegressionModel.train(sc, sc.parallelize(data), initial_weights=array([1.0]))
-    """
-    @classmethod
-    def train(cls, sc, data, iterations=100, step=1.0, reg_param=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
-        """Train a ridge regression model on the given data."""
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainRidgeModel(d._jrdd,
-                        iterations, step, reg_param, mini_batch_fraction, i),
-                RidgeRegressionModel, data, initial_weights)
-
-class LogisticRegressionModel(LinearModel):
-    """A linear binary classification model derived from logistic regression.
-
-    >>> data = array([0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0, 3.0]).reshape(4,2)
-    >>> lrm = LogisticRegressionModel.train(sc, sc.parallelize(data))
-    """
-    def predict(self, x):
-        _linear_predictor_typecheck(x, _coeff)
-        margin = dot(x, _coeff) + intercept
-        prob = 1/(1 + exp(-margin))
-        return 1 if prob > 0.5 else 0
-
-    @classmethod
-    def train(cls, sc, data, iterations=100, step=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
-        """Train a logistic regression model on the given data."""
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainLogisticRegressionModel(d._jrdd,
-                        iterations, step, mini_batch_fraction, i),
-                LogisticRegressionModel, data, initial_weights)
-
-class SVMModel(LinearModel):
-    """A support vector machine.
-
-    >>> data = array([0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0, 3.0]).reshape(4,2)
-    >>> svm = SVMModel.train(sc, sc.parallelize(data))
-    """
-    def predict(self, x):
-        _linear_predictor_typecheck(x, _coeff)
-        margin = dot(x, _coeff) + intercept
-        return 1 if margin >= 0 else 0
-    @classmethod
-    def train(cls, sc, data, iterations=100, step=1.0, reg_param=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
-        """Train a support vector machine on the given data."""
-        return _regression_train_wrapper(sc, lambda d, i:
-                sc._jvm.PythonMLLibAPI().trainSVMModel(d._jrdd,
-                        iterations, step, reg_param, mini_batch_fraction, i),
-                SVMModel, data, initial_weights)
-
-class KMeansModel(object):
-    """A clustering model derived from the k-means method.
-
-    >>> data = array([0.0,0.0, 1.0,1.0, 9.0,8.0, 8.0,9.0]).reshape(4,2)
-    >>> clusters = KMeansModel.train(sc, sc.parallelize(data), 2, maxIterations=10, runs=30, initialization_mode="random")
-    >>> clusters.predict(array([0.0, 0.0])) == clusters.predict(array([1.0, 1.0]))
-    True
-    >>> clusters.predict(array([8.0, 9.0])) == clusters.predict(array([9.0, 8.0]))
-    True
-    >>> clusters = KMeansModel.train(sc, sc.parallelize(data), 2)
-    """
-    def __init__(self, centers_):
-        self.centers = centers_
-
-    def predict(self, x):
-        """Find the cluster to which x belongs in this model."""
-        best = 0
-        best_distance = 1e75
-        for i in range(0, self.centers.shape[0]):
-            diff = x - self.centers[i]
-            distance = sqrt(dot(diff, diff))
-            if distance < best_distance:
-                best = i
-                best_distance = distance
-        return best
-
-    @classmethod
-    def train(cls, sc, data, k, maxIterations=100, runs=1,
-            initialization_mode="k-means||"):
-        """Train a k-means clustering model."""
-        dataBytes = _get_unmangled_double_vector_rdd(data)
-        ans = sc._jvm.PythonMLLibAPI().trainKMeansModel(dataBytes._jrdd,
-                k, maxIterations, runs, initialization_mode)
-        if len(ans) != 1:
-            raise RuntimeError("JVM call result had unexpected length")
-        elif type(ans[0]) != bytearray:
-            raise RuntimeError("JVM call result had first element of type "
-                    + type(ans[0]) + " which is not bytearray")
-        return KMeansModel(_deserialize_double_matrix(ans[0]))
-
 def _serialize_rating(r):
     ba = bytearray(16)
     intpart = ndarray(shape=[2], buffer=ba, dtype=int32)
     doublepart = ndarray(shape=[1], buffer=ba, dtype=float64, offset=8)
     intpart[0], intpart[1], doublepart[0] = r
     return ba
-
-class ALSModel(object):
-    """A matrix factorisation model trained by regularized alternating
-    least-squares.
-
-    >>> r1 = (1, 1, 1.0)
-    >>> r2 = (1, 2, 2.0)
-    >>> r3 = (2, 1, 2.0)
-    >>> ratings = sc.parallelize([r1, r2, r3])
-    >>> model = ALSModel.trainImplicit(sc, ratings, 1)
-    >>> model.predict(2,2) is not None
-    True
-    """
-
-    def __init__(self, sc, java_model):
-        self._context = sc
-        self._java_model = java_model
-
-    def __del__(self):
-        self._context._gateway.detach(self._java_model)
-
-    def predict(self, user, product):
-        return self._java_model.predict(user, product)
-
-    @classmethod
-    def train(cls, sc, ratings, rank, iterations=5, lambda_=0.01, blocks=-1):
-        ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating)
-        mod = sc._jvm.PythonMLLibAPI().trainALSModel(ratingBytes._jrdd,
-                rank, iterations, lambda_, blocks)
-        return ALSModel(sc, mod)
-
-    @classmethod
-    def trainImplicit(cls, sc, ratings, rank, iterations=5, lambda_=0.01, blocks=-1, alpha=0.01):
-        ratingBytes = _get_unmangled_rdd(ratings, _serialize_rating)
-        mod = sc._jvm.PythonMLLibAPI().trainImplicitALSModel(ratingBytes._jrdd,
-                rank, iterations, lambda_, blocks, alpha)
-        return ALSModel(sc, mod)
 
 def _test():
     import doctest
