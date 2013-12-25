@@ -180,7 +180,7 @@ private[spark] class AppClient(
     if (actor != null) {
       try {
         val timeout = AkkaUtils.askTimeout
-        val future = actor.ask(StopClient)(timeout)
+        val future = actor.ask(StopAppClient)(timeout)
         Await.result(future, timeout)
       } catch {
         case e: TimeoutException =>
