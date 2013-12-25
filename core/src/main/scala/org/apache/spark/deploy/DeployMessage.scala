@@ -84,7 +84,7 @@ private[deploy] object DeployMessages {
       sparkHome: String)
     extends DeployMessage
 
-  case class LaunchDriver(driverId: String, jarUrl: String, mainClass: String, mem: Int)
+  case class LaunchDriver(driverId: String, driverDesc: DriverDescription)
     extends DeployMessage
 
   case class KillDriver(driverId: String) extends DeployMessage

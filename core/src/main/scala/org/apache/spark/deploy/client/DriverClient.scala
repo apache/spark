@@ -34,7 +34,7 @@ import scala.concurrent.Await
 import akka.actor.Actor.emptyBehavior
 
 /**
- * Parent class for actors that to send a single message to the standalone master and then die.
+ * Actor that sends a single message to the standalone master and then shuts down.
  */
 private[spark] abstract class SingleMessageClient(
     actorSystem: ActorSystem, master: String, message: DeployMessage)
@@ -94,34 +94,31 @@ private[spark] class TerminationClient(actorSystem: ActorSystem, master: String,
 }
 
 /**
- * Callable utility for starting and terminating drivers inside of the standalone scheduler.
+ * Executable utility for starting and terminating drivers inside of a standalone cluster.
  */
 object DriverClient {
 
   def main(args: Array[String]) {
-    if (args.size < 3) {
-      println("usage: DriverClient launch <active-master> <jar-url> <main-class>")
-      println("usage: DriverClient kill <active-master> <driver-id>")
-      System.exit(-1)
-    }
+    val driverArgs = new DriverClientArguments(args)
 
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
-      "driverSubmission", Utils.localHostName(), 0)
+      "driverClient", Utils.localHostName(), 0)
 
-    // TODO Should be configurable
-    val mem = 512
-
-    args(0) match {
+    driverArgs.cmd match {
       case "launch" =>
-        val master = args(1)
-        val jarUrl = args(2)
-        val mainClass = args(3)
-        val driverDescription = new DriverDescription(jarUrl, mainClass, mem)
-        val client = new SubmissionClient(actorSystem, master, driverDescription)
+        val driverDescription = new DriverDescription(
+          driverArgs.jarUrl,
+          driverArgs.mainClass,
+          driverArgs.memory,
+          driverArgs.cores,
+          driverArgs.driverOptions,
+          driverArgs.driverJavaOptions,
+          driverArgs.driverEnvVars)
+        val client = new SubmissionClient(actorSystem, driverArgs.master, driverDescription)
 
       case "kill" =>
-        val master = args(1)
-        val driverId = args(2)
+        val master = driverArgs.master
+        val driverId = driverArgs.driverId
         val client = new TerminationClient(actorSystem, master, driverId)
     }
     actorSystem.awaitTermination()

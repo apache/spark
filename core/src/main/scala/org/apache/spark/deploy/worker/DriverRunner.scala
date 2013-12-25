@@ -29,16 +29,15 @@ import org.apache.hadoop.conf.Configuration
 import akka.actor.{ActorRef, ActorSelection}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.deploy.DriverDescription
 
 /**
  * Manages the execution of one driver process.
  */
 private[spark] class DriverRunner(
     val driverId: String,
-    val jarUrl: String,
-    val mainClass: String,
     val workDir: File,
-    val memory: Int,
+    val driverDesc: DriverDescription,
     val worker: ActorRef)
   extends Logging {
 
@@ -54,8 +53,9 @@ private[spark] class DriverRunner(
         try {
           val driverDir = createWorkingDirectory()
           val localJarFilename = downloadUserJar(driverDir)
-          val command = Seq("java", "-cp", localJarFilename, mainClass)
-          runCommandWithRetry(command, driverDir)
+          val command = Seq("java") ++ driverDesc.javaOptions ++ Seq("-cp", localJarFilename) ++
+            Seq(driverDesc.mainClass) ++ driverDesc.options
+          runCommandWithRetry(command, driverDesc.envVars, driverDir)
         }
         catch {
           case e: Exception => exn = Some(e)
@@ -110,7 +110,7 @@ private[spark] class DriverRunner(
    */
   def downloadUserJar(driverDir: File): String = {
 
-    val jarPath = new Path(jarUrl)
+    val jarPath = new Path(driverDesc.jarUrl)
 
     val emptyConf = new Configuration() // TODO: In docs explain it needs to be full HDFS path
     val jarFileSystem = jarPath.getFileSystem(emptyConf)
@@ -134,17 +134,17 @@ private[spark] class DriverRunner(
   }
 
   /** Continue launching the supplied command until it exits zero. */
-  def runCommandWithRetry(command: Seq[String], baseDir: File) = {
-    /* Time to wait between submission retries. */
+  def runCommandWithRetry(command: Seq[String], envVars: Seq[(String, String)], baseDir: File) = {
+    // Time to wait between submission retries.
     var waitSeconds = 1
-    // TODO: We should distinguish between "immediate" exits and cases where it was running
-    //       for a long time and then exits.
     var cleanExit = false
 
     while (!cleanExit && !killed) {
       Thread.sleep(waitSeconds * 1000)
+
+      logInfo("Launch Command: " + command.mkString("\"", "\" \"", "\""))
       val builder = new ProcessBuilder(command: _*).directory(baseDir)
-      logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
+      envVars.map{ case(k,v) => builder.environment().put(k, v) }
 
       process = Some(builder.start())
 
@@ -153,11 +153,10 @@ private[spark] class DriverRunner(
       redirectStream(process.get.getInputStream, stdout)
 
       val stderr = new File(baseDir, "stderr")
-      val header = "Driver Command: %s\n%s\n\n".format(
+      val header = "Launch Command: %s\n%s\n\n".format(
         command.mkString("\"", "\" \"", "\""), "=" * 40)
       Files.write(header, stderr, Charsets.UTF_8)
       redirectStream(process.get.getErrorStream, stderr)
-
 
       val exitCode =
         /* There is a race here I've elected to ignore for now because it's very unlikely and not

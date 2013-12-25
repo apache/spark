@@ -137,9 +137,9 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
   def driverRow(driver: DriverRunner): Seq[Node] = {
     <tr>
       <td>{driver.driverId}</td>
-      <td>{driver.mainClass}</td>
-      <td sorttable_customkey={driver.memory.toString}>
-        {Utils.megabytesToString(driver.memory)}
+      <td>{driver.driverDesc.mainClass}</td>
+      <td sorttable_customkey={driver.driverDesc.mem.toString}>
+        {Utils.megabytesToString(driver.driverDesc.mem)}
       </td>
       <td>
         <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>

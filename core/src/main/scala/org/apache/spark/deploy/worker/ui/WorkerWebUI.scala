@@ -82,6 +82,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         s"${workDir.getPath}/$appId/$executorId/$logType"
       case (None, None, Some(d)) =>
         s"${workDir.getPath}/$driverId/$logType"
+      case _ =>
+        throw new Exception("Request must specify either application or driver identifiers")
     }
 
     val (startByte, endByte) = getByteRange(path, offset, byteLength)
@@ -106,6 +108,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         (s"${workDir.getPath}/$a/$e/$logType", s"appId=$a&executorId=$e")
       case (None, None, Some(d)) =>
         (s"${workDir.getPath}/$d/$logType", s"driverId=$d")
+      case _ =>
+        throw new Exception("Request must specify either application or driver identifiers")
     }
 
     val (startByte, endByte) = getByteRange(path, offset, byteLength)

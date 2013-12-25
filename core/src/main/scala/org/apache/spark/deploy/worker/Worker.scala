@@ -242,9 +242,9 @@ private[spark] class Worker(
         }
       }
 
-    case LaunchDriver(driverId, jarUrl, mainClass, memory) => {
+    case LaunchDriver(driverId, driverDesc) => {
       logInfo(s"Asked to launch driver $driverId")
-      val driver = new DriverRunner(driverId, jarUrl, mainClass, workDir, memory, self)
+      val driver = new DriverRunner(driverId, workDir, driverDesc, self)
       drivers(driverId) = driver
       driver.start()
 
@@ -278,7 +278,7 @@ private[spark] class Worker(
         master ! DriverStateChanged(driverId, state, exception)
       }
       val driver = drivers(driverId)
-      memoryUsed -= driver.memory
+      memoryUsed -= driver.driverDesc.mem
       coresUsed -= 1
       drivers -= driverId
       finishedDrivers(driverId) = driver

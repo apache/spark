@@ -627,8 +627,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     logInfo("Launching driver " + driver.id + " on worker " + worker.id)
     worker.addDriver(driver)
     driver.worker = Some(worker)
-    worker.actor ! LaunchDriver(driver.id, driver.desc.jarUrl, driver.desc.mainClass,
-      driver.desc.mem)
+    worker.actor ! LaunchDriver(driver.id, driver.desc)
     driver.state = DriverState.RUNNING
   }
 }
