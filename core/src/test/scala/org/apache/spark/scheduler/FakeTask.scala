@@ -15,10 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler
 
 import org.apache.spark.TaskContext
-import org.apache.spark.scheduler.{TaskLocation, Task}
 
 class FakeTask(stageId: Int, prefLocs: Seq[TaskLocation] = Nil) extends Task[Int](stageId, 0) {
   override def runTask(context: TaskContext): Int = 0
