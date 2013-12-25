@@ -29,6 +29,4 @@ private[spark] object DriverState extends Enumeration {
   // KILLED: A user manually killed this driver
   // FAILED: Unable to run due to an unrecoverable error (e.g. missing jar file)
   val SUBMITTED, RUNNING, FINISHED, RELAUNCHING, UNKNOWN, KILLED, FAILED = Value
-
-  val MAX_NUM_RETRY = 10
 }
