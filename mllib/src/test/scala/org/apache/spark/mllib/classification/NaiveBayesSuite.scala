@@ -1,6 +1,5 @@
 package org.apache.spark.mllib.classification
 
-import scala.collection.JavaConversions._
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
@@ -56,12 +55,12 @@ class NaiveBayesSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
-    val numOffPredictions = predictions.zip(input).count {
+    val numOfPredictions = predictions.zip(input).count {
       case (prediction, expected) =>
         prediction != expected.label
     }
     // At least 80% of the predictions should be on.
-    assert(numOffPredictions < input.length / 5)
+    assert(numOfPredictions < input.length / 5)
   }
 
   test("Naive Bayes") {
@@ -71,8 +70,8 @@ class NaiveBayesSuite extends FunSuite with BeforeAndAfterAll {
     val weightsMatrix = Array(
       Array(math.log(0.91), math.log(0.03), math.log(0.03), math.log(0.03)), // label 0
       Array(math.log(0.03), math.log(0.91), math.log(0.03), math.log(0.03)), // label 1
-      Array(math.log(0.03), math.log(0.03), math.log(0.91), math.log(0.03)) //  label 2
-      )
+      Array(math.log(0.03), math.log(0.03), math.log(0.91), math.log(0.03))  // label 2
+    )
 
     val testData = NaiveBayesSuite.generateNaiveBayesInput(weightPerLabel, weightsMatrix, nPoints, 42)
     val testRDD = sc.parallelize(testData, 2)
