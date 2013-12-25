@@ -100,52 +100,56 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
   override val partitioner = Some(part)
 
-  override def compute(s: Partition, context: TaskContext): Iterator[(K, Seq[Seq[_]])] = {
+  override def compute(s: Partition, context: TaskContext): Iterator[(K, CoGroupCombiner)] = {
     // e.g. for `(k, a) cogroup (k, b)`, K -> Seq(ArrayBuffer as, ArrayBuffer bs)
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
-    def combine(x: Seq[ArrayBuffer[Any]], y: Seq[ArrayBuffer[Any]]) = {
-      x.zipAll(y, ArrayBuffer[Any](), ArrayBuffer[Any]()).map {
-        case (a, b) => a ++ b
-      }
-    }
-    //val map = new AppendOnlyMap[K, Seq[ArrayBuffer[Any]]]
-    val map = new ExternalAppendOnlyMap[K, Seq[ArrayBuffer[Any]]](combine)
+    //val combiners = new AppendOnlyMap[K, Seq[ArrayBuffer[Any]]]
+    val combiners = createExternalMap(numRdds)
 
     val ser = SparkEnv.get.serializerManager.get(serializerClass)
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         // Read them from the parent
         rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]].foreach {
-          kv => addToMap(kv._1, kv._2, depNum)
+          kv => combiners.insert(kv._1, new CoGroupValue(kv._2, depNum))
         }
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
         val fetcher = SparkEnv.get.shuffleFetcher
         fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser).foreach {
-          kv => addToMap(kv._1, kv._2, depNum)
+          kv => combiners.insert(kv._1, new CoGroupValue(kv._2, depNum))
         }
       }
     }
+    new InterruptibleIterator(context, combiners.iterator)
+  }
 
-    def addToMap(key: K, value: Any, depNum: Int) {
-      def update(hadVal: Boolean, oldVal: Seq[ArrayBuffer[Any]]): Seq[ArrayBuffer[Any]] = {
-        var newVal = oldVal
-        if (!hadVal){
-          newVal = Array.fill(numRdds)(new ArrayBuffer[Any])
-        }
-        newVal(depNum) += value
-        newVal
-      }
-      map.changeValue(key, update)
+  def createExternalMap(numRdds:Int): ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner] = {
+    def createCombiner(v: CoGroupValue): CoGroupCombiner = {
+      val newCombiner = Array.fill(numRdds)(new CoGroup)
+      mergeValue(newCombiner, v)
     }
-
-    new InterruptibleIterator(context, map.iterator)
+    def mergeValue(c: CoGroupCombiner, v: CoGroupValue): CoGroupCombiner = {
+      v match { case (value, depNum) => c(depNum) += value }
+      c
+    }
+    def mergeCombiners(c1: CoGroupCombiner, c2: CoGroupCombiner): CoGroupCombiner = {
+      c1.zipAll(c2, new CoGroup, new CoGroup).map {
+        case (v1, v2) => v1 ++ v2
+      }
+    }
+    new ExternalAppendOnlyMap [K, CoGroupValue, CoGroupCombiner] (
+      createCombiner,mergeValue, mergeCombiners)
   }
 
   override def clearDependencies() {
     super.clearDependencies()
     rdds = null
   }
+
+  type CoGroup = ArrayBuffer[Any]
+  type CoGroupValue = (Any, Int)  // Int is dependency number
+  type CoGroupCombiner = Seq[CoGroup]
 }

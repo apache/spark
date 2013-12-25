@@ -33,28 +33,20 @@ case class Aggregator[K, V, C] (
 
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
     //val combiners = new AppendOnlyMap[K, C]
-    val combiners = new ExternalAppendOnlyMap[K, C](mergeCombiners)
-    var kv: Product2[K, V] = null
-    val update = (hadValue: Boolean, oldValue: C) => {
-      if (hadValue) mergeValue(oldValue, kv._2) else createCombiner(kv._2)
-    }
+    val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
     while (iter.hasNext) {
-      kv = iter.next()
-      combiners.changeValue(kv._1, update)
+      val kv = iter.next()
+      combiners.insert(kv._1, kv._2)
     }
     combiners.iterator
   }
 
   def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] = {
     //val combiners = new AppendOnlyMap[K, C]
-    val combiners = new ExternalAppendOnlyMap[K, C](mergeCombiners)
-    var kc: (K, C) = null
-    val update = (hadValue: Boolean, oldValue: C) => {
-      if (hadValue) mergeCombiners(oldValue, kc._2) else kc._2
-    }
+    val combiners = new ExternalAppendOnlyMap[K, C, C]((c:C) => c, mergeCombiners, mergeCombiners)
     while (iter.hasNext) {
-      kc = iter.next()
-      combiners.changeValue(kc._1, update)
+      val kc = iter.next()
+      combiners.insert(kc._1, kc._2)
     }
     combiners.iterator
   }
