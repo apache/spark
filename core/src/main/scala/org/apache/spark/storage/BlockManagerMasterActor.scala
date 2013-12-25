@@ -350,14 +350,15 @@ object BlockManagerMasterActor {
 
       if (storageLevel.isValid) {
         // isValid means it is either stored in-memory or on-disk.
-        _blocks.put(blockId, BlockStatus(storageLevel, memSize, diskSize))
         if (storageLevel.useMemory) {
+          _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0))
           _remainingMem -= memSize
           logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
             blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
             Utils.bytesToString(_remainingMem)))
         }
         if (storageLevel.useDisk) {
+          _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize))
           logInfo("Added %s on disk on %s (size: %s)".format(
             blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
         }
