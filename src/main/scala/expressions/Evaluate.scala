@@ -127,7 +127,7 @@ object Evaluate extends Logging {
       case Cast(e, StringType) => eval(e).toString
       // String => Numeric Types
       case Cast(e, IntegerType) if e.dataType == StringType => eval(e).asInstanceOf[String].toInt
-      case Cast(e, IntegerType) if e.dataType == StringType => eval(e).asInstanceOf[String].toDouble
+      case Cast(e, DoubleType) if e.dataType == StringType => eval(e).asInstanceOf[String].toDouble
       // Numeric Type => Numeric Type
       case Cast(e, IntegerType) => n1(e, _.toInt(_))
       case Cast(e, DoubleType) => n1(e, _.toDouble(_))

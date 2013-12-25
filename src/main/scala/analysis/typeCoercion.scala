@@ -1,14 +1,15 @@
 package catalyst
 package analysis
 
+import errors._
 import expressions._
 import plans.logical._
 import rules._
 import types._
 
 /**
- * Converts string "NaN"s that are in binary operators with a NaN-able types (Float / Double) to the appropriate numeric
- * equivalent.
+ * Converts string "NaN"s that are in binary operators with a NaN-able types (Float / Double) to the
+ * appropriate numeric equivalent.
  */
 object ConvertNaNs extends Rule[LogicalPlan]{
   val stringNaN = Literal("NaN", StringType)
@@ -37,21 +38,67 @@ object ConvertNaNs extends Rule[LogicalPlan]{
   }
 }
 
-object PromoteTypes extends Rule[LogicalPlan] {
-  // TODO: Do this generically given some list of type precedence.
+/**
+ * Widens numeric types and converts strings to numbers when appropriate.
+ *
+ * Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
+ *
+ * The implicit conversion rules can be summarized as follows. Any integral numeric type can be
+ * implicitly converted to a wider type. All the integral numeric types, FLOAT, and (perhaps
+ * surprisingly) STRING can be implicitly converted to DOUBLE. TINYINT, SMALLINT, and INT can all be
+ * converted to FLOAT. BOOLEAN types cannot be converted to any other type.
+ *
+ * String conversions are handled by the PromoteStrings rule.
+ */
+object PromoteNumericTypes extends Rule[LogicalPlan] {
+  val integralPrecedence = Seq(ByteType, ShortType, IntegerType, LongType)
+  val toDouble = integralPrecedence ++ Seq(FloatType, DoubleType)
+  val toFloat = Seq(ByteType, ShortType, IntegerType) :+ FloatType
+  val allPromotions = integralPrecedence :: toDouble :: toFloat :: Nil
+
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
-      // Int <op> String or String <op> Int => Int <op> Int
-      case b: BinaryExpression if b.left.dataType == StringType && b.right.dataType == IntegerType =>
-        b.makeCopy(Array(Cast(b.left, IntegerType), b.right))
-      case b: BinaryExpression if b.left.dataType == IntegerType && b.right.dataType == StringType =>
-        b.makeCopy(Array(b.left, Cast(b.right, IntegerType)))
+      case b: BinaryExpression if b.left.dataType != b.right.dataType =>
+        // Try and find a promotion rule that contains both types in question.
+        val applicableConversion =
+          allPromotions.find(p => p.contains(b.left.dataType) && p.contains(b.right.dataType))
 
-      case Sum(e) if e.dataType == StringType =>
-        Sum(Cast(e, IntegerType))
+        applicableConversion match {
+          case Some(promotionRule) =>
+            val widestType =
+              promotionRule.filter(t => t == b.left.dataType || t == b.right.dataType).last
+            val newLeft =
+              if (b.left.dataType == widestType) b.left else Cast(b.left, widestType)
+            val newRight =
+              if (b.right.dataType == widestType) b.right else Cast(b.right, widestType)
+            b.makeCopy(Array(newLeft, newRight))
+
+          // If there is no applicable conversion, leave expression unchanged.
+          case None => b
+        }
     }
+  }
+}
+
+/**
+ * Promotes strings that appear in arithmetic expressions.
+ */
+object PromoteStrings extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    // Skip nodes who's children have not been resolved yet.
+    case e if !e.childrenResolved => e
+
+    case a: BinaryArithmetic if a.left.dataType == StringType =>
+      a.makeCopy(Array(Cast(a.left, DoubleType), a.right))
+    case a: BinaryArithmetic if a.right.dataType == StringType =>
+      a.makeCopy(Array(a.left, Cast(a.right, DoubleType)))
+
+    case Sum(e) if e.dataType == StringType =>
+      Sum(Cast(e, DoubleType))
+    case Average(e) if e.dataType == StringType =>
+      Sum(Cast(e, DoubleType))
   }
 }
