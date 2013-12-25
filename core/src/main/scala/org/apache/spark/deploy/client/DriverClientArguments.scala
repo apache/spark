@@ -58,7 +58,12 @@ private[spark] class DriverClientArguments(args: Array[String]) {
 
     case ("--environment-variable" | "-e") :: value :: tail =>
       val parts = value.split("=")
+      if (parts.length != 2) {
+        println(s"Error - invalid environment variable (expecting K=V): $value")
+        printUsageAndExit(1)
+      }
       _driverEnvVars += ((parts(0), parts(1)))
+      parse(tail)
 
     case ("--help" | "-h") :: tail =>
       printUsageAndExit(0)

@@ -53,7 +53,7 @@ private[spark] class DriverRunner(
         try {
           val driverDir = createWorkingDirectory()
           val localJarFilename = downloadUserJar(driverDir)
-          val command = Seq("java") ++ driverDesc.javaOptions ++ Seq(s"-Xmx${driverDesc.mem}m")
+          val command = Seq("java") ++ driverDesc.javaOptions ++ Seq(s"-Xmx${driverDesc.mem}m") ++
             Seq("-cp", localJarFilename) ++ Seq(driverDesc.mainClass) ++ driverDesc.options
           runCommandWithRetry(command, driverDesc.envVars, driverDir)
         }
