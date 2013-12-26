@@ -47,7 +47,7 @@ case class Aggregator[K, V, C] (
     } else {
       val combiners =
         new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
-      iter.foreach { case(k, v) => combiners.insert(k, v) }
+      iter.foreach { kv => combiners.insert(kv._1, kv._2) }
       combiners.iterator
     }
   }
@@ -68,7 +68,7 @@ case class Aggregator[K, V, C] (
     } else {
       val combiners =
         new ExternalAppendOnlyMap[K, C, C](Predef.identity, mergeCombiners, mergeCombiners)
-      iter.foreach { case(k, c) => combiners.insert(k, c) }
+      iter.foreach { kc => combiners.insert(kc._1, kc._2) }
       combiners.iterator
     }
   }

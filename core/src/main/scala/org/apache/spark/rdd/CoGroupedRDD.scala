@@ -130,17 +130,17 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       val update: (Boolean, CoGroupCombiner) => CoGroupCombiner = (hadVal, oldVal) => {
         if (hadVal) oldVal else Array.fill(numRdds)(new ArrayBuffer[Any])
       }
-      rddIterators.foreach { case(it, depNum) =>
-        it.foreach { case(k, v) =>
-          map.changeValue(k, update)(depNum) += v
+      rddIterators.foreach { case (it, depNum) =>
+        it.foreach { kv =>
+          map.changeValue(kv._1, update)(depNum) += kv._2
         }
       }
       new InterruptibleIterator(context, map.iterator)
     } else {
       val map = createExternalMap(numRdds)
-      rddIterators.foreach { case(it, depNum) =>
-        it.foreach { case(k, v) =>
-          map.insert(k, new CoGroupValue(v, depNum))
+      rddIterators.foreach { case (it, depNum) =>
+        it.foreach { kv =>
+          map.insert(kv._1, new CoGroupValue(kv._2, depNum))
         }
       }
       new InterruptibleIterator(context, map.iterator)
