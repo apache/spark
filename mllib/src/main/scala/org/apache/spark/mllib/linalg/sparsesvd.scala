@@ -1,6 +1,53 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package org.apache.spark.mllib.linalg
+
 import org.apache.spark.SparkContext
 
 import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
+
+
+/**
+ * Singular Value Decomposition for Tall and Skinny matrices.
+ * Given an m x n matrix A, this will compute matrices U, S, V such that
+ * A = U * S * V'
+ * 
+ * There is no restriction on m, but we require n doubles to be held in memory.
+ * Further, n should be less than m.
+ * 
+ * This is computed by first computing A'A = V S^2 V',
+ * computing locally on that (since n x n is small),
+ * from which we recover S and V. 
+ * Then we compute U via easy matrix multiplication
+ * as U =  A * V * S^-1
+ * 
+ * Only singular vectors associated with singular values
+ * greater or equal to MIN_SVALUE are recovered. If there are k
+ * such values, then the dimensions of the return will be:
+ *
+ * S is k x k and diagonal, holding the singular values on diagonal
+ * U is m x k and satisfies U'U = eye(k,k)
+ * V is n x k and satisfies V'V = eye(k,k)
+ *
+ * All input and output is expected in sparse matrix format, 1-indexed
+ * as tuples of the form ((i,j),value) all in RDDs
+ */
+
 
 // arguments
 val MIN_SVALUE = 0.01 // minimum singular value to recover
