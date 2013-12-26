@@ -49,8 +49,9 @@ class NaiveBayesModel(val weightPerLabel: Array[Double],
 class NaiveBayes private (val lambda: Double = 1.0) // smoothing parameter
   extends Serializable with Logging {
 
-  private[this] def vectorAdd(v1: Array[Double], v2: Array[Double]) =
+  private def vectorAdd(v1: Array[Double], v2: Array[Double]) = {
     v1.zip(v2).map(pair => pair._1 + pair._2)
+  }
 
   /**
    * Run the algorithm with the configured parameters on an input
@@ -62,7 +63,7 @@ class NaiveBayes private (val lambda: Double = 1.0) // smoothing parameter
    */
   def run(C: Int, D: Int, data: RDD[LabeledPoint]) = {
     val countsAndSummedFeatures = data.map { case LabeledPoint(label, features) =>
-      label.toInt ->(1, features)
+      label.toInt -> (1, features)
     }.reduceByKey { (lhs, rhs) =>
       (lhs._1 + rhs._1, vectorAdd(lhs._2, rhs._2))
     }
