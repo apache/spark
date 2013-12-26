@@ -16,7 +16,7 @@ import collection.JavaConversions._
 import scala.collection.mutable
 
 /**
- * A logical node that represent a non-query command to be executed by the system.  For example,
+ * A logical node that represents a non-query command to be executed by the system.  For example,
  * commands can be used by parsers to represent DDL operations.
  */
 abstract class Command extends LeafNode {
@@ -523,7 +523,9 @@ object HiveQl {
   val RAND = "(?i)RAND".r
   val AND = "(?i)AND".r
   val OR = "(?i)OR".r
-  val NOT = "(?i)Not".r
+  val NOT = "(?i)NOT".r
+  val TRUE = "(?i)TRUE".r
+  val FALSE = "(?i)FALSE".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -583,6 +585,8 @@ object HiveQl {
 
     /* Literals */
     case Token("TOK_NULL", Nil) => Literal(null, IntegerType) // TODO: What type is null?
+    case Token(TRUE(), Nil) => Literal(true, BooleanType) // TODO: What type is null?
+    case Token(FALSE(), Nil) => Literal(false, BooleanType) // TODO: What type is null?
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.asInstanceOf[ASTNode].getText)).mkString)
 
