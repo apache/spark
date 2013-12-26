@@ -18,21 +18,27 @@
 package org.apache.spark.util
 
 import java.io._
+import java.text.DecimalFormat
+
+import scala.Some
+import scala.Predef._
 import scala.collection.mutable.{ArrayBuffer, PriorityQueue}
+import scala.util.Random
 
 /**
  * A wrapper for SpillableAppendOnlyMap that handles two cases:
  *
  * (1)  If a mergeCombiners function is specified, merge values into combiners before
- *      disk spill, as it is possible to merge the resulting combiners later
+ *      disk spill, as it is possible to merge the resulting combiners later.
  *
  * (2)  Otherwise, group values of the same key together before disk spill, and merge
- *      them into combiners only after reading them back from disk
+ *      them into combiners only after reading them back from disk.
  */
-class ExternalAppendOnlyMap[K, V, C] (createCombiner: V => C,
-                                      mergeValue: (C, V) => C,
-                                      mergeCombiners: (C, C) => C,
-                                      memoryThresholdMB: Int = 1024)
+class ExternalAppendOnlyMap[K, V, C](
+    createCombiner: V => C,
+    mergeValue: (C, V) => C,
+    mergeCombiners: (C, C) => C,
+    memoryThresholdMB: Long = 1024)
   extends Iterable[(K, C)] with Serializable {
 
   private val mergeBeforeSpill: Boolean = mergeCombiners != null
@@ -40,8 +46,9 @@ class ExternalAppendOnlyMap[K, V, C] (createCombiner: V => C,
   private val map: SpillableAppendOnlyMap[K, V, _, C] = {
     if (mergeBeforeSpill) {
       new SpillableAppendOnlyMap[K, V, C, C] (createCombiner,
-        mergeValue, mergeCombiners, combinerIdentity, memoryThresholdMB)
+        mergeValue, mergeCombiners, Predef.identity, memoryThresholdMB)
     } else {
+      val createGroup: (V => ArrayBuffer[V]) = value => ArrayBuffer[V](value)
       new SpillableAppendOnlyMap[K, V, ArrayBuffer[V], C] (createGroup,
         mergeValueIntoGroup, mergeGroups, combineGroup, memoryThresholdMB)
     }
@@ -51,8 +58,6 @@ class ExternalAppendOnlyMap[K, V, C] (createCombiner: V => C,
 
   override def iterator: Iterator[(K, C)] = map.iterator
 
-  private def combinerIdentity(combiner: C): C = combiner
-  private def createGroup(value: V): ArrayBuffer[V] = ArrayBuffer[V](value)
   private def mergeValueIntoGroup(group: ArrayBuffer[V], value: V): ArrayBuffer[V] = {
     group += value
     group
@@ -78,14 +83,16 @@ class ExternalAppendOnlyMap[K, V, C] (createCombiner: V => C,
  * is exceeded. A group with type M is an intermediate combiner, and shares the same
  * type as either C or ArrayBuffer[V].
  */
-class SpillableAppendOnlyMap[K, V, M, C] (createGroup: V => M,
-                                          mergeValue: (M, V) => M,
-                                          mergeGroups: (M, M) => M,
-                                          createCombiner: M => C,
-                                          memoryThresholdMB: Int = 1024)
+class SpillableAppendOnlyMap[K, V, M, C](
+    createGroup: V => M,
+    mergeValue: (M, V) => M,
+    mergeGroups: (M, M) => M,
+    createCombiner: M => C,
+    memoryThresholdMB: Long = 1024)
   extends Iterable[(K, C)] with Serializable {
 
   var currentMap = new AppendOnlyMap[K, M]
+  var sizeTracker = new SamplingSizeTracker(currentMap)
   var oldMaps = new ArrayBuffer[DiskIterator]
 
   def insert(key: K, value: V): Unit = {
@@ -93,9 +100,8 @@ class SpillableAppendOnlyMap[K, V, M, C] (createGroup: V => M,
       if (hadVal) mergeValue(oldVal, value) else createGroup(value)
     }
     currentMap.changeValue(key, update)
-    val mapSize = SizeEstimator.estimate(currentMap)
-    //if (mapSize > memoryThresholdMB * math.pow(1024, 2)) {
-    if (mapSize > 1024 * 10) {
+    sizeTracker.updateMade()
+    if (sizeTracker.estimateSize() > memoryThresholdMB * 1024 * 1024) {
       spill()
     }
   }
@@ -104,9 +110,10 @@ class SpillableAppendOnlyMap[K, V, M, C] (createGroup: V => M,
     val file = File.createTempFile("external_append_only_map", "")  // Add spill location
     val out = new ObjectOutputStream(new FileOutputStream(file))
     val sortedMap = currentMap.iterator.toList.sortBy(kv => kv._1.hashCode())
-    sortedMap.foreach { out.writeObject( _ ) }
+    sortedMap.foreach(out.writeObject)
     out.close()
     currentMap = new AppendOnlyMap[K, M]
+    sizeTracker = new SamplingSizeTracker(currentMap)
     oldMaps.append(new DiskIterator(file))
   }
 
@@ -115,13 +122,10 @@ class SpillableAppendOnlyMap[K, V, M, C] (createGroup: V => M,
   // An iterator that sort-merges (K, M) pairs from memory and disk into (K, C) pairs
   class ExternalIterator extends Iterator[(K, C)] {
 
-    // Order by increasing key hash value
-    implicit object KVOrdering extends Ordering[KMITuple] {
-      def compare(a:KMITuple, b:KMITuple) = -a.key.hashCode().compareTo(b.key.hashCode())
-    }
-    val pq = PriorityQueue[KMITuple]()
+    // Order by key hash value
+    val pq = PriorityQueue[KMITuple]()(Ordering.by(_.key.hashCode()))
     val inputStreams = Seq(new MemoryIterator(currentMap)) ++ oldMaps
-    inputStreams.foreach { readFromIterator( _ ) }
+    inputStreams.foreach(readFromIterator)
 
     // Read from the given iterator until a key of different hash is retrieved
     def readFromIterator(iter: Iterator[(K, M)]): Unit = {
@@ -131,10 +135,7 @@ class SpillableAppendOnlyMap[K, V, M, C] (createGroup: V => M,
         pq.enqueue(KMITuple(k, m, iter))
         minHash match {
           case None => minHash = Some(k.hashCode())
-          case Some(expectedHash) =>
-            if (k.hashCode() != expectedHash){
-              return
-            }
+          case Some(expectedHash) if k.hashCode() != expectedHash => return
         }
       }
     }
@@ -159,16 +160,16 @@ class SpillableAppendOnlyMap[K, V, M, C] (createGroup: V => M,
           collidedKMI += newKMI
         }
       }
-      collidedKMI.foreach { pq.enqueue( _ ) }
+      collidedKMI.foreach(pq.enqueue(_))
       (minKey, createCombiner(minGroup))
     }
 
-    case class KMITuple(key:K, group:M, iterator:Iterator[(K, M)])
+    case class KMITuple(key: K, group: M, iterator: Iterator[(K, M)])
   }
 
   // Iterate through (K, M) pairs in sorted order from the in-memory map
   class MemoryIterator(map: AppendOnlyMap[K, M]) extends Iterator[(K, M)] {
-    val sortedMap = currentMap.iterator.toList.sortBy(kc => kc._1.hashCode())
+    val sortedMap = currentMap.iterator.toList.sortBy(km => km._1.hashCode())
     val it = sortedMap.iterator
     override def hasNext: Boolean = it.hasNext
     override def next(): (K, M) = it.next()
@@ -180,21 +181,18 @@ class SpillableAppendOnlyMap[K, V, M, C] (createGroup: V => M,
     var nextItem: Option[(K, M)] = None
 
     override def hasNext: Boolean = {
-      try {
-        nextItem = Some(in.readObject().asInstanceOf[(K, M)])
-        true
+      nextItem = try {
+        Some(in.readObject().asInstanceOf[(K, M)])
       } catch {
-        case e: EOFException =>
-          nextItem = None
-          false
+        case e: EOFException => None
       }
+      nextItem.isDefined
     }
 
     override def next(): (K, M) = {
       nextItem match {
         case Some(item) => item
-        case None =>
-          throw new NoSuchElementException
+        case None => throw new NoSuchElementException
       }
     }
   }

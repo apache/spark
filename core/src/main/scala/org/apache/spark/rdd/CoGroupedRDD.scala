@@ -25,7 +25,6 @@ import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv
 import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
 import org.apache.spark.util.{AppendOnlyMap, ExternalAppendOnlyMap}
 
-
 private[spark] sealed trait CoGroupSplitDep extends Serializable
 
 private[spark] case class NarrowCoGroupSplitDep(
@@ -61,6 +60,10 @@ class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep])
  */
 class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) {
+
+  type CoGroup = ArrayBuffer[Any]
+  type CoGroupValue = (Any, Int)  // Int is dependency number
+  type CoGroupCombiner = Seq[CoGroup]
 
   private var serializerClass: String = null
 
@@ -125,7 +128,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
     if (!externalSorting) {
       val map = new AppendOnlyMap[K, CoGroupCombiner]
-      val update: (Boolean, Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] = (hadVal, oldVal) => {
+      val update: (Boolean, CoGroupCombiner) => CoGroupCombiner = (hadVal, oldVal) => {
         if (hadVal) oldVal else Array.fill(numRdds)(new ArrayBuffer[Any])
       }
       val getSeq = (k: K) => map.changeValue(k, update)
@@ -147,30 +150,29 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     }
   }
 
-  private def createExternalMap(numRdds:Int): ExternalAppendOnlyMap [K, CoGroupValue, CoGroupCombiner] = {
-    def createCombiner(v: CoGroupValue): CoGroupCombiner = {
+  private def createExternalMap(numRdds: Int)
+    : ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner] = {
+
+    val createCombiner: (CoGroupValue) => CoGroupCombiner = v => {
       val newCombiner = Array.fill(numRdds)(new CoGroup)
-      mergeValue(newCombiner, v)
+      v match { case (value, depNum) => newCombiner(depNum) += value }
+      newCombiner
     }
-    def mergeValue(c: CoGroupCombiner, v: CoGroupValue): CoGroupCombiner = {
+    val mergeValue: (CoGroupCombiner, CoGroupValue) => CoGroupCombiner = (c, v) => {
       v match { case (value, depNum) => c(depNum) += value }
       c
     }
-    def mergeCombiners(c1: CoGroupCombiner, c2: CoGroupCombiner): CoGroupCombiner = {
+    val mergeCombiners: (CoGroupCombiner, CoGroupCombiner) => CoGroupCombiner = (c1, c2) => {
       c1.zipAll(c2, new CoGroup, new CoGroup).map {
         case (v1, v2) => v1 ++ v2
       }
     }
-    new ExternalAppendOnlyMap [K, CoGroupValue, CoGroupCombiner] (
-      createCombiner,mergeValue, mergeCombiners)
+    new ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner](
+      createCombiner, mergeValue, mergeCombiners)
   }
 
   override def clearDependencies() {
     super.clearDependencies()
     rdds = null
   }
-
-  type CoGroup = ArrayBuffer[Any]
-  type CoGroupValue = (Any, Int)  // Int is dependency number
-  type CoGroupCombiner = Seq[CoGroup]
 }

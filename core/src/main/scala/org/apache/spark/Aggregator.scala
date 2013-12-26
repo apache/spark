@@ -67,8 +67,8 @@ case class Aggregator[K, V, C] (
       combiners.iterator
     } else {
       // Spilling
-      def combinerIdentity(combiner:C) = combiner
-      val combiners = new ExternalAppendOnlyMap[K, C, C](combinerIdentity, mergeCombiners, mergeCombiners)
+      val combiners =
+        new ExternalAppendOnlyMap[K, C, C](Predef.identity, mergeCombiners, mergeCombiners)
       iter.foreach { case(k, c) => combiners.insert(k, c) }
       combiners.iterator
     }
