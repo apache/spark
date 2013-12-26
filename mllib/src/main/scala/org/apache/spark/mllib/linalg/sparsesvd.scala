@@ -110,22 +110,31 @@ object SVD {
 		(retU, retS, retV)	
   }
 
+
   def main(args: Array[String]) {
-    if (args.length < 4) {
-      println("Usage: KMeans <master> <input_file> <k> <max_iterations> [<runs>]")
+    if (args.length < 8) {
+      println("Usage: SVD <master> <matrix_file> <m> <n> <minimum_singular_value> <output_U_file> <output_S_file> <output_V_file>")
       System.exit(1)
     }
-    val (master, inputFile, k, iters) = (args(0), args(1), args(2).toInt, args(3).toInt)
-    val runs = if (args.length >= 5) args(4).toInt else 1
-    val sc = new SparkContext(master, "KMeans")
-    val data = sc.textFile(inputFile).map(line => line.split(' ').map(_.toDouble)).cache()
-    println("Cost: ")
+    val (master, inputFile, m, n, min_svalue, output_u, output_s, output_v) = 
+			(args(0), args(1), args(2).toInt, args(3).toInt, args(4).toDouble, args(5), args(6), args(7))
+    
+    val sc = new SparkContext(master, "SVD")
+    
+		val rawdata = sc.textFile(inputFile)
+		val data = rawdata.map { line =>
+  		val parts = line.split(',')
+  		((parts(0).toInt, parts(1).toInt), parts(2).toDouble)
+		}
+
+		val (u, s, v) = SVD.sparseSVD(data, m, n, min_svalue)
+    println("Computed " + s.size + " singular values and vectors")
+		u.saveAsText(output_u)
+		s.saveAsText(output_s)
+		v.saveAsText(output_v)
     System.exit(0)
-		//val data = sc.makeRDD(Array.tabulate(m,n){ (a,b)=> ((a+1,b+1),a*b%37) }.flatten )
   }
 }
-
-
 
 
 
