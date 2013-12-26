@@ -32,22 +32,45 @@ case class Aggregator[K, V, C] (
     mergeCombiners: (C, C) => C) {
 
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
-    //val combiners = new AppendOnlyMap[K, C]
-    val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
-    while (iter.hasNext) {
-      val kv = iter.next()
-      combiners.insert(kv._1, kv._2)
+    val externalSorting = System.getProperty("spark.shuffle.externalSorting", "false").toBoolean
+    if (!externalSorting) {
+      val combiners = new AppendOnlyMap[K,C]
+      var kv: Product2[K, V] = null
+      val update = (hadValue: Boolean, oldValue: C) => {
+        if (hadValue) mergeValue(oldValue, kv._2) else createCombiner(kv._2)
+      }
+      while (iter.hasNext) {
+        kv = iter.next()
+        combiners.changeValue(kv._1, update)
+      }
+      combiners.iterator
+    } else {
+      // Spilling
+      val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+      iter.foreach { case(k, v) => combiners.insert(k, v) }
+      combiners.iterator
     }
-    combiners.iterator
   }
 
   def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] = {
-    //val combiners = new AppendOnlyMap[K, C]
-    val combiners = new ExternalAppendOnlyMap[K, C, C]((c:C) => c, mergeCombiners, mergeCombiners)
-    while (iter.hasNext) {
-      val kc = iter.next()
-      combiners.insert(kc._1, kc._2)
+    val externalSorting = System.getProperty("spark.shuffle.externalSorting", "false").toBoolean
+    if (!externalSorting) {
+      val combiners = new AppendOnlyMap[K,C]
+      var kc: Product2[K, C] = null
+      val update = (hadValue: Boolean, oldValue: C) => {
+        if (hadValue) mergeCombiners(oldValue, kc._2) else kc._2
+      }
+      while (iter.hasNext) {
+        kc = iter.next()
+        combiners.changeValue(kc._1, update)
+      }
+      combiners.iterator
+    } else {
+      // Spilling
+      def combinerIdentity(combiner:C) = combiner
+      val combiners = new ExternalAppendOnlyMap[K, C, C](combinerIdentity, mergeCombiners, mergeCombiners)
+      iter.foreach { case(k, c) => combiners.insert(k, c) }
+      combiners.iterator
     }
-    combiners.iterator
   }
 }

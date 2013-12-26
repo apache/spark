@@ -39,11 +39,9 @@ class ExternalAppendOnlyMap[K, V, C] (createCombiner: V => C,
 
   private val map: SpillableAppendOnlyMap[K, V, _, C] = {
     if (mergeBeforeSpill) {
-      println("* Merge before spill *")
       new SpillableAppendOnlyMap[K, V, C, C] (createCombiner,
         mergeValue, mergeCombiners, combinerIdentity, memoryThresholdMB)
     } else {
-      println("* Merge after spill *")
       new SpillableAppendOnlyMap[K, V, ArrayBuffer[V], C] (createGroup,
         mergeValueIntoGroup, mergeGroups, combineGroup, memoryThresholdMB)
     }
@@ -103,7 +101,6 @@ class SpillableAppendOnlyMap[K, V, M, C] (createGroup: V => M,
   }
 
   def spill(): Unit = {
-    println("> SPILL <")
     val file = File.createTempFile("external_append_only_map", "")  // Add spill location
     val out = new ObjectOutputStream(new FileOutputStream(file))
     val sortedMap = currentMap.iterator.toList.sortBy(kv => kv._1.hashCode())

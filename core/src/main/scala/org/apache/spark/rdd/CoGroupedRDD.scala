@@ -102,28 +102,49 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, CoGroupCombiner)] = {
     // e.g. for `(k, a) cogroup (k, b)`, K -> Seq(ArrayBuffer as, ArrayBuffer bs)
+    val externalSorting = System.getProperty("spark.shuffle.externalSorting", "false").toBoolean
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
-    //val combiners = new AppendOnlyMap[K, Seq[ArrayBuffer[Any]]]
-    val combiners = createExternalMap(numRdds)
-
     val ser = SparkEnv.get.serializerManager.get(serializerClass)
+
+    // A list of (rdd iterator, dependency number) pairs
+    val rddIterators = new ArrayBuffer[(Iterator[Product2[K, Any]], Int)]
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         // Read them from the parent
-        rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]].foreach {
-          kv => combiners.insert(kv._1, new CoGroupValue(kv._2, depNum))
-        }
+        val v = (rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]], depNum)
+        rddIterators += v
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
         val fetcher = SparkEnv.get.shuffleFetcher
-        fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser).foreach {
-          kv => combiners.insert(kv._1, new CoGroupValue(kv._2, depNum))
-        }
+        val v = (fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser), depNum)
+        rddIterators += v
       }
     }
-    new InterruptibleIterator(context, combiners.iterator)
+
+    if (!externalSorting) {
+      val map = new AppendOnlyMap[K, CoGroupCombiner]
+      val update: (Boolean, Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] = (hadVal, oldVal) => {
+        if (hadVal) oldVal else Array.fill(numRdds)(new ArrayBuffer[Any])
+      }
+      val getSeq = (k: K) => map.changeValue(k, update)
+      rddIterators.foreach { case(iter, depNum) =>
+        iter.foreach {
+          case(k, v) => getSeq(k)(depNum) += v
+        }
+      }
+      new InterruptibleIterator(context, map.iterator)
+    } else {
+      // Spilling
+      val map = createExternalMap(numRdds)
+      rddIterators.foreach { case(iter, depNum) =>
+        iter.foreach {
+          case(k, v) => map.insert(k, new CoGroupValue(v, depNum))
+        }
+      }
+      new InterruptibleIterator(context, map.iterator)
+    }
   }
 
   private def createExternalMap(numRdds:Int): ExternalAppendOnlyMap [K, CoGroupValue, CoGroupCombiner] = {
