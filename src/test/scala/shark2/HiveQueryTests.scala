@@ -42,7 +42,7 @@ class HiveQueryTests extends HiveComaparisionTest {
     "SELECT length(\"test\") FROM src LIMIT 1")
 
   createQueryTest("partitioned table scan",
-    "SELECT * FROM srcpart")
+    "SELECT ds, hr, key, value FROM srcpart")
 
   createQueryTest("create table as",
     """
