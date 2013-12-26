@@ -55,11 +55,12 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
 
     inputRdd.map {
       case array: Array[Any] =>
-        array.flatMap {
+        val res = array.flatMap {
           case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct => unpackStruct(struct)
           case array: Array[Any] => array
         }
-      case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct => unpackStruct(struct)
+        buildRow(res)
+      case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct => buildRow(unpackStruct(struct))
     }
   }
 

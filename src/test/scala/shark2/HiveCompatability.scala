@@ -255,6 +255,6 @@ class HiveCompatability extends HiveQueryFileTest {
   )
 
   // TODO: bundle in jar files... get from classpath
-  lazy val hiveQueryDir = new File(testShark.hiveDevHome, "ql/src/test/queries/clientpositive")
+  lazy val hiveQueryDir = new File(TestShark.hiveDevHome, "ql/src/test/queries/clientpositive")
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f).toMap
 }

@@ -23,7 +23,7 @@ case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends 
   def output = projectList.map(_.toAttribute)
 
   def execute() = child.execute().map { row =>
-    projectList.map(Evaluate(_, Vector(row))).toIndexedSeq
+    buildRow(projectList.map(Evaluate(_, Vector(row))))
   }
 }
 
@@ -109,6 +109,6 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
 
 case class LocalRelation(output: Seq[Attribute], data: Seq[IndexedSeq[Any]])
                         (@transient sc: SharkContext) extends LeafNode {
-  def execute() = sc.makeRDD(data, 1)
+  def execute() = sc.makeRDD(data.map(buildRow), 1)
 }
 
