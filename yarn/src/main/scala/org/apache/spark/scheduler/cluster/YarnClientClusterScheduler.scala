@@ -20,13 +20,14 @@ package org.apache.spark.scheduler.cluster
 import org.apache.spark._
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.deploy.yarn.YarnAllocationHandler
+import org.apache.spark.scheduler.TaskSchedulerImpl
 import org.apache.spark.util.Utils
 
 /**
  *
  * This scheduler launch worker through Yarn - by call into Client to launch WorkerLauncher as AM.
  */
-private[spark] class YarnClientClusterScheduler(sc: SparkContext, conf: Configuration) extends ClusterScheduler(sc) {
+private[spark] class YarnClientClusterScheduler(sc: SparkContext, conf: Configuration) extends TaskSchedulerImpl(sc) {
 
   def this(sc: SparkContext) = this(sc, new Configuration())
 
