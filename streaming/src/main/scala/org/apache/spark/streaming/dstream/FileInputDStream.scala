@@ -114,6 +114,13 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   /** Generate one RDD from an array of files */
   private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
     val fileRDDs = files.map(file => context.sparkContext.newAPIHadoopFile[K, V, F](file))
+    files.zip(fileRDDs).foreach { case (file, rdd) => {
+      if (rdd.partitions.size == 0) {
+        logWarning("File " + file + " has no data in it. Are you sure you are following " +
+          "the move-based method of adding input files? Refer to the programming guide " +
+          "for more details.")
+      }
+    }}
     new UnionRDD(context.sparkContext, fileRDDs)
   }
 
