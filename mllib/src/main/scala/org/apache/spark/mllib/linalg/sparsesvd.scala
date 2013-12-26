@@ -128,10 +128,10 @@ object SVD {
 		}
 
 		val (u, s, v) = SVD.sparseSVD(data, m, n, min_svalue)
-    println("Computed " + s.size + " singular values and vectors")
-		u.saveAsText(output_u)
-		s.saveAsText(output_s)
-		v.saveAsText(output_v)
+    println("Computed " + s.toArray.length + " singular values and vectors")
+		u.saveAsTextFile(output_u)
+		s.saveAsTextFile(output_s)
+		v.saveAsTextFile(output_v)
     System.exit(0)
   }
 }
