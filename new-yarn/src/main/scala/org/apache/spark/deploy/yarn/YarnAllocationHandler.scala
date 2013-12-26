@@ -27,8 +27,8 @@ import scala.collection.JavaConversions._
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
 import org.apache.spark.Logging
-import org.apache.spark.scheduler.SplitInfo
-import org.apache.spark.scheduler.cluster.{ClusterScheduler, CoarseGrainedSchedulerBackend}
+import org.apache.spark.scheduler.{SplitInfo,TaskSchedulerImpl}
+import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.util.Utils
 
 import org.apache.hadoop.conf.Configuration
@@ -233,9 +233,9 @@ private[yarn] class YarnAllocationHandler(
       // Note that the list we create below tries to ensure that not all containers end up within
       // a host if there is a sufficiently large number of hosts/containers.
       val allocatedContainersToProcess = new ArrayBuffer[Container](allocatedContainers.size)
-      allocatedContainersToProcess ++= ClusterScheduler.prioritizeContainers(dataLocalContainers)
-      allocatedContainersToProcess ++= ClusterScheduler.prioritizeContainers(rackLocalContainers)
-      allocatedContainersToProcess ++= ClusterScheduler.prioritizeContainers(offRackContainers)
+      allocatedContainersToProcess ++= TaskSchedulerImpl.prioritizeContainers(dataLocalContainers)
+      allocatedContainersToProcess ++= TaskSchedulerImpl.prioritizeContainers(rackLocalContainers)
+      allocatedContainersToProcess ++= TaskSchedulerImpl.prioritizeContainers(offRackContainers)
 
       // Run each of the allocated containers.
       for (container <- allocatedContainersToProcess) {
