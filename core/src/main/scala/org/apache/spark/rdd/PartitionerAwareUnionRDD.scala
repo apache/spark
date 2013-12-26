@@ -9,8 +9,8 @@ class PartitionerAwareUnionRDDPartition(
     @transient val rdds: Seq[RDD[_]],
     val idx: Int
   ) extends Partition {
-  var parents = rdds.map(_.partitions(index)).toArray
-
+  var parents = rdds.map(_.partitions(idx)).toArray
+  
   override val index = idx
   override def hashCode(): Int = idx
 
@@ -42,7 +42,7 @@ class PartitionerAwareUnionRDD[T: ClassTag](
 
   // Get the location where most of the partitions of parent RDDs are located
   override def getPreferredLocations(s: Partition): Seq[String] = {
-    logDebug("Getting preferred locations for " + this)
+    logDebug("Finding preferred location for " + this + ", partition " + s.index)
     val parentPartitions = s.asInstanceOf[PartitionerAwareUnionRDDPartition].parents
     val locations = rdds.zip(parentPartitions).flatMap {
       case (rdd, part) => {
@@ -51,11 +51,14 @@ class PartitionerAwareUnionRDD[T: ClassTag](
         parentLocations
       }
     }
-    if (locations.isEmpty) {
-      Seq.empty
+    val location = if (locations.isEmpty) {
+      None
     } else  {
-      Seq(locations.groupBy(x => x).map(x => (x._1, x._2.length)).maxBy(_._2)._1)
+      // Find the location where maximum number of parent partitions prefer 
+      Some(locations.groupBy(x => x).maxBy(_._2.length)._1)
     }
+    logDebug("Selected location for " + this + ", partition " + s.index + " = " + location)
+    location.toSeq
   }
 
   override def compute(s: Partition, context: TaskContext): Iterator[T] = {
