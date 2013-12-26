@@ -1,9 +1,31 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.rdd
 
-import org.apache.spark.{TaskContext, OneToOneDependency, SparkContext, Partition}
 import scala.reflect.ClassTag
 import java.io.{ObjectOutputStream, IOException}
+import org.apache.spark.{TaskContext, OneToOneDependency, SparkContext, Partition}
 
+
+/**
+ * Class representing partitions of PartitionerAwareUnionRDD, which maintains the list of corresponding partitions
+ * of parent RDDs.
+ */
 private[spark]
 class PartitionerAwareUnionRDDPartition(
     @transient val rdds: Seq[RDD[_]],
@@ -22,6 +44,14 @@ class PartitionerAwareUnionRDDPartition(
   }
 }
 
+/**
+ * Class representing an RDD that can take multiple RDDs partitioned by the same partitioner and
+ * unify them into a single RDD while preserving the partitioner. So m RDDs with p partitions each
+ * will be unified to a single RDD with p partitions and the same partitioner. The preferred
+ * location for each partition of the unified RDD will be the most common preferred location
+ * of the corresponding partitions of the parent RDDs. For example, location of partition 0
+ * of the unified RDD will be where most of partition 0 of the parent RDDs are located.
+ */
 private[spark]
 class PartitionerAwareUnionRDD[T: ClassTag](
     sc: SparkContext,
@@ -54,7 +84,7 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     val location = if (locations.isEmpty) {
       None
     } else  {
-      // Find the location where maximum number of parent partitions prefer 
+      // Find the location that maximum number of parent partitions prefer
       Some(locations.groupBy(x => x).maxBy(_._2.length)._1)
     }
     logDebug("Selected location for " + this + ", partition " + s.index + " = " + location)
@@ -73,7 +103,7 @@ class PartitionerAwareUnionRDD[T: ClassTag](
     rdds = null
   }
 
-  // gets the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
+  // Get the *current* preferred locations from the DAGScheduler (as opposed to the static ones)
   private def currPrefLocs(rdd: RDD[_], part: Partition): Seq[String] = {
     rdd.context.getPreferredLocs(rdd, part.index).map(tl => tl.host)
   }
