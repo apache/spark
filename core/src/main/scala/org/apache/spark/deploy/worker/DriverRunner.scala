@@ -136,8 +136,7 @@ private[spark] class DriverRunner(
   }
 
   /** Continue launching the supplied command until it exits zero or is killed. */
-  def runCommandWithRetry(command: Seq[String], envVars: Seq[(String, String)], baseDir: File)
-      : Unit = {
+  def runCommandWithRetry(command: Seq[String], envVars: Seq[(String, String)], baseDir: File) {
     // Time to wait between submission retries.
     var waitSeconds = 1
     var cleanExit = false
