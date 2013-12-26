@@ -39,7 +39,7 @@ class WindowedDStream[T: ClassTag](
     throw new Exception("The slide duration of WindowedDStream (" + _slideDuration + ") " +
     "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")")
 
-  val useNewUnion = System.getProperty("spark.streaming.useNewUnion", "false").toBoolean
+  val useNewUnion = System.getProperty("spark.streaming.useNewUnion", "true").toBoolean
 
   parent.persist(StorageLevel.MEMORY_ONLY_SER)
 
