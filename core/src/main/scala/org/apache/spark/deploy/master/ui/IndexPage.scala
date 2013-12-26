@@ -94,7 +94,6 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         <div class="row-fluid">
           <div class="span12">
             <h4> Running Applications </h4>
-
             {activeAppsTable}
           </div>
         </div>
@@ -109,7 +108,6 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         <div class="row-fluid">
           <div class="span12">
             <h4> Active Drivers </h4>
-
             {activeDriversTable}
           </div>
         </div>
@@ -167,7 +165,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td>{driver.worker.map(w => w.id.toString).getOrElse("None")}</td>
       <td>{driver.state}</td>
       <td sorttable_customkey={driver.desc.cores.toString}>
-        {driver.desc.cores.toString}
+        {driver.desc.cores}
       </td>
       <td sorttable_customkey={driver.desc.mem.toString}>
         {Utils.megabytesToString(driver.desc.mem.toLong)}

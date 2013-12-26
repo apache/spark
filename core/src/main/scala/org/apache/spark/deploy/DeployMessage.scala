@@ -83,8 +83,7 @@ private[deploy] object DeployMessages {
       sparkHome: String)
     extends DeployMessage
 
-  case class LaunchDriver(driverId: String, driverDesc: DriverDescription)
-    extends DeployMessage
+  case class LaunchDriver(driverId: String, driverDesc: DriverDescription) extends DeployMessage
 
   case class KillDriver(driverId: String) extends DeployMessage
 
@@ -134,8 +133,8 @@ private[deploy] object DeployMessages {
   // Master to MasterWebUI
 
   case class MasterStateResponse(host: String, port: Int, workers: Array[WorkerInfo],
-    activeDrivers: Array[DriverInfo], completedDrivers: Array[DriverInfo],
     activeApps: Array[ApplicationInfo], completedApps: Array[ApplicationInfo],
+    activeDrivers: Array[DriverInfo], completedDrivers: Array[DriverInfo],
     status: MasterState) {
 
     Utils.checkHost(host, "Required hostname")

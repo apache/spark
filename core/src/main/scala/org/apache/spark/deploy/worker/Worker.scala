@@ -222,8 +222,8 @@ private[spark] class Worker(
         logInfo("Executor " + fullId + " finished with state " + state +
           message.map(" message " + _).getOrElse("") +
           exitStatus.map(" exitStatus " + _).getOrElse(""))
-        finishedExecutors(fullId) = executor
         executors -= fullId
+        finishedExecutors(fullId) = executor
         coresUsed -= executor.cores
         memoryUsed -= executor.memory
       }
@@ -248,8 +248,8 @@ private[spark] class Worker(
       drivers(driverId) = driver
       driver.start()
 
-      coresUsed += 1
-      memoryUsed += memory
+      coresUsed += driverDesc.cores
+      memoryUsed += driverDesc.mem
     }
 
     case KillDriver(driverId) => {
@@ -269,16 +269,16 @@ private[spark] class Worker(
         case DriverState.FINISHED =>
           logInfo(s"Driver $driverId exited successfully")
         case DriverState.KILLED =>
-          logInfo(s"Driver $driverId was killed")
+          logInfo(s"Driver $driverId was killed by user")
       }
       masterLock.synchronized {
         master ! DriverStateChanged(driverId, state, exception)
       }
       val driver = drivers(driverId)
-      memoryUsed -= driver.driverDesc.mem
-      coresUsed -= driver.driverDesc.cores
       drivers -= driverId
       finishedDrivers(driverId) = driver
+      memoryUsed -= driver.driverDesc.mem
+      coresUsed -= driver.driverDesc.cores
     }
 
     case x: DisassociatedEvent if x.remoteAddress == masterAddress =>

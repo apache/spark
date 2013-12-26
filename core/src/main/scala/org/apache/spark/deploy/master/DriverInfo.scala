@@ -33,5 +33,4 @@ private[spark] class DriverInfo(
   @transient var exception: Option[Exception] = None
   /* Most recent worker assigned to this driver */
   @transient var worker: Option[WorkerInfo] = None
-
 }

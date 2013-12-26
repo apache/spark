@@ -19,11 +19,11 @@ package org.apache.spark.deploy.master
 
 import java.text.SimpleDateFormat
 import java.util.Date
-import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.util.Random
 
 import akka.actor._
 import akka.pattern.ask
@@ -174,8 +174,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
 
     case RequestSubmitDriver(description) => {
-      if (state == RecoveryState.STANDBY) {
-        sender ! SubmitDriverResponse(false, "Standby master cannot accept driver submission")
+      if (state != RecoveryState.ALIVE) {
+        val msg = s"Can only accept driver submissions in ALIVE state. Current state: $state."
+        sender ! SubmitDriverResponse(false, msg)
       } else {
         logInfo("Driver submitted " + description.mainClass)
         val driver = createDriver(description)
@@ -192,14 +193,18 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
 
     case RequestKillDriver(driverId) => {
-      if (state == RecoveryState.STANDBY) {
-        sender ! KillDriverResponse(false, "Standby master cannot kill drivers")
+      if (state != RecoveryState.ALIVE) {
+        val msg = s"Can only kill drivers in ALIVE state. Current state: $state."
+        sender ! KillDriverResponse(false, msg)
       } else {
         logInfo("Asked to kill driver " + driverId)
         val driver = drivers.find(_.id == driverId)
         driver match {
           case Some(d) =>
-            if (waitingDrivers.contains(d)) { waitingDrivers -= d }
+            if (waitingDrivers.contains(d)) {
+              waitingDrivers -= d
+              self ! DriverStateChanged(driverId, DriverState.KILLED, None)
+            }
             else {
               // We just notify the worker to kill the driver here. The final bookkeeping occurs
               // on the return path when the worker submits a state change back to the master
@@ -208,6 +213,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
                 w.actor ! KillDriver(driverId)
               }
             }
+            // TODO: It would be nice for this to be a synchronous response
             val msg = s"Kill request for $driverId submitted"
             logInfo(msg)
             sender ! KillDriverResponse(true, msg)
@@ -338,8 +344,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
 
     case RequestMasterState => {
-      sender ! MasterStateResponse(host, port, workers.toArray, drivers.toArray,
-        completedDrivers.toArray ,apps.toArray, completedApps.toArray, state)
+      sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
+        drivers.toArray, completedDrivers.toArray, state)
     }
 
     case CheckForWorkerTimeOut => {
@@ -423,10 +429,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
    */
   def schedule() {
     if (state != RecoveryState.ALIVE) { return }
+
     // First schedule drivers, they take strict precedence over applications
-    for (worker <- workers if worker.coresFree > 0 && worker.state == WorkerState.ALIVE) {
-      for (driver <- Seq(waitingDrivers: _*)) {
-        if (worker.memoryFree > driver.desc.mem && worker.coresFree > driver.desc.cores) {
+    val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
+    for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
+      for (driver <- waitingDrivers) {
+        if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
         }

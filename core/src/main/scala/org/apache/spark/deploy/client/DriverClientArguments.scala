@@ -89,7 +89,7 @@ private[spark] class DriverClientArguments(args: Array[String]) {
    */
   def printUsageAndExit(exitCode: Int) {
     System.err.println(
-      "usage: DriverClient launch [options] <active-master> <jar-url> <main-class> " +
+      "usage: DriverClient [options] launch <active-master> <jar-url> <main-class> " +
         "[driver options]\n" +
       "usage: DriverClient kill <active-master> <driver-id>\n\n" +
       "Options:\n" +
