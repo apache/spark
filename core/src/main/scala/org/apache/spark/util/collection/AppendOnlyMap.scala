@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.util.collection
 
 /**
  * A simple open hash table optimized for the append-only use case, where keys

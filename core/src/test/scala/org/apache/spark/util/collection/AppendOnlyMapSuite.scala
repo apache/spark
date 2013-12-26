@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 

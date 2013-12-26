@@ -5,7 +5,7 @@ import scala.util.Random
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.util.SamplingSizeTrackerSuite.LargeDummyClass
-import org.apache.spark.util.collection.SizeTrackingAppendOnlyMap
+import org.apache.spark.util.collection.{AppendOnlyMap, SizeTrackingAppendOnlyMap}
 
 class SamplingSizeTrackerSuite extends FunSuite with BeforeAndAfterAll {
   val NORMAL_ERROR = 0.20

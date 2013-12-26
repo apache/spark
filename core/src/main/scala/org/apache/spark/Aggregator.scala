@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.util.{AppendOnlyMap, ExternalAppendOnlyMap}
+import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap}
 
 /**
  * A set of functions used to aggregate data.
