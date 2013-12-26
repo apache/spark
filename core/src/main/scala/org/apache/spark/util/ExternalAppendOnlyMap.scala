@@ -28,11 +28,11 @@ import scala.util.Random
 /**
  * A wrapper for SpillableAppendOnlyMap that handles two cases:
  *
- * (1)  If a mergeCombiners function is specified, merge values into combiners before
- *      disk spill, as it is possible to merge the resulting combiners later.
+ * (1)  If a mergeCombiners function is specified, merge values into combiners before disk
+ *      spill, as it is possible to merge the resulting combiners later.
  *
- * (2)  Otherwise, group values of the same key together before disk spill, and merge
- *      them into combiners only after reading them back from disk.
+ * (2)  Otherwise, group values of the same key together before disk spill, and merge them
+ *      into combiners only after reading them back from disk.
  */
 class ExternalAppendOnlyMap[K, V, C](
     createCombiner: V => C,
@@ -48,8 +48,25 @@ class ExternalAppendOnlyMap[K, V, C](
       new SpillableAppendOnlyMap[K, V, C, C] (createCombiner,
         mergeValue, mergeCombiners, Predef.identity, memoryThresholdMB)
     } else {
+      // Use ArrayBuffer[V] as the intermediate combiner
       val createGroup: (V => ArrayBuffer[V]) = value => ArrayBuffer[V](value)
-      new SpillableAppendOnlyMap[K, V, ArrayBuffer[V], C] (createGroup,
+      val mergeValueIntoGroup: (ArrayBuffer[V], V) => ArrayBuffer[V] = (group, value) => {
+        group += value
+      }
+      val mergeGroups: (ArrayBuffer[V], ArrayBuffer[V]) => ArrayBuffer[V] = (group1, group2) => {
+        group1 ++= group2
+      }
+      val combineGroup: (ArrayBuffer[V] => C) = group => {
+        var combiner : Option[C] = None
+        group.foreach { v =>
+          combiner match {
+            case None => combiner = Some(createCombiner(v))
+            case Some(c) => combiner = Some(mergeValue(c, v))
+          }
+        }
+        combiner.getOrElse(null.asInstanceOf[C])
+      }
+      new SpillableAppendOnlyMap[K, V, ArrayBuffer[V], C](createGroup,
         mergeValueIntoGroup, mergeGroups, combineGroup, memoryThresholdMB)
     }
   }
@@ -57,31 +74,11 @@ class ExternalAppendOnlyMap[K, V, C](
   def insert(key: K, value: V): Unit = map.insert(key, value)
 
   override def iterator: Iterator[(K, C)] = map.iterator
-
-  private def mergeValueIntoGroup(group: ArrayBuffer[V], value: V): ArrayBuffer[V] = {
-    group += value
-    group
-  }
-  private def mergeGroups(group1: ArrayBuffer[V], group2: ArrayBuffer[V]): ArrayBuffer[V] = {
-    group1 ++= group2
-    group1
-  }
-  private def combineGroup(group: ArrayBuffer[V]): C = {
-    var combiner : Option[C] = None
-    group.foreach { v =>
-      combiner match {
-        case None => combiner = Some(createCombiner(v))
-        case Some(c) => combiner = Some(mergeValue(c, v))
-      }
-    }
-    combiner.get
-  }
 }
 
 /**
- * An append-only map that spills sorted content to disk when the memory threshold
- * is exceeded. A group with type M is an intermediate combiner, and shares the same
- * type as either C or ArrayBuffer[V].
+ * An append-only map that spills sorted content to disk when the memory threshold is exceeded.
+ * A group is an intermediate combiner, with type M equal to either C or ArrayBuffer[V].
  */
 class SpillableAppendOnlyMap[K, V, M, C](
     createGroup: V => M,
@@ -96,7 +93,7 @@ class SpillableAppendOnlyMap[K, V, M, C](
   var oldMaps = new ArrayBuffer[DiskIterator]
 
   def insert(key: K, value: V): Unit = {
-    def update(hadVal: Boolean, oldVal: M): M = {
+    val update: (Boolean, M) => M = (hadVal, oldVal) => {
       if (hadVal) mergeValue(oldVal, value) else createGroup(value)
     }
     currentMap.changeValue(key, update)
@@ -128,11 +125,11 @@ class SpillableAppendOnlyMap[K, V, M, C](
     inputStreams.foreach(readFromIterator)
 
     // Read from the given iterator until a key of different hash is retrieved
-    def readFromIterator(iter: Iterator[(K, M)]): Unit = {
+    def readFromIterator(it: Iterator[(K, M)]): Unit = {
       var minHash : Option[Int] = None
-      while (iter.hasNext) {
-        val (k, m) = iter.next()
-        pq.enqueue(KMITuple(k, m, iter))
+      while (it.hasNext) {
+        val (k, m) = it.next()
+        pq.enqueue(KMITuple(k, m, it))
         minHash match {
           case None => minHash = Some(k.hashCode())
           case Some(expectedHash) if k.hashCode() != expectedHash => return
