@@ -190,7 +190,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
   }
 
   /** Double the table's size and re-hash everything */
-  private def growTable() {
+  protected def growTable() {
     val newCapacity = capacity * 2
     if (newCapacity >= (1 << 30)) {
       // We can't make the table this big because we want an array of 2x

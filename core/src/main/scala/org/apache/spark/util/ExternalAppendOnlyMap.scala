@@ -18,12 +18,10 @@
 package org.apache.spark.util
 
 import java.io._
-import java.text.DecimalFormat
 
-import scala.Some
-import scala.Predef._
 import scala.collection.mutable.{ArrayBuffer, PriorityQueue}
-import scala.util.Random
+
+import org.apache.spark.util.collection.SizeTrackingAppendOnlyMap
 
 /**
  * A wrapper for SpillableAppendOnlyMap that handles two cases:
@@ -88,8 +86,7 @@ class SpillableAppendOnlyMap[K, V, M, C](
     memoryThresholdMB: Long = 1024)
   extends Iterable[(K, C)] with Serializable {
 
-  var currentMap = new AppendOnlyMap[K, M]
-  var sizeTracker = new SamplingSizeTracker(currentMap)
+  var currentMap = new SizeTrackingAppendOnlyMap[K, M]
   var oldMaps = new ArrayBuffer[DiskIterator]
 
   def insert(key: K, value: V): Unit = {
@@ -97,8 +94,8 @@ class SpillableAppendOnlyMap[K, V, M, C](
       if (hadVal) mergeValue(oldVal, value) else createGroup(value)
     }
     currentMap.changeValue(key, update)
-    sizeTracker.updateMade()
-    if (sizeTracker.estimateSize() > memoryThresholdMB * 1024 * 1024) {
+    // TODO: Make sure we're only using some % of the actual threshold due to error
+    if (currentMap.estimateSize() > memoryThresholdMB * 1024 * 1024) {
       spill()
     }
   }
@@ -109,8 +106,7 @@ class SpillableAppendOnlyMap[K, V, M, C](
     val sortedMap = currentMap.iterator.toList.sortBy(kv => kv._1.hashCode())
     sortedMap.foreach(out.writeObject)
     out.close()
-    currentMap = new AppendOnlyMap[K, M]
-    sizeTracker = new SamplingSizeTracker(currentMap)
+    currentMap = new SizeTrackingAppendOnlyMap[K, M]
     oldMaps.append(new DiskIterator(file))
   }
 
