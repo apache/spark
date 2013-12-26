@@ -53,10 +53,10 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
       UIUtils.listingTable(executorHeaders, executorRow, workerState.finishedExecutors)
 
     val driverHeaders = Seq("DriverID", "Main Class", "Cores", "Memory", "Logs")
-    val runningDriverTable =
-      UIUtils.listingTable(driverHeaders, driverRow, workerState.drivers)
-    def finishedDriverTable =
-      UIUtils.listingTable(driverHeaders, driverRow, workerState.finishedDrivers)
+    val runningDrivers = workerState.drivers.sortBy(_.driverId).reverse
+    val runningDriverTable = UIUtils.listingTable(driverHeaders, driverRow, runningDrivers)
+    val finishedDrivers = workerState.finishedDrivers.sortBy(_.driverId).reverse
+    def finishedDriverTable = UIUtils.listingTable(driverHeaders, driverRow, finishedDrivers)
 
     val content =
         <div class="row-fluid"> <!-- Worker Details -->

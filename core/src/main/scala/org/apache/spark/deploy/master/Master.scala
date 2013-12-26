@@ -37,6 +37,7 @@ import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.deploy.master.DriverState.DriverState
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   import context.dispatcher
@@ -268,21 +269,11 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
 
     case DriverStateChanged(driverId, state, exception) => {
-      if (!(state == DriverState.FAILED || state == DriverState.FINISHED ||
-          state == DriverState.KILLED)) {
-        throw new Exception(s"Received unexpected state update for driver $driverId: $state")
-      }
-      drivers.find(_.id == driverId) match {
-        case Some(driver) => {
-          drivers -= driver
-          completedDrivers += driver
-          persistenceEngine.removeDriver(driver)
-          driver.state = state
-          driver.exception = exception
-          driver.worker.foreach(w => w.removeDriver(driver))
-        }
-        case None =>
-          logWarning(s"Got driver update for unknown driver $driverId")
+      state match {
+        case DriverState.FAILED | DriverState.FINISHED | DriverState.KILLED =>
+          removeDriver(driverId, state, exception)
+        case _ =>
+          throw new Exception(s"Received unexpected state update for driver $driverId: $state")
       }
     }
 
@@ -637,6 +628,21 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     driver.worker = Some(worker)
     worker.actor ! LaunchDriver(driver.id, driver.desc)
     driver.state = DriverState.RUNNING
+  }
+
+  def removeDriver(driverId: String, finalState: DriverState, exception: Option[Exception]) {
+    drivers.find(d => d.id == driverId) match {
+      case Some(driver) =>
+        logInfo(s"Removing driver: $driverId")
+        drivers -= driver
+        completedDrivers += driver
+        persistenceEngine.removeDriver(driver)
+        driver.state = finalState
+        driver.exception = exception
+        driver.worker.foreach(w => w.removeDriver(driver))
+      case None =>
+        logWarning(s"Asked to remove unknown driver: $driverId")
+    }
   }
 }
 

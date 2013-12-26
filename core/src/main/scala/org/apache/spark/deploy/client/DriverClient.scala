@@ -90,7 +90,6 @@ object DriverClient extends Logging {
         case e: TimeoutException => (false, s"Master $master failed to respond in time")
       }
     if (success) logInfo(message) else logError(message)
-    actorSystem.stop(driver)
     actorSystem.shutdown()
     actorSystem.awaitTermination()
   }
