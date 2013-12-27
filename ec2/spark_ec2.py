@@ -113,16 +113,6 @@ def parse_args():
   # Boto config check
   # http://boto.cloudhackers.com/en/latest/boto_config_tut.html
   home_dir = os.getenv('HOME')
-  if home_dir == None or not os.path.isfile(home_dir + '/.boto'):
-    if not os.path.isfile('/etc/boto.cfg'):
-      if os.getenv('AWS_ACCESS_KEY_ID') == None:
-        print >> stderr, ("ERROR: The environment variable AWS_ACCESS_KEY_ID " +
-                          "must be set")
-        sys.exit(1)
-      if os.getenv('AWS_SECRET_ACCESS_KEY') == None:
-        print >> stderr, ("ERROR: The environment variable AWS_SECRET_ACCESS_KEY " +
-                          "must be set")
-        sys.exit(1)
   return (opts, action, cluster_name)
 
 
@@ -646,7 +636,7 @@ def get_partition(total, num_partitions, current_partitions):
 def real_main():
   (opts, action, cluster_name) = parse_args()
   try:
-    conn = ec2.connect_to_region(opts.region)
+    conn = ec2.connect_to_region(opts.region,aws_access_key_id="AKIAI2EGAQ7GYNL4LRAA", aws_secret_access_key="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")
   except Exception as e:
     print >> stderr, (e)
     sys.exit(1)

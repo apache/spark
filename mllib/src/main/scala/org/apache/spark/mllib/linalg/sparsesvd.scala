@@ -32,8 +32,8 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
  * There is no restriction on m, but we require n^2 doubles to fit in memory.
  * Further, n should be less than m.
  * 
- * This is computed by first computing A'A = V S^2 V',
- * computing locally on that (since n x n is small),
+ * The decomposition is computed by first computing A'A = V S^2 V',
+ * computing svd locally on that (since n x n is small),
  * from which we recover S and V. 
  * Then we compute U via easy matrix multiplication
  * as U =  A * V * S^-1
@@ -43,8 +43,8 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
  * such values, then the dimensions of the return will be:
  *
  * S is k x k and diagonal, holding the singular values on diagonal
- * U is m x k and satisfies U'U = eye(k,k)
- * V is n x k and satisfies V'V = eye(k,k)
+ * U is m x k and satisfies U'U = eye(k)
+ * V is n x k and satisfies V'V = eye(k)
  *
  * All input and output is expected in sparse matrix format, 1-indexed
  * as tuples of the form ((i,j),value) all in RDDs
