@@ -58,8 +58,8 @@ object SVD {
       n: Int,
       min_svalue: Double)
     : (  RDD[((Int, Int), Double)],
-  RDD[((Int, Int), Double)],
-  RDD[((Int, Int), Double)]) =
+         RDD[((Int, Int), Double)],
+         RDD[((Int, Int), Double)]) =
   {
     if (m < n || m <= 0 || n <= 0) {
       throw new IllegalArgumentException("Expecting a tall and skinny matrix")
