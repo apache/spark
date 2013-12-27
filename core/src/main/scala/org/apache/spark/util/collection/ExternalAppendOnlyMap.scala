@@ -91,8 +91,8 @@ private[spark] class SpillableAppendOnlyMap[K, V, M: ClassTag, C: ClassTag](
   private var currentMap = new SizeTrackingAppendOnlyMap[K, M]
   private val oldMaps = new ArrayBuffer[DiskIterator]
   private val memoryThreshold = {
-    val bufferSize = System.getProperty("spark.shuffle.buffer", "1024").toLong * 1024 * 1024
-    val bufferPercent = System.getProperty("spark.shuffle.buffer.percent", "0.8").toFloat
+    val bufferSize = System.getProperty("spark.shuffle.buffer.mb", "1024").toLong * 1024 * 1024
+    val bufferPercent = System.getProperty("spark.shuffle.buffer.fraction", "0.8").toFloat
     bufferSize * bufferPercent
   }
   private val ordering = new SpillableAppendOnlyMap.KeyHashOrdering[K, M]()
