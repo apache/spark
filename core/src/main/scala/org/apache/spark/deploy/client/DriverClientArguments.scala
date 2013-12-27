@@ -88,6 +88,12 @@ private[spark] class DriverClientArguments(args: Array[String]) {
    * Print usage and exit JVM with the given exit code.
    */
   def printUsageAndExit(exitCode: Int) {
+    // TODO: Document the submission approach here. It is:
+    //      1) Create an uber jar with your application and dependencies (excluding Spark)
+    //      2) You'll need to add this jar using addJar(X) inside of your spark context
+
+    // TODO: It wouldnt be too hard to allow users to submit their app and dependency jars
+    //       separately similar to in the YARN client.
     System.err.println(
       "usage: DriverClient [options] launch <active-master> <jar-url> <main-class> " +
         "[driver options]\n" +
@@ -95,7 +101,7 @@ private[spark] class DriverClientArguments(args: Array[String]) {
       "Options:\n" +
       "  -c CORES, --cores CORES                Number of cores to request \n" +
       "  -m MEMORY, --memory MEMORY             Megabytes of memory to request\n" +
-      "  -j JAVA_OPT, --java-option JAVA_OPT    Java option to pass to driver\n" +
+      "  -o JAVA_OPT, --java-option JAVA_OPT    JVM option to pass to driver\n" +
       "  -e K=V, --environment-variable K=V     Environment variable to pass to driver\n")
     System.exit(exitCode)
   }
