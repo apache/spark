@@ -563,6 +563,7 @@ object HiveQl {
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token("DIV", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
@@ -571,6 +572,9 @@ object HiveQl {
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
+    case Token("LIKE", left :: right:: Nil) => UnresolvedFunction("LIKE", Seq(nodeToExpr(left), nodeToExpr(right)))
+    case Token("RLIKE", left :: right:: Nil) => UnresolvedFunction("RLIKE", Seq(nodeToExpr(left), nodeToExpr(right)))
+    case Token("REGEXP", left :: right:: Nil) => UnresolvedFunction("REGEXP", Seq(nodeToExpr(left), nodeToExpr(right)))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) => IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) => IsNull(nodeToExpr(child))
 
