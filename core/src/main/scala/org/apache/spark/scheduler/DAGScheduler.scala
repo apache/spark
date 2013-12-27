@@ -361,8 +361,8 @@ class DAGScheduler(
         stageIdToJobIds.getOrElseUpdate(s.id, new HashSet[Int]()) += jobId
         jobIdToStageIds.getOrElseUpdate(jobId, new HashSet[Int]()) += s.id
         val parents = getParentStages(s.rdd, jobId)
-        val parentsWithoutThisJobId = parents.filter(
-          p => !stageIdToJobIds.get(p.id).exists(_.contains(jobId)))
+        val parentsWithoutThisJobId = parents.filter(p =>
+          !stageIdToJobIds.get(p.id).exists(_.contains(jobId)))
         updateJobIdStageIdMapsList(parentsWithoutThisJobId ++ stages.tail)
       }
     }
@@ -395,8 +395,8 @@ class DAGScheduler(
                   running -= s
                 }
                 stageToInfos -= s
-                shuffleToMapStage.keys.filter(shuffleToMapStage(_) == s).foreach(
-                  shuffleToMapStage.remove)
+                shuffleToMapStage.keys.filter(shuffleToMapStage(_) == s).foreach(shuffleId =>
+                  shuffleToMapStage.remove(shuffleId))
                 if (pendingTasks.contains(s) && !pendingTasks(s).isEmpty) {
                   logDebug("Removing pending status for stage %d".format(stageId))
                 }
@@ -573,8 +573,8 @@ class DAGScheduler(
       case JobGroupCancelled(groupId) =>
         // Cancel all jobs belonging to this job group.
         // First finds all active jobs with this group id, and then kill stages for them.
-        val activeInGroup = activeJobs.filter(
-          groupId == _.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
+        val activeInGroup = activeJobs.filter(activeJob =>
+          groupId == activeJob.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
         val jobIds = activeInGroup.map(_.jobId)
         jobIds.foreach { handleJobCancellation }
 
