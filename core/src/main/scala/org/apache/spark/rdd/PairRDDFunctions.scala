@@ -69,7 +69,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * In addition, users can control the partitioning of the output RDD, and whether to perform
    * map-side aggregation (if a mapper can produce multiple items with the same key).
    */
-  def combineByKey[C](createCombiner: V => C,
+  def combineByKey[C: ClassTag](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       partitioner: Partitioner,
@@ -107,7 +107,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   /**
    * Simplified version of combineByKey that hash-partitions the output RDD.
    */
-  def combineByKey[C](createCombiner: V => C,
+  def combineByKey[C: ClassTag](createCombiner: V => C,
       mergeValue: (C, V) => C,
       mergeCombiners: (C, C) => C,
       numPartitions: Int): RDD[(K, C)] = {
@@ -296,8 +296,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the
    * existing partitioner/parallelism level.
    */
-  def combineByKey[C](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
-      : RDD[(K, C)] = {
+  def combineByKey[C: ClassTag](
+      createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
+    : RDD[(K, C)] = {
     combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
   }
 

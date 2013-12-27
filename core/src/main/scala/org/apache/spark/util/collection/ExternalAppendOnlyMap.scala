@@ -18,7 +18,9 @@
 package org.apache.spark.util.collection
 
 import java.io._
+
 import scala.collection.mutable.{ArrayBuffer, PriorityQueue}
+import scala.reflect.ClassTag
 
 /**
  * A wrapper for SpillableAppendOnlyMap that handles two cases:
@@ -29,7 +31,7 @@ import scala.collection.mutable.{ArrayBuffer, PriorityQueue}
  * (2)  Otherwise, group values of the same key together before disk spill, and merge them
  *      into combiners only after reading them back from disk.
  */
-class ExternalAppendOnlyMap[K, V, C](
+class ExternalAppendOnlyMap[K, V, C: ClassTag](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C)
@@ -74,7 +76,7 @@ class ExternalAppendOnlyMap[K, V, C](
  * An append-only map that spills sorted content to disk when the memory threshold is exceeded.
  * A group is an intermediate combiner, with type M equal to either C or ArrayBuffer[V].
  */
-class SpillableAppendOnlyMap[K, V, M, C](
+class SpillableAppendOnlyMap[K, V, M: ClassTag, C: ClassTag](
     createGroup: V => M,
     mergeValue: (M, V) => M,
     mergeGroups: (M, M) => M,
@@ -114,7 +116,13 @@ class SpillableAppendOnlyMap[K, V, M, C](
     oldMaps.append(new DiskIterator(file))
   }
 
-  override def iterator: Iterator[(K, C)] = new ExternalIterator()
+  override def iterator: Iterator[(K, C)] = {
+    if (oldMaps.isEmpty && implicitly[ClassTag[M]] == implicitly[ClassTag[C]]) {
+      currentMap.iterator.asInstanceOf[Iterator[(K, C)]]
+    } else {
+      new ExternalIterator()
+    }
+  }
 
   // An iterator that sort-merges (K, M) pairs from memory and disk into (K, C) pairs
   class ExternalIterator extends Iterator[(K, C)] {

@@ -17,7 +17,9 @@
 
 package org.apache.spark
 
-import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap}
+import scala.reflect.ClassTag
+
+import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
 
 /**
  * A set of functions used to aggregate data.
@@ -26,7 +28,7 @@ import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap}
  * @param mergeValue function to merge a new value into the aggregation result.
  * @param mergeCombiners function to merge outputs from multiple mergeValue function.
  */
-case class Aggregator[K, V, C] (
+case class Aggregator[K, V, C: ClassTag] (
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C) {
