@@ -109,6 +109,9 @@ package object dsl {
     def filter[T1](arg1: Symbol)(udf: (T1) => Boolean) =
       Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), plan)
 
+    def filter(dynamicUdf: (DynamicRow) => Boolean) =
+      Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(plan.output))), plan)
+
     def analyze = analysis.SimpleAnalyzer(plan)
   }
 }
