@@ -107,3 +107,15 @@ object PromoteStrings extends Rule[LogicalPlan] {
       Sum(Cast(e, DoubleType))
   }
 }
+
+object BooleanComparisons extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    // Skip nodes who's children have not been resolved yet.
+    case e if !e.childrenResolved => e
+    // No need to change Equals operators as that actually makes sense for boolean types.
+    case e: Equals => e
+    // Otherwise turn them to Byte types so that there exists and ordering.
+    case p: BinaryComparison if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
+      p.makeCopy(Array(Cast(p.left, ByteType), Cast(p.right, ByteType)))
+  }
+}

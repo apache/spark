@@ -31,7 +31,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("Type Coersion", fixedPoint,
       PromoteNumericTypes,
       PromoteStrings,
-      ConvertNaNs)
+      ConvertNaNs,
+      BooleanComparisons)
   )
 
   /**
