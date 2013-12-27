@@ -27,14 +27,17 @@ import io.netty.channel.socket.oio.OioSocketChannel;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.TimeUnit;
+
 class FileClient {
 
   private Logger LOG = LoggerFactory.getLogger(this.getClass().getName());
-  private FileClientHandler handler = null;
+  private final FileClientHandler handler;
   private Channel channel = null;
   private Bootstrap bootstrap = null;
   private EventLoopGroup group = null;
-  private int connectTimeout = 60*1000; // 1 min
+  private final int connectTimeout;
+  private final int sendTimeout = 60; // 1 min
 
   public FileClient(FileClientHandler handler, int connectTimeout) {
     this.handler = handler;
@@ -43,7 +46,7 @@ class FileClient {
 
   public void init() {
     group = new OioEventLoopGroup();
-    Bootstrap bootstrap = new Bootstrap();
+    bootstrap = new Bootstrap();
     bootstrap.group(group)
       .channel(OioSocketChannel.class)
       .option(ChannelOption.SO_KEEPALIVE, true)
@@ -59,6 +62,7 @@ class FileClient {
       // ChannelFuture cf = channel.closeFuture();
       //cf.addListener(new ChannelCloseListener(this));
     } catch (InterruptedException e) {
+      LOG.warn("FileClient interrupted while trying to connect", e);
       close();
     }
   }
@@ -74,15 +78,18 @@ class FileClient {
   public void sendRequest(String file) {
     //assert(file == null);
     //assert(channel == null);
-    channel.write(file + "\r\n");
+      try {
+          // Should be able to send the message to network link channel.
+          boolean bSent = channel.writeAndFlush(file + "\r\n").await(sendTimeout, TimeUnit.SECONDS);
+          if (!bSent) {
+              throw new RuntimeException("Failed to send");
+          }
+      } catch (InterruptedException e) {
+          LOG.error("Error", e);
+      }
   }
 
   public void close() {
-    if(channel != null) {
-      channel.close().awaitUninterruptibly();
-      channel = null;
-    }
-
     if (group != null) {
       group.shutdownGracefully();
       group = null;

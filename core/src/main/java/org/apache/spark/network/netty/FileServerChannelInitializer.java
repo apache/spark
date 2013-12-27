@@ -35,7 +35,7 @@ class FileServerChannelInitializer extends ChannelInitializer<SocketChannel> {
   public void initChannel(SocketChannel channel) {
     channel.pipeline()
       .addLast("framer", new DelimiterBasedFrameDecoder(8192, Delimiters.lineDelimiter()))
-      .addLast("strDecoder", new StringDecoder())
+      .addLast("stringDecoder", new StringDecoder())
       .addLast("handler", new FileServerHandler(pResolver));
   }
 }

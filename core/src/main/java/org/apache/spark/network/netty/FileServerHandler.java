@@ -26,10 +26,14 @@ import io.netty.channel.DefaultFileRegion;
 
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.FileSegment;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 class FileServerHandler extends SimpleChannelInboundHandler<String> {
 
-  PathResolver pResolver;
+  private Logger LOG = LoggerFactory.getLogger(this.getClass().getName());
+
+  private final PathResolver pResolver;
 
   public FileServerHandler(PathResolver pResolver){
     this.pResolver = pResolver;
@@ -63,7 +67,7 @@ class FileServerHandler extends SimpleChannelInboundHandler<String> {
         ctx.write(new DefaultFileRegion(new FileInputStream(file)
           .getChannel(), fileSegment.offset(), fileSegment.length()));
       } catch (Exception e) {
-        e.printStackTrace();
+          LOG.error("Exception: ", e);
       }
     } else {
       ctx.write(new FileHeader(0, blockId).buffer());
@@ -73,7 +77,7 @@ class FileServerHandler extends SimpleChannelInboundHandler<String> {
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-    cause.printStackTrace();
+    LOG.error("Exception: ", cause);
     ctx.close();
   }
 }
