@@ -29,7 +29,7 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
  * Given an m x n matrix A, this will compute matrices U, S, V such that
  * A = U * S * V'
  * 
- * There is no restriction on m, but we require n doubles to be held in memory.
+ * There is no restriction on m, but we require n^2 doubles to fit in memory.
  * Further, n should be less than m.
  * 
  * This is computed by first computing A'A = V S^2 V',
@@ -81,7 +81,7 @@ object SVD {
     }.reduceByKey(_+_)
 
 
-    // Constructi jblas A^T A locally
+    // Construct jblas A^T A locally
     val ata = DoubleMatrix.zeros(n, n)
     for(entry <- emits.toArray) {
       ata.put(entry._1._1-1, entry._1._2-1, entry._2)
