@@ -17,6 +17,8 @@
 
 package org.apache.spark.util.collection
 
+import java.util
+
 /**
  * A simple open hash table optimized for the append-only use case, where keys
  * are never removed, but the value for each key may be changed.
@@ -233,5 +235,36 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
   private def nextPowerOf2(n: Int): Int = {
     val highBit = Integer.highestOneBit(n)
     if (highBit == n) n else highBit << 1
+  }
+
+  // Return an iterator of the map in sorted order.
+  // Note that the validity of the map is no longer preserved.
+  def destructiveSortedIterator(ord: Ordering[(K, V)]): Iterator[(K, V)] = {
+    var keyIndex, newIndex = 0
+    while (keyIndex < capacity) {
+      if (data(2 * keyIndex) != null) {
+        data(newIndex) = (data(2 * keyIndex), data(2 * keyIndex + 1))
+        newIndex += 1
+      }
+      keyIndex += 1
+    }
+    // sort
+    assert(newIndex == curSize)
+    val rawOrdering = new Ordering[AnyRef] {
+      def compare(x: AnyRef, y: AnyRef): Int ={
+        ord.compare(x.asInstanceOf[(K, V)], y.asInstanceOf[(K, V)])
+      }
+    }
+    util.Arrays.sort(data, 0, curSize, rawOrdering)
+
+    new Iterator[(K, V)] {
+      var i = 0
+      def hasNext = i < curSize
+      def next(): (K, V) = {
+        val item = data(i).asInstanceOf[(K, V)]
+        i += 1
+        item
+      }
+    }
   }
 }

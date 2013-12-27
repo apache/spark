@@ -88,6 +88,7 @@ class SpillableAppendOnlyMap[K, V, M, C](
     val bufferPercent = System.getProperty("spark.shuffle.buffer.percent", "0.8").toFloat
     bufferSize * bufferPercent
   }
+  val KMOrdering: Ordering[(K, M)] = Ordering.by(km => km._1.hashCode())
 
   def insert(key: K, value: V): Unit = {
     val update: (Boolean, M) => M = (hadVal, oldVal) => {
@@ -100,10 +101,14 @@ class SpillableAppendOnlyMap[K, V, M, C](
   }
 
   def spill(): Unit = {
+    println("******************* SPILL *********************")
     val file = File.createTempFile("external_append_only_map", "")
     val out = new ObjectOutputStream(new FileOutputStream(file))
-    val sortedMap = currentMap.iterator.toList.sortBy(kv => kv._1.hashCode())
-    sortedMap.foreach(out.writeObject)
+    val it = currentMap.destructiveSortedIterator(KMOrdering)
+    while (it.hasNext) {
+      val kv = it.next()
+      out.writeObject(kv)
+    }
     out.close()
     currentMap = new SizeTrackingAppendOnlyMap[K, M]
     oldMaps.append(new DiskIterator(file))
@@ -115,8 +120,8 @@ class SpillableAppendOnlyMap[K, V, M, C](
   class ExternalIterator extends Iterator[(K, C)] {
 
     // Order by key hash value
-    val pq = PriorityQueue[KMITuple]()(Ordering.by(_.key.hashCode()))
-    val inputStreams = Seq(new MemoryIterator(currentMap)) ++ oldMaps
+    val pq = new PriorityQueue[KMITuple]
+    val inputStreams = Seq(currentMap.destructiveSortedIterator(KMOrdering)) ++ oldMaps
     inputStreams.foreach(readFromIterator)
 
     // Read from the given iterator until a key of different hash is retrieved
@@ -127,7 +132,10 @@ class SpillableAppendOnlyMap[K, V, M, C](
         pq.enqueue(KMITuple(k, m, it))
         minHash match {
           case None => minHash = Some(k.hashCode())
-          case Some(expectedHash) if k.hashCode() != expectedHash => return
+          case Some(expectedHash) =>
+            if (k.hashCode() != expectedHash) {
+              return
+            }
         }
       }
     }
@@ -156,15 +164,11 @@ class SpillableAppendOnlyMap[K, V, M, C](
       (minKey, createCombiner(minGroup))
     }
 
-    case class KMITuple(key: K, group: M, iterator: Iterator[(K, M)])
-  }
-
-  // Iterate through (K, M) pairs in sorted order from the in-memory map
-  class MemoryIterator(map: AppendOnlyMap[K, M]) extends Iterator[(K, M)] {
-    val sortedMap = currentMap.iterator.toList.sortBy(km => km._1.hashCode())
-    val it = sortedMap.iterator
-    override def hasNext: Boolean = it.hasNext
-    override def next(): (K, M) = it.next()
+    case class KMITuple(key: K, group: M, iterator: Iterator[(K, M)]) extends Ordered[KMITuple] {
+      def compare(other: KMITuple): Int = {
+        -key.hashCode().compareTo(other.key.hashCode())
+      }
+    }
   }
 
   // Iterate through (K, M) pairs in sorted order from an on-disk map
