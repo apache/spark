@@ -23,6 +23,8 @@ import com.twitter.algebird._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.SparkContext._
 
+import org.apache.spark.streaming.twitter._
+
 /**
  * Illustrates the use of the Count-Min Sketch, from Twitter's Algebird library, to compute
  * windowed and global Top-K estimates of user IDs occurring in a Twitter stream.

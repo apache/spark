@@ -45,8 +45,8 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
-import twitter4j.Status
-import twitter4j.auth.Authorization
+//import twitter4j.Status
+//import twitter4j.auth.Authorization
 import org.apache.spark.streaming.scheduler._
 import akka.util.ByteString
 
@@ -414,6 +414,7 @@ class StreamingContext private (
     fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
   }
 
+  /*
   /**
    * Create a input stream that returns tweets received from Twitter.
    * @param twitterAuth Twitter4J authentication, or None to use Twitter4J's default OAuth
@@ -431,6 +432,7 @@ class StreamingContext private (
     registerInputStream(inputStream)
     inputStream
   }
+  */
 
   /**
    * Create an input stream from a queue of RDDs. In each batch,

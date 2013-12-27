@@ -50,7 +50,7 @@ object SparkBuild extends Build {
     .dependsOn(core, bagel, mllib)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, bagel, streaming)
+    .dependsOn(core, mllib, bagel, streaming, externalTwitter)
 
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
@@ -59,6 +59,8 @@ object SparkBuild extends Build {
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
+
+  lazy val externalTwitter = Project("streaming-twitter", file("external/twitter"), settings = twitterSettings) dependsOn(streaming)
 
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
     .dependsOn(core, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*)
@@ -313,7 +315,7 @@ object SparkBuild extends Build {
         excludeAll(excludeNetty),
       "org.eclipse.paho"        % "mqtt-client"      % "0.4.0",
       "com.github.sgroschupf"   % "zkclient"         % "0.1"                   excludeAll(excludeNetty),
-      "org.twitter4j"           % "twitter4j-stream" % "3.0.3"                 excludeAll(excludeNetty),
+      // "org.twitter4j"           % "twitter4j-stream" % "3.0.3"                 excludeAll(excludeNetty),
       "org.spark-project.akka" %% "akka-zeromq"      % "2.2.3-shaded-protobuf" excludeAll(excludeNetty)
     )
   )
@@ -353,5 +355,12 @@ object SparkBuild extends Build {
       case "reference.conf" => MergeStrategy.concat
       case _ => MergeStrategy.first
     }
+  )
+
+  def twitterSettings() = streamingSettings ++ Seq(
+    name := "spark-twitter",
+    libraryDependencies ++= Seq(
+      "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty)
+    )
   )
 }

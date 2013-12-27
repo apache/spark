@@ -25,13 +25,13 @@ import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-import twitter4j.Status
+//import twitter4j.Status
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
 import akka.zeromq.Subscribe
 import akka.util.ByteString
 
-import twitter4j.auth.Authorization
+//import twitter4j.auth.Authorization
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -338,7 +338,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   def flumeStream(hostname: String, port: Int): JavaDStream[SparkFlumeEvent] = {
     ssc.flumeStream(hostname, port)
   }
-
+  /*
   /**
    * Create a input stream that returns tweets received from Twitter.
    * @param twitterAuth Twitter4J Authorization object
@@ -409,7 +409,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   def twitterStream(): JavaDStream[Status] = {
     ssc.twitterStream()
   }
-
+  */
   /**
    * Create an input stream with any arbitrary user implemented actor receiver.
    * @param props Props object defining creation of the actor
