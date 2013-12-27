@@ -592,8 +592,8 @@ object HiveQl {
 
     /* Literals */
     case Token("TOK_NULL", Nil) => Literal(null, IntegerType) // TODO: What type is null?
-    case Token(TRUE(), Nil) => Literal(true, BooleanType) // TODO: What type is null?
-    case Token(FALSE(), Nil) => Literal(false, BooleanType) // TODO: What type is null?
+    case Token(TRUE(), Nil) => Literal(true, BooleanType)
+    case Token(FALSE(), Nil) => Literal(false, BooleanType)
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.asInstanceOf[ASTNode].getText)).mkString)
 
