@@ -1233,15 +1233,15 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList("hello", "moon"),
         Arrays.asList("hello"));
 
-    List<List<Tuple2<String, Long>>> expected = Arrays.asList(
-        Arrays.asList(
-            new Tuple2<String, Long>("world", 1L),
-            new Tuple2<String, Long>("hello", 1L)),
-        Arrays.asList(
-            new Tuple2<String, Long>("world", 1L),
+    List<HashSet<Tuple2<String, Long>>> expected = Arrays.asList(
+        Sets.newHashSet(
+            new Tuple2<String, Long>("hello", 1L),
+            new Tuple2<String, Long>("world", 1L)),
+        Sets.newHashSet(
             new Tuple2<String, Long>("hello", 2L),
+            new Tuple2<String, Long>("world", 1L),
             new Tuple2<String, Long>("moon", 1L)),
-        Arrays.asList(
+        Sets.newHashSet(
             new Tuple2<String, Long>("hello", 2L),
             new Tuple2<String, Long>("moon", 1L)));
 
@@ -1251,8 +1251,12 @@ public class JavaAPISuite implements Serializable {
       stream.countByValueAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
+    List<HashSet<Tuple2<String, Long>>> unorderedResult = Lists.newArrayList();
+    for (List<Tuple2<String, Long>> res: result) {
+      unorderedResult.add(Sets.newHashSet(res));
+    }
 
-    Assert.assertEquals(expected, result);
+    Assert.assertEquals(expected, unorderedResult);
   }
 
   @Test
