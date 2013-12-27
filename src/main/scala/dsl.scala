@@ -1,5 +1,6 @@
 package catalyst
 
+import analysis.UnresolvedAttribute
 import expressions._
 import plans._
 import plans.logical._
@@ -104,6 +105,9 @@ package object dsl {
     }
     def subquery(alias: Symbol) = Subquery(alias.name, plan)
     def unionAll(otherPlan: LogicalPlan) = Union(plan, otherPlan)
+
+    def filter[T1](arg1: Symbol)(udf: (T1) => Boolean) =
+      Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), plan)
 
     def analyze = analysis.SimpleAnalyzer(plan)
   }
