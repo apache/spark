@@ -3,9 +3,9 @@ package org.apache.spark.util.collection
 import org.apache.spark.util.SamplingSizeTracker
 
 /** Append-only map that keeps track of its estimated size in bytes. */
-class SizeTrackingAppendOnlyMap[K, V] extends AppendOnlyMap[K, V] {
+private[spark] class SizeTrackingAppendOnlyMap[K, V] extends AppendOnlyMap[K, V] {
 
-  val sizeTracker = new SamplingSizeTracker(this)
+  private val sizeTracker = new SamplingSizeTracker(this)
 
   def estimateSize() = sizeTracker.estimateSize()
 

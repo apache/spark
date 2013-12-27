@@ -60,9 +60,9 @@ class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep])
 class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) {
 
-  type CoGroup = ArrayBuffer[Any]
-  type CoGroupValue = (Any, Int)  // Int is dependency number
-  type CoGroupCombiner = Seq[CoGroup]
+  private type CoGroup = ArrayBuffer[Any]
+  private type CoGroupValue = (Any, Int)  // Int is dependency number
+  private type CoGroupCombiner = Seq[CoGroup]
 
   private var serializerClass: String = null
 
@@ -131,7 +131,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         if (hadVal) oldVal else Array.fill(numRdds)(new ArrayBuffer[Any])
       }
       rddIterators.foreach { case (it, depNum) =>
-        it.foreach { kv =>
+        while (it.hasNext) {
+          val kv = it.next()
           map.changeValue(kv._1, update)(depNum) += kv._2
         }
       }
@@ -139,7 +140,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     } else {
       val map = createExternalMap(numRdds)
       rddIterators.foreach { case (it, depNum) =>
-        it.foreach { kv =>
+        while (it.hasNext) {
+          val kv = it.next()
           map.insert(kv._1, new CoGroupValue(kv._2, depNum))
         }
       }

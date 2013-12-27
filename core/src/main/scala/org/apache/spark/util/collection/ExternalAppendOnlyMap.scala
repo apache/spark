@@ -24,7 +24,6 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.serializer.Serializer
-import org.apache.spark.util.collection.SpillableAppendOnlyMap.KeyHashOrdering
 
 /**
  * A wrapper for SpillableAppendOnlyMap that handles two cases:
@@ -42,13 +41,12 @@ private[spark] class ExternalAppendOnlyMap[K, V, C: ClassTag](
   extends Iterable[(K, C)] with Serializable {
 
   private val serializer = SparkEnv.get.serializerManager.default
-
   private val mergeBeforeSpill: Boolean = mergeCombiners != null
 
   private val map: SpillableAppendOnlyMap[K, V, _, C] = {
     if (mergeBeforeSpill) {
-      new SpillableAppendOnlyMap[K, V, C, C] (createCombiner, mergeValue,
-        mergeCombiners, Predef.identity, serializer)
+      new SpillableAppendOnlyMap[K, V, C, C] (createCombiner, mergeValue, mergeCombiners,
+        Predef.identity, serializer)
     } else {
       // Use ArrayBuffer[V] as the intermediate combiner
       val createGroup: (V => ArrayBuffer[V]) = value => ArrayBuffer[V](value)
@@ -90,16 +88,15 @@ private[spark] class SpillableAppendOnlyMap[K, V, M: ClassTag, C: ClassTag](
     serializer: Serializer)
   extends Iterable[(K, C)] with Serializable {
 
-  val ser = serializer.newInstance()
-
-  var currentMap = new SizeTrackingAppendOnlyMap[K, M]
-  val oldMaps = new ArrayBuffer[DiskIterator]
-  val memoryThreshold = {
+  private var currentMap = new SizeTrackingAppendOnlyMap[K, M]
+  private val oldMaps = new ArrayBuffer[DiskIterator]
+  private val memoryThreshold = {
     val bufferSize = System.getProperty("spark.shuffle.buffer", "1024").toLong * 1024 * 1024
     val bufferPercent = System.getProperty("spark.shuffle.buffer.percent", "0.8").toFloat
     bufferSize * bufferPercent
   }
-  val ordering = new KeyHashOrdering[K, M]()
+  private val ordering = new SpillableAppendOnlyMap.KeyHashOrdering[K, M]()
+  private val ser = serializer.newInstance()
 
   def insert(key: K, value: V): Unit = {
     val update: (Boolean, M) => M = (hadVal, oldVal) => {
@@ -111,7 +108,7 @@ private[spark] class SpillableAppendOnlyMap[K, V, M: ClassTag, C: ClassTag](
     }
   }
 
-  def spill(): Unit = {
+  private def spill(): Unit = {
     val file = File.createTempFile("external_append_only_map", "")
     val out = ser.serializeStream(new FileOutputStream(file))
     val it = currentMap.destructiveSortedIterator(ordering)
@@ -133,9 +130,7 @@ private[spark] class SpillableAppendOnlyMap[K, V, M: ClassTag, C: ClassTag](
   }
 
   // An iterator that sort-merges (K, M) pairs from memory and disk into (K, C) pairs
-  class ExternalIterator extends Iterator[(K, C)] {
-
-    // Order by key hash value
+  private class ExternalIterator extends Iterator[(K, C)] {
     val pq = new PriorityQueue[KMITuple]
     val inputStreams = Seq(currentMap.destructiveSortedIterator(ordering)) ++ oldMaps
     inputStreams.foreach(readFromIterator)
@@ -182,13 +177,13 @@ private[spark] class SpillableAppendOnlyMap[K, V, M: ClassTag, C: ClassTag](
 
     case class KMITuple(key: K, group: M, iterator: Iterator[(K, M)]) extends Ordered[KMITuple] {
       def compare(other: KMITuple): Int = {
-        -key.hashCode().compareTo(other.key.hashCode())
+        other.key.hashCode().compareTo(key.hashCode())
       }
     }
   }
 
   // Iterate through (K, M) pairs in sorted order from an on-disk map
-  class DiskIterator(file: File) extends Iterator[(K, M)] {
+  private class DiskIterator(file: File) extends Iterator[(K, M)] {
     val in = ser.deserializeStream(new FileInputStream(file))
     var nextItem: Option[(K, M)] = None
 
