@@ -20,6 +20,7 @@ package org.apache.spark.streaming;
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Maps;
+import com.google.common.collect.Sets;
 import com.google.common.io.Files;
 
 import kafka.serializer.StringDecoder;
@@ -473,13 +474,13 @@ public class JavaAPISuite implements Serializable {
             new Tuple2<String, String>("new york", "islanders")));
 
 
-    List<List<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
-        Arrays.asList(
-            new Tuple2<String, Tuple2<String, String>>("california",
-                new Tuple2<String, String>("dodgers", "giants")),
-            new Tuple2<String, Tuple2<String, String>>("new york",
-                    new Tuple2<String, String>("yankees", "mets"))),
-        Arrays.asList(
+    List<HashSet<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
+        Sets.newHashSet(
+                    new Tuple2<String, Tuple2<String, String>>("california",
+                            new Tuple2<String, String>("dodgers", "giants")),
+                    new Tuple2<String, Tuple2<String, String>>("new york",
+                            new Tuple2<String, String>("yankees", "mets"))),
+        Sets.newHashSet(
             new Tuple2<String, Tuple2<String, String>>("california",
                 new Tuple2<String, String>("sharks", "ducks")),
             new Tuple2<String, Tuple2<String, String>>("new york",
@@ -514,8 +515,12 @@ public class JavaAPISuite implements Serializable {
 
     JavaTestUtils.attachTestOutputStream(joined);
     List<List<Tuple2<String, Tuple2<String, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<HashSet<Tuple2<String, Tuple2<String, String>>>> unorderedResult = Lists.newArrayList();
+    for (List<Tuple2<String, Tuple2<String, String>>> res: result) {
+        unorderedResult.add(Sets.newHashSet(res));
+    }
 
-    Assert.assertEquals(expected, result);
+    Assert.assertEquals(expected, unorderedResult);
   }
 
 
@@ -1230,11 +1235,11 @@ public class JavaAPISuite implements Serializable {
 
     List<List<Tuple2<String, Long>>> expected = Arrays.asList(
         Arrays.asList(
-            new Tuple2<String, Long>("hello", 1L),
-            new Tuple2<String, Long>("world", 1L)),
-        Arrays.asList(
-            new Tuple2<String, Long>("hello", 2L),
             new Tuple2<String, Long>("world", 1L),
+            new Tuple2<String, Long>("hello", 1L)),
+        Arrays.asList(
+            new Tuple2<String, Long>("world", 1L),
+            new Tuple2<String, Long>("hello", 2L),
             new Tuple2<String, Long>("moon", 1L)),
         Arrays.asList(
             new Tuple2<String, Long>("hello", 2L),
