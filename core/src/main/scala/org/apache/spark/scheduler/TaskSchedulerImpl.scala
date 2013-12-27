@@ -365,13 +365,6 @@ private[spark] class TaskSchedulerImpl(
     }
   }
 
-  // Check for pending tasks in all our active jobs.
-  def hasPendingTasks: Boolean = {
-    synchronized {
-      rootPool.hasPendingTasks()
-    }
-  }
-
   def executorLost(executorId: String, reason: ExecutorLossReason) {
     var failedExecutor: Option[String] = None
 
