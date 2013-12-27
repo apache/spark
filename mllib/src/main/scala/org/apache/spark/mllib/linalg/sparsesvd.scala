@@ -61,6 +61,14 @@ object SVD {
 	RDD[((Int, Int), Double)],
 	RDD[((Int, Int), Double)]) =
   {
+		if (m < n) {
+      throw new IllegalArgumentException("Expecting a tall and skinny matrix")
+    }
+
+		if (min_svalue < 1.0e-9) {
+      throw new IllegalArgumentException("Minimum singular value must be greater than 1e-9")
+    }
+
 		val sc = data.sparkContext
 
 		// Compute A^T A, assuming rows are sparse enough to fit in memory
@@ -86,7 +94,7 @@ object SVD {
 
 		// threshold s values
 		if(sigma.isEmpty) {
-    		    // TODO: return empty
+      throw new Exception("All singular values are smaller than min_svalue: " + min_svalue)
 		}
 
 		// prepare V for returning
