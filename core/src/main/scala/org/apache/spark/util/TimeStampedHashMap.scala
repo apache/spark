@@ -85,7 +85,7 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() with Logging {
   }
 
   override def filter(p: ((A, B)) => Boolean): Map[A, B] = {
-    JavaConversions.asScalaConcurrentMap(internalMap).map(kv => (kv._1, kv._2._1)).filter(p)
+    JavaConversions.mapAsScalaConcurrentMap(internalMap).map(kv => (kv._1, kv._2._1)).filter(p)
   }
 
   override def empty: Map[A, B] = new TimeStampedHashMap[A, B]()
@@ -104,17 +104,26 @@ class TimeStampedHashMap[A, B] extends Map[A, B]() with Logging {
   def toMap: immutable.Map[A, B] = iterator.toMap
 
   /**
-   * Removes old key-value pairs that have timestamp earlier than `threshTime`
+   * Removes old key-value pairs that have timestamp earlier than `threshTime`,
+   * calling the supplied function on each such entry before removing.
    */
-  def clearOldValues(threshTime: Long) {
+  def clearOldValues(threshTime: Long, f: (A, B) => Unit) {
     val iterator = internalMap.entrySet().iterator()
-    while(iterator.hasNext) {
+    while (iterator.hasNext) {
       val entry = iterator.next()
       if (entry.getValue._2 < threshTime) {
+        f(entry.getKey, entry.getValue._1)
         logDebug("Removing key " + entry.getKey)
         iterator.remove()
       }
     }
+  }
+
+  /**
+   * Removes old key-value pairs that have timestamp earlier than `threshTime`
+   */
+  def clearOldValues(threshTime: Long) {
+    clearOldValues(threshTime, (_, _) => ())
   }
 
   private def currentTime: Long = System.currentTimeMillis()

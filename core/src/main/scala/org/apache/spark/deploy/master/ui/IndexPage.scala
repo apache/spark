@@ -17,37 +17,33 @@
 
 package org.apache.spark.deploy.master.ui
 
-import javax.servlet.http.HttpServletRequest
-
+import scala.concurrent.Await
 import scala.xml.Node
 
-import akka.dispatch.Await
 import akka.pattern.ask
-import akka.util.duration._
-
+import javax.servlet.http.HttpServletRequest
 import net.liftweb.json.JsonAST.JValue
 
-import org.apache.spark.deploy.DeployWebUI
+import org.apache.spark.deploy.{DeployWebUI, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
-import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.master.{ApplicationInfo, WorkerInfo}
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 private[spark] class IndexPage(parent: MasterWebUI) {
   val master = parent.masterActorRef
-  implicit val timeout = parent.timeout
+  val timeout = parent.timeout
 
   def renderJson(request: HttpServletRequest): JValue = {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, 30 seconds)
+    val state = Await.result(stateFuture, timeout)
     JsonProtocol.writeMasterState(state)
   }
 
   /** Index view listing applications and executors */
   def render(request: HttpServletRequest): Seq[Node] = {
     val stateFuture = (master ? RequestMasterState)(timeout).mapTo[MasterStateResponse]
-    val state = Await.result(stateFuture, 30 seconds)
+    val state = Await.result(stateFuture, timeout)
 
     val workerHeaders = Seq("Id", "Address", "State", "Cores", "Memory")
     val workers = state.workers.sortBy(_.id)

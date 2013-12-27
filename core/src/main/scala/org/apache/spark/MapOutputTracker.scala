@@ -21,17 +21,15 @@ import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.HashSet
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 import akka.actor._
-import akka.dispatch._
 import akka.pattern.ask
-import akka.util.Duration
-
 
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{MetadataCleanerType, Utils, MetadataCleaner, TimeStampedHashMap}
-
+import org.apache.spark.util.{AkkaUtils, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int, requester: String)
@@ -54,10 +52,10 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
 
 private[spark] class MapOutputTracker extends Logging {
 
-  private val timeout = Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds")
-  
+  private val timeout = AkkaUtils.askTimeout
+
   // Set to the MapOutputTrackerActor living on the driver
-  var trackerActor: ActorRef = _
+  var trackerActor: Either[ActorRef, ActorSelection] = _
 
   protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]
 
@@ -73,8 +71,18 @@ private[spark] class MapOutputTracker extends Logging {
   // throw a SparkException if this fails.
   private def askTracker(message: Any): Any = {
     try {
-      val future = trackerActor.ask(message)(timeout)
-      return Await.result(future, timeout)
+      /*
+        The difference between ActorRef and ActorSelection is well explained here:
+        http://doc.akka.io/docs/akka/2.2.3/project/migration-guide-2.1.x-2.2.x.html#Use_actorSelection_instead_of_actorFor
+        In spark a map output tracker can be either started on Driver where it is created which
+        is an ActorRef or it can be on executor from where it is looked up which is an
+        actorSelection.
+       */
+      val future = trackerActor match {
+        case Left(a: ActorRef) => a.ask(message)(timeout)
+        case Right(b: ActorSelection) => b.ask(message)(timeout)
+      }
+      Await.result(future, timeout)
     } catch {
       case e: Exception =>
         throw new SparkException("Error communicating with MapOutputTracker", e)
@@ -117,7 +125,7 @@ private[spark] class MapOutputTracker extends Logging {
           fetching += shuffleId
         }
       }
-      
+
       if (fetchedStatuses == null) {
         // We won the race to fetch the output locs; do so
         logInfo("Doing the fetch; tracker actor = " + trackerActor)
@@ -144,7 +152,7 @@ private[spark] class MapOutputTracker extends Logging {
       else{
         throw new FetchFailedException(null, shuffleId, -1, reduceId,
           new Exception("Missing all output locations for shuffle " + shuffleId))
-      }      
+      }
     } else {
       statuses.synchronized {
         return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, statuses)
@@ -244,12 +252,12 @@ private[spark] class MapOutputTrackerMaster extends MapOutputTracker {
         case Some(bytes) =>
           return bytes
         case None =>
-          statuses = mapStatuses(shuffleId)
+          statuses = mapStatuses.getOrElse(shuffleId, Array[MapStatus]())
           epochGotten = epoch
       }
     }
     // If we got here, we failed to find the serialized locations in the cache, so we pulled
-    // out a snapshot of the locations as "locs"; let's serialize and return that
+    // out a snapshot of the locations as "statuses"; let's serialize and return that
     val bytes = MapOutputTracker.serializeMapStatuses(statuses)
     logInfo("Size of output statuses for shuffle %d is %d bytes".format(shuffleId, bytes.length))
     // Add them into the table only if the epoch hasn't changed while we were working
@@ -273,6 +281,10 @@ private[spark] class MapOutputTrackerMaster extends MapOutputTracker {
 
   override def updateEpoch(newEpoch: Long) {
     // This might be called on the MapOutputTrackerMaster if we're running in local mode.
+  }
+
+  def has(shuffleId: Int): Boolean = {
+    cachedSerializedStatuses.get(shuffleId).isDefined || mapStatuses.contains(shuffleId)
   }
 }
 
@@ -308,7 +320,7 @@ private[spark] object MapOutputTracker {
         statuses: Array[MapStatus]): Array[(BlockManagerId, Long)] = {
     assert (statuses != null)
     statuses.map {
-      status => 
+      status =>
         if (status == null) {
           throw new FetchFailedException(null, shuffleId, -1, reduceId,
             new Exception("Missing an output location for shuffle " + shuffleId))

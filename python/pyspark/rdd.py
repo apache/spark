@@ -54,6 +54,9 @@ class RDD(object):
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
 
+    def __repr__(self):
+        return self._jrdd.toString()
+
     @property
     def context(self):
         """
@@ -576,8 +579,13 @@ class RDD(object):
         # Take only up to num elements from each partition we try
         mapped = self.mapPartitions(takeUpToNum)
         items = []
+        # TODO(shivaram): Similar to the scala implementation, update the take 
+        # method to scan multiple splits based on an estimate of how many elements 
+        # we have per-split.
         for partition in range(mapped._jrdd.splits().size()):
-            iterator = self.ctx._takePartition(mapped._jrdd.rdd(), partition)
+            partitionsToTake = self.ctx._gateway.new_array(self.ctx._jvm.int, 1)
+            partitionsToTake[0] = partition
+            iterator = mapped._jrdd.collectPartitions(partitionsToTake)[0].iterator()
             items.extend(mapped._collect_iterator_through_file(iterator))
             if len(items) >= num:
                 break
@@ -605,7 +613,10 @@ class RDD(object):
         '0\\n1\\n2\\n3\\n4\\n5\\n6\\n7\\n8\\n9\\n'
         """
         def func(split, iterator):
-            return (str(x).encode("utf-8") for x in iterator)
+            for x in iterator:
+                if not isinstance(x, basestring):
+                    x = unicode(x)
+                yield x.encode("utf-8")
         keyed = PipelinedRDD(self, func)
         keyed._bypass_serializer = True
         keyed._jrdd.map(self.ctx._jvm.BytesToString()).saveAsTextFile(path)
@@ -975,7 +986,7 @@ class PipelinedRDD(RDD):
             [x._jbroadcast for x in self.ctx._pickled_broadcast_vars],
             self.ctx._gateway._gateway_client)
         self.ctx._pickled_broadcast_vars.clear()
-        class_manifest = self._prev_jrdd.classManifest()
+        class_tag = self._prev_jrdd.classTag()
         env = MapConverter().convert(self.ctx.environment,
                                      self.ctx._gateway._gateway_client)
         includes = ListConverter().convert(self.ctx._python_includes,
@@ -983,7 +994,7 @@ class PipelinedRDD(RDD):
         python_rdd = self.ctx._jvm.PythonRDD(self._prev_jrdd.rdd(),
             bytearray(pickled_command), env, includes, self.preservesPartitioning,
             self.ctx.pythonExec, broadcast_vars, self.ctx._javaAccumulator,
-            class_manifest)
+            class_tag)
         self._jrdd_val = python_rdd.asJavaRDD()
         return self._jrdd_val
 

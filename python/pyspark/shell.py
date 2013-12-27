@@ -42,7 +42,7 @@ print "Using Python version %s (%s, %s)" % (
     platform.python_version(),
     platform.python_build()[0],
     platform.python_build()[1])
-print "Spark context avaiable as sc."
+print "Spark context available as sc."
 
 if add_files != None:
     print "Adding files: [%s]" % ", ".join(add_files)

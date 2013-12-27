@@ -122,7 +122,7 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
       sc.parallelize(1 to 10, 10).foreach(x => println(x / 0))
     }
     assert(thrown.getClass === classOf[SparkException])
-    assert(thrown.getMessage.contains("more than 4 times"))
+    assert(thrown.getMessage.contains("failed 4 times"))
   }
 
   test("caching") {
@@ -303,12 +303,13 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
           Thread.sleep(200)
         }
       } catch {
-        case _ => { Thread.sleep(10) }
+        case _: Throwable => { Thread.sleep(10) }
           // Do nothing. We might see exceptions because block manager
           // is racing this thread to remove entries from the driver.
       }
     }
   }
+
 }
 
 object DistributedSuite {

@@ -17,12 +17,15 @@
 
 package org.apache.spark.api.java
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext.doubleRDDToDoubleRDDFunctions
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.util.StatCounter
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.storage.StorageLevel
+
 import java.lang.Double
 import org.apache.spark.Partitioner
 
@@ -30,7 +33,7 @@ import scala.collection.JavaConverters._
 
 class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, JavaDoubleRDD] {
 
-  override val classManifest: ClassManifest[Double] = implicitly[ClassManifest[Double]]
+  override val classTag: ClassTag[Double] = implicitly[ClassTag[Double]]
 
   override val rdd: RDD[Double] = srdd.map(x => Double.valueOf(x))
 
@@ -44,7 +47,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): JavaDoubleRDD = fromRDD(srdd.cache())
 
-  /** 
+  /**
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. Can only be called once on each RDD.
    */
@@ -108,7 +111,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
-   * 
+   *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */

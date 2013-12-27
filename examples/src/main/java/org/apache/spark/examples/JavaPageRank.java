@@ -21,7 +21,6 @@ import scala.Tuple2;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
@@ -106,7 +105,7 @@ public class JavaPageRank {
 
     // Collects all URL ranks and dump them to console.
     List<Tuple2<String, Double>> output = ranks.collect();
-    for (Tuple2 tuple : output) {
+    for (Tuple2<?,?> tuple : output) {
         System.out.println(tuple._1 + " has rank: " + tuple._2 + ".");
     }
 

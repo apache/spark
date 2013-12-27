@@ -21,52 +21,59 @@ import java.net.URI
 import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
 
+import scala.collection.JavaConversions._
+import scala.collection.mutable.HashMap
+
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
+import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.records._
 import org.apache.hadoop.yarn.api.protocolrecords._
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records, ProtoUtils}
-import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
-
-import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
 
 import org.apache.spark.Logging
 
-class WorkerRunnable(container: Container, conf: Configuration, masterAddress: String,
-    slaveId: String, hostname: String, workerMemory: Int, workerCores: Int) 
-    extends Runnable with Logging {
-  
+
+class WorkerRunnable(
+    container: Container,
+    conf: Configuration,
+    masterAddress: String,
+    slaveId: String,
+    hostname: String,
+    workerMemory: Int,
+    workerCores: Int) 
+  extends Runnable with Logging {
+
   var rpc: YarnRPC = YarnRPC.create(conf)
   var cm: ContainerManager = null
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
-  
+
   def run = {
     logInfo("Starting Worker Container")
     cm = connectToCM
     startContainer
   }
-  
+
   def startContainer = {
     logInfo("Setting up ContainerLaunchContext")
-    
+
     val ctx = Records.newRecord(classOf[ContainerLaunchContext])
       .asInstanceOf[ContainerLaunchContext]
-    
+
     ctx.setContainerId(container.getId())
     ctx.setResource(container.getResource())
     val localResources = prepareLocalResources
     ctx.setLocalResources(localResources)
-    
+
     val env = prepareEnvironment
     ctx.setEnvironment(env)
-    
+
     // Extra options for the JVM
     var JAVA_OPTS = ""
     // Set the JVM memory
@@ -79,17 +86,21 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     JAVA_OPTS += " -Djava.io.tmpdir=" + 
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
 
-
-    // Commenting it out for now - so that people can refer to the properties if required. Remove it once cpuset version is pushed out.
-    // The context is, default gc for server class machines end up using all cores to do gc - hence if there are multiple containers in same
-    // node, spark gc effects all other containers performance (which can also be other spark containers)
-    // Instead of using this, rely on cpusets by YARN to enforce spark behaves 'properly' in multi-tenant environments. Not sure how default java gc behaves if it is
-    // limited to subset of cores on a node.
+    // Commenting it out for now - so that people can refer to the properties if required. Remove
+    // it once cpuset version is pushed out.
+    // The context is, default gc for server class machines end up using all cores to do gc - hence
+    // if there are multiple containers in same node, spark gc effects all other containers
+    // performance (which can also be other spark containers)
+    // Instead of using this, rely on cpusets by YARN to enforce spark behaves 'properly' in
+    // multi-tenant environments. Not sure how default java gc behaves if it is limited to subset
+    // of cores on a node.
 /*
     else {
       // If no java_opts specified, default to using -XX:+CMSIncrementalMode
-      // It might be possible that other modes/config is being done in SPARK_JAVA_OPTS, so we dont want to mess with it.
-      // In our expts, using (default) throughput collector has severe perf ramnifications in multi-tennent machines
+      // It might be possible that other modes/config is being done in SPARK_JAVA_OPTS, so we dont
+      // want to mess with it.
+      // In our expts, using (default) throughput collector has severe perf ramnifications in
+      // multi-tennent machines
       // The options are based on
       // http://www.oracle.com/technetwork/java/gc-tuning-5-138395.html#0.0.0.%20When%20to%20Use%20the%20Concurrent%20Low%20Pause%20Collector|outline
       JAVA_OPTS += " -XX:+UseConcMarkSweepGC "
@@ -116,8 +127,10 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     val commands = List[String](javaCommand +
       " -server " +
       // Kill if OOM is raised - leverage yarn's failure handling to cause rescheduling.
-      // Not killing the task leaves various aspects of the worker and (to some extent) the jvm in an inconsistent state.
-      // TODO: If the OOM is not recoverable by rescheduling it on different node, then do 'something' to fail job ... akin to blacklisting trackers in mapred ?
+      // Not killing the task leaves various aspects of the worker and (to some extent) the jvm in
+      // an inconsistent state.
+      // TODO: If the OOM is not recoverable by rescheduling it on different node, then do
+      // 'something' to fail job ... akin to blacklisting trackers in mapred ?
       " -XX:OnOutOfMemoryError='kill %p' " +
       JAVA_OPTS +
       " org.apache.spark.executor.CoarseGrainedExecutorBackend " +
@@ -129,7 +142,7 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
       " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
     logInfo("Setting up worker with commands: " + commands)
     ctx.setCommands(commands)
-    
+
     // Send the start request to the ContainerManager
     val startReq = Records.newRecord(classOf[StartContainerRequest])
     .asInstanceOf[StartContainerRequest]
@@ -137,7 +150,8 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     cm.startContainer(startReq)
   }
 
-  private def setupDistributedCache(file: String,
+  private def setupDistributedCache(
+      file: String,
       rtype: LocalResourceType,
       localResources: HashMap[String, LocalResource],
       timestamp: String,
@@ -152,12 +166,11 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
     amJarRsrc.setSize(size.toLong)
     localResources(uri.getFragment()) = amJarRsrc
   }
-  
-  
+
   def prepareLocalResources: HashMap[String, LocalResource] = {
     logInfo("Preparing Local resources")
     val localResources = HashMap[String, LocalResource]()
-    
+
     if (System.getenv("SPARK_YARN_CACHE_FILES") != null) {
       val timeStamps = System.getenv("SPARK_YARN_CACHE_FILES_TIME_STAMPS").split(',')
       val fileSizes = System.getenv("SPARK_YARN_CACHE_FILES_FILE_SIZES").split(',')
@@ -179,30 +192,30 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
           timeStamps(i), fileSizes(i), visibilities(i))
       }
     }
-    
+
     logInfo("Prepared Local resources " + localResources)
     return localResources
   }
-  
+
   def prepareEnvironment: HashMap[String, String] = {
     val env = new HashMap[String, String]()
 
     Client.populateClasspath(yarnConf, System.getenv("SPARK_YARN_LOG4J_PATH") != null, env)
 
-    // allow users to specify some environment variables
+    // Allow users to specify some environment variables
     Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
     return env
   }
-  
+
   def connectToCM: ContainerManager = {
     val cmHostPortStr = container.getNodeId().getHost() + ":" + container.getNodeId().getPort()
     val cmAddress = NetUtils.createSocketAddr(cmHostPortStr)
     logInfo("Connecting to ContainerManager at " + cmHostPortStr)
 
-    // use doAs and remoteUser here so we can add the container token and not 
-    // pollute the current users credentials with all of the individual container tokens
+    // Use doAs and remoteUser here so we can add the container token and not pollute the current
+    // users credentials with all of the individual container tokens
     val user = UserGroupInformation.createRemoteUser(container.getId().toString())
     val containerToken = container.getContainerToken()
     if (containerToken != null) {
@@ -218,5 +231,5 @@ class WorkerRunnable(container: Container, conf: Configuration, masterAddress: S
         })
     proxy
   }
-  
+
 }

@@ -99,7 +99,7 @@ class SimpleFutureAction[T] private[spark](jobWaiter: JobWaiter[_], resultFunc: 
   override def ready(atMost: Duration)(implicit permit: CanAwait): SimpleFutureAction.this.type = {
     if (!atMost.isFinite()) {
       awaitResult()
-    } else {
+    } else jobWaiter.synchronized {
       val finishTime = System.currentTimeMillis() + atMost.toMillis
       while (!isCompleted) {
         val time = System.currentTimeMillis()
