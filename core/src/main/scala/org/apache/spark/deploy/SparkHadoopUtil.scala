@@ -69,7 +69,8 @@ class SparkHadoopUtil {
 object SparkHadoopUtil {
 
   private val hadoop = {
-    val yarnMode = java.lang.Boolean.valueOf(System.getenv("SPARK_YARN_MODE"))
+    val yarnMode = java.lang.Boolean.valueOf(
+        System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
     if (yarnMode) {
       try {
         Class.forName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil")
