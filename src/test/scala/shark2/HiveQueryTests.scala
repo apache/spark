@@ -44,6 +44,9 @@ class HiveQueryTests extends HiveComaparisionTest {
   createQueryTest("partitioned table scan",
     "SELECT ds, hr, key, value FROM srcpart")
 
+  createQueryTest("hash",
+    "SELECT hash('test') FROM src LIMIT 1")
+
   createQueryTest("create table as",
     """
       |CREATE TABLE createdtable AS SELECT * FROM src;
@@ -52,4 +55,7 @@ class HiveQueryTests extends HiveComaparisionTest {
 
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
+
+  createQueryTest("LIKE",
+    "SELECT * FROM src WHERE value LIKE '%1%'")
 }
