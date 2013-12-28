@@ -681,10 +681,6 @@ private[spark] class TaskSetManager(
     return foundTasks
   }
 
-  override def hasPendingTasks(): Boolean = {
-    numTasks > 0 && tasksSuccessful < numTasks
-  }
-
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
     val defaultWait = System.getProperty("spark.locality.wait", "3000")
     level match {

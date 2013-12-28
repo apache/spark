@@ -117,8 +117,4 @@ private[spark] class Pool(
       parent.decreaseRunningTasks(taskNum)
     }
   }
-
-  override def hasPendingTasks(): Boolean = {
-    schedulableQueue.exists(_.hasPendingTasks())
-  }
 }
