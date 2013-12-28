@@ -45,11 +45,14 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
         if(!isOrdered) answer.sorted else answer
     }
-    orderedAnswer.map(cleanPaths)
+    orderedAnswer.map(cleanPaths).map(clearTimes)
   }
 
   protected def nonDeterministicLine(line: String) =
     Seq("CreateTime","transient_lastDdlTime", "grantTime").map(line contains _).reduceLeft(_||_)
+
+  protected def clearTimes(line: String) =
+    line.replaceAll("\"lastUpdateTime\":\\d+", "<UPDATETIME>")
 
   /**
    * Removes non-deterministic paths from [[str]] so cached answers will still pass.
