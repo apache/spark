@@ -17,12 +17,14 @@
 
 package org.apache.spark.deploy.client
 
+import scala.collection.JavaConversions._
+import scala.collection.mutable.Map
 import scala.concurrent._
 
 import akka.actor._
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.DriverDescription
+import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -68,14 +70,20 @@ object DriverClient extends Logging {
 
     driverArgs.cmd match {
       case "launch" =>
+        // TODO: Could modify env here to pass a flag indicating Spark is in deploy-driver mode
+        //       then use that to load jars locally
+        val env = Map[String, String]()
+        System.getenv().foreach{case (k, v) => env(k) = v}
+
+        val mainClass = "org.apache.spark.deploy.worker.DriverWrapper"
+        val command = new Command(mainClass, Seq("{{WORKER_URL}}", driverArgs.mainClass) ++
+          driverArgs.driverOptions, env)
+
         val driverDescription = new DriverDescription(
           driverArgs.jarUrl,
-          driverArgs.mainClass,
           driverArgs.memory,
           driverArgs.cores,
-          driverArgs.driverOptions,
-          driverArgs.driverJavaOptions,
-          driverArgs.driverEnvVars)
+          command)
         driver ! RequestSubmitDriver(driverDescription)
 
       case "kill" =>

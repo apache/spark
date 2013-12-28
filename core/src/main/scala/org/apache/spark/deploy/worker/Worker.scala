@@ -45,6 +45,8 @@ private[spark] class Worker(
     cores: Int,
     memory: Int,
     masterUrls: Array[String],
+    actorSystemName: String,
+    actorName: String,
     workDirPath: String = null)
   extends Actor with Logging {
   import context.dispatcher
@@ -68,6 +70,7 @@ private[spark] class Worker(
   var masterAddress: Address = null
   var activeMasterUrl: String = ""
   var activeMasterWebUiUrl : String = ""
+  val akkaUrl = "akka.tcp://%s@%s:%s/user/%s".format(actorSystemName, host, port, actorName)
   @volatile var registered = false
   @volatile var connected = false
   val workerId = generateWorkerId()
@@ -190,6 +193,9 @@ private[spark] class Worker(
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
       sender ! WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq)
 
+    case Heartbeat =>
+      logInfo(s"Received heartbeat from driver ${sender.path}")
+
     case RegisterWorkerFailed(message) =>
       if (!registered) {
         logError("Worker registration failed: " + message)
@@ -202,7 +208,7 @@ private[spark] class Worker(
       } else {
         logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
         val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-          self, workerId, host, new File(execSparkHome_), workDir, ExecutorState.RUNNING)
+          self, workerId, host, new File(execSparkHome_), workDir, akkaUrl, ExecutorState.RUNNING)
         executors(appId + "/" + execId) = manager
         manager.start()
         coresUsed += cores_
@@ -244,7 +250,7 @@ private[spark] class Worker(
 
     case LaunchDriver(driverId, driverDesc) => {
       logInfo(s"Asked to launch driver $driverId")
-      val driver = new DriverRunner(driverId, workDir, driverDesc, self)
+      val driver = new DriverRunner(driverId, workDir, sparkHome, driverDesc, self, akkaUrl)
       drivers(driverId) = driver
       driver.start()
 
@@ -322,9 +328,10 @@ private[spark] object Worker {
     : (ActorSystem, Int) = {
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
+    val actorName = "Worker"
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, workDir), name = "Worker")
+      masterUrls, systemName, actorName, workDir), name = actorName)
     (actorSystem, boundPort)
   }
 

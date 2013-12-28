@@ -19,13 +19,10 @@ package org.apache.spark.deploy
 
 private[spark] class DriverDescription(
     val jarUrl: String,
-    val mainClass: String,
     val mem: Int,
     val cores: Int,
-    val options: Seq[String],
-    val javaOptions: Seq[String],
-    val envVars: Seq[(String, String)])
+    val command: Command)
   extends Serializable {
 
-  override def toString: String = s"DriverDescription ($mainClass)"
+  override def toString: String = s"DriverDescription (${command.mainClass})"
 }

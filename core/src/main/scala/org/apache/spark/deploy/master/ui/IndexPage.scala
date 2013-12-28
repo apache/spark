@@ -170,7 +170,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td sorttable_customkey={driver.desc.mem.toString}>
         {Utils.megabytesToString(driver.desc.mem.toLong)}
       </td>
-      <td>{driver.desc.mainClass}</td>
+      <td>{driver.desc.command.mainClass}</td>
     </tr>
   }
 }

@@ -179,7 +179,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         val msg = s"Can only accept driver submissions in ALIVE state. Current state: $state."
         sender ! SubmitDriverResponse(false, msg)
       } else {
-        logInfo("Driver submitted " + description.mainClass)
+        logInfo("Driver submitted " + description.command.mainClass)
         val driver = createDriver(description)
         persistenceEngine.addDriver(driver)
         waitingDrivers += driver

@@ -32,11 +32,7 @@ private[spark] class DriverClientArguments(args: Array[String]) {
   var memory: Int = 512
   var cores: Int = 1
   private var _driverOptions = ListBuffer[String]()
-  private var _driverJavaOptions = ListBuffer[String]()
-  private var _driverEnvVars = ListBuffer[(String, String)]()
   def driverOptions = _driverOptions.toSeq
-  def driverJavaOptions = _driverJavaOptions.toSeq
-  def driverEnvVars = _driverEnvVars.toSeq
 
   // kill parameters
   var driverId: String = ""
@@ -50,19 +46,6 @@ private[spark] class DriverClientArguments(args: Array[String]) {
 
     case ("--memory" | "-m") :: value :: tail =>
       memory = value.toInt
-      parse(tail)
-
-    case ("--java-option" | "-j") :: value :: tail =>
-      _driverJavaOptions += value
-      parse(tail)
-
-    case ("--environment-variable" | "-e") :: value :: tail =>
-      val parts = value.split("=")
-      if (parts.length != 2) {
-        println(s"Error - invalid environment variable (expecting K=V): $value")
-        printUsageAndExit(1)
-      }
-      _driverEnvVars += ((parts(0), parts(1)))
       parse(tail)
 
     case ("--help" | "-h") :: tail =>
@@ -92,7 +75,7 @@ private[spark] class DriverClientArguments(args: Array[String]) {
     //      1) Create an uber jar with your application and dependencies (excluding Spark)
     //      2) You'll need to add this jar using addJar(X) inside of your spark context
 
-    // TODO: It wouldnt be too hard to allow users to submit their app and dependency jars
+    // TODO: It wouldn't be too hard to allow users to submit their app and dependency jars
     //       separately similar to in the YARN client.
     System.err.println(
       "usage: DriverClient [options] launch <active-master> <jar-url> <main-class> " +
@@ -100,9 +83,7 @@ private[spark] class DriverClientArguments(args: Array[String]) {
       "usage: DriverClient kill <active-master> <driver-id>\n\n" +
       "Options:\n" +
       "  -c CORES, --cores CORES                Number of cores to request \n" +
-      "  -m MEMORY, --memory MEMORY             Megabytes of memory to request\n" +
-      "  -o JAVA_OPT, --java-option JAVA_OPT    JVM option to pass to driver\n" +
-      "  -e K=V, --environment-variable K=V     Environment variable to pass to driver\n")
+      "  -m MEMORY, --memory MEMORY             Megabytes of memory to request\n")
     System.exit(exitCode)
   }
 }

@@ -80,11 +80,14 @@ class JsonProtocolSuite extends FunSuite {
     new ApplicationInfo(3, "id", createAppDesc(), new Date(123456789), null, "appUriStr")
   }
 
-  def createDriverDesc() = new DriverDescription(
-    "hdfs://some-dir/some.jar", "org.apache.spark.FakeClass", 100, 3,
-    Seq("--some-config", "val", "--other-config", "val"), Seq("-Dsystem.property=someValue"),
-    Seq(("K1", "V1"), ("K2", "V2"))
+  def createDriverCommand() = new Command(
+    "org.apache.spark.FakeClass", Seq("some arg --and-some options -g foo"),
+    Map(("K1", "V1"), ("K2", "V2"))
   )
+
+  def createDriverDesc() = new DriverDescription("hdfs://some-dir/some.jar", 100, 3,
+    createDriverCommand())
+
   def createDriverInfo(): DriverInfo = new DriverInfo(3, "driver-3", createDriverDesc(), new Date())
 
   def createWorkerInfo(): WorkerInfo = {
@@ -92,10 +95,11 @@ class JsonProtocolSuite extends FunSuite {
   }
   def createExecutorRunner(): ExecutorRunner = {
     new ExecutorRunner("appId", 123, createAppDesc(), 4, 1234, null, "workerId", "host",
-      new File("sparkHome"), new File("workDir"), ExecutorState.RUNNING)
+      new File("sparkHome"), new File("workDir"), "akka://worker", ExecutorState.RUNNING)
   }
   def createDriverRunner(): DriverRunner = {
-    new DriverRunner("driverId", new File("workDir"), createDriverDesc(), null)
+    new DriverRunner("driverId", new File("workDir"), new File("sparkHome"), createDriverDesc(),
+      null, "akka://worker")
   }
 
   def assertValidJson(json: JValue) {

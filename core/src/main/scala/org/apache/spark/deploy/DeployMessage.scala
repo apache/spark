@@ -158,7 +158,7 @@ private[deploy] object DeployMessages {
     assert (port > 0)
   }
 
-  // Actor System to Worker
+  // Liveness checks in various places
 
   case object SendHeartbeat
 }

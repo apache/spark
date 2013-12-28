@@ -19,6 +19,8 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 
+import scala.collection.mutable.Map
+
 import akka.actor.ActorRef
 import com.google.common.base.Charsets
 import com.google.common.io.Files
@@ -26,10 +28,9 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileUtil, Path}
 
 import org.apache.spark.Logging
-import org.apache.spark.deploy.DriverDescription
+import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
-import org.apache.spark.util.Utils
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
@@ -37,8 +38,10 @@ import org.apache.spark.util.Utils
 private[spark] class DriverRunner(
     val driverId: String,
     val workDir: File,
+    val sparkHome: File,
     val driverDesc: DriverDescription,
-    val worker: ActorRef)
+    val worker: ActorRef,
+    val workerUrl: String)
   extends Logging {
 
   @volatile var process: Option[Process] = None
@@ -53,9 +56,17 @@ private[spark] class DriverRunner(
         try {
           val driverDir = createWorkingDirectory()
           val localJarFilename = downloadUserJar(driverDir)
-          val command = Seq("java") ++ driverDesc.javaOptions ++ Seq(s"-Xmx${driverDesc.mem}m") ++
-            Seq("-cp", localJarFilename) ++ Seq(driverDesc.mainClass) ++ driverDesc.options
-          runCommandWithRetry(command, driverDesc.envVars, driverDir)
+
+          // Make sure user application jar is on the classpath
+          // TODO: This could eventually exploit ability for driver to add jars
+          val env = Map(driverDesc.command.environment.toSeq: _*)
+          env("SPARK_CLASSPATH") = env.getOrElse("SPARK_CLASSPATH", "") + s":$localJarFilename"
+          val newCommand = Command(driverDesc.command.mainClass,
+            driverDesc.command.arguments.map(substituteVariables), env)
+
+          val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
+            sparkHome.getAbsolutePath)
+          runCommandWithRetry(command, env, driverDir)
         }
         catch {
           case e: Exception => exn = Some(e)
@@ -79,26 +90,17 @@ private[spark] class DriverRunner(
     }
   }
 
-  /** Spawn a thread that will redirect a given stream to a file */
-  def redirectStream(in: InputStream, file: File) {
-    val out = new FileOutputStream(file, true)
-    new Thread("redirect output to " + file) {
-      override def run() {
-        try {
-          Utils.copyStream(in, out, true)
-        } catch {
-          case e: IOException =>
-            logInfo("Redirection to " + file + " closed: " + e.getMessage)
-        }
-      }
-    }.start()
+  /** Replace variables in a command argument passed to us */
+  private def substituteVariables(argument: String): String = argument match {
+    case "{{WORKER_URL}}" => workerUrl
+    case other => other
   }
 
   /**
    * Creates the working directory for this driver.
    * Will throw an exception if there are errors preparing the directory.
    */
-  def createWorkingDirectory(): File = {
+  private def createWorkingDirectory(): File = {
     val driverDir = new File(workDir, driverId)
     if (!driverDir.exists() && !driverDir.mkdirs()) {
       throw new IOException("Failed to create directory " + driverDir)
@@ -110,7 +112,7 @@ private[spark] class DriverRunner(
    * Download the user jar into the supplied directory and return its local path.
    * Will throw an exception if there are errors downloading the jar.
    */
-  def downloadUserJar(driverDir: File): String = {
+  private def downloadUserJar(driverDir: File): String = {
 
     val jarPath = new Path(driverDesc.jarUrl)
 
@@ -136,7 +138,7 @@ private[spark] class DriverRunner(
   }
 
   /** Continue launching the supplied command until it exits zero or is killed. */
-  def runCommandWithRetry(command: Seq[String], envVars: Seq[(String, String)], baseDir: File) {
+  private def runCommandWithRetry(command: Seq[String], envVars: Map[String, String], baseDir: File) {
     // Time to wait between submission retries.
     var waitSeconds = 1
     var cleanExit = false
@@ -153,13 +155,13 @@ private[spark] class DriverRunner(
 
         // Redirect stdout and stderr to files
         val stdout = new File(baseDir, "stdout")
-        redirectStream(process.get.getInputStream, stdout)
+        CommandUtils.redirectStream(process.get.getInputStream, stdout)
 
         val stderr = new File(baseDir, "stderr")
         val header = "Launch Command: %s\n%s\n\n".format(
           command.mkString("\"", "\" \"", "\""), "=" * 40)
         Files.write(header, stderr, Charsets.UTF_8)
-        redirectStream(process.get.getErrorStream, stderr)
+        CommandUtils.redirectStream(process.get.getErrorStream, stderr)
       }
 
       val exitCode = process.get.waitFor()

@@ -133,7 +133,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
   def driverRow(driver: DriverRunner): Seq[Node] = {
     <tr>
       <td>{driver.driverId}</td>
-      <td>{driver.driverDesc.mainClass}</td>
+      <td>{driver.driverDesc.command.mainClass}</td>
       <td sorttable_customkey={driver.driverDesc.cores.toString}>
         {driver.driverDesc.cores.toString}
       </td>
