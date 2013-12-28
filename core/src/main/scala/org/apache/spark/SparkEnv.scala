@@ -107,7 +107,7 @@ object SparkEnv extends Logging {
   /**
    * Returns the ThreadLocal SparkEnv.
    */
-  def getThreadLocal : SparkEnv = {
+  def getThreadLocal: SparkEnv = {
 	  env.get()
   }
 
@@ -150,18 +150,19 @@ object SparkEnv extends Logging {
     val serializerManager = new SerializerManager
 
     val serializer = serializerManager.setDefault(
-      conf.getOrElse("spark.serializer",  "org.apache.spark.serializer.JavaSerializer"))
+      conf.getOrElse("spark.serializer", "org.apache.spark.serializer.JavaSerializer"), conf)
 
     val closureSerializer = serializerManager.get(
-      conf.getOrElse("spark.closure.serializer",  "org.apache.spark.serializer.JavaSerializer"))
+      conf.getOrElse("spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer"),
+      conf)
 
     def registerOrLookup(name: String, newActor: => Actor): Either[ActorRef, ActorSelection] = {
       if (isDriver) {
         logInfo("Registering " + name)
         Left(actorSystem.actorOf(Props(newActor), name = name))
       } else {
-        val driverHost: String = conf.getOrElse("spark.driver.host",  "localhost")
-        val driverPort: Int = conf.getOrElse("spark.driver.port",  "7077").toInt
+        val driverHost: String = conf.getOrElse("spark.driver.host", "localhost")
+        val driverPort: Int = conf.getOrElse("spark.driver.port", "7077").toInt
         Utils.checkHost(driverHost, "Expected hostname")
         val url = "akka.tcp://spark@%s:%s/user/%s".format(driverHost, driverPort, name)
         logInfo("Connecting to " + name + ": " + url)

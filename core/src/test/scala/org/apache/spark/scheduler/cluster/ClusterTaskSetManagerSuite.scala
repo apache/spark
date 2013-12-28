@@ -82,7 +82,7 @@ class FakeClusterScheduler(sc: SparkContext, liveExecutors: (String, String)* /*
 class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
   import TaskLocality.{ANY, PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL}
   private val conf = new SparkConf
-  val LOCALITY_WAIT = conf.getOrElse("spark.locality.wait",  "3000").toLong
+  val LOCALITY_WAIT = conf.getOrElse("spark.locality.wait", "3000").toLong
 
   test("TaskSet with no preferences") {
     sc = new SparkContext("local", "test")

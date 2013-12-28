@@ -26,7 +26,7 @@ private[spark] class ApplicationDescription(
     val appUiUrl: String)
   extends Serializable {
 
-  val user = System.getProperty("user.name",  "<unknown>")
+  val user = System.getProperty("user.name", "<unknown>")
 
   override def toString: String = "ApplicationDescription(" + name + ")"
 }

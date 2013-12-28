@@ -26,10 +26,10 @@ class Scheduler(ssc: StreamingContext) extends Logging {
 
   initLogging()
 
-  val concurrentJobs = ssc.sc.conf.getOrElse("spark.streaming.concurrentJobs",  "1").toInt
+  val concurrentJobs = ssc.sc.conf.getOrElse("spark.streaming.concurrentJobs", "1").toInt
   val jobManager = new JobManager(ssc, concurrentJobs)
   val checkpointWriter = if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
-    new CheckpointWriter(ssc.checkpointDir)
+    new CheckpointWriter(ssc.conf, ssc.checkpointDir)
   } else {
     null
   }
@@ -50,13 +50,13 @@ class Scheduler(ssc: StreamingContext) extends Logging {
     }
     logInfo("Scheduler started")
   }
-  
+
   def stop() = synchronized {
     timer.stop()
     jobManager.stop()
     if (checkpointWriter != null) checkpointWriter.stop()
     ssc.graph.stop()
-    logInfo("Scheduler stopped")    
+    logInfo("Scheduler stopped")
   }
 
   private def startFirstTime() {
@@ -73,7 +73,7 @@ class Scheduler(ssc: StreamingContext) extends Logging {
     // or if the property is defined set it to that time
     if (clock.isInstanceOf[ManualClock]) {
       val lastTime = ssc.initialCheckpoint.checkpointTime.milliseconds
-      val jumpTime = ssc.sc.conf.getOrElse("spark.streaming.manualClock.jump",  "0").toLong
+      val jumpTime = ssc.sc.conf.getOrElse("spark.streaming.manualClock.jump", "0").toLong
       clock.asInstanceOf[ManualClock].setTime(lastTime + jumpTime)
     }
 

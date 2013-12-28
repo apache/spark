@@ -34,7 +34,7 @@ import scala.tools.reflect.StdRuntimeTags._
 import scala.util.control.ControlThrowable
 import util.stackTraceString
 
-import org.apache.spark.{SparkContext, HttpServer, SparkEnv, Logging}
+import org.apache.spark.{HttpServer, SparkConf, Logging}
 import org.apache.spark.util.Utils
 
 // /** directory to save .class files to */
@@ -89,7 +89,7 @@ import org.apache.spark.util.Utils
       /** Local directory to save .class files too */
       val outputDir = {
         val tmp = System.getProperty("java.io.tmpdir")
-        val rootDir = SparkContext.globalConf.getOrElse("spark.repl.classdir",  tmp)
+        val rootDir = new SparkConf().getOrElse("spark.repl.classdir",  tmp)
         Utils.createTempDir(rootDir)
       }
       if (SPARK_DEBUG_REPL) {

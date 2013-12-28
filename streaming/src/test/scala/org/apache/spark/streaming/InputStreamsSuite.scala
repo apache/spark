@@ -52,9 +52,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
 
   override def checkpointDir = "checkpoint"
 
-  before {
-    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
-  }
+  conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
 
   after {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
@@ -70,7 +68,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     // Set up the streaming context and input streams
     val ssc = new StreamingContext(new SparkContext(conf), batchDuration)
     val networkStream = ssc.socketTextStream("localhost", testServer.port, StorageLevel.MEMORY_AND_DISK)
-    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String  ]]
+    val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)
     ssc.registerOutputStream(outputStream)

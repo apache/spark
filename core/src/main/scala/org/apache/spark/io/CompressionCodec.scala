@@ -22,7 +22,7 @@ import java.io.{InputStream, OutputStream}
 import com.ning.compress.lzf.{LZFInputStream, LZFOutputStream}
 
 import org.xerial.snappy.{SnappyInputStream, SnappyOutputStream}
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkEnv, SparkConf}
 
 
 /**
@@ -38,16 +38,15 @@ trait CompressionCodec {
 
 
 private[spark] object CompressionCodec {
-  import org.apache.spark.SparkContext.globalConf
-  def createCodec(): CompressionCodec = {
-    createCodec(System.getProperty(
+  def createCodec(conf: SparkConf): CompressionCodec = {
+    createCodec(conf, conf.getOrElse(
       "spark.io.compression.codec", classOf[LZFCompressionCodec].getName))
   }
 
-  def createCodec(codecName: String): CompressionCodec = {
+  def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
     val ctor = Class.forName(codecName, true, Thread.currentThread.getContextClassLoader)
       .getConstructor(classOf[SparkConf])
-      ctor.newInstance(globalConf).asInstanceOf[CompressionCodec]
+      ctor.newInstance(conf).asInstanceOf[CompressionCodec]
   }
 }
 
@@ -72,7 +71,7 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.getOrElse("spark.io.compression.snappy.block.size",  "32768").toInt
+    val blockSize = conf.getOrElse("spark.io.compression.snappy.block.size", "32768").toInt
     new SnappyOutputStream(s, blockSize)
   }
 

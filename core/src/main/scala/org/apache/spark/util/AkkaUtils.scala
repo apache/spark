@@ -41,19 +41,19 @@ private[spark] object AkkaUtils {
   def createActorSystem(name: String, host: String, port: Int, indestructible: Boolean = false,
     conf: SparkConf): (ActorSystem, Int) = {
 
-    val akkaThreads   = conf.getOrElse("spark.akka.threads",  "4").toInt
-    val akkaBatchSize = conf.getOrElse("spark.akka.batchSize",  "15").toInt
+    val akkaThreads   = conf.getOrElse("spark.akka.threads", "4").toInt
+    val akkaBatchSize = conf.getOrElse("spark.akka.batchSize", "15").toInt
 
-    val akkaTimeout = conf.getOrElse("spark.akka.timeout",  "100").toInt
+    val akkaTimeout = conf.getOrElse("spark.akka.timeout", "100").toInt
 
-    val akkaFrameSize = conf.getOrElse("spark.akka.frameSize",  "10").toInt
+    val akkaFrameSize = conf.getOrElse("spark.akka.frameSize", "10").toInt
     val lifecycleEvents =
-      if (conf.getOrElse("spark.akka.logLifecycleEvents",  "false").toBoolean) "on" else "off"
+      if (conf.getOrElse("spark.akka.logLifecycleEvents", "false").toBoolean) "on" else "off"
 
-    val akkaHeartBeatPauses = conf.getOrElse("spark.akka.heartbeat.pauses",  "600").toInt
+    val akkaHeartBeatPauses = conf.getOrElse("spark.akka.heartbeat.pauses", "600").toInt
     val akkaFailureDetector =
-      conf.getOrElse("spark.akka.failure-detector.threshold",  "300.0").toDouble
-    val akkaHeartBeatInterval = conf.getOrElse("spark.akka.heartbeat.interval",  "1000").toInt
+      conf.getOrElse("spark.akka.failure-detector.threshold", "300.0").toDouble
+    val akkaHeartBeatInterval = conf.getOrElse("spark.akka.heartbeat.interval", "1000").toInt
 
     val akkaConf = ConfigFactory.parseString(
       s"""
@@ -89,6 +89,6 @@ private[spark] object AkkaUtils {
 
   /** Returns the default Spark timeout to use for Akka ask operations. */
   def askTimeout(conf: SparkConf): FiniteDuration = {
-    Duration.create(conf.getOrElse("spark.akka.askTimeout",  "30").toLong, "seconds")
+    Duration.create(conf.getOrElse("spark.akka.askTimeout", "30").toLong, "seconds")
   }
 }

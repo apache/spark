@@ -37,7 +37,7 @@ import org.apache.spark.{SparkConf, Logging}
  */
 private[spark] class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher,
     conf: SparkConf) extends Logging {
-  val ZK_URL = conf.getOrElse("spark.deploy.zookeeper.url",  "")
+  val ZK_URL = conf.getOrElse("spark.deploy.zookeeper.url", "")
 
   val ZK_ACL = ZooDefs.Ids.OPEN_ACL_UNSAFE
   val ZK_TIMEOUT_MILLIS = 30000

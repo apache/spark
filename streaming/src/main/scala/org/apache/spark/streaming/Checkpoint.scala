@@ -24,7 +24,7 @@ import java.util.concurrent.RejectedExecutionException
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.MetadataCleaner
 
@@ -36,12 +36,11 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val framework = ssc.sc.appName
   val sparkHome = ssc.sc.getSparkHome.getOrElse(null)
   val jars = ssc.sc.jars
-  val environment = ssc.sc.environment
   val graph = ssc.graph
   val checkpointDir = ssc.checkpointDir
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.jobManager.getPendingTimes()
-  val delaySeconds = MetadataCleaner.getDelaySeconds
+  val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
   val sparkConf = ssc.sc.conf
 
   def validate() {
@@ -58,7 +57,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
  * Convenience class to speed up the writing of graph checkpoint to file
  */
 private[streaming]
-class CheckpointWriter(checkpointDir: String) extends Logging {
+class CheckpointWriter(conf: SparkConf, checkpointDir: String) extends Logging {
   val file = new Path(checkpointDir, "graph")
   // The file to which we actually write - and then "move" to file.
   private val writeFile = new Path(file.getParent, file.getName + ".next")
@@ -66,14 +65,14 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
 
   private var stopped = false
 
-  val conf = new Configuration()
-  var fs = file.getFileSystem(conf)
+  val hadoopConf = new Configuration()
+  var fs = file.getFileSystem(hadoopConf)
   val maxAttempts = 3
   val executor = Executors.newFixedThreadPool(1)
 
-  private val compressionCodec = CompressionCodec.createCodec()
+  private val compressionCodec = CompressionCodec.createCodec(conf)
 
-  // Removed code which validates whether there is only one CheckpointWriter per path 'file' since 
+  // Removed code which validates whether there is only one CheckpointWriter per path 'file' since
   // I did not notice any errors - reintroduce it ?
 
   class CheckpointWriteHandler(checkpointTime: Time, bytes: Array[Byte]) extends Runnable {
@@ -142,11 +141,12 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
 private[streaming]
 object CheckpointReader extends Logging {
 
-  def read(path: String): Checkpoint = {
+  def read(conf: SparkConf, path: String): Checkpoint = {
     val fs = new Path(path).getFileSystem(new Configuration())
-    val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"), new Path(path), new Path(path + ".bk"))
+    val attempts = Seq(
+      new Path(path, "graph"), new Path(path, "graph.bk"), new Path(path), new Path(path + ".bk"))
 
-    val compressionCodec = CompressionCodec.createCodec()
+    val compressionCodec = CompressionCodec.createCodec(conf)
 
     attempts.foreach(file => {
       if (fs.exists(file)) {

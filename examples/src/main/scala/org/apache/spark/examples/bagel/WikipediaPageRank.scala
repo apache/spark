@@ -37,7 +37,7 @@ object WikipediaPageRank {
       System.exit(-1)
     }
     val sparkConf = new SparkConf()
-    sparkConf.set("spark.serializer",  "org.apache.spark.serializer.KryoSerializer")
+    sparkConf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
     sparkConf.set("spark.kryo.registrator",  classOf[PRKryoRegistrator].getName)
 
     val inputFile = args(0)
@@ -46,7 +46,7 @@ object WikipediaPageRank {
     val host = args(3)
     val usePartitioner = args(4).toBoolean
 
-    sparkConf.setMasterUrl(host).setAppName("WikipediaPageRank")
+    sparkConf.setMaster(host).setAppName("WikipediaPageRank")
     val sc = new SparkContext(sparkConf)
 
     // Parse the Wikipedia page data into a graph

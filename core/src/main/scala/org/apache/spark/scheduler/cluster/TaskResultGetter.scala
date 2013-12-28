@@ -32,7 +32,7 @@ import org.apache.spark.util.Utils
 private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterScheduler)
   extends Logging {
 
-  private val THREADS = sparkEnv.conf.getOrElse("spark.resultGetter.threads",  "4").toInt
+  private val THREADS = sparkEnv.conf.getOrElse("spark.resultGetter.threads", "4").toInt
   private val getTaskResultExecutor = Utils.newDaemonFixedThreadPool(
     THREADS, "Result resolver thread")
 

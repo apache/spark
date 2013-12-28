@@ -593,10 +593,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
 
 private[spark] object ConnectionManager {
 
-  import SparkContext.globalConf
-
   def main(args: Array[String]) {
-    val manager = new ConnectionManager(9999, globalConf)
+    val manager = new ConnectionManager(9999, new SparkConf)
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       println("Received [" + msg + "] from [" + id + "]")
       None
