@@ -328,10 +328,6 @@ class JobLogger(val user: String, val logDirName: String)
                       task.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" +
                       mapId + " REDUCE_ID=" + reduceId
         stageLogInfo(task.stageId, taskStatus)
-      case OtherFailure(message) =>
-        taskStatus += " STATUS=FAILURE TID=" + taskInfo.taskId +
-                      " STAGE_ID=" + task.stageId + " INFO=" + message
-        stageLogInfo(task.stageId, taskStatus)
       case _ =>
     }
   }
