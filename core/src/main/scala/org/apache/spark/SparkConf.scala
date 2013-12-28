@@ -28,7 +28,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
   if (loadDefaults) {
     val typesafeConfig = ConfigFactory.systemProperties()
       .withFallback(ConfigFactory.parseResources("spark.conf"))
-    for (e <- typesafeConfig.entrySet().asScala) {
+    for (e <- typesafeConfig.entrySet().asScala if e.getKey.startsWith("spark.")) {
       settings(e.getKey) = e.getValue.unwrapped.toString
     }
   }
