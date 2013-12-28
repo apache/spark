@@ -14,7 +14,7 @@ textFile(sc, path, minSplits = NULL)
   parallelism.}
 }
 \value{
-RRDD where each item is of type \code{character}
+RDD where each item is of type \code{character}
 }
 \description{
 This function reads a text file from HDFS, a local file

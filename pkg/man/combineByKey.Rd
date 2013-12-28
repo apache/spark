@@ -1,16 +1,16 @@
 \docType{methods}
 \name{combineByKey}
 \alias{combineByKey}
-\alias{combineByKey,RRDD,ANY,ANY,ANY,integer-method}
+\alias{combineByKey,RDD,ANY,ANY,ANY,integer-method}
 \title{Combine values by key}
 \usage{
-combineByKey(rrdd, createCombiner, mergeValue, mergeCombiners, numPartitions)
+combineByKey(rdd, createCombiner, mergeValue, mergeCombiners, numPartitions)
 
-\S4method{combineByKey}{RRDD,ANY,ANY,ANY,integer}(rrdd, createCombiner,
+\S4method{combineByKey}{RDD,ANY,ANY,ANY,integer}(rdd, createCombiner,
   mergeValue, mergeCombiners, numPartitions)
 }
 \arguments{
-  \item{rrdd}{The RRDD to combine. Should be an RDD where
+  \item{rdd}{The RDD to combine. Should be an RDD where
   each element is list(K, V).}
 
   \item{createCombiner}{Create a combiner (C) given a value
@@ -25,7 +25,7 @@ combineByKey(rrdd, createCombiner, mergeValue, mergeCombiners, numPartitions)
   \item{numPartitions}{Number of partitions to create.}
 }
 \value{
-An RRDD where each element is list(K, C) where C is the
+An RDD where each element is list(K, C) where C is the
 combined type
 }
 \description{

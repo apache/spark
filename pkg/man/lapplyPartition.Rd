@@ -1,21 +1,21 @@
 \docType{methods}
 \name{lapplyPartition}
 \alias{lapplyPartition}
-\alias{lapplyPartition,RRDD,function-method}
+\alias{lapplyPartition,RDD,function-method}
 \title{Apply a function to each partition of an RDD}
 \usage{
 lapplyPartition(X, FUN)
 
-\S4method{lapplyPartition}{RRDD,function}(X, FUN)
+\S4method{lapplyPartition}{RDD,function}(X, FUN)
 }
 \arguments{
-  \item{X}{The RRDD to apply the transformation.}
+  \item{X}{The RDD to apply the transformation.}
 
   \item{FUN}{the transformation to apply on each
   partition.}
 }
 \value{
-a new RRDD created by the transformation.
+a new RDD created by the transformation.
 }
 \description{
 Return a new RDD by applying a function to each partition

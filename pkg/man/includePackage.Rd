@@ -29,8 +29,8 @@ Spark cluster.
    sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3))
  }
 
- rrdd <- lapplyPartition(parallelize(sc, 1:2, 2L), generateSparse)
- collect(rrdd)
+ rdd <- lapplyPartition(parallelize(sc, 1:2, 2L), generateSparse)
+ collect(rdd)
 }
 }
 

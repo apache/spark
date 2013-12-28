@@ -1,22 +1,22 @@
 \docType{methods}
 \name{collect}
 \alias{collect}
-\alias{collect,RRDD-method}
+\alias{collect,RDD-method}
 \alias{collectPartition}
-\alias{collectPartition,RRDD,integer-method}
-\alias{collectPartition,integer,RRDD-method}
+\alias{collectPartition,RDD,integer-method}
+\alias{collectPartition,integer,RDD-method}
 \title{Collect elements of an RDD}
 \usage{
-collect(rrdd, ...)
+collect(rdd, ...)
 
-\S4method{collect}{RRDD}(rrdd, flatten = TRUE)
+\S4method{collect}{RDD}(rdd, flatten = TRUE)
 
-collectPartition(rrdd, partitionId)
+collectPartition(rdd, partitionId)
 
-\S4method{collectPartition}{RRDD,integer}(rrdd, partitionId)
+\S4method{collectPartition}{RDD,integer}(rdd, partitionId)
 }
 \arguments{
-  \item{rrdd}{The RRDD to collect}
+  \item{rdd}{The RDD to collect}
 
   \item{...}{Other optional arguments to collect}
 
@@ -26,11 +26,11 @@ collectPartition(rrdd, partitionId)
   0)}
 }
 \value{
-a list containing elements in the RRDD
+a list containing elements in the RDD
 }
 \description{
 \code{collect} returns a list that contains all of the
-elements in this RRDD.
+elements in this RDD.
 
 \code{collectPartition} returns a list that contains all of
 the elements in the specified partition of the RDD.

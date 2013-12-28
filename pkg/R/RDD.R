@@ -1,20 +1,20 @@
-# RRDD (RDD in R) class implemented in S4 OO system.
+# RDD in R implemented in S4 OO system.
 
 #setOldClass("jobjRef")
 
 #' @title S4 class that represents an RDD
-#' @description RRDD can be created using functions like
+#' @description RDD can be created using functions like
 #'              \code{parallelize}, \code{textFile} etc.
-#' @rdname RRDD 
+#' @rdname RDD
 #' @seealso parallelize, textFile
 #'
 #' @param jrdd Java object reference to the backing JavaRDD
 #' @param serialized TRUE if the JavaRDD contains serialized R objects
 #' @export
-setClass("RRDD", slots = list(jrdd = "jobjRef",
+setClass("RDD", slots = list(jrdd = "jobjRef",
                               serialized = "logical"))
 
-setValidity("RRDD",
+setValidity("RDD",
             function(object) {
               cls <- object@jrdd$getClass()
               className <- cls$getName()
@@ -25,46 +25,46 @@ setValidity("RRDD",
               }
             })
 
-#' @rdname RRDD 
+#' @rdname RDD
 #' @export
-RRDD <- function(jrdd, serialized = TRUE) {
-  new("RRDD", jrdd = jrdd, serialized = serialized)
+RDD <- function(jrdd, serialized = TRUE) {
+  new("RDD", jrdd = jrdd, serialized = serialized)
 }
 
 #' Persist an RDD
 #'
 #' Persist this RDD with the default storage level (MEMORY_ONLY).
 #'
-#' @param rrdd The RRDD to cache
+#' @param rdd The RDD to cache
 #' @rdname cache-methods
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' rrdd <- parallelize(sc, 1:10, 2L)
-#' cache(rrdd)
+#' rdd <- parallelize(sc, 1:10, 2L)
+#' cache(rdd)
 #'}
-setGeneric("cache", function(rrdd) { standardGeneric("cache") })
+setGeneric("cache", function(rdd) { standardGeneric("cache") })
 
 #' @rdname cache-methods
-#' @aliases cache,RRDD-method
+#' @aliases cache,RDD-method
 setMethod("cache",
-          signature(rrdd = "RRDD"),
-          function(rrdd) {
-            .jcall(rrdd@jrdd, "Lorg/apache/spark/api/java/JavaRDD;", "cache")
-            rrdd
+          signature(rdd = "RDD"),
+          function(rdd) {
+            .jcall(rdd@jrdd, "Lorg/apache/spark/api/java/JavaRDD;", "cache")
+            rdd
           })
 
 
 #' Collect elements of an RDD
 #'
 #' @description
-#' \code{collect} returns a list that contains all of the elements in this RRDD.
+#' \code{collect} returns a list that contains all of the elements in this RDD.
 #'
-#' @param rrdd The RRDD to collect
+#' @param rdd The RDD to collect
 #' @param ... Other optional arguments to collect
 #' @param flatten FALSE if the list should not flattened
-#' @return a list containing elements in the RRDD
+#' @return a list containing elements in the RDD
 #' @rdname collect-methods
 #' @export
 #' @examples
@@ -74,15 +74,15 @@ setMethod("cache",
 #' collect(rdd) # list from 1 to 10
 #' collectPartition(rdd, 0L) # list from 1 to 5
 #'}
-setGeneric("collect", function(rrdd, ...) { standardGeneric("collect") })
+setGeneric("collect", function(rdd, ...) { standardGeneric("collect") })
 
 #' @rdname collect-methods
-#' @aliases collect,RRDD-method
+#' @aliases collect,RDD-method
 setMethod("collect",
-          signature(rrdd = "RRDD"),
-          function(rrdd, flatten = TRUE) {
-            # Assumes a pairwise RRDD is backed by a JavaPairRDD.
-            collected <- .jcall(rrdd@jrdd, "Ljava/util/List;", "collect")
+          signature(rdd = "RDD"),
+          function(rdd, flatten = TRUE) {
+            # Assumes a pairwise RDD is backed by a JavaPairRDD.
+            collected <- .jcall(rdd@jrdd, "Ljava/util/List;", "collect")
             convertJListToRList(collected, flatten)
           })
 
@@ -93,16 +93,16 @@ setMethod("collect",
 #' in the specified partition of the RDD.
 #' @param partitionId the partition to collect (starts from 0)
 setGeneric("collectPartition",
-           function(rrdd, partitionId) {
+           function(rdd, partitionId) {
              standardGeneric("collectPartition")
            })
 
 #' @rdname collect-methods
-#' @aliases collectPartition,integer,RRDD-method
+#' @aliases collectPartition,integer,RDD-method
 setMethod("collectPartition",
-          signature(rrdd = "RRDD", partitionId = "integer"),
-          function(rrdd, partitionId) {
-            jPartitionsList <- .jcall(rrdd@jrdd,
+          signature(rdd = "RDD", partitionId = "integer"),
+          function(rdd, partitionId) {
+            jPartitionsList <- .jcall(rdd@jrdd,
                                       "[Ljava/util/List;",
                                       "collectPartitions",
                                       .jarray(as.integer(partitionId)))
@@ -114,8 +114,8 @@ setMethod("collectPartition",
 
 #' Return the number of elements in the RDD.
 #'
-#' @param rrdd The RRDD to count
-#' @return number of elements in the RRDD.
+#' @param rdd The RDD to count
+#' @return number of elements in the RDD.
 #' @rdname count
 #' @export
 #' @examples
@@ -125,17 +125,17 @@ setMethod("collectPartition",
 #' count(rdd) # 10
 #' length(rdd) # Same as count
 #'}
-setGeneric("count", function(rrdd) { standardGeneric("count") })
+setGeneric("count", function(rdd) { standardGeneric("count") })
 
 #' @rdname count
-#' @aliases count,RRDD-method
+#' @aliases count,RDD-method
 setMethod("count",
-          signature(rrdd = "RRDD"),
-          function(rrdd) {
+          signature(rdd = "RDD"),
+          function(rdd) {
             countPartition <- function(part) {
               as.integer(length(part))
             }
-            valsRDD <- lapplyPartition(rrdd, countPartition)
+            valsRDD <- lapplyPartition(rdd, countPartition)
             vals <- collect(valsRDD)
             sum(as.integer(vals))
           })
@@ -144,7 +144,7 @@ setMethod("count",
 #' @export
 #' @rdname count
 setMethod("length",
-          signature(x = "RRDD"),
+          signature(x = "RDD"),
           function(x) {
             count(x)
           })
@@ -152,12 +152,12 @@ setMethod("length",
 
 #' Apply a function to all elements
 #'
-#' This function creates a new RRDD by applying the given transformation to all
+#' This function creates a new RDD by applying the given transformation to all
 #' elements of the given RDD
 #'
-#' @param X The RRDD to apply the transformation.
+#' @param X The RDD to apply the transformation.
 #' @param FUN the transformation to apply on each element
-#' @return a new RRDD created by the transformation.
+#' @return a new RDD created by the transformation.
 #' @rdname lapply
 #' @export
 #' @examples
@@ -168,7 +168,7 @@ setMethod("length",
 #' collect(multiplyByTwo) # 2,4,6...
 #'}
 setMethod("lapply",
-          signature(X = "RRDD", FUN = "function"),
+          signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
             partitionFunc <- function(part) {
               lapply(part, FUN)
@@ -183,9 +183,9 @@ setGeneric("map", function(X, FUN) {
            standardGeneric("map") })
 
 #' @rdname lapply
-#' @aliases map,RRDD,function-method
+#' @aliases map,RDD,function-method
 setMethod("map",
-          signature(X = "RRDD", FUN = "function"),
+          signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
             lapply(X, FUN)
           })
@@ -195,9 +195,9 @@ setMethod("map",
 #' This function return a new RDD by first applying a function to all 
 #' elements of this RDD, and then flattening the results.
 #'
-#' @param X The RRDD to apply the transformation.
+#' @param X The RDD to apply the transformation.
 #' @param FUN the transformation to apply on each element
-#' @return a new RRDD created by the transformation.
+#' @return a new RDD created by the transformation.
 #' @rdname flatMap
 #' @export
 #' @examples
@@ -211,9 +211,9 @@ setGeneric("flatMap", function(X, FUN) {
            standardGeneric("flatMap") })
 
 #' @rdname flatMap
-#' @aliases flatMap,RRDD,function-method
+#' @aliases flatMap,RDD,function-method
 setMethod("flatMap",
-          signature(X = "RRDD", FUN = "function"),
+          signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
             partitionFunc <- function(part) {
               unlist(
@@ -227,9 +227,9 @@ setMethod("flatMap",
 #'
 #' Return a new RDD by applying a function to each partition of this RDD.
 #'
-#' @param X The RRDD to apply the transformation.
+#' @param X The RDD to apply the transformation.
 #' @param FUN the transformation to apply on each partition.
-#' @return a new RRDD created by the transformation.
+#' @return a new RDD created by the transformation.
 #' @rdname lapplyPartition
 #' @export
 #' @examples
@@ -243,9 +243,9 @@ setGeneric("lapplyPartition", function(X, FUN) {
            standardGeneric("lapplyPartition") })
 
 #' @rdname lapplyPartition
-#' @aliases lapplyPartition,RRDD,function-method
+#' @aliases lapplyPartition,RDD,function-method
 setMethod("lapplyPartition",
-          signature(X = "RRDD", FUN = "function"),
+          signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
             # TODO: This is to handle anonymous functions. Find out a
             # better way to do this.
@@ -261,7 +261,7 @@ setMethod("lapplyPartition",
 
             depsBin <- getDependencies(computeFunc)
             depsBinArr <- .jarray(depsBin)
-            rrddRef <- new(J("sparkr.RRDD"),
+            rddRef <- new(J("sparkr.RRDD"),
                            X@jrdd$rdd(),
                            serializedFuncArr,
                            X@serialized,
@@ -269,8 +269,8 @@ setMethod("lapplyPartition",
                            packageNamesArr,
                            as.character(.sparkREnv[["libname"]]),
                            X@jrdd$classTag())
-            jrdd <- rrddRef$asJavaRDD()
-            RRDD(jrdd, TRUE)
+            jrdd <- rddRef$asJavaRDD()
+            RDD(jrdd, TRUE)
           })
 
 #' Reduce across elements of an RDD. 
@@ -278,9 +278,9 @@ setMethod("lapplyPartition",
 #' This function reduces the elements of this RDD using the 
 #' specified commutative and associative binary operator.
 #' 
-#' @param rrdd The RRDD to reduce
+#' @param rdd The RDD to reduce
 #' @param func Commutative and associative function to apply on elements 
-#'             of the RRDD.
+#'             of the RDD.
 #' @export
 #' @rdname reduce
 #' @examples
@@ -289,29 +289,29 @@ setMethod("lapplyPartition",
 #' rdd <- parallelize(sc, 1:10)
 #' reduce(rdd, "+") # 55
 #'}
-setGeneric("reduce", function(rrdd, func) { standardGeneric("reduce") })
+setGeneric("reduce", function(rdd, func) { standardGeneric("reduce") })
 
 #' @rdname reduce
-#' @aliases reduce,RRDD,ANY-method
+#' @aliases reduce,RDD,ANY-method
 setMethod("reduce",
-          signature(rrdd = "RRDD", func = "ANY"),
-          function(rrdd, func) {
+          signature(rdd = "RDD", func = "ANY"),
+          function(rdd, func) {
 
             reducePartition <- function(part) {
               Reduce(func, part)
             }
 
-            partitionList <- collect(lapplyPartition(rrdd, reducePartition),
+            partitionList <- collect(lapplyPartition(rdd, reducePartition),
                                      flatten=FALSE)
             Reduce(func, partitionList)
           })
 
 #' Take elements from an RDD.
 #'
-#' This function takes the first NUM elements in the RRDD and 
+#' This function takes the first NUM elements in the RDD and 
 #' returns them in a list.
 #'
-#' @param rrdd The RRDD to take elements from
+#' @param rdd The RDD to take elements from
 #' @param num Number of elements to take
 #' @rdname take
 #' @export
@@ -321,16 +321,16 @@ setMethod("reduce",
 #' rdd <- parallelize(sc, 1:10)
 #' take(rdd, 2L) # list(1, 2)
 #'}
-setGeneric("take", function(rrdd, num) { standardGeneric("take") })
+setGeneric("take", function(rdd, num) { standardGeneric("take") })
 
 #' @rdname take
-#' @aliases take,RRDD,numeric-method
+#' @aliases take,RDD,numeric-method
 setMethod("take",
-          signature(rrdd = "RRDD", num = "numeric"),
-          function(rrdd, num) {
+          signature(rdd = "RDD", num = "numeric"),
+          function(rdd, num) {
             resList <- list()
             index <- -1
-            partitions <- .jcall(rrdd@jrdd, "Ljava/util/List;", "splits")
+            partitions <- .jcall(rdd@jrdd, "Ljava/util/List;", "splits")
             numPartitions <- .jcall(partitions, "I", "size")
             # TODO(shivaram): Collect more than one partition based on size
             # estimates similar to the scala version of `take`.
@@ -341,7 +341,7 @@ setMethod("take",
                 break
 
               # a JList of byte arrays
-              partitionArr <- .jcall(rrdd@jrdd,
+              partitionArr <- .jcall(rdd@jrdd,
                                      "[Ljava/util/List;",
                                      "collectPartitions",
                                      .jarray(as.integer(index)))
@@ -361,14 +361,14 @@ setMethod("take",
 #' For each element of this RDD, the partitioner is used to compute a hash
 #' function and the RDD is partitioned using this hash value.
 #'
-#' @param rrdd The RRDD to partition. Should be an RDD where each element is
+#' @param rdd The RDD to partition. Should be an RDD where each element is
 #'             list(K, V).
 #' @param numPartitions Number of partitions to create.
 #' @param ... Other optional arguments to partitionBy.
 #'
 #' @param partitionFunc The partition function to use. Uses a default hashCode
 #'                      function if not provided
-#' @return An RRDD partitioned using the specified partitioner.
+#' @return An RDD partitioned using the specified partitioner.
 #' @rdname partitionBy
 #' @export
 #' @examples
@@ -380,15 +380,15 @@ setMethod("take",
 #' collectPartition(parts, 0L) # First partition should contain c(1,2) and c(1,3)
 #'}
 setGeneric("partitionBy",
-           function(rrdd, numPartitions, ...) {
+           function(rdd, numPartitions, ...) {
              standardGeneric("partitionBy")
            })
 
 #' @rdname partitionBy
-#' @aliases partitionBy,RRDD,integer-method
+#' @aliases partitionBy,RDD,integer-method
 setMethod("partitionBy",
-          signature(rrdd = "RRDD", numPartitions = "integer"),
-          function(rrdd, numPartitions, partitionFunc = hashCode) {
+          signature(rdd = "RDD", numPartitions = "integer"),
+          function(rdd, numPartitions, partitionFunc = hashCode) {
 
             #if (missing(partitionFunc)) {
             #  partitionFunc <- hashCode
@@ -410,14 +410,14 @@ setMethod("partitionBy",
             # Array[Byte])], where the key is the hashed split, the value is
             # the content (key-val pairs). 
             pairwiseRRDD <- new(J("sparkr.PairwiseRRDD"),
-                                rrdd@jrdd$rdd(),
+                                rdd@jrdd$rdd(),
                                 as.integer(numPartitions),
                                 serializedHashFuncBytes,
-                                rrdd@serialized,
+                                rdd@serialized,
                                 depsBinArr,
                                 packageNamesArr,
                                 as.character(.sparkREnv[["libname"]]),
-                                rrdd@jrdd$classTag())
+                                rdd@jrdd$classTag())
 
             # Create a corresponding partitioner.
             rPartitioner <- new(J("org.apache.spark.HashPartitioner"),
@@ -430,7 +430,7 @@ setMethod("partitionBy",
             # shuffled acutal content key-val pairs.
             r <- javaPairRDD$values()
 
-            RRDD(r, serialized=TRUE)
+            RDD(r, serialized=TRUE)
           })
 
 #' Group values by key
@@ -438,10 +438,10 @@ setMethod("partitionBy",
 #' This function operates on RDDs where every element is of the form list(K, V).
 #' and group values for each key in the RDD into a single sequence.
 #'
-#' @param rrdd The RRDD to group. Should be an RDD where each element is
+#' @param rdd The RDD to group. Should be an RDD where each element is
 #'             list(K, V).
 #' @param numPartitions Number of partitions to create.
-#' @return An RRDD where each element is list(K, list(V))
+#' @return An RDD where each element is list(K, list(V))
 #' @seealso reduceByKey
 #' @rdname groupByKey
 #' @export
@@ -455,16 +455,16 @@ setMethod("partitionBy",
 #' grouped[[1]] # Should be a list(1, list(2, 4))
 #'}
 setGeneric("groupByKey",
-           function(rrdd, numPartitions) {
+           function(rdd, numPartitions) {
              standardGeneric("groupByKey")
            })
 
 #' @rdname groupByKey
-#' @aliases groupByKey,RRDD,integer-method
+#' @aliases groupByKey,RDD,integer-method
 setMethod("groupByKey",
-          signature(rrdd = "RRDD", numPartitions = "integer"),
-          function(rrdd, numPartitions) {
-            shuffled <- partitionBy(rrdd, numPartitions)
+          signature(rdd = "RDD", numPartitions = "integer"),
+          function(rdd, numPartitions) {
+            shuffled <- partitionBy(rdd, numPartitions)
             groupVals <- function(part) {
               vals <- new.env()
               keys <- new.env()
@@ -497,11 +497,11 @@ setMethod("groupByKey",
 #' This function operates on RDDs where every element is of the form list(K, V).
 #' and merges the values for each key using an associative reduce function.
 #'
-#' @param rrdd The RRDD to reduce by key. Should be an RDD where each element is
+#' @param rdd The RDD to reduce by key. Should be an RDD where each element is
 #'             list(K, V).
 #' @param combineFunc The associative reduce function to use.
 #' @param numPartitions Number of partitions to create.
-#' @return An RRDD where each element is list(K, V') where V' is the merged
+#' @return An RDD where each element is list(K, V') where V' is the merged
 #'         value
 #' @rdname reduceByKey
 #' @seealso groupByKey
@@ -516,17 +516,17 @@ setMethod("groupByKey",
 #' reduced[[1]] # Should be a list(1, 6)
 #'}
 setGeneric("reduceByKey",
-           function(rrdd, combineFunc, numPartitions) {
+           function(rdd, combineFunc, numPartitions) {
              standardGeneric("reduceByKey")
            })
 
 #' @rdname reduceByKey
-#' @aliases reduceByKey,RRDD,integer-method
+#' @aliases reduceByKey,RDD,integer-method
 setMethod("reduceByKey",
-          signature(rrdd = "RRDD", combineFunc = "ANY", numPartitions = "integer"),
-          function(rrdd, combineFunc, numPartitions) {
+          signature(rdd = "RDD", combineFunc = "ANY", numPartitions = "integer"),
+          function(rdd, combineFunc, numPartitions) {
             # TODO: Implement map-side combine 
-            shuffled <- partitionBy(rrdd, numPartitions)
+            shuffled <- partitionBy(rdd, numPartitions)
             reduceVals <- function(part) {
               vals <- new.env()
               keys <- new.env()
@@ -565,13 +565,13 @@ setMethod("reduceByKey",
 #'    two lists).
 #' }
 #'
-#' @param rrdd The RRDD to combine. Should be an RDD where each element is
+#' @param rdd The RDD to combine. Should be an RDD where each element is
 #'             list(K, V).
 #' @param createCombiner Create a combiner (C) given a value (V)
 #' @param mergeValue Merge the given value (V) with an existing combiner (C)
 #' @param mergeCombiners Merge two combiners and return a new combiner
 #' @param numPartitions Number of partitions to create.
-#' @return An RRDD where each element is list(K, C) where C is the combined type
+#' @return An RDD where each element is list(K, C) where C is the combined type
 #'
 #' @rdname combineByKey
 #' @seealso groupByKey, reduceByKey
@@ -586,16 +586,16 @@ setMethod("reduceByKey",
 #' combined[[1]] # Should be a list(1, 6)
 #'}
 setGeneric("combineByKey",
-           function(rrdd, createCombiner, mergeValue, mergeCombiners, numPartitions) {
+           function(rdd, createCombiner, mergeValue, mergeCombiners, numPartitions) {
              standardGeneric("combineByKey")
            })
 
 #' @rdname combineByKey
-#' @aliases combineByKey,RRDD,ANY,ANY,ANY,integer-method
+#' @aliases combineByKey,RDD,ANY,ANY,ANY,integer-method
 setMethod("combineByKey",
-          signature(rrdd = "RRDD", createCombiner = "ANY", mergeValue = "ANY",
+          signature(rdd = "RDD", createCombiner = "ANY", mergeValue = "ANY",
                     mergeCombiners = "ANY", numPartitions = "integer"),
-          function(rrdd, createCombiner, mergeValue, mergeCombiners, numPartitions) {
+          function(rdd, createCombiner, mergeValue, mergeCombiners, numPartitions) {
             combineLocally <- function(part) {
               combiners <- new.env()
               keys <- new.env()
@@ -616,7 +616,7 @@ setMethod("combineByKey",
                       list(keys[[k]], combiners[[k]])
                      })
             }
-            locallyCombined <- lapplyPartition(rrdd, combineLocally)
+            locallyCombined <- lapplyPartition(rdd, combineLocally)
             shuffled <- partitionBy(locallyCombined, numPartitions)
             mergeAfterShuffle <- function(part) {
               combiners <- new.env()

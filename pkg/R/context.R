@@ -10,7 +10,7 @@
 #' @param path Path of file to read
 #' @param minSplits Minimum number of splits to be created. If NULL, the default
 #'  value is chosen based on available parallelism.
-#' @return RRDD where each item is of type \code{character}
+#' @return RDD where each item is of type \code{character}
 #' @export
 #' @examples
 #'\dontrun{
@@ -26,7 +26,7 @@ textFile <- function(sc, path, minSplits = NULL) {
   }
   jrdd <- .jcall(sc, "Lorg/apache/spark/api/java/JavaRDD;", "textFile", path,
                  as.integer(minSplits))
-  RRDD(jrdd, FALSE)
+  RDD(jrdd, FALSE)
 }
 
 #' Create an RDD from a homogeneous list or vector.
@@ -38,7 +38,7 @@ textFile <- function(sc, path, minSplits = NULL) {
 #' @param sc SparkContext to use
 #' @param coll collection to parallelize
 #' @param numSlices number of partitions to create in the RDD
-#' @return an RRDD created from this collection
+#' @return an RDD created from this collection
 #' @export
 #' @examples
 #'\dontrun{
@@ -79,7 +79,7 @@ parallelize <- function(sc, coll, numSlices = 1) {
                  sc,
                  javaSerializedSlices)
 
-  RRDD(jrdd, TRUE)
+  RDD(jrdd, TRUE)
 }
 
 
@@ -107,8 +107,8 @@ parallelize <- function(sc, coll, numSlices = 1) {
 #'    sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3)) 
 #'  }
 #'  
-#'  rrdd <- lapplyPartition(parallelize(sc, 1:2, 2L), generateSparse)
-#'  collect(rrdd)
+#'  rdd <- lapplyPartition(parallelize(sc, 1:2, 2L), generateSparse)
+#'  collect(rdd)
 #'}
 includePackage <- function(sc, pkg) {
   pkg <- as.character(substitute(pkg))

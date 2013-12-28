@@ -1,20 +1,20 @@
 \docType{methods}
 \name{take}
 \alias{take}
-\alias{take,RRDD,numeric-method}
+\alias{take,RDD,numeric-method}
 \title{Take elements from an RDD.}
 \usage{
-take(rrdd, num)
+take(rdd, num)
 
-\S4method{take}{RRDD,numeric}(rrdd, num)
+\S4method{take}{RDD,numeric}(rdd, num)
 }
 \arguments{
-  \item{rrdd}{The RRDD to take elements from}
+  \item{rdd}{The RDD to take elements from}
 
   \item{num}{Number of elements to take}
 }
 \description{
-This function takes the first NUM elements in the RRDD and
+This function takes the first NUM elements in the RDD and
 returns them in a list.
 }
 \examples{

@@ -1,21 +1,21 @@
 \docType{methods}
 \name{groupByKey}
 \alias{groupByKey}
-\alias{groupByKey,RRDD,integer-method}
+\alias{groupByKey,RDD,integer-method}
 \title{Group values by key}
 \usage{
-groupByKey(rrdd, numPartitions)
+groupByKey(rdd, numPartitions)
 
-\S4method{groupByKey}{RRDD,integer}(rrdd, numPartitions)
+\S4method{groupByKey}{RDD,integer}(rdd, numPartitions)
 }
 \arguments{
-  \item{rrdd}{The RRDD to group. Should be an RDD where
-  each element is list(K, V).}
+  \item{rdd}{The RDD to group. Should be an RDD where each
+  element is list(K, V).}
 
   \item{numPartitions}{Number of partitions to create.}
 }
 \value{
-An RRDD where each element is list(K, list(V))
+An RDD where each element is list(K, list(V))
 }
 \description{
 This function operates on RDDs where every element is of

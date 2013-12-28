@@ -1,19 +1,19 @@
 \docType{methods}
 \name{reduce}
 \alias{reduce}
-\alias{reduce,RRDD,ANY-method}
-\alias{reduce,RRDD-method}
+\alias{reduce,RDD,ANY-method}
+\alias{reduce,RDD-method}
 \title{Reduce across elements of an RDD.}
 \usage{
-reduce(rrdd, func)
+reduce(rdd, func)
 
-\S4method{reduce}{RRDD}(rrdd, func)
+\S4method{reduce}{RDD}(rdd, func)
 }
 \arguments{
-  \item{rrdd}{The RRDD to reduce}
+  \item{rdd}{The RDD to reduce}
 
   \item{func}{Commutative and associative function to apply
-  on elements of the RRDD.}
+  on elements of the RDD.}
 }
 \description{
 This function reduces the elements of this RDD using the

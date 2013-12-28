@@ -5,7 +5,7 @@ sc <- sparkR.init()
 
 # Partitioned data
 nums <- 1:3
-rrdd <- parallelize(sc, nums, 3L)
+rdd <- parallelize(sc, nums, 3L)
 
 test_that("include inside function", {
   # Only run the test if Matrix is installed.
@@ -16,7 +16,7 @@ test_that("include inside function", {
       sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3))
     }
 
-    sparseMat <- lapplyPartition(rrdd, generateSparse)
+    sparseMat <- lapplyPartition(rdd, generateSparse)
     actual <- collect(sparseMat)
   }
 })
@@ -29,7 +29,7 @@ test_that("use include package", {
       sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3))
     }
     includePackage(sc, Matrix)
-    sparseMat <- lapplyPartition(rrdd, generateSparse)
+    sparseMat <- lapplyPartition(rdd, generateSparse)
     actual <- collect(sparseMat)
   }
 })

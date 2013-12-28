@@ -16,7 +16,7 @@ convertJListToRList <- function(jList, flatten) {
              obj <- .jsimplify(jElem)
 
              if (class(obj) == "jobjRef" && .jinstanceof(obj, "[B")) {
-               # RRDD[Array[Byte]].
+               # RDD[Array[Byte]].
 
                rRaw <- .jevalArray(.jcastToArray(jElem))
                res <- unserialize(rRaw)
@@ -32,7 +32,7 @@ convertJListToRList <- function(jList, flatten) {
 
              } else if (class(obj) == "jobjRef" && !.jinstanceof(obj, "[B")) {
                stop(paste("utils.R: convertJListToRList only supports",
-                          "RRDD[Array[Byte]] and",
+                          "RDD[Array[Byte]] and",
                           "JavaPairRDD[Array[Byte], Array[Byte]] for now"))
              }
 
@@ -55,10 +55,10 @@ convertJListToRList <- function(jList, flatten) {
 
 }
 
-# Returns TRUE if `name` refers to an RRDD in the given environment `env`
-isRRDD <- function(name, env) {
+# Returns TRUE if `name` refers to an RDD in the given environment `env`
+isRDD <- function(name, env) {
   obj <- get(name, envir=env)
-  class(obj) == "RRDD"
+  class(obj) == "RDD"
 }
 
 # Returns TRUE if `name` is a function in the SparkR package.
@@ -85,7 +85,7 @@ isSparkFunction <- function(name) {
 }
 
 # Serialize the dependencies of the given function and return them as a raw
-# vector. Filters out RRDDs before serializing the dependencies
+# vector. Filters out RDDs before serializing the dependencies
 getDependencies <- function(name) {
   varsToSave <- c()
   closureEnv <- environment(name)
@@ -104,7 +104,7 @@ getDependencies <- function(name) {
        break
     currentEnv <- parent.env(currentEnv)
   }
-  filteredVars <- Filter(function(x) { !isRRDD(x, closureEnv) }, varsToSave)
+  filteredVars <- Filter(function(x) { !isRDD(x, closureEnv) }, varsToSave)
 
   #cat("Saving ", filteredVars, "\n", file=stderr())
 

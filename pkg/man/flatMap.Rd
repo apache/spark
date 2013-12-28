@@ -1,20 +1,20 @@
 \docType{methods}
 \name{flatMap}
 \alias{flatMap}
-\alias{flatMap,RRDD,function-method}
+\alias{flatMap,RDD,function-method}
 \title{Flatten results after apply a function to all elements}
 \usage{
 flatMap(X, FUN)
 
-\S4method{flatMap}{RRDD,function}(X, FUN)
+\S4method{flatMap}{RDD,function}(X, FUN)
 }
 \arguments{
-  \item{X}{The RRDD to apply the transformation.}
+  \item{X}{The RDD to apply the transformation.}
 
   \item{FUN}{the transformation to apply on each element}
 }
 \value{
-a new RRDD created by the transformation.
+a new RDD created by the transformation.
 }
 \description{
 This function return a new RDD by first applying a function

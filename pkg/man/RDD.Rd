@@ -1,10 +1,10 @@
 \docType{class}
-\name{RRDD-class}
-\alias{RRDD}
-\alias{RRDD-class}
+\name{RDD-class}
+\alias{RDD}
+\alias{RDD-class}
 \title{S4 class that represents an RDD}
 \usage{
-RRDD(jrdd, serialized = TRUE)
+RDD(jrdd, serialized = TRUE)
 }
 \arguments{
   \item{jrdd}{Java object reference to the backing JavaRDD}
@@ -13,8 +13,8 @@ RRDD(jrdd, serialized = TRUE)
   R objects}
 }
 \description{
-RRDD can be created using functions like
-\code{parallelize}, \code{textFile} etc.
+RDD can be created using functions like \code{parallelize},
+\code{textFile} etc.
 }
 \seealso{
 parallelize, textFile

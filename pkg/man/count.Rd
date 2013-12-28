@@ -1,24 +1,24 @@
 \docType{methods}
 \name{count}
 \alias{count}
-\alias{count,RRDD-method}
-\alias{length,RRDD-method}
+\alias{count,RDD-method}
+\alias{length,RDD-method}
 \title{Return the number of elements in the RDD.}
 \usage{
-count(rrdd)
+count(rdd)
 
-\S4method{count}{RRDD}(rrdd)
+\S4method{count}{RDD}(rdd)
 
-\S4method{length}{RRDD}(x)
+\S4method{length}{RDD}(x)
 }
 \arguments{
-  \item{rrdd}{The RRDD to count}
+  \item{rdd}{The RDD to count}
 
   \item{x}{an \R object.  For replacement, a vector or
   factor.}
 }
 \value{
-number of elements in the RRDD.
+number of elements in the RDD.
 }
 \description{
 Return the number of elements in the RDD.

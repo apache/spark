@@ -20,51 +20,51 @@ jsc <- sparkR.init()
 
 # Tests
 
-test_that("parallelize() on simple vectors and lists returns an RRDD", {
-  numVectorRRDD <- parallelize(jsc, numVector, 1)
-  numVectorRRDD2 <- parallelize(jsc, numVector, 10)
-  numListRRDD <- parallelize(jsc, numList, 1)
-  numListRRDD2 <- parallelize(jsc, numList, 4)
-  strVectorRRDD <- parallelize(jsc, strVector, 2)
-  strVectorRRDD2 <- parallelize(jsc, strVector, 3)
-  strListRRDD <- parallelize(jsc, strList, 4)
-  strListRRDD2 <- parallelize(jsc, strList, 1)
+test_that("parallelize() on simple vectors and lists returns an RDD", {
+  numVectorRDD <- parallelize(jsc, numVector, 1)
+  numVectorRDD2 <- parallelize(jsc, numVector, 10)
+  numListRDD <- parallelize(jsc, numList, 1)
+  numListRDD2 <- parallelize(jsc, numList, 4)
+  strVectorRDD <- parallelize(jsc, strVector, 2)
+  strVectorRDD2 <- parallelize(jsc, strVector, 3)
+  strListRDD <- parallelize(jsc, strList, 4)
+  strListRDD2 <- parallelize(jsc, strList, 1)
 
-  rrdds <- c(numVectorRRDD,
-             numVectorRRDD2,
-             numListRRDD,
-             numListRRDD2,
-             strVectorRRDD,
-             strVectorRRDD2,
-             strListRRDD,
-             strListRRDD2)
+  rdds <- c(numVectorRDD,
+             numVectorRDD2,
+             numListRDD,
+             numListRDD2,
+             strVectorRDD,
+             strVectorRDD2,
+             strListRDD,
+             strListRDD2)
 
-  for (rrdd in rrdds) {
-    expect_that(class(rrdd), is_equivalent_to("RRDD"))
-    expect_true(.hasSlot(rrdd, "jrdd")
-                && class(rrdd@jrdd) == "jobjRef"
-                && .jinstanceof(rrdd@jrdd, "org/apache/spark/api/java/JavaRDD"))
+  for (rdd in rdds) {
+    expect_that(class(rdd), is_equivalent_to("RDD"))
+    expect_true(.hasSlot(rdd, "jrdd")
+                && class(rdd@jrdd) == "jobjRef"
+                && .jinstanceof(rdd@jrdd, "org/apache/spark/api/java/JavaRDD"))
   }
 })
 
 test_that("collect(), following a parallelize(), gives back the original collections", {
-  numVectorRRDD <- parallelize(jsc, numVector, 10)
-  expect_equal(collect(numVectorRRDD), as.list(numVector))
+  numVectorRDD <- parallelize(jsc, numVector, 10)
+  expect_equal(collect(numVectorRDD), as.list(numVector))
 
-  numListRRDD <- parallelize(jsc, numList, 1)
-  numListRRDD2 <- parallelize(jsc, numList, 4)
-  expect_equal(collect(numListRRDD), as.list(numList))
-  expect_equal(collect(numListRRDD2), as.list(numList))
+  numListRDD <- parallelize(jsc, numList, 1)
+  numListRDD2 <- parallelize(jsc, numList, 4)
+  expect_equal(collect(numListRDD), as.list(numList))
+  expect_equal(collect(numListRDD2), as.list(numList))
 
-  strVectorRRDD <- parallelize(jsc, strVector, 2)
-  strVectorRRDD2 <- parallelize(jsc, strVector, 3)
-  expect_equal(collect(strVectorRRDD), as.list(strVector))
-  expect_equal(collect(strVectorRRDD2), as.list(strVector))
+  strVectorRDD <- parallelize(jsc, strVector, 2)
+  strVectorRDD2 <- parallelize(jsc, strVector, 3)
+  expect_equal(collect(strVectorRDD), as.list(strVector))
+  expect_equal(collect(strVectorRDD2), as.list(strVector))
 
-  strListRRDD <- parallelize(jsc, strList, 4)
-  strListRRDD2 <- parallelize(jsc, strList, 1)
-  expect_equal(collect(strListRRDD), as.list(strList))
-  expect_equal(collect(strListRRDD2), as.list(strList))
+  strListRDD <- parallelize(jsc, strList, 4)
+  strListRDD2 <- parallelize(jsc, strList, 1)
+  expect_equal(collect(strListRDD), as.list(strList))
+  expect_equal(collect(strListRDD2), as.list(strList))
 })
 
 test_that("parallelize() and collect() work for lists of pairs (pairwise data)", {

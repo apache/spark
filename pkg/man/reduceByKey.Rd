@@ -1,16 +1,16 @@
 \docType{methods}
 \name{reduceByKey}
 \alias{reduceByKey}
-\alias{reduceByKey,RRDD,ANY,integer-method}
-\alias{reduceByKey,RRDD,integer-method}
+\alias{reduceByKey,RDD,ANY,integer-method}
+\alias{reduceByKey,RDD,integer-method}
 \title{Merge values by key}
 \usage{
-reduceByKey(rrdd, combineFunc, numPartitions)
+reduceByKey(rdd, combineFunc, numPartitions)
 
-\S4method{reduceByKey}{RRDD,ANY,integer}(rrdd, combineFunc, numPartitions)
+\S4method{reduceByKey}{RDD,ANY,integer}(rdd, combineFunc, numPartitions)
 }
 \arguments{
-  \item{rrdd}{The RRDD to reduce by key. Should be an RDD
+  \item{rdd}{The RDD to reduce by key. Should be an RDD
   where each element is list(K, V).}
 
   \item{combineFunc}{The associative reduce function to
@@ -19,7 +19,7 @@ reduceByKey(rrdd, combineFunc, numPartitions)
   \item{numPartitions}{Number of partitions to create.}
 }
 \value{
-An RRDD where each element is list(K, V') where V' is the
+An RDD where each element is list(K, V') where V' is the
 merged value
 }
 \description{

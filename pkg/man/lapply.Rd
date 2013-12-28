@@ -1,26 +1,26 @@
 \docType{methods}
-\name{lapply,RRDD,function-method}
-\alias{lapply,RRDD,function-method}
+\name{lapply,RDD,function-method}
+\alias{lapply,RDD,function-method}
 \alias{map}
-\alias{map,RRDD,function-method}
+\alias{map,RDD,function-method}
 \title{Apply a function to all elements}
 \usage{
-\S4method{lapply}{RRDD,function}(X, FUN)
+\S4method{lapply}{RDD,function}(X, FUN)
 
 map(X, FUN)
 
-\S4method{map}{RRDD,function}(X, FUN)
+\S4method{map}{RDD,function}(X, FUN)
 }
 \arguments{
-  \item{X}{The RRDD to apply the transformation.}
+  \item{X}{The RDD to apply the transformation.}
 
   \item{FUN}{the transformation to apply on each element}
 }
 \value{
-a new RRDD created by the transformation.
+a new RDD created by the transformation.
 }
 \description{
-This function creates a new RRDD by applying the given
+This function creates a new RDD by applying the given
 transformation to all elements of the given RDD
 }
 \examples{

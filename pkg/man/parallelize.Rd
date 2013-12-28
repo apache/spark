@@ -13,7 +13,7 @@ parallelize(sc, coll, numSlices = 1)
   RDD}
 }
 \value{
-an RRDD created from this collection
+an RDD created from this collection
 }
 \description{
 This function creates an RDD from a local homogeneous list

@@ -18,7 +18,7 @@ strList <- list("Dexter Morgan: Blood. Sometimes it sets my teeth on edge, ",
                 "other times it helps me control the chaos.",
                 "Dexter Morgan: Harry and Dorris Morgan did a wonderful job ",
                 "raising me. But they're both dead now. I didn't kill them. Honest.")
-strListRRDD <- parallelize(sc, strList, 4)
+strListRDD <- parallelize(sc, strList, 4)
 
 test_that("groupByKey for integers", {
   grouped <- groupByKey(intRdd, 2L)
@@ -76,12 +76,12 @@ test_that("partitionBy() partitions data correctly", {
   # Partition by magnitude
   partitionByMagnitude <- function(key) { if (key >= 3) 1 else 0 }
 
-  resultRRDD <- partitionBy(numPairsRdd, 2L, partitionByMagnitude)
+  resultRDD <- partitionBy(numPairsRdd, 2L, partitionByMagnitude)
 
   expected_first <- list(list(1, 100), list(2, 200)) # key < 3
   expected_second <- list(list(4, -1), list(3, 1), list(3, 0)) # key >= 3
-  actual_first <- collectPartition(resultRRDD, 0L)
-  actual_second <- collectPartition(resultRRDD, 1L)
+  actual_first <- collectPartition(resultRDD, 0L)
+  actual_second <- collectPartition(resultRDD, 1L)
 
   expect_equal(actual_first, expected_first)
   expect_equal(actual_second, expected_second)
@@ -92,14 +92,14 @@ test_that("partitionBy works with dependencies", {
   partitionByParity <- function(key) { if (key %% 2 == kOne) 7 else 4 }
 
   # Partition by parity
-  resultRRDD <- partitionBy(numPairsRdd, numPartitions = 2L, partitionByParity)
+  resultRDD <- partitionBy(numPairsRdd, numPartitions = 2L, partitionByParity)
 
   # keys even; 100 %% 2 == 0
   expected_first <- list(list(2, 200), list(4, -1))
   # keys odd; 3 %% 2 == 1
   expected_second <- list(list(1, 100), list(3, 1), list(3, 0))
-  actual_first <- collectPartition(resultRRDD, 0L)
-  actual_second <- collectPartition(resultRRDD, 1L)
+  actual_first <- collectPartition(resultRDD, 0L)
+  actual_second <- collectPartition(resultRDD, 1L)
 
   expect_equal(actual_first, expected_first)
   expect_equal(actual_second, expected_second)

@@ -1,16 +1,16 @@
 \docType{methods}
 \name{partitionBy}
 \alias{partitionBy}
-\alias{partitionBy,RRDD,integer-method}
+\alias{partitionBy,RDD,integer-method}
 \title{Partition an RDD by key}
 \usage{
-partitionBy(rrdd, numPartitions, ...)
+partitionBy(rdd, numPartitions, ...)
 
-\S4method{partitionBy}{RRDD,integer}(rrdd, numPartitions,
+\S4method{partitionBy}{RDD,integer}(rdd, numPartitions,
   partitionFunc = hashCode)
 }
 \arguments{
-  \item{rrdd}{The RRDD to partition. Should be an RDD where
+  \item{rdd}{The RDD to partition. Should be an RDD where
   each element is list(K, V).}
 
   \item{numPartitions}{Number of partitions to create.}
@@ -21,7 +21,7 @@ partitionBy(rrdd, numPartitions, ...)
   a default hashCode function if not provided}
 }
 \value{
-An RRDD partitioned using the specified partitioner.
+An RDD partitioned using the specified partitioner.
 }
 \description{
 This function operates on RDDs where every element is of

@@ -1,15 +1,15 @@
 \docType{methods}
 \name{cache}
 \alias{cache}
-\alias{cache,RRDD-method}
+\alias{cache,RDD-method}
 \title{Persist an RDD}
 \usage{
-cache(rrdd)
+cache(rdd)
 
-\S4method{cache}{RRDD}(rrdd)
+\S4method{cache}{RDD}(rdd)
 }
 \arguments{
-  \item{rrdd}{The RRDD to cache}
+  \item{rdd}{The RDD to cache}
 }
 \description{
 Persist this RDD with the default storage level
@@ -18,8 +18,8 @@ Persist this RDD with the default storage level
 \examples{
 \dontrun{
 sc <- sparkR.init()
-rrdd <- parallelize(sc, 1:10, 2L)
-cache(rrdd)
+rdd <- parallelize(sc, 1:10, 2L)
+cache(rdd)
 }
 }
 
