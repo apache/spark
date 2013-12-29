@@ -130,6 +130,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   // Whether to actually wait in real time before changing manual clock
   def actuallyWait = false
 
+  // A SparkConf to use in tests. Can be modified before calling setupStreams to configure things.
   val conf = new SparkConf()
     .setMaster(master)
     .setAppName(framework)

@@ -23,14 +23,13 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 
 import util.ManualClock
+import org.apache.spark.{SparkContext, SparkConf}
 
 class BasicOperationsSuite extends TestSuiteBase {
 
-  override def framework() = "BasicOperationsSuite"
+  override def framework = "BasicOperationsSuite"
 
-  before {
-    System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
-  }
+  conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
 
   after {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
@@ -387,7 +386,11 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("slice") {
-    val ssc = new StreamingContext("local[2]", "BasicOperationSuite", Seconds(1))
+    val conf2 = new SparkConf()
+      .setMaster("local[2]")
+      .setAppName("BasicOperationsSuite")
+      .set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    val ssc = new StreamingContext(new SparkContext(conf2), Seconds(1))
     val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
     val stream = new TestInputStream[Int](ssc, input, 2)
     ssc.registerInputStream(stream)

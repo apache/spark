@@ -62,13 +62,14 @@ public class JavaAPISuite implements Serializable {
 
   @Before
   public void setUp() {
-      System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
-      ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+    System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
+    ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
     ssc.checkpoint("checkpoint");
   }
 
   @After
   public void tearDown() {
+    System.clearProperty("spark.streaming.clock");
     ssc.stop();
     ssc = null;
 
@@ -101,7 +102,7 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList("hello", "world"),
         Arrays.asList("goodnight", "moon"));
 
-   List<List<Integer>> expected = Arrays.asList(
+    List<List<Integer>> expected = Arrays.asList(
         Arrays.asList(5,5),
         Arrays.asList(9,4));
 
