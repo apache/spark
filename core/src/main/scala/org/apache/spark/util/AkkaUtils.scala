@@ -42,7 +42,8 @@ private[spark] object AkkaUtils extends Logging {
    * of a fatal exception. This is used by [[org.apache.spark.executor.Executor]].
    */
   def createActorSystem(name: String, host: String, port: Int, indestructible: Boolean = false,
-    conf: SparkConf, securityManager: SecurityManager): (ActorSystem, Int) = {
+    conf: SparkConf, securityManager: SecurityManager,
+    classLoader: ClassLoader = this.getClass.getClassLoader): (ActorSystem, Int) = {
 
     val akkaThreads   = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
@@ -102,9 +103,9 @@ private[spark] object AkkaUtils extends Logging {
       """.stripMargin))
 
     val actorSystem = if (indestructible) {
-      IndestructibleActorSystem(name, akkaConf)
+      IndestructibleActorSystem(name, akkaConf, classLoader)
     } else {
-      ActorSystem(name, akkaConf)
+      ActorSystem(name, akkaConf, classLoader)
     }
 
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider
