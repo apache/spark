@@ -530,6 +530,8 @@ setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
                                            as.integer(ceiling(runif(1,
                                                                     -MAXINT,
                                                                     MAXINT)))))
+
+            # TODO(zongheng): investigate if this call is an in-place shuffle?
             sample(samples)[1:total]
           })
 
