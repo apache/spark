@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
 import java.util.concurrent.atomic.AtomicLong
@@ -28,16 +28,16 @@ import scala.concurrent.duration._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
-import org.apache.spark.scheduler._
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
- * The main TaskScheduler implementation, for running tasks on a cluster. Clients should first call
- * initialize() and start(), then submit task sets through the runTasks method.
- *
- * This class can work with multiple types of clusters by acting through a SchedulerBackend.
+ * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
+ * It can also work with a local setup by using a LocalBackend and setting isLocal to true.
  * It handles common logic, like determining a scheduling order across jobs, waking up to launch
  * speculative tasks, etc.
+ *
+ * Clients should first call initialize() and start(), then submit task sets through the
+ * runTasks method.
  *
  * THREADING: SchedulerBackends and task-submitting clients can call this class from multiple
  * threads, so it needs locks in public API methods to maintain its state. In addition, some
@@ -45,20 +45,23 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * acquire a lock on us, so we need to make sure that we don't try to lock the backend while
  * we are holding a lock on ourselves.
  */
-private[spark] class ClusterScheduler(val sc: SparkContext)
-  extends TaskScheduler
-  with Logging
+private[spark] class TaskSchedulerImpl(
+    val sc: SparkContext,
+    val maxTaskFailures: Int = System.getProperty("spark.task.maxFailures", "4").toInt,
+    isLocal: Boolean = false)
+  extends TaskScheduler with Logging
 {
   val conf = sc.conf
+
   // How often to check for speculative tasks
   val SPECULATION_INTERVAL = conf.getOrElse("spark.speculation.interval", "100").toLong
 
   // Threshold above which we warn user initial TaskSet may be starved
   val STARVATION_TIMEOUT = conf.getOrElse("spark.starvation.timeout", "15000").toLong
 
-  // ClusterTaskSetManagers are not thread safe, so any access to one should be synchronized
+  // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
-  val activeTaskSets = new HashMap[String, ClusterTaskSetManager]
+  val activeTaskSets = new HashMap[String, TaskSetManager]
 
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskIdToExecutorId = new HashMap[Long, String]
@@ -120,7 +123,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
   override def start() {
     backend.start()
 
-    if (conf.getOrElse("spark.speculation", "false").toBoolean) {
+    if (!isLocal && conf.getOrElse("spark.speculation", "false").toBoolean) {
       logInfo("Starting speculative execution thread")
       import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
@@ -134,12 +137,12 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     val tasks = taskSet.tasks
     logInfo("Adding task set " + taskSet.id + " with " + tasks.length + " tasks")
     this.synchronized {
-      val manager = new ClusterTaskSetManager(this, taskSet)
+      val manager = new TaskSetManager(this, taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
       taskSetTaskIds(taskSet.id) = new HashSet[Long]()
 
-      if (!hasReceivedTask) {
+      if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
           override def run() {
             if (!hasLaunchedTask) {
@@ -293,19 +296,19 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
   }
 
-  def handleTaskGettingResult(taskSetManager: ClusterTaskSetManager, tid: Long) {
+  def handleTaskGettingResult(taskSetManager: TaskSetManager, tid: Long) {
     taskSetManager.handleTaskGettingResult(tid)
   }
 
   def handleSuccessfulTask(
-    taskSetManager: ClusterTaskSetManager,
+    taskSetManager: TaskSetManager,
     tid: Long,
     taskResult: DirectTaskResult[_]) = synchronized {
     taskSetManager.handleSuccessfulTask(tid, taskResult)
   }
 
   def handleFailedTask(
-    taskSetManager: ClusterTaskSetManager,
+    taskSetManager: TaskSetManager,
     tid: Long,
     taskState: TaskState,
     reason: Option[TaskEndReason]) = synchronized {
@@ -353,7 +356,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   override def defaultParallelism() = backend.defaultParallelism()
 
-
   // Check for speculatable tasks in all our active jobs.
   def checkSpeculatableTasks() {
     var shouldRevive = false
@@ -362,13 +364,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     }
     if (shouldRevive) {
       backend.reviveOffers()
-    }
-  }
-
-  // Check for pending tasks in all our active jobs.
-  def hasPendingTasks: Boolean = {
-    synchronized {
-      rootPool.hasPendingTasks()
     }
   }
 
@@ -430,7 +425,7 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 }
 
 
-object ClusterScheduler {
+private[spark] object TaskSchedulerImpl {
   /**
    * Used to balance containers across hosts.
    *

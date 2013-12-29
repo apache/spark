@@ -26,17 +26,6 @@ import util.ManualClock
 import org.apache.spark.{SparkContext, SparkConf}
 
 class BasicOperationsSuite extends TestSuiteBase {
-
-  override def framework = "BasicOperationsSuite"
-
-  conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
-
-  after {
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
-  }
-
   test("map") {
     val input = Seq(1 to 4, 5 to 8, 9 to 12)
     testOperation(

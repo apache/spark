@@ -32,7 +32,7 @@ class MetadataCleaner(
 {
   val name = cleanerType.toString
 
-  private val delaySeconds = MetadataCleaner.getDelaySeconds(conf)
+  private val delaySeconds = MetadataCleaner.getDelaySeconds(conf, cleanerType)
   private val periodSeconds = math.max(10, delaySeconds / 10)
   private val timer = new Timer(name + " cleanup timer", true)
 

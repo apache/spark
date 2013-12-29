@@ -15,20 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.ui.jobs
 
-import org.apache.spark.SparkContext
-
-/**
- * A backend interface for cluster scheduling systems that allows plugging in different ones under
- * ClusterScheduler. We assume a Mesos-like model where the application gets resource offers as
- * machines become available and can launch tasks on them.
- */
-private[spark] trait SchedulerBackend {
-  def start(): Unit
-  def stop(): Unit
-  def reviveOffers(): Unit
-  def defaultParallelism(): Int
-
-  def killTask(taskId: Long, executorId: String): Unit = throw new UnsupportedOperationException
+/** class for reporting aggregated metrics for each executors in stageUI */
+private[spark] class ExecutorSummary {
+  var taskTime : Long = 0
+  var failedTasks : Int = 0
+  var succeededTasks : Int = 0
+  var shuffleRead : Long = 0
+  var shuffleWrite : Long = 0
 }

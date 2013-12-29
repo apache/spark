@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.scheduler
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
@@ -23,7 +23,6 @@ import scala.collection.mutable
 import org.scalatest.FunSuite
 
 import org.apache.spark._
-import org.apache.spark.scheduler._
 import org.apache.spark.executor.TaskMetrics
 import java.nio.ByteBuffer
 import org.apache.spark.util.{Utils, FakeClock}
@@ -56,10 +55,10 @@ class FakeDAGScheduler(taskScheduler: FakeClusterScheduler) extends DAGScheduler
  * A mock ClusterScheduler implementation that just remembers information about tasks started and
  * feedback received from the TaskSetManagers. Note that it's important to initialize this with
  * a list of "live" executors and their hostnames for isExecutorAlive and hasExecutorsAliveOnHost
- * to work, and these are required for locality in ClusterTaskSetManager.
+ * to work, and these are required for locality in TaskSetManager.
  */
 class FakeClusterScheduler(sc: SparkContext, liveExecutors: (String, String)* /* execId, host */)
-  extends ClusterScheduler(sc)
+  extends TaskSchedulerImpl(sc)
 {
   val startedTasks = new ArrayBuffer[Long]
   val endedTasks = new mutable.HashMap[Long, TaskEndReason]
@@ -79,16 +78,19 @@ class FakeClusterScheduler(sc: SparkContext, liveExecutors: (String, String)* /*
   override def hasExecutorsAliveOnHost(host: String): Boolean = executors.values.exists(_ == host)
 }
 
-class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
+class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
   import TaskLocality.{ANY, PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL}
+
   private val conf = new SparkConf
+
   val LOCALITY_WAIT = conf.getOrElse("spark.locality.wait", "3000").toLong
+  val MAX_TASK_FAILURES = 4
 
   test("TaskSet with no preferences") {
     sc = new SparkContext("local", "test")
     val sched = new FakeClusterScheduler(sc, ("exec1", "host1"))
     val taskSet = createTaskSet(1)
-    val manager = new ClusterTaskSetManager(sched, taskSet)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // Offer a host with no CPUs
     assert(manager.resourceOffer("exec1", "host1", 0, ANY) === None)
@@ -114,7 +116,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     sc = new SparkContext("local", "test")
     val sched = new FakeClusterScheduler(sc, ("exec1", "host1"))
     val taskSet = createTaskSet(3)
-    val manager = new ClusterTaskSetManager(sched, taskSet)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES)
 
     // First three offers should all find tasks
     for (i <- 0 until 3) {
@@ -151,7 +153,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
       Seq()   // Last task has no locality prefs
     )
     val clock = new FakeClock
-    val manager = new ClusterTaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // First offer host1, exec1: first task should be chosen
     assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
@@ -197,7 +199,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
       Seq(TaskLocation("host2"))
     )
     val clock = new FakeClock
-    val manager = new ClusterTaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // First offer host1: first task should be chosen
     assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
@@ -234,7 +236,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
       Seq(TaskLocation("host3"))
     )
     val clock = new FakeClock
-    val manager = new ClusterTaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // First offer host1: first task should be chosen
     assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
@@ -262,7 +264,7 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     val sched = new FakeClusterScheduler(sc, ("exec1", "host1"))
     val taskSet = createTaskSet(1)
     val clock = new FakeClock
-    val manager = new ClusterTaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
 
@@ -279,17 +281,17 @@ class ClusterTaskSetManagerSuite extends FunSuite with LocalSparkContext with Lo
     val sched = new FakeClusterScheduler(sc, ("exec1", "host1"))
     val taskSet = createTaskSet(1)
     val clock = new FakeClock
-    val manager = new ClusterTaskSetManager(sched, taskSet, clock)
+    val manager = new TaskSetManager(sched, taskSet, MAX_TASK_FAILURES, clock)
 
     // Fail the task MAX_TASK_FAILURES times, and check that the task set is aborted
     // after the last failure.
-    (1 to manager.MAX_TASK_FAILURES).foreach { index =>
+    (1 to manager.maxTaskFailures).foreach { index =>
       val offerResult = manager.resourceOffer("exec1", "host1", 1, ANY)
       assert(offerResult != None,
         "Expect resource offer on iteration %s to return a task".format(index))
       assert(offerResult.get.index === 0)
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, Some(TaskResultLost))
-      if (index < manager.MAX_TASK_FAILURES) {
+      if (index < MAX_TASK_FAILURES) {
         assert(!sched.taskSetsFailed.contains(taskSet.id))
       } else {
         assert(sched.taskSetsFailed.contains(taskSet.id))

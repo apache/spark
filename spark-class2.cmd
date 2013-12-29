@@ -17,7 +17,7 @@ rem See the License for the specific language governing permissions and
 rem limitations under the License.
 rem
 
-set SCALA_VERSION=2.9.3
+set SCALA_VERSION=2.10
 
 rem Figure out where the Spark framework is installed
 set FWDIR=%~dp0
@@ -75,7 +75,7 @@ rem Compute classpath using external script
 set DONT_PRINT_CLASSPATH=1
 call "%FWDIR%bin\compute-classpath.cmd"
 set DONT_PRINT_CLASSPATH=0
-set CLASSPATH=%SPARK_TOOLS_JAR%;%CLASSPATH%
+set CLASSPATH=%CLASSPATH%;%SPARK_TOOLS_JAR%
 
 rem Figure out where java is.
 set RUNNER=java

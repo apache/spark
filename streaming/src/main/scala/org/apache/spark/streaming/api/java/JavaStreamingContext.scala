@@ -40,6 +40,7 @@ import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.SparkConf
+import org.apache.spark.streaming.scheduler.StreamingListener
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -694,6 +695,13 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    */
   def remember(duration: Duration) {
     ssc.remember(duration)
+  }
+
+  /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+    * receiving system events related to streaming.
+    */
+  def addStreamingListener(streamingListener: StreamingListener) {
+    ssc.addStreamingListener(streamingListener)
   }
 
   /**

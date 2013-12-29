@@ -15,10 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler.cluster
+package org.apache.spark.streaming.scheduler
+
+import org.apache.spark.streaming.Time
 
 /**
- * Represents free resources available on an executor.
+ * Class representing a Spark computation. It may contain multiple Spark jobs.
  */
-private[spark]
-class WorkerOffer(val executorId: String, val host: String, val cores: Int)
+private[streaming]
+class Job(val time: Time, func: () => _) {
+  var id: String = _
+
+  def run(): Long = {
+    val startTime = System.currentTimeMillis 
+    func() 
+    val stopTime = System.currentTimeMillis
+    (stopTime - startTime)
+  }
+
+  def setId(number: Int) {
+    id = "streaming job " + time + "." + number
+  }
+
+  override def toString = id
+}

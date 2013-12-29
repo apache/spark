@@ -15,27 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming
+package org.apache.spark.scheduler
 
-import java.util.concurrent.atomic.AtomicLong
+import org.apache.spark.TaskContext
 
-private[streaming]
-class Job(val time: Time, func: () => _) {
-  val id = Job.getNewId()
-  def run(): Long = {
-    val startTime = System.currentTimeMillis 
-    func() 
-    val stopTime = System.currentTimeMillis
-    (stopTime - startTime)
-  }
+class FakeTask(stageId: Int, prefLocs: Seq[TaskLocation] = Nil) extends Task[Int](stageId, 0) {
+  override def runTask(context: TaskContext): Int = 0
 
-  override def toString = "streaming job " + id + " @ " + time 
+  override def preferredLocations: Seq[TaskLocation] = prefLocs
 }
-
-private[streaming]
-object Job {
-  val id = new AtomicLong(0)
-
-  def getNewId() = id.getAndIncrement()
-}
-

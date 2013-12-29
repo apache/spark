@@ -422,8 +422,10 @@ class Client(conf: Configuration, args: ClientArguments) extends YarnClientImpl 
   }
 
   def monitorApplication(appId: ApplicationId): Boolean = {
+    val interval = new SparkConf().getOrElse("spark.yarn.report.interval", "1000").toLong
+
     while (true) {
-      Thread.sleep(1000)
+      Thread.sleep(interval)
       val report = super.getApplicationReport(appId)
 
       logInfo("Application report from ASM: \n" +

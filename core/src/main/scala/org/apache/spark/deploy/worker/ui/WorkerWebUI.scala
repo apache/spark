@@ -140,12 +140,12 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         <body>
           {linkToMaster}
           <div>
-            <div style="float:left;width:40%">{backButton}</div>
+            <div style="float:left; margin-right:10px">{backButton}</div>
             <div style="float:left;">{range}</div>
-            <div style="float:right;">{nextButton}</div>
+            <div style="float:right; margin-left:10px">{nextButton}</div>
           </div>
           <br />
-          <div style="height:500px;overflow:auto;padding:5px;">
+          <div style="height:500px; overflow:auto; padding:5px;">
             <pre>{logText}</pre>
           </div>
         </body>
