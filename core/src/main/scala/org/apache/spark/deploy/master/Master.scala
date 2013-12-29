@@ -189,7 +189,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         // TODO: It might be good to instead have the submission client poll the master to determine
         //       the current status of the driver. For now it's simply "fire and forget".
 
-        sender ! SubmitDriverResponse(true, "Driver successfully submitted")
+        sender ! SubmitDriverResponse(true, s"Driver successfully submitted as ${driver.id}")
       }
     }
 

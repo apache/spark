@@ -43,7 +43,7 @@ class DriverActor(master: String, response: Promise[(Boolean, String)]) extends 
       response.success((success, message))
     }
 
-    // Relay all other messages to the server.
+    // Relay all other messages to the master.
     case message => {
       logInfo(s"Sending message to master $master...")
       val masterActor = context.actorSelection(Master.toAkkaUrl(master))
