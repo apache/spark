@@ -396,8 +396,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     // Reschedule drivers which were not claimed by any workers
     drivers.filter(_.worker.isEmpty).foreach { d =>
-      logWarning(s"Driver ${d.id} was not found after master recovery, re-launching")
-      relaunchDriver(d)
+      logWarning(s"Driver ${d.id} was not found after master recovery")
+      if (d.desc.supervise) {
+        logWarning(s"Re-launching ${d.id}")
+        relaunchDriver(d)
+      } else {
+        removeDriver(d.id, DriverState.FAILED, None)
+        logWarning(s"Did not re-launch ${d.id} because it was not supervised")
+      }
     }
 
     state = RecoveryState.ALIVE
@@ -519,7 +525,13 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       exec.application.removeExecutor(exec)
     }
     for (driver <- worker.drivers.values) {
-      relaunchDriver(driver)
+      if (driver.desc.supervise) {
+        logInfo(s"Re-launching ${driver.id}")
+        relaunchDriver(driver)
+      } else {
+        logInfo(s"Not re-launching ${driver.id} because it was not supervised")
+        removeDriver(driver.id, DriverState.FAILED, None)
+      }
     }
     persistenceEngine.removeWorker(worker)
   }
