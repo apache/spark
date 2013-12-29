@@ -74,13 +74,21 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
     this
   }
 
-  /** Set an environment variable to be used when launching executors for this application. */
+  /**
+   * Set an environment variable to be used when launching executors for this application.
+   * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
+   * (for example spark.executorEnv.PATH) but this method makes them easier to set.
+   */
   def setExecutorEnv(variable: String, value: String): SparkConf = {
     settings("spark.executorEnv." + variable) = value
     this
   }
 
-  /** Set multiple environment variables to be used when launching executors. */
+  /**
+   * Set multiple environment variables to be used when launching executors.
+   * These variables are stored as properties of the form spark.executorEnv.VAR_NAME
+   * (for example spark.executorEnv.PATH) but this method makes them easier to set.
+   */
   def setExecutorEnv(variables: Seq[(String, String)]): SparkConf = {
     for ((k, v) <- variables) {
       setExecutorEnv(k, v)
@@ -135,7 +143,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
   }
 
   /** Get all parameters as a list of pairs */
-  def getAll: Seq[(String, String)] = settings.clone().toSeq
+  def getAll: Array[(String, String)] = settings.clone().toArray
 
   /** Get a parameter, falling back to a default if not set */
   def getOrElse(k: String, defaultValue: String): String = {

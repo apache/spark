@@ -78,7 +78,7 @@ class SparkContext(
    * @param conf a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
    */
   def this(master: String, appName: String, conf: SparkConf) =
-    this(conf.setMaster(master).setAppName(appName))
+    this(conf.clone().setMaster(master).setAppName(appName))
 
   /**
    * Alternative constructor that allows setting common Spark properties directly
