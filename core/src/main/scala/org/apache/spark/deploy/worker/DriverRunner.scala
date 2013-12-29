@@ -66,7 +66,7 @@ private[spark] class DriverRunner(
 
           val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
             sparkHome.getAbsolutePath)
-          runCommandWithRetry(command, env, driverDir)
+          runCommand(command, env, driverDir, driverDesc.supervise)
         }
         catch {
           case e: Exception => exn = Some(e)
@@ -137,13 +137,14 @@ private[spark] class DriverRunner(
     localJarFilename
   }
 
-  /** Continue launching the supplied command until it exits zero or is killed. */
-  private def runCommandWithRetry(command: Seq[String], envVars: Map[String, String], baseDir: File) {
+  /** Launch the supplied command. */
+  private def runCommand(command: Seq[String], envVars: Map[String, String], baseDir: File,
+      supervise: Boolean) {
     // Time to wait between submission retries.
     var waitSeconds = 1
-    var cleanExit = false
+    var keepTrying = !killed
 
-    while (!cleanExit && !killed) {
+    while (keepTrying) {
       logInfo("Launch Command: " + command.mkString("\"", "\" \"", "\""))
       val builder = new ProcessBuilder(command: _*).directory(baseDir)
       envVars.map{ case(k,v) => builder.environment().put(k, v) }
@@ -166,8 +167,8 @@ private[spark] class DriverRunner(
 
       val exitCode = process.get.waitFor()
 
-      cleanExit = exitCode == 0
-      if (!cleanExit && !killed) {
+      keepTrying = supervise && exitCode != 0 && !killed
+      if (keepTrying) {
         waitSeconds = waitSeconds * 2 // exponential back-off
         logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")
         (0 until waitSeconds).takeWhile(f => {Thread.sleep(1000); !killed})

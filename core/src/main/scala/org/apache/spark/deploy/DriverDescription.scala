@@ -21,6 +21,7 @@ private[spark] class DriverDescription(
     val jarUrl: String,
     val mem: Int,
     val cores: Int,
+    val supervise: Boolean,
     val command: Command)
   extends Serializable {
 

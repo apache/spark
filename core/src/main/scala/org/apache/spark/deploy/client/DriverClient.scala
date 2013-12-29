@@ -71,7 +71,7 @@ object DriverClient extends Logging {
     driverArgs.cmd match {
       case "launch" =>
         // TODO: Could modify env here to pass a flag indicating Spark is in deploy-driver mode
-        //       then use that to load jars locally
+        //       then use that to load jars locally (e.g. truncate the filesystem path)
         val env = Map[String, String]()
         System.getenv().foreach{case (k, v) => env(k) = v}
 
@@ -83,6 +83,7 @@ object DriverClient extends Logging {
           driverArgs.jarUrl,
           driverArgs.memory,
           driverArgs.cores,
+          driverArgs.supervise,
           command)
         driver ! RequestSubmitDriver(driverDescription)
 

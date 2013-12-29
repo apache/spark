@@ -29,6 +29,7 @@ private[spark] class DriverClientArguments(args: Array[String]) {
   var master: String = ""
   var jarUrl: String = ""
   var mainClass: String = ""
+  var supervise: Boolean = false
   var memory: Int = 512
   var cores: Int = 1
   private var _driverOptions = ListBuffer[String]()
@@ -46,6 +47,10 @@ private[spark] class DriverClientArguments(args: Array[String]) {
 
     case ("--memory" | "-m") :: value :: tail =>
       memory = value.toInt
+      parse(tail)
+
+    case ("--supervise" | "-s") :: tail =>
+      supervise = true
       parse(tail)
 
     case ("--help" | "-h") :: tail =>
@@ -71,10 +76,6 @@ private[spark] class DriverClientArguments(args: Array[String]) {
    * Print usage and exit JVM with the given exit code.
    */
   def printUsageAndExit(exitCode: Int) {
-    // TODO: Document the submission approach here. It is:
-    //      1) Create an uber jar with your application and dependencies (excluding Spark)
-    //      2) You'll need to add this jar using addJar(X) inside of your spark context
-
     // TODO: It wouldn't be too hard to allow users to submit their app and dependency jars
     //       separately similar to in the YARN client.
     System.err.println(
@@ -83,7 +84,8 @@ private[spark] class DriverClientArguments(args: Array[String]) {
       "usage: DriverClient kill <active-master> <driver-id>\n\n" +
       "Options:\n" +
       "  -c CORES, --cores CORES                Number of cores to request \n" +
-      "  -m MEMORY, --memory MEMORY             Megabytes of memory to request\n")
+      "  -m MEMORY, --memory MEMORY             Megabytes of memory to request\n" +
+      "  -s, --supervise                        Whether to restart the driver on failure\n")
     System.exit(exitCode)
   }
 }
