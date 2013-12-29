@@ -53,7 +53,8 @@ class SparkContext(object):
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
         environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None):
         """
-        Create a new SparkContext.
+        Create a new SparkContext. At least the master and app name should be set,
+        either through the named parameters here or through C{conf}.
 
         @param master: Cluster URL to connect to
                (e.g. mesos://host:port, spark://host:port, local[4]).
