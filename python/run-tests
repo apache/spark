@@ -35,6 +35,7 @@ function run_test() {
 
 run_test "pyspark/rdd.py"
 run_test "pyspark/context.py"
+run_test "pyspark/conf.py"
 run_test "-m doctest pyspark/broadcast.py"
 run_test "-m doctest pyspark/accumulators.py"
 run_test "-m doctest pyspark/serializers.py"

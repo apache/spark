@@ -50,10 +50,11 @@ u'value1'
 
 
 class SparkConf(object):
-    def __init__(self, loadDefaults=False):
+    def __init__(self, loadDefaults=True, _jvm=None):
         from pyspark.context import SparkContext
         SparkContext._ensure_initialized()
-        self._jconf = SparkContext._jvm.SparkConf(loadDefaults)
+        _jvm = _jvm or SparkContext._jvm
+        self._jconf = _jvm.SparkConf(loadDefaults)
 
     def set(self, key, value):
         self._jconf.set(key, value)
