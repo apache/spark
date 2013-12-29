@@ -37,7 +37,9 @@ private[spark] object AkkaUtils {
    * If indestructible is set to true, the Actor System will continue running in the event
    * of a fatal exception. This is used by [[org.apache.spark.executor.Executor]].
    */
-  def createActorSystem(name: String, host: String, port: Int, indestructible: Boolean = false)
+  def createActorSystem(name: String, host: String, port: Int,
+                        indestructible: Boolean = false,
+                        classLoader: ClassLoader = this.getClass.getClassLoader)
     : (ActorSystem, Int) = {
 
     val akkaThreads   = System.getProperty("spark.akka.threads", "4").toInt
@@ -76,9 +78,9 @@ private[spark] object AkkaUtils {
       """.stripMargin)
 
     val actorSystem = if (indestructible) {
-      IndestructibleActorSystem(name, akkaConf)
+      IndestructibleActorSystem(name, akkaConf, classLoader)
     } else {
-      ActorSystem(name, akkaConf)
+      ActorSystem(name, akkaConf, classLoader)
     }
 
     val provider = actorSystem.asInstanceOf[ExtendedActorSystem].provider

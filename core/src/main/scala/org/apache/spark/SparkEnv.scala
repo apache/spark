@@ -119,7 +119,10 @@ object SparkEnv extends Logging {
       isDriver: Boolean,
       isLocal: Boolean): SparkEnv = {
 
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port)
+    val classLoader = Thread.currentThread.getContextClassLoader
+
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port,
+                                                               classLoader = classLoader)
 
     // Bit of a hack: If this is the driver and our port was 0 (meaning bind to any free port),
     // figure out which port number Akka actually bound to and set spark.driver.port to it.
@@ -136,8 +139,6 @@ object SparkEnv extends Logging {
       Utils.checkHost(hostname)
       System.setProperty("spark.hostPort", hostname + ":" + boundPort)
     }
-
-    val classLoader = Thread.currentThread.getContextClassLoader
 
     // Create an instance of the class named by the given Java system property, or by
     // defaultClassName if the property is not set, and return it as a T
