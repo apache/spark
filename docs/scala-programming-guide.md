@@ -349,7 +349,7 @@ An accumulator is created from an initial value `v` by calling `SparkContext.acc
 The interpreter session below shows an accumulator being used to add up the elements of an array:
 
 {% highlight scala %}
-scala> var accum = sc.accumulator(0)
+scala> val accum = sc.accumulator(0)
 accum: spark.Accumulator[Int] = 0
 
 scala> sc.parallelize(Array(1, 2, 3, 4)).foreach(x => accum += x)
