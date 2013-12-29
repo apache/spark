@@ -28,7 +28,6 @@ import com.google.common.collect.MapMaker
 
 import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
-import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.ConnectionManager
 import org.apache.spark.scheduler.LiveListenerBus
@@ -58,7 +57,6 @@ class SparkEnv private[spark] (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    val classLoader: ExecutorURLClassLoader,
     val conf: SparkConf) extends Logging {
 
   // A mapping of thread ID to amount of memory used for shuffle in bytes
@@ -135,12 +133,6 @@ object SparkEnv extends Logging {
     }
 
     val securityManager = new SecurityManager(conf)
-
-    // Create a classLoader for use by the driver so that jars added via addJar are available to the driver
-    // Do this before all other initialization so that any thread pools created for this SparkContext
-    // uses the class loader
-    val driverLoader = getDriverClassLoader()
-    Thread.currentThread.setContextClassLoader(driverLoader)
 
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
       securityManager = securityManager)
@@ -257,14 +249,7 @@ object SparkEnv extends Logging {
       httpFileServer,
       sparkFilesDir,
       metricsSystem,
-      driverLoader,
       conf)
-  }
-
-  private def getDriverClassLoader(): ExecutorURLClassLoader = {
-    // Initially there are no jars
-    val parentLoader = this.getClass.getClassLoader
-    new ExecutorURLClassLoader(Array.empty[URL], parentLoader)
   }
 
   /**
