@@ -50,7 +50,7 @@ private[spark] class ExecutorRunner(
   var workerThread: Thread = null
   var process: Process = null
 
-  // NOTE: This is now redundant with the automated shut-down enforced by the Executor. It mike
+  // NOTE: This is now redundant with the automated shut-down enforced by the Executor. It might
   // make sense to remove this in the future.
   var shutdownHook: Thread = null
 

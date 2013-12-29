@@ -19,7 +19,7 @@ private[spark] class WorkerWatcher(workerUrl: String) extends Actor with Logging
     worker ! SendHeartbeat // need to send a message here to initiate connection
   }
 
-  // Lets us filter events only from the worker actor
+  // Lets us filter events only from the worker's actor system
   private val expectedHostPort = AddressFromURIString(workerUrl).hostPort
   private def isWorker(address: Address) = address.hostPort == expectedHostPort
 

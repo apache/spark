@@ -58,7 +58,7 @@ private[spark] class DriverRunner(
           val localJarFilename = downloadUserJar(driverDir)
 
           // Make sure user application jar is on the classpath
-          // TODO: This could eventually exploit ability for driver to add jars
+          // TODO: If we add ability to submit multiple jars they should also be added here
           val env = Map(driverDesc.command.environment.toSeq: _*)
           env("SPARK_CLASSPATH") = env.getOrElse("SPARK_CLASSPATH", "") + s":$localJarFilename"
           val newCommand = Command(driverDesc.command.mainClass,

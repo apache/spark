@@ -70,8 +70,9 @@ object DriverClient extends Logging {
 
     driverArgs.cmd match {
       case "launch" =>
-        // TODO: Could modify env here to pass a flag indicating Spark is in deploy-driver mode
-        //       then use that to load jars locally (e.g. truncate the filesystem path)
+        // TODO: We could add an env variable here and intercept it in `sc.addJar` that would
+        //       truncate filesystem paths similar to what YARN does. For now, we just require
+        //       people call `addJar` assuming the jar is in the same directory.
         val env = Map[String, String]()
         System.getenv().foreach{case (k, v) => env(k) = v}
 

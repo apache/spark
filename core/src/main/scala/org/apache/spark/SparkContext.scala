@@ -622,7 +622,6 @@ class SparkContext(
       } else {
         val uri = new URI(path)
         key = uri.getScheme match {
-          // TODO: Have this load jars that are available on the driver
           // A JAR file which exists only on the driver node
           case null | "file" =>
             if (SparkHadoopUtil.get.isYarnMode()) {
