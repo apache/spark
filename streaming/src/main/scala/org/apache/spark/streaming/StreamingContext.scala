@@ -71,6 +71,15 @@ class StreamingContext private (
   }
 
   /**
+   * Create a StreamingContext by providing the configuration necessary for a new SparkContext.
+   * @param conf A standard Spark application configuration
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   */
+  def this(conf: SparkConf, batchDuration: Duration) = {
+    this(StreamingContext.createNewSparkContext(conf), null, batchDuration)
+  }
+
+  /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your job, to display on the cluster web UI
@@ -577,6 +586,16 @@ object StreamingContext {
     new PairDStreamFunctions[K, V](stream)
   }
 
+  protected[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
+    // Set the default cleaner delay to an hour if not already set.
+    // This should be sufficient for even 1 second batch intervals.
+    val sc = new SparkContext(conf)
+    if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
+      MetadataCleaner.setDelaySeconds(sc.conf, 3600)
+    }
+    sc
+  }
+
   protected[streaming] def createNewSparkContext(
       master: String,
       appName: String,
@@ -586,7 +605,7 @@ object StreamingContext {
   {
     val sc = new SparkContext(master, appName, sparkHome, jars, environment)
     // Set the default cleaner delay to an hour if not already set.
-    // This should be sufficient for even 1 second interval.
+    // This should be sufficient for even 1 second batch intervals.
     if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
       MetadataCleaner.setDelaySeconds(sc.conf, 3600)
     }
