@@ -46,7 +46,7 @@ private[spark] object CompressionCodec {
   def createCodec(conf: SparkConf, codecName: String): CompressionCodec = {
     val ctor = Class.forName(codecName, true, Thread.currentThread.getContextClassLoader)
       .getConstructor(classOf[SparkConf])
-      ctor.newInstance(conf).asInstanceOf[CompressionCodec]
+    ctor.newInstance(conf).asInstanceOf[CompressionCodec]
   }
 }
 

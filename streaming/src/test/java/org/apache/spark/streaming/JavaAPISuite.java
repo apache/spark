@@ -25,6 +25,7 @@ import com.google.common.io.Files;
 import kafka.serializer.StringDecoder;
 
 import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
+import org.apache.spark.SparkConf;
 import org.apache.spark.streaming.api.java.JavaDStreamLike;
 import org.junit.After;
 import org.junit.Assert;
@@ -62,14 +63,16 @@ public class JavaAPISuite implements Serializable {
 
   @Before
   public void setUp() {
-    System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
-    ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
+    SparkConf conf = new SparkConf()
+        .setMaster("local[2]")
+        .setAppName("test")
+        .set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
+    ssc = new JavaStreamingContext(conf, new Duration(1000));
     ssc.checkpoint("checkpoint");
   }
 
   @After
   public void tearDown() {
-    System.clearProperty("spark.streaming.clock");
     ssc.stop();
     ssc = null;
 

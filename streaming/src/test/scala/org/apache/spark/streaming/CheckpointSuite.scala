@@ -201,10 +201,6 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
   // It also tests whether batches, whose processing was incomplete due to the
   // failure, are re-processed or not.
   test("recovery with file input stream") {
-    // Disable manual clock as FileInputDStream does not work with manual clock
-    val clockProperty = System.getProperty("spark.streaming.clock")
-    System.clearProperty("spark.streaming.clock")
-
     // Set up the streaming context and input streams
     val testDir = Files.createTempDir()
     var ssc = new StreamingContext(master, framework, Seconds(1))
@@ -301,10 +297,6 @@ class CheckpointSuite extends TestSuiteBase with BeforeAndAfter {
     )
     // To ensure that all the inputs were received correctly
     assert(expectedOutput.last === output.last)
-
-    // Enable manual clock back again for other tests
-    if (clockProperty != null)
-      System.setProperty("spark.streaming.clock", clockProperty)
   }
 
 

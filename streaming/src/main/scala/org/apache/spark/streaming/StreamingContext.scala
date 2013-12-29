@@ -63,8 +63,8 @@ class StreamingContext private (
 
   /**
    * Create a StreamingContext using an existing SparkContext.
-   * @param sparkContext Existing SparkContext
-   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param sparkContext existing SparkContext
+   * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(sparkContext: SparkContext, batchDuration: Duration) = {
     this(sparkContext, null, batchDuration)
@@ -72,8 +72,8 @@ class StreamingContext private (
 
   /**
    * Create a StreamingContext by providing the configuration necessary for a new SparkContext.
-   * @param conf A standard Spark application configuration
-   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
+   * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(conf: SparkConf, batchDuration: Duration) = {
     this(StreamingContext.createNewSparkContext(conf), null, batchDuration)
@@ -81,9 +81,9 @@ class StreamingContext private (
 
   /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param appName A name for your job, to display on the cluster web UI
-   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param master cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName a name for your job, to display on the cluster web UI
+   * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(
       master: String,

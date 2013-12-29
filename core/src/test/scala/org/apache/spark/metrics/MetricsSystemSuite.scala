@@ -24,10 +24,10 @@ import org.apache.spark.SparkConf
 class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
   var filePath: String = _
   var conf: SparkConf = null
+
   before {
     filePath = getClass.getClassLoader.getResource("test_metrics_system.properties").getFile()
-    System.setProperty("spark.metrics.conf", filePath)
-    conf = new SparkConf
+    conf = new SparkConf(false).set("spark.metrics.conf", filePath)
   }
 
   test("MetricsSystem with default config") {
