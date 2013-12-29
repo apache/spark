@@ -938,7 +938,7 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** Record user function generating this RDD. */
-  @transient private[spark] val origin = Utils.formatSparkCallSite
+  @transient private[spark] val origin = sc.getCallSite
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 

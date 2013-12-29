@@ -704,6 +704,26 @@ class SparkContext(
   }
 
   /**
+   * Support function for API backtraces.
+   */
+  def setCallSite(site: String) {
+    setLocalProperty("externalCallSite", site)
+  }
+
+  /**
+   * Support function for API backtraces.
+   */
+  def clearCallSite() {
+    setLocalProperty("externalCallSite", null)
+  }
+
+  private[spark] def getCallSite(): String = {
+    val callSite = getLocalProperty("externalCallSite")
+    if (callSite == null) return Utils.formatSparkCallSite
+    callSite
+  }
+
+  /**
    * Run a function on a given set of partitions in an RDD and pass the results to the given
    * handler function. This is the main entry point for all actions in Spark. The allowLocal
    * flag specifies whether the scheduler can run the computation on the driver rather than
@@ -715,7 +735,7 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    val callSite = Utils.formatSparkCallSite
+    val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
@@ -799,7 +819,7 @@ class SparkContext(
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long): PartialResult[R] = {
-    val callSite = Utils.formatSparkCallSite
+    val callSite = getCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
     val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout,
@@ -819,7 +839,7 @@ class SparkContext(
       resultFunc: => R): SimpleFutureAction[R] =
   {
     val cleanF = clean(processPartition)
-    val callSite = Utils.formatSparkCallSite
+    val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
       rdd,
       (context: TaskContext, iter: Iterator[T]) => cleanF(iter),

@@ -405,6 +405,20 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     new JavaRDD(sc.checkpointFile(path))
   }
+
+  /**
+   * Pass-through to SparkContext.setCallSite.  For API support only.
+   */
+  def setCallSite(site: String) {
+    sc.setCallSite(site)
+  }
+
+  /**
+   * Pass-through to SparkContext.setCallSite.  For API support only.
+   */
+  def clearCallSite() {
+    sc.clearCallSite()
+  }
 }
 
 object JavaSparkContext {
