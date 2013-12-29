@@ -52,6 +52,7 @@ import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFor
 import org.apache.mesos.MesosNativeLibrary
 
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
+import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
@@ -100,6 +101,12 @@ class SparkContext(
   }
 
   val isLocal = (master == "local" || master.startsWith("local["))
+
+  // Create a classLoader for use by the driver so that jars added via addJar are available to the driver
+  // Do this before all other initialization so that any thread pools created for this SparkContext
+  // uses the class loader
+  private[spark] val classLoader = new ExecutorURLClassLoader(Array.empty[URL], this.getClass.getClassLoader)
+  Thread.currentThread.setContextClassLoader(classLoader)
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.createFromSystemProperties(
@@ -667,9 +674,9 @@ class SparkContext(
   }
 
   private def addUrlToDriverLoader(url: URL) {
-    if (!env.classLoader.getURLs.contains(url)) {
+    if (!classLoader.getURLs.contains(url)) {
       logInfo("Adding JAR " + url + " to driver class loader")
-      env.classLoader.addURL(url)
+      classLoader.addURL(url)
     }
   }
 
