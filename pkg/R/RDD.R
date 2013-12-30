@@ -11,8 +11,7 @@
 #' @param jrdd Java object reference to the backing JavaRDD
 #' @param serialized TRUE if the JavaRDD contains serialized R objects
 #' @export
-setClass("RDD", slots = list(jrdd = "jobjRef",
-                              serialized = "logical"))
+setClass("RDD", slots = list(jrdd = "jobjRef", serialized = "logical"))
 
 setValidity("RDD",
             function(object) {
@@ -89,7 +88,7 @@ setMethod("collect",
 #' @rdname collect-methods
 #' @export
 #' @description
-#' \code{collectPartition} returns a list that contains all of the elements 
+#' \code{collectPartition} returns a list that contains all of the elements
 #' in the specified partition of the RDD.
 #' @param partitionId the partition to collect (starts from 0)
 setGeneric("collectPartition",
@@ -164,7 +163,7 @@ setMethod("length",
 #'\dontrun{
 #' sc <- sparkR.init()
 #' rdd <- parallelize(sc, 1:10)
-#' multiplyByTwo <- lapply(rdd, function(x) { x * 2 })  
+#' multiplyByTwo <- lapply(rdd, function(x) { x * 2 })
 #' collect(multiplyByTwo) # 2,4,6...
 #'}
 setMethod("lapply",
@@ -192,7 +191,7 @@ setMethod("map",
 
 #' Flatten results after apply a function to all elements
 #'
-#' This function return a new RDD by first applying a function to all 
+#' This function return a new RDD by first applying a function to all
 #' elements of this RDD, and then flattening the results.
 #'
 #' @param X The RDD to apply the transformation.
@@ -273,13 +272,13 @@ setMethod("lapplyPartition",
             RDD(jrdd, TRUE)
           })
 
-#' Reduce across elements of an RDD. 
+#' Reduce across elements of an RDD.
 #'
-#' This function reduces the elements of this RDD using the 
+#' This function reduces the elements of this RDD using the
 #' specified commutative and associative binary operator.
-#' 
+#'
 #' @param rdd The RDD to reduce
-#' @param func Commutative and associative function to apply on elements 
+#' @param func Commutative and associative function to apply on elements
 #'             of the RDD.
 #' @export
 #' @rdname reduce
@@ -308,7 +307,7 @@ setMethod("reduce",
 
 #' Take elements from an RDD.
 #'
-#' This function takes the first NUM elements in the RDD and 
+#' This function takes the first NUM elements in the RDD and
 #' returns them in a list.
 #'
 #' @param rdd The RDD to take elements from
@@ -353,9 +352,80 @@ setMethod("take",
             resList
           })
 
+
+#' Return an RDD that is a sampled subset of the given RDD.
+#'
+#' @param rdd The RDD to sample elements from
+#' @param withReplacement Sampling with replacement or not
+#' @param fraction The (rough) sample target fraction
+#' @param seed Randomness seed value
+#' @rdname sample
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 10L) # ensure each num is in its own split
+#' collect(sample(rdd, FALSE, 0.5, 1618L)) # approximately 5 elements sampled
+#'}
+setGeneric("sample",
+           # TODO: `sample` shadows the same-name func in R base; should we
+           # rename this to `sampleRDD`?
+           function(rdd, withReplacement, fraction, seed) {
+             standardGeneric("sample")
+           })
+
+#' @rdname sample
+#' @aliases sample,RDD
+setMethod("sample",
+          signature(rdd = "RDD", withReplacement = "logical",
+                    fraction = "numeric", seed = "integer"),
+          function(rdd, withReplacement, fraction, seed) {
+            jrdd <- .jcall(rdd@jrdd,
+                           "Lorg/apache/spark/api/java/JavaRDD;",
+                           "sample",
+                           withReplacement,
+                           fraction,
+                           as.integer(seed))
+            RDD(jrdd)
+          })
+
+
+#' Return a list of the elements that are a sampled subset of the given RDD.
+#'
+#' @param rdd The RDD to sample elements from
+#' @param withReplacement Sampling with replacement or not
+#' @param num Number of elements to return
+#' @param seed Randomness seed value
+#' @rdname takeSample
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 10L) # ensure each num is in its own split
+#' # exactly 5 elements sampled (may not be distinct)
+#' takeSample(rdd, TRUE, 5L, 1618L)
+#'}
+setGeneric("takeSample",
+           function(rdd, withReplacement, num, seed) {
+             standardGeneric("takeSample")
+           })
+#' @rdname takeSample
+#' @aliases takeSample,RDD
+setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
+                                  num = "integer", seed = "integer"),
+          function(rdd, withReplacement, num, seed) {
+            underlying <- rdd@jrdd$rdd()
+            arrs <- underlying$takeSample(withReplacement, num, seed)
+            if (rdd@serialized)
+              deserializeByteArrays(arrs)
+            else
+              arrs
+          })
+
+
 ############ Shuffle Functions ############
 
-#' Partition an RDD by key 
+#' Partition an RDD by key
 #'
 #' This function operates on RDDs where every element is of the form list(K, V).
 #' For each element of this RDD, the partitioner is used to compute a hash
@@ -376,7 +446,7 @@ setMethod("take",
 #' sc <- sparkR.init()
 #' pairs <- list(c(1, 2), c(1.1, 3), c(1, 4))
 #' rdd <- parallelize(sc, pairs)
-#' parts <- partitionBy(rdd, 2L) 
+#' parts <- partitionBy(rdd, 2L)
 #' collectPartition(parts, 0L) # First partition should contain c(1,2) and c(1,3)
 #'}
 setGeneric("partitionBy",
@@ -408,7 +478,7 @@ setMethod("partitionBy",
 
             # We create a PairwiseRRDD that extends RDD[(Array[Byte],
             # Array[Byte])], where the key is the hashed split, the value is
-            # the content (key-val pairs). 
+            # the content (key-val pairs).
             pairwiseRRDD <- new(J("sparkr.PairwiseRRDD"),
                                 rdd@jrdd$rdd(),
                                 as.integer(numPartitions),
@@ -450,8 +520,8 @@ setMethod("partitionBy",
 #' sc <- sparkR.init()
 #' pairs <- list(c(1, 2), c(1.1, 3), c(1, 4))
 #' rdd <- parallelize(sc, pairs)
-#' parts <- groupByKey(rdd, 2L) 
-#' grouped <- collect(parts) 
+#' parts <- groupByKey(rdd, 2L)
+#' grouped <- collect(parts)
 #' grouped[[1]] # Should be a list(1, list(2, 4))
 #'}
 setGeneric("groupByKey",
@@ -512,7 +582,7 @@ setMethod("groupByKey",
 #' pairs <- list(c(1, 2), c(1.1, 3), c(1, 4))
 #' rdd <- parallelize(sc, pairs)
 #' parts <- reduceByKey(rdd, "+", 2L)
-#' reduced <- collect(parts) 
+#' reduced <- collect(parts)
 #' reduced[[1]] # Should be a list(1, 6)
 #'}
 setGeneric("reduceByKey",
@@ -525,7 +595,7 @@ setGeneric("reduceByKey",
 setMethod("reduceByKey",
           signature(rdd = "RDD", combineFunc = "ANY", numPartitions = "integer"),
           function(rdd, combineFunc, numPartitions) {
-            # TODO: Implement map-side combine 
+            # TODO: Implement map-side combine
             shuffled <- partitionBy(rdd, numPartitions)
             reduceVals <- function(part) {
               vals <- new.env()
@@ -555,7 +625,7 @@ setMethod("reduceByKey",
 #' Generic function to combine the elements for each key using a custom set of
 #' aggregation functions. Turns an RDD[(K, V)] into a result of type RDD[(K, C)],
 #' for a "combined type" C. Note that V and C can be different -- for example, one
-#' might group an RDD of type (Int, Int) into an RDD of type (Int, Seq[Int]). 
+#' might group an RDD of type (Int, Int) into an RDD of type (Int, Seq[Int]).
 
 #' Users provide three functions:
 #' \itemize{
@@ -640,3 +710,4 @@ setMethod("combineByKey",
             combined <-lapplyPartition(shuffled, mergeAfterShuffle)
             combined
           })
+

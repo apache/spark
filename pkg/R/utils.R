@@ -55,6 +55,13 @@ convertJListToRList <- function(jList, flatten) {
 
 }
 
+# Given a Java array of byte arrays, deserilize each, returning an R list of
+# the deserialized elements.
+deserializeByteArrays <- function(byteArrs) {
+  arrs <- .jevalArray(byteArrs)
+  lapply(arrs, function(bs) { unlist(unserialize(.jevalArray(bs))) })
+}
+
 # Returns TRUE if `name` refers to an RDD in the given environment `env`
 isRDD <- function(name, env) {
   obj <- get(name, envir=env)

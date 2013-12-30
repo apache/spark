@@ -15,7 +15,9 @@ exportMethods(
               "partitionBy",
               "reduce",
               "reduceByKey",
-              "take"
+              "sample",
+              "take",
+              "takeSample"
              )
 
 # S3 methods exported
