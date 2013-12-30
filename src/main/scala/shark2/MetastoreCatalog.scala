@@ -79,6 +79,7 @@ object HiveMetatoreTypes {
       case "string" => StringType
       case "int" => IntegerType
       case "double" => DoubleType
+      case "bigint" => LongType
     }
 }
 
