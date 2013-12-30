@@ -93,7 +93,7 @@ trait Logging {
   // threads do it concurrently (as SLF4J initialization is not thread safe).
   protected def initLogging() {
     // If Log4j doesn't seem initialized, load a default properties file
-    def log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
+    val log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
     if (!log4jInitialized) {
       val defaultLogProps = "org/apache/spark/default-log4j.properties"
       val classLoader = this.getClass.getClassLoader
