@@ -20,10 +20,12 @@ package org.apache.spark.streaming.examples
 import akka.actor.ActorSystem
 import akka.actor.actorRef2Scala
 import akka.zeromq._
-import org.apache.spark.streaming.{ Seconds, StreamingContext }
-import org.apache.spark.streaming.StreamingContext._
 import akka.zeromq.Subscribe
 import akka.util.ByteString
+
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.zeromq._
 
 /**
  * A simple publisher for demonstration purposes, repeatedly publishes random Messages

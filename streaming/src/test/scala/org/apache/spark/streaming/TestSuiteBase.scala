@@ -137,11 +137,10 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   // if you want to add your stuff to "before" (i.e., don't call before { } )
   def beforeFunction() {
     if (useManualClock) {
-      System.setProperty(
-        "spark.streaming.clock",
-        "org.apache.spark.streaming.util.ManualClock"
-      )
+      logInfo("Using manual clock")
+      System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
     } else {
+      logInfo("Using real clock")
       System.clearProperty("spark.streaming.clock")
     }
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
@@ -273,7 +272,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       val startTime = System.currentTimeMillis()
       while (output.size < numExpectedOutput && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
-        Thread.sleep(100)
+        Thread.sleep(10)
       }
       val timeTaken = System.currentTimeMillis() - startTime
 

@@ -20,6 +20,7 @@ package org.apache.spark.streaming.examples
 import org.apache.spark.util.IntParam
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
+import org.apache.spark.streaming.flume._
 
 /**
  *  Produces a count of events received from Flume.

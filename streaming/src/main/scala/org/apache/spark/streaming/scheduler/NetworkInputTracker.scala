@@ -160,7 +160,10 @@ class NetworkInputTracker(
       }
       // Run the dummy Spark job to ensure that all slaves have registered.
       // This avoids all the receivers to be scheduled on the same node.
-      ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
+      if (!ssc.sparkContext.isLocal) {
+        ssc.sparkContext.makeRDD(1 to 50, 50).map(x => (x, 1)).reduceByKey(_ + _, 20).collect()
+      }
+
 
       // Distribute the receivers and start them
       ssc.sparkContext.runJob(tempRDD, startReceiver)

@@ -24,6 +24,7 @@ import kafka.producer._
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.util.RawTextHelper._
+import org.apache.spark.streaming.kafka._
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
