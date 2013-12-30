@@ -14,6 +14,7 @@ import util._
 
 import collection.JavaConversions._
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
+import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 
 
 /**
@@ -159,6 +160,31 @@ object TestShark extends SharkInstance {
           runSqlHive(s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')")
         }
       }
+    }),
+    TestTable("src_thrift", () => {
+      import org.apache.thrift.protocol.TBinaryProtocol
+      import org.apache.hadoop.hive.serde2.thrift.test.Complex
+      import org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer
+      import org.apache.hadoop.mapred.SequenceFileInputFormat
+      import org.apache.hadoop.mapred.SequenceFileOutputFormat
+
+      val srcThrift = new org.apache.hadoop.hive.metastore.api.Table()
+      srcThrift.setTableName("src_thrift")
+      srcThrift.setDbName("default")
+      srcThrift.setSd(new StorageDescriptor)
+      srcThrift.getSd.setCols(Nil)
+      srcThrift.getSd.setInputFormat(classOf[SequenceFileInputFormat[_,_]].getName)
+      srcThrift.getSd.setOutputFormat(classOf[SequenceFileOutputFormat[_,_]].getName)
+      srcThrift.getSd.setSerdeInfo(new SerDeInfo)
+      srcThrift.getSd.getSerdeInfo.setSerializationLib(classOf[ThriftDeserializer].getName)
+      srcThrift.getSd.getSerdeInfo.setParameters(
+        Map(
+          "serialization.class" -> classOf[Complex].getName,
+          "serialization.format" -> classOf[TBinaryProtocol].getName))
+
+      catalog.client.createTable(srcThrift)
+
+      runSqlHive(s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/complex.seq' INTO TABLE src_thrift")
     })
   )
 
