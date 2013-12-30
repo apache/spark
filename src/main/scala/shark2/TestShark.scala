@@ -168,7 +168,8 @@ object TestShark extends SharkInstance {
   def loadTestTable(name: String) {
     if(!(loadedTables contains name)) {
       logger.info(s"Loading test table $name")
-      val createCmds = testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
+      val createCmds =
+        testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
       loadedTables += name
     }
