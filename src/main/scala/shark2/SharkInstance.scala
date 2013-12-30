@@ -112,6 +112,12 @@ abstract class SharkInstance extends Logging {
 
     lazy val toRdd = executedPlan.execute()
 
+    def toHiveString(a: Any): String = a match {
+      case seq: Seq[_] => seq.map(toHiveString).map(s => "\"" + s + "\"").mkString("[", ",", "]")
+      case null => "NULL"
+      case other => other.toString
+    }
+
     /**
      * Returns the result as a hive compatible sequence of strings.  For native commands, the execution is simply
      * passed back to Hive.
@@ -123,11 +129,7 @@ abstract class SharkInstance extends Logging {
       case query =>
         val result: Seq[Seq[Any]] = toRdd.collect.toSeq
         // Reformat to match hive tab delimited output.
-        val asString = result.map(_.map {
-          case null => "NULL"
-          case other => other
-        }).map(_.mkString("\t")).toSeq
-
+        val asString = result.map(_.map(toHiveString)).map(_.mkString("\t")).toSeq
         asString
     }
 

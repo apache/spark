@@ -18,6 +18,7 @@ abstract class BinaryPredicate extends BinaryExpression with Predicate {
 case class Not(child: Expression) extends Predicate with trees.UnaryNode[Expression]{
   def references = child.references
   def nullable = child.nullable
+  override def toString = s"NOT $child"
 }
 case class And(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "&&"
@@ -26,19 +27,24 @@ case class Or(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "||"
 }
 
-case class Equals(left: Expression, right: Expression) extends BinaryPredicate {
+abstract class BinaryComparison extends BinaryPredicate {
+  self: Product =>
+}
+
+case class Equals(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "="
 }
-case class LessThan(left: Expression, right: Expression) extends BinaryPredicate {
+
+case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<"
 }
-case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryPredicate {
+case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<="
 }
-case class GreaterThan(left: Expression, right: Expression) extends BinaryPredicate {
+case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">"
 }
-case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryPredicate {
+case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">="
 }
 

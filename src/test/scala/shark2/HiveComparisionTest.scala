@@ -45,11 +45,14 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
         if(!isOrdered) answer.sorted else answer
     }
-    orderedAnswer.map(cleanPaths)
+    orderedAnswer.map(cleanPaths).map(clearTimes)
   }
 
   protected def nonDeterministicLine(line: String) =
     Seq("CreateTime","transient_lastDdlTime", "grantTime").map(line contains _).reduceLeft(_||_)
+
+  protected def clearTimes(line: String) =
+    line.replaceAll("\"lastUpdateTime\":\\d+", "<UPDATETIME>")
 
   /**
    * Removes non-deterministic paths from [[str]] so cached answers will still pass.
@@ -97,12 +100,14 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
             logger.warn(s"Using answer cache for test: $testCaseName")
             hiveCachedResults
           } else {
-            val computedResults = queryList.zip(hiveCacheFiles).zipWithIndex.map {
-              case ((queryString, cachedAnswerFile), i)=>
+            val sharkQueries = queryList.map(new TestShark.SharkSqlQuery(_))
+            // Make sure we can at least parse everything before doing hive execution.
+            sharkQueries.foreach(_.parsed)
+            val computedResults = (queryList.zipWithIndex, sharkQueries,hiveCacheFiles).zipped.map {
+              case ((queryString, i), sharkQuery, cachedAnswerFile)=>
                 logger.warn(s"Running query ${i+1}/${queryList.size} with hive.")
                 info(s"HIVE: $queryString")
                 // Analyze the query with catalyst to ensure test tables are loaded.
-                val sharkQuery = (new TestShark.SharkSqlQuery(queryString))
                 val answer = sharkQuery.analyzed match {
                   case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
                   case _ => TestShark.runSqlHive(queryString)

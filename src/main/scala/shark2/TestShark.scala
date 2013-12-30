@@ -13,6 +13,7 @@ import frontend.hive._
 import util._
 
 import collection.JavaConversions._
+import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 
 
 /**
@@ -166,6 +167,12 @@ object TestShark extends SharkInstance {
   }
 
   /**
+   * Records the UDFs present when the server starts, so we can delete ones that are created by
+   * tests.
+   */
+  protected val originalUdfs = FunctionRegistry.getFunctionNames()
+
+  /**
    * Resets the test instance by deleting any tables that have been created.
    * TODO: also clear out UDFs, views, etc.
    */
@@ -195,6 +202,10 @@ object TestShark extends SharkInstance {
       catalog.client.getAllDatabases.filterNot(_ == "default").foreach {db =>
         logger.debug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
+      }
+
+      FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
+        FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 
       configure()

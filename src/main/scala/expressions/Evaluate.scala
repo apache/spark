@@ -19,68 +19,111 @@ object Evaluate extends Logging {
      * themselves.
      */
     @inline
-    def n1(e: Expression, f: ((Numeric[Any], Any) => Any)): Any  = e.dataType match {
-      case IntegerType =>
-        f.asInstanceOf[(Numeric[Int], Int) => Int](implicitly[Numeric[Int]], eval(e).asInstanceOf[Int])
-      case DoubleType =>
-         f.asInstanceOf[(Numeric[Double], Double) => Double](implicitly[Numeric[Double]], eval(e).asInstanceOf[Double])
-      case LongType =>
-         f.asInstanceOf[(Numeric[Long], Long) => Long](implicitly[Numeric[Long]], eval(e).asInstanceOf[Long])
-      case FloatType =>
-         f.asInstanceOf[(Numeric[Float], Float) => Float](implicitly[Numeric[Float]], eval(e).asInstanceOf[Float])
-      case ByteType =>
-         f.asInstanceOf[(Numeric[Byte], Byte) => Byte](implicitly[Numeric[Byte]], eval(e).asInstanceOf[Byte])
-      case ShortType =>
-         f.asInstanceOf[(Numeric[Short], Short) => Short](implicitly[Numeric[Short]], eval(e).asInstanceOf[Short])
-      case other => sys.error(s"Type $other does not support numeric operations")
+    def n1(e: Expression, f: ((Numeric[Any], Any) => Any)): Any  = {
+      val evalE = eval(e)
+      if(evalE == null)
+        null
+      else
+        e.dataType match {
+          case IntegerType =>
+            f.asInstanceOf[(Numeric[Int], Int) => Int](
+              implicitly[Numeric[Int]], eval(e).asInstanceOf[Int])
+          case DoubleType =>
+            f.asInstanceOf[(Numeric[Double], Double) => Double](
+              implicitly[Numeric[Double]], eval(e).asInstanceOf[Double])
+          case LongType =>
+            f.asInstanceOf[(Numeric[Long], Long) => Long](
+              implicitly[Numeric[Long]], eval(e).asInstanceOf[Long])
+          case FloatType =>
+            f.asInstanceOf[(Numeric[Float], Float) => Float](
+              implicitly[Numeric[Float]], eval(e).asInstanceOf[Float])
+          case ByteType =>
+            f.asInstanceOf[(Numeric[Byte], Byte) => Byte](
+              implicitly[Numeric[Byte]], eval(e).asInstanceOf[Byte])
+          case ShortType =>
+            f.asInstanceOf[(Numeric[Short], Short) => Short](
+              implicitly[Numeric[Short]], eval(e).asInstanceOf[Short])
+          case other => sys.error(s"Type $other does not support numeric operations")
+        }
     }
 
     @inline
     def n2(e1: Expression, e2: Expression, f: ((Numeric[Any], Any, Any) => Any)): Any  = {
-      assert(e1.dataType == e2.dataType, s"Data types do not match ${e1.dataType} != ${e2.dataType}")
-      e1.dataType match {
-        case IntegerType =>
-          f.asInstanceOf[(Numeric[Int], Int, Int) => Int](implicitly[Numeric[Int]], eval(e1).asInstanceOf[Int], eval(e2).asInstanceOf[Int])
-        case DoubleType =>
-          f.asInstanceOf[(Numeric[Double], Double, Double) => Double](implicitly[Numeric[Double]], eval(e1).asInstanceOf[Double], eval(e2).asInstanceOf[Double])
-        case LongType =>
-          f.asInstanceOf[(Numeric[Long], Long, Long) => Long](implicitly[Numeric[Long]], eval(e1).asInstanceOf[Long], eval(e2).asInstanceOf[Long])
-        case FloatType =>
-          f.asInstanceOf[(Numeric[Float], Float, Float) => Float](implicitly[Numeric[Float]], eval(e1).asInstanceOf[Float], eval(e2).asInstanceOf[Float])
-        case ByteType =>
-          f.asInstanceOf[(Numeric[Byte], Byte, Byte) => Byte](implicitly[Numeric[Byte]], eval(e1).asInstanceOf[Byte], eval(e2).asInstanceOf[Byte])
-        case ShortType =>
-          f.asInstanceOf[(Numeric[Short], Short, Short) => Short](implicitly[Numeric[Short]], eval(e1).asInstanceOf[Short], eval(e2).asInstanceOf[Short])
-        case other => sys.error(s"Type $other does not support numeric operations")
-      }
+      if (e1.dataType != e2.dataType)
+        throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+
+      val evalE1 = eval(e1)
+      val evalE2 = eval(e2)
+      if(evalE1 == null || evalE2 == null)
+        null
+      else
+        e1.dataType match {
+          case IntegerType =>
+            f.asInstanceOf[(Numeric[Int], Int, Int) => Int](
+              implicitly[Numeric[Int]], evalE1.asInstanceOf[Int], evalE2.asInstanceOf[Int])
+          case DoubleType =>
+            f.asInstanceOf[(Numeric[Double], Double, Double) => Double](
+              implicitly[Numeric[Double]], evalE1.asInstanceOf[Double], evalE2.asInstanceOf[Double])
+          case LongType =>
+            f.asInstanceOf[(Numeric[Long], Long, Long) => Long](
+              implicitly[Numeric[Long]], evalE1.asInstanceOf[Long], evalE2.asInstanceOf[Long])
+          case FloatType =>
+            f.asInstanceOf[(Numeric[Float], Float, Float) => Float](
+              implicitly[Numeric[Float]], evalE1.asInstanceOf[Float], evalE2.asInstanceOf[Float])
+          case ByteType =>
+            f.asInstanceOf[(Numeric[Byte], Byte, Byte) => Byte](
+              implicitly[Numeric[Byte]], evalE1.asInstanceOf[Byte], evalE2.asInstanceOf[Byte])
+          case ShortType =>
+            f.asInstanceOf[(Numeric[Short], Short, Short) => Short](
+              implicitly[Numeric[Short]], evalE1.asInstanceOf[Short], evalE2.asInstanceOf[Short])
+          case other => sys.error(s"Type $other does not support numeric operations")
+        }
     }
 
     @inline
     def f2(e1: Expression, e2: Expression, f: ((Fractional[Any], Any, Any) => Any)): Any  = {
-      assert(e1.dataType == e2.dataType, s"Data types do not match ${e1.dataType} != ${e2.dataType}")
-      e1.dataType match {
-        case DoubleType =>
-          f.asInstanceOf[(Fractional[Double], Double, Double) => Double](implicitly[Fractional[Double]], eval(e1).asInstanceOf[Double], eval(e2).asInstanceOf[Double])
-        case FloatType =>
-          f.asInstanceOf[(Fractional[Float], Float, Float) => Float](implicitly[Fractional[Float]], eval(e1).asInstanceOf[Float], eval(e2).asInstanceOf[Float])
-        case other => sys.error(s"Type $other does not support fractional operations")
-      }
+      if (e1.dataType != e2.dataType)
+        throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+
+      val evalE1 = eval(e1)
+      val evalE2 = eval(e2)
+      if(evalE1 == null || evalE2 == null)
+        null
+      else
+        e1.dataType match {
+          case DoubleType =>
+            f.asInstanceOf[(Fractional[Double], Double, Double) => Double](
+              implicitly[Fractional[Double]], evalE1.asInstanceOf[Double], evalE2.asInstanceOf[Double])
+          case FloatType =>
+            f.asInstanceOf[(Fractional[Float], Float, Float) => Float](
+              implicitly[Fractional[Float]], evalE1.asInstanceOf[Float], evalE2.asInstanceOf[Float])
+          case other => sys.error(s"Type $other does not support fractional operations")
+        }
     }
 
     @inline
     def i2(e1: Expression, e2: Expression, f: ((Integral[Any], Any, Any) => Any)): Any  = {
-      assert(e1.dataType == e2.dataType, s"Data types do not match ${e1.dataType} != ${e2.dataType}")
-      e1.dataType match {
-        case IntegerType =>
-          f.asInstanceOf[(Integral[Int], Int, Int) => Int](implicitly[Integral[Int]], eval(e1).asInstanceOf[Int], eval(e2).asInstanceOf[Int])
-        case LongType =>
-          f.asInstanceOf[(Integral[Long], Long, Long) => Long](implicitly[Integral[Long]], eval(e1).asInstanceOf[Long], eval(e2).asInstanceOf[Long])
-        case ByteType =>
-          f.asInstanceOf[(Integral[Byte], Byte, Byte) => Byte](implicitly[Integral[Byte]], eval(e1).asInstanceOf[Byte], eval(e2).asInstanceOf[Byte])
-        case ShortType =>
-          f.asInstanceOf[(Integral[Short], Short, Short) => Short](implicitly[Integral[Short]], eval(e1).asInstanceOf[Short], eval(e2).asInstanceOf[Short])
-        case other => sys.error(s"Type $other does not support numeric operations")
-      }
+      if (e1.dataType != e2.dataType) throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+      val evalE1 = eval(e1)
+      val evalE2 = eval(e2)
+      if(evalE1 == null || evalE2 == null)
+        null
+      else
+        e1.dataType match {
+          case IntegerType =>
+            f.asInstanceOf[(Integral[Int], Int, Int) => Int](
+              implicitly[Integral[Int]], evalE1.asInstanceOf[Int], evalE2.asInstanceOf[Int])
+          case LongType =>
+            f.asInstanceOf[(Integral[Long], Long, Long) => Long](
+              implicitly[Integral[Long]], evalE1.asInstanceOf[Long], evalE2.asInstanceOf[Long])
+          case ByteType =>
+            f.asInstanceOf[(Integral[Byte], Byte, Byte) => Byte](
+              implicitly[Integral[Byte]], evalE1.asInstanceOf[Byte], evalE2.asInstanceOf[Byte])
+          case ShortType =>
+            f.asInstanceOf[(Integral[Short], Short, Short) => Short](
+              implicitly[Integral[Short]], evalE1.asInstanceOf[Short], evalE2.asInstanceOf[Short])
+          case other => sys.error(s"Type $other does not support numeric operations")
+        }
     }
 
     val result = e match {
@@ -104,7 +147,14 @@ object Evaluate extends Logging {
       case UnaryMinus(child) => n1(child, _.negate(_))
 
       /* Comparisons */
-      case Equals(l, r) => eval(l) == eval(r)
+      case Equals(l, r) =>
+        val left = eval(l)
+        val right = eval(r)
+        if(left == null || right == null)
+          null
+        else
+          left == right
+
       // Strings
       case GreaterThan(l, r) if l.dataType == StringType && r.dataType == StringType =>
         eval(l).asInstanceOf[String] > eval(r).asInstanceOf[String]
@@ -124,10 +174,23 @@ object Evaluate extends Logging {
 
       /* Casts */
       // toString
-      case Cast(e, StringType) => eval(e).toString
+      case Cast(e, StringType) =>
+        eval(e) match {
+          case null => null
+          case other => other.toString
+        }
+
       // String => Numeric Types
       case Cast(e, IntegerType) if e.dataType == StringType => eval(e).asInstanceOf[String].toInt
-      case Cast(e, IntegerType) if e.dataType == StringType => eval(e).asInstanceOf[String].toDouble
+      case Cast(e, DoubleType) if e.dataType == StringType => eval(e).asInstanceOf[String].toDouble
+      // Boolean conversions
+      case Cast(e, ByteType) if e.dataType == BooleanType =>
+        eval(e) match {
+          case null => null
+          case true => 1.toByte
+          case false => 0.toByte
+        }
+
       // Numeric Type => Numeric Type
       case Cast(e, IntegerType) => n1(e, _.toInt(_))
       case Cast(e, DoubleType) => n1(e, _.toDouble(_))
@@ -137,20 +200,43 @@ object Evaluate extends Logging {
       case Cast(e, ByteType) => n1(e, _.toInt(_).toByte)
 
       /* Boolean Logic */
-      case Not(c) => !eval(c).asInstanceOf[Boolean]
-      case And(l,r) => eval(l).asInstanceOf[Boolean] && eval(r).asInstanceOf[Boolean]
-      case Or(l,r) => eval(l).asInstanceOf[Boolean] || eval(r).asInstanceOf[Boolean]
+      case Not(c) =>
+        eval(c) match {
+          case null => null
+          case b: Boolean => !b
+        }
+
+      case And(l,r) =>
+        val left = eval(l)
+        val right = eval(r)
+        if(left == false || right == false)
+          false
+        else if(left == null || right == null )
+          null
+        else
+          true
+      case Or(l,r) =>
+        val left = eval(l)
+        val right = eval(r)
+        if(left == true || right == true)
+          true
+        else if(left == null || right == null)
+          null
+        else
+          false
 
       /* References to input tuples */
       case br @ BoundReference(inputTuple, ordinal, _) => try input(inputTuple)(ordinal) catch {
-        case iob: IndexOutOfBoundsException => throw new OptimizationException(br, s"Reference not in tuple: $input")
+        case iob: IndexOutOfBoundsException =>
+          throw new OptimizationException(br, s"Reference not in tuple: $input")
       }
 
       /* Functions */
       case Rand => scala.util.Random.nextDouble
 
       /* UDFs */
-      case implementedFunction: ImplementedUdf => implementedFunction.evaluate(implementedFunction.children.map(eval))
+      case implementedFunction: ImplementedUdf =>
+        implementedFunction.evaluate(implementedFunction.children.map(eval))
 
       case other => throw new OptimizationException(other, "evaluation not implemented")
     }

@@ -16,7 +16,7 @@ import collection.JavaConversions._
 import scala.collection.mutable
 
 /**
- * A logical node that represent a non-query command to be executed by the system.  For example,
+ * A logical node that represents a non-query command to be executed by the system.  For example,
  * commands can be used by parsers to represent DDL operations.
  */
 abstract class Command extends LeafNode {
@@ -255,7 +255,7 @@ object HiveQl {
 
   /** Extractor for matching Hive's AST Tokens. */
   object Token {
-    /** @returns matches of the form (tokenName, children). */
+    /** @return matches of the form (tokenName, children). */
     def unapply(t: Any) = t match {
       case t: ASTNode =>
         Some((t.getText, Option(t.getChildren).map(_.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
@@ -523,7 +523,9 @@ object HiveQl {
   val RAND = "(?i)RAND".r
   val AND = "(?i)AND".r
   val OR = "(?i)OR".r
-  val NOT = "(?i)Not".r
+  val NOT = "(?i)NOT".r
+  val TRUE = "(?i)TRUE".r
+  val FALSE = "(?i)FALSE".r
 
   protected def nodeToExpr(node: Node): Expression = node match {
     /* Attribute References */
@@ -550,7 +552,10 @@ object HiveQl {
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), StringType)
     case Token("TOK_FUNCTION", Token("TOK_INT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), IntegerType)
     case Token("TOK_FUNCTION", Token("TOK_FLOAT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), FloatType)
-    case Token("TOK_FUNCTION", Token("TOK_DOUBLE", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), StringType)
+    case Token("TOK_FUNCTION", Token("TOK_DOUBLE", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), DoubleType)
+    case Token("TOK_FUNCTION", Token("TOK_SMALLINT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), ShortType)
+    case Token("TOK_FUNCTION", Token("TOK_TINYINT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), ByteType)
+    case Token("TOK_FUNCTION", Token("TOK_BINARY", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), BinaryType)
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
@@ -558,6 +563,7 @@ object HiveQl {
     case Token("-", left :: right:: Nil) => Subtract(nodeToExpr(left), nodeToExpr(right))
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token("DIV", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
@@ -566,6 +572,9 @@ object HiveQl {
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))
     case Token("<", left :: right:: Nil) => LessThan(nodeToExpr(left), nodeToExpr(right))
     case Token("<=", left :: right:: Nil) => LessThanOrEqual(nodeToExpr(left), nodeToExpr(right))
+    case Token("LIKE", left :: right:: Nil) => UnresolvedFunction("LIKE", Seq(nodeToExpr(left), nodeToExpr(right)))
+    case Token("RLIKE", left :: right:: Nil) => UnresolvedFunction("RLIKE", Seq(nodeToExpr(left), nodeToExpr(right)))
+    case Token("REGEXP", left :: right:: Nil) => UnresolvedFunction("REGEXP", Seq(nodeToExpr(left), nodeToExpr(right)))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) => IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) => IsNull(nodeToExpr(child))
 
@@ -583,6 +592,8 @@ object HiveQl {
 
     /* Literals */
     case Token("TOK_NULL", Nil) => Literal(null, IntegerType) // TODO: What type is null?
+    case Token(TRUE(), Nil) => Literal(true, BooleanType)
+    case Token(FALSE(), Nil) => Literal(false, BooleanType)
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
       Literal(strings.map(s => BaseSemanticAnalyzer.unescapeSQLString(s.asInstanceOf[ASTNode].getText)).mkString)
 

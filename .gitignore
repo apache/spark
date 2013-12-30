@@ -2,6 +2,8 @@
 target/
 .idea/
 metastore_db/
+metastore/
+warehouse/
 TempStatsStore/
 hs_err_*.log
 derby.log
