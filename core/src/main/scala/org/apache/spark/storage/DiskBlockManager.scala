@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.{Date, Random}
+import java.util.{Date, Random, UUID}
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
@@ -89,6 +89,15 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   }
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
+
+  /** Produces a unique block id and File suitable for intermediate results. */
+  def createIntermediateBlock: (IntermediateBlockId, File) = {
+    var blockId = new IntermediateBlockId(UUID.randomUUID().toString)
+    while (getFile(blockId).exists()) {
+      blockId = new IntermediateBlockId(UUID.randomUUID().toString)
+    }
+    (blockId, getFile(blockId))
+  }
 
   private def createLocalDirs(): Array[File] = {
     logDebug("Creating local directories at root dirs '" + rootDirs + "'")

@@ -22,7 +22,7 @@ package org.apache.spark.storage
  * A Block can be uniquely identified by its filename, but each type of Block has a different
  * set of keys which produce its unique name.
  *
- * If your BlockId should be serializable, be sure to add it to the BlockId.fromString() method.
+ * If your BlockId should be serializable, be sure to add it to the BlockId.apply() method.
  */
 private[spark] sealed abstract class BlockId {
   /** A globally unique identifier for this Block. Can be used for ser/de. */
@@ -55,7 +55,8 @@ private[spark] case class BroadcastBlockId(broadcastId: Long) extends BlockId {
   def name = "broadcast_" + broadcastId
 }
 
-private[spark] case class BroadcastHelperBlockId(broadcastId: BroadcastBlockId, hType: String) extends BlockId {
+private[spark]
+case class BroadcastHelperBlockId(broadcastId: BroadcastBlockId, hType: String) extends BlockId {
   def name = broadcastId.name + "_" + hType
 }
 
@@ -65,6 +66,11 @@ private[spark] case class TaskResultBlockId(taskId: Long) extends BlockId {
 
 private[spark] case class StreamBlockId(streamId: Int, uniqueId: Long) extends BlockId {
   def name = "input-" + streamId + "-" + uniqueId
+}
+
+/** Block associated with intermediate (temporary) data managed as blocks. */
+private[spark] case class IntermediateBlockId(id: String) extends BlockId {
+  def name = "intermediate_" + id
 }
 
 // Intended only for testing purposes
@@ -79,6 +85,7 @@ private[spark] object BlockId {
   val BROADCAST_HELPER = "broadcast_([0-9]+)_([A-Za-z0-9]+)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
+  val INTERMEDIATE = "intermediate_(.*)".r
   val TEST = "test_(.*)".r
 
   /** Converts a BlockId "name" String back into a BlockId. */

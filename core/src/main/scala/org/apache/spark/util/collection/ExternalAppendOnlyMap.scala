@@ -25,6 +25,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.SparkEnv
 import org.apache.spark.serializer.Serializer
+import org.apache.spark.storage.{DiskBlockManager, DiskBlockObjectWriter}
 
 /**
  * A wrapper for SpillableAppendOnlyMap that handles two cases:
@@ -43,7 +44,8 @@ private[spark] class ExternalAppendOnlyMap[K, V, C: ClassTag](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C,
-    serializer: Serializer = SparkEnv.get.serializerManager.default)
+    serializer: Serializer = SparkEnv.get.serializerManager.default,
+    diskBlockManager: DiskBlockManager = SparkEnv.get.blockManager.diskBlockManager)
   extends Iterable[(K, C)] with Serializable {
 
   private val mergeBeforeSpill: Boolean = mergeCombiners != null
@@ -51,7 +53,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C: ClassTag](
   private val map: SpillableAppendOnlyMap[K, V, _, C] = {
     if (mergeBeforeSpill) {
       new SpillableAppendOnlyMap[K, V, C, C] (createCombiner, mergeValue, mergeCombiners,
-        Predef.identity, serializer)
+        Predef.identity, serializer, diskBlockManager)
     } else {
       // Use ArrayBuffer[V] as the intermediate combiner
       val createGroup: (V => ArrayBuffer[V]) = value => ArrayBuffer[V](value)
@@ -72,7 +74,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C: ClassTag](
         combiner.getOrElse(null.asInstanceOf[C])
       }
       new SpillableAppendOnlyMap[K, V, ArrayBuffer[V], C](createGroup, mergeValueIntoGroup,
-        mergeGroups, combineGroup, serializer)
+        mergeGroups, combineGroup, serializer, diskBlockManager)
     }
   }
 
@@ -102,7 +104,8 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
     mergeValue: (G, V) => G,
     mergeGroups: (G, G) => G,
     createCombiner: G => C,
-    serializer: Serializer)
+    serializer: Serializer,
+    diskBlockManager: DiskBlockManager)
   extends Iterable[(K, C)] with Serializable {
 
   import SpillableAppendOnlyMap._
@@ -114,6 +117,8 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
     val bufferPercent = System.getProperty("spark.shuffle.buffer.fraction", "0.8").toFloat
     bufferSize * bufferPercent
   }
+  private val fileBufferSize =
+    System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
   private val comparator = new KeyGroupComparator[K, G]
   private val ser = serializer.newInstance()
 
@@ -128,14 +133,19 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
   }
 
   private def spill(): Unit = {
-    val file = File.createTempFile("external_append_only_map", "")
-    val out = ser.serializeStream(new FileOutputStream(file))
-    val it = currentMap.destructiveSortedIterator(comparator)
-    while (it.hasNext) {
-      val kv = it.next()
-      out.writeObject(kv)
+    val (blockId, file) = diskBlockManager.createIntermediateBlock
+    val writer = new DiskBlockObjectWriter(blockId, file, serializer, fileBufferSize, identity)
+    try {
+      val it = currentMap.destructiveSortedIterator(comparator)
+      while (it.hasNext) {
+        val kv = it.next()
+        writer.write(kv)
+      }
+      writer.commit()
+    } finally {
+      // Partial failures cannot be tolerated; do not revert partial writes
+      writer.close()
     }
-    out.close()
     currentMap = new SizeTrackingAppendOnlyMap[K, G]
     oldMaps.append(new DiskKGIterator(file))
   }
@@ -210,7 +220,7 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
     }
 
     override def next(): (K, C) = {
-      var minKGI = mergeHeap.dequeue()
+      val minKGI = mergeHeap.dequeue()
       val (minPairs, minHash) = (minKGI.pairs, minKGI.minHash)
       if (minPairs.length == 0) {
         // Should only happen when hasNext is false
@@ -271,7 +281,9 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
         try {
           return Some(in.readObject().asInstanceOf[(K, G)])
         } catch {
-          case e: EOFException => eof = true
+          case e: EOFException =>
+            eof = true
+            cleanup()
         }
       }
       None
@@ -295,6 +307,11 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
           val item = readNextItem()
           item.getOrElse(throw new NoSuchElementException)
       }
+    }
+
+    // TODO: Ensure this gets called even if the iterator isn't drained.
+    def cleanup() {
+      file.delete()
     }
   }
 }
