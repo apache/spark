@@ -43,8 +43,7 @@ private[spark] case class NarrowCoGroupSplitDep(
 
 private[spark] case class ShuffleCoGroupSplitDep(shuffleId: Int) extends CoGroupSplitDep
 
-private[spark]
-class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep])
+private[spark] class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep])
   extends Partition with Serializable {
   override val index: Int = idx
   override def hashCode(): Int = idx
@@ -60,6 +59,9 @@ class CoGroupPartition(idx: Int, val deps: Array[CoGroupSplitDep])
 class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: Partitioner)
   extends RDD[(K, Seq[Seq[_]])](rdds.head.context, Nil) {
 
+  // For example, `(k, a) cogroup (k, b)` produces k -> Seq(ArrayBuffer as, ArrayBuffer bs).
+  // Each ArrayBuffer is represented as a CoGroup, and the resulting Seq as a CoGroupCombiner.
+  // CoGroupValue is the intermediate state of each value before being merged in compute.
   private type CoGroup = ArrayBuffer[Any]
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Seq[CoGroup]
@@ -103,7 +105,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   override val partitioner = Some(part)
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, CoGroupCombiner)] = {
-    // e.g. for `(k, a) cogroup (k, b)`, K -> Seq(ArrayBuffer as, ArrayBuffer bs)
+
     val externalSorting = System.getProperty("spark.shuffle.externalSorting", "false").toBoolean
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
@@ -113,27 +115,30 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     for ((dep, depNum) <- split.deps.zipWithIndex) dep match {
       case NarrowCoGroupSplitDep(rdd, _, itsSplit) => {
         // Read them from the parent
-        val v = (rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]], depNum)
-        rddIterators += v
+        val it = rdd.iterator(itsSplit, context).asInstanceOf[Iterator[Product2[K, Any]]]
+        rddIterators += ((it, depNum))
       }
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
         val fetcher = SparkEnv.get.shuffleFetcher
         val ser = SparkEnv.get.serializerManager.get(serializerClass)
-        val v = (fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser), depNum)
-        rddIterators += v
+        val it = fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser)
+        rddIterators += ((it, depNum))
       }
     }
 
     if (!externalSorting) {
       val map = new AppendOnlyMap[K, CoGroupCombiner]
       val update: (Boolean, CoGroupCombiner) => CoGroupCombiner = (hadVal, oldVal) => {
-        if (hadVal) oldVal else Array.fill(numRdds)(new ArrayBuffer[Any])
+        if (hadVal) oldVal else Array.fill(numRdds)(new CoGroup)
+      }
+      val getCombiner: K => CoGroupCombiner = key => {
+        map.changeValue(key, update)
       }
       rddIterators.foreach { case (it, depNum) =>
         while (it.hasNext) {
           val kv = it.next()
-          map.changeValue(kv._1, update)(depNum) += kv._2
+          getCombiner(kv._1)(depNum) += kv._2
         }
       }
       new InterruptibleIterator(context, map.iterator)
@@ -149,17 +154,17 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
     }
   }
 
-  private def createExternalMap(numRdds: Int):
-    ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner] = {
+  private def createExternalMap(numRdds: Int)
+    : ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner] = {
 
     val createCombiner: (CoGroupValue => CoGroupCombiner) = value => {
       val newCombiner = Array.fill(numRdds)(new CoGroup)
-      value match { case(v, depNum) => newCombiner(depNum) += v }
+      value match { case (v, depNum) => newCombiner(depNum) += v }
       newCombiner
     }
     val mergeValue: (CoGroupCombiner, CoGroupValue) => CoGroupCombiner =
       (combiner, value) => {
-      value match { case(v, depNum) => combiner(depNum) += v }
+      value match { case (v, depNum) => combiner(depNum) += v }
       combiner
     }
     val mergeCombiners: (CoGroupCombiner, CoGroupCombiner) => CoGroupCombiner =

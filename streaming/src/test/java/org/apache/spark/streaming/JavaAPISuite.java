@@ -476,10 +476,10 @@ public class JavaAPISuite implements Serializable {
 
     List<HashSet<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
         Sets.newHashSet(
-                    new Tuple2<String, Tuple2<String, String>>("california",
-                            new Tuple2<String, String>("dodgers", "giants")),
-                    new Tuple2<String, Tuple2<String, String>>("new york",
-                            new Tuple2<String, String>("yankees", "mets"))),
+            new Tuple2<String, Tuple2<String, String>>("california",
+                new Tuple2<String, String>("dodgers", "giants")),
+            new Tuple2<String, Tuple2<String, String>>("new york",
+                new Tuple2<String, String>("yankees", "mets"))),
         Sets.newHashSet(
             new Tuple2<String, Tuple2<String, String>>("california",
                 new Tuple2<String, String>("sharks", "ducks")),

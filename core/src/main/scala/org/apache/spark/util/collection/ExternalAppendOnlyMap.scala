@@ -33,6 +33,10 @@ import org.apache.spark.serializer.Serializer
  *
  * (2)  Otherwise, group values of the same key together before disk spill, and merge them
  *      into combiners only after reading them back from disk.
+ *
+ * In the latter case, values occupy much more space because they are not collapsed as soon
+ * as they are inserted. This in turn leads to more disk spills, degrading performance.
+ * For this reason, a mergeCombiners function should be specified if possible.
  */
 private[spark] class ExternalAppendOnlyMap[K, V, C: ClassTag](
     createCombiner: V => C,
@@ -78,28 +82,42 @@ private[spark] class ExternalAppendOnlyMap[K, V, C: ClassTag](
 
 /**
  * An append-only map that spills sorted content to disk when the memory threshold is exceeded.
- * A group is an intermediate combiner, with type M equal to either C or ArrayBuffer[V].
+ * A group is an intermediate combiner, with type G equal to either C or ArrayBuffer[V].
+ *
+ * This map takes two passes over the data:
+ *   (1) Values are merged into groups, which are spilled to disk as necessary.
+ *   (2) Groups are read from disk and merged into combiners, which are returned.
+ *
+ * If we never spill to disk, we avoid the second pass provided that groups G are already
+ * combiners C.
+ *
+ * Note that OOM is still possible with the SpillableAppendOnlyMap. This may occur if the
+ * collective G values do not fit into memory, or if the size estimation is not sufficiently
+ * accurate. To account for the latter, `spark.shuffle.buffer.fraction` specifies an additional
+ * margin of safety, while `spark.shuffle.buffer.mb` specifies the raw memory threshold.
  */
-private[spark] class SpillableAppendOnlyMap[K, V, M: ClassTag, C: ClassTag](
-    createGroup: V => M,
-    mergeValue: (M, V) => M,
-    mergeGroups: (M, M) => M,
-    createCombiner: M => C,
+private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
+    createGroup: V => G,
+    mergeValue: (G, V) => G,
+    mergeGroups: (G, G) => G,
+    createCombiner: G => C,
     serializer: Serializer)
   extends Iterable[(K, C)] with Serializable {
 
-  private var currentMap = new SizeTrackingAppendOnlyMap[K, M]
-  private val oldMaps = new ArrayBuffer[DiskIterator]
+  import SpillableAppendOnlyMap._
+
+  private var currentMap = new SizeTrackingAppendOnlyMap[K, G]
+  private val oldMaps = new ArrayBuffer[DiskKGIterator]
   private val memoryThreshold = {
     val bufferSize = System.getProperty("spark.shuffle.buffer.mb", "1024").toLong * 1024 * 1024
     val bufferPercent = System.getProperty("spark.shuffle.buffer.fraction", "0.8").toFloat
     bufferSize * bufferPercent
   }
-  private val ordering = new SpillableAppendOnlyMap.KeyHashOrdering[K, M]()
+  private val ordering = new KeyGroupOrdering[K, G]
   private val ser = serializer.newInstance()
 
   def insert(key: K, value: V): Unit = {
-    val update: (Boolean, M) => M = (hadVal, oldVal) => {
+    val update: (Boolean, G) => G = (hadVal, oldVal) => {
       if (hadVal) mergeValue(oldVal, value) else createGroup(value)
     }
     currentMap.changeValue(key, update)
@@ -117,98 +135,173 @@ private[spark] class SpillableAppendOnlyMap[K, V, M: ClassTag, C: ClassTag](
       out.writeObject(kv)
     }
     out.close()
-    currentMap = new SizeTrackingAppendOnlyMap[K, M]
-    oldMaps.append(new DiskIterator(file))
+    currentMap = new SizeTrackingAppendOnlyMap[K, G]
+    oldMaps.append(new DiskKGIterator(file))
   }
 
   override def iterator: Iterator[(K, C)] = {
-    if (oldMaps.isEmpty && implicitly[ClassTag[M]] == implicitly[ClassTag[C]]) {
+    if (oldMaps.isEmpty && implicitly[ClassTag[G]] == implicitly[ClassTag[C]]) {
       currentMap.iterator.asInstanceOf[Iterator[(K, C)]]
     } else {
       new ExternalIterator()
     }
   }
 
-  // An iterator that sort-merges (K, M) pairs from memory and disk into (K, C) pairs
+  // An iterator that sort-merges (K, G) pairs from memory and disk into (K, C) pairs
   private class ExternalIterator extends Iterator[(K, C)] {
-    val pq = new PriorityQueue[KMITuple]
-    val inputStreams = Seq(currentMap.destructiveSortedIterator(ordering)) ++ oldMaps
-    inputStreams.foreach(readFromIterator)
+    val mergeHeap = new PriorityQueue[KGITuple]
+    val inputStreams = oldMaps ++ Seq(currentMap.destructiveSortedIterator(ordering))
 
-    // Read from the given iterator until a key of different hash is retrieved
-    def readFromIterator(it: Iterator[(K, M)]): Unit = {
-      var minHash : Option[Int] = None
-      while (it.hasNext) {
-        val (k, m) = it.next()
-        pq.enqueue(KMITuple(k, m, it))
-        minHash match {
-          case None => minHash = Some(k.hashCode())
-          case Some(expectedHash) =>
-            if (k.hashCode() != expectedHash) {
-              return
-            }
-        }
-      }
+    // Invariant: size of mergeHeap == number of input streams
+    inputStreams.foreach{ it =>
+      val kgPairs = readFromIterator(it)
+      mergeHeap.enqueue(KGITuple(it, kgPairs))
     }
 
-    override def hasNext: Boolean = !pq.isEmpty
-
-    override def next(): (K, C) = {
-      val minKMI = pq.dequeue()
-      var (minKey, minGroup) = (minKMI.key, minKMI.group)
-      val minHash = minKey.hashCode()
-      readFromIterator(minKMI.iterator)
-
-      // Merge groups with the same key into minGroup
-      var collidedKMI = ArrayBuffer[KMITuple]()
-      while (!pq.isEmpty && pq.head.key.hashCode() == minHash) {
-        val newKMI = pq.dequeue()
-        if (newKMI.key == minKey) {
-          minGroup = mergeGroups(minGroup, newKMI.group)
-          readFromIterator(newKMI.iterator)
-        } else {
-          // Collision
-          collidedKMI += newKMI
+    // Read from the given iterator until a key of different hash is retrieved.
+    // The resulting ArrayBuffer includes this key, and is ordered by key hash.
+    def readFromIterator(it: Iterator[(K, G)]): ArrayBuffer[(K, G)] = {
+      val kgPairs = new ArrayBuffer[(K, G)]
+      if (it.hasNext) {
+        var kg = it.next()
+        kgPairs += kg
+        val minHash = kg._1.hashCode()
+        while (it.hasNext && kg._1.hashCode() == minHash) {
+          kg = it.next()
+          kgPairs += kg
         }
       }
-      collidedKMI.foreach(pq.enqueue(_))
+      kgPairs
+    }
+
+    // Drop and return all (K, G) pairs with K = the given key from the given KGITuple
+    def dropKey(kgi: KGITuple, key: K): ArrayBuffer[(K, G)] = {
+      val dropped = new ArrayBuffer[(K, G)]
+      var i = 0
+      while (i < kgi.pairs.length) {
+        if (kgi.pairs(i)._1 == key) {
+          dropped += kgi.pairs.remove(i)
+        } else {
+          i += 1
+        }
+      }
+      dropped
+    }
+
+    // Merge all (K, G) pairs with K = the given key into baseGroup
+    def mergeIntoGroup(key: K, baseGroup: G, kgPairs: ArrayBuffer[(K, G)]): G = {
+      var mergedGroup = baseGroup
+      kgPairs.foreach { case (k, g) =>
+        if (k == key){
+          mergedGroup = mergeGroups(mergedGroup, g)
+        }
+      }
+      mergedGroup
+    }
+
+    override def hasNext: Boolean = {
+      mergeHeap.foreach{ kgi =>
+        if (!kgi.pairs.isEmpty) {
+          return true
+        }
+      }
+      false
+    }
+
+    override def next(): (K, C) = {
+      var minKGI = mergeHeap.dequeue()
+      val (minPairs, minHash) = (minKGI.pairs, minKGI.minHash)
+      if (minPairs.length == 0) {
+        // Should only happen when hasNext is false
+        throw new NoSuchElementException
+      }
+      var (minKey, minGroup) = minPairs(0)
+      assert(minKey.hashCode() == minHash)
+
+      // Merge the rest of minPairs into minGroup
+      val minPairsWithKey = dropKey(minKGI, minKey).tail
+      minGroup = mergeIntoGroup(minKey, minGroup, minPairsWithKey)
+      if (minPairs.length == 0) {
+        minPairs ++= readFromIterator(minKGI.iterator)
+      }
+
+      // Do the same for all other KGITuples with the same minHash
+      val tuplesToAddBack = ArrayBuffer[KGITuple](minKGI)
+      while (!mergeHeap.isEmpty && mergeHeap.head.minHash == minHash) {
+        val newKGI = mergeHeap.dequeue()
+        val pairsWithKey = dropKey(newKGI, minKey)
+        minGroup = mergeIntoGroup(minKey, minGroup, pairsWithKey)
+        if (newKGI.pairs.length == 0) {
+          newKGI.pairs ++= readFromIterator(newKGI.iterator)
+        }
+        tuplesToAddBack += newKGI
+      }
+      tuplesToAddBack.foreach(mergeHeap.enqueue(_))
       (minKey, createCombiner(minGroup))
     }
 
-    case class KMITuple(key: K, group: M, iterator: Iterator[(K, M)]) extends Ordered[KMITuple] {
-      def compare(other: KMITuple): Int = {
-        other.key.hashCode().compareTo(key.hashCode())
+    case class KGITuple(iterator: Iterator[(K, G)], pairs: ArrayBuffer[(K, G)])
+      extends Ordered[KGITuple] {
+
+      // Invariant: pairs are ordered by key hash
+      def minHash: Int = {
+        if (pairs.length > 0){
+          pairs(0)._1.hashCode()
+        } else {
+          Int.MaxValue
+        }
+      }
+
+      def compare(other: KGITuple): Int = {
+        // mutable.PriorityQueue dequeues the max, not the min
+        -minHash.compareTo(other.minHash)
       }
     }
   }
 
-  // Iterate through (K, M) pairs in sorted order from an on-disk map
-  private class DiskIterator(file: File) extends Iterator[(K, M)] {
+  // Iterate through (K, G) pairs in sorted order from an on-disk map
+  private class DiskKGIterator(file: File) extends Iterator[(K, G)] {
     val in = ser.deserializeStream(new FileInputStream(file))
-    var nextItem: Option[(K, M)] = None
+    var nextItem: Option[(K, G)] = None
+    var eof = false
 
-    override def hasNext: Boolean = {
-      nextItem = try {
-        Some(in.readObject().asInstanceOf[(K, M)])
-      } catch {
-        case e: EOFException => None
+    def readNextItem(): Option[(K, G)] = {
+      if (!eof) {
+        try {
+          return Some(in.readObject().asInstanceOf[(K, G)])
+        } catch {
+          case e: EOFException => eof = true
+        }
       }
-      nextItem.isDefined
+      None
     }
 
-    override def next(): (K, M) = {
+    override def hasNext: Boolean = {
       nextItem match {
-        case Some(item) => item
-        case None => throw new NoSuchElementException
+        case Some(item) => true
+        case None =>
+          nextItem = readNextItem()
+          nextItem.isDefined
+      }
+    }
+
+    override def next(): (K, G) = {
+      nextItem match {
+        case Some(item) =>
+          nextItem = None
+          item
+        case None =>
+          val item = readNextItem()
+          item.getOrElse(throw new NoSuchElementException)
       }
     }
   }
 }
 
 private[spark] object SpillableAppendOnlyMap {
-  private class KeyHashOrdering[K, M] extends Ordering[(K, M)] {
-    def compare(x: (K, M), y: (K, M)): Int = {
-      x._1.hashCode().compareTo(y._1.hashCode())
+  private class KeyGroupOrdering[K, G] extends Ordering[(K, G)] {
+    def compare(kg1: (K, G), kg2: (K, G)): Int = {
+      kg1._1.hashCode().compareTo(kg2._1.hashCode())
     }
   }
 }

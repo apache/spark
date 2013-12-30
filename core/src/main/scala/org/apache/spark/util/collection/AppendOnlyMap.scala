@@ -237,10 +237,12 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
     if (highBit == n) n else highBit << 1
   }
 
-  // Return an iterator of the map in sorted order.
-  // Note that the validity of the map is no longer preserved.
-  def destructiveSortedIterator(ord: Ordering[(K, V)]): Iterator[(K, V)] = {
+  /** Return an iterator of the map in sorted order. This provides a way to sort the map without
+    * using additional memory, at the expense of destroying the validity of the map.
+    */
+  def destructiveSortedIterator(ordering: Ordering[(K, V)]): Iterator[(K, V)] = {
     var keyIndex, newIndex = 0
+    // Pack KV pairs into the front of the underlying array
     while (keyIndex < capacity) {
       if (data(2 * keyIndex) != null) {
         data(newIndex) = (data(2 * keyIndex), data(2 * keyIndex + 1))
@@ -248,11 +250,11 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
       }
       keyIndex += 1
     }
-    // sort
     assert(newIndex == curSize)
+    // Sort by the given ordering
     val rawOrdering = new Ordering[AnyRef] {
-      def compare(x: AnyRef, y: AnyRef): Int ={
-        ord.compare(x.asInstanceOf[(K, V)], y.asInstanceOf[(K, V)])
+      def compare(x: AnyRef, y: AnyRef): Int = {
+        ordering.compare(x.asInstanceOf[(K, V)], y.asInstanceOf[(K, V)])
       }
     }
     util.Arrays.sort(data, 0, curSize, rawOrdering)

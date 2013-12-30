@@ -74,7 +74,7 @@ case class Aggregator[K, V, C: ClassTag] (
       val combiners =
         new ExternalAppendOnlyMap[K, C, C](Predef.identity, mergeCombiners, mergeCombiners)
       while (iter.hasNext) {
-        var kc = iter.next()
+        val kc = iter.next()
         combiners.insert(kc._1, kc._2)
       }
       combiners.iterator
