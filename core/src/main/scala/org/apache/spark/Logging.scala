@@ -17,8 +17,8 @@
 
 package org.apache.spark
 
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import org.apache.log4j.{LogManager, PropertyConfigurator}
+import org.slf4j.{Logger, LoggerFactory}
 
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
@@ -91,5 +91,17 @@ trait Logging {
 
   // Method for ensuring that logging is initialized, to avoid having multiple
   // threads do it concurrently (as SLF4J initialization is not thread safe).
-  protected def initLogging() { log }
+  protected def initLogging() {
+    // If Log4j doesn't seem initialized, load a default properties file
+    def log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
+    if (!log4jInitialized) {
+      val defaultLogProps = "org/apache/spark/default-log4j.properties"
+      val classLoader = this.getClass.getClassLoader
+      Option(classLoader.getResource(defaultLogProps)) match {
+        case Some(url) => PropertyConfigurator.configure(url)
+        case None => System.err.println(s"Spark was unable to load $defaultLogProps")
+      }
+    }
+    log
+  }
 }

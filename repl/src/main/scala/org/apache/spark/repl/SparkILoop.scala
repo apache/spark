@@ -60,6 +60,8 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   def this(in0: BufferedReader, out: JPrintWriter) = this(Some(in0), out, None)
   def this() = this(None, new JPrintWriter(Console.out, true), None)
 
+  initLogging()
+
   var in: InteractiveReader = _   // the input stream from which commands come
   var settings: Settings = _
   var intp: SparkIMain = _
