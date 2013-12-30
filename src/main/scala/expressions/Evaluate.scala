@@ -252,7 +252,7 @@ object Evaluate extends Logging {
       case other => throw new OptimizationException(other, "evaluation not implemented")
     }
 
-    logger.debug(s"Evaluated $e => $result")
+    logger.debug(s"Evaluated $e => $result of type ${if(result == null) "null" else result.getClass.getName}, expected: ${e.dataType}")
     result
   }
 }
