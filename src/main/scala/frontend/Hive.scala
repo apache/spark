@@ -264,19 +264,16 @@ object HiveQl {
   }
 
   protected def getClauses(clauseNames: Seq[String], nodeList: Seq[ASTNode]): Seq[Option[Node]] = {
-    val unhandledClauses = nodeList.filterNot(clauseNames contains _.getText)
-    require(unhandledClauses.isEmpty, s"Unhandled parse clauses: $unhandledClauses")
-
     var remainingNodes = nodeList
-
     val clauses = clauseNames.map { clauseName =>
-      val (matches, nonMatches) = remainingNodes.partition(_.getText == clauseName)
+      val (matches, nonMatches) = remainingNodes.partition(_.getText.toUpperCase == clauseName)
       remainingNodes = nonMatches ++ (if(matches.nonEmpty) matches.tail else Nil)
       matches.headOption
     }
 
-     assert(remainingNodes.isEmpty, s"Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}")
-     clauses
+    assert(remainingNodes.isEmpty,
+      s"Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}")
+    clauses
   }
 
   def getClause(clauseName: String, nodeList: Seq[Node]) =
