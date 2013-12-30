@@ -18,6 +18,7 @@
 package org.apache.spark.util.collection
 
 import java.util
+import java.util.Comparator
 
 /**
  * A simple open hash table optimized for the append-only use case, where keys
@@ -240,7 +241,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
   /** Return an iterator of the map in sorted order. This provides a way to sort the map without
     * using additional memory, at the expense of destroying the validity of the map.
     */
-  def destructiveSortedIterator(ordering: Ordering[(K, V)]): Iterator[(K, V)] = {
+  def destructiveSortedIterator(cmp: Comparator[(K, V)]): Iterator[(K, V)] = {
     var keyIndex, newIndex = 0
     // Pack KV pairs into the front of the underlying array
     while (keyIndex < capacity) {
@@ -252,9 +253,9 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
     }
     assert(newIndex == curSize)
     // Sort by the given ordering
-    val rawOrdering = new Ordering[AnyRef] {
+    val rawOrdering = new Comparator[AnyRef] {
       def compare(x: AnyRef, y: AnyRef): Int = {
-        ordering.compare(x.asInstanceOf[(K, V)], y.asInstanceOf[(K, V)])
+        cmp.compare(x.asInstanceOf[(K, V)], y.asInstanceOf[(K, V)])
       }
     }
     util.Arrays.sort(data, 0, curSize, rawOrdering)
