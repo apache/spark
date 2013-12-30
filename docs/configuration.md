@@ -149,7 +149,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.io.compression.codec</td>
   <td>org.apache.spark.io.<br />LZFCompressionCodec</td>
   <td>
-    The compression codec class to use for various compressions. By default, Spark provides two
+    The codec used to compress internal data such as RDD partitions and shuffle outputs. By default, Spark provides two
     codecs: <code>org.apache.spark.io.LZFCompressionCodec</code> and <code>org.apache.spark.io.SnappyCompressionCodec</code>.
   </td>
 </tr>
@@ -275,9 +275,30 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.akka.timeout</td>
-  <td>20</td>
+  <td>100</td>
   <td>
     Communication timeout between Spark nodes, in seconds.
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.heartbeat.pauses</td>
+  <td>600</td>
+  <td>
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold` if you need to.
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.failure-detector.threshold</td>
+  <td>300.0</td>
+  <td>
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). This maps to akka's `akka.remote.transport-failure-detector.threshold`. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.heartbeat.interval</td>
+  <td>1000</td>
+  <td>
+    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those. 
   </td>
 </tr>
 <tr>
@@ -319,7 +340,49 @@ Apart from these, the following properties are also available, and may be useful
     Should be greater than or equal to 1. Number of allowed retries = this value - 1.
   </td>
 </tr>
-
+<tr>
+  <td>spark.broadcast.blockSize</td>
+  <td>4096</td>
+  <td>
+    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>. 
+    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.consolidateFiles</td>
+  <td>false</td>
+  <td>
+    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation</td>
+  <td>false</td>
+  <td>
+    If set to "true", performs speculative execution of tasks. This means if one or more tasks are running slowly in a stage, they will be re-launched.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation.interval</td>
+  <td>100</td>
+  <td>
+    How often Spark will check for tasks to speculate, in milliseconds.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation.quantile</td>
+  <td>0.75</td>
+  <td>
+    Percentage of tasks which must be complete before speculation is enabled for a particular stage.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation.multiplier</td>
+  <td>1.5</td>
+  <td>
+    How many times slower a task is than the median to be considered for speculation.
+  </td>
+</tr>
 </table>
 
 # Environment Variables

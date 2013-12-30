@@ -10,7 +10,7 @@ with these distributions:
 # Compile-time Hadoop Version
 
 When compiling Spark, you'll need to 
-[set the SPARK_HADOOP_VERSION flag](http://localhost:4000/index.html#a-note-about-hadoop-versions):
+[set the SPARK_HADOOP_VERSION flag](index.html#a-note-about-hadoop-versions):
 
     SPARK_HADOOP_VERSION=1.0.4 sbt/sbt assembly
 
@@ -25,8 +25,8 @@ the _exact_ Hadoop version you are running to avoid any compatibility errors.
       <h3>CDH Releases</h3>
       <table class="table" style="width:350px; margin-right: 20px;">
         <tr><th>Release</th><th>Version code</th></tr>
-        <tr><td>CDH 4.X.X (YARN mode)</td><td>2.0.0-chd4.X.X</td></tr>
-        <tr><td>CDH 4.X.X</td><td>2.0.0-mr1-chd4.X.X</td></tr>
+        <tr><td>CDH 4.X.X (YARN mode)</td><td>2.0.0-cdh4.X.X</td></tr>
+        <tr><td>CDH 4.X.X</td><td>2.0.0-mr1-cdh4.X.X</td></tr>
         <tr><td>CDH 3u6</td><td>0.20.2-cdh3u6</td></tr>
         <tr><td>CDH 3u5</td><td>0.20.2-cdh3u5</td></tr>
         <tr><td>CDH 3u4</td><td>0.20.2-cdh3u4</td></tr>
@@ -40,6 +40,7 @@ the _exact_ Hadoop version you are running to avoid any compatibility errors.
         <tr><td>HDP 1.2</td><td>1.1.2</td></tr>
         <tr><td>HDP 1.1</td><td>1.0.3</td></tr>
         <tr><td>HDP 1.0</td><td>1.0.3</td></tr>
+        <tr><td>HDP 2.0</td><td>2.2.0</td></tr>
       </table>
     </td>
   </tr>

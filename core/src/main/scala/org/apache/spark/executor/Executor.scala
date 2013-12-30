@@ -25,8 +25,9 @@ import java.util.concurrent._
 import scala.collection.JavaConversions._
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.scheduler._
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util.Utils
 
@@ -74,30 +75,33 @@ private[spark] class Executor(
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
   Thread.currentThread.setContextClassLoader(replClassLoader)
 
-  // Make any thread terminations due to uncaught exceptions kill the entire
-  // executor process to avoid surprising stalls.
-  Thread.setDefaultUncaughtExceptionHandler(
-    new Thread.UncaughtExceptionHandler {
-      override def uncaughtException(thread: Thread, exception: Throwable) {
-        try {
-          logError("Uncaught exception in thread " + thread, exception)
+  if (!isLocal) {
+    // Setup an uncaught exception handler for non-local mode.
+    // Make any thread terminations due to uncaught exceptions kill the entire
+    // executor process to avoid surprising stalls.
+    Thread.setDefaultUncaughtExceptionHandler(
+      new Thread.UncaughtExceptionHandler {
+        override def uncaughtException(thread: Thread, exception: Throwable) {
+          try {
+            logError("Uncaught exception in thread " + thread, exception)
 
-          // We may have been called from a shutdown hook. If so, we must not call System.exit().
-          // (If we do, we will deadlock.)
-          if (!Utils.inShutdown()) {
-            if (exception.isInstanceOf[OutOfMemoryError]) {
-              System.exit(ExecutorExitCode.OOM)
-            } else {
-              System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
+            // We may have been called from a shutdown hook. If so, we must not call System.exit().
+            // (If we do, we will deadlock.)
+            if (!Utils.inShutdown()) {
+              if (exception.isInstanceOf[OutOfMemoryError]) {
+                System.exit(ExecutorExitCode.OOM)
+              } else {
+                System.exit(ExecutorExitCode.UNCAUGHT_EXCEPTION)
+              }
             }
+          } catch {
+            case oom: OutOfMemoryError => Runtime.getRuntime.halt(ExecutorExitCode.OOM)
+            case t: Throwable => Runtime.getRuntime.halt(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
           }
-        } catch {
-          case oom: OutOfMemoryError => Runtime.getRuntime.halt(ExecutorExitCode.OOM)
-          case t: Throwable => Runtime.getRuntime.halt(ExecutorExitCode.UNCAUGHT_EXCEPTION_TWICE)
         }
       }
-    }
-  )
+    )
+  }
 
   val executorSource = new ExecutorSource(this, executorId)
 
@@ -117,7 +121,7 @@ private[spark] class Executor(
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
   private val akkaFrameSize = {
-    env.actorSystem.settings.config.getBytes("akka.remote.netty.message-frame-size")
+    env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size")
   }
 
   // Start worker thread pool
@@ -125,6 +129,8 @@ private[spark] class Executor(
 
   // Maintains the list of running tasks.
   private val runningTasks = new ConcurrentHashMap[Long, TaskRunner]
+
+  val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(SparkContext.SPARK_UNKNOWN_USER)
 
   def launchTask(context: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer) {
     val tr = new TaskRunner(context, taskId, serializedTask)
@@ -173,7 +179,7 @@ private[spark] class Executor(
       }
     }
 
-    override def run() {
+    override def run(): Unit = SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
       val startTime = System.currentTimeMillis()
       SparkEnv.set(env)
       Thread.currentThread.setContextClassLoader(replClassLoader)
@@ -216,18 +222,22 @@ private[spark] class Executor(
           return
         }
 
+        val resultSer = SparkEnv.get.serializer.newInstance()
+        val beforeSerialization = System.currentTimeMillis()
+        val valueBytes = resultSer.serialize(value)
+        val afterSerialization = System.currentTimeMillis()
+
         for (m <- task.metrics) {
           m.hostname = Utils.localHostName()
           m.executorDeserializeTime = (taskStart - startTime).toInt
           m.executorRunTime = (taskFinish - taskStart).toInt
           m.jvmGCTime = gcTime - startGCTime
+          m.resultSerializationTime = (afterSerialization - beforeSerialization).toInt
         }
-        // TODO I'd also like to track the time it takes to serialize the task results, but that is
-        // huge headache, b/c we need to serialize the task metrics first.  If TaskMetrics had a
-        // custom serialized format, we could just change the relevants bytes in the byte buffer
+
         val accumUpdates = Accumulators.values
 
-        val directResult = new DirectTaskResult(value, accumUpdates, task.metrics.getOrElse(null))
+        val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.getOrElse(null))
         val serializedDirectResult = ser.serialize(directResult)
         logInfo("Serialized size of result for " + taskId + " is " + serializedDirectResult.limit)
         val serializedResult = {

@@ -17,9 +17,10 @@
 
 package org.apache.hadoop.mapreduce
 
-import org.apache.hadoop.conf.Configuration
 import java.lang.{Integer => JInteger, Boolean => JBoolean}
+import org.apache.hadoop.conf.Configuration
 
+private[apache]
 trait SparkHadoopMapReduceUtil {
   def newJobContext(conf: Configuration, jobId: JobID): JobContext = {
     val klass = firstAvailableClass(
@@ -37,23 +38,31 @@ trait SparkHadoopMapReduceUtil {
     ctor.newInstance(conf, attemptId).asInstanceOf[TaskAttemptContext]
   }
 
-  def newTaskAttemptID(jtIdentifier: String, jobId: Int, isMap: Boolean, taskId: Int, attemptId: Int) = {
-    val klass = Class.forName("org.apache.hadoop.mapreduce.TaskAttemptID");
+  def newTaskAttemptID(
+      jtIdentifier: String,
+      jobId: Int,
+      isMap: Boolean,
+      taskId: Int,
+      attemptId: Int) = {
+    val klass = Class.forName("org.apache.hadoop.mapreduce.TaskAttemptID")
     try {
-      // first, attempt to use the old-style constructor that takes a boolean isMap (not available in YARN)
+      // First, attempt to use the old-style constructor that takes a boolean isMap
+      // (not available in YARN)
       val ctor = klass.getDeclaredConstructor(classOf[String], classOf[Int], classOf[Boolean],
-          classOf[Int], classOf[Int])
-      ctor.newInstance(jtIdentifier, new JInteger(jobId), new JBoolean(isMap), new JInteger(taskId), new
-        JInteger(attemptId)).asInstanceOf[TaskAttemptID]
+        classOf[Int], classOf[Int])
+      ctor.newInstance(jtIdentifier, new JInteger(jobId), new JBoolean(isMap), new JInteger(taskId),
+        new JInteger(attemptId)).asInstanceOf[TaskAttemptID]
     } catch {
       case exc: NoSuchMethodException => {
-        // failed, look for the new ctor that takes a TaskType (not available in 1.x)
-        val taskTypeClass = Class.forName("org.apache.hadoop.mapreduce.TaskType").asInstanceOf[Class[Enum[_]]]
-        val taskType = taskTypeClass.getMethod("valueOf", classOf[String]).invoke(taskTypeClass, if(isMap) "MAP" else "REDUCE")
+        // If that failed, look for the new constructor that takes a TaskType (not available in 1.x)
+        val taskTypeClass = Class.forName("org.apache.hadoop.mapreduce.TaskType")
+          .asInstanceOf[Class[Enum[_]]]
+        val taskType = taskTypeClass.getMethod("valueOf", classOf[String]).invoke(
+          taskTypeClass, if(isMap) "MAP" else "REDUCE")
         val ctor = klass.getDeclaredConstructor(classOf[String], classOf[Int], taskTypeClass,
           classOf[Int], classOf[Int])
-        ctor.newInstance(jtIdentifier, new JInteger(jobId), taskType, new JInteger(taskId), new
-          JInteger(attemptId)).asInstanceOf[TaskAttemptID]
+        ctor.newInstance(jtIdentifier, new JInteger(jobId), taskType, new JInteger(taskId),
+          new JInteger(attemptId)).asInstanceOf[TaskAttemptID]
       }
     }
   }

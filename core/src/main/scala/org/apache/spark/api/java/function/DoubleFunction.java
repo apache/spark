@@ -18,8 +18,6 @@
 package org.apache.spark.api.java.function;
 
 
-import scala.runtime.AbstractFunction1;
-
 import java.io.Serializable;
 
 /**
@@ -29,6 +27,5 @@ import java.io.Serializable;
 // are overloaded for both Function and DoubleFunction.
 public abstract class DoubleFunction<T> extends WrappedFunction1<T, Double>
   implements Serializable {
-
-  public abstract Double call(T t) throws Exception;
+    // Intentionally left blank
 }

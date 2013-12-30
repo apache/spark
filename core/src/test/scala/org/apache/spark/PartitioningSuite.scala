@@ -142,11 +142,11 @@ class PartitioningSuite extends FunSuite with SharedSparkContext {
         .filter(_ >= 0.0)
 
     // Run the partitions, including the consecutive empty ones, through StatCounter
-    val stats: StatCounter = rdd.stats();
-    assert(abs(6.0 - stats.sum) < 0.01);
-    assert(abs(6.0/2 - rdd.mean) < 0.01);
-    assert(abs(1.0 - rdd.variance) < 0.01);
-    assert(abs(1.0 - rdd.stdev) < 0.01);
+    val stats: StatCounter = rdd.stats()
+    assert(abs(6.0 - stats.sum) < 0.01)
+    assert(abs(6.0/2 - rdd.mean) < 0.01)
+    assert(abs(1.0 - rdd.variance) < 0.01)
+    assert(abs(1.0 - rdd.stdev) < 0.01)
 
     // Add other tests here for classes that should be able to handle empty partitions correctly
   }

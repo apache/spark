@@ -152,6 +152,26 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     assert(rdd.union(emptyKv).collect().size === 2)
   }
 
+  test("repartitioned RDDs") {
+    val data = sc.parallelize(1 to 1000, 10)
+
+    // Coalesce partitions
+    val repartitioned1 = data.repartition(2)
+    assert(repartitioned1.partitions.size == 2)
+    val partitions1 = repartitioned1.glom().collect()
+    assert(partitions1(0).length > 0)
+    assert(partitions1(1).length > 0)
+    assert(repartitioned1.collect().toSet === (1 to 1000).toSet)
+
+    // Split partitions
+    val repartitioned2 = data.repartition(20)
+    assert(repartitioned2.partitions.size == 20)
+    val partitions2 = repartitioned2.glom().collect()
+    assert(partitions2(0).length > 0)
+    assert(partitions2(19).length > 0)
+    assert(repartitioned2.collect().toSet === (1 to 1000).toSet)
+  }
+
   test("coalesced RDDs") {
     val data = sc.parallelize(1 to 10, 10)
 
@@ -237,8 +257,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     // test that you get over 90% locality in each group
     val minLocality = coalesced2.partitions
       .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
-      .foldLeft(1.)((perc, loc) => math.min(perc,loc))
-    assert(minLocality >= 0.90, "Expected 90% locality but got " + (minLocality*100.).toInt + "%")
+      .foldLeft(1.0)((perc, loc) => math.min(perc,loc))
+    assert(minLocality >= 0.90, "Expected 90% locality but got " + (minLocality*100.0).toInt + "%")
 
     // test that the groups are load balanced with 100 +/- 20 elements in each
     val maxImbalance = coalesced2.partitions
@@ -250,9 +270,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val coalesced3 = data3.coalesce(numMachines*2)
     val minLocality2 = coalesced3.partitions
       .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
-      .foldLeft(1.)((perc, loc) => math.min(perc,loc))
+      .foldLeft(1.0)((perc, loc) => math.min(perc,loc))
     assert(minLocality2 >= 0.90, "Expected 90% locality for derived RDD but got " +
-      (minLocality2*100.).toInt + "%")
+      (minLocality2*100.0).toInt + "%")
   }
 
   test("zipped RDDs") {

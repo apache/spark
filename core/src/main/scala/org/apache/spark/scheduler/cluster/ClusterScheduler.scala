@@ -24,6 +24,7 @@ import java.util.{TimerTask, Timer}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
 import scala.collection.mutable.HashSet
+import scala.concurrent.duration._
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
@@ -98,8 +99,8 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     this.dagScheduler = dagScheduler
   }
 
-  def initialize(context: SchedulerBackend) {
-    backend = context
+  def initialize(backend: SchedulerBackend) {
+    this.backend = backend
     // temporarily set rootPool name to empty
     rootPool = new Pool("", schedulingMode, 0, 0)
     schedulableBuilder = {
@@ -119,21 +120,12 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     backend.start()
 
     if (System.getProperty("spark.speculation", "false").toBoolean) {
-      new Thread("ClusterScheduler speculation check") {
-        setDaemon(true)
-
-        override def run() {
-          logInfo("Starting speculative execution thread")
-          while (true) {
-            try {
-              Thread.sleep(SPECULATION_INTERVAL)
-            } catch {
-              case e: InterruptedException => {}
-            }
-            checkSpeculatableTasks()
-          }
-        }
-      }.start()
+      logInfo("Starting speculative execution thread")
+      import sc.env.actorSystem.dispatcher
+      sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
+            SPECULATION_INTERVAL milliseconds) {
+        checkSpeculatableTasks()
+      }
     }
   }
 
@@ -180,7 +172,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
           backend.killTask(tid, execId)
         }
       }
-      tsm.error("Stage %d was cancelled".format(stageId))
+      logInfo("Stage %d was cancelled".format(stageId))
+      tsm.removeAllRunningTasks()
+      taskSetFinished(tsm)
     }
   }
 
@@ -256,7 +250,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     var failedExecutor: Option[String] = None
-    var taskFailed = false
     synchronized {
       try {
         if (state == TaskState.LOST && taskIdToExecutorId.contains(tid)) {
@@ -275,9 +268,6 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
                 taskSetTaskIds(taskSetId) -= tid
               }
               taskIdToExecutorId.remove(tid)
-            }
-            if (state == TaskState.FAILED) {
-              taskFailed = true
             }
             activeTaskSets.get(taskSetId).foreach { taskSet =>
               if (state == TaskState.FINISHED) {
@@ -300,10 +290,10 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
       dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
-    if (taskFailed) {
-      // Also revive offers if a task had failed for some reason other than host lost
-      backend.reviveOffers()
-    }
+  }
+
+  def handleTaskGettingResult(taskSetManager: ClusterTaskSetManager, tid: Long) {
+    taskSetManager.handleTaskGettingResult(tid)
   }
 
   def handleSuccessfulTask(
@@ -319,8 +309,9 @@ private[spark] class ClusterScheduler(val sc: SparkContext)
     taskState: TaskState,
     reason: Option[TaskEndReason]) = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
-    if (taskState == TaskState.FINISHED) {
-      // The task finished successfully but the result was lost, so we should revive offers.
+    if (taskState != TaskState.KILLED) {
+      // Need to revive offers again now that the task set manager state has been updated to
+      // reflect failed tasks that need to be re-run.
       backend.reviveOffers()
     }
   }

@@ -40,7 +40,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val graph = ssc.graph
   val checkpointDir = ssc.checkpointDir
   val checkpointDuration = ssc.checkpointDuration
-  val pendingTimes = ssc.scheduler.jobManager.getPendingTimes()
+  val pendingTimes = ssc.scheduler.getPendingTimes()
   val delaySeconds = MetadataCleaner.getDelaySeconds
 
   def validate() {
@@ -94,7 +94,7 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
           fs.delete(file, false)
           fs.rename(writeFile, file)
 
-          val finishTime = System.currentTimeMillis();
+          val finishTime = System.currentTimeMillis()
           logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + file +
             "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " milliseconds")
           return
@@ -124,7 +124,9 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
 
   def stop() {
     synchronized {
-      if (stopped) return ;
+      if (stopped) {
+        return
+      }
       stopped = true
     }
     executor.shutdown()

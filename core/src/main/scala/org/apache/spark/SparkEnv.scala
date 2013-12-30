@@ -20,18 +20,18 @@ package org.apache.spark
 import collection.mutable
 import serializer.Serializer
 
-import akka.actor.{Actor, ActorRef, Props, ActorSystemImpl, ActorSystem}
+import akka.actor._
 import akka.remote.RemoteActorRefProvider
 
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.storage.{BlockManagerMasterActor, BlockManager, BlockManagerMaster}
 import org.apache.spark.network.ConnectionManager
 import org.apache.spark.serializer.{Serializer, SerializerManager}
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.api.python.PythonWorkerFactory
 
+import com.google.common.collect.MapMaker
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
@@ -58,18 +58,9 @@ class SparkEnv (
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
-  val hadoop = {
-    val yarnMode = java.lang.Boolean.valueOf(System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE")))
-    if(yarnMode) {
-      try {
-        Class.forName("org.apache.spark.deploy.yarn.YarnSparkHadoopUtil").newInstance.asInstanceOf[SparkHadoopUtil]
-      } catch {
-        case th: Throwable => throw new SparkException("Unable to load YARN support", th)
-      }
-    } else {
-      new SparkHadoopUtil
-    }
-  }
+  // A general, soft-reference map for metadata needed during HadoopRDD split computation
+  // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
+  private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
   def stop() {
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
@@ -83,7 +74,8 @@ class SparkEnv (
     actorSystem.shutdown()
     // Unfortunately Akka's awaitTermination doesn't actually wait for the Netty server to shut
     // down, but let's call it anyway in case it gets fixed in a later release
-    actorSystem.awaitTermination()
+    // UPDATE: In Akka 2.1.x, this hangs if there are remote actors, so we can't call it.
+    //actorSystem.awaitTermination()
   }
 
   def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
@@ -160,17 +152,17 @@ object SparkEnv extends Logging {
     val closureSerializer = serializerManager.get(
       System.getProperty("spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer"))
 
-    def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
+    def registerOrLookup(name: String, newActor: => Actor): Either[ActorRef, ActorSelection] = {
       if (isDriver) {
         logInfo("Registering " + name)
-        actorSystem.actorOf(Props(newActor), name = name)
+        Left(actorSystem.actorOf(Props(newActor), name = name))
       } else {
         val driverHost: String = System.getProperty("spark.driver.host", "localhost")
         val driverPort: Int = System.getProperty("spark.driver.port", "7077").toInt
         Utils.checkHost(driverHost, "Expected hostname")
-        val url = "akka://spark@%s:%s/user/%s".format(driverHost, driverPort, name)
+        val url = "akka.tcp://spark@%s:%s/user/%s".format(driverHost, driverPort, name)
         logInfo("Connecting to " + name + ": " + url)
-        actorSystem.actorFor(url)
+        Right(actorSystem.actorSelection(url))
       }
     }
 
@@ -187,10 +179,14 @@ object SparkEnv extends Logging {
 
     // Have to assign trackerActor after initialization as MapOutputTrackerActor
     // requires the MapOutputTracker itself
-    val mapOutputTracker = new MapOutputTracker()
+    val mapOutputTracker =  if (isDriver) {
+      new MapOutputTrackerMaster()
+    } else {
+      new MapOutputTracker()
+    }
     mapOutputTracker.trackerActor = registerOrLookup(
       "MapOutputTracker",
-      new MapOutputTrackerActor(mapOutputTracker))
+      new MapOutputTrackerMasterActor(mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]))
 
     val shuffleFetcher = instantiateClass[ShuffleFetcher](
       "spark.shuffle.fetcher", "org.apache.spark.BlockStoreShuffleFetcher")

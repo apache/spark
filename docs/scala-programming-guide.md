@@ -142,7 +142,7 @@ All transformations in Spark are <i>lazy</i>, in that they do not compute their 
 
 By default, each transformed RDD is recomputed each time you run an action on it. However, you may also *persist* an RDD in memory using the `persist` (or `cache`) method, in which case Spark will keep the elements around on the cluster for much faster access the next time you query it. There is also support for persisting datasets on disk, or replicated across the cluster. The next section in this document describes these options.
 
-The following tables list the transformations and actions currently supported (see also the [RDD API doc](api/core/index.html#org.apache.spark.RDD) for details):
+The following tables list the transformations and actions currently supported (see also the [RDD API doc](api/core/index.html#org.apache.spark.rdd.RDD) for details):
 
 ### Transformations
 
@@ -211,7 +211,7 @@ The following tables list the transformations and actions currently supported (s
 </tr>
 </table>
 
-A complete list of transformations is available in the [RDD API doc](api/core/index.html#org.apache.spark.RDD).
+A complete list of transformations is available in the [RDD API doc](api/core/index.html#org.apache.spark.rdd.RDD).
 
 ### Actions
 
@@ -259,7 +259,7 @@ A complete list of transformations is available in the [RDD API doc](api/core/in
 </tr>
 </table>
 
-A complete list of actions is available in the [RDD API doc](api/core/index.html#org.apache.spark.RDD).
+A complete list of actions is available in the [RDD API doc](api/core/index.html#org.apache.spark.rdd.RDD).
 
 ## RDD Persistence
 
@@ -363,7 +363,7 @@ res2: Int = 10
 
 # Where to Go from Here
 
-You can see some [example Spark programs](http://www.spark-project.org/examples.html) on the Spark website.
+You can see some [example Spark programs](http://spark.incubator.apache.org/examples.html) on the Spark website.
 In addition, Spark includes several samples in `examples/src/main/scala`. Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what had to be changed to make the program run on a cluster. You can run them using by passing the class name to the `run-example` script included in Spark; for example:
 
     ./run-example org.apache.spark.examples.SparkPi

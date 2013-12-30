@@ -120,7 +120,7 @@ private[spark] class CoarseMesosSchedulerBackend(
     }
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val driverUrl = "akka://spark@%s:%s/user/%s".format(
+    val driverUrl = "akka.tcp://spark@%s:%s/user/%s".format(
       System.getProperty("spark.driver.host"),
       System.getProperty("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
@@ -181,6 +181,7 @@ private[spark] class CoarseMesosSchedulerBackend(
             !slaveIdsWithExecutors.contains(slaveId)) {
           // Launch an executor on the slave
           val cpusToUse = math.min(cpus, maxCores - totalCoresAcquired)
+          totalCoresAcquired += cpusToUse
           val taskId = newMesosTaskId()
           taskIdToSlaveId(taskId) = slaveId
           slaveIdsWithExecutors += slaveId

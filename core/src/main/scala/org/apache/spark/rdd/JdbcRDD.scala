@@ -19,6 +19,8 @@ package org.apache.spark.rdd
 
 import java.sql.{Connection, ResultSet}
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.{Logging, Partition, SparkContext, TaskContext}
 import org.apache.spark.util.NextIterator
 
@@ -45,7 +47,7 @@ private[spark] class JdbcPartition(idx: Int, val lower: Long, val upper: Long) e
  *   This should only call getInt, getString, etc; the RDD takes care of calling next.
  *   The default maps a ResultSet to an array of Object.
  */
-class JdbcRDD[T: ClassManifest](
+class JdbcRDD[T: ClassTag](
     sc: SparkContext,
     getConnection: () => Connection,
     sql: String,

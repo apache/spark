@@ -50,6 +50,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterSche
             case directResult: DirectTaskResult[_] => directResult
             case IndirectTaskResult(blockId) =>
               logDebug("Fetching indirect task result for TID %s".format(tid))
+              scheduler.handleTaskGettingResult(taskSetManager, tid)
               val serializedTaskResult = sparkEnv.blockManager.getRemoteBytes(blockId)
               if (!serializedTaskResult.isDefined) {
                 /* We won't be able to get the task result if the machine that ran the task failed
@@ -70,7 +71,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterSche
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
             taskSetManager.abort("ClassNotFound with classloader: " + loader)
-          case ex =>
+          case ex: Throwable =>
             taskSetManager.abort("Exception while deserializing and fetching task: %s".format(ex))
         }
       }
@@ -94,7 +95,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: ClusterSche
             val loader = Thread.currentThread.getContextClassLoader
             logError(
               "Could not deserialize TaskEndReason: ClassNotFound with classloader " + loader)
-          case ex => {}
+          case ex: Throwable => {}
         }
         scheduler.handleFailedTask(taskSetManager, tid, taskState, reason)
       }

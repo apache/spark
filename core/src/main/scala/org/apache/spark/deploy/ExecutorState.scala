@@ -17,8 +17,7 @@
 
 package org.apache.spark.deploy
 
-private[spark] object ExecutorState
-  extends Enumeration("LAUNCHING", "LOADING", "RUNNING", "KILLED", "FAILED", "LOST") {
+private[spark] object ExecutorState extends Enumeration {
 
   val LAUNCHING, LOADING, RUNNING, KILLED, FAILED, LOST = Value
 

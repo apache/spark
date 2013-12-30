@@ -17,6 +17,7 @@
 
 package org.apache.spark.scheduler.cluster
 
+import java.io.NotSerializableException
 import java.util.Arrays
 
 import scala.collection.mutable.ArrayBuffer
@@ -376,6 +377,7 @@ private[spark] class ClusterTaskSetManager(
           logInfo("Serialized task %s:%d as %d bytes in %d ms".format(
             taskSet.id, index, serializedTask.limit, timeTaken))
           val taskName = "task %s:%d".format(taskSet.id, index)
+          info.serializedSize = serializedTask.limit
           if (taskAttempts(index).size == 1)
             taskStarted(task,info)
           return Some(new TaskDescription(taskId, execId, taskName, index, serializedTask))
@@ -416,6 +418,12 @@ private[spark] class ClusterTaskSetManager(
 
   private def taskStarted(task: Task[_], info: TaskInfo) {
     sched.dagScheduler.taskStarted(task, info)
+  }
+
+  def handleTaskGettingResult(tid: Long) = {
+    val info = taskInfos(tid)
+    info.markGettingResult()
+    sched.dagScheduler.taskGettingResult(tasks(info.index), info)
   }
 
   /**
@@ -478,6 +486,14 @@ private[spark] class ClusterTaskSetManager(
 
         case ef: ExceptionFailure =>
           sched.dagScheduler.taskEnded(tasks(index), ef, null, null, info, ef.metrics.getOrElse(null))
+          if (ef.className == classOf[NotSerializableException].getName()) {
+            // If the task result wasn't serializable, there's no point in trying to re-execute it.
+            logError("Task %s:%s had a not serializable result: %s; not retrying".format(
+              taskSet.id, index, ef.description))
+            abort("Task %s:%s had a not serializable result: %s".format(
+              taskSet.id, index, ef.description))
+            return
+          }
           val key = ef.description
           val now = clock.getTime()
           val (printFull, dupCount) = {
@@ -513,10 +529,10 @@ private[spark] class ClusterTaskSetManager(
       addPendingTask(index)
       if (state != TaskState.KILLED) {
         numFailures(index) += 1
-        if (numFailures(index) > MAX_TASK_FAILURES) {
-          logError("Task %s:%d failed more than %d times; aborting job".format(
+        if (numFailures(index) >= MAX_TASK_FAILURES) {
+          logError("Task %s:%d failed %d times; aborting job".format(
             taskSet.id, index, MAX_TASK_FAILURES))
-          abort("Task %s:%d failed more than %d times".format(taskSet.id, index, MAX_TASK_FAILURES))
+          abort("Task %s:%d failed %d times".format(taskSet.id, index, MAX_TASK_FAILURES))
         }
       }
     } else {
@@ -558,7 +574,7 @@ private[spark] class ClusterTaskSetManager(
     runningTasks = runningTasksSet.size
   }
 
-  private def removeAllRunningTasks() {
+  private[cluster] def removeAllRunningTasks() {
     val numRunningTasks = runningTasksSet.size
     runningTasksSet.clear()
     if (parent != null) {

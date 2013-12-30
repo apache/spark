@@ -23,6 +23,7 @@ import akka.zeromq._
 import org.apache.spark.streaming.{ Seconds, StreamingContext }
 import org.apache.spark.streaming.StreamingContext._
 import akka.zeromq.Subscribe
+import akka.util.ByteString
 
 /**
  * A simple publisher for demonstration purposes, repeatedly publishes random Messages
@@ -40,10 +41,11 @@ object SimpleZeroMQPublisher {
     val acs: ActorSystem = ActorSystem()
 
     val pubSocket = ZeroMQExtension(acs).newSocket(SocketType.Pub, Bind(url))
-    val messages: Array[String] = Array("words ", "may ", "count ")
+    implicit def stringToByteString(x: String) = ByteString(x)
+    val messages: List[ByteString] = List("words ", "may ", "count ")
     while (true) {
       Thread.sleep(1000)
-      pubSocket ! ZMQMessage(Frame(topic) :: messages.map(x => Frame(x.getBytes)).toList)
+      pubSocket ! ZMQMessage(ByteString(topic) :: messages)
     }
     acs.awaitTermination()
   }
@@ -78,7 +80,7 @@ object ZeroMQWordCount {
     val ssc = new StreamingContext(master, "ZeroMQWordCount", Seconds(2),
       System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
 
-    def bytesToStringIterator(x: Seq[Seq[Byte]]) = (x.map(x => new String(x.toArray))).iterator
+    def bytesToStringIterator(x: Seq[ByteString]) = (x.map(_.utf8String)).iterator
 
     //For this stream, a zeroMQ publisher should be running.
     val lines = ssc.zeroMQStream(url, Subscribe(topic), bytesToStringIterator)

@@ -19,6 +19,8 @@ package org.apache.spark
 
 import java.util.concurrent.Semaphore
 
+import scala.concurrent.Await
+import scala.concurrent.duration.Duration
 import scala.concurrent.future
 import scala.concurrent.ExecutionContext.Implicits.global
 
@@ -83,6 +85,36 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     assert(sc.parallelize(1 to 10, 2).count === 10)
   }
 
+  test("job group") {
+    sc = new SparkContext("local[2]", "test")
+
+    // Add a listener to release the semaphore once any tasks are launched.
+    val sem = new Semaphore(0)
+    sc.dagScheduler.addSparkListener(new SparkListener {
+      override def onTaskStart(taskStart: SparkListenerTaskStart) {
+        sem.release()
+      }
+    })
+
+    // jobA is the one to be cancelled.
+    val jobA = future {
+      sc.setJobGroup("jobA", "this is a job to be cancelled")
+      sc.parallelize(1 to 10000, 2).map { i => Thread.sleep(10); i }.count()
+    }
+
+    sc.clearJobGroup()
+    val jobB = sc.parallelize(1 to 100, 2).countAsync()
+
+    // Block until both tasks of job A have started and cancel job A.
+    sem.acquire(2)
+    sc.cancelJobGroup("jobA")
+    val e = intercept[SparkException] { Await.result(jobA, Duration.Inf) }
+    assert(e.getMessage contains "cancel")
+
+    // Once A is cancelled, job B should finish fairly quickly.
+    assert(jobB.get() === 100)
+  }
+/*
   test("two jobs sharing the same stage") {
     // sem1: make sure cancel is issued after some tasks are launched
     // sem2: make sure the first stage is not finished until cancel is issued
@@ -116,7 +148,7 @@ class JobCancellationSuite extends FunSuite with ShouldMatchers with BeforeAndAf
     intercept[SparkException] { f1.get() }
     intercept[SparkException] { f2.get() }
   }
-
+ */
   def testCount() {
     // Cancel before launching any tasks
     {

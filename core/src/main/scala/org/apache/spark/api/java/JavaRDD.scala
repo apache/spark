@@ -17,12 +17,14 @@
 
 package org.apache.spark.api.java
 
+import scala.reflect.ClassTag
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.storage.StorageLevel
 
-class JavaRDD[T](val rdd: RDD[T])(implicit val classManifest: ClassManifest[T]) extends
+class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T]) extends
 JavaRDDLike[T, JavaRDD[T]] {
 
   override def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
@@ -41,8 +43,16 @@ JavaRDDLike[T, JavaRDD[T]] {
 
   /**
    * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+   * This method blocks until all blocks are deleted.
    */
   def unpersist(): JavaRDD[T] = wrapRDD(rdd.unpersist())
+
+  /**
+   * Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+   *
+   * @param blocking Whether to block until all blocks are deleted.
+   */
+  def unpersist(blocking: Boolean): JavaRDD[T] = wrapRDD(rdd.unpersist(blocking))
 
   // Transformations (return a new RDD)
 
@@ -72,6 +82,17 @@ JavaRDDLike[T, JavaRDD[T]] {
    */
   def coalesce(numPartitions: Int, shuffle: Boolean): JavaRDD[T] =
     rdd.coalesce(numPartitions, shuffle)
+
+  /**
+   * Return a new RDD that has exactly numPartitions partitions.
+   *
+   * Can increase or decrease the level of parallelism in this RDD. Internally, this uses
+   * a shuffle to redistribute data.
+   *
+   * If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
+   * which can avoid performing a shuffle.
+   */
+  def repartition(numPartitions: Int): JavaRDD[T] = rdd.repartition(numPartitions)
 
   /**
    * Return a sampled subset of this RDD.
@@ -104,12 +125,13 @@ JavaRDDLike[T, JavaRDD[T]] {
    */
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
+
+  override def toString = rdd.toString
 }
 
 object JavaRDD {
 
-  implicit def fromRDD[T: ClassManifest](rdd: RDD[T]): JavaRDD[T] = new JavaRDD[T](rdd)
+  implicit def fromRDD[T: ClassTag](rdd: RDD[T]): JavaRDD[T] = new JavaRDD[T](rdd)
 
   implicit def toRDD[T](rdd: JavaRDD[T]): RDD[T] = rdd.rdd
 }
-
