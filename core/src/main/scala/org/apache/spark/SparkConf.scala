@@ -54,7 +54,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
   /** Set a name for your application. Shown in the Spark web UI. */
   def setAppName(name: String): SparkConf = {
     if (name != null) {
-      settings("spark.appName") = name
+      settings("spark.app.name") = name
     }
     this
   }

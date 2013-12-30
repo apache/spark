@@ -104,13 +104,13 @@ class SparkContext(object):
         # Check that we have at least the required parameters
         if not self.conf.contains("spark.master"):
             raise Exception("A master URL must be set in your configuration")
-        if not self.conf.contains("spark.appName"):
+        if not self.conf.contains("spark.app.name"):
             raise Exception("An application name must be set in your configuration")
 
         # Read back our properties from the conf in case we loaded some of them from
         # the classpath or an external config file
         self.master = self.conf.get("spark.master")
-        self.appName = self.conf.get("spark.appName")
+        self.appName = self.conf.get("spark.app.name")
         self.sparkHome = self.conf.getOrElse("spark.home", None)
         for (k, v) in self.conf.getAll():
             if k.startswith("spark.executorEnv."):

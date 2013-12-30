@@ -112,7 +112,7 @@ class SparkContext(
   if (!conf.contains("spark.master")) {
     throw new SparkException("A master URL must be set in your configuration")
   }
-  if (!conf.contains("spark.appName")) {
+  if (!conf.contains("spark.app.name")) {
     throw new SparkException("An application must be set in your configuration")
   }
 
@@ -127,7 +127,7 @@ class SparkContext(
   }
 
   val master = conf.get("spark.master")
-  val appName = conf.get("spark.appName")
+  val appName = conf.get("spark.app.name")
 
   val isLocal = (master == "local" || master.startsWith("local["))
 

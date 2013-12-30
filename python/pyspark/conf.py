@@ -23,7 +23,7 @@
 <pyspark.conf.SparkConf object at ...>
 >>> conf.get("spark.master")
 u'local'
->>> conf.get("spark.appName")
+>>> conf.get("spark.app.name")
 u'My app'
 >>> sc = SparkContext(conf=conf)
 >>> sc.master
