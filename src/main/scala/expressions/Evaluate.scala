@@ -181,8 +181,16 @@ object Evaluate extends Logging {
         }
 
       // String => Numeric Types
-      case Cast(e, IntegerType) if e.dataType == StringType => eval(e).asInstanceOf[String].toInt
-      case Cast(e, DoubleType) if e.dataType == StringType => eval(e).asInstanceOf[String].toDouble
+      case Cast(e, IntegerType) if e.dataType == StringType =>
+        eval(e) match {
+          case null => null
+          case s: String => s.toInt
+        }
+      case Cast(e, DoubleType) if e.dataType == StringType =>
+        eval(e) match {
+          case null => null
+          case s: String => s.toDouble
+        }
       // Boolean conversions
       case Cast(e, ByteType) if e.dataType == BooleanType =>
         eval(e) match {
