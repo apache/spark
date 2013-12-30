@@ -126,6 +126,9 @@ object Evaluate extends Logging {
         }
     }
 
+    @inline def castOrNull[A](f: => A) =
+      try f catch { case _: java.lang.NumberFormatException => null }
+
     val result = e match {
       case Literal(v, _) => v
 
@@ -184,12 +187,12 @@ object Evaluate extends Logging {
       case Cast(e, IntegerType) if e.dataType == StringType =>
         eval(e) match {
           case null => null
-          case s: String => s.toInt
+          case s: String => castOrNull(s.toInt)
         }
       case Cast(e, DoubleType) if e.dataType == StringType =>
         eval(e) match {
           case null => null
-          case s: String => s.toDouble
+          case s: String => castOrNull(s.toDouble)
         }
       // Boolean conversions
       case Cast(e, ByteType) if e.dataType == BooleanType =>
