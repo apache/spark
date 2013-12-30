@@ -41,10 +41,10 @@ import org.apache.spark.serializer.Serializer
 private[spark] class ExternalAppendOnlyMap[K, V, C: ClassTag](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
-    mergeCombiners: (C, C) => C)
+    mergeCombiners: (C, C) => C,
+    serializer: Serializer = SparkEnv.get.serializerManager.default)
   extends Iterable[(K, C)] with Serializable {
 
-  private val serializer = SparkEnv.get.serializerManager.default
   private val mergeBeforeSpill: Boolean = mergeCombiners != null
 
   private val map: SpillableAppendOnlyMap[K, V, _, C] = {

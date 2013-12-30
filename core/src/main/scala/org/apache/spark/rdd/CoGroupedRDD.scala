@@ -173,8 +173,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
         case (v1, v2) => v1 ++ v2
       }
     }
-    new ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner](
-      createCombiner, mergeValue, mergeCombiners)
+    new ExternalAppendOnlyMap[K, CoGroupValue, CoGroupCombiner](createCombiner, mergeValue,
+      mergeCombiners, SparkEnv.get.serializerManager.get(serializerClass))
   }
 
   override def clearDependencies() {
