@@ -38,20 +38,20 @@ object NaiveBayesSuite {
 
   // Generate input of the form Y = (weightMatrix*x).argmax()
   def generateNaiveBayesInput(
-      weightPerLabel: Array[Double],          // 1XC
-      weightsMatrix: Array[Array[Double]],    // CXD
+      pi: Array[Double],            // 1XC
+      theta: Array[Array[Double]],  // CXD
       nPoints: Int,
       seed: Int): Seq[LabeledPoint] = {
-    val D = weightsMatrix(0).length
+    val D = theta(0).length
     val rnd = new Random(seed)
 
-    val _weightPerLabel = weightPerLabel.map(math.pow(math.E, _))
-    val _weightMatrix = weightsMatrix.map(row => row.map(math.pow(math.E, _)))
+    val _pi = pi.map(math.pow(math.E, _))
+    val _theta = theta.map(row => row.map(math.pow(math.E, _)))
 
     for (i <- 0 until nPoints) yield {
-      val y = calcLabel(rnd.nextDouble(), _weightPerLabel)
+      val y = calcLabel(rnd.nextDouble(), _pi)
       val xi = Array.tabulate[Double](D) { j =>
-        if (rnd.nextDouble() < _weightMatrix(y)(j)) 1 else 0
+        if (rnd.nextDouble() < _theta(y)(j)) 1 else 0
       }
 
       LabeledPoint(y, xi)
@@ -83,20 +83,20 @@ class NaiveBayesSuite extends FunSuite with BeforeAndAfterAll {
   test("Naive Bayes") {
     val nPoints = 10000
 
-    val weightPerLabel = Array(math.log(0.5), math.log(0.3), math.log(0.2))
-    val weightsMatrix = Array(
-      Array(math.log(0.91), math.log(0.03), math.log(0.03), math.log(0.03)), // label 0
-      Array(math.log(0.03), math.log(0.91), math.log(0.03), math.log(0.03)), // label 1
-      Array(math.log(0.03), math.log(0.03), math.log(0.91), math.log(0.03))  // label 2
-    )
+    val pi = Array(0.5, 0.3, 0.2).map(math.log)
+    val theta = Array(
+      Array(0.91, 0.03, 0.03, 0.03), // label 0
+      Array(0.03, 0.91, 0.03, 0.03), // label 1
+      Array(0.03, 0.03, 0.91, 0.03)  // label 2
+    ).map(_.map(math.log))
 
-    val testData = NaiveBayesSuite.generateNaiveBayesInput(weightPerLabel, weightsMatrix, nPoints, 42)
+    val testData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 42)
     val testRDD = sc.parallelize(testData, 2)
     testRDD.cache()
 
-    val model = NaiveBayes.train(3, 4, testRDD)
+    val model = NaiveBayes.train(testRDD)
 
-    val validationData = NaiveBayesSuite.generateNaiveBayesInput(weightPerLabel, weightsMatrix, nPoints, 17)
+    val validationData = NaiveBayesSuite.generateNaiveBayesInput(pi, theta, nPoints, 17)
     val validationRDD = sc.parallelize(validationData, 2)
 
     // Test prediction on RDD.
