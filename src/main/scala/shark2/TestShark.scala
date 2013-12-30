@@ -84,13 +84,21 @@ object TestShark extends SharkInstance {
     else
       cmd
 
+  val describedTable = "DESCRIBE (\\w+)".r
   /**
    * Override SharkQuery with special debug workflow.
    */
   abstract class SharkQuery extends super.SharkQuery {
     override lazy val analyzed = {
+      val describedTables = parsed match {
+        case NativeCommand(describedTable(tbl)) => tbl :: Nil
+        case _ => Nil
+      }
+
       // Make sure any test tables referenced are loaded.
-      val referencedTables = parsed collect { case UnresolvedRelation(name, _) => name.split("\\.").last }
+      val referencedTables =
+        describedTables ++
+        parsed.collect { case UnresolvedRelation(name, _) => name.split("\\.").last }
       val referencedTestTables = referencedTables.filter(testTables.contains)
       logger.debug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
