@@ -119,8 +119,7 @@ object StatsReportListener extends Logging {
   val probabilities = percentiles.map{_ / 100.0}
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
 
-  def extractDoubleDistribution(
-      stage:SparkListenerStageCompleted,
+  def extractDoubleDistribution(stage: SparkListenerStageCompleted,
       getMetric: (TaskInfo,TaskMetrics) => Option[Double])
     : Option[Distribution] = {
     Distribution(stage.stage.taskInfos.flatMap {
@@ -128,8 +127,7 @@ object StatsReportListener extends Logging {
   }
 
   //is there some way to setup the types that I can get rid of this completely?
-  def extractLongDistribution(
-      stage:SparkListenerStageCompleted,
+  def extractLongDistribution(stage: SparkListenerStageCompleted,
       getMetric: (TaskInfo,TaskMetrics) => Option[Long])
     : Option[Distribution] = {
     extractDoubleDistribution(stage, (info, metric) => getMetric(info,metric).map{_.toDouble})
