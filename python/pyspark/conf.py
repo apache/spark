@@ -55,11 +55,11 @@ class SparkConf(object):
     parameters as key-value pairs.
 
     Most of the time, you would create a SparkConf object with
-    C{SparkConf()}, which will load values from `spark.*` Java system
-    properties and any `spark.conf` on your application's classpath.
-    In this case, system properties take priority over `spark.conf`,
-    and any parameters you set directly on the `SparkConf` object take
-    priority over both of those.
+    C{SparkConf()}, which will load values from C{spark.*} Java system
+    properties and any C{spark.conf} on your Spark classpath. In this
+    case, system properties take priority over C{spark.conf}, and any
+    parameters you set directly on the C{SparkConf} object take priority
+    over both of those.
 
     For unit tests, you can also call C{SparkConf(false)} to skip
     loading external settings and get the same configuration no matter
