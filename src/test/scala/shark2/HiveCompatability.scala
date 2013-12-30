@@ -37,7 +37,13 @@ class HiveCompatability extends HiveQueryFileTest {
 
     // Avro tests seem to change the output format permenently thus breaking the answer cache, until
     // we figure out what this is the case let just ignore all of them
-    ".*avro.*"
+    ".*avro.*",
+
+    // Unique joins are weird and will require a lot of hacks (see comments in hive parser)
+    "uniquejoin",
+
+    // Hive seems to get the wrong answer on some outer joins.  MySQL agrees with catalyst.
+    "auto_join29"
   )
 
   /**
@@ -58,7 +64,10 @@ class HiveCompatability extends HiveQueryFileTest {
     "auto_join28",
     "auto_join_nulls",
     "binarysortable_1",
+    "bucket1",
     "bucketmapjoin6",
+    "bucketmapjoin_negative",
+    "bucketmapjoin_negative2",
     "combine1",
     "count",
     "create_default_prop",
@@ -70,6 +79,7 @@ class HiveCompatability extends HiveQueryFileTest {
     "describe_database_json",
     "describe_table_json",
     "diff_part_input_formats",
+    "disable_file_format_check",
     "drop_function",
     "drop_index",
     "drop_partitions_filter",
@@ -88,6 +98,7 @@ class HiveCompatability extends HiveQueryFileTest {
     "groupby5_map",
     "groupby5_map_skew",
     "groupby5_noskew",
+    "implicit_cast1",
     "index_auth",
     "index_auto_mult_tables",
     "index_auto_mult_tables_compact",
@@ -100,11 +111,13 @@ class HiveCompatability extends HiveQueryFileTest {
     "input11",
     "input11_limit",
     "input22",
+    "input23",
     "input24",
     "input25",
     "input41",
     "input4_cb_delim",
     "input4_limit",
+    "input6",
     "input7",
     "input9",
     "input_part1",
@@ -144,10 +157,16 @@ class HiveCompatability extends HiveQueryFileTest {
     "join35",
     "join36",
     "join37",
+    "join39",
+    "join4",
     "join40",
+    "join5",
+    "join6",
+    "join8",
     "join9",
     "join_casesensitive",
     "join_empty",
+    "join_hive_626",
     "join_nulls",
     "join_reorder2",
     "join_reorder3",
@@ -161,6 +180,7 @@ class HiveCompatability extends HiveQueryFileTest {
     "mapjoin1",
     "mapjoin_mapjoin",
     "mapjoin_subquery",
+    "mapjoin_subquery2",
     "mergejoins",
     "misc_json",
     "no_hooks",
@@ -179,7 +199,9 @@ class HiveCompatability extends HiveQueryFileTest {
     "part_inherit_tbl_props",
     "part_inherit_tbl_props_empty",
     "part_inherit_tbl_props_with_star",
+    "partitions_json",
     "ppd1",
+    "ppd_gby",
     "ppd_gby_join",
     "ppd_join",
     "ppd_join2",
@@ -208,6 +230,8 @@ class HiveCompatability extends HiveQueryFileTest {
     "subq2",
     "tablename_with_select",
     "udf2",
+    "udf5",
+    "udf7",
     "udf9",
     "udf_10_trims",
     "udf_abs",
