@@ -31,7 +31,7 @@ case class Aggregate(groupingExpressions: Seq[Expression],
   case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
     def this() = this(null, null) // Required for serialization.
 
-    var count: Long = _
+    var count: Int = _
 
     def apply(input: Seq[Row]): Unit = {
       val evaluatedExpr = expr.map(Evaluate(_, input))
