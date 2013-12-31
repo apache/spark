@@ -46,7 +46,7 @@ private[spark] class HttpServer(resourceBase: File) extends Logging {
     if (server != null) {
       throw new ServerStateException("Server is already started")
     } else {
-      log.info("Starting HTTP Server")
+      logInfo("Starting HTTP Server")
       server = new Server()
       val connector = new SocketConnector
       connector.setMaxIdleTime(60*1000)

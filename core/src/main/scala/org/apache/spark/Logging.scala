@@ -119,6 +119,6 @@ trait Logging {
 }
 
 object Logging {
-  @transient @volatile private var initialized = false
-  @transient val initLock = new Object()
+  @volatile private var initialized = false
+  val initLock = new Object()
 }
