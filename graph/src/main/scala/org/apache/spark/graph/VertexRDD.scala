@@ -86,7 +86,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * Caching a VertexRDD causes the index and values to be cached separately.
    */
   override def persist(newLevel: StorageLevel): VertexRDD[VD] = {
-    partitionsRDD.persist(newLevel)
+    super.persist(newLevel)
     this
   }
 

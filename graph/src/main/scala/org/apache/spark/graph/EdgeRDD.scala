@@ -33,7 +33,7 @@ class EdgeRDD[@specialized ED: ClassManifest](
    * Caching a VertexRDD causes the index and values to be cached separately.
    */
   override def persist(newLevel: StorageLevel): EdgeRDD[ED] = {
-    partitionsRDD.persist(newLevel)
+    super.persist(newLevel)
     this
   }
 
