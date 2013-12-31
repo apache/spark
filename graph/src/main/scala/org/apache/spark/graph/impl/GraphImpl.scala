@@ -196,14 +196,12 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   override def subgraph(
       epred: EdgeTriplet[VD, ED] => Boolean = x => true,
       vpred: (Vid, VD) => Boolean = (a, b) => true): Graph[VD, ED] = {
+    // Filter the vertices, reusing the partitioner and the index from this graph
+    val newVerts = vertices.mapVertexPartitions(_.filter(vpred))
 
-    // Filter the vertices, reusing the partitioner (but not the index) from
-    // this graph
-    val newVTable = vertices.mapVertexPartitions(_.filter(vpred).reindex())
-
+    // Filter the edges
     val edManifest = classManifest[ED]
-
-    val newETable = new EdgeRDD[ED](triplets.filter { et =>
+    val newEdges = new EdgeRDD[ED](triplets.filter { et =>
       vpred(et.srcId, et.srcAttr) && vpred(et.dstId, et.dstAttr) && epred(et)
     }.mapPartitionsWithIndex( { (pid, iter) =>
       val builder = new EdgePartitionBuilder[ED]()(edManifest)
@@ -212,7 +210,9 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       Iterator((pid, edgePartition))
     }, preservesPartitioning = true)).cache()
 
-    new GraphImpl(newVTable, newETable)
+    // Reuse the previous VTableReplicated unmodified. It will contain extra vertices, which is
+    // fine.
+    new GraphImpl(newVerts, newEdges, new VertexPlacement(newEdges, newVerts), vTableReplicated)
   } // end of subgraph
 
   override def mask[VD2: ClassManifest, ED2: ClassManifest] (
