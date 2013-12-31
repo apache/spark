@@ -345,17 +345,12 @@ class SparkContext(object):
             self._python_includes.append(filename)
             sys.path.append(os.path.join(SparkFiles.getRootDirectory(), filename)) # for tests in local mode
 
-    def setCheckpointDir(self, dirName, useExisting=False):
+    def setCheckpointDir(self, dirName):
         """
         Set the directory under which RDDs are going to be checkpointed. The
         directory must be a HDFS path if running on a cluster.
-
-        If the directory does not exist, it will be created. If the directory
-        exists and C{useExisting} is set to true, then the exisiting directory
-        will be used.  Otherwise an exception will be thrown to prevent
-        accidental overriding of checkpoint files in the existing directory.
         """
-        self._jsc.sc().setCheckpointDir(dirName, useExisting)
+        self._jsc.sc().setCheckpointDir(dirName)
 
     def _getJavaStorageLevel(self, storageLevel):
         """

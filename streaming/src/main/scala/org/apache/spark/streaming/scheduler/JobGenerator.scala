@@ -17,10 +17,17 @@
 
 package org.apache.spark.streaming.scheduler
 
+import akka.actor.{Props, Actor}
 import org.apache.spark.SparkEnv
 import org.apache.spark.Logging
 import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
 import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
+
+/** Event classes for JobGenerator */
+private[scheduler] sealed trait JobGeneratorEvent
+private[scheduler] case class GenerateJobs(time: Time) extends JobGeneratorEvent
+private[scheduler] case class ClearOldMetadata(time: Time) extends JobGeneratorEvent
+private[scheduler] case class DoCheckpoint(time: Time) extends JobGeneratorEvent
 
 /**
  * This class generates jobs from DStreams as well as drives checkpointing and cleaning
@@ -32,19 +39,26 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   initLogging()
 
   val ssc = jobScheduler.ssc
-  val clockClass = ssc.sc.conf.getOrElse(
-    "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
-  val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
-  val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
-    longTime => generateJobs(new Time(longTime)))
   val graph = ssc.graph
+  val eventProcessorActor = ssc.env.actorSystem.actorOf(Props(new Actor {
+    def receive = {
+      case event: JobGeneratorEvent =>
+        logDebug("Got event of type " + event.getClass.getName)
+        processEvent(event)
+    }
+  }))
+  val clock = {
+    val clockClass = ssc.sc.conf.getOrElse(
+      "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+    val clock = Class.forName(clockClass).newInstance().asInstanceOf[Clock]
+  }
+  val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
+    longTime => eventProcessorActor ! GenerateJobs(new Time(longTime)))
   lazy val checkpointWriter = if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
-    new CheckpointWriter(ssc.conf, ssc.checkpointDir)
+    new CheckpointWriter(ssc.conf, ssc.checkpointDir, ssc.sparkContext.hadoopConfiguration)
   } else {
     null
   }
-
-  var latestTime: Time = null
 
   def start() = synchronized {
     if (ssc.isCheckpointPresent) {
@@ -52,23 +66,40 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     } else {
       startFirstTime()
     }
-    logInfo("JobGenerator started")
   }
 
-  def stop() = synchronized {
+  def stop() {
     timer.stop()
     if (checkpointWriter != null) checkpointWriter.stop()
     ssc.graph.stop()
     logInfo("JobGenerator stopped")
   }
 
+  /**
+   * On batch completion, clear old metadata and checkpoint computation.
+   */
+  private[scheduler] def onBatchCompletion(time: Time) {
+    eventProcessorActor ! ClearOldMetadata(time)
+  }
+
+  /** Processes all events */
+  private def processEvent(event: JobGeneratorEvent) {
+    event match {
+      case GenerateJobs(time) => generateJobs(time)
+      case ClearOldMetadata(time) => clearOldMetadata(time)
+      case DoCheckpoint(time) => doCheckpoint(time)
+    }
+  }
+
+  /** Starts the generator for the first time */
   private def startFirstTime() {
     val startTime = new Time(timer.getStartTime())
     graph.start(startTime - graph.batchDuration)
     timer.start(startTime.milliseconds)
-    logInfo("JobGenerator's timer started at " + startTime)
+    logInfo("JobGenerator started at " + startTime)
   }
 
+  /** Restarts the generator based on the information in checkpoint */
   private def restart() {
     // If manual clock is being used for testing, then
     // either set the manual clock to the last checkpointed time,
@@ -100,7 +131,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
     // Restart the timer
     timer.start(restartTime.milliseconds)
-    logInfo("JobGenerator's timer restarted at " + restartTime)
+    logInfo("JobGenerator restarted at " + restartTime)
   }
 
   /** Generate jobs and perform checkpoint for the given `time`.  */
@@ -108,16 +139,13 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     SparkEnv.set(ssc.env)
     logInfo("\n-----------------------------------------------------\n")
     jobScheduler.runJobs(time, graph.generateJobs(time))
-    latestTime = time
-    doCheckpoint(time)
+    eventProcessorActor ! DoCheckpoint(time)
   }
 
-  /**
-   * On batch completion, clear old metadata and checkpoint computation.
-   */
-  private[streaming] def onBatchCompletion(time: Time) {
+  /** Clear DStream metadata for the given `time`. */
+  private def clearOldMetadata(time: Time) {
     ssc.graph.clearOldMetadata(time)
-    doCheckpoint(time)
+    eventProcessorActor ! DoCheckpoint(time)
   }
 
   /** Perform checkpoint for the give `time`. */
