@@ -61,7 +61,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
-  override def onStageCompleted(stageCompleted: StageCompleted) = synchronized {
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stage
     poolToActiveStages(stageIdToPool(stage.stageId)) -= stage
     activeStages -= stage
@@ -146,12 +146,9 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         // update duration
         y.taskTime += taskEnd.taskInfo.duration
 
-        taskEnd.taskMetrics.shuffleReadMetrics.foreach { shuffleRead =>
-          y.shuffleRead += shuffleRead.remoteBytesRead
-        }
-
-        taskEnd.taskMetrics.shuffleWriteMetrics.foreach { shuffleWrite =>
-          y.shuffleWrite += shuffleWrite.shuffleBytesWritten
+        Option(taskEnd.taskMetrics).foreach { taskMetrics =>
+          taskMetrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
+          taskMetrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
         }
       }
       case _ => {}
