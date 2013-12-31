@@ -23,7 +23,7 @@ import java.util.Comparator
 import scala.collection.mutable.{ArrayBuffer, PriorityQueue}
 import scala.reflect.ClassTag
 
-import org.apache.spark.SparkEnv
+import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{DiskBlockManager, DiskBlockObjectWriter}
 
@@ -106,14 +106,14 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
     createCombiner: G => C,
     serializer: Serializer,
     diskBlockManager: DiskBlockManager)
-  extends Iterable[(K, C)] with Serializable {
+  extends Iterable[(K, C)] with Serializable with Logging {
 
   import SpillableAppendOnlyMap._
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, G]
   private val oldMaps = new ArrayBuffer[DiskKGIterator]
-  private val memoryThreshold = {
-    val bufferSize = System.getProperty("spark.shuffle.buffer.mb", "1024").toLong * 1024 * 1024
+  private val memoryThresholdMB = {
+    val bufferSize = System.getProperty("spark.shuffle.buffer.mb", "1024").toLong
     val bufferPercent = System.getProperty("spark.shuffle.buffer.fraction", "0.8").toFloat
     bufferSize * bufferPercent
   }
@@ -121,18 +121,22 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
     System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
   private val comparator = new KeyGroupComparator[K, G]
   private val ser = serializer.newInstance()
+  private var spillCount = 0
 
   def insert(key: K, value: V): Unit = {
     val update: (Boolean, G) => G = (hadVal, oldVal) => {
       if (hadVal) mergeValue(oldVal, value) else createGroup(value)
     }
     currentMap.changeValue(key, update)
-    if (currentMap.estimateSize() > memoryThreshold) {
+    if (currentMap.estimateSize() > memoryThresholdMB * 1024 * 1024) {
       spill()
     }
   }
 
   private def spill(): Unit = {
+    spillCount += 1
+    logWarning(s"In-memory KV map exceeded threshold of $memoryThresholdMB MB!")
+    logWarning(s"Spilling to disk ($spillCount time"+(if (spillCount > 1) "s" else "")+" so far)")
     val (blockId, file) = diskBlockManager.createIntermediateBlock
     val writer = new DiskBlockObjectWriter(blockId, file, serializer, fileBufferSize, identity)
     try {
