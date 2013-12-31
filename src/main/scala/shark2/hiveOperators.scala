@@ -71,7 +71,7 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
   def output = attributes
 }
 
-case class InsertIntoHiveTable(table: MetastoreRelation, child: SharkPlan)
+case class InsertIntoHiveTable(table: MetastoreRelation, partition: Map[String, String], child: SharkPlan)
                               (@transient sc: SharkContext) extends UnaryNode {
   /**
    * This file sink / record writer code is only the first step towards implementing this operator correctly and is not
@@ -105,7 +105,12 @@ case class InsertIntoHiveTable(table: MetastoreRelation, child: SharkPlan)
     tempDir.delete()
     tempDir.mkdir()
     childRdd.map(_.map(a => stringOrNull(a.asInstanceOf[AnyRef])).mkString("\001")).saveAsTextFile(tempDir.getCanonicalPath)
-    sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName}")
+    val partitionSpec =
+      if(partition.nonEmpty)
+        s"PARTITION (${partition.map { case (k,v) => s"$k=$v" }.mkString(",")})"
+      else
+        ""
+    sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName} $partitionSpec")
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

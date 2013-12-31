@@ -68,7 +68,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
         sd.setSerdeInfo(serDeInfo)
         client.createTable(table)
 
-        InsertIntoTable(lookupRelation(tableName, None), child)
+        InsertIntoTable(lookupRelation(tableName, None), Map.empty, child)
     }
   }
 }

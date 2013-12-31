@@ -30,7 +30,7 @@ case class Join(
   def output = left.output ++ right.output
 }
 
-case class InsertIntoTable(table: BaseRelation, child: LogicalPlan) extends LogicalPlan {
+case class InsertIntoTable(table: BaseRelation, partition: Map[String, String], child: LogicalPlan) extends LogicalPlan {
   // The table being inserted into is a child for the purposes of transformations.
   def children = table :: child :: Nil
   def references = Set.empty

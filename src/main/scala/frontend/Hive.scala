@@ -519,11 +519,20 @@ object HiveQl {
            Token("TOK_DIR",
              Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
       query
+
     case Token("TOK_DESTINATION",
            Token("TOK_TAB",
-             Token("TOK_TABNAME",
-               Token(tableName, Nil) :: Nil) :: Nil) :: Nil) =>
-      InsertIntoTable(UnresolvedRelation(tableName, None), query)
+              tableArgs) :: Nil) =>
+      val Some(nameClause) :: partitionClause :: Nil =
+        getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
+      val Token("TOK_TABNAME", Token(tableName, Nil) :: Nil) = nameClause
+
+      val partitionKeys = partitionClause.map(_.getChildren.map {
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) => key -> value
+      }.toMap).getOrElse(Map.empty)
+
+      InsertIntoTable(UnresolvedRelation(tableName, None), partitionKeys, query)
+
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
