@@ -930,4 +930,36 @@ public class JavaAPISuite implements Serializable {
                         parts[1]);
   }
 
+  @Test
+  public void countApproxDistinct() {
+    List<Integer> arrayData = new ArrayList<Integer>();
+    int size = 100;
+    for (int i = 0; i < 100000; i++) {
+      arrayData.add(i % size);
+    }
+    JavaRDD<Integer> simpleRdd = sc.parallelize(arrayData, 10);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.2) - size) / (size * 1.0)) < 0.2);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.05) - size) / (size * 1.0)) <= 0.05);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.01) - size) / (size * 1.0)) <= 0.01);
+  }
+
+  @Test
+  public void countApproxDistinctByKey() {
+    double relativeSD = 0.001;
+
+    List<Tuple2<Integer, Integer>> arrayData = new ArrayList<Tuple2<Integer, Integer>>();
+    for (int i = 10; i < 100; i++)
+      for (int j = 0; j < i; j++)
+        arrayData.add(new Tuple2<Integer, Integer>(i, j));
+
+    JavaPairRDD<Integer, Integer> pairRdd = sc.parallelizePairs(arrayData);
+    List<Tuple2<Integer, Object>> res =  pairRdd.countApproxDistinctByKey(relativeSD).collect();
+    for (Tuple2<Integer, Object> resItem : res) {
+      double count = (double)resItem._1();
+      Long resCount = (Long)resItem._2();
+      Double error = Math.abs((resCount - count) / count);
+      Assert.assertTrue(error < relativeSD);
+    }
+
+  }
 }
