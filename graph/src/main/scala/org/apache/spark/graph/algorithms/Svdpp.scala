@@ -28,7 +28,7 @@ object Svdpp {
    * @return a graph with vertex attributes containing the trained model
    */
 
-  def run(edges: RDD[Edge[Double]], conf: SvdppConf): Graph[(RealVector, RealVector, Double, Double), Double] = {
+  def run(edges: RDD[Edge[Double]], conf: SvdppConf): (Graph[(RealVector, RealVector, Double, Double), Double], Double) = {
 
     // generate default vertex attribute
     def defaultF(rank: Int): (RealVector, RealVector, Double, Double) = {
@@ -95,9 +95,9 @@ object Svdpp {
       Iterator((et.dstId, err))
     }
     val t3 = g.mapReduceTriplets(mapTestF(conf, u), (g1: Double, g2: Double) => g1 + g2)
-    g.outerJoinVertices(t3) { (vid: Vid, vd: (RealVector, RealVector, Double, Double), msg: Option[Double]) =>
+    g = g.outerJoinVertices(t3) { (vid: Vid, vd: (RealVector, RealVector, Double, Double), msg: Option[Double]) =>
       if (msg.isDefined) (vd._1, vd._2, vd._3, msg.get) else vd
     }
-    g
+    (g, u)
   }
 }
