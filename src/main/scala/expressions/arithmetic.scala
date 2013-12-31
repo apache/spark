@@ -13,7 +13,8 @@ case class UnaryMinus(child: Expression) extends UnaryExpression {
 abstract class BinaryArithmetic extends BinaryExpression {
   self: Product =>
 
-  override lazy val resolved = left.dataType == right.dataType
+  override lazy val resolved =
+    left.resolved && right.resolved && left.dataType == right.dataType
 
   def dataType = {
     if(!resolved)
