@@ -80,6 +80,7 @@ class OptimizerSuite extends FunSuite {
       testRelation
         .select('a + 'b as 'e)
         .where('e === 1)
+        .analyze
 
     /* Your code here */
     fail("not implemented")
