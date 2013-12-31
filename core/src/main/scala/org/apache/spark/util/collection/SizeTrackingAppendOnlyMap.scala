@@ -17,28 +17,85 @@
 
 package org.apache.spark.util.collection
 
-import org.apache.spark.util.SamplingSizeTracker
+import scala.collection.mutable.ArrayBuffer
 
-/** Append-only map that keeps track of its estimated size in bytes. */
+import org.apache.spark.util.SizeEstimator
+import org.apache.spark.util.collection.SizeTrackingAppendOnlyMap.Sample
+
+/**
+ * Append-only map that keeps track of its estimated size in bytes.
+ * We sample with a slow exponential back-off using the SizeEstimator to amortize the time,
+ * as each call to SizeEstimator can take a sizable amount of time (order of a few milliseconds).
+ */
 private[spark] class SizeTrackingAppendOnlyMap[K, V] extends AppendOnlyMap[K, V] {
 
-  private val sizeTracker = new SamplingSizeTracker(this)
+  /**
+   * Controls the base of the exponential which governs the rate of sampling.
+   * E.g., a value of 2 would mean we sample at 1, 2, 4, 8, ... elements.
+   */
+  private val SAMPLE_GROWTH_RATE = 1.1
 
-  def estimateSize() = sizeTracker.estimateSize()
+  /** All samples taken since last resetSamples(). Only the last two are used for extrapolation. */
+  private val samples = new ArrayBuffer[Sample]()
+
+  /** Total number of insertions and updates into the map since the last resetSamples(). */
+  private var numUpdates: Long = _
+
+  /** The value of 'numUpdates' at which we will take our next sample. */
+  private var nextSampleNum: Long = _
+
+  /** The average number of bytes per update between our last two samples. */
+  private var bytesPerUpdate: Double = _
+
+  resetSamples()
+
+  /** Called after the map grows in size, as this can be a dramatic change for small objects. */
+  def resetSamples() {
+    numUpdates = 1
+    nextSampleNum = 1
+    samples.clear()
+    takeSample()
+  }
 
   override def update(key: K, value: V): Unit = {
     super.update(key, value)
-    sizeTracker.updateMade()
+    numUpdates += 1
+    if (nextSampleNum == numUpdates) { takeSample() }
   }
 
   override def changeValue(key: K, updateFunc: (Boolean, V) => V): V = {
     val newValue = super.changeValue(key, updateFunc)
-    sizeTracker.updateMade()
+    numUpdates += 1
+    if (nextSampleNum == numUpdates) { takeSample() }
     newValue
+  }
+
+  /** Takes a new sample of the current map's size. */
+  def takeSample() {
+    samples += Sample(SizeEstimator.estimate(this), numUpdates)
+    // Only use the last two samples to extrapolate. If fewer than 2 samples, assume no change.
+    bytesPerUpdate = math.max(0, samples.toSeq.reverse match {
+      case latest :: previous :: tail =>
+        (latest.size - previous.size).toDouble / (latest.numUpdates - previous.numUpdates)
+      case _ =>
+        0
+    })
+    nextSampleNum = math.ceil(numUpdates * SAMPLE_GROWTH_RATE).toLong
   }
 
   override protected def growTable() {
     super.growTable()
-    sizeTracker.flushSamples()
+    resetSamples()
   }
+
+  /** Estimates the current size of the map in bytes. O(1) time. */
+  def estimateSize(): Long = {
+    assert(samples.nonEmpty)
+    val extrapolatedDelta = bytesPerUpdate * (numUpdates - samples.last.numUpdates)
+    (samples.last.size + extrapolatedDelta).toLong
+  }
+}
+
+object SizeTrackingAppendOnlyMap {
+  case class Sample(size: Long, numUpdates: Long)
 }

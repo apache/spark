@@ -21,10 +21,10 @@ import scala.util.Random
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
-import org.apache.spark.util.SamplingSizeTrackerSuite.LargeDummyClass
+import org.apache.spark.util.SizeTrackingAppendOnlyMapSuite.LargeDummyClass
 import org.apache.spark.util.collection.{AppendOnlyMap, SizeTrackingAppendOnlyMap}
 
-class SamplingSizeTrackerSuite extends FunSuite with BeforeAndAfterAll {
+class SizeTrackingAppendOnlyMapSuite extends FunSuite with BeforeAndAfterAll {
   val NORMAL_ERROR = 0.20
   val HIGH_ERROR = 0.30
 
@@ -70,24 +70,24 @@ class SamplingSizeTrackerSuite extends FunSuite with BeforeAndAfterAll {
   }
 }
 
-object SamplingSizeTrackerSuite {
+object SizeTrackingAppendOnlyMapSuite {
   // Speed test, for reproducibility of results.
   // These could be highly non-deterministic in general, however.
   // Results:
-  // AppendOnlyMap:   30 ms
-  // SizeTracker:     45 ms
+  // AppendOnlyMap:   31 ms
+  // SizeTracker:     54 ms
   // SizeEstimator: 1500 ms
   def main(args: Array[String]) {
     val numElements = 100000
 
-    val baseTimes = for (i <- 0 until 3) yield time {
+    val baseTimes = for (i <- 0 until 10) yield time {
       val map = new AppendOnlyMap[Int, LargeDummyClass]()
       for (i <- 0 until numElements) {
         map(i) = new LargeDummyClass()
       }
     }
 
-    val sampledTimes = for (i <- 0 until 3) yield time {
+    val sampledTimes = for (i <- 0 until 10) yield time {
       val map = new SizeTrackingAppendOnlyMap[Int, LargeDummyClass]()
       for (i <- 0 until numElements) {
         map(i) = new LargeDummyClass()
