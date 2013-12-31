@@ -96,7 +96,7 @@ object Svdpp {
     }
     val t3 = g.mapReduceTriplets(mapTestF(conf, u), (g1: Double, g2: Double) => g1 + g2)
     g.outerJoinVertices(t3) { (vid: Vid, vd: (RealVector, RealVector, Double, Double), msg: Option[Double]) =>
-      if (msg.isDefined && vid % 2 == 1) (vd._1, vd._2, vd._3, msg.get) else vd
+      if (msg.isDefined) (vd._1, vd._2, vd._3, msg.get) else vd
     }
     g
   }
