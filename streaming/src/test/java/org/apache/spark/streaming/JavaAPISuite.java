@@ -1600,30 +1600,4 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   public void testRawSocketStream() {
     JavaDStream<String> test = ssc.rawSocketStream("localhost", 12345);
   }
-  /*
-  @Test
-  public void testFileStream() {
-    JavaPairDStream<String, String> foo = ssc.<String, String, SequenceFileInputFormat<String,String>>fileStream("/tmp/foo");
-  }
-
-  @Test
-  public void testTwitterStream() {
-    String[] filters = new String[] { "good", "bad", "ugly" };
-    JavaDStream<Status> test = ssc.twitterStream(filters, StorageLevel.MEMORY_ONLY());
-  }
-
-  @Test
-  public void testActorStream() {
-    JavaDStream<String> test = ssc.actorStream((Props)null, "TestActor", StorageLevel.MEMORY_ONLY());
-  }
-
-  @Test
-  public void testZeroMQStream() {
-    JavaDStream<String> test = ssc.zeroMQStream("url", (Subscribe) null, new Function<byte[][], Iterable<String>>() {
-      @Override
-      public Iterable<String> call(byte[][] b) throws Exception {
-        return null;
-      }
-    });
-  } */
 }
