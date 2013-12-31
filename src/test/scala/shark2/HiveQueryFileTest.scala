@@ -21,7 +21,7 @@ abstract class HiveQueryFileTest extends HiveComaparisionTest {
    */
   def whiteList: Seq[String] = ".*" :: Nil
 
-  def testCases: Map[String, File]
+  def testCases: Seq[(String, File)]
 
   val runAll = !(System.getProperty("shark.hive.alltests") == null)
 
