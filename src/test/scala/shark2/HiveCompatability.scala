@@ -35,7 +35,7 @@ class HiveCompatability extends HiveQueryFileTest {
     // Uses a serde that isn't on the classpath... breaks other tests.
     "bucketizedhiveinputformat",
 
-    // Avro tests seem to change the output format permenently thus breaking the answer cache, until
+    // Avro tests seem to change the output format permanently thus breaking the answer cache, until
     // we figure out what this is the case let just ignore all of them
     ".*avro.*",
 
