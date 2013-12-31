@@ -44,6 +44,11 @@ u'/path'
 <pyspark.conf.SparkConf object at ...>
 >>> conf.get("spark.executorEnv.VAR1")
 u'value1'
+>>> print conf.toDebugString()
+spark.executorEnv.VAR1=value1
+spark.executorEnv.VAR3=value3
+spark.executorEnv.VAR4=value4
+spark.home=/path
 >>> sorted(conf.getAll(), key=lambda p: p[0])
 [(u'spark.executorEnv.VAR1', u'value1'), (u'spark.executorEnv.VAR3', u'value3'), (u'spark.executorEnv.VAR4', u'value4'), (u'spark.home', u'/path')]
 """
@@ -67,6 +72,9 @@ class SparkConf(object):
 
     All setter methods in this class support chaining. For example,
     you can write C{conf.setMaster("local").setAppName("My app")}.
+
+    Note that once a SparkConf object is passed to Spark, it is cloned
+    and can no longer be modified by the user.
     """
 
     def __init__(self, loadDefaults=True, _jvm=None):
@@ -74,7 +82,9 @@ class SparkConf(object):
         Create a new Spark configuration.
 
         @param loadDefaults: whether to load values from Java system
-               properties and classpath (true by default)
+               properties and classpath (True by default)
+        @param _jvm: internal parameter used to pass a handle to the
+               Java VM; does not need to be set by users
         """
         from pyspark.context import SparkContext
         SparkContext._ensure_initialized()
@@ -97,10 +107,7 @@ class SparkConf(object):
         return self
 
     def setSparkHome(self, value):
-        """
-        Set path where Spark is installed on worker nodes (needed for some
-        deployment modes).
-        """
+        """Set path where Spark is installed on worker nodes."""
         self._jconf.setSparkHome(value)
         return self
 
@@ -143,6 +150,13 @@ class SparkConf(object):
     def contains(self, key):
         """Does this configuration contain a given key?"""
         return self._jconf.contains(key)
+
+    def toDebugString(self):
+        """
+        Returns a printable version of the configuration, as a list of
+        key=value pairs, one per line.
+        """
+        return self._jconf.toDebugString()
 
 
 def _test():

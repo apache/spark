@@ -83,7 +83,7 @@ class SparkContext(object):
         SparkContext._ensure_initialized(self)
 
         self.environment = environment or {}
-        self.conf = conf or SparkConf(_jvm=self._jvm)
+        self._conf = conf or SparkConf(_jvm=self._jvm)
         self._batchSize = batchSize  # -1 represents an unlimited batch size
         self._unbatched_serializer = serializer
         if batchSize == 1:
@@ -94,31 +94,31 @@ class SparkContext(object):
 
         # Set parameters passed directly to us on the conf; these operations will be
         # no-ops if the parameters were None
-        self.conf.setMaster(master)
-        self.conf.setAppName(appName)
-        self.conf.setSparkHome(sparkHome)
+        self._conf.setMaster(master)
+        self._conf.setAppName(appName)
+        self._conf.setSparkHome(sparkHome)
         if environment:
             for key, value in environment.iteritems():
-                self.conf.setExecutorEnv(key, value)
+                self._conf.setExecutorEnv(key, value)
 
         # Check that we have at least the required parameters
-        if not self.conf.contains("spark.master"):
+        if not self._conf.contains("spark.master"):
             raise Exception("A master URL must be set in your configuration")
-        if not self.conf.contains("spark.app.name"):
+        if not self._conf.contains("spark.app.name"):
             raise Exception("An application name must be set in your configuration")
 
         # Read back our properties from the conf in case we loaded some of them from
         # the classpath or an external config file
-        self.master = self.conf.get("spark.master")
-        self.appName = self.conf.get("spark.app.name")
-        self.sparkHome = self.conf.getOrElse("spark.home", None)
-        for (k, v) in self.conf.getAll():
+        self.master = self._conf.get("spark.master")
+        self.appName = self._conf.get("spark.app.name")
+        self.sparkHome = self._conf.getOrElse("spark.home", None)
+        for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]
                 self.environment[varName] = v
 
         # Create the Java SparkContext through Py4J
-        self._jsc = self._jvm.JavaSparkContext(self.conf._jconf)
+        self._jsc = self._jvm.JavaSparkContext(self._conf._jconf)
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server

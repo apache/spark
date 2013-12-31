@@ -55,14 +55,14 @@ import org.apache.spark.util._
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
  * cluster, and can be used to create RDDs, accumulators and broadcast variables on that cluster.
  *
- * @param conf_ a Spark Config object describing the application configuration. Any settings in
+ * @param config a Spark Config object describing the application configuration. Any settings in
  *   this config overrides the default configs as well as system properties.
  * @param preferredNodeLocationData used in YARN mode to select nodes to launch containers on. Can
  *   be generated using [[org.apache.spark.scheduler.InputFormatInfo.computePreferredLocations]]
  *   from a list of input files or InputFormats for the application.
  */
 class SparkContext(
-    conf_ : SparkConf,
+    config: SparkConf,
     // This is used only by YARN for now, but should be relevant to other cluster types (Mesos, etc)
     // too. This is typically generated from InputFormatInfo.computePreferredLocations. It contains
     // a map from hostname to a list of input format splits on the host.
@@ -107,7 +107,13 @@ class SparkContext(
       preferredNodeLocationData)
   }
 
-  val conf = conf_.clone()
+  private[spark] val conf = config.clone()
+
+  /**
+   * Return a copy of this SparkContext's configuration. The configuration ''cannot'' be
+   * changed at runtime.
+   */
+  def getConf: SparkConf = conf.clone()
 
   if (!conf.contains("spark.master")) {
     throw new SparkException("A master URL must be set in your configuration")
@@ -135,11 +141,11 @@ class SparkContext(
   initLogging()
 
   // Create the Spark execution environment (cache, map output tracker, etc)
-  private[spark] val env = SparkEnv.createFromSystemProperties(
+  private[spark] val env = SparkEnv.create(
+    conf,
     "<driver>",
     conf.get("spark.driver.host"),
     conf.get("spark.driver.port").toInt,
-    conf,
     isDriver = true,
     isLocal = isLocal)
   SparkEnv.set(env)
@@ -730,7 +736,7 @@ class SparkContext(
    * (in that order of preference). If neither of these is set, return None.
    */
   private[spark] def getSparkHome(): Option[String] = {
-    if (conf.getOrElse("spark.home", null) != null) {
+    if (conf.contains("spark.home")) {
       Some(conf.get("spark.home"))
     } else if (System.getenv("SPARK_HOME") != null) {
       Some(System.getenv("SPARK_HOME"))

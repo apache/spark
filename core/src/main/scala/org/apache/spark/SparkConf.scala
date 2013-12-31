@@ -16,6 +16,12 @@ import com.typesafe.config.ConfigFactory
  * For unit tests, you can also call `new SparkConf(false)` to skip loading external settings and
  * get the same configuration no matter what is on the classpath.
  *
+ * All setter methods in this class support chaining. For example, you can write
+ * `new SparkConf().setMaster("local").setAppName("My app")`.
+ *
+ * Note that once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
+ * by the user. Spark does not support modifying the configuration at runtime.
+ *
  * @param loadDefaults whether to load values from the system properties and classpath
  */
 class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
@@ -69,10 +75,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
 
   /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
   def setJars(jars: Array[String]): SparkConf = {
-    if (!jars.isEmpty) {
-      settings("spark.jars") = jars.mkString(",")
-    }
-    this
+    setJars(jars.toSeq)
   }
 
   /**
@@ -102,15 +105,11 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
    * (Java-friendly version.)
    */
   def setExecutorEnv(variables: Array[(String, String)]): SparkConf = {
-    for ((k, v) <- variables) {
-      setExecutorEnv(k, v)
-    }
-    this
+    setExecutorEnv(variables.toSeq)
   }
 
   /**
-   * Set the location where Spark is installed on worker nodes. This is only needed on Mesos if
-   * you are not using `spark.executor.uri` to disseminate the Spark binary distribution.
+   * Set the location where Spark is installed on worker nodes.
    */
   def setSparkHome(home: String): SparkConf = {
     if (home != null) {
@@ -154,8 +153,8 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
     val prefix = "spark.executorEnv."
-    getAll.filter(pair => pair._1.startsWith(prefix))
-          .map(pair => (pair._1.substring(prefix.length), pair._2))
+    getAll.filter{case (k, v) => k.startsWith(prefix)}
+          .map{case (k, v) => (k.substring(prefix.length), v)}
   }
 
   /** Does the configuration contain a given parameter? */
@@ -164,5 +163,13 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
   /** Copy this object */
   override def clone: SparkConf = {
     new SparkConf(false).setAll(settings)
+  }
+
+  /**
+   * Return a string listing all keys and values, one per line. This is useful to print the
+   * configuration out for debugging.
+   */
+  def toDebugString: String = {
+    settings.toArray.sorted.map{case (k, v) => k + "=" + v}.mkString("\n")
   }
 }

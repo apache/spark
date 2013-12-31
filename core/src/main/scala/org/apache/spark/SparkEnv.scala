@@ -40,7 +40,7 @@ import com.google.common.collect.MapMaker
  * objects needs to have the right SparkEnv set. You can get the current environment with
  * SparkEnv.get (e.g. after creating a SparkContext) and set it with SparkEnv.set.
  */
-class SparkEnv (
+class SparkEnv private[spark] (
     val executorId: String,
     val actorSystem: ActorSystem,
     val serializerManager: SerializerManager,
@@ -63,7 +63,7 @@ class SparkEnv (
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
 
-  def stop() {
+  private[spark] def stop() {
     pythonWorkers.foreach { case(key, worker) => worker.stop() }
     httpFileServer.stop()
     mapOutputTracker.stop()
@@ -79,6 +79,7 @@ class SparkEnv (
     //actorSystem.awaitTermination()
   }
 
+  private[spark]
   def createPythonWorker(pythonExec: String, envVars: Map[String, String]): java.net.Socket = {
     synchronized {
       val key = (pythonExec, envVars)
@@ -111,11 +112,11 @@ object SparkEnv extends Logging {
 	  env.get()
   }
 
-  def createFromSystemProperties(
+  private[spark] def create(
+      conf: SparkConf,
       executorId: String,
       hostname: String,
       port: Int,
-      conf: SparkConf,
       isDriver: Boolean,
       isLocal: Boolean): SparkEnv = {
 
@@ -129,7 +130,7 @@ object SparkEnv extends Logging {
     }
 
     // set only if unset until now.
-    if (conf.getOrElse("spark.hostPort",  null) == null) {
+    if (!conf.contains("spark.hostPort")) {
       if (!isDriver){
         // unexpected
         Utils.logErrorWithStack("Unexpected NOT to have spark.hostPort set")
@@ -216,7 +217,7 @@ object SparkEnv extends Logging {
     }
 
     // Warn about deprecated spark.cache.class property
-    if (conf.getOrElse("spark.cache.class", null) != null) {
+    if (conf.contains("spark.cache.class")) {
       logWarning("The spark.cache.class property is no longer being used! Specify storage " +
         "levels using the RDD.persist() method instead.")
     }
