@@ -91,7 +91,8 @@ private[spark] class RDDCheckpointData[T: ClassTag](rdd: RDD[T])
     }
 
     // Save to file, and reload it as an RDD
-    val broadcastedConf = rdd.context.broadcast(new SerializableWritable(rdd.context.hadoopConfiguration))
+    val broadcastedConf = rdd.context.broadcast(
+      new SerializableWritable(rdd.context.hadoopConfiguration))
     rdd.context.runJob(rdd, CheckpointRDD.writeToFile(path.toString, broadcastedConf) _)
     val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
     if (newRDD.partitions.size != rdd.partitions.size) {

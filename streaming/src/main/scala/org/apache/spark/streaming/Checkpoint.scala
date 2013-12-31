@@ -81,8 +81,8 @@ class CheckpointWriter(checkpointDir: String, hadoopConf: Configuration) extends
         attempts += 1
         try {
           logDebug("Saving checkpoint for time " + checkpointTime + " to file '" + file + "'")
-          // This is inherently thread unsafe .. so alleviating it by writing to '.new' and
-          // then doing moves : which should be pretty fast.
+          // This is inherently thread unsafe, so alleviating it by writing to '.new' and
+          // then moving it to the final file
           val fos = fs.create(writeFile)
           fos.write(bytes)
           fos.close()
