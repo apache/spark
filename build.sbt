@@ -1,3 +1,5 @@
+import AssemblyKeys._ // put this at the top of the file
+
 name := "catalyst"
 
 organization := "com.databricks"
@@ -55,3 +57,16 @@ git.remoteRepo := "git@github.com:marmbrus/catalyst.git"
 site.settings
 
 site.includeScaladoc()
+
+assemblySettings
+
+test in assembly := {}
+
+mergeStrategy in assembly := {
+  case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
+  case m if m.toLowerCase.matches("meta-inf.*\\.sf$") => MergeStrategy.discard
+  case "log4j.properties" => MergeStrategy.discard
+  case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
+  case "reference.conf" => MergeStrategy.concat
+  case _ => MergeStrategy.first
+}

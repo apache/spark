@@ -23,7 +23,7 @@ case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends 
   def output = projectList.map(_.toAttribute)
 
   def execute() = child.execute().map { row =>
-    projectList.map(Evaluate(_, Vector(row))).toIndexedSeq
+    buildRow(projectList.map(Evaluate(_, Vector(row))))
   }
 }
 
@@ -69,7 +69,13 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
         logger.debug(s"Comparing $left, $right as $curDataType order $curDirection")
         // TODO: Use numeric here too?
         val comparison =
-          if(curDataType == IntegerType)
+          if(left == null && right == null)
+            0
+          else if(left == null)
+            -1
+          else if(right == null)
+            1
+          else if(curDataType == IntegerType)
             if(curDirection == Ascending)
               left.asInstanceOf[Int] compare right.asInstanceOf[Int]
             else
@@ -109,6 +115,6 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
 
 case class LocalRelation(output: Seq[Attribute], data: Seq[IndexedSeq[Any]])
                         (@transient sc: SharkContext) extends LeafNode {
-  def execute() = sc.makeRDD(data, 1)
+  def execute() = sc.makeRDD(data.map(buildRow), 1)
 }
 

@@ -1,22 +1,20 @@
 package catalyst
 package shark2
 
-import catalyst.expressions.AttributeReference
-import catalyst.optimizer.Optimize
 import java.io.File
+import scala.collection.mutable
+
+import org.apache.hadoop.hive.metastore.MetaStoreUtils
+import shark.SharkEnv
 
 import analysis._
-import catalyst.plans.logical.LogicalPlan
+import plans.logical.LogicalPlan
 import frontend.hive._
-import planning._
-import rules._
-import shark.{SharkConfVars, SharkContext, SharkEnv}
 import util._
-import org.apache.spark.rdd.RDD
 
 import collection.JavaConversions._
-import org.apache.hadoop.hive.metastore.MetaStoreUtils
-import scala.collection.mutable
+import org.apache.hadoop.hive.ql.exec.FunctionRegistry
+
 
 /**
  * A locally running test instance of spark.  The lifecycle for a given query is managed by the inner class
@@ -44,59 +42,29 @@ import scala.collection.mutable
  * seems to lead to weird non-deterministic failures.  Therefore, the execution of testcases that rely on TestShark
  * must be serialized.
  */
-object TestShark extends Logging {
+object TestShark extends SharkInstance {
   self =>
 
-  val WAREHOUSE_PATH = getTempFilePath("sharkWarehouse")
-  val METASTORE_PATH = getTempFilePath("sharkMetastore")
-  val MASTER = "local"
+  lazy val master = "local"
+  lazy val warehousePath = getTempFilePath("sharkWarehouse").getCanonicalPath
+  lazy val metastorePath = getTempFilePath("sharkMetastore").getCanonicalPath
 
-  /** A local shark context */
-  protected val sc = {
+  override protected def createContext =  {
     // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
     // without restarting the JVM.
     System.clearProperty("spark.driver.port")
     System.clearProperty("spark.hostPort")
 
-    SharkEnv.initWithSharkContext("shark-sql-suite-testing", MASTER)
+    SharkEnv.initWithSharkContext("catalyst.shark2.TestShark", master)
   }
-
-  configure()
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
   /** The location of the hive source code. */
   lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
 
-  /* A catalyst metadata catalog that points to the Shark/Hive Metastore. */
-  val catalog = new HiveMetastoreCatalog(SharkContext.hiveconf)
-  /* An analyzer that uses the Shark/Hive metastore. */
-  val analyze = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
-
-  /** Sets up the system initially or after a RESET command */
-  protected def configure() {
-    // Use hive natively for queries that won't be executed by catalyst. This is because
-    // shark has dependencies on a custom version of hive that we are trying to avoid
-    // in catalyst.
-    SharkConfVars.setVar(SharkContext.hiveconf, SharkConfVars.EXEC_MODE, "hive")
-
-    runSqlHive("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + METASTORE_PATH + ";create=true")
-    runSqlHive("set hive.metastore.warehouse.dir=" + WAREHOUSE_PATH)
-
-    // HACK: Hive is too noisy by default.
-    org.apache.log4j.LogManager.getCurrentLoggers.foreach(_.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN))
-  }
-
-  /**
-   * Runs the specified SQL query using Hive.
-   */
-  def runSqlHive(sql: String): Seq[String] = {
-    val maxResults = 100000
-    val results = sc.sql(rewritePaths(sql), 100000)
-    // It is very confusing when you only get back some of the results...
-    if(results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
-    results
-  }
+  // Override so we can intercept relative paths and rewrite them to point at hive.
+  override def runSqlHive(sql: String): Seq[String] = super.runSqlHive(rewritePaths(sql))
 
   /** Returns the value of specified environmental variable as a [[java.io.File]] after checking to ensure it exists */
   private def envVarToFile(envVar: String): File = {
@@ -116,34 +84,11 @@ object TestShark extends Logging {
     else
       cmd
 
-  object TrivalPlanner extends QueryPlanner[SharkPlan] with PlanningStrategies {
-    val sc = self.sc
-    val strategies =
-      SparkEquiInnerJoin ::
-      SparkAggregates ::
-      HiveTableScans ::
-      DataSinks ::
-      BasicOperators ::
-      CartesianProduct ::
-      BroadcastNestedLoopJoin :: Nil
-  }
-
-  object PrepareForExecution extends RuleExecutor[SharkPlan] {
-    val batches =
-      Batch("Prepare Expressions", Once,
-        expressions.BindReferences) :: Nil
-  }
-
-  class SharkSqlQuery(sql: String) extends SharkQuery {
-    lazy val parsed = HiveQl.parseSql(sql)
-    def hiveExec() = runSqlHive(sql)
-    override def toString = sql + "\n" + super.toString
-  }
-
-  abstract class SharkQuery {
-    def parsed: LogicalPlan
-
-    lazy val analyzed = {
+  /**
+   * Override SharkQuery with special debug workflow.
+   */
+  abstract class SharkQuery extends super.SharkQuery {
+    override lazy val analyzed = {
       // Make sure any test tables referenced are loaded.
       val referencedTables = parsed collect { case UnresolvedRelation(name, _) => name.split("\\.").last }
       val referencedTestTables = referencedTables.filter(testTables.contains)
@@ -152,54 +97,25 @@ object TestShark extends Logging {
       // Proceed with analysis.
       analyze(parsed)
     }
-    lazy val optimizedPlan = Optimize(catalog.CreateTables(analyzed))
-    // TODO: Don't just pick the first one...
-    lazy val sharkPlan = TrivalPlanner(optimizedPlan).next()
-    lazy val executedPlan = PrepareForExecution(sharkPlan)
 
-    lazy val toRdd = executedPlan.execute()
-
+    /** Runs the query after interposing operators that print the result of each intermediate step. */
     def debugExec() = DebugQuery(executedPlan).execute().collect
-
-    /**
-     * Returns the result as a hive compatible sequence of strings.  For native commands, the execution is simply
-     * passed back to Hive.
-     */
-    def stringResult(): Seq[String] = analyzed match {
-      case NativeCommand(cmd) => runSqlHive(rewritePaths(cmd))
-      case ConfigurationAssignment(cmd) => runSqlHive(cmd)
-      case ExplainCommand(plan) => (new SharkQuery { val parsed = plan }).toString.split("\n")
-      case query =>
-        val result: Seq[Seq[Any]] = toRdd.collect.toSeq
-        // Reformat to match hive tab delimited output.
-        val asString = result.map(_.map {
-          case null => "NULL"
-          case other => other
-        }).map(_.mkString("\t")).toSeq
-
-        asString
-    }
-
-    protected def stringOrError[A](f: => A): String =
-      try f.toString catch { case e: Throwable => e.toString }
-
-    override def toString: String =
-      s"""== Logical Plan ==
-         |${stringOrError(analyzed)}
-         |== Physical Plan ==
-         |${stringOrError(sharkPlan)}
-      """.stripMargin.trim
   }
 
-  abstract class CaseSensitiveSharkQuery extends SharkQuery {
-    override lazy val analyzed = SimpleAnalyzer(parsed)
+  class SharkSqlQuery(sql: String) extends SharkQuery {
+    lazy val parsed = HiveQl.parseSql(sql)
+    def hiveExec() = runSqlHive(sql)
+    override def toString = sql + "\n" + super.toString
   }
 
-  implicit class stringToQuery(str: String) {
+
+  /* We must repeat the implicits so that we bind to the overriden versions */
+
+  implicit class stringToTestQuery(str: String) {
     def q = new SharkSqlQuery(str)
   }
 
-  implicit def logicalToSharkQuery(plan: LogicalPlan) = new CaseSensitiveSharkQuery { val parsed = plan }
+  implicit override def logicalToSharkQuery(plan: LogicalPlan) = new LogicalSharkQuery { val parsed = plan }
 
   case class TestTable(name: String, commands: (()=>Unit)*)
 
@@ -251,11 +167,20 @@ object TestShark extends Logging {
   }
 
   /**
+   * Records the UDFs present when the server starts, so we can delete ones that are created by
+   * tests.
+   */
+  protected val originalUdfs = FunctionRegistry.getFunctionNames()
+
+  /**
    * Resets the test instance by deleting any tables that have been created.
    * TODO: also clear out UDFs, views, etc.
    */
   def reset() {
     try {
+      // HACK: Hive is too noisy by default.
+      org.apache.log4j.LogManager.getCurrentLoggers.foreach(_.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN))
+
       // It is important that we RESET first as broken hooks that might have been set could break other sql exec here.
       runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
@@ -277,6 +202,10 @@ object TestShark extends Logging {
       catalog.client.getAllDatabases.filterNot(_ == "default").foreach {db =>
         logger.debug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
+      }
+
+      FunctionRegistry.getFunctionNames.filterNot(originalUdfs.contains(_)).foreach { udfName =>
+        FunctionRegistry.unregisterTemporaryUDF(udfName)
       }
 
       configure()

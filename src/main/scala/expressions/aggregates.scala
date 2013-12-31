@@ -20,7 +20,7 @@ abstract class AggregateFunction extends AggregateExpression with Serializable w
   def nullable = base.nullable
   def dataType = base.dataType
 
-  def apply(input: Seq[Seq[Any]]): Unit
+  def apply(input: Seq[Row]): Unit
   def result: Any
 }
 

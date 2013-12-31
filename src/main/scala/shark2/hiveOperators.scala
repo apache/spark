@@ -5,6 +5,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.`lazy`.LazyStruct
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.mapred.JobConf
 
@@ -30,12 +31,25 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
     relation.tableDesc.getDeserializer.getObjectInspector.asInstanceOf[StructObjectInspector]
 
   /**
-   * The hive struct field references that correspond to the attributes to be read from this table.
+   * Functions that extract the requested attributes from the hive output.
    */
   @transient
-  lazy val refs = attributes.flatMap { a =>
-    objectInspector.getAllStructFieldRefs
-      .find(_.getFieldName == a.name)
+  protected lazy val attributeFunctions = attributes.map { a =>
+    if(relation.partitionKeys.contains(a)) {
+      val ordinal = relation.partitionKeys.indexOf(a)
+      (struct: LazyStruct, partitionKeys: Array[String]) => partitionKeys(ordinal)
+    } else {
+      val ref =
+        objectInspector.getAllStructFieldRefs
+        .find(_.getFieldName == a.name)
+        .getOrElse(sys.error(s"Can't find attribute $a"))
+
+      (struct: LazyStruct, _: Array[String]) => {
+        val data = objectInspector.getStructFieldData(struct, ref)
+        val inspector = ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector]
+        inspector.getPrimitiveJavaObject(data)
+      }
+    }
   }
 
   @transient
@@ -46,20 +60,11 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
       hadoopReader.makeRDDForPartitionedTable(relation.hiveQlPartitions)
 
   def execute() = {
-    // TODO: THIS DOES NOT CORRECTLY RETURN PARTITION ATTRIBUTES.
-    def unpackStruct(struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct) =
-      refs.map { ref =>
-        val data = objectInspector.getStructFieldData(struct, ref)
-        ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector].getPrimitiveJavaObject(data)
-      }.toIndexedSeq
-
     inputRdd.map {
-      case array: Array[Any] =>
-        array.flatMap {
-          case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct => unpackStruct(struct)
-          case array: Array[Any] => array
-        }
-      case struct: org.apache.hadoop.hive.serde2.`lazy`.LazyStruct => unpackStruct(struct)
+      case Array(struct: LazyStruct, partitionKeys: Array[String]) =>
+        buildRow(attributeFunctions.map(_(struct, partitionKeys)))
+      case struct: LazyStruct =>
+        buildRow(attributeFunctions.map(_(struct, Array.empty)))
     }
   }
 

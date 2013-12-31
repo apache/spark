@@ -18,8 +18,6 @@ import collection.JavaConversions._
  * The "golden" results from Hive are cached in [[answerCache]] to speed up testing.
  */
 abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
-  val testShark = TestShark
-
   protected val targetDir = new File("target")
   protected val answerCache = new File(targetDir, "comparison-test-cache")
   if(!answerCache.exists)
@@ -47,11 +45,14 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
         if(!isOrdered) answer.sorted else answer
     }
-    orderedAnswer.map(cleanPaths)
+    orderedAnswer.map(cleanPaths).map(clearTimes)
   }
 
   protected def nonDeterministicLine(line: String) =
     Seq("CreateTime","transient_lastDdlTime", "grantTime").map(line contains _).reduceLeft(_||_)
+
+  protected def clearTimes(line: String) =
+    line.replaceAll("\"lastUpdateTime\":\\d+", "<UPDATETIME>")
 
   /**
    * Removes non-deterministic paths from [[str]] so cached answers will still pass.
@@ -71,7 +72,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
       val queryList = sql.split("(?<=[^\\\\]);").map(_.trim).filterNot(q => q == "").toSeq
 
       try {
-        testShark.reset()
+        TestShark.reset()
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i)  =>
@@ -99,22 +100,24 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
             logger.warn(s"Using answer cache for test: $testCaseName")
             hiveCachedResults
           } else {
-            val computedResults = queryList.zip(hiveCacheFiles).zipWithIndex.map {
-              case ((queryString, cachedAnswerFile), i)=>
+            val sharkQueries = queryList.map(new TestShark.SharkSqlQuery(_))
+            // Make sure we can at least parse everything before doing hive execution.
+            sharkQueries.foreach(_.parsed)
+            val computedResults = (queryList.zipWithIndex, sharkQueries,hiveCacheFiles).zipped.map {
+              case ((queryString, i), sharkQuery, cachedAnswerFile)=>
                 logger.warn(s"Running query ${i+1}/${queryList.size} with hive.")
                 info(s"HIVE: $queryString")
                 // Analyze the query with catalyst to ensure test tables are loaded.
-                val sharkQuery = (new testShark.SharkSqlQuery(queryString))
                 val answer = sharkQuery.analyzed match {
                   case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
-                  case _ => testShark.runSqlHive(queryString)
+                  case _ => TestShark.runSqlHive(queryString)
                 }
 
                 stringToFile(cachedAnswerFile, answer.mkString("\n"))
 
                 answer
             }.toSeq
-            testShark.reset()
+            TestShark.reset()
 
             computedResults
           }
@@ -122,7 +125,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           info(queryString)
-          val query = new testShark.SharkSqlQuery(queryString)
+          val query = new TestShark.SharkSqlQuery(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Exception =>
               val out = new java.io.ByteArrayOutputStream
@@ -170,8 +173,8 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
             // When we encounter an error we check to see if the environment is still okay by running a simple query.
             // If this fails then we halt testing since something must have gone seriously wrong.
             try {
-              new testShark.SharkSqlQuery("SELECT key FROM src").stringResult()
-              testShark.runSqlHive("SELECT key FROM src")
+              new TestShark.SharkSqlQuery("SELECT key FROM src").stringResult()
+              TestShark.runSqlHive("SELECT key FROM src")
             } catch {
               case e: Exception =>
                 logger.error(s"FATAL ERROR: Canary query threw $e This implies that the testing environment has likely been corrupted.")

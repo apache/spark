@@ -25,14 +25,14 @@ abstract class HiveQueryFileTest extends HiveComaparisionTest {
 
   val runAll = !(System.getProperty("shark.hive.alltests") == null)
 
-  // Allow the whitelist to be overriden by a system property
+  // Allow the whiteList to be overridden by a system property
   val realWhiteList = Option(System.getProperty("shark.hive.whitelist")).map(_.split(",").toSeq).getOrElse(whiteList)
 
   // Go through all the test cases and add them to scala test.
   testCases.foreach {
     case (testCaseName, testCaseFile) =>
-      if(blackList contains testCaseName) {
-        // Do nothing
+      if(blackList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_)) {
+        logger.warn(s"Blacklisted test skipped $testCaseName")
       } else if(realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) || runAll) {
         // Build a test case and submit it to scala test framework...
         val queriesString = fileToString(testCaseFile)
