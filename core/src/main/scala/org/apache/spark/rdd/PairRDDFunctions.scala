@@ -217,7 +217,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * more accurate counts but increase the memory footprint and vise versa. Uses the provided
    * Partitioner to partition the output RDD.
    */
-  def countDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
+  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
     val createHLL = (v: V) => {
       val hll = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
       hll.value.offer(v)
@@ -242,8 +242,8 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * output RDD into numPartitions.
    *
    */
-  def countDistinctByKey(relativeSD: Double, numPartitions: Int): RDD[(K, Long)] = {
-    countDistinctByKey(relativeSD, new HashPartitioner(numPartitions))
+  def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): RDD[(K, Long)] = {
+    countApproxDistinctByKey(relativeSD, new HashPartitioner(numPartitions))
   }
 
   /**
@@ -254,8 +254,8 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * relativeSD is 0.05. Hash-partitions the output RDD using the existing partitioner/parallelism
    * level.
    */
-  def countDistinctByKey(relativeSD: Double = 0.05): RDD[(K, Long)] = {
-    countDistinctByKey(relativeSD, defaultPartitioner(self))
+  def countApproxDistinctByKey(relativeSD: Double = 0.05): RDD[(K, Long)] = {
+    countApproxDistinctByKey(relativeSD, defaultPartitioner(self))
   }
 
   /**

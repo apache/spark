@@ -797,7 +797,7 @@ abstract class RDD[T: ClassTag](
    * more accurate counts but increase the memory footprint and vise versa. The default value of
    * relativeSD is 0.05.
    */
-  def countDistinct(relativeSD: Double = 0.05): Long = {
+  def countApproxDistinct(relativeSD: Double = 0.05): Long = {
 
     def hllCountPartition(iter: Iterator[T]): Iterator[SerializableHyperLogLog] = {
       val hllCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))

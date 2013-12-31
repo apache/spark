@@ -173,7 +173,7 @@ class KryoSerializerSuite extends FunSuite with SharedSparkContext {
   }
 
   test("kryo with SerializableHyperLogLog") {
-    assert(sc.parallelize( Array(1, 2, 3, 2, 3, 3, 2, 3, 1) ).countDistinct(0.01) === 3)
+    assert(sc.parallelize( Array(1, 2, 3, 2, 3, 3, 2, 3, 1) ).countApproxDistinct(0.01) === 3)
   }
 
   test("kryo with reduce") {
