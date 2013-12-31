@@ -98,4 +98,3 @@ class TwitterReceiver(
     logInfo("Twitter receiver stopped")
   }
 }
-
