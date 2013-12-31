@@ -141,7 +141,7 @@ object SparkBuild extends Build {
     // also check the local Maven repository ~/.m2
     resolvers ++= Seq(Resolver.file("Local Maven Repo", file(Path.userHome + "/.m2/repository"))),
 
-   // For Sonatype publishing
+    // For Sonatype publishing
     resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
 
@@ -315,9 +315,6 @@ object SparkBuild extends Build {
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
-    resolvers ++= Seq(
-      "Apache repo" at "https://repository.apache.org/content/repositories/releases"
-    ),
     libraryDependencies ++= Seq(
       "commons-io" % "commons-io" % "2.4" 
     )
@@ -360,14 +357,14 @@ object SparkBuild extends Build {
     }
   )
 
-  def twitterSettings() = streamingSettings ++ Seq(
+  def twitterSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-twitter",
     libraryDependencies ++= Seq(
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty)
     )
   )
   
-  def kafkaSettings() = streamingSettings ++ Seq(
+  def kafkaSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-kafka",
     libraryDependencies ++= Seq(
       "com.github.sgroschupf"    % "zkclient"   % "0.1"          excludeAll(excludeNetty),
@@ -379,14 +376,14 @@ object SparkBuild extends Build {
     )
   )
   
-  def flumeSettings() = streamingSettings ++ Seq(
+  def flumeSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-flume",
     libraryDependencies ++= Seq(
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty, excludeSnappy)
     )
   )
 
-  def zeromqSettings() = streamingSettings ++ Seq(
+  def zeromqSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-zeromq",
     libraryDependencies ++= Seq(
       "org.spark-project.akka" %% "akka-zeromq" % "2.2.3-shaded-protobuf" excludeAll(excludeNetty)
@@ -395,11 +392,7 @@ object SparkBuild extends Build {
 
   def mqttSettings() = streamingSettings ++ Seq(
     name := "spark-streaming-mqtt",
-    resolvers ++= Seq(
-      "Apache repo" at "https://repository.apache.org/content/repositories/releases"
-    ),
-    libraryDependencies ++= Seq(
-      "org.eclipse.paho" % "mqtt-client" % "0.4.0"
-    )
+    resolvers ++= Seq("Eclipse Repo" at "https://repo.eclipse.org/content/repositories/paho-releases/"),
+    libraryDependencies ++= Seq("org.eclipse.paho" % "mqtt-client" % "0.4.0")
   )
 }
