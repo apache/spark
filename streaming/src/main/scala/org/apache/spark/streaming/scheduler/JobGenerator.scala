@@ -29,7 +29,6 @@ import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
 private[streaming]
 class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
-  initLogging()
   val ssc = jobScheduler.ssc
   val clockClass = System.getProperty(
     "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")

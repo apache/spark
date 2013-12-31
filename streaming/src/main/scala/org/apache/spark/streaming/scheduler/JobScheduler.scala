@@ -30,8 +30,6 @@ import org.apache.spark.streaming._
 private[streaming]
 class JobScheduler(val ssc: StreamingContext) extends Logging {
 
-  initLogging()
-
   val jobSets = new ConcurrentHashMap[Time, JobSet]
   val numConcurrentJobs = System.getProperty("spark.streaming.concurrentJobs", "1").toInt
   val executor = Executors.newFixedThreadPool(numConcurrentJobs)

@@ -63,7 +63,6 @@ import org.apache.spark.metrics.source.Source
  * [options] is the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (val instance: String) extends Logging {
-  initLogging()
 
   val confFile = System.getProperty("spark.metrics.conf")
   val metricsConfig = new MetricsConfig(Option(confFile))

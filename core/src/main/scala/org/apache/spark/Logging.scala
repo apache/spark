@@ -33,6 +33,7 @@ trait Logging {
   // Method to get or create the logger for this object
   protected def log: Logger = {
     if (log_ == null) {
+      initializeIfNecessary()
       var className = this.getClass.getName
       // Ignore trailing $'s in the class names for Scala objects
       if (className.endsWith("$")) {
@@ -89,9 +90,15 @@ trait Logging {
     log.isTraceEnabled
   }
 
-  // Method for ensuring that logging is initialized, to avoid having multiple
-  // threads do it concurrently (as SLF4J initialization is not thread safe).
-  protected def initLogging() {
+  private def initializeIfNecessary() {
+    Logging.initLock.synchronized {
+      if (!Logging.initialized) {
+        initializeLogging()
+      }
+    }
+  }
+
+  private def initializeLogging() {
     // If Log4j doesn't seem initialized, load a default properties file
     val log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
     if (!log4jInitialized) {
@@ -101,7 +108,17 @@ trait Logging {
         case Some(url) => PropertyConfigurator.configure(url)
         case None => System.err.println(s"Spark was unable to load $defaultLogProps")
       }
+      log.info(s"Using Spark's default log4j profile: $defaultLogProps")
     }
+    Logging.initialized = true
+
+    // Force a call into slf4j to initialize it avoids this happening from mutliple threads
+    // and triggering this: http://mailman.qos.ch/pipermail/slf4j-dev/2010-April/002956.html
     log
   }
+}
+
+object Logging {
+  @transient @volatile private var initialized = false
+  @transient val initLock = new Object()
 }
