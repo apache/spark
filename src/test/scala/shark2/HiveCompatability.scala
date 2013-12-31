@@ -9,7 +9,11 @@ import util._
  * Runs the test cases that are included in the hive distribution.
  */
 class HiveCompatability extends HiveQueryFileTest {
-  /** A list of tests deemed out of scope and thus completely disregarded */
+  // TODO: bundle in jar files... get from classpath
+  lazy val hiveQueryDir = new File(TestShark.hiveDevHome, "ql/src/test/queries/clientpositive")
+  def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
+
+  /** A list of tests deemed out of scope currently and thus completely disregarded */
   override def blackList = Seq(
     "hook_order", // These tests use hooks that are not on the classpath and thus break all subsequent SQL execution.
     "hook_context",
@@ -36,10 +40,10 @@ class HiveCompatability extends HiveQueryFileTest {
     "bucketizedhiveinputformat",
 
     // Avro tests seem to change the output format permanently thus breaking the answer cache, until
-    // we figure out what this is the case let just ignore all of them
+    // we figure out why this is the case let just ignore all of avro related tests.
     ".*avro.*",
 
-    // Unique joins are weird and will require a lot of hacks (see comments in hive parser)
+    // Unique joins are weird and will require a lot of hacks (see comments in hive parser).
     "uniquejoin",
 
     // Hive seems to get the wrong answer on some outer joins.  MySQL agrees with catalyst.
@@ -361,8 +365,4 @@ class HiveCompatability extends HiveQueryFileTest {
     "union9",
     "union_script"
   )
-
-  // TODO: bundle in jar files... get from classpath
-  lazy val hiveQueryDir = new File(TestShark.hiveDevHome, "ql/src/test/queries/clientpositive")
-  def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 }
