@@ -108,6 +108,9 @@ object PromoteStrings extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Changes Boolean values to Bytes so that expressions like true < false can be Evaluated.
+ */
 object BooleanComparisons extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
     // Skip nodes who's children have not been resolved yet.
