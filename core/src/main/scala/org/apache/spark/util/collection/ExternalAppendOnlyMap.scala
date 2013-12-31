@@ -257,14 +257,15 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
 
   // Iterate through (K, G) pairs in sorted order from an on-disk map
   private class DiskKGIterator(file: File) extends Iterator[(K, G)] {
-    val in = ser.deserializeStream(new FileInputStream(file))
+    val fstream = new FileInputStream(file)
+    val dstream = ser.deserializeStream(fstream)
     var nextItem: Option[(K, G)] = None
     var eof = false
 
     def readNextItem(): Option[(K, G)] = {
       if (!eof) {
         try {
-          return Some(in.readObject().asInstanceOf[(K, G)])
+          return Some(dstream.readObject().asInstanceOf[(K, G)])
         } catch {
           case e: EOFException =>
             eof = true
@@ -296,6 +297,8 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
 
     // TODO: Ensure this gets called even if the iterator isn't drained.
     def cleanup() {
+      fstream.close()
+      dstream.close()
       file.delete()
     }
   }
