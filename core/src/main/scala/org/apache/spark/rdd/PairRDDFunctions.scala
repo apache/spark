@@ -229,9 +229,8 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     }
     val mergeHLL = (h1: SerializableHyperLogLog, h2: SerializableHyperLogLog) => h1.merge(h2)
 
-    combineByKey(createHLL, mergeValueHLL, mergeHLL, partitioner).map {
-      case (k, v) => (k, v.value.cardinality())
-    }
+    combineByKey(createHLL, mergeValueHLL, mergeHLL, partitioner).mapValues(_.value.cardinality())
+
   }
 
   /**

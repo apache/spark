@@ -809,7 +809,9 @@ abstract class RDD[T: ClassTag](
     }
     def mergeCounters(c1: SerializableHyperLogLog, c2: SerializableHyperLogLog) = c1.merge(c2)
 
-    mapPartitions(hllCountPartition).reduce(mergeCounters).value.cardinality()
+    val zeroCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
+    mapPartitions(hllCountPartition).aggregate(zeroCounter)(mergeCounters, mergeCounters)
+      .value.cardinality()
   }
 
   /**
