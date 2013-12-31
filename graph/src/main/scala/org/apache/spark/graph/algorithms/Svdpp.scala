@@ -71,7 +71,7 @@ object Svdpp {
     }
 
     for (i <- 0 until conf.maxIters) {
-      // phase 1, calculate v2 for user nodes
+      // phase 1, calculate pu + |N(u)|^(-0.5)*sum(y) for user nodes
       var t1 = g.mapReduceTriplets(et => Iterator((et.srcId, et.dstAttr._2)), (g1: RealVector, g2: RealVector) => g1.add(g2))
       g = g.outerJoinVertices(t1) { (vid: Vid, vd: (RealVector, RealVector, Double, Double), msg: Option[RealVector]) =>
         if (msg.isDefined) (vd._1, vd._1.add(msg.get.mapMultiply(vd._4)), vd._3, vd._4) else vd
