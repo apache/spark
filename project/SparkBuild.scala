@@ -178,7 +178,7 @@ object SparkBuild extends Build {
 
 
     libraryDependencies ++= Seq(
-        "io.netty"          % "netty-all"       % "4.0.0.CR1",
+        "io.netty"          % "netty-all"       % "4.0.13.Final",
         "org.eclipse.jetty" % "jetty-server"    % "7.6.8.v20121106",
         /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
         "org.eclipse.jetty.orbit" % "javax.servlet" % "2.5.0.v201103041518" artifacts Artifact("javax.servlet", "jar", "jar"),
