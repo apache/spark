@@ -229,27 +229,4 @@ class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with Local
       }
     }
   }
-
-  test("spilling with no mergeCombiners function") {
-    System.setProperty("spark.shuffle.buffer.mb", "1")
-    System.setProperty("spark.shuffle.buffer.fraction", "0.05")
-
-    // combineByKey - should spill exactly 11 times
-    val _createCombiner: Int => ArrayBuffer[Int] = i => ArrayBuffer[Int](i)
-    val _mergeValue: (ArrayBuffer[Int], Int) => ArrayBuffer[Int] = (buf, i) => buf += i
-    val rdd = sc.parallelize(0 until 10000).map(i => (i/4, i))
-    val result = rdd.combineByKey[ArrayBuffer[Int]](_createCombiner, _mergeValue, null,
-      new HashPartitioner(1), mapSideCombine=false).collect()
-
-    // result should be the same as groupByKey
-    assert(result.length == 2500)
-    result.foreach { case(i, seq) =>
-      i match {
-        case 0 => assert(seq.toSet == Set[Int](0, 1, 2, 3))
-        case 1250 => assert(seq.toSet == Set[Int](5000, 5001, 5002, 5003))
-        case 2499 => assert(seq.toSet == Set[Int](9996, 9997, 9998, 9999))
-        case _ =>
-      }
-    }
-  }
 }
