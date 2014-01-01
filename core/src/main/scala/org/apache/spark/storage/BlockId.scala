@@ -68,9 +68,9 @@ private[spark] case class StreamBlockId(streamId: Int, uniqueId: Long) extends B
   def name = "input-" + streamId + "-" + uniqueId
 }
 
-/** Block associated with intermediate (temporary) data managed as blocks. */
-private[spark] case class IntermediateBlockId(id: String) extends BlockId {
-  def name = "intermediate_" + id
+/** Block associated with temporary data managed as blocks. */
+private[spark] case class TempBlockId(id: String) extends BlockId {
+  def name = "temp_" + id
 }
 
 // Intended only for testing purposes
@@ -85,7 +85,7 @@ private[spark] object BlockId {
   val BROADCAST_HELPER = "broadcast_([0-9]+)_([A-Za-z0-9]+)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
-  val INTERMEDIATE = "intermediate_(.*)".r
+  val TEMP = "temp_(.*)".r
   val TEST = "test_(.*)".r
 
   /** Converts a BlockId "name" String back into a BlockId. */
