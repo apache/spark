@@ -27,16 +27,16 @@ import org.apache.spark.SparkContext
 
 object NaiveBayesSuite {
 
-  private def calcLabel(p: Double, weightPerLabel: Array[Double]): Int = {
+  private def calcLabel(p: Double, pi: Array[Double]): Int = {
     var sum = 0.0
-    for (j <- 0 until weightPerLabel.length) {
-      sum += weightPerLabel(j)
+    for (j <- 0 until pi.length) {
+      sum += pi(j)
       if (p < sum) return j
     }
     -1
   }
 
-  // Generate input of the form Y = (weightMatrix*x).argmax()
+  // Generate input of the form Y = (theta * x).argmax()
   def generateNaiveBayesInput(
       pi: Array[Double],            // 1XC
       theta: Array[Array[Double]],  // CXD
