@@ -200,16 +200,16 @@
         <artifactId>asm</artifactId>
         <version>4.0</version>
       </dependency>
-      <!-- In theory we need not directly depend on protobuf since Spark does not directly
-           use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
-           the protobuf version up from the one Mesos gives. For now we include this variable 
-           to explicitly bump the version when building with YARN. It would be nice to figure
-           out why Maven can't resolve this correctly (like SBT does). -->
       <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
         <version>2.4.0</version>
       </dependency>
+      <!-- In theory we need not directly depend on protobuf since Spark does not directly
+           use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
+           the protobuf version up from the one Mesos gives. For now we include this variable 
+           to explicitly bump the version when building with YARN. It would be nice to figure
+           out why Maven can't resolve this correctly (like SBT does). -->
       <dependency>
         <groupId>com.google.protobuf</groupId>
         <artifactId>protobuf-java</artifactId>
