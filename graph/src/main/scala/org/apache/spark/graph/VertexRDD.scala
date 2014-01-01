@@ -105,7 +105,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * Provide the `RDD[(Vid, VD)]` equivalent output.
    */
   override def compute(part: Partition, context: TaskContext): Iterator[(Vid, VD)] = {
-    partitionsRDD.compute(part, context).next().iterator
+    firstParent[VertexPartition[VD]].iterator(part, context).next.iterator
   }
 
   /**
