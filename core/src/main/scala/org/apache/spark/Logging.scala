@@ -91,9 +91,11 @@ trait Logging {
   }
 
   private def initializeIfNecessary() {
-    Logging.initLock.synchronized {
-      if (!Logging.initialized) {
-        initializeLogging()
+    if (!Logging.initialized) {
+      Logging.initLock.synchronized {
+        if (!Logging.initialized) {
+          initializeLogging()
+        }
       }
     }
   }
