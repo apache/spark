@@ -113,6 +113,44 @@ class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with Local
     assert(kv1._2 == kv2._2 && kv2._2 == kv3._2)
   }
 
+  test("null keys and values") {
+    val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
+      mergeValue, mergeCombiners)
+    map.insert(1, 5)
+    map.insert(2, 6)
+    map.insert(3, 7)
+    assert(map.size === 3)
+    assert(map.iterator.toSet == Set[(Int, Seq[Int])](
+      (1, Seq[Int](5)),
+      (2, Seq[Int](6)),
+      (3, Seq[Int](7))
+    ))
+
+    // Null keys
+    val nullInt = null.asInstanceOf[Int]
+    map.insert(nullInt, 8)
+    assert(map.size === 4)
+    assert(map.iterator.toSet == Set[(Int, Seq[Int])](
+      (1, Seq[Int](5)),
+      (2, Seq[Int](6)),
+      (3, Seq[Int](7)),
+      (nullInt, Seq[Int](8))
+    ))
+
+    // Null values
+    map.insert(4, nullInt)
+    map.insert(nullInt, nullInt)
+    assert(map.size === 5)
+    val result = map.iterator.toSet[(Int, ArrayBuffer[Int])].map(kv => (kv._1, kv._2.toSet))
+    assert(result == Set[(Int, Set[Int])](
+      (1, Set[Int](5)),
+      (2, Set[Int](6)),
+      (3, Set[Int](7)),
+      (4, Set[Int](nullInt)),
+      (nullInt, Set[Int](nullInt, 8))
+    ))
+  }
+
   test("simple aggregator") {
     // reduceByKey
     val rdd = sc.parallelize(1 to 10).map(i => (i%2, 1))

@@ -112,6 +112,7 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, G]
   private val oldMaps = new ArrayBuffer[DiskKGIterator]
+
   private val memoryThresholdMB = {
     val bufferSize = System.getProperty("spark.shuffle.buffer.mb", "1024").toLong
     val bufferPercent = System.getProperty("spark.shuffle.buffer.fraction", "0.8").toFloat
