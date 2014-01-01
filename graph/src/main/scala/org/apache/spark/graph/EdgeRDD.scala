@@ -22,9 +22,8 @@ class EdgeRDD[@specialized ED: ClassManifest](
   override val partitioner =
     partitionsRDD.partitioner.orElse(Some(Partitioner.defaultPartitioner(partitionsRDD)))
 
-  override def compute(split: Partition, context: TaskContext): Iterator[Edge[ED]] = {
-    val edgePartition = partitionsRDD.compute(split, context).next()._2
-    edgePartition.iterator
+  override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
+    firstParent[(Pid, EdgePartition[ED])].iterator(part, context).next._2.iterator
   }
 
   override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()
@@ -33,7 +32,7 @@ class EdgeRDD[@specialized ED: ClassManifest](
    * Caching a VertexRDD causes the index and values to be cached separately.
    */
   override def persist(newLevel: StorageLevel): EdgeRDD[ED] = {
-    super.persist(newLevel)
+    partitionsRDD.persist(newLevel)
     this
   }
 
@@ -45,6 +44,7 @@ class EdgeRDD[@specialized ED: ClassManifest](
 
   def mapEdgePartitions[ED2: ClassManifest](f: EdgePartition[ED] => EdgePartition[ED2])
     : EdgeRDD[ED2] = {
+//       iter => iter.map { case (pid, ep) => (pid, f(ep)) }
     new EdgeRDD[ED2](partitionsRDD.mapPartitions({ iter =>
       val (pid, ep) = iter.next()
       Iterator(Tuple2(pid, f(ep)))
