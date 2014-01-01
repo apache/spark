@@ -138,7 +138,7 @@ private[spark] class SpillableAppendOnlyMap[K, V, G: ClassTag, C: ClassTag](
     spillCount += 1
     logWarning(s"In-memory KV map exceeded threshold of $memoryThresholdMB MB!")
     logWarning(s"Spilling to disk ($spillCount time"+(if (spillCount > 1) "s" else "")+" so far)")
-    val (blockId, file) = diskBlockManager.createIntermediateBlock
+    val (blockId, file) = diskBlockManager.createTempBlock()
     val writer = new DiskBlockObjectWriter(blockId, file, serializer, fileBufferSize, identity)
     try {
       val it = currentMap.destructiveSortedIterator(comparator)

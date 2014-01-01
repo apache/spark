@@ -96,6 +96,6 @@ private[spark] class SizeTrackingAppendOnlyMap[K, V] extends AppendOnlyMap[K, V]
   }
 }
 
-object SizeTrackingAppendOnlyMap {
+private object SizeTrackingAppendOnlyMap {
   case class Sample(size: Long, numUpdates: Long)
 }
