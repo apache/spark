@@ -798,20 +798,8 @@ abstract class RDD[T: ClassTag](
    * relativeSD is 0.05.
    */
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
-
-    def hllCountPartition(iter: Iterator[T]): Iterator[SerializableHyperLogLog] = {
-      val hllCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
-      while (iter.hasNext) {
-        val v = iter.next()
-        hllCounter.value.offer(v)
-      }
-      Iterator(hllCounter)
-    }
-    def mergeCounters(c1: SerializableHyperLogLog, c2: SerializableHyperLogLog) = c1.merge(c2)
-
     val zeroCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
-    mapPartitions(hllCountPartition).aggregate(zeroCounter)(mergeCounters, mergeCounters)
-      .value.cardinality()
+    aggregate(zeroCounter)(_.add(_), _.merge(_)).value.cardinality()
   }
 
   /**

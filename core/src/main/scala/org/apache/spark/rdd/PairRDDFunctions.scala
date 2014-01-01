@@ -218,19 +218,11 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Partitioner to partition the output RDD.
    */
   def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
-    val createHLL = (v: V) => {
-      val hll = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
-      hll.value.offer(v)
-      hll
-    }
-    val mergeValueHLL = (hll: SerializableHyperLogLog, v: V) => {
-      hll.value.offer(v)
-      hll
-    }
+    val createHLL = (v: V) => new SerializableHyperLogLog(new HyperLogLog(relativeSD)).add(v)
+    val mergeValueHLL = (hll: SerializableHyperLogLog, v: V) => hll.add(v)
     val mergeHLL = (h1: SerializableHyperLogLog, h2: SerializableHyperLogLog) => h1.merge(h2)
 
     combineByKey(createHLL, mergeValueHLL, mergeHLL, partitioner).mapValues(_.value.cardinality())
-
   }
 
   /**

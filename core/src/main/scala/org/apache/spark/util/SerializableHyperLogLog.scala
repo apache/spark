@@ -30,6 +30,11 @@ class SerializableHyperLogLog(var value: ICardinality) extends Externalizable {
 
   def merge(other: SerializableHyperLogLog) = new SerializableHyperLogLog(value.merge(other.value))
 
+  def add[T](elem: T) = {
+    this.value.offer(elem)
+    this
+  }
+
   def readExternal(in: ObjectInput) {
     val byteLength = in.readInt()
     val bytes = new Array[Byte](byteLength)
