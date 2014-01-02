@@ -328,7 +328,7 @@ private[spark] class TaskSchedulerImpl(
         // Have each task set throw a SparkException with the error
         for ((taskSetId, manager) <- activeTaskSets) {
           try {
-            manager.error(message)
+            manager.abort(message)
           } catch {
             case e: Exception => logError("Exception in error callback", e)
           }
