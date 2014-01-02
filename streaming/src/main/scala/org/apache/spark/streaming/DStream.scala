@@ -56,8 +56,6 @@ abstract class DStream[T: ClassTag] (
     @transient protected[streaming] var ssc: StreamingContext
   ) extends Serializable with Logging {
 
-  initLogging()
-
   // =======================================================================
   // Methods that should be implemented by subclasses of DStream
   // =======================================================================

@@ -88,8 +88,6 @@ private[streaming] case class ReportError(msg: String) extends NetworkReceiverMe
  */
 abstract class NetworkReceiver[T: ClassTag]() extends Serializable with Logging {
 
-  initLogging()
-
   lazy protected val env = SparkEnv.get
 
   lazy protected val actor = env.actorSystem.actorOf(

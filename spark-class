@@ -129,11 +129,16 @@ fi
 
 # Compute classpath using external script
 CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
-CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"
+
+if [ "$1" == "org.apache.spark.tools.JavaAPICompletenessChecker" ]; then
+  CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"
+fi
 
 if $cygwin; then
   CLASSPATH=`cygpath -wp $CLASSPATH`
-  export SPARK_TOOLS_JAR=`cygpath -w $SPARK_TOOLS_JAR`
+  if [ "$1" == "org.apache.spark.tools.JavaAPICompletenessChecker" ]; then
+    export SPARK_TOOLS_JAR=`cygpath -w $SPARK_TOOLS_JAR`
+  fi
 fi
 export CLASSPATH
 

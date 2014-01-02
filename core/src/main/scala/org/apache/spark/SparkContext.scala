@@ -137,9 +137,6 @@ class SparkContext(
 
   val isLocal = (master == "local" || master.startsWith("local["))
 
-  // Ensure logging is initialized before we spawn any threads
-  initLogging()
-
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.create(
     conf,
