@@ -36,8 +36,6 @@ private[scheduler] case class DoCheckpoint(time: Time) extends JobGeneratorEvent
 private[streaming]
 class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
-  initLogging()
-
   val ssc = jobScheduler.ssc
   val graph = ssc.graph
   val eventProcessorActor = ssc.env.actorSystem.actorOf(Props(new Actor {

@@ -94,8 +94,6 @@ class StreamingContext private (
    */
   def this(path: String) = this(null, CheckpointReader.read(path), null)
 
-  initLogging()
-
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
       "both SparkContext and checkpoint as null")

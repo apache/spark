@@ -50,8 +50,6 @@ class BlockManagerMasterActor(val isLocal: Boolean) extends Actor with Logging {
 
   private val akkaTimeout = AkkaUtils.askTimeout
 
-  initLogging()
-
   val slaveTimeout = System.getProperty("spark.storage.blockManagerSlaveTimeoutMs",
     "" + (BlockManager.getHeartBeatFrequencyFromSystemProperties * 3)).toLong
 

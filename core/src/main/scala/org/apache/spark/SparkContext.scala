@@ -88,9 +88,6 @@ class SparkContext(
       scala.collection.immutable.Map())
   extends Logging {
 
-  // Ensure logging is initialized before we spawn any threads
-  initLogging()
-
   // Set Spark driver host and port system properties
   if (System.getProperty("spark.driver.host") == null) {
     System.setProperty("spark.driver.host", Utils.localHostName())

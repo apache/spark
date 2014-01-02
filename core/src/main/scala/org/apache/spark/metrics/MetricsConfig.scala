@@ -26,7 +26,6 @@ import scala.util.matching.Regex
 import org.apache.spark.Logging
 
 private[spark] class MetricsConfig(val configFile: Option[String]) extends Logging {
-  initLogging()
 
   val DEFAULT_PREFIX = "*"
   val INSTANCE_REGEX = "^(\\*|[a-zA-Z]+)\\.(.+)".r
