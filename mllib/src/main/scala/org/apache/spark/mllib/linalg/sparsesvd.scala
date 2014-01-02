@@ -24,6 +24,7 @@ import org.apache.spark.rdd.RDD
 import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 
 
+object SVD {
 /**
  * Singular Value Decomposition for Tall and Skinny matrices.
  * Given an m x n matrix A, this will compute matrices U, S, V such that
@@ -48,10 +49,13 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
  *
  * All input and output is expected in sparse matrix format, 1-indexed
  * as tuples of the form ((i,j),value) all in RDDs
+ *
+ * @param data RDD Matrix in sparse 1-index format ((int, int), value)
+ * @param m number of rows
+ * @param n number of columns
+ * @param min_svalue Recover singular values greater or equal to min_svalue
+ * @return Three sparse matrices: U, S, V such that A = USV^T
  */
-
-
-object SVD {
   def sparseSVD(
       data: RDD[((Int, Int), Double)],
       m: Int,
