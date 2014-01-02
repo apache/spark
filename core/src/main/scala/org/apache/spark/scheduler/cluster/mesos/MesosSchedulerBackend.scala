@@ -100,7 +100,7 @@ private[spark] class MesosSchedulerBackend(
     }
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val uri = sc.conf.get("spark.executor.uri")
+    val uri = sc.conf.get("spark.executor.uri", null)
     if (uri == null) {
       command.setValue(new File(sparkHome, "spark-executor").getCanonicalPath)
     } else {

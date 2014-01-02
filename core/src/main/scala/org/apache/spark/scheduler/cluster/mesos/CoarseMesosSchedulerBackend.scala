@@ -125,7 +125,7 @@ private[spark] class CoarseMesosSchedulerBackend(
       conf.get("spark.driver.host"),
       conf.get("spark.driver.port"),
       CoarseGrainedSchedulerBackend.ACTOR_NAME)
-    val uri = conf.get("spark.executor.uri")
+    val uri = conf.get("spark.executor.uri", null)
     if (uri == null) {
       val runScript = new File(sparkHome, "spark-class").getCanonicalPath
       command.setValue(
