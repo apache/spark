@@ -12,7 +12,7 @@ See the [programming guide](scala-programming-guide.html) for a more complete re
 To follow along with this guide, you only need to have successfully built Spark on one machine. Simply go into your Spark directory and run:
 
 {% highlight bash %}
-$ sbt/sbt assembly
+$ sbt assembly
 {% endhighlight %}
 
 # Interactive Analysis with the Spark Shell

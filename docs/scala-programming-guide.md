@@ -31,7 +31,7 @@ In addition, if you wish to access an HDFS cluster, you need to add a dependency
     artifactId = hadoop-client
     version = <your-hdfs-version>
 
-For other build systems, you can run `sbt/sbt assembly` to pack Spark and its dependencies into one JAR (`assembly/target/scala-{{site.SCALA_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop*.jar`), then add this to your CLASSPATH. Set the HDFS version as described [here](index.html#a-note-about-hadoop-versions).
+For other build systems, you can run `sbt assembly` to pack Spark and its dependencies into one JAR (`assembly/target/scala-{{site.SCALA_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop*.jar`), then add this to your CLASSPATH. Set the HDFS version as described [here](index.html#a-note-about-hadoop-versions).
 
 Finally, you need to import some Spark classes and implicit conversions into your program. Add the following lines:
 
