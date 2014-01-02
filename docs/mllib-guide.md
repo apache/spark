@@ -87,7 +87,7 @@ svmAlg.optimizer.setNumIterations(200)
 val modelL1 = svmAlg.run(parsedData)
 {% endhighlight %}
 
-Both of the code snippets above can be executed in `spark-shell` to generate a
+Both of the code snippets above can be executed in `bin/spark-shell` to generate a
 classifier for the provided dataset.
 
 Available algorithms for binary classification:

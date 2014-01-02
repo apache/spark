@@ -34,7 +34,7 @@ to connect to. This can be a [URL for a distributed cluster](scala-programming-g
 or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing.
 
-Finally, you can run Spark interactively through modified versions of the Scala shell (`./spark-shell`) or
+Finally, you can run Spark interactively through modified versions of the Scala shell (`./bin/spark-shell`) or
 Python interpreter (`./pyspark`). These are a great way to learn the framework.
 
 # Launching on a Cluster

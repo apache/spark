@@ -19,7 +19,7 @@ which is packaged with it. To build Spark and its example programs, run:
 
 Once you've built Spark, the easiest way to start using it is the shell:
 
-    ./spark-shell
+    ./bin/spark-shell
 
 Or, for the Python API, the Python shell (`./pyspark`).
 
