@@ -200,6 +200,11 @@
         <artifactId>asm</artifactId>
         <version>4.0</version>
       </dependency>
+      <dependency>
+        <groupId>com.clearspring.analytics</groupId>
+        <artifactId>stream</artifactId>
+        <version>2.4.0</version>
+      </dependency>
       <!-- In theory we need not directly depend on protobuf since Spark does not directly
            use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
            the protobuf version up from the one Mesos gives. For now we include this variable 
@@ -282,7 +287,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.0.CR1</version>
+        <version>4.0.13.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>

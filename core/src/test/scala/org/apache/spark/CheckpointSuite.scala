@@ -26,8 +26,6 @@ import org.apache.spark.storage.{BlockId, StorageLevel, TestBlockId}
 import org.apache.spark.util.Utils
 
 class CheckpointSuite extends FunSuite with LocalSparkContext with Logging {
-  initLogging()
-
   var checkpointDir: File = _
   val partitioner = new HashPartitioner(2)
 
