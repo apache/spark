@@ -51,7 +51,11 @@ case class UnresolvedFunction(name: String, children: Seq[Expression]) extends E
  * @param table an optional table that should be the target of the expansion.  If omitted all
  *              tables' columns are produced.
  */
-case class Star(table: Option[String]) extends Attribute with trees.LeafNode[Expression] {
+case class Star(
+    table: Option[String],
+    mapFunction: Attribute => Expression = identity[Attribute])
+  extends Attribute with trees.LeafNode[Expression] {
+
   def name = throw new UnresolvedException(this, "exprId")
   def exprId = throw new UnresolvedException(this, "exprId")
   def dataType = throw new UnresolvedException(this, "dataType")
@@ -61,6 +65,19 @@ case class Star(table: Option[String]) extends Attribute with trees.LeafNode[Exp
 
   def newInstance = this
   def withQualifiers(newQualifiers: Seq[String]) = this
+
+  def expand(input: Seq[Attribute]): Seq[NamedExpression] = {
+    val expandedAttributes = table match {
+      case None => input
+      case Some(table) => input.filter(_.qualifiers contains table)
+    }
+    val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {
+      case (n: NamedExpression, _) => n
+      case (e, originalAttribute) =>
+        Alias(e, originalAttribute.name)(qualifiers = originalAttribute.qualifiers)
+    }
+    mappedAttributes
+  }
 
   override def toString = table.map(_ + ".").getOrElse("") + "*"
 }
