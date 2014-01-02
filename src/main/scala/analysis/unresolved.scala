@@ -1,7 +1,7 @@
 package catalyst
 package analysis
 
-import expressions.{Attribute, Expression}
+import expressions._
 import plans.logical.BaseRelation
 import trees.TreeNode
 
@@ -45,9 +45,11 @@ case class UnresolvedFunction(name: String, children: Seq[Expression]) extends E
 }
 
 /**
- * Represents all of the input attributes to a given relational operator, for example in "SELECT * FROM ...".
+ * Represents all of the input attributes to a given relational operator, for example in
+ * "SELECT * FROM ...".
  *
- * @param table an optional table that should be the target of the expansion.  If omitted all tables' columns are produced.
+ * @param table an optional table that should be the target of the expansion.  If omitted all
+ *              tables' columns are produced.
  */
 case class Star(table: Option[String]) extends Attribute with trees.LeafNode[Expression] {
   def name = throw new UnresolvedException(this, "exprId")
