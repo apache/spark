@@ -154,11 +154,18 @@ You can also pass an option `-c <numCores>` to control the number of cores that 
 
 The standalone cluster mode currently only supports a simple FIFO scheduler across applications.
 However, to allow multiple concurrent users, you can control the maximum number of resources each
-application will acquire.
+application will use.
 By default, it will acquire *all* cores in the cluster, which only makes sense if you just run one
-application at a time. You can cap the number of cores using
-`System.setProperty("spark.cores.max", "10")` (for example).
-This value must be set *before* initializing your SparkContext.
+application at a time. You can cap the number of cores by setting `spark.cores.max` in your
+[SparkConf](configuration.html#spark-properties). For example:
+
+{% highlight scala %}
+val conf = new SparkConf()
+             .setMaster(...)
+             .setAppName(...)
+             .set("spark.cores.max", "10")
+val sc = new SparkContext(conf)
+{% endhighlight %}
 
 
 # Monitoring and Logging

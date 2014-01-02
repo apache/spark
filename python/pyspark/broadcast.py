@@ -45,7 +45,18 @@ def _from_id(bid):
 
 
 class Broadcast(object):
+    """
+    A broadcast variable created with
+    L{SparkContext.broadcast()<pyspark.context.SparkContext.broadcast>}.
+    Access its value through C{.value}.
+    """
+
     def __init__(self, bid, value, java_broadcast=None, pickle_registry=None):
+        """
+        Should not be called directly by users -- use
+        L{SparkContext.broadcast()<pyspark.context.SparkContext.broadcast>}
+        instead.
+        """
         self.value = value
         self.bid = bid
         self._jbroadcast = java_broadcast

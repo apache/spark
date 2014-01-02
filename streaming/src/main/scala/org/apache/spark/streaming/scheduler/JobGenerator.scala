@@ -46,14 +46,14 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     }
   }))
   val clock = {
-    val clockClass = System.getProperty(
+    val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
     Class.forName(clockClass).newInstance().asInstanceOf[Clock]
   }
   val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
     longTime => eventProcessorActor ! GenerateJobs(new Time(longTime)))
   lazy val checkpointWriter = if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
-    new CheckpointWriter(ssc.checkpointDir, ssc.sparkContext.hadoopConfiguration)
+    new CheckpointWriter(ssc.conf, ssc.checkpointDir, ssc.sparkContext.hadoopConfiguration)
   } else {
     null
   }
@@ -65,7 +65,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
       startFirstTime()
     }
   }
-  
+
   def stop() {
     timer.stop()
     if (checkpointWriter != null) checkpointWriter.stop()
@@ -104,7 +104,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // or if the property is defined set it to that time
     if (clock.isInstanceOf[ManualClock]) {
       val lastTime = ssc.initialCheckpoint.checkpointTime.milliseconds
-      val jumpTime = System.getProperty("spark.streaming.manualClock.jump", "0").toLong
+      val jumpTime = ssc.sc.conf.get("spark.streaming.manualClock.jump", "0").toLong
       clock.asInstanceOf[ManualClock].setTime(lastTime + jumpTime)
     }
 
