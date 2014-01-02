@@ -19,7 +19,7 @@ abstract class BinaryArithmetic extends BinaryExpression {
   def dataType = {
     if(!resolved)
       throw new UnresolvedException(
-        this, s"datatype. Can not resolve due to  differing types ${left.dataType}, ${right.dataType}")
+        this, s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
     left.dataType
   }
 }
