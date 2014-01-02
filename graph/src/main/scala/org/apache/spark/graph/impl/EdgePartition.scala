@@ -70,8 +70,13 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    *         applied to each edge
    */
   def map[ED2: ClassManifest](iter: Iterator[ED2]): EdgePartition[ED2] = {
-    val newData = iter.toArray
-    assert(newData.size == data.size)
+    val newData = new Array[ED2](data.size)
+    var i = 0
+    while (iter.hasNext) {
+      newData(i) = iter.next()
+      i += 1
+    }
+    assert(newData.size == i)
     new EdgePartition(srcIds, dstIds, newData, index)
   }
 
