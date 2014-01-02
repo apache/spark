@@ -93,7 +93,7 @@ class SparkConf(object):
 
     def set(self, key, value):
         """Set a configuration property."""
-        self._jconf.set(key, value)
+        self._jconf.set(key, unicode(value))
         return self
 
     def setMaster(self, value):
@@ -132,13 +132,9 @@ class SparkConf(object):
             self._jconf.set(k, v)
         return self
 
-    def get(self, key):
-        """Get the configured value for some key, if set."""
-        return self._jconf.get(key)
-
-    def getOrElse(self, key, defaultValue):
-        """Get the value for some key, or return a default otherwise."""
-        return self._jconf.getOrElse(key, defaultValue)
+    def get(self, key, defaultValue=None):
+        """Get the configured value for some key, or return a default otherwise."""
+        return self._jconf.get(key, defaultValue)
 
     def getAll(self):
         """Get all values as a list of key-value pairs."""

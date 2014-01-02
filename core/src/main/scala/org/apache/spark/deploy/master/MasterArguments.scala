@@ -27,8 +27,8 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
   var host = Utils.localHostName()
   var port = 7077
   var webUiPort = 8080
-  
-  // Check for settings in environment variables 
+
+  // Check for settings in environment variables
   if (System.getenv("SPARK_MASTER_HOST") != null) {
     host = System.getenv("SPARK_MASTER_HOST")
   }
@@ -38,7 +38,7 @@ private[spark] class MasterArguments(args: Array[String], conf: SparkConf) {
   if (System.getenv("SPARK_MASTER_WEBUI_PORT") != null) {
     webUiPort = System.getenv("SPARK_MASTER_WEBUI_PORT").toInt
   }
-  if (conf.get("master.ui.port") != null) {
+  if (conf.contains("master.ui.port")) {
     webUiPort = conf.get("master.ui.port").toInt
   }
 

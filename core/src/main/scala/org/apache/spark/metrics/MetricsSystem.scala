@@ -65,7 +65,7 @@ import org.apache.spark.metrics.source.Source
 private[spark] class MetricsSystem private (val instance: String,
     conf: SparkConf) extends Logging {
 
-  val confFile = conf.getOrElse("spark.metrics.conf", null)
+  val confFile = conf.get("spark.metrics.conf", null)
   val metricsConfig = new MetricsConfig(Option(confFile))
 
   val sinks = new mutable.ArrayBuffer[Sink]

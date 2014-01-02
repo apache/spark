@@ -74,7 +74,7 @@ class SparkConfSuite extends FunSuite with LocalSparkContext {
     assert(!conf.contains("k4"), "conf contained k4")
     assert(conf.get("k1") === "v4")
     intercept[Exception] { conf.get("k4") }
-    assert(conf.getOrElse("k4", "not found") === "not found")
+    assert(conf.get("k4", "not found") === "not found")
     assert(conf.getOption("k1") === Some("v4"))
     assert(conf.getOption("k4") === None)
   }

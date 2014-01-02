@@ -33,7 +33,7 @@ private[spark] class SimrSchedulerBackend(
   val tmpPath = new Path(driverFilePath + "_tmp")
   val filePath = new Path(driverFilePath)
 
-  val maxCores = conf.getOrElse("spark.simr.executor.cores", "1").toInt
+  val maxCores = conf.get("spark.simr.executor.cores", "1").toInt
 
   override def start() {
     super.start()

@@ -311,7 +311,7 @@ private[spark] object Utils extends Logging {
    * multiple paths.
    */
   def getLocalDir(conf: SparkConf): String = {
-    conf.getOrElse("spark.local.dir",  System.getProperty("java.io.tmpdir")).split(',')(0)
+    conf.get("spark.local.dir",  System.getProperty("java.io.tmpdir")).split(',')(0)
   }
 
   /**
@@ -397,7 +397,7 @@ private[spark] object Utils extends Logging {
   }
 
   def localHostPort(conf: SparkConf): String = {
-    val retval = conf.getOrElse("spark.hostPort", null)
+    val retval = conf.get("spark.hostPort", null)
     if (retval == null) {
       logErrorWithStack("spark.hostPort not set but invoking localHostPort")
       return localHostName()

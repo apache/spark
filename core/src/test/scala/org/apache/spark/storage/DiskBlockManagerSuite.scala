@@ -27,8 +27,8 @@ import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
 import scala.util.Try
 import akka.actor.{Props, ActorSelection, ActorSystem}
 
-class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with BeforeAndAfterAll {
-  private val testConf = new SparkConf
+class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
+  private val testConf = new SparkConf(false)
   val rootDir0 = Files.createTempDir()
   rootDir0.deleteOnExit()
   val rootDir1 = Files.createTempDir()
@@ -38,9 +38,7 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
 
   // This suite focuses primarily on consolidation features,
   // so we coerce consolidation if not already enabled.
-  val consolidateProp = "spark.shuffle.consolidateFiles"
-  val oldConsolidate = Try(testConf.get(consolidateProp)).toOption
-  testConf.set(consolidateProp, "true")
+  testConf.set("spark.shuffle.consolidateFiles", "true")
 
   val shuffleBlockManager = new ShuffleBlockManager(null) {
     override def conf = testConf.clone
@@ -49,10 +47,6 @@ class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach with Before
   }
 
   var diskBlockManager: DiskBlockManager = _
-
-  override def afterAll() {
-    oldConsolidate.map(c => System.setProperty(consolidateProp, c))
-  }
 
   override def beforeEach() {
     diskBlockManager = new DiskBlockManager(shuffleBlockManager, rootDirs)

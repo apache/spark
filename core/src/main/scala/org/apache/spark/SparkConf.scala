@@ -42,6 +42,12 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
 
   /** Set a configuration variable. */
   def set(key: String, value: String): SparkConf = {
+    if (key == null) {
+      throw new NullPointerException("null key")
+    }
+    if (value == null) {
+      throw new NullPointerException("null value")
+    }
     settings(key) = value
     this
   }
@@ -51,26 +57,17 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
    * run locally with 4 cores, or "spark://master:7077" to run on a Spark standalone cluster.
    */
   def setMaster(master: String): SparkConf = {
-    if (master != null) {
-      settings("spark.master") = master
-    }
-    this
+    set("spark.master", master)
   }
 
   /** Set a name for your application. Shown in the Spark web UI. */
   def setAppName(name: String): SparkConf = {
-    if (name != null) {
-      settings("spark.app.name") = name
-    }
-    this
+    set("spark.app.name", name)
   }
 
   /** Set JAR files to distribute to the cluster. */
   def setJars(jars: Seq[String]): SparkConf = {
-    if (!jars.isEmpty) {
-      settings("spark.jars") = jars.mkString(",")
-    }
-    this
+    set("spark.jars", jars.mkString(","))
   }
 
   /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
@@ -84,8 +81,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
    * (for example spark.executorEnv.PATH) but this method makes them easier to set.
    */
   def setExecutorEnv(variable: String, value: String): SparkConf = {
-    settings("spark.executorEnv." + variable) = value
-    this
+    set("spark.executorEnv." + variable, value)
   }
 
   /**
@@ -112,10 +108,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
    * Set the location where Spark is installed on worker nodes.
    */
   def setSparkHome(home: String): SparkConf = {
-    if (home != null) {
-      settings("spark.home") = home
-    }
-    this
+    set("spark.home", home)
   }
 
   /** Set multiple parameters together */
@@ -132,9 +125,20 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
     this
   }
 
-  /** Get a parameter; throws an exception if it's not set */
+  /** Remove a parameter from the configuration */
+  def remove(key: String): SparkConf = {
+    settings.remove(key)
+    this
+  }
+
+  /** Get a parameter; throws a NoSuchElementException if it's not set */
   def get(key: String): String = {
-    settings(key)
+    settings.getOrElse(key, throw new NoSuchElementException(key))
+  }
+
+  /** Get a parameter, falling back to a default if not set */
+  def get(key: String, defaultValue: String): String = {
+    settings.getOrElse(key, defaultValue)
   }
 
   /** Get a parameter as an Option */
@@ -145,9 +149,19 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
   /** Get all parameters as a list of pairs */
   def getAll: Array[(String, String)] = settings.clone().toArray
 
-  /** Get a parameter, falling back to a default if not set */
-  def getOrElse(k: String, defaultValue: String): String = {
-    settings.getOrElse(k, defaultValue)
+  /** Get a parameter as an integer, falling back to a default if not set */
+  def getInt(key: String, defaultValue: Int): Int = {
+    getOption(key).map(_.toInt).getOrElse(defaultValue)
+  }
+
+  /** Get a parameter as a long, falling back to a default if not set */
+  def getLong(key: String, defaultValue: Long): Long = {
+    getOption(key).map(_.toLong).getOrElse(defaultValue)
+  }
+
+  /** Get a parameter as a double, falling back to a default if not set */
+  def getDouble(key: String, defaultValue: Double): Double = {
+    getOption(key).map(_.toDouble).getOrElse(defaultValue)
   }
 
   /** Get all executor environment variables set on this SparkConf */
