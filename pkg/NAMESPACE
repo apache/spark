@@ -11,6 +11,7 @@ exportMethods(
               "length",
               "lapply",
               "lapplyPartition",
+              "lapplyPartitionsWithIndex",
               "map",
               "partitionBy",
               "reduce",

@@ -246,10 +246,39 @@ setGeneric("lapplyPartition", function(X, FUN) {
 setMethod("lapplyPartition",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
+            lapplyPartitionsWithIndex(X, function(s, part) { FUN(part) })
+          })
+
+
+#' Return a new RDD by applying a function to each partition of this RDD, while
+#' tracking the index of the original partition.
+#'
+#' @param X The RDD to apply the transformation.
+#' @param FUN the transformation to apply on each partition; takes the partition
+#'        index and a list of elements in the particular partition.
+#' @return a new RDD created by the transformation.
+#' @rdname lapplyPartitionsWithIndex
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 5L)
+#' prod <- lapplyPartitionsWithIndex(rdd, function(split, part) {
+#'                                          split * Reduce("+", part) })
+#' collect(prod, flatten = FALSE) # 0, 7, 22, 45, 76
+#'}
+setGeneric("lapplyPartitionsWithIndex", function(X, FUN) {
+           standardGeneric("lapplyPartitionsWithIndex") })
+
+#' @rdname lapplyPartitionsWithIndex
+#' @aliases lapplyPartitionsWithIndex,RDD,function-method
+setMethod("lapplyPartitionsWithIndex",
+          signature(X = "RDD", FUN = "function"),
+          function(X, FUN) {
             # TODO: This is to handle anonymous functions. Find out a
             # better way to do this.
-            computeFunc <- function(part) {
-              FUN(part)
+            computeFunc <- function(split, part) {
+              FUN(split, part)
             }
             serializedFunc <- serialize("computeFunc",
                                         connection = NULL, ascii = TRUE)
@@ -271,6 +300,21 @@ setMethod("lapplyPartition",
             jrdd <- rddRef$asJavaRDD()
             RDD(jrdd, TRUE)
           })
+
+
+#' @rdname lapplyPartitionsWithIndex
+#' @export
+setGeneric("mapPartitionsWithIndex", function(X, FUN) {
+           standardGeneric("mapPartitionsWithIndex") })
+
+#' @rdname lapplyPartitionsWithIndex
+#' @aliases mapPartitionsWithIndex,RDD,function-method
+setMethod("mapPartitionsWithIndex",
+          signature(X = "RDD", FUN = "function"),
+          function(X, FUN) {
+            lapplyPartitionsWithIndex(X, FUN)
+          })
+
 
 #' Reduce across elements of an RDD.
 #'
@@ -380,6 +424,7 @@ setMethod("sample",
           signature(rdd = "RDD", withReplacement = "logical",
                     fraction = "numeric", seed = "integer"),
           function(rdd, withReplacement, fraction, seed) {
+
             jrdd <- .jcall(rdd@jrdd,
                            "Lorg/apache/spark/api/java/JavaRDD;",
                            "sample",

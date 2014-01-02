@@ -35,7 +35,8 @@ private class PairwiseRRDD[T: ClassTag](
 
     RRDD.startStdinThread(rLibDir, proc, hashFunc, dataSerialized,
       functionDependencies, packageNames,
-      firstParent[T].iterator(split, context), numPartitions)
+      firstParent[T].iterator(split, context), numPartitions,
+      split.index)
 
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
@@ -105,7 +106,8 @@ class RRDD[T: ClassTag](
     // Write -1 in numPartitions to indicate this is a normal RDD
     RRDD.startStdinThread(rLibDir, proc, func, dataSerialized,
       functionDependencies, packageNames,
-      firstParent[T].iterator(split, context), numPartitions = -1)
+      firstParent[T].iterator(split, context),
+      numPartitions = -1, split.index)
 
     // Return an iterator that read lines from the process's stdout
     val inputStream = new BufferedReader(new InputStreamReader(proc.getInputStream))
@@ -195,7 +197,8 @@ object RRDD {
       functionDependencies: Array[Byte],
       packageNames: Array[Byte],
       iter: Iterator[T],
-      numPartitions: Int) {
+      numPartitions: Int,
+      splitIndex: Int) {
 
     val tempDir =
       System.getProperty("spark.local.dir", System.getProperty("java.io.tmpdir")).split(',')(0)
@@ -214,6 +217,8 @@ object RRDD {
 
         printOut.println(tempFileName)
         printOut.println(rLibDir)
+
+        dataOut.writeInt(splitIndex)
 
         dataOut.writeInt(func.length)
         dataOut.write(func, 0, func.length)

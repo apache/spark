@@ -38,5 +38,11 @@ test_that("lapply with dependency", {
   multiples <- lapply(rdd, function(x) { fa * x })
   actual <- collect(multiples)
 
-  expect_equal(actual,  as.list(nums * 5))
+  expect_equal(actual, as.list(nums * 5))
+})
+
+test_that("lapplyPartitionsWithIndex on RDD", {
+  func <- function(splitIndex, part) { list(splitIndex, Reduce("+", part)) }
+  actual <- collect(lapplyPartitionsWithIndex(rdd, func), flatten = FALSE)
+  expect_equal(actual, list(list(0, 15), list(1, 40)))
 })
