@@ -41,8 +41,18 @@ test_that("lapply with dependency", {
   expect_equal(actual, as.list(nums * 5))
 })
 
-test_that("lapplyPartitionsWithIndex on RDD", {
+test_that("lapplyPartitionsWithIndex on RDDs", {
   func <- function(splitIndex, part) { list(splitIndex, Reduce("+", part)) }
   actual <- collect(lapplyPartitionsWithIndex(rdd, func), flatten = FALSE)
   expect_equal(actual, list(list(0, 15), list(1, 40)))
+
+  pairsRDD <- parallelize(sc, list(list(1, 2), list(3, 4), list(4, 8)), 1L)
+  partitionByParity <- function(key) { if (key %% 2 == 1) 0 else 1 }
+  mkTup <- function(splitIndex, part) { list(splitIndex, part) }
+  actual <- collect(lapplyPartitionsWithIndex(
+                      partitionBy(pairsRDD, 2L, partitionByParity),
+                      mkTup),
+                    FALSE)
+  expect_equal(actual, list(list(0, list(list(1, 2), list(3, 4))),
+                            list(1, list(list(4, 8)))))
 })
