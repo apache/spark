@@ -215,17 +215,18 @@ Available algorithms for gradient descent:
 
 # Singular Value Decomposition
 Singular Value Decomposition for Tall and Skinny matrices.
-Given an m x n matrix A, this will compute matrices U, S, V such that
-A = U * S * V^T
+Given an *m x n* matrix *A*, this will compute matrices *U, S, V* such that
+
+*A = U * S * V^T*
 
 There is no restriction on m, but we require n^2 doubles to fit in memory.
 Further, n should be less than m.
  
-The decomposition is computed by first computing A^TA = V S^2 V^T,
+The decomposition is computed by first computing *A^TA = V S^2 V^T*,
 computing svd locally on that (since n x n is small),
 from which we recover S and V. 
 Then we compute U via easy matrix multiplication
-as U =  A * V * S^-1
+as *U =  A * V * S^-1*
  
 Only singular vectors associated with singular values
 greater or equal to MIN_SVALUE are recovered. If there are k
