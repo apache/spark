@@ -65,11 +65,9 @@ object SVD {
       throw new IllegalArgumentException("Expecting a tall and skinny matrix")
     }
 
-    if (min_svalue < 1.0e-9) {
-      throw new IllegalArgumentException("Minimum singular value must be greater than 1e-9")
+    if (min_svalue < 1.0e-8) {
+      throw new IllegalArgumentException("Minimum singular value requested must be greater than 1e-9")
     }
-
-    val sc = data.sparkContext
 
     // Compute A^T A, assuming rows are sparse enough to fit in memory
     val rows = data.map(entry =>
@@ -79,7 +77,6 @@ object SVD {
                     cols.map{ case (colind2, mval2) =>
                             ((colind1, colind2), mval1*mval2) } }
     }.reduceByKey(_+_)
-
 
     // Construct jblas A^T A locally
     val ata = DoubleMatrix.zeros(n, n)
@@ -96,6 +93,8 @@ object SVD {
     if(sigma.isEmpty) {
       throw new Exception("All singular values are smaller than min_svalue: " + min_svalue)
     }
+
+    val sc = data.sparkContext
 
     // prepare V for returning
     val retV = sc.makeRDD(
