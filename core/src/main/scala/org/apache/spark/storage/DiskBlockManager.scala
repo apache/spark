@@ -92,9 +92,9 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
 
   /** Produces a unique block id and File suitable for intermediate results. */
   def createTempBlock(): (TempBlockId, File) = {
-    var blockId = new TempBlockId(UUID.randomUUID().toString)
+    var blockId = new TempBlockId(UUID.randomUUID())
     while (getFile(blockId).exists()) {
-      blockId = new TempBlockId(UUID.randomUUID().toString)
+      blockId = new TempBlockId(UUID.randomUUID())
     }
     (blockId, getFile(blockId))
   }

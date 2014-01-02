@@ -17,6 +17,8 @@
 
 package org.apache.spark.storage
 
+import java.util.UUID
+
 /**
  * Identifies a particular Block of data, usually associated with a single file.
  * A Block can be uniquely identified by its filename, but each type of Block has a different
@@ -68,8 +70,8 @@ private[spark] case class StreamBlockId(streamId: Int, uniqueId: Long) extends B
   def name = "input-" + streamId + "-" + uniqueId
 }
 
-/** Block associated with temporary data managed as blocks. */
-private[spark] case class TempBlockId(id: String) extends BlockId {
+/** Id associated with temporary data managed as blocks. Not serializable. */
+private[spark] case class TempBlockId(id: UUID) extends BlockId {
   def name = "temp_" + id
 }
 
@@ -85,7 +87,6 @@ private[spark] object BlockId {
   val BROADCAST_HELPER = "broadcast_([0-9]+)_([A-Za-z0-9]+)".r
   val TASKRESULT = "taskresult_([0-9]+)".r
   val STREAM = "input-([0-9]+)-([0-9]+)".r
-  val TEMP = "temp_(.*)".r
   val TEST = "test_(.*)".r
 
   /** Converts a BlockId "name" String back into a BlockId. */
