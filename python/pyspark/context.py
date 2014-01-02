@@ -92,11 +92,13 @@ class SparkContext(object):
             self.serializer = BatchedSerializer(self._unbatched_serializer,
                                                 batchSize)
 
-        # Set parameters passed directly to us on the conf; these operations will be
-        # no-ops if the parameters were None
-        self._conf.setMaster(master)
-        self._conf.setAppName(appName)
-        self._conf.setSparkHome(sparkHome)
+        # Set any parameters passed directly to us on the conf
+        if master:
+            self._conf.setMaster(master)
+        if appName:
+            self._conf.setAppName(appName)
+        if sparkHome:
+            self._conf.setSparkHome(sparkHome)
         if environment:
             for key, value in environment.iteritems():
                 self._conf.setExecutorEnv(key, value)
@@ -111,7 +113,7 @@ class SparkContext(object):
         # the classpath or an external config file
         self.master = self._conf.get("spark.master")
         self.appName = self._conf.get("spark.app.name")
-        self.sparkHome = self._conf.getOrElse("spark.home", None)
+        self.sparkHome = self._conf.get("spark.home", None)
         for (k, v) in self._conf.getAll():
             if k.startswith("spark.executorEnv."):
                 varName = k[len("spark.executorEnv."):]

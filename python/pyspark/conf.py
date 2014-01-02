@@ -134,7 +134,12 @@ class SparkConf(object):
 
     def get(self, key, defaultValue=None):
         """Get the configured value for some key, or return a default otherwise."""
-        return self._jconf.get(key, defaultValue)
+        if defaultValue == None:   # Py4J doesn't call the right get() if we pass None
+            if not self._jconf.contains(key):
+                return None
+            return self._jconf.get(key)
+        else:
+            return self._jconf.get(key, defaultValue)
 
     def getAll(self):
         """Get all values as a list of key-value pairs."""
