@@ -134,9 +134,9 @@ object FeederActor {
  *   <hostname> and <port> describe the AkkaSystem that Spark Sample feeder is running on.
  *
  * To run this example locally, you may run Feeder Actor as
- *    `$ ./run-example spark.streaming.examples.FeederActor 127.0.1.1 9999`
+ *    `$ ./bin/run-example spark.streaming.examples.FeederActor 127.0.1.1 9999`
  * and then run the example
- *    `$ ./run-example spark.streaming.examples.ActorWordCount local[2] 127.0.1.1 9999`
+ *    `$ ./bin/run-example spark.streaming.examples.ActorWordCount local[2] 127.0.1.1 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {

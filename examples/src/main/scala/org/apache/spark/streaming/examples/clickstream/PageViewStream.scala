@@ -25,8 +25,8 @@ import org.apache.spark.SparkContext._
   * operators available in Spark streaming.
   *
   * This should be used in tandem with PageViewStream.scala. Example:
-  * $ ./run-example spark.streaming.examples.clickstream.PageViewGenerator 44444 10
-  * $ ./run-example spark.streaming.examples.clickstream.PageViewStream errorRatePerZipCode localhost 44444
+  * $ ./bin/run-example spark.streaming.examples.clickstream.PageViewGenerator 44444 10
+  * $ ./bin/run-example spark.streaming.examples.clickstream.PageViewStream errorRatePerZipCode localhost 44444
   */
 object PageViewStream {
   def main(args: Array[String]) {

@@ -24,9 +24,9 @@ Once you've built Spark, the easiest way to start using it is the shell:
 Or, for the Python API, the Python shell (`./pyspark`).
 
 Spark also comes with several sample programs in the `examples` directory.
-To run one of them, use `./run-example <class> <params>`. For example:
+To run one of them, use `./bin/run-example <class> <params>`. For example:
 
-    ./run-example org.apache.spark.examples.SparkLR local[2]
+    ./bin/run-example org.apache.spark.examples.SparkLR local[2]
 
 will run the Logistic Regression example locally on 2 CPUs.
 
