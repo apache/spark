@@ -57,6 +57,25 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
   }
 
   /**
+   * Construct a new edge partition by using the edge attributes
+   * contained in the iterator.
+   *
+   * @note The input iterator should return edge attributes in the
+   * order of the edges returned by `EdgePartition.iterator` and
+   * should return attributes equal to the number of edges.
+   *
+   * @param f a function from an edge to a new attribute
+   * @tparam ED2 the type of the new attribute
+   * @return a new edge partition with the result of the function `f`
+   *         applied to each edge
+   */
+  def map[ED2: ClassManifest](iter: Iterator[ED2]): EdgePartition[ED2] = {
+    val newData = iter.toArray
+    assert(newData.size == data.size)
+    new EdgePartition(srcIds, dstIds, newData, index)
+  }
+
+  /**
    * Apply the function f to all edges in this partition.
    *
    * @param f an external state mutating user defined function.
