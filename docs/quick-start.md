@@ -277,11 +277,11 @@ We can pass Python functions to Spark, which are automatically serialized along 
 For applications that use custom classes or third-party libraries, we can add those code dependencies to SparkContext to ensure that they will be available on remote machines; this is described in more detail in the [Python programming guide](python-programming-guide.html).
 `SimpleApp` is simple enough that we do not need to specify any code dependencies.
 
-We can run this application using the `pyspark` script:
+We can run this application using the `bin/pyspark` script:
 
 {% highlight python %}
 $ cd $SPARK_HOME
-$ ./pyspark SimpleApp.py
+$ ./bin/pyspark SimpleApp.py
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight python %}

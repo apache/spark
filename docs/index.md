@@ -35,7 +35,7 @@ or `local` to run locally with one thread, or `local[N]` to run locally with N t
 `local` for testing.
 
 Finally, you can run Spark interactively through modified versions of the Scala shell (`./bin/spark-shell`) or
-Python interpreter (`./pyspark`). These are a great way to learn the framework.
+Python interpreter (`./bin/pyspark`). These are a great way to learn the framework.
 
 # Launching on a Cluster
 

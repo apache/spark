@@ -21,7 +21,7 @@ Once you've built Spark, the easiest way to start using it is the shell:
 
     ./bin/spark-shell
 
-Or, for the Python API, the Python shell (`./pyspark`).
+Or, for the Python API, the Python shell (`./bin/pyspark`).
 
 Spark also comes with several sample programs in the `examples` directory.
 To run one of them, use `./bin/run-example <class> <params>`. For example:
