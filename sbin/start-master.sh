@@ -17,16 +17,17 @@
 # limitations under the License.
 #
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+# Starts the master on the machine this script is executed on.
 
-. "$bin/spark-config.sh"
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
+
+. "$sbin/spark-config.sh"
 
 if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
   . "${SPARK_CONF_DIR}/spark-env.sh"
 fi
 
-# Find the port number for the master
 if [ "$SPARK_MASTER_PORT" = "" ]; then
   SPARK_MASTER_PORT=7077
 fi
@@ -35,14 +36,17 @@ if [ "$SPARK_MASTER_IP" = "" ]; then
   SPARK_MASTER_IP=`hostname`
 fi
 
-# Launch the slaves
-if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  exec "$bin/slaves.sh" cd "$SPARK_HOME" \; "$bin/start-slave.sh" 1 spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT
-else
-  if [ "$SPARK_WORKER_WEBUI_PORT" = "" ]; then
-    SPARK_WORKER_WEBUI_PORT=8081
-  fi
-  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$bin/slaves.sh" cd "$SPARK_HOME" \; "$bin/start-slave.sh" $(( $i + 1 ))  spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT --webui-port $(( $SPARK_WORKER_WEBUI_PORT + $i ))
-  done
+if [ "$SPARK_MASTER_WEBUI_PORT" = "" ]; then
+  SPARK_MASTER_WEBUI_PORT=8080
 fi
+
+# Set SPARK_PUBLIC_DNS so the master report the correct webUI address to the slaves
+if [ "$SPARK_PUBLIC_DNS" = "" ]; then
+    # If we appear to be running on EC2, use the public address by default:
+    # NOTE: ec2-metadata is installed on Amazon Linux AMI. Check based on that and hostname
+    if command -v ec2-metadata > /dev/null || [[ `hostname` == *ec2.internal ]]; then
+        export SPARK_PUBLIC_DNS=`wget -q -O - http://instance-data.ec2.internal/latest/meta-data/public-hostname`
+    fi
+fi
+
+"$sbin"/spark-daemon.sh start org.apache.spark.deploy.master.Master 1 --ip $SPARK_MASTER_IP --port $SPARK_MASTER_PORT --webui-port $SPARK_MASTER_WEBUI_PORT

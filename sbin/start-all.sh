@@ -17,11 +17,18 @@
 # limitations under the License.
 #
 
-# Starts the master on the machine this script is executed on.
+# Start all spark daemons.
+# Starts the master on this node.
+# Starts a worker on each node specified in conf/slaves
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
-. "$bin/spark-config.sh"
+# Load the Spark configuration
+. "$sbin/spark-config.sh"
 
-"$bin"/spark-daemon.sh stop org.apache.spark.deploy.master.Master 1
+# Start Master
+"$sbin"/start-master.sh
+
+# Start Workers
+"$sbin"/start-slaves.sh

@@ -21,12 +21,12 @@
 # Run this on the master nde
 
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
 # Load the Spark configuration
-. "$bin/spark-config.sh"
+. "$sbin/spark-config.sh"
 
 # Stop the slaves, then the master
-"$bin"/stop-slaves.sh
-"$bin"/stop-master.sh
+"$sbin"/stop-slaves.sh
+"$sbin"/stop-master.sh

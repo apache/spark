@@ -20,8 +20,8 @@
 # Usage: start-slave.sh <worker#> <master-spark-URL>
 #   where <master-spark-URL> is like "spark://localhost:7077"
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
 # Set SPARK_PUBLIC_DNS so slaves can be linked in master web UI
 if [ "$SPARK_PUBLIC_DNS" = "" ]; then
@@ -32,4 +32,4 @@ if [ "$SPARK_PUBLIC_DNS" = "" ]; then
     fi
 fi
 
-"$bin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker "$@"
+"$sbin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker "$@"
