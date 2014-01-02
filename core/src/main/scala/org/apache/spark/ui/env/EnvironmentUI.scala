@@ -48,12 +48,15 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
     def jvmTable =
       UIUtils.listingTable(Seq("Name", "Value"), jvmRow, jvmInformation, fixedWidth = true)
 
-    val properties = System.getProperties.iterator.toSeq
-    val classPathProperty = properties.find { case (k, v) =>
-      k.contains("java.class.path")
+    val sparkProperties = sc.conf.getAll.sorted
+
+    val systemProperties = System.getProperties.iterator.toSeq
+    val classPathProperty = systemProperties.find { case (k, v) =>
+      k == "java.class.path"
     }.getOrElse(("", ""))
-    val sparkProperties = properties.filter(_._1.startsWith("spark")).sorted
-    val otherProperties = properties.diff(sparkProperties :+ classPathProperty).sorted
+    val otherProperties = systemProperties.filter { case (k, v) =>
+      k != "java.class.path" && !k.startsWith("spark.")
+    }.sorted
 
     val propertyHeaders = Seq("Name", "Value")
     def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
@@ -63,7 +66,7 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
       UIUtils.listingTable(propertyHeaders, propertyRow, otherProperties, fixedWidth = true)
 
     val classPathEntries = classPathProperty._2
-        .split(System.getProperty("path.separator", ":"))
+        .split(sc.conf.get("path.separator", ":"))
         .filterNot(e => e.isEmpty)
         .map(e => (e, "System Classpath"))
     val addedJars = sc.addedJars.iterator.toSeq.map{case (path, time) => (path, "Added By User")}

@@ -74,7 +74,8 @@ class DiskBlockObjectWriter(
     file: File,
     serializer: Serializer,
     bufferSize: Int,
-    compressStream: OutputStream => OutputStream)
+    compressStream: OutputStream => OutputStream,
+    syncWrites: Boolean)
   extends BlockObjectWriter(blockId)
   with Logging
 {
@@ -96,8 +97,6 @@ class DiskBlockObjectWriter(
     override def close() = out.close()
     override def flush() = out.flush()
   }
-
-  private val syncWrites = System.getProperty("spark.shuffle.sync", "false").toBoolean
 
   /** The file channel, used for repositioning / truncating the file. */
   private var channel: FileChannel = null

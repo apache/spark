@@ -39,6 +39,7 @@ import org.apache.spark.api.java.function.{Function => JFunction, Function2 => J
 import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.SparkConf
 import org.apache.spark.streaming.scheduler.StreamingListener
 
 /**
@@ -122,6 +123,14 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    */
   def this(sparkContext: JavaSparkContext, batchDuration: Duration) =
     this(new StreamingContext(sparkContext.sc, batchDuration))
+
+  /**
+   * Creates a StreamingContext using an existing SparkContext.
+   * @param conf A Spark application configuration
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   */
+  def this(conf: SparkConf, batchDuration: Duration) =
+    this(new StreamingContext(conf, batchDuration))
 
   /**
    * Re-creates a StreamingContext from a checkpoint file.
