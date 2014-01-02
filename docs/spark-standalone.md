@@ -20,7 +20,7 @@ then modify `conf/spark-env.sh` in the `dist/` directory before deploying to all
 
 You can start a standalone master server by executing:
 
-    ./bin/start-master.sh
+    ./sbin/start-master.sh
 
 Once started, the master will print out a `spark://HOST:PORT` URL for itself, which you can use to connect workers to it,
 or pass as the "master" argument to `SparkContext`. You can also find this URL on

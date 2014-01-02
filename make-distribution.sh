@@ -31,9 +31,9 @@
 #
 # Recommended deploy/testing procedure (standalone mode):
 # 1) Rsync / deploy the dist/ dir to one host
-# 2) cd to deploy dir; ./bin/start-master.sh
+# 2) cd to deploy dir; ./sbin/start-master.sh
 # 3) Verify master is up by visiting web page, ie http://master-ip:8080.  Note the spark:// URL.
-# 4) ./bin/start-slave.sh 1 <<spark:// URL>>
+# 4) ./sbin/start-slave.sh 1 <<spark:// URL>>
 # 5) MASTER="spark://my-master-ip:7077" ./bin/spark-shell
 #
 
