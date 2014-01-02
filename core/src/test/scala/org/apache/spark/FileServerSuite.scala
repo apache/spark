@@ -75,7 +75,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     assert(result.toSet === Set((1,200), (2,300), (3,500)))
   }
 
-  test ("Dynamically adding JARS locally") {
+  ignore ("Dynamically adding JARS locally") {
     sc = new SparkContext("local[4]", "test")
     val sampleJarFile = getClass.getClassLoader.getResource("uncommons-maths-1.2.2.jar").getFile()
     sc.addJar(sampleJarFile)
@@ -105,7 +105,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     assert(result.toSet === Set((1,200), (2,300), (3,500)))
   }
 
-  test ("Dynamically adding JARS on a standalone cluster") {
+  ignore ("Dynamically adding JARS on a standalone cluster") {
     sc = new SparkContext("local-cluster[1,1,512]", "test")
     val sampleJarFile = getClass.getClassLoader.getResource("uncommons-maths-1.2.2.jar").getFile()
     sc.addJar(sampleJarFile)
@@ -121,7 +121,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     assert(result.toSet === Set((1,2), (2,7), (3,121)))
   }
 
-  test ("Dynamically adding JARS on a standalone cluster using local: URL") {
+  ignore ("Dynamically adding JARS on a standalone cluster using local: URL") {
     sc = new SparkContext("local-cluster[1,1,512]", "test")
     val sampleJarFile = getClass.getClassLoader.getResource("uncommons-maths-1.2.2.jar").getFile()
     sc.addJar(sampleJarFile.replace("file", "local"))
