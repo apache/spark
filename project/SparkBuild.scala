@@ -324,7 +324,14 @@ object SparkBuild extends Build {
       Seq(
          base / "../common/src/main/scala"
       )
+    },
+
+    unmanagedSourceDirectories in Test <++= baseDirectory { base =>
+      Seq(
+         base / "../common/src/test/scala"
+      )
     }
+
   ) ++ extraYarnSettings
 
   def yarn20Settings = yarnCommonSettings ++ Seq(
