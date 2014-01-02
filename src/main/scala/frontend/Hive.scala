@@ -467,6 +467,8 @@ object HiveQl {
             joinType = joinType.remove(joinType.length - 1))
       }
 
+      val groups = (0 until joinExpressions.head.size).map(i => Coalesce(joinExpressions.map(_(i))))
+
       // Unique join is not really the same as an outer join so we must group together results where
       // the joinExpressions are the same, taking the First of each value is only okay because the
       // user of a unique join is implicitly promising that there is only one result.
@@ -475,7 +477,7 @@ object HiveQl {
       // worth the number of hacks that will be required to implement it.  Namely, we need to add
       // some sort of mapped star expansion that would expand all child output row to be similarly
       // named output expressions where some aggregate expression has been applied (i.e. First).
-      ??? // Aggregate(joinExpressions.map(Coalesce(_)), Star(None) :: Nil, joinedResult)
+      ??? /// Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
 
     /* Table with Alias */
     case Token("TOK_TABREF",
@@ -563,7 +565,6 @@ object HiveQl {
 
   val numericAstTypes =
     Seq(HiveParser.Number, HiveParser.TinyintLiteral, HiveParser.SmallintLiteral, HiveParser.BigintLiteral)
-
 
   /* Case insensitive matches */
   val COUNT = "(?i)COUNT".r
