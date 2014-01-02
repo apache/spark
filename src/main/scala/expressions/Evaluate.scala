@@ -172,8 +172,17 @@ object Evaluate extends Logging {
       case GreaterThanOrEqual(l, r) => n2(l, r, _.gteq(_, _))
       case LessThan(l, r) => n2(l, r, _.lt(_, _))
       case LessThanOrEqual(l, r) => n2(l, r, _.lteq(_, _))
+
       case IsNull(e) => eval(e) == null
       case IsNotNull(e) => eval(e) != null
+      case Coalesce(exprs) =>
+        var currentExpression: Any = null
+        var i = 0
+        while (i < exprs.size && currentExpression == null) {
+          currentExpression = eval(exprs(i))
+          i += 1
+        }
+        currentExpression
 
       /* Casts */
       // toString
