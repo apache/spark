@@ -20,17 +20,19 @@ package org.apache.spark.streaming
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
 import akka.zeromq.Subscribe
+import akka.util.ByteString
 
 import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.scheduler.StreamingListener
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.receivers.ActorReceiver
 import org.apache.spark.streaming.receivers.ReceiverSupervisorStrategy
 import org.apache.spark.streaming.receivers.ZeroMQReceiver
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.MetadataCleaner
 import org.apache.spark.streaming.receivers.ActorReceiver
+import org.apache.spark.streaming.scheduler.{JobScheduler, NetworkInputTracker}
 
 import scala.collection.mutable.Queue
 import scala.collection.Map
@@ -38,17 +40,15 @@ import scala.reflect.ClassTag
 
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.UUID
 
 import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
+
 import twitter4j.Status
 import twitter4j.auth.Authorization
-import org.apache.spark.streaming.scheduler._
-import akka.util.ByteString
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -86,7 +86,6 @@ class StreamingContext private (
     this(StreamingContext.createNewSparkContext(master, appName, sparkHome, jars, environment),
          null, batchDuration)
   }
-
 
   /**
    * Re-create a StreamingContext from a checkpoint file.
@@ -139,7 +138,7 @@ class StreamingContext private (
 
   protected[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
-      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(cp_.checkpointDir), true)
+      sc.setCheckpointDir(cp_.checkpointDir)
       cp_.checkpointDir
     } else {
       null
@@ -174,8 +173,12 @@ class StreamingContext private (
    */
   def checkpoint(directory: String) {
     if (directory != null) {
-      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(directory))
-      checkpointDir = directory
+      val path = new Path(directory)
+      val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+      fs.mkdirs(path)
+      val fullPath = fs.getFileStatus(path).getPath().toString
+      sc.setCheckpointDir(fullPath)
+      checkpointDir = fullPath
     } else {
       checkpointDir = null
     }
@@ -366,7 +369,8 @@ class StreamingContext private (
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
-   * File names starting with . are ignored.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
@@ -385,6 +389,8 @@ class StreamingContext private (
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system.
    * @param directory HDFS directory to monitor for new file
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
@@ -405,7 +411,9 @@ class StreamingContext private (
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
-   * as Text and input format as TextInputFormat). File names starting with . are ignored.
+   * as Text and input format as TextInputFormat). Files must be written to the
+   * monitored directory by "moving" them from another location within the same
+   * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): DStream[String] = {
@@ -596,9 +604,5 @@ object StreamingContext {
     } else {
       prefix + "-" + time.milliseconds + "." + suffix
     }
-  }
-
-  protected[streaming] def getSparkCheckpointDir(sscCheckpointDir: String): String = {
-    new Path(sscCheckpointDir, UUID.randomUUID.toString).toString
   }
 }
