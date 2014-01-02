@@ -72,9 +72,15 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
           if(left == null && right == null)
             0
           else if(left == null)
-            -1
+            if(curDirection == Ascending)
+              -1
+            else
+              1
           else if(right == null)
-            1
+            if(curDirection == Ascending)
+              1
+            else
+              -1
           else if(curDataType == IntegerType)
             if(curDirection == Ascending)
               left.asInstanceOf[Int] compare right.asInstanceOf[Int]

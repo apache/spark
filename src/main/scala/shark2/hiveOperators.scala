@@ -60,11 +60,18 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
       hadoopReader.makeRDDForPartitionedTable(relation.hiveQlPartitions)
 
   def execute() = {
-    inputRdd.map {
-      case Array(struct: LazyStruct, partitionKeys: Array[String]) =>
-        buildRow(attributeFunctions.map(_(struct, partitionKeys)))
-      case struct: LazyStruct =>
-        buildRow(attributeFunctions.map(_(struct, Array.empty)))
+    inputRdd.map { row =>
+      val values = row match {
+        case Array(struct: LazyStruct, partitionKeys: Array[String]) =>
+          attributeFunctions.map(_(struct, partitionKeys))
+        case struct: LazyStruct =>
+          attributeFunctions.map(_(struct, Array.empty))
+      }
+      buildRow(values.map {
+        case "NULL" => null
+        case "null" => null
+        case other => other
+      })
     }
   }
 
