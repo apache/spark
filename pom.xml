@@ -722,7 +722,7 @@
 
   <profiles>
     <profile>
-      <id>hadoop2-yarn</id>
+      <id>yarn-alpha</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
@@ -738,7 +738,7 @@
     </profile>
 
     <profile>
-      <id>hadoop2.2-yarn</id>
+      <id>yarn</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
         <hadoop.version>2.2.0</hadoop.version>

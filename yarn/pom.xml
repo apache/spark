@@ -89,16 +89,16 @@
 
   <profiles>
     <profile>
-      <id>hadoop2-yarn</id>
+      <id>yarn-alpha</id>
       <modules>
-        <module>2.0</module>
+        <module>alpha</module>
       </modules>
     </profile>
 
     <profile>
-      <id>hadoop2.2-yarn</id>
+      <id>yarn</id>
       <modules>
-        <module>2.2</module>
+        <module>stable</module>
       </modules>
     </profile>
   </profiles>

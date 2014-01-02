@@ -25,9 +25,9 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-yarn-2.0_2.10</artifactId>
+  <artifactId>spark-yarn-alpha_2.10</artifactId>
   <packaging>jar</packaging>
-  <name>Spark Project YARN 2.0</name>
+  <name>Spark Project YARN Alpha API</name>
   <url>http://spark.incubator.apache.org/</url>
 
   <build>
