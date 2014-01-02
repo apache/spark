@@ -23,7 +23,10 @@ import org.apache.spark.rdd.RDD
 
 import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 
-
+/**
+ * Top-level methods for calling Singular Value Decomposition
+ * NOTE: All matrices are in 1-indexed sparse format RDD[((int, int), value)]
+ */
 object SVD {
 /**
  * Singular Value Decomposition for Tall and Skinny matrices.
