@@ -73,7 +73,7 @@ object SVD {
     }
 
     if (min_svalue < 1.0e-8) {
-      throw new IllegalArgumentException("Minimum singular value requested must be greater than 1e-9")
+      throw new IllegalArgumentException("Minimum singular value requested is too small")
     }
 
     // Compute A^T A, assuming rows are sparse enough to fit in memory
