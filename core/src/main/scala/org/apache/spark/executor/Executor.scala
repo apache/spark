@@ -142,11 +142,6 @@ private[spark] class Executor(
     val tr = runningTasks.get(taskId)
     if (tr != null) {
       tr.kill()
-      // We remove the task also in the finally block in TaskRunner.run.
-      // The reason we need to remove it here is because killTask might be called before the task
-      // is even launched, and never reaching that finally block. ConcurrentHashMap's remove is
-      // idempotent.
-      runningTasks.remove(taskId)
     }
   }
 
@@ -167,6 +162,8 @@ private[spark] class Executor(
 
   class TaskRunner(execBackend: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer)
     extends Runnable {
+
+    object TaskKilledException extends Exception
 
     @volatile private var killed = false
     @volatile private var task: Task[Any] = _
@@ -201,9 +198,11 @@ private[spark] class Executor(
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
         if (killed) {
-          logInfo("Executor killed task " + taskId)
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
-          return
+          // Throw an exception rather than returning, because returning within a try{} block
+          // causes a NonLocalReturnControl exception to be thrown. The NonLocalReturnControl
+          // exception will be caught by the catch block, leading to an incorrect ExceptionFailure
+          // for the task.
+          throw TaskKilledException
         }
 
         attemptedTask = Some(task)
@@ -217,9 +216,7 @@ private[spark] class Executor(
 
         // If the task has been killed, let's fail it.
         if (task.killed) {
-          logInfo("Executor killed task " + taskId)
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
-          return
+          throw TaskKilledException
         }
 
         for (m <- task.metrics) {
@@ -255,6 +252,11 @@ private[spark] class Executor(
         case ffe: FetchFailedException => {
           val reason = ffe.toTaskEndReason
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
+        }
+
+        case TaskKilledException => {
+          logInfo("Executor killed task " + taskId)
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
         }
 
         case t: Throwable => {
