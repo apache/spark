@@ -28,6 +28,7 @@ import org.apache.spark.api.java.function.PairFunction;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.regex.Pattern;
 
 /**
  * Computes the PageRank of URLs from an input file. Input file should
@@ -38,7 +39,12 @@ import java.util.ArrayList;
  * ...
  * where URL and their neighbors are separated by space(s).
  */
-public class JavaPageRank {
+public final class JavaPageRank {
+  private static final Pattern SPACES = Pattern.compile("\\s+");
+
+  private JavaPageRank() {
+  }
+
   private static class Sum extends Function2<Double, Double, Double> {
     @Override
     public Double call(Double a, Double b) {
@@ -66,7 +72,7 @@ public class JavaPageRank {
     JavaPairRDD<String, List<String>> links = lines.map(new PairFunction<String, String, String>() {
       @Override
       public Tuple2<String, String> call(String s) {
-        String[] parts = s.split("\\s+");
+        String[] parts = SPACES.split(s);
         return new Tuple2<String, String>(parts[0], parts[1]);
       }
     }).distinct().groupByKey().cache();
@@ -74,7 +80,7 @@ public class JavaPageRank {
     // Loads all URLs with other URL(s) link to from input file and initialize ranks of them to one.
     JavaPairRDD<String, Double> ranks = links.mapValues(new Function<List<String>, Double>() {
       @Override
-      public Double call(List<String> rs) throws Exception {
+      public Double call(List<String> rs) {
         return 1.0;
       }
     });
@@ -97,7 +103,7 @@ public class JavaPageRank {
       // Re-calculates URL ranks based on neighbor contributions.
       ranks = contribs.reduceByKey(new Sum()).mapValues(new Function<Double, Double>() {
         @Override
-        public Double call(Double sum) throws Exception {
+        public Double call(Double sum) {
           return 0.15 + sum * 0.85;
         }
       });

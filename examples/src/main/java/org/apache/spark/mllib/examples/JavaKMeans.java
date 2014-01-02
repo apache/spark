@@ -25,20 +25,25 @@ import org.apache.spark.mllib.clustering.KMeans;
 import org.apache.spark.mllib.clustering.KMeansModel;
 
 import java.util.Arrays;
-import java.util.StringTokenizer;
+import java.util.regex.Pattern;
 
 /**
  * Example using MLLib KMeans from Java.
  */
-public class JavaKMeans {
+public final class JavaKMeans {
+
+  private JavaKMeans() {
+  }
 
   static class ParsePoint extends Function<String, double[]> {
+    private static final Pattern SPACE = Pattern.compile(" ");
+
+    @Override
     public double[] call(String line) {
-      StringTokenizer tok = new StringTokenizer(line, " ");
-      int numTokens = tok.countTokens();
-      double[] point = new double[numTokens];
-      for (int i = 0; i < numTokens; ++i) {
-        point[i] = Double.parseDouble(tok.nextToken());
+      String[] tok = SPACE.split(line);
+      double[] point = new double[tok.length];
+      for (int i = 0; i < tok.length; ++i) {
+        point[i] = Double.parseDouble(tok[i]);
       }
       return point;
     }
