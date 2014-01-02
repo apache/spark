@@ -210,3 +210,55 @@ at each iteration.
 Available algorithms for gradient descent:
 
 * [GradientDescent](api/mllib/index.html#org.apache.spark.mllib.optimization.GradientDescent)
+
+
+
+# Singular Value Decomposition
+Singular Value Decomposition for Tall and Skinny matrices.
+Given an m x n matrix A, this will compute matrices U, S, V such that
+A = U * S * V^T
+
+There is no restriction on m, but we require n^2 doubles to fit in memory.
+Further, n should be less than m.
+ 
+The decomposition is computed by first computing A^TA = V S^2 V^T,
+computing svd locally on that (since n x n is small),
+from which we recover S and V. 
+Then we compute U via easy matrix multiplication
+as U =  A * V * S^-1
+ 
+Only singular vectors associated with singular values
+greater or equal to MIN_SVALUE are recovered. If there are k
+such values, then the dimensions of the return will be:
+
+S is k x k and diagonal, holding the singular values on diagonal
+U is m x k and satisfies U^T*U = eye(k)
+V is n x k and satisfies V^TV = eye(k)
+
+All input and output is expected in sparse matrix format, 1-indexed
+as tuples of the form ((i,j),value) all in RDDs
+
+{% highlight scala %}
+
+import org.apache.spark.SparkContext
+import org.apache.spark.mllib.linalg.SVD
+
+// Load and parse the data file
+val data = sc.textFile("mllib/data/als/test.data").map { line =>
+      val parts = line.split(',')
+      ((parts(0).toInt, parts(1).toInt), parts(2).toDouble)
+}
+val m = 4
+val n = 4
+
+// recover singular vectors for singular values at or above 1e-5
+val (u, s, v) = SVD.sparseSVD(data, m, n, 1e-5)
+
+println("singular values = " + s.toArray.mkString)
+
+{% endhighlight %}
+
+
+
+
+
