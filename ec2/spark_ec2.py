@@ -636,7 +636,7 @@ def get_partition(total, num_partitions, current_partitions):
 def real_main():
   (opts, action, cluster_name) = parse_args()
   try:
-    conn = ec2.connect_to_region(opts.region,aws_access_key_id="AKIAI2EGAQ7GYNL4LRAA", aws_secret_access_key="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")
+    conn = ec2.connect_to_region(opts.region)
   except Exception as e:
     print >> stderr, (e)
     sys.exit(1)
