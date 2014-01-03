@@ -1,10 +1,19 @@
-.DS_Store
+
+# Scala compilation
 target/
+
+# IntelliJ files
+*.iml
 .idea/
+.idea_modules/
+
+# Hive files
 metastore_db/
 metastore/
 warehouse/
-TempStatsStore/
-hs_err_*.log
 derby.log
-.idea_modules/
+hs_err_*.log
+TempStatsStore/
+
+# Mac OS X
+.DS_Store
