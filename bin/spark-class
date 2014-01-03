@@ -128,7 +128,7 @@ if [ -e "$TOOLS_DIR"/target/spark-tools*[0-9Tg].jar ]; then
 fi
 
 # Compute classpath using external script
-CLASSPATH=`$FWDIR/sbin/compute-classpath.sh`
+CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
 
 if [ "$1" == "org.apache.spark.tools.JavaAPICompletenessChecker" ]; then
   CLASSPATH="$CLASSPATH:$SPARK_TOOLS_JAR"

@@ -122,7 +122,7 @@ private[spark] class ExecutorRunner(
     // Figure out our classpath with the external compute-classpath script
     val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
     val classPath = Utils.executeAndGetOutput(
-        Seq(sparkHome + "/sbin/compute-classpath" + ext),
+        Seq(sparkHome + "/bin/compute-classpath" + ext),
         extraEnvironment=appDesc.command.environment)
 
     Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts

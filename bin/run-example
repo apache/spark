@@ -61,7 +61,7 @@ fi
 
 # Since the examples JAR ideally shouldn't include spark-core (that dependency should be
 # "provided"), also add our standard Spark classpath, built using compute-classpath.sh.
-CLASSPATH=`$FWDIR/sbin/compute-classpath.sh`
+CLASSPATH=`$FWDIR/bin/compute-classpath.sh`
 CLASSPATH="$SPARK_EXAMPLES_JAR:$CLASSPATH"
 
 if $cygwin; then
