@@ -261,7 +261,7 @@ private[yarn] class YarnAllocationHandler(
           }
 
           new Thread(
-            new WorkerRunnable(container, conf, driverUrl, workerId,
+            new WorkerRunnable(container, conf, sparkConf, driverUrl, workerId,
               workerHostname, workerMemory, workerCores)
           ).start()
         }

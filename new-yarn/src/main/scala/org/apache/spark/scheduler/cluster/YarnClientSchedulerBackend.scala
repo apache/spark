@@ -67,8 +67,8 @@ private[spark] class YarnClientSchedulerBackend(
       "--master-class", "org.apache.spark.deploy.yarn.WorkerLauncher"
     )
 
-    val args = new ClientArguments(argsArray)
-    client = new Client(args)
+    val args = new ClientArguments(argsArray, conf)
+    client = new Client(args, conf)
     appId = client.runApp()
     waitForApp()
   }
