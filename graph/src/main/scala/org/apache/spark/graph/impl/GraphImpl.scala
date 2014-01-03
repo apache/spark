@@ -47,11 +47,11 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   /** Return a RDD that brings edges together with their source and destination vertices. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
-    val vdManifest = classTag[VD]
-    val edManifest = classTag[ED]
+    val vdTag = classTag[VD]
+    val edTag = classTag[ED]
     edges.zipEdgePartitions(replicatedVertexView.get(true, true)) { (pid, ePart, vPartIter) =>
       val (_, vPart) = vPartIter.next()
-      new EdgeTripletIterator(vPart.index, vPart.values, ePart)(vdManifest, edManifest)
+      new EdgeTripletIterator(vPart.index, vPart.values, ePart)(vdTag, edTag)
     }
   }
 
@@ -65,7 +65,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   override def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
     val numPartitions = edges.partitions.size
-    val edManifest = classTag[ED]
+    val edTag = classTag[ED]
     val newEdges = new EdgeRDD(edges.map { e =>
       val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
 
@@ -74,7 +74,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     }
       .partitionBy(new HashPartitioner(numPartitions))
       .mapPartitionsWithIndex( { (pid, iter) =>
-        val builder = new EdgePartitionBuilder[ED]()(edManifest)
+        val builder = new EdgePartitionBuilder[ED]()(edTag)
         iter.foreach { message =>
           val data = message.data
           builder.add(data._1, data._2, data._3)
@@ -180,7 +180,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       f: (Pid, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
     // Use an explicit manifest in PrimitiveKeyOpenHashMap init so we don't pull in the implicit
     // manifest from GraphImpl (which would require serializing GraphImpl).
-    val vdManifest = classTag[VD]
+    val vdTag = classTag[VD]
     val newEdgePartitions =
       edges.zipEdgePartitions(replicatedVertexView.get(true, true)) {
         (ePid, edgePartition, vTableReplicatedIter) =>
@@ -210,11 +210,11 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     val newVerts = vertices.mapVertexPartitions(_.filter(vpred))
 
     // Filter the edges
-    val edManifest = classTag[ED]
+    val edTag = classTag[ED]
     val newEdges = new EdgeRDD[ED](triplets.filter { et =>
       vpred(et.srcId, et.srcAttr) && vpred(et.dstId, et.dstAttr) && epred(et)
     }.mapPartitionsWithIndex( { (pid, iter) =>
-      val builder = new EdgePartitionBuilder[ED]()(edManifest)
+      val builder = new EdgePartitionBuilder[ED]()(edTag)
       iter.foreach { et => builder.add(et.srcId, et.dstId, et.attr) }
       val edgePartition = builder.toEdgePartition
       Iterator((pid, edgePartition))

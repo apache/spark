@@ -76,10 +76,10 @@ class EdgeRDD[@specialized ED: ClassTag](
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgeRDD[ED2])
       (f: (Vid, Vid, ED, ED2) => ED3): EdgeRDD[ED3] = {
-    val ed2Manifest = classTag[ED2]
-    val ed3Manifest = classTag[ED3]
+    val ed2Tag = classTag[ED2]
+    val ed3Tag = classTag[ED3]
     zipEdgePartitions(other) { (pid, thisEPart, otherEPart) =>
-      thisEPart.innerJoin(otherEPart)(f)(ed2Manifest, ed3Manifest)
+      thisEPart.innerJoin(otherEPart)(f)(ed2Tag, ed3Tag)
     }
   }
 

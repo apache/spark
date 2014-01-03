@@ -82,12 +82,12 @@ class ReplicatedVertexView[VD: ClassTag](
 
   private def create(includeSrc: Boolean, includeDst: Boolean)
     : RDD[(Pid, VertexPartition[VD])] = {
-    val vdManifest = classTag[VD]
+    val vdTag = classTag[VD]
 
     // Ship vertex attributes to edge partitions according to vertexPlacement
     val verts = updatedVerts.partitionsRDD
     val shippedVerts = routingTable.get(includeSrc, includeDst)
-      .zipPartitions(verts)(ReplicatedVertexView.buildBuffer(_, _)(vdManifest))
+      .zipPartitions(verts)(ReplicatedVertexView.buildBuffer(_, _)(vdTag))
       .partitionBy(edges.partitioner.get)
     // TODO: Consider using a specialized shuffler.
 
@@ -109,7 +109,7 @@ class ReplicatedVertexView[VD: ClassTag](
           val (pid, vidToIndex) = mapIter.next()
           assert(!mapIter.hasNext)
           // Populate the vertex array using the vidToIndex map
-          val vertexArray = vdManifest.newArray(vidToIndex.capacity)
+          val vertexArray = vdTag.newArray(vidToIndex.capacity)
           for ((_, block) <- shippedVertsIter) {
             for (i <- 0 until block.vids.size) {
               val vid = block.vids(i)
@@ -119,7 +119,7 @@ class ReplicatedVertexView[VD: ClassTag](
             }
           }
           val newVPart = new VertexPartition(
-            vidToIndex, vertexArray, vidToIndex.getBitSet)(vdManifest)
+            vidToIndex, vertexArray, vidToIndex.getBitSet)(vdTag)
           Iterator((pid, newVPart))
         }.cache().setName("ReplicatedVertexView %s %s".format(includeSrc, includeDst))
     }
