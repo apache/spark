@@ -3,7 +3,7 @@ package examples
 
 import plans.logical.LocalRelation
 
-import shark2.TestShark._
+import execution.TestShark._
 import dsl._
 
 object SchemaRddExample {

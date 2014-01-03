@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils

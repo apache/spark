@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 import java.io.File
 
@@ -40,7 +40,7 @@ abstract class SharkInstance extends Logging {
   lazy val sc = createContext()
 
   protected def createContext() = {
-    SharkEnv.initWithSharkContext("catalyst.shark2", master)
+    SharkEnv.initWithSharkContext("catalyst.execution", master)
   }
 
   /** Sets up the system initially or after a RESET command */

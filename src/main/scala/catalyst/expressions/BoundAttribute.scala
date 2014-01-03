@@ -4,7 +4,7 @@ package expressions
 import rules._
 import errors._
 
-import shark2.SharkPlan
+import execution.SharkPlan
 
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value to be retrieved more

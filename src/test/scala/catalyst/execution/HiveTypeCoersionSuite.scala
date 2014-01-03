@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 /**
  * A set of tests that validate type promotion rules.

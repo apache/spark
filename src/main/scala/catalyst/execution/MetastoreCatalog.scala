@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table, StorageDescriptor, SerDeInfo}
