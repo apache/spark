@@ -61,7 +61,7 @@ abstract class SharkInstance extends Logging {
    */
   def runSqlHive(sql: String): Seq[String] = {
     val maxResults = 100000
-    val results = sc.sql(sql, 100000)
+    val results = sc.runHive(sql, 100000)
     // It is very confusing when you only get back some of the results...
     if (results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
     results

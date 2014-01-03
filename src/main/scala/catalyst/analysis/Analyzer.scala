@@ -122,7 +122,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved
       case p: LogicalPlan if !childIsFullyResolved(p) => p
-      // If the projection list contains Star's, expand it.
+      // If the projection list contains Stars, expand it.
       case p @ Project(projectList, child) if containsStar(projectList) =>
         Project(
           projectList.flatMap {
@@ -130,7 +130,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             case o => o :: Nil
           },
           child)
-      // If the aggregate function argument contains Star's, expand it.
+      // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         a.copy(
           aggregateExpressions = a.aggregateExpressions.flatMap {

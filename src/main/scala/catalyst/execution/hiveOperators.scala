@@ -114,7 +114,7 @@ case class InsertIntoHiveTable(table: MetastoreRelation, partition: Map[String, 
         s"PARTITION (${partition.map { case (k,v) => s"$k=$v" }.mkString(",")})"
       else
         ""
-    sc.sql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName} $partitionSpec")
+    sc.runHive(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName} $partitionSpec")
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

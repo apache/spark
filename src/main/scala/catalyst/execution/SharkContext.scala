@@ -33,7 +33,7 @@ class SharkContext(
    * Execute the command and return the results as a sequence. Each element
    * in the sequence is one row.
    */
-  def sql(cmd: String, maxRows: Int = 1000): Seq[String] = {
+  def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
     SparkEnv.set(sparkEnv)
     val cmd_trimmed: String = cmd.trim()
     val tokens: Array[String] = cmd_trimmed.split("\\s+")

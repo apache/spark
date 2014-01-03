@@ -103,7 +103,7 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
   @transient
   lazy val method = function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
   @transient
-  lazy val dataType: DataType = javaClassToDataType(method.getReturnType)
+  lazy val dataType = javaClassToDataType(method.getReturnType)
 
   lazy val wrappers = method.getParameterTypes.map { argClass =>
     val primitiveClasses = Seq(
