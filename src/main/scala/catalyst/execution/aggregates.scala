@@ -169,7 +169,7 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
     def result: Any = count.value.toLong
   }
 
-  def execute() = attachTree(this, "SparkAggregate") {
+  override def executeCollect() = attachTree(this, "SparkAggregate") {
     // Replace all aggregate expressions with spark functions that will compute the result.
     val aggImplementations = aggregateExprs.map { _ transform {
       case base @ Average(expr) => new AverageFunction(expr, base)
@@ -185,6 +185,8 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
       val input = Vector(row)
       aggFunctions.foreach(_.apply(input))
     }
-    sc.makeRDD(Seq(buildRow(aggImplementations.map(Evaluate(_, Nil)))), 1)
+    Array(buildRow(aggImplementations.map(Evaluate(_, Nil))))
   }
+
+  def execute() = sc.makeRDD(executeCollect(), 1)
 }

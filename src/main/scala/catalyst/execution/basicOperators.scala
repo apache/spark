@@ -37,8 +37,12 @@ case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) 
   override def otherCopyArgs = sc :: Nil
 
   def output = child.output
+
+  override def executeCollect() = child.execute().take(limit)
+
+  // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
-  def execute() = sc.makeRDD(child.execute().take(limit),1)
+  def execute() = sc.makeRDD(executeCollect(), 1)
 }
 
 case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
