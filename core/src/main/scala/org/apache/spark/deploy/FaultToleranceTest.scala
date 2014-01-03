@@ -190,7 +190,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
   /** Creates a SparkContext, which constructs a Client to interact with our cluster. */
   def createClient() = {
     if (sc != null) { sc.stop() }
-    // Counter-hack: Because of a hack in SparkEnv#createFromSystemProperties() that changes this
+    // Counter-hack: Because of a hack in SparkEnv#create() that changes this
     // property, we need to reset it.
     System.setProperty("spark.driver.port", "0")
     sc = new SparkContext(getMasterUrls(masters), "fault-tolerance", containerSparkHome)
