@@ -360,60 +360,75 @@ object HiveQl {
 
     case Token("TOK_QUERY",
            Token("TOK_FROM", fromClause :: Nil) ::
-           Token("TOK_INSERT", insertClauses) :: Nil) =>
+           insertClauses) =>
 
-      val (Some(destClause) ::
-          Some(selectClause) ::
-          whereClause ::
-          groupByClause ::
-          orderByClause ::
-          sortByClause ::
-          limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), insertClauses)
+      // Return one query for each insert clause.
+      val queries = insertClauses.map { case Token("TOK_INSERT", singleInsert) =>
+        val (Some(destClause) ::
+            Some(selectClause) ::
+            whereClause ::
+            groupByClause ::
+            orderByClause ::
+            sortByClause ::
+            limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), singleInsert)
 
-      val relations = nodeToRelation(fromClause)
-      val withWhere = whereClause.map { whereNode =>
-        val Seq(whereExpr) = whereNode.getChildren().toSeq
-        Filter(nodeToExpr(whereExpr), relations)
-      }.getOrElse(relations)
+        val relations = nodeToRelation(fromClause)
+        val withWhere = whereClause.map { whereNode =>
+          val Seq(whereExpr) = whereNode.getChildren().toSeq
+          Filter(nodeToExpr(whereExpr), relations)
+        }.getOrElse(relations)
 
-      // Script transformations are expressed as a select clause with a single expression of type TOK_TRANSFORM
-      val transformation = selectClause.getChildren.head match {
-        case Token("TOK_SELEXPR",
-               Token("TOK_TRANSFORM",
-                 Token("TOK_EXPLIST", inputExprs) ::
-                 Token("TOK_SERDE", Nil) ::
-                 Token("TOK_RECORDWRITER", Nil) :: // TODO: Need to support other types of (in/out)put
-                 Token(script, Nil)::
-                 Token("TOK_SERDE", Nil) ::
-                 Token("TOK_RECORDREADER", Nil) ::
-                 Token("TOK_ALIASLIST", aliases) :: Nil) :: Nil) =>
 
-          val output = aliases.map { case Token(n, Nil) => AttributeReference(n, StringType)() }
-          val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
-          Some(Transform(inputExprs.map(nodeToExpr), unescapedScript, output, withWhere))
-        case _ => None
-      }
+        // Script transformations are expressed as a select clause with a single expression of type
+        // TOK_TRANSFORM
+        val transformation = selectClause.getChildren.head match {
+          case Token("TOK_SELEXPR",
+                 Token("TOK_TRANSFORM",
+                   Token("TOK_EXPLIST", inputExprs) ::
+                   Token("TOK_SERDE", Nil) ::
+                   Token("TOK_RECORDWRITER", Nil) :: // TODO: Need to support other types of (in/out)put
+                   Token(script, Nil)::
+                   Token("TOK_SERDE", Nil) ::
+                   Token("TOK_RECORDREADER", Nil) ::
+                   Token("TOK_ALIASLIST", aliases) :: Nil) :: Nil) =>
 
-      // The projection of the query can either be a normal projection, an aggregation (if there is a group by) or
-      // a script transformation.
-      val withProject = transformation.getOrElse {
-        // Not a transformation so must be either project or aggregation.
-        val selectExpressions = nameExpressions(selectClause.getChildren.flatMap(selExprNodeToExpr))
-
-        groupByClause match {
-          case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
-          case None => Project(selectExpressions, withWhere)
+            val output = aliases.map { case Token(n, Nil) => AttributeReference(n, StringType)() }
+            val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
+            Some(Transform(inputExprs.map(nodeToExpr), unescapedScript, output, withWhere))
+          case _ => None
         }
+
+        // The projection of the query can either be a normal projection, an aggregation (if there is a group by) or
+        // a script transformation.
+        val withProject = transformation.getOrElse {
+          // Not a transformation so must be either project or aggregation.
+          val selectExpressions = nameExpressions(selectClause.getChildren.flatMap(selExprNodeToExpr))
+
+          groupByClause match {
+            case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
+            case None => Project(selectExpressions, withWhere)
+          }
+        }
+
+        require(!(orderByClause.isDefined && sortByClause.isDefined), "Can't have both a sort by and order by.")
+        // Right now we treat sorting and ordering as identical.
+        val withSort =
+          (orderByClause orElse sortByClause)
+            .map(_.getChildren.map(nodeToSortOrder))
+            .map(Sort(_, withProject))
+            .getOrElse(withProject)
+        val withLimit =
+          limitClause.map(l => nodeToExpr(l.getChildren.head))
+            .map(StopAfter(_, withSort))
+            .getOrElse(withSort)
+
+        nodeToDest(
+          destClause,
+          withLimit)
       }
 
-      require(!(orderByClause.isDefined && sortByClause.isDefined), "Can't have both a sort by and order by.")
-      // Right now we treat sorting and ordering as identical.
-      val withSort = (orderByClause orElse sortByClause).map(_.getChildren.map(nodeToSortOrder)).map(Sort(_, withProject)).getOrElse(withProject)
-      val withLimit = limitClause.map(l => nodeToExpr(l.getChildren.head)).map(StopAfter(_, withSort)).getOrElse(withSort)
-
-      nodeToDest(
-        destClause,
-        withLimit)
+      // If there are multiple INSERTS just UNION them together into on query.
+      queries.reduceLeft(Union)
 
     case Token("TOK_UNION", left :: right :: Nil) => Union(nodeToPlan(left), nodeToPlan(right))
 
