@@ -19,9 +19,9 @@ libraryDependencies ++= Seq(
  "org.apache.hadoop" % "hadoop-client" % "1.0.4",
  "org.scalatest" %% "scalatest" % "1.9.1" % "test",
  //"net.hydromatic" % "optiq-core" % "0.4.16-SNAPSHOT",
- "org.apache.hive" % "hive-metastore" % "0.10.0",
- "org.apache.hive" % "hive-exec" % "0.10.0",
- "org.apache.hive" % "hive-builtins" % "0.10.0",
+ "org.apache.hive" % "hive-metastore" % "0.12.0",
+ "org.apache.hive" % "hive-exec" % "0.12.0",
+ "org.apache.hive" % "hive-serde" % "0.12.0",
   "com.typesafe" %% "scalalogging-slf4j" % "1.0.1")
 
 // Multiple queries rely on the TestShark singleton.  See comments there for more details.
