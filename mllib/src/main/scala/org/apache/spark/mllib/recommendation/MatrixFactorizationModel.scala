@@ -20,7 +20,6 @@ package org.apache.spark.mllib.recommendation
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 
-
 import org.jblas._
 import java.nio.{ByteOrder, ByteBuffer}
 
