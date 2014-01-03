@@ -6,7 +6,7 @@ import scala.collection.JavaConversions._
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
 import org.apache.hadoop.hive.ql.exec.UDF
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{AbstractPrimitiveJavaObjectInspector, PrimitiveObjectInspectorFactory}
 import org.apache.hadoop.io._
 
 import expressions._
@@ -105,7 +105,7 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
   @transient
   lazy val dataType = javaClassToDataType(method.getReturnType)
 
-  lazy val wrappers = method.getParameterTypes.map { argClass =>
+  lazy val wrappers: Array[(Any) => AnyRef] = method.getParameterTypes.map { argClass =>
     val primitiveClasses = Seq(
       Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
       classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long]
@@ -118,7 +118,8 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
       sys.error(s"No matching wrapper found, options: ${argClass.getConstructors.toSeq}."))
 
     (a: Any) => {
-      logger.debug(s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} using $constructor.")
+      logger.debug(
+        s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} using $constructor.")
       // We must make sure that primitives get boxed java style.
       if (a == null) {
         null
@@ -150,7 +151,7 @@ case class HiveGenericUdf(
   import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
   type UDFType = GenericUDF
 
-  lazy val inspectors = children.map(_.dataType).map {
+  lazy val inspectors: Seq[AbstractPrimitiveJavaObjectInspector] = children.map(_.dataType).map {
     case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
     case IntegerType => PrimitiveObjectInspectorFactory.javaIntObjectInspector
     case DoubleType => PrimitiveObjectInspectorFactory.javaDoubleObjectInspector
@@ -178,7 +179,9 @@ case class HiveGenericUdf(
   }
 
   def evaluate(evaluatedChildren: Seq[Any]): Any = {
-    val args = evaluatedChildren.map(wrap).map(v => new DeferredJavaObject(v): DeferredObject).toArray
+    val args = evaluatedChildren.map(wrap).map { v =>
+      new DeferredJavaObject(v): DeferredObject
+    }.toArray
     unwrap(instance.evaluate(args))
   }
 }

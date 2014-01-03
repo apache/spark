@@ -5,8 +5,8 @@ import errors._
 import expressions._
 import types._
 
-
 import org.apache.spark.SparkContext._
+
 
 case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
@@ -23,7 +23,8 @@ case class Filter(condition: Expression, child: SharkPlan) extends UnaryNode {
   }
 }
 
-case class Union(left: SharkPlan, right: SharkPlan)(@transient sc: SharkContext) extends BinaryNode {
+case class Union(left: SharkPlan, right: SharkPlan)(@transient sc: SharkContext)
+  extends BinaryNode {
   // TODO: attributes output by union should be distinct for nullability purposes
   def output = left.output
   // TODO: is it more efficient to union a bunch of rdds at once? should union be variadic?
@@ -49,7 +50,7 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
   private class SortKey(val keyValues: IndexedSeq[Any]) extends Ordered[SortKey] with Serializable {
     def compare(other: SortKey): Int = {
       var i = 0
-      while(i < keyValues.size) {
+      while (i < keyValues.size) {
         val left = keyValues(i)
         val right = other.keyValues(i)
         val curDirection = directions(i)
@@ -58,35 +59,33 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
         logger.debug(s"Comparing $left, $right as $curDataType order $curDirection")
         // TODO: Use numeric here too?
         val comparison =
-          if(left == null && right == null)
+          if (left == null && right == null) {
             0
-          else if(left == null)
-            if(curDirection == Ascending)
-              -1
-            else
-              1
-          else if(right == null)
-            if(curDirection == Ascending)
-              1
-            else
-              -1
-          else if(curDataType == IntegerType)
-            if(curDirection == Ascending)
+          } else if (left == null) {
+            if (curDirection == Ascending) -1 else 1
+          } else if (right == null) {
+            if (curDirection == Ascending) 1 else -1
+          } else if (curDataType == IntegerType) {
+            if (curDirection == Ascending) {
               left.asInstanceOf[Int] compare right.asInstanceOf[Int]
-            else
+            } else {
               right.asInstanceOf[Int] compare left.asInstanceOf[Int]
-          else if(curDataType == DoubleType)
-            if(curDirection == Ascending)
+            }
+          } else if (curDataType == DoubleType) {
+            if (curDirection == Ascending) {
               left.asInstanceOf[Double] compare right.asInstanceOf[Double]
-            else
+            } else {
               right.asInstanceOf[Double] compare left.asInstanceOf[Double]
-          else if(curDataType == StringType)
-            if(curDirection == Ascending)
+            }
+          } else if (curDataType == StringType) {
+            if (curDirection == Ascending) {
               left.asInstanceOf[String] compare right.asInstanceOf[String]
-            else
+            } else {
               right.asInstanceOf[String] compare left.asInstanceOf[String]
-          else
+            }
+          } else {
             sys.error(s"Comparison not yet implemented for: $curDataType")
+          }
 
         if(comparison != 0) return comparison
         i += 1
@@ -102,7 +101,7 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
       val sortKey = new SortKey(sortExprs.map(s => Evaluate(s.child, input)).toIndexedSeq)
 
       (sortKey, row)
-    }.sortByKey(true, numPartitions).map(_._2)
+    }.sortByKey(ascending = true, numPartitions).map(_._2)
   }
 
   def output = child.output

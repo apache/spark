@@ -5,6 +5,8 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table, StorageDescriptor, SerDeInfo}
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
 import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.mapred.InputFormat
 
 import analysis.Catalog
 import expressions._
@@ -88,10 +90,14 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
   extends BaseRelation {
 
   def hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
-  def hiveQlPartitions = partitions.map(new org.apache.hadoop.hive.ql.metadata.Partition(hiveQlTable, _))
+
+  def hiveQlPartitions = partitions.map { p =>
+    new org.apache.hadoop.hive.ql.metadata.Partition(hiveQlTable, p)
+  }
+
   val tableDesc = new TableDesc(
-    Class.forName(table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[org.apache.hadoop.hive.serde2.Deserializer]],
-    Class.forName(table.getSd.getInputFormat).asInstanceOf[Class[org.apache.hadoop.mapred.InputFormat[_,_]]],
+    Class.forName(table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[Deserializer]],
+    Class.forName(table.getSd.getInputFormat).asInstanceOf[Class[InputFormat[_,_]]],
     Class.forName(table.getSd.getOutputFormat),
     hiveQlTable.getSchema
   )
@@ -110,4 +116,3 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
   // Must be a stable value since new attributes are born here.
   val output = partitionKeys ++ table.getSd.getCols.map(_.toAttribute)
 }
-

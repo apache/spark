@@ -2,6 +2,7 @@ package catalyst
 package execution
 
 import java.io.File
+import java.util.{Set => JavaSet}
 
 import scala.collection.mutable
 import scala.collection.JavaConversions._
@@ -16,8 +17,9 @@ import frontend.hive._
 import util._
 
 /**
- * A locally running test instance of spark.  The lifecycle for a given query is managed by the inner class
- * [[SharkQuery]].  A [[SharkQuery]] can either be instantiated directly or using the implicit conversion '.q'.
+ * A locally running test instance of spark.  The lifecycle for a given query is managed by the
+ * inner class [[SharkQuery]].  A [[SharkQuery]] can either be instantiated directly or using the
+ * implicit conversion '.q'.
  *
  * {{{
  *   scala> val query = "SELECT key FROM src".q
@@ -34,12 +36,13 @@ import util._
  *   res0: Array[IndexedSeq[Any]] = Array(Vector(238), Vector(86), Vector(311), ...
  * }}}
  *
- * Data from [[testTables]] will be automatically loaded whenever a query is run over those tables.  Calling
- * [[reset]] will delete all tables and other state in the database, leaving the database in a "clean" state.
+ * Data from [[testTables]] will be automatically loaded whenever a query is run over those tables.
+ * Calling [[reset]] will delete all tables and other state in the database, leaving the database
+ * in a "clean" state.
  *
- * TestShark is implemented as a singleton object because instantiating multiple copies of the hive metastore
- * seems to lead to weird non-deterministic failures.  Therefore, the execution of testcases that rely on TestShark
- * must be serialized.
+ * TestShark is implemented as a singleton object because instantiating multiple copies of the hive
+ * metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
+ * testcases that rely on TestShark must be serialized.
  */
 object TestShark extends SharkInstance {
   self =>
@@ -48,7 +51,7 @@ object TestShark extends SharkInstance {
   lazy val warehousePath = getTempFilePath("sharkWarehouse").getCanonicalPath
   lazy val metastorePath = getTempFilePath("sharkMetastore").getCanonicalPath
 
-  override protected def createContext =  {
+  override protected def createContext() =  {
     // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
     // without restarting the JVM.
     System.clearProperty("spark.driver.port")
@@ -65,7 +68,10 @@ object TestShark extends SharkInstance {
   // Override so we can intercept relative paths and rewrite them to point at hive.
   override def runSqlHive(sql: String): Seq[String] = super.runSqlHive(rewritePaths(sql))
 
-  /** Returns the value of specified environmental variable as a [[java.io.File]] after checking to ensure it exists */
+  /**
+   * Returns the value of specified environmental variable as a [[java.io.File]] after checking
+   * to ensure it exists
+   */
   private def envVarToFile(envVar: String): File = {
     assert(System.getenv(envVar) != null, s"$envVar not set")
     val ret = new File(System.getenv(envVar))
@@ -74,8 +80,8 @@ object TestShark extends SharkInstance {
   }
 
   /**
-   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the hive test cases
-   * assume the system is set up.
+   * Replaces relative paths to the parent directory "../" with hiveDevHome since this is how the
+   * hive test cases assume the system is set up.
    */
   private def rewritePaths(cmd: String): String =
     if(cmd.toUpperCase startsWith "LOAD")
@@ -84,6 +90,7 @@ object TestShark extends SharkInstance {
       cmd
 
   val describedTable = "DESCRIBE (\\w+)".r
+
   /**
    * Override SharkQuery with special debug workflow.
    */
@@ -105,8 +112,10 @@ object TestShark extends SharkInstance {
       analyze(parsed)
     }
 
-    /** Runs the query after interposing operators that print the result of each intermediate step. */
-    def debugExec() = DebugQuery(executedPlan).execute().collect
+    /**
+     * Runs the query after interposing operators that print the result of each intermediate step.
+     */
+    def debugExec() = DebugQuery(executedPlan).execute().collect()
   }
 
   class SharkSqlQuery(sql: String) extends SharkQuery {
@@ -122,15 +131,17 @@ object TestShark extends SharkInstance {
     def q = new SharkSqlQuery(str)
   }
 
-  implicit override def logicalToSharkQuery(plan: LogicalPlan) = new LogicalSharkQuery { val parsed = plan }
+  implicit override def logicalToSharkQuery(plan: LogicalPlan) = new LogicalSharkQuery {
+    val parsed = plan
+  }
 
   case class TestTable(name: String, commands: (()=>Unit)*)
 
   implicit class SqlCmd(sql: String) { def cmd = () => sql.q.stringResult(): Unit}
 
   /**
-   * A list of test tables and the DDL required to initialize them.  A test table is loaded on demand when a query
-   * are run against it.
+   * A list of test tables and the DDL required to initialize them.  A test table is loaded on
+   * demand when a query are run against it.
    */
   val testTables = new mutable.HashMap[String, TestTable]()
   def registerTestTable(testTable: TestTable) = testTables += (testTable.name -> testTable)
@@ -175,10 +186,9 @@ object TestShark extends SharkInstance {
       srcThrift.getSd.setOutputFormat(classOf[SequenceFileOutputFormat[_,_]].getName)
       srcThrift.getSd.setSerdeInfo(new SerDeInfo)
       srcThrift.getSd.getSerdeInfo.setSerializationLib(classOf[ThriftDeserializer].getName)
-      srcThrift.getSd.getSerdeInfo.setParameters(
-        Map(
-          "serialization.class" -> classOf[Complex].getName,
-          "serialization.format" -> classOf[TBinaryProtocol].getName))
+      srcThrift.getSd.getSerdeInfo.setParameters(Map(
+        "serialization.class" -> classOf[Complex].getName,
+        "serialization.format" -> classOf[TBinaryProtocol].getName))
 
       catalog.client.createTable(srcThrift)
 
@@ -189,8 +199,9 @@ object TestShark extends SharkInstance {
   hiveQTestUtilTables.foreach(registerTestTable)
 
   private val loadedTables = new collection.mutable.HashSet[String]
+
   def loadTestTable(name: String) {
-    if(!(loadedTables contains name)) {
+    if (!(loadedTables contains name)) {
       logger.info(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
@@ -203,7 +214,7 @@ object TestShark extends SharkInstance {
    * Records the UDFs present when the server starts, so we can delete ones that are created by
    * tests.
    */
-  protected val originalUdfs = FunctionRegistry.getFunctionNames()
+  protected val originalUdfs: JavaSet[String] = FunctionRegistry.getFunctionNames
 
   /**
    * Resets the test instance by deleting any tables that have been created.
@@ -212,27 +223,32 @@ object TestShark extends SharkInstance {
   def reset() {
     try {
       // HACK: Hive is too noisy by default.
-      org.apache.log4j.LogManager.getCurrentLoggers.foreach(_.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN))
+      org.apache.log4j.LogManager.getCurrentLoggers.foreach { logger =>
+        logger.asInstanceOf[org.apache.log4j.Logger].setLevel(org.apache.log4j.Level.WARN)
+      }
 
-      // It is important that we RESET first as broken hooks that might have been set could break other sql exec here.
+      // It is important that we RESET first as broken hooks that might have been set could break
+      // other sql exec here.
       runSqlHive("RESET")
       // For some reason, RESET does not reset the following variables...
       runSqlHive("set datanucleus.cache.collections=true")
       runSqlHive("set datanucleus.cache.collections.lazy=true")
 
       loadedTables.clear()
-      catalog.client.getAllTables("default").foreach(t => {
+      catalog.client.getAllTables("default").foreach { t =>
         logger.debug(s"Deleting table $t")
         val table = catalog.client.getTable("default", t)
 
-        catalog.client.listIndexes("default", t, 255)
-          .foreach(i => catalog.client.dropIndex("default", t, i.getIndexName, true))
+        catalog.client.listIndexes("default", t, 255).foreach { index =>
+          catalog.client.dropIndex("default", t, index.getIndexName, true)
+        }
 
-        if(!MetaStoreUtils.isIndexTable(table))
+        if (!MetaStoreUtils.isIndexTable(table)) {
           catalog.client.dropTable("default", t)
-      })
+        }
+      }
 
-      catalog.client.getAllDatabases.filterNot(_ == "default").foreach {db =>
+      catalog.client.getAllDatabases.filterNot(_ == "default").foreach { db =>
         logger.debug(s"Dropping Database: $db")
         catalog.client.dropDatabase(db, true, false, true)
       }
@@ -247,8 +263,9 @@ object TestShark extends SharkInstance {
     } catch {
       case e: Exception =>
         logger.error(s"FATAL ERROR: Failed to reset TestDB state. $e")
-        // At this point there is really no reason to continue, but the test framework traps exits.  So instead we just
-        // pause forever so that at least the developer can see where things started to go wrong.
+        // At this point there is really no reason to continue, but the test framework traps exits.
+        // So instead we just pause forever so that at least the developer can see where things
+        // started to go wrong.
         Thread.sleep(100000)
     }
   }

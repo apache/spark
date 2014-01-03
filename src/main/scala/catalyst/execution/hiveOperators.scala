@@ -4,16 +4,16 @@ package execution
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
+import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.`lazy`.LazyStruct
-import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.mapred.JobConf
 
 import expressions.Attribute
 import util._
 
 /* Implicits */
-import collection.JavaConversions._
+import scala.collection.JavaConversions._
 
 case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation) extends LeafNode {
   @transient
@@ -31,20 +31,21 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
    * Functions that extract the requested attributes from the hive output.
    */
   @transient
-  protected lazy val attributeFunctions: Seq[(LazyStruct, Array[String]) => AnyRef] = attributes.map { a =>
-    if (relation.partitionKeys.contains(a)) {
-      val ordinal = relation.partitionKeys.indexOf(a)
-      (struct: LazyStruct, partitionKeys: Array[String]) => partitionKeys(ordinal)
-    } else {
-      val ref =
-        objectInspector.getAllStructFieldRefs
-        .find(_.getFieldName == a.name)
-        .getOrElse(sys.error(s"Can't find attribute $a"))
+  protected lazy val attributeFunctions: Seq[(LazyStruct, Array[String]) => AnyRef] = {
+    attributes.map { a =>
+      if (relation.partitionKeys.contains(a)) {
+        val ordinal = relation.partitionKeys.indexOf(a)
+        (struct: LazyStruct, partitionKeys: Array[String]) => partitionKeys(ordinal)
+      } else {
+        val ref = objectInspector.getAllStructFieldRefs
+          .find(_.getFieldName == a.name)
+          .getOrElse(sys.error(s"Can't find attribute $a"))
 
-      (struct: LazyStruct, _: Array[String]) => {
-        val data = objectInspector.getStructFieldData(struct, ref)
-        val inspector = ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector]
-        inspector.getPrimitiveJavaObject(data)
+        (struct: LazyStruct, _: Array[String]) => {
+          val data = objectInspector.getStructFieldData(struct, ref)
+          val inspector = ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector]
+          inspector.getPrimitiveJavaObject(data)
+        }
       }
     }
   }
@@ -75,31 +76,37 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
   def output = attributes
 }
 
-case class InsertIntoHiveTable(table: MetastoreRelation, partition: Map[String, String], child: SharkPlan)
-                              (@transient sc: SharkContext) extends UnaryNode {
+case class InsertIntoHiveTable(
+    table: MetastoreRelation, partition: Map[String, String], child: SharkPlan)
+    (@transient sc: SharkContext)
+  extends UnaryNode {
+
   /**
-   * This file sink / record writer code is only the first step towards implementing this operator correctly and is not
-   * actually used yet.
+   * This file sink / record writer code is only the first step towards implementing this operator
+   * correctly and is not actually used yet.
    */
   val desc = new FileSinkDesc("./", table.tableDesc, false)
+
   val outputClass = {
     val serializer = table.tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
     serializer.initialize(null, table.tableDesc.getProperties)
     serializer.getSerializedClass
   }
 
-  lazy val conf = new JobConf();
+  lazy val conf = new JobConf()
+
   lazy val writer = HiveFileFormatUtils.getHiveRecordWriter(
     conf,
     table.tableDesc,
     outputClass,
     desc,
-    new Path((new org.apache.hadoop.fs.RawLocalFileSystem).getWorkingDirectory(), "test.out"),
+    new Path((new org.apache.hadoop.fs.RawLocalFileSystem).getWorkingDirectory, "test.out"),
     null)
 
   override def otherCopyArgs = sc :: Nil
 
   def output = child.output
+
   def execute() = {
     val childRdd = child.execute()
     assert(childRdd != null)
@@ -108,12 +115,16 @@ case class InsertIntoHiveTable(table: MetastoreRelation, partition: Map[String, 
     val tempDir = java.io.File.createTempFile("data", "tsv")
     tempDir.delete()
     tempDir.mkdir()
-    childRdd.map(_.map(a => stringOrNull(a.asInstanceOf[AnyRef])).mkString("\001")).saveAsTextFile(tempDir.getCanonicalPath)
+    childRdd.map(_.map(a => stringOrNull(a.asInstanceOf[AnyRef])).mkString("\001"))
+      .saveAsTextFile(tempDir.getCanonicalPath)
+
     val partitionSpec =
-      if(partition.nonEmpty)
+      if (partition.nonEmpty) {
         s"PARTITION (${partition.map { case (k,v) => s"$k=$v" }.mkString(",")})"
-      else
+      } else {
         ""
+      }
+
     sc.runHive(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName} $partitionSpec")
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,

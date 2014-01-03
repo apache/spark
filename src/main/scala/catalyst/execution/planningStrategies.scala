@@ -49,7 +49,9 @@ trait PlanningStrategies {
       classOf[Count],
       classOf[Average])
 
-    /** Returns true if [[exprs]] contains only aggregates that can be computed using Accumulators. */
+    /**
+     * Returns true if [[exprs]] contains only aggregates that can be computed using Accumulators.
+     */
     def onlyAllowedAggregates(exprs: Seq[Expression]): Boolean = {
       val aggs = exprs.flatMap(_.collect { case a: AggregateExpression => a}).map(_.getClass)
       aggs.map(allowedAggregates contains _).reduceLeft(_ && _)
@@ -66,9 +68,9 @@ trait PlanningStrategies {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case FilteredOperation(predicates, logical.Join(left, right, Inner, condition)) =>
         logger.debug(s"Considering join: ${predicates ++ condition}")
-        // Find equi-join predicates that can be evaluated before the join, and thus can be used as join keys.
-        // Note we can only mix in the conditions with other predicates because the match above ensures that this is
-        // and Inner join.
+        // Find equi-join predicates that can be evaluated before the join, and thus can be used
+        // as join keys. Note we can only mix in the conditions with other predicates because the
+        // match above ensures that this is and Inner join.
         val (joinPredicates, otherPredicates) = (predicates ++ condition).partition {
           case Equals(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
                                (canEvaluate(l, right) && canEvaluate(r, left)) => true
@@ -81,17 +83,19 @@ trait PlanningStrategies {
         }
 
         // Do not consider this strategy if there are no join keys.
-        if(joinKeys.nonEmpty) {
+        if (joinKeys.nonEmpty) {
           val leftKeys = joinKeys.map(_._1)
           val rightKeys = joinKeys.map(_._2)
 
-          val joinOp = execution.SparkEquiInnerJoin(leftKeys, rightKeys, planLater(left), planLater(right))
+          val joinOp = execution.SparkEquiInnerJoin(
+            leftKeys, rightKeys, planLater(left), planLater(right))
 
           // Make sure other conditions are met if present.
-          if(otherPredicates.nonEmpty)
+          if (otherPredicates.nonEmpty) {
             execution.Filter(combineConjunctivePredicates(otherPredicates), joinOp) :: Nil
-          else
+          } else {
             joinOp :: Nil
+          }
         } else {
           logger.debug(s"Avoiding spark join with no join keys.")
           Nil
@@ -110,14 +114,16 @@ trait PlanningStrategies {
   object BroadcastNestedLoopJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
-        execution.BroadcastNestedLoopJoin(planLater(left), planLater(right), joinType, condition)(sc) :: Nil
+        execution.BroadcastNestedLoopJoin(
+          planLater(left), planLater(right), joinType, condition)(sc) :: Nil
       case _ => Nil
     }
   }
 
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
-      case logical.Join(left, right, _, None) => execution.CartesianProduct(planLater(left), planLater(right)) :: Nil
+      case logical.Join(left, right, _, None) =>
+        execution.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
         execution.Filter(condition,
           execution.CartesianProduct(planLater(left), planLater(right))) :: Nil
