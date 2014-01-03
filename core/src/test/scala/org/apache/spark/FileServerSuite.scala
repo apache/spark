@@ -55,7 +55,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     in.close()
     jar.close()
     stream.close()
-    testJarFile = tmpFile2.getAbsolutePath
+    testJarFile = tmpFile2.toURI.toURL.toString
   }
 
   override def beforeEach() {
@@ -134,6 +134,17 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   test ("Dynamically adding JARS on a standalone cluster") {
     sc = new SparkContext("local-cluster[1,1,512]", "test")
     sc.addJar(testJarFile)
+    val testData = Array((1,1))
+    sc.parallelize(testData).foreach { (x) =>
+      if (Thread.currentThread.getContextClassLoader.getResource("FileServerSuite2.txt") == null) {
+        throw new SparkException("jar not added")
+      }
+    }
+  }
+
+  test ("Dynamically adding JARS on a standalone cluster using local: URL") {
+    sc = new SparkContext("local-cluster[1,1,512]", "test")
+    sc.addJar(testJarFile.replace("file", "local"))
     val testData = Array((1,1))
     sc.parallelize(testData).foreach { (x) =>
       if (Thread.currentThread.getContextClassLoader.getResource("FileServerSuite2.txt") == null) {
