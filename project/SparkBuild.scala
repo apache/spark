@@ -85,12 +85,11 @@ object SparkBuild extends Build {
   }
 
   // Conditionally include the yarn sub-project
-  lazy val yarn = Project("yarn", file(if (isNewHadoop) "new-yarn" else "yarn"), settings = yarnSettings) dependsOn(core)
+  lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
+  lazy val yarn = Project("yarn", file("yarn/stable"), settings = yarnSettings) dependsOn(core)
 
-  //lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn(core)
-
-  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
-  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
+  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](if (isNewHadoop) yarn else yarnAlpha) else Seq[ClasspathDependency]()
+  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](if (isNewHadoop) yarn else yarnAlpha) else Seq[ProjectReference]()
 
   // Everything except assembly, tools and examples belong to packageProjects
   lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib) ++ maybeYarnRef
@@ -320,9 +319,28 @@ object SparkBuild extends Build {
     )
   )
 
-  def yarnSettings = sharedSettings ++ Seq(
-    name := "spark-yarn"
+  def yarnCommonSettings = sharedSettings ++ Seq(
+    unmanagedSourceDirectories in Compile <++= baseDirectory { base =>
+      Seq(
+         base / "../common/src/main/scala"
+      )
+    },
+
+    unmanagedSourceDirectories in Test <++= baseDirectory { base =>
+      Seq(
+         base / "../common/src/test/scala"
+      )
+    }
+
   ) ++ extraYarnSettings
+
+  def yarnAlphaSettings = yarnCommonSettings ++ Seq(
+    name := "spark-yarn-alpha"
+  )
+
+  def yarnSettings = yarnCommonSettings ++ Seq(
+    name := "spark-yarn"
+  )
 
   // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain
   // if we refer to nonexistent dependencies (e.g. hadoop-yarn-api from a Hadoop version without YARN).
