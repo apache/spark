@@ -1,4 +1,4 @@
-#!/usr/bin/env bash
+#!/bin/sh
 
 #
 # Licensed to the Apache Software Foundation (ASF) under one or more
@@ -17,19 +17,7 @@
 # limitations under the License.
 #
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+FWDIR="$(cd `dirname $0`/..; pwd)"
 
-. "$bin/spark-config.sh"
-
-if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
-  . "${SPARK_CONF_DIR}/spark-env.sh"
-fi
-
-if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  "$bin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker 1
-else
-  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
-    "$bin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
-  done
-fi
+echo "Running spark-executor with framework dir = $FWDIR"
+exec $FWDIR/bin/spark-class org.apache.spark.executor.MesosExecutorBackend

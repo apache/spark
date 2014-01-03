@@ -17,19 +17,19 @@
 # limitations under the License.
 #
 
-# Usage: start-slave.sh <worker#> <master-spark-URL>
-#   where <master-spark-URL> is like "spark://localhost:7077"
+# Run a Spark command on all slave hosts.
 
-bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+usage="Usage: spark-daemons.sh [--config <conf-dir>] [start|stop] command instance-number args..."
 
-# Set SPARK_PUBLIC_DNS so slaves can be linked in master web UI
-if [ "$SPARK_PUBLIC_DNS" = "" ]; then
-    # If we appear to be running on EC2, use the public address by default:
-    # NOTE: ec2-metadata is installed on Amazon Linux AMI. Check based on that and hostname
-    if command -v ec2-metadata > /dev/null || [[ `hostname` == *ec2.internal ]]; then
-        export SPARK_PUBLIC_DNS=`wget -q -O - http://instance-data.ec2.internal/latest/meta-data/public-hostname`
-    fi
+# if no args specified, show usage
+if [ $# -le 1 ]; then
+  echo $usage
+  exit 1
 fi
 
-"$bin"/spark-daemon.sh start org.apache.spark.deploy.worker.Worker "$@"
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
+
+. "$sbin/spark-config.sh"
+
+exec "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/spark-daemon.sh" "$@"

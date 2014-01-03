@@ -32,7 +32,7 @@ esac
 # Enter posix mode for bash
 set -o posix
 
-FWDIR="`dirname $0`"
+FWDIR="$(cd `dirname $0`/..; pwd)"
 
 for o in "$@"; do
   if [ "$1" = "-c" -o "$1" = "--cores" ]; then
@@ -90,10 +90,10 @@ if $cygwin; then
     # "Backspace sends ^H" setting in "Keys" section of the Mintty options
     # (see https://github.com/sbt/sbt/issues/562).
     stty -icanon min 1 -echo > /dev/null 2>&1
-    $FWDIR/spark-class -Djline.terminal=unix $OPTIONS org.apache.spark.repl.Main "$@"
+    $FWDIR/bin/spark-class -Djline.terminal=unix $OPTIONS org.apache.spark.repl.Main "$@"
     stty icanon echo > /dev/null 2>&1
 else
-    $FWDIR/spark-class $OPTIONS org.apache.spark.repl.Main "$@"
+    $FWDIR/bin/spark-class $OPTIONS org.apache.spark.repl.Main "$@"
 fi
 
 # record the exit status lest it be overwritten:

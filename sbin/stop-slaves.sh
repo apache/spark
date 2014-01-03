@@ -17,16 +17,19 @@
 # limitations under the License.
 #
 
-# Start all spark daemons.
-# Run this on the master nde
-
-
 bin=`dirname "$0"`
-bin=`cd "$bin"; pwd`
+bin=`cd "$sbin"; pwd`
 
-# Load the Spark configuration
-. "$bin/spark-config.sh"
+. "$sbin/spark-config.sh"
 
-# Stop the slaves, then the master
-"$bin"/stop-slaves.sh
-"$bin"/stop-master.sh
+if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
+  . "${SPARK_CONF_DIR}/spark-env.sh"
+fi
+
+if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
+  "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker 1
+else
+  for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
+    "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker $(( $i + 1 ))
+  done
+fi
