@@ -2,11 +2,10 @@ package catalyst
 
 import org.scalatest.FunSuite
 
-import analysis._
 import expressions._
 import optimizer.Optimize
 import plans.logical._
-import types._
+import catalyst.types.{DoubleType, IntegerType}
 import util._
 
 /* Implicit conversions for creating query plans */
@@ -61,7 +60,7 @@ class OptimizerSuite extends FunSuite {
   /*
   * Unit tests for evaluating literals in expressions.
   * */
-  test("Evaluating Literals Test: expressions only have literals") {
+  test("Constant folding test: expressions only have literals") {
     val originalQuery =
       testRelation
         .select(Literal(2) + Literal(3) + Literal(4) as Symbol("2+3+4"),
@@ -86,7 +85,7 @@ class OptimizerSuite extends FunSuite {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Evaluating Literals Test: expressions have attribute references and literals in" +
+  test("Constant folding test: expressions have attribute references and literals in" +
     "arithmetic operations") {
     val originalQuery =
       testRelation
@@ -108,7 +107,7 @@ class OptimizerSuite extends FunSuite {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Evaluating Literals Test: expressions have attribute references and literals in" +
+  test("Constant folding test: expressions have attribute references and literals in" +
     "predicates") {
     val originalQuery =
       testRelation
@@ -121,11 +120,7 @@ class OptimizerSuite extends FunSuite {
                (Literal(1) === Literal(1) || 'b > 1) &&
                (Literal(1) === Literal(2) || 'b < 10)))
 
-    println(originalQuery.analyze)
-
     val optimized = Optimize(originalQuery.analyze)
-
-    println(optimized)
 
     val correctAnswer =
       testRelation
@@ -133,6 +128,40 @@ class OptimizerSuite extends FunSuite {
                'b > 1) &&
                ('a < 10 &&
                'b < 10))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Constant folding test: expressions have foldable functions") {
+    val originalQuery =
+      testRelation
+        .select(Cast(Literal("2"), IntegerType) + Literal(3) + 'a as Symbol("c1"),
+                Coalesce(Seq(Cast(Literal("abc"), IntegerType), Literal(3))) as Symbol("c2"))
+
+    val optimized = Optimize(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(Literal(5) + 'a as Symbol("c1"),
+                Literal(3) as Symbol("c2"))
+        .analyze
+
+    comparePlans(optimized, correctAnswer)
+  }
+
+  test("Constant folding test: expressions have nonfoldable functions") {
+    val originalQuery =
+      testRelation
+        .select(Rand + Literal(1) as Symbol("c1"),
+                Sum('a) as Symbol("c2"))
+
+    val optimized = Optimize(originalQuery.analyze)
+
+    val correctAnswer =
+      testRelation
+        .select(Rand + Literal(1.0) as Symbol("c1"),
+          Sum('a) as Symbol("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)

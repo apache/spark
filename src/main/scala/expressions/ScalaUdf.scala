@@ -7,6 +7,7 @@ case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expressi
     extends Expression with ImplementedUdf {
 
   def references = children.flatMap(_.references).toSet
+  def foldable = false
   def nullable = true
 
   def evaluate(evaluatedChildren: Seq[Any]): Any = {

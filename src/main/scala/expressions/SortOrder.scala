@@ -1,8 +1,6 @@
 package catalyst
 package expressions
 
-import types._
-
 abstract sealed class SortDirection
 case object Ascending extends SortDirection
 case object Descending extends SortDirection
@@ -13,6 +11,7 @@ case object Descending extends SortDirection
  */
 case class SortOrder(child: Expression, direction: SortDirection) extends UnaryExpression {
   def dataType = child.dataType
+  def foldable = false
   def nullable = child.nullable
   override def toString = s"$child ${if(direction == Ascending) "ASC" else "DESC"}"
 }

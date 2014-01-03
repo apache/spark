@@ -8,6 +8,7 @@ abstract class Expression extends TreeNode[Expression] {
   self: Product =>
 
   def dataType: DataType
+  def foldable: Boolean
   def nullable: Boolean
   def references: Set[Attribute]
 
@@ -24,6 +25,8 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
   self: Product =>
 
   def symbol: String
+
+  def foldable = left.foldable && right.foldable
 
   def references = left.references ++ right.references
 

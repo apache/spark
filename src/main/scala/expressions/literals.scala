@@ -13,6 +13,7 @@ object Literal {
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(s, StringType)
     case b: Boolean => Literal(b, BooleanType)
+    case null => Literal(null, NullType)
   }
 }
 
@@ -27,6 +28,7 @@ object IntegerLiteral {
 }
 
 case class Literal(value: Any, dataType: DataType) extends LeafExpression {
+  def foldable = true
   def nullable = false
   def references = Set.empty
 

@@ -70,6 +70,7 @@ abstract class HiveUdf extends Expression with ImplementedUdf with Logging {
   type UDFType
   val name: String
 
+  def foldable = false
   def nullable = true
   def references = children.flatMap(_.references).toSet
 

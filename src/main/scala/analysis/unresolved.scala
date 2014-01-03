@@ -37,6 +37,7 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
 case class UnresolvedFunction(name: String, children: Seq[Expression]) extends Expression {
   def exprId = throw new UnresolvedException(this, "exprId")
   def dataType = throw new UnresolvedException(this, "dataType")
+  def foldable = throw new UnresolvedException(this, "foldable")
   def nullable = throw new UnresolvedException(this, "nullable")
   def qualifiers = throw new UnresolvedException(this, "qualifiers")
   def references = children.flatMap(_.references).toSet

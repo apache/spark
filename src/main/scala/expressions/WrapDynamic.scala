@@ -9,6 +9,7 @@ case object DynamicType extends DataType
 
 case class WrapDynamic(children: Seq[Attribute]) extends Expression with ImplementedUdf {
   def nullable = false
+  def foldable = false
   def references = children.toSet
   def dataType = DynamicType
 

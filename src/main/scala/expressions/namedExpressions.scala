@@ -19,6 +19,8 @@ case class ExprId(id: Long)
 abstract class NamedExpression extends Expression {
   self: Product =>
 
+  def foldable = false
+
   def name: String
   def exprId: ExprId
   def qualifiers: Seq[String]

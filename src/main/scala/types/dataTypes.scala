@@ -13,6 +13,7 @@ case object DoubleType extends DataType
 case object LongType extends DataType
 case object ByteType extends DataType
 case object ShortType extends DataType
+case object NullType extends DataType
 
 case class ArrayType(elementType: DataType) extends DataType
 
