@@ -60,18 +60,25 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
       hadoopReader.makeRDDForPartitionedTable(relation.hiveQlPartitions)
 
   def execute() = {
-    inputRdd.map {
-      case Array(struct: LazyStruct, partitionKeys: Array[String]) =>
-        buildRow(attributeFunctions.map(_(struct, partitionKeys)))
-      case struct: LazyStruct =>
-        buildRow(attributeFunctions.map(_(struct, Array.empty)))
+    inputRdd.map { row =>
+      val values = row match {
+        case Array(struct: LazyStruct, partitionKeys: Array[String]) =>
+          attributeFunctions.map(_(struct, partitionKeys))
+        case struct: LazyStruct =>
+          attributeFunctions.map(_(struct, Array.empty))
+      }
+      buildRow(values.map {
+        case "NULL" => null
+        case "null" => null
+        case other => other
+      })
     }
   }
 
   def output = attributes
 }
 
-case class InsertIntoHiveTable(table: MetastoreRelation, child: SharkPlan)
+case class InsertIntoHiveTable(table: MetastoreRelation, partition: Map[String, String], child: SharkPlan)
                               (@transient sc: SharkContext) extends UnaryNode {
   /**
    * This file sink / record writer code is only the first step towards implementing this operator correctly and is not
@@ -105,7 +112,12 @@ case class InsertIntoHiveTable(table: MetastoreRelation, child: SharkPlan)
     tempDir.delete()
     tempDir.mkdir()
     childRdd.map(_.map(a => stringOrNull(a.asInstanceOf[AnyRef])).mkString("\001")).saveAsTextFile(tempDir.getCanonicalPath)
-    sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName}")
+    val partitionSpec =
+      if(partition.nonEmpty)
+        s"PARTITION (${partition.map { case (k,v) => s"$k=$v" }.mkString(",")})"
+      else
+        ""
+    sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName} $partitionSpec")
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

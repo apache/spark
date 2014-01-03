@@ -52,3 +52,10 @@ case class Sum(child: Expression) extends AggregateExpression with trees.UnaryNo
   def dataType = child.dataType
   override def toString = s"SUM($child)"
 }
+
+case class First(child: Expression) extends AggregateExpression with trees.UnaryNode[Expression] {
+  def references = child.references
+  def nullable = child.nullable
+  def dataType = child.dataType
+  override def toString = s"FIRST($child)"
+}

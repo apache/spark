@@ -52,7 +52,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       case UnresolvedRelation(name, alias) => UnresolvedRelation(name, alias.map(_.toLowerCase))
       case Subquery(alias, child) => Subquery(alias.toLowerCase, child)
       case q: LogicalPlan => q transformExpressions {
-        case Star(name) => Star(name.map(_.toLowerCase))
+        case s: Star => s.copy(table = s.table.map(_.toLowerCase))
         case UnresolvedAttribute(name) => UnresolvedAttribute(name.toLowerCase)
         case Alias(c, name) => Alias(c, name.toLowerCase)()
       }
@@ -109,21 +109,29 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object StarExpansion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case p @ Project(projectList, child) if childIsFullyResolved(p) && containsStar(projectList) =>
+      // Wait until children are resolved
+      case p: LogicalPlan if !childIsFullyResolved(p) => p
+      case p @ Project(projectList, child) if containsStar(projectList) =>
         Project(
           projectList.flatMap {
-            case Star(None) => child.output
-            case Star(Some(table)) => child.output.filter(_.qualifiers contains table)
+            case s: Star => s.expand(child.output)
             case o => o :: Nil
           },
           child)
+      case a: Aggregate if containsStar(a.aggregateExpressions) =>
+        a.copy(
+          aggregateExpressions = a.aggregateExpressions.flatMap {
+            case s: Star => s.expand(a.child.output)
+            case o => o :: Nil
+          }
+        )
     }
 
     /**
      * Returns true if [[exprs]] contains a star.
      */
     protected def containsStar(exprs: Seq[NamedExpression]): Boolean =
-      exprs.collect { case Star(_) => true }.nonEmpty
+      exprs.collect { case _: Star => true }.nonEmpty
   }
 
   /**

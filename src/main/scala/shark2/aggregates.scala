@@ -31,7 +31,7 @@ case class Aggregate(groupingExpressions: Seq[Expression],
   case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
     def this() = this(null, null) // Required for serialization.
 
-    var count: Long = _
+    var count: Int = _
 
     def apply(input: Seq[Row]): Unit = {
       val evaluatedExpr = expr.map(Evaluate(_, input))
@@ -67,9 +67,18 @@ case class Aggregate(groupingExpressions: Seq[Expression],
     def result: Any = seen.size
   }
 
+  case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+    def this() = this(null, null) // Required for serialization.
+
+    var result: Any = null
+
+    def apply(input: Seq[Row]): Unit = {
+      if(result == null)
+        result = Evaluate(expr, input)
+    }
+  }
+
   def output = aggregateExpressions.map(_.toAttribute)
-
-
 
   def execute() = attachTree(this, "execute") {
     val grouped = child.execute().map(row => (buildRow(groupingExpressions.map(Evaluate(_, Vector(row)))), row)).groupByKey()
@@ -82,6 +91,7 @@ case class Aggregate(groupingExpressions: Seq[Expression],
             case base @ Sum(expr) => new SumFunction(expr, base)
             case base @ Count(expr) => new CountFunction(expr, base)
             case base @ CountDistinct(expr) => new CountDistinctFunction(expr, base)
+            case base @ First(expr) => new FirstFunction(expr, base)
           }
 
           val remainingAttributes = impl.collect { case a: Attribute => a }

@@ -15,8 +15,8 @@ abstract trait PlanningStrategies {
 
   object DataSinks extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
-      case logical.InsertIntoTable(table: MetastoreRelation, child) =>
-        InsertIntoHiveTable(table, planLater(child))(sc) :: Nil
+      case logical.InsertIntoTable(table: MetastoreRelation, partition, child) =>
+        InsertIntoHiveTable(table, partition, planLater(child))(sc) :: Nil
       case _ => Nil
     }
   }

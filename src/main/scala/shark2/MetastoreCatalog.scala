@@ -6,7 +6,6 @@ import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table, Stor
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
 import org.apache.hadoop.hive.ql.plan.TableDesc
 
-
 import analysis.Catalog
 import expressions._
 import plans.logical._
@@ -14,7 +13,6 @@ import rules._
 import types._
 
 import collection.JavaConversions._
-
 
 class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
   val client = new HiveMetaStoreClient(hiveConf)
@@ -68,7 +66,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
         sd.setSerdeInfo(serDeInfo)
         client.createTable(table)
 
-        InsertIntoTable(lookupRelation(tableName, None), child)
+        InsertIntoTable(lookupRelation(tableName, None), Map.empty, child)
     }
   }
 }
@@ -79,6 +77,7 @@ object HiveMetatoreTypes {
       case "string" => StringType
       case "int" => IntegerType
       case "double" => DoubleType
+      case "bigint" => LongType
     }
 }
 

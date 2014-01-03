@@ -99,11 +99,17 @@ case class BroadcastNestedLoopJoin(streamed: SharkPlan, broadcast: SharkPlan, jo
       (outputRows, includedBroadcastTuples)
     }
 
-    val allIncludedBroadcastTupes = streamedPlusMatches.map(_._2).reduce(_ ++ _)
+    val includedBroadcastTuples = streamedPlusMatches.map(_._2)
+    val allIncludedBroadcastTuples =
+      if(includedBroadcastTuples.count == 0)
+        new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
+      else
+        streamedPlusMatches.map(_._2).reduce(_ ++ _)
+
     val rightOuterMatches: Seq[Row] =
       if(joinType == RightOuter || joinType == FullOuter)
         broadcastedRelation.value.zipWithIndex.filter {
-          case (row, i) => !allIncludedBroadcastTupes.contains(i)
+          case (row, i) => !allIncludedBroadcastTuples.contains(i)
         }.map {
           case (row, _) => buildRow(Vector.fill(left.output.size)(null) ++ row)
         }

@@ -114,6 +114,7 @@ abstract class SharkInstance extends Logging {
 
     def toHiveString(a: Any): String = a match {
       case seq: Seq[_] => seq.map(toHiveString).map(s => "\"" + s + "\"").mkString("[", ",", "]")
+      case "null" => "NULL"
       case null => "NULL"
       case other => other.toString
     }

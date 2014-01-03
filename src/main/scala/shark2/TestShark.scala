@@ -14,6 +14,7 @@ import util._
 
 import collection.JavaConversions._
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
+import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 
 
 /**
@@ -79,18 +80,26 @@ object TestShark extends SharkInstance {
    * assume the system is set up.
    */
   private def rewritePaths(cmd: String): String =
-    if(cmd startsWith "LOAD")
+    if(cmd.toUpperCase startsWith "LOAD")
       cmd.replaceAll("\\.\\.", hiveDevHome.getCanonicalPath)
     else
       cmd
 
+  val describedTable = "DESCRIBE (\\w+)".r
   /**
    * Override SharkQuery with special debug workflow.
    */
   abstract class SharkQuery extends super.SharkQuery {
     override lazy val analyzed = {
+      val describedTables = parsed match {
+        case NativeCommand(describedTable(tbl)) => tbl :: Nil
+        case _ => Nil
+      }
+
       // Make sure any test tables referenced are loaded.
-      val referencedTables = parsed collect { case UnresolvedRelation(name, _) => name.split("\\.").last }
+      val referencedTables =
+        describedTables ++
+        parsed.collect { case UnresolvedRelation(name, _) => name.split("\\.").last }
       val referencedTestTables = referencedTables.filter(testTables.contains)
       logger.debug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)
@@ -151,6 +160,31 @@ object TestShark extends SharkInstance {
           runSqlHive(s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')")
         }
       }
+    }),
+    TestTable("src_thrift", () => {
+      import org.apache.thrift.protocol.TBinaryProtocol
+      import org.apache.hadoop.hive.serde2.thrift.test.Complex
+      import org.apache.hadoop.hive.serde2.thrift.ThriftDeserializer
+      import org.apache.hadoop.mapred.SequenceFileInputFormat
+      import org.apache.hadoop.mapred.SequenceFileOutputFormat
+
+      val srcThrift = new org.apache.hadoop.hive.metastore.api.Table()
+      srcThrift.setTableName("src_thrift")
+      srcThrift.setDbName("default")
+      srcThrift.setSd(new StorageDescriptor)
+      srcThrift.getSd.setCols(Nil)
+      srcThrift.getSd.setInputFormat(classOf[SequenceFileInputFormat[_,_]].getName)
+      srcThrift.getSd.setOutputFormat(classOf[SequenceFileOutputFormat[_,_]].getName)
+      srcThrift.getSd.setSerdeInfo(new SerDeInfo)
+      srcThrift.getSd.getSerdeInfo.setSerializationLib(classOf[ThriftDeserializer].getName)
+      srcThrift.getSd.getSerdeInfo.setParameters(
+        Map(
+          "serialization.class" -> classOf[Complex].getName,
+          "serialization.format" -> classOf[TBinaryProtocol].getName))
+
+      catalog.client.createTable(srcThrift)
+
+      runSqlHive(s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/complex.seq' INTO TABLE src_thrift")
     })
   )
 
@@ -160,7 +194,8 @@ object TestShark extends SharkInstance {
   def loadTestTable(name: String) {
     if(!(loadedTables contains name)) {
       logger.info(s"Loading test table $name")
-      val createCmds = testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
+      val createCmds =
+        testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
       loadedTables += name
     }

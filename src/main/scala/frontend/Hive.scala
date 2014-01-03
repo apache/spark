@@ -264,19 +264,16 @@ object HiveQl {
   }
 
   protected def getClauses(clauseNames: Seq[String], nodeList: Seq[ASTNode]): Seq[Option[Node]] = {
-    val unhandledClauses = nodeList.filterNot(clauseNames contains _.getText)
-    require(unhandledClauses.isEmpty, s"Unhandled parse clauses: $unhandledClauses")
-
     var remainingNodes = nodeList
-
     val clauses = clauseNames.map { clauseName =>
-      val (matches, nonMatches) = remainingNodes.partition(_.getText == clauseName)
+      val (matches, nonMatches) = remainingNodes.partition(_.getText.toUpperCase == clauseName)
       remainingNodes = nonMatches ++ (if(matches.nonEmpty) matches.tail else Nil)
       matches.headOption
     }
 
-     assert(remainingNodes.isEmpty, s"Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}")
-     clauses
+    assert(remainingNodes.isEmpty,
+      s"Unhandled clauses: ${remainingNodes.map(dumpTree(_)).mkString("\n")}")
+    clauses
   }
 
   def getClause(clauseName: String, nodeList: Seq[Node]) =
@@ -437,6 +434,51 @@ object HiveQl {
       val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
       UnresolvedRelation(tableName, None)
 
+    case Token("TOK_UNIQUEJOIN", joinArgs) =>
+      val tableOrdinals =
+        joinArgs.zipWithIndex.filter {
+          case (arg, i) => arg.getText == "TOK_TABREF"
+        }.map(_._2)
+
+      val isPreserved = tableOrdinals.map(i => (i - 1 < 0) || joinArgs(i - 1).getText == "PRESERVE")
+      val tables = tableOrdinals.map(i => nodeToRelation(joinArgs(i)))
+      val joinExpressions = tableOrdinals.map(i => joinArgs(i + 1).getChildren.map(nodeToExpr))
+
+      val joinConditions = joinExpressions.sliding(2).map {
+        case Seq(c1, c2) =>
+          val predicates = (c1, c2).zipped.map { case (e1, e2) => Equals(e1, e2): Expression }
+          predicates.reduceLeft(And)
+      }.toBuffer
+
+      val joinType = isPreserved.sliding(2).map {
+        case Seq(true, true) => FullOuter
+        case Seq(true, false) => LeftOuter
+        case Seq(false, true) => RightOuter
+        case Seq(false, false) => Inner
+      }.toBuffer
+
+      val joinedTables = tables.reduceLeft(Join(_,_, Inner, None))
+
+      // Must be transform down.
+      val joinedResult = joinedTables transform {
+        case j: Join =>
+          j.copy(
+            condition = Some(joinConditions.remove(joinConditions.length - 1)),
+            joinType = joinType.remove(joinType.length - 1))
+      }
+
+      val groups = (0 until joinExpressions.head.size).map(i => Coalesce(joinExpressions.map(_(i))))
+
+      // Unique join is not really the same as an outer join so we must group together results where
+      // the joinExpressions are the same, taking the First of each value is only okay because the
+      // user of a unique join is implicitly promising that there is only one result.
+      // TODO: This doesn't actually work since [[Star]] is not a valid aggregate expression.
+      // instead we should figure out how important supporting this feature is and whether it is
+      // worth the number of hacks that will be required to implement it.  Namely, we need to add
+      // some sort of mapped star expansion that would expand all child output row to be similarly
+      // named output expressions where some aggregate expression has been applied (i.e. First).
+      ??? /// Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
+
     /* Table with Alias */
     case Token("TOK_TABREF",
            Token("TOK_TABNAME",
@@ -479,11 +521,20 @@ object HiveQl {
            Token("TOK_DIR",
              Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
       query
+
     case Token("TOK_DESTINATION",
            Token("TOK_TAB",
-             Token("TOK_TABNAME",
-               Token(tableName, Nil) :: Nil) :: Nil) :: Nil) =>
-      InsertIntoTable(UnresolvedRelation(tableName, None), query)
+              tableArgs) :: Nil) =>
+      val Some(nameClause) :: partitionClause :: Nil =
+        getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
+      val Token("TOK_TABNAME", Token(tableName, Nil) :: Nil) = nameClause
+
+      val partitionKeys = partitionClause.map(_.getChildren.map {
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) => key -> value
+      }.toMap).getOrElse(Map.empty)
+
+      InsertIntoTable(UnresolvedRelation(tableName, None), partitionKeys, query)
+
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
@@ -514,7 +565,6 @@ object HiveQl {
 
   val numericAstTypes =
     Seq(HiveParser.Number, HiveParser.TinyintLiteral, HiveParser.SmallintLiteral, HiveParser.BigintLiteral)
-
 
   /* Case insensitive matches */
   val COUNT = "(?i)COUNT".r
@@ -567,6 +617,7 @@ object HiveQl {
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
+    case Token("!=", left :: right:: Nil) => Not(Equals(nodeToExpr(left), nodeToExpr(right)))
     case Token("<>", left :: right:: Nil) => Not(Equals(nodeToExpr(left), nodeToExpr(right)))
     case Token(">", left :: right:: Nil) => GreaterThan(nodeToExpr(left), nodeToExpr(right))
     case Token(">=", left :: right:: Nil) => GreaterThanOrEqual(nodeToExpr(left), nodeToExpr(right))

@@ -21,13 +21,13 @@ abstract class NamedExpression extends Expression {
 
   def name: String
   def exprId: ExprId
+  def qualifiers: Seq[String]
+
   def toAttribute: Attribute
 }
 
 abstract class Attribute extends NamedExpression {
   self: Product =>
-
-  def qualifiers: Seq[String]
 
   def withQualifiers(newQualifiers: Seq[String]): Attribute
 
@@ -47,7 +47,8 @@ abstract class Attribute extends NamedExpression {
  *               Auto-assigned if left blank.
  */
 case class Alias(child: Expression, name: String)
-                (val exprId: ExprId = NamedExpression.newExprId)
+                (val exprId: ExprId = NamedExpression.newExprId,
+                 val qualifiers: Seq[String] = Nil)
   extends NamedExpression with trees.UnaryNode[Expression] {
 
   def dataType = child.dataType
@@ -56,13 +57,13 @@ case class Alias(child: Expression, name: String)
 
   def toAttribute =
     if(resolved)
-      AttributeReference(name, child.dataType, child.nullable)(exprId)
+      AttributeReference(name, child.dataType, child.nullable)(exprId, qualifiers)
     else
       UnresolvedAttribute(name)
 
   override def toString(): String = s"$child AS $name#${exprId.id}"
 
-  override protected final def otherCopyArgs = exprId :: Nil
+  override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
 }
 
 /**

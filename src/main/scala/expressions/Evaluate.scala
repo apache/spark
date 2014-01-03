@@ -126,6 +126,9 @@ object Evaluate extends Logging {
         }
     }
 
+    @inline def castOrNull[A](f: => A) =
+      try f catch { case _: java.lang.NumberFormatException => null }
+
     val result = e match {
       case Literal(v, _) => v
 
@@ -169,8 +172,17 @@ object Evaluate extends Logging {
       case GreaterThanOrEqual(l, r) => n2(l, r, _.gteq(_, _))
       case LessThan(l, r) => n2(l, r, _.lt(_, _))
       case LessThanOrEqual(l, r) => n2(l, r, _.lteq(_, _))
+
       case IsNull(e) => eval(e) == null
       case IsNotNull(e) => eval(e) != null
+      case Coalesce(exprs) =>
+        var currentExpression: Any = null
+        var i = 0
+        while (i < exprs.size && currentExpression == null) {
+          currentExpression = eval(exprs(i))
+          i += 1
+        }
+        currentExpression
 
       /* Casts */
       // toString
@@ -181,8 +193,16 @@ object Evaluate extends Logging {
         }
 
       // String => Numeric Types
-      case Cast(e, IntegerType) if e.dataType == StringType => eval(e).asInstanceOf[String].toInt
-      case Cast(e, DoubleType) if e.dataType == StringType => eval(e).asInstanceOf[String].toDouble
+      case Cast(e, IntegerType) if e.dataType == StringType =>
+        eval(e) match {
+          case null => null
+          case s: String => castOrNull(s.toInt)
+        }
+      case Cast(e, DoubleType) if e.dataType == StringType =>
+        eval(e) match {
+          case null => null
+          case s: String => castOrNull(s.toDouble)
+        }
       // Boolean conversions
       case Cast(e, ByteType) if e.dataType == BooleanType =>
         eval(e) match {
@@ -241,7 +261,7 @@ object Evaluate extends Logging {
       case other => throw new OptimizationException(other, "evaluation not implemented")
     }
 
-    logger.debug(s"Evaluated $e => $result")
+    logger.debug(s"Evaluated $e => $result of type ${if(result == null) "null" else result.getClass.getName}, expected: ${e.dataType}")
     result
   }
 }
