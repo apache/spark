@@ -119,15 +119,14 @@ private[spark] class DriverRunner(
     val emptyConf = new Configuration() // TODO: In docs explain it needs to be full HDFS path
     val jarFileSystem = jarPath.getFileSystem(emptyConf)
 
-    val destPath = new Path(driverDir.getAbsolutePath())
-    val destFileSystem = destPath.getFileSystem(emptyConf)
+    val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
     val localJarFile = new File(driverDir, jarFileName)
     val localJarFilename = localJarFile.getAbsolutePath
 
     if (!localJarFile.exists()) { // May already exist if running multiple workers on one node
       logInfo(s"Copying user jar $jarPath to $destPath")
-      FileUtil.copy(jarFileSystem, jarPath, destFileSystem, destPath, false, false, emptyConf)
+      FileUtil.copy(jarFileSystem, jarPath, destPath, false, emptyConf)
     }
 
     if (!localJarFile.exists()) { // Verify copy succeeded
@@ -140,8 +139,12 @@ private[spark] class DriverRunner(
   /** Launch the supplied command. */
   private def runCommand(command: Seq[String], envVars: Map[String, String], baseDir: File,
       supervise: Boolean) {
+
     // Time to wait between submission retries.
     var waitSeconds = 1
+    // A run of this many seconds resets the exponential back-off.
+    val successfulRunDuration = 1
+
     var keepTrying = !killed
 
     while (keepTrying) {
@@ -161,11 +164,15 @@ private[spark] class DriverRunner(
         val stderr = new File(baseDir, "stderr")
         val header = "Launch Command: %s\n%s\n\n".format(
           command.mkString("\"", "\" \"", "\""), "=" * 40)
-        Files.write(header, stderr, Charsets.UTF_8)
+        Files.append(header, stderr, Charsets.UTF_8)
         CommandUtils.redirectStream(process.get.getErrorStream, stderr)
       }
 
+      val processStart = System.currentTimeMillis()
       val exitCode = process.get.waitFor()
+      if (System.currentTimeMillis() - processStart > successfulRunDuration * 1000) {
+        waitSeconds = 1
+      }
 
       if (supervise && exitCode != 0 && !killed) {
         waitSeconds = waitSeconds * 2 // exponential back-off

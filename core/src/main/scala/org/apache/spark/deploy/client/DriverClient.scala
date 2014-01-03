@@ -62,7 +62,7 @@ object DriverClient extends Logging {
 
     // TODO: See if we can initialize akka so return messages are sent back using the same TCP
     //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(
+    val (actorSystem, _) = AkkaUtils.createActorSystem(
       "driverClient", Utils.localHostName(), 0)
     val master = driverArgs.master
     val response = promise[(Boolean, String)]

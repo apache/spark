@@ -11,7 +11,7 @@ object DriverWrapper {
   def main(args: Array[String]) {
     args.toList match {
       case workerUrl :: mainClass :: extraArgs =>
-        val (actorSystem, boundPort) = AkkaUtils.createActorSystem("Driver",
+        val (actorSystem, _) = AkkaUtils.createActorSystem("Driver",
           Utils.localHostName(), 0)
         actorSystem.actorOf(Props(classOf[WorkerWatcher], workerUrl), name = "workerWatcher")
 

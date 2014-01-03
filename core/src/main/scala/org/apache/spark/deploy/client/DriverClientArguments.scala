@@ -23,6 +23,9 @@ import scala.collection.mutable.ListBuffer
  * Command-line parser for the driver client.
  */
 private[spark] class DriverClientArguments(args: Array[String]) {
+  val defaultCores = 1
+  val defaultMemory = 512
+
   var cmd: String = "" // 'launch' or 'kill'
 
   // launch parameters
@@ -30,8 +33,8 @@ private[spark] class DriverClientArguments(args: Array[String]) {
   var jarUrl: String = ""
   var mainClass: String = ""
   var supervise: Boolean = false
-  var memory: Int = 512
-  var cores: Int = 1
+  var memory: Int = defaultMemory
+  var cores: Int = defaultCores
   private var _driverOptions = ListBuffer[String]()
   def driverOptions = _driverOptions.toSeq
 
@@ -78,14 +81,17 @@ private[spark] class DriverClientArguments(args: Array[String]) {
   def printUsageAndExit(exitCode: Int) {
     // TODO: It wouldn't be too hard to allow users to submit their app and dependency jars
     //       separately similar to in the YARN client.
-    System.err.println(
-      "usage: DriverClient [options] launch <active-master> <jar-url> <main-class> " +
-        "[driver options]\n" +
-      "usage: DriverClient kill <active-master> <driver-id>\n\n" +
-      "Options:\n" +
-      "  -c CORES, --cores CORES                Number of cores to request \n" +
-      "  -m MEMORY, --memory MEMORY             Megabytes of memory to request\n" +
-      "  -s, --supervise                        Whether to restart the driver on failure\n")
+    val usage =
+      s"""
+        |Usage: DriverClient [options] launch <active-master> <jar-url> <main-class> [driver options]
+        |Usage: DriverClient kill <active-master> <driver-id>
+        |
+        |Options:
+        |   -c CORES, --cores CORES        Number of cores to request (default: $defaultCores)
+        |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $defaultMemory)
+        |   -s, --supervise                Whether to restart the driver on failure
+      """.stripMargin
+    System.err.println(usage)
     System.exit(exitCode)
   }
 }

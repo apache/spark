@@ -260,8 +260,8 @@ private[spark] class Worker(
 
     case KillDriver(driverId) => {
       logInfo(s"Asked to kill driver $driverId")
-      drivers.find(_._1 == driverId) match {
-        case Some((id, runner)) =>
+      drivers.get(driverId) match {
+        case Some(runner) =>
           runner.kill()
         case None =>
           logError(s"Asked to kill unknown driver $driverId")
@@ -280,8 +280,7 @@ private[spark] class Worker(
       masterLock.synchronized {
         master ! DriverStateChanged(driverId, state, exception)
       }
-      val driver = drivers(driverId)
-      drivers -= driverId
+      val driver = drivers.remove(driverId).get
       finishedDrivers(driverId) = driver
       memoryUsed -= driver.driverDesc.mem
       coresUsed -= driver.driverDesc.cores
