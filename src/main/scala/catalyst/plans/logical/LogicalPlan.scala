@@ -28,14 +28,9 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
 
   def resolve(name: String): Option[Attribute] = {
     val parts = name.split("\\.")
-    val options = children.flatMap(_.output).filter {option =>
-     // If the first part of the desired name matches a qualifier for this possible match, drop it.
-     val remainingParts =
-      if(option.qualifiers contains parts.head)
-        parts.drop(1)
-      else
-        parts
-
+    val options = children.flatMap(_.output).filter { option =>
+      // If the first part of the desired name matches a qualifier for this possible match, drop it.
+      val remainingParts = if (option.qualifiers contains parts.head) parts.drop(1) else parts
       option.name == remainingParts.head
     }
 

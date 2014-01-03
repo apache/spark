@@ -1,7 +1,6 @@
 package catalyst
 package analysis
 
-import errors._
 import expressions._
 import plans.logical._
 import rules._
@@ -11,7 +10,7 @@ import types._
  * Converts string "NaN"s that are in binary operators with a NaN-able types (Float / Double) to the
  * appropriate numeric equivalent.
  */
-object ConvertNaNs extends Rule[LogicalPlan]{
+object ConvertNaNs extends Rule[LogicalPlan] {
   val stringNaN = Literal("NaN", StringType)
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -43,10 +42,12 @@ object ConvertNaNs extends Rule[LogicalPlan]{
  *
  * Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
  *
- * The implicit conversion rules can be summarized as follows. Any integral numeric type can be
- * implicitly converted to a wider type. All the integral numeric types, FLOAT, and (perhaps
- * surprisingly) STRING can be implicitly converted to DOUBLE. TINYINT, SMALLINT, and INT can all be
- * converted to FLOAT. BOOLEAN types cannot be converted to any other type.
+ * The implicit conversion rules can be summarized as follows:
+ *  - Any integral numeric type can be implicitly converted to a wider type.
+ *  - All the integral numeric types, FLOAT, and (perhaps surprisingly) STRING can be implicitly
+ *    converted to DOUBLE.
+ *  - TINYINT, SMALLINT, and INT can all be converted to FLOAT.
+ *  - BOOLEAN types cannot be converted to any other type.
  *
  * String conversions are handled by the PromoteStrings rule.
  */

@@ -6,21 +6,28 @@ import plans.logical._
 import rules._
 
 /**
- * A trivial [[Analyzer]] with an [[EmptyCatalog]]. Used for testing when all relations are
- * already filled in and the analyser needs only to resolve attribute references.
- *
+ * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
+ * when all relations are already filled in and the analyser needs only to resolve attribute
+ * references.
  */
-object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyRegistry, true)
+object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true)
 
+/**
+ * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
+ * [[UnresolvedRelation]]s into fully typed objects using information in a schema [[Catalog]] and
+ * a [[FunctionRegistry]].
+ */
 class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Boolean)
-    extends RuleExecutor[LogicalPlan] {
+  extends RuleExecutor[LogicalPlan] {
+
+  // TODO: pass this in as a parameter.
   val fixedPoint = FixedPoint(100)
 
-  val batches = Seq(
+  val batches: Seq[Batch] = Seq(
     Batch("LocalRelations", Once,
       NewLocalRelationInstances),
     Batch("CaseInsensitiveAttributeReferences", Once,
-      (if(caseSensitive) Nil else LowercaseAttributeReferences :: Nil):_*),
+      (if (caseSensitive) Nil else LowercaseAttributeReferences :: Nil) : _*),
     Batch("Resolution", fixedPoint,
       ResolveReferences,
       ResolveRelations,
@@ -60,22 +67,26 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
-   * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s from a logical plan node's children.
+   * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s
+   * from a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan if childIsFullyResolved(q) =>
         logger.trace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
-        case u @ UnresolvedAttribute(name) =>
-          // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
-          val result = q.resolve(name).getOrElse(u)
-          logger.debug(s"Resolving $u to $result")
-          result
+          case u @ UnresolvedAttribute(name) =>
+            // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
+            val result = q.resolve(name).getOrElse(u)
+            logger.debug(s"Resolving $u to $result")
+            result
         }
     }
   }
 
+  /**
+   * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
+   */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
@@ -111,6 +122,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved
       case p: LogicalPlan if !childIsFullyResolved(p) => p
+      // If the projection list contains Star's, expand it.
       case p @ Project(projectList, child) if containsStar(projectList) =>
         Project(
           projectList.flatMap {
@@ -118,6 +130,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             case o => o :: Nil
           },
           child)
+      // If the aggregate function argument contains Star's, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         a.copy(
           aggregateExpressions = a.aggregateExpressions.flatMap {

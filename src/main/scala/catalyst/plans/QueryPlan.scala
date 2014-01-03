@@ -19,7 +19,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
 
     @inline def transformExpression(e: Expression) = {
       val newE = e.transform(rule)
-      if(newE.id != e.id && newE != e) {
+      if (newE.id != e.id && newE != e) {
         changed = true
         newE
       } else {
@@ -37,7 +37,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case other: AnyRef => other
     }.toArray
 
-    if(changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs) else this
   }
 
   /** Returns the result of running [[transformExpressions]] on this node and all its children */

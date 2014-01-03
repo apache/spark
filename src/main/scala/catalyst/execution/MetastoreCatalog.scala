@@ -25,17 +25,19 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
     val table = client.getTable(databaseName, tableName)
     val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
     val partitions =
-      if(hiveQlTable.isPartitioned)
+      if (hiveQlTable.isPartitioned) {
         client.listPartitions(databaseName, tableName, 255).toSeq
-      else
+      } else {
         Nil
+      }
 
     // Since HiveQL is case insensitive for table names we make them all lowercase.
     MetastoreRelation(databaseName.toLowerCase, tableName.toLowerCase, alias)(table, partitions)
   }
 
   /**
-   * Creates any tables required for query execution.  For example, because of a CREATE TABLE X AS statement.
+   * Creates any tables required for query execution.
+   * For example, because of a CREATE TABLE X AS statement.
    */
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -81,8 +83,9 @@ object HiveMetatoreTypes {
     }
 }
 
-case class MetastoreRelation(databaseName: String, tableName: String, alias: Option[String])(val table: Table, val partitions: Seq[Partition])
-    extends BaseRelation {
+case class MetastoreRelation(databaseName: String, tableName: String, alias: Option[String])
+    (val table: Table, val partitions: Seq[Partition])
+  extends BaseRelation {
 
   def hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
   def hiveQlPartitions = partitions.map(new org.apache.hadoop.hive.ql.metadata.Partition(hiveQlTable, _))
@@ -94,12 +97,12 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
   )
 
    implicit class SchemaAttribute(f: FieldSchema) {
-     def toAttribute =
-       AttributeReference(
-         f.getName,
-         HiveMetatoreTypes.toDataType(f.getType),
-         true // Since data can be dumped in randomly with no validation, everything is nullable.
-       )(qualifiers = tableName +: alias.toSeq)
+     def toAttribute = AttributeReference(
+       f.getName,
+       HiveMetatoreTypes.toDataType(f.getType),
+       // Since data can be dumped in randomly with no validation, everything is nullable.
+       nullable = true
+     )(qualifiers = tableName +: alias.toSeq)
    }
 
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)

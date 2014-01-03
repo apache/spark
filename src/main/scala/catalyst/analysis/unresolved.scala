@@ -31,7 +31,7 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   def newInstance = this
   def withQualifiers(newQualifiers: Seq[String]) = this
 
-  override def toString(): String = s"'$name"
+  override def toString: String = s"'$name"
 }
 
 case class UnresolvedFunction(name: String, children: Seq[Expression]) extends Expression {
@@ -67,8 +67,10 @@ case class Star(
   def withQualifiers(newQualifiers: Seq[String]) = this
 
   def expand(input: Seq[Attribute]): Seq[NamedExpression] = {
-    val expandedAttributes = table match {
+    val expandedAttributes: Seq[Attribute] = table match {
+      // If there is no table specified, use all input attributes.
       case None => input
+      // If there is a table, pick out attributes that are part of this table.
       case Some(table) => input.filter(_.qualifiers contains table)
     }
     val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {

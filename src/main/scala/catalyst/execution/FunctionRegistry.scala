@@ -1,26 +1,23 @@
 package catalyst
 package execution
 
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
-
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
-
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
 import org.apache.hadoop.hive.ql.exec.UDF
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.io._
 
 import expressions._
 import types._
-import org.apache.hadoop.io._
-
-import collection.JavaConversions._
-import scala.Predef._
 
 object HiveFunctionRegistry extends analysis.FunctionRegistry {
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
-    // We only look it up to see if it exists, but do not include it in the HiveUDF since it is not always serializable.
-    val functionInfo =
-      Option(FunctionRegistry.getFunctionInfo(name))
-        .getOrElse(sys.error(s"Couldn't find function $name"))
+    // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
+    // not always serializable.
+    val functionInfo: FunctionInfo = Option(FunctionRegistry.getFunctionInfo(name)).getOrElse(
+      sys.error(s"Couldn't find function $name"))
 
     if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
       val functionInfo = FunctionRegistry.getFunctionInfo(name)
@@ -31,7 +28,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry {
 
       HiveSimpleUdf(
         name,
-        children.zip(expectedDataTypes).map { case (e, t) => Cast(e,t) }
+        children.zip(expectedDataTypes).map { case (e, t) => Cast(e, t) }
       )
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdf(name, IntegerType, children)
@@ -99,41 +96,38 @@ abstract class HiveUdf extends Expression with ImplementedUdf with Logging {
   }
 }
 
-case class HiveSimpleUdf(
-    name: String,
-    children: Seq[Expression]) extends HiveUdf {
+case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUdf {
   import HiveFunctionRegistry._
   type UDFType = UDF
 
   @transient
   lazy val method = function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
   @transient
-  lazy val dataType = javaClassToDataType(method.getReturnType)
+  lazy val dataType: DataType = javaClassToDataType(method.getReturnType)
 
   lazy val wrappers = method.getParameterTypes.map { argClass =>
     val primitiveClasses = Seq(
       Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
       classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long]
     )
-    val matchingConstructor =
-      argClass.getConstructors.find(c =>
-        c.getParameterTypes.size == 1 &&
-        primitiveClasses.contains(c.getParameterTypes.head))
+    val matchingConstructor = argClass.getConstructors.find { c =>
+      c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
+    }
 
-    val constructor =
-      matchingConstructor
-        .getOrElse(sys.error(s"No matching wrapper found, options: ${argClass.getConstructors.toSeq}."))
+    val constructor = matchingConstructor.getOrElse(
+      sys.error(s"No matching wrapper found, options: ${argClass.getConstructors.toSeq}."))
 
     (a: Any) => {
-      logger.debug(s"Wrapping $a of type ${if(a == null) "null" else  a.getClass.getName} using $constructor.")
+      logger.debug(s"Wrapping $a of type ${if (a == null) "null" else a.getClass.getName} using $constructor.")
       // We must make sure that primitives get boxed java style.
-      if(a == null)
+      if (a == null) {
         null
-      else
+      } else {
         constructor.newInstance(a match {
           case i: Int => i: java.lang.Integer
           case other: AnyRef => other
         }).asInstanceOf[AnyRef]
+      }
     }
   }
 
@@ -156,7 +150,7 @@ case class HiveGenericUdf(
   import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
   type UDFType = GenericUDF
 
- lazy val inspectors = children.map(_.dataType).map {
+  lazy val inspectors = children.map(_.dataType).map {
     case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
     case IntegerType => PrimitiveObjectInspectorFactory.javaIntObjectInspector
     case DoubleType => PrimitiveObjectInspectorFactory.javaDoubleObjectInspector
@@ -165,6 +159,7 @@ case class HiveGenericUdf(
     case ShortType => PrimitiveObjectInspectorFactory.javaShortObjectInspector
     case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
   }
+
   lazy val instance = {
     function.initialize(inspectors.toArray)
     function

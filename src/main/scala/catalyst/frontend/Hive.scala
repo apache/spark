@@ -2,7 +2,8 @@ package catalyst
 package frontend
 package hive
 
-import catalyst.analysis.UnresolvedRelation
+import scala.collection.JavaConversions._
+
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
 
@@ -11,9 +12,6 @@ import expressions._
 import plans._
 import plans.logical._
 import types._
-
-import collection.JavaConversions._
-import scala.collection.mutable
 
 /**
  * A logical node that represents a non-query command to be executed by the system.  For example,
@@ -25,8 +23,9 @@ abstract class Command extends LeafNode {
 }
 
 /**
- * Used when we need to start parsing the AST before deciding that we are going to pass the command back for Hive to
- * execute natively.  Will be replaced with a native command that contains the cmd string.
+ * Used when we need to start parsing the AST before deciding that we are going to pass the command
+ * back for Hive to execute natively.  Will be replaced with a native command that contains the
+ * cmd string.
  */
 case object NativePlaceholder extends Command
 
@@ -119,7 +118,7 @@ object HiveQl {
 
   /**
    * A set of implicit transformations that allow Hive ASTNodes to be rewritten by transformations similar to
-   * [[catalyst.tree.TreeNode]].
+   * [[catalyst.trees.TreeNode]].
    *
    * Note that this should be considered very experimental and is not indented as a replacement for TreeNode.  Primarily
    * it should be noted ASTNodes are not immutable and do not appear to have clean copy semantics.  Therefore, users of

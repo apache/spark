@@ -15,14 +15,14 @@ abstract class SharkPlan extends QueryPlan[SharkPlan] with Logging {
   protected def buildRow(values: Seq[Any]): Row = new catalyst.expressions.GenericRow(values)
 }
 
-abstract trait LeafNode extends SharkPlan with trees.LeafNode[SharkPlan] {
+trait LeafNode extends SharkPlan with trees.LeafNode[SharkPlan] {
   self: Product =>
 }
 
-abstract trait UnaryNode extends SharkPlan with trees.UnaryNode[SharkPlan] {
+trait UnaryNode extends SharkPlan with trees.UnaryNode[SharkPlan] {
   self: Product =>
 }
 
-abstract trait BinaryNode extends SharkPlan with trees.BinaryNode[SharkPlan] {
+trait BinaryNode extends SharkPlan with trees.BinaryNode[SharkPlan] {
   self: Product =>
 }
