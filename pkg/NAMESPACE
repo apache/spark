@@ -16,7 +16,7 @@ exportMethods(
               "partitionBy",
               "reduce",
               "reduceByKey",
-              "sample",
+              "sampleRDD",
               "take",
               "takeSample"
              )

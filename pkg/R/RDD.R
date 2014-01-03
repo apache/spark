@@ -399,39 +399,70 @@ setMethod("take",
 
 #' Return an RDD that is a sampled subset of the given RDD.
 #'
+#' The same as `sample()' in Spark. (We rename it due to signature
+#' inconsistencies with the `sample()' function in R's base package.)
+#'
 #' @param rdd The RDD to sample elements from
 #' @param withReplacement Sampling with replacement or not
 #' @param fraction The (rough) sample target fraction
 #' @param seed Randomness seed value
-#' @rdname sample
+#' @rdname sampleRDD
 #' @export
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' rdd <- parallelize(sc, 1:10, 10L) # ensure each num is in its own split
-#' collect(sample(rdd, FALSE, 0.5, 1618L)) # approximately 5 elements sampled
+#' rdd <- parallelize(sc, 1:10) # ensure each num is in its own split
+#' collect(sampleRDD(rdd, FALSE, 0.5, 1618L)) # ~5 distinct elements
+#' collect(sampleRDD(rdd, TRUE, 0.5, 9L)) # ~5 elements possibly with duplicates
 #'}
-setGeneric("sample",
-           # TODO: `sample` shadows the same-name func in R base; should we
-           # rename this to `sampleRDD`?
+setGeneric("sampleRDD",
            function(rdd, withReplacement, fraction, seed) {
-             standardGeneric("sample")
+             standardGeneric("sampleRDD")
            })
 
-#' @rdname sample
-#' @aliases sample,RDD
-setMethod("sample",
+#' @rdname sampleRDD
+#' @aliases sampleRDD,RDD
+setMethod("sampleRDD",
           signature(rdd = "RDD", withReplacement = "logical",
                     fraction = "numeric", seed = "integer"),
           function(rdd, withReplacement, fraction, seed) {
 
-            jrdd <- .jcall(rdd@jrdd,
-                           "Lorg/apache/spark/api/java/JavaRDD;",
-                           "sample",
-                           withReplacement,
-                           fraction,
-                           as.integer(seed))
-            RDD(jrdd)
+            # The sampler: takes a partition and returns its sampled version.
+            samplingFunc <- function(split, part) {
+              set.seed(seed)
+              res <- vector("list", length(part))
+              len <- 0
+
+              # Discards some random values to ensure each partition has a
+              # different random seed.
+              runif(split)
+
+              for (elem in part) {
+                if (withReplacement) {
+                  count <- rpois(1, fraction)
+                  if (count > 0) {
+                    res[(len + 1):(len + count)] <- rep(list(elem), count)
+                    len <- len + count
+                  }
+                } else {
+                  if (runif(1) < fraction) {
+                    len <- len + 1
+                    res[[len]] <- elem
+                  }
+                }
+              }
+
+              # TODO(zongheng): look into the performance of the current
+              # implementation. Look into some iterator package? Note that
+              # Scala avoids many calls to creating an empty list and PySpark
+              # similarly achieves this using `yield'.
+              if (len > 0)
+                res[1:len]
+              else
+                list()
+            }
+
+            lapplyPartitionsWithIndex(rdd, samplingFunc)
           })
 
 
@@ -446,9 +477,11 @@ setMethod("sample",
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' rdd <- parallelize(sc, 1:10, 10L) # ensure each num is in its own split
-#' # exactly 5 elements sampled (may not be distinct)
+#' rdd <- parallelize(sc, 1:100)
+#' # exactly 5 elements sampled, which may not be distinct
 #' takeSample(rdd, TRUE, 5L, 1618L)
+#' # exactly 5 distinct elements sampled
+#' takeSample(rdd, FALSE, 5L, 16181618L)
 #'}
 setGeneric("takeSample",
            function(rdd, withReplacement, num, seed) {
@@ -459,12 +492,45 @@ setGeneric("takeSample",
 setMethod("takeSample", signature(rdd = "RDD", withReplacement = "logical",
                                   num = "integer", seed = "integer"),
           function(rdd, withReplacement, num, seed) {
-            underlying <- rdd@jrdd$rdd()
-            arrs <- underlying$takeSample(withReplacement, num, seed)
-            if (rdd@serialized)
-              deserializeByteArrays(arrs)
-            else
-              arrs
+            # This function is ported from RDD.scala.
+            fraction <- 0.0
+            total <- 0
+            multiplier <- 3.0
+            initialCount <- count(rdd)
+            maxSelected <- 0
+            MAXINT <- .Machine$integer.max
+
+            if (num < 0)
+              stop(paste("Negative number of elements requested"))
+
+            if (initialCount > MAXINT - 1) {
+              maxSelected <- MAXINT - 1
+            } else {
+              maxSelected <- initialCount
+            }
+
+            if (num > initialCount && !withReplacement) {
+              total <- maxSelected
+              fraction <- multiplier * (maxSelected + 1) / initialCount
+            } else {
+              total <- num
+              fraction <- multiplier * (num + 1) / initialCount
+            }
+
+            set.seed(seed)
+            samples <- collect(sampleRDD(rdd, withReplacement, fraction,
+                                         as.integer(ceiling(runif(1,
+                                                                  -MAXINT,
+                                                                  MAXINT)))))
+            # If the first sample didn't turn out large enough, keep trying to
+            # take samples; this shouldn't happen often because we use a big
+            # multiplier for thei initial size
+            while (length(samples) < total)
+              samples <- collect(sampleRDD(rdd, withReplacement, fraction,
+                                           as.integer(ceiling(runif(1,
+                                                                    -MAXINT,
+                                                                    MAXINT)))))
+            sample(samples)[1:total]
           })
 
 

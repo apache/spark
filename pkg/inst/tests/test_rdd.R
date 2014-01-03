@@ -56,3 +56,50 @@ test_that("lapplyPartitionsWithIndex on RDDs", {
   expect_equal(actual, list(list(0, list(list(1, 2), list(3, 4))),
                             list(1, list(list(4, 8)))))
 })
+
+test_that("sampleRDD() on RDDs", {
+  expect_equal(collect(sampleRDD(rdd, FALSE, 1.0, 2014L)), nums)
+  expect_equal(collect(sampleRDD(rdd, TRUE, 1.0, 20140103L)), nums)
+})
+
+test_that("takeSample() on RDDs", {
+  # ported from RDDSuite.scala, modified seeds
+  data <- parallelize(sc, 1:100, 2L)
+  for (seed in 4:5) {
+    s <- takeSample(data, FALSE, 20L, seed)
+    expect_equal(length(s), 20L)
+    expect_equal(length(unique(s)), 20L)
+    for (elem in s) {
+      expect_true(elem >= 1 && elem <= 100)
+    }
+  }
+  for (seed in 4:5) {
+    s <- takeSample(data, FALSE, 200L, seed)
+    expect_equal(length(s), 100L)
+    expect_equal(length(unique(s)), 100L)
+    for (elem in s) {
+      expect_true(elem >= 1 && elem <= 100)
+    }
+  }
+  for (seed in 4:5) {
+    s <- takeSample(data, TRUE, 20L, seed)
+    expect_equal(length(s), 20L)
+    for (elem in s) {
+      expect_true(elem >= 1 && elem <= 100)
+    }
+  }
+  for (seed in 4:5) {
+    s <- takeSample(data, TRUE, 100L, seed)
+    expect_equal(length(s), 100L)
+    # Chance of getting all distinct elements is astronomically low, so test we
+    # got < 100
+    expect_true(length(unique(s)) < 100L)
+  }
+  for (seed in 4:5) {
+    s <- takeSample(data, TRUE, 200L, seed)
+    expect_equal(length(s), 200L)
+    # Chance of getting all distinct elements is still quite low, so test we
+    # got < 100
+    expect_true(length(unique(s)) < 100L)
+  }
+})
