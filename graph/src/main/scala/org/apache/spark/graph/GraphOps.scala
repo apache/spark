@@ -1,5 +1,7 @@
 package org.apache.spark.graph
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkException
@@ -15,7 +17,7 @@ import org.apache.spark.SparkException
  * @tparam ED the edge attribute type
  *
  */
-class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
+class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
 
   /**
    * Compute the number of edges in the graph.
@@ -109,7 +111,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * @todo Should this return a graph with the new vertex values?
    *
    */
-  def aggregateNeighbors[A: ClassManifest](
+  def aggregateNeighbors[A: ClassTag](
       mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
       reduceFunc: (A, A) => A,
       dir: EdgeDirection)
@@ -226,7 +228,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * }}}
    *
    */
-  def joinVertices[U: ClassManifest](table: RDD[(Vid, U)])(mapFunc: (Vid, VD, U) => VD)
+  def joinVertices[U: ClassTag](table: RDD[(Vid, U)])(mapFunc: (Vid, VD, U) => VD)
     : Graph[VD, ED] = {
     val uf = (id: Vid, data: VD, o: Option[U]) => {
       o match {
@@ -262,7 +264,7 @@ class GraphOps[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, ED]) {
    * }}}
    *
    */
-  def filter[VD2: ClassManifest, ED2: ClassManifest](
+  def filter[VD2: ClassTag, ED2: ClassTag](
       preprocess: Graph[VD, ED] => Graph[VD2, ED2],
       epred: (EdgeTriplet[VD2, ED2]) => Boolean = (x: EdgeTriplet[VD2, ED2]) => true,
       vpred: (Vid, VD2) => Boolean = (v:Vid, d:VD2) => true): Graph[VD, ED] = {

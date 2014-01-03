@@ -1,5 +1,6 @@
 package org.apache.spark.graph.impl
 
+import scala.reflect.ClassTag
 import scala.util.Random
 
 import org.scalatest.FunSuite
@@ -59,7 +60,7 @@ class EdgePartitionSuite extends FunSuite {
   }
 
   test("innerJoin") {
-    def makeEdgePartition[A: ClassManifest](xs: Iterable[(Int, Int, A)]): EdgePartition[A] = {
+    def makeEdgePartition[A: ClassTag](xs: Iterable[(Int, Int, A)]): EdgePartition[A] = {
       val builder = new EdgePartitionBuilder[A]
       for ((src, dst, attr) <- xs) { builder.add(src: Vid, dst: Vid, attr) }
       builder.toEdgePartition

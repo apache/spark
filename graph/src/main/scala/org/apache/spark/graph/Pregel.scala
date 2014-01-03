@@ -1,5 +1,7 @@
 package org.apache.spark.graph
 
+import scala.reflect.ClassTag
+
 
 /**
  * This object implements a Pregel-like bulk-synchronous
@@ -84,7 +86,7 @@ object Pregel {
    * @return the resulting graph at the end of the computation
    *
    */
-  def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest]
+  def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
     (graph: Graph[VD, ED], initialMsg: A, maxIterations: Int = Int.MaxValue)(
       vprog: (Vid, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(Vid,A)],

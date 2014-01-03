@@ -1,5 +1,7 @@
 package org.apache.spark.graph.algorithms
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.graph._
 
 
@@ -21,7 +23,7 @@ object TriangleCount {
    *
    * @return
    */
-  def run[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD,ED]): Graph[Int, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD,ED]): Graph[Int, ED] = {
     // Remove redundant edges
     val g = graph.groupEdges((a, b) => a).cache
 

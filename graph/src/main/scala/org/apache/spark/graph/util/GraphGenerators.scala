@@ -1,10 +1,9 @@
 package org.apache.spark.graph.util
 
-import util._
-import math._
 import scala.annotation.tailrec
-//import scala.collection.mutable
-
+import scala.math._
+import scala.reflect.ClassTag
+import scala.util._
 
 import org.apache.spark._
 import org.apache.spark.serializer._
@@ -155,7 +154,7 @@ object GraphGenerators {
 
   }
 
-  def outDegreeFromEdges[ED: ClassManifest](edges: RDD[Edge[ED]]): Graph[Int, ED] = {
+  def outDegreeFromEdges[ED: ClassTag](edges: RDD[Edge[ED]]): Graph[Int, ED] = {
 
     val vertices = edges.flatMap { edge => List((edge.srcId, 1)) }
       .reduceByKey(_ + _)
@@ -281,14 +280,3 @@ object GraphGenerators {
 
 
 } // end of Graph Generators
-
-
-
-
-
-
-
-
-
-
-

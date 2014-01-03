@@ -17,6 +17,8 @@
 
 package org.apache.spark.graph
 
+import scala.reflect.ClassTag
+
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
@@ -50,7 +52,7 @@ import org.apache.spark.graph.impl.VertexPartition
  * }}}
  *
  */
-class VertexRDD[@specialized VD: ClassManifest](
+class VertexRDD[@specialized VD: ClassTag](
     val partitionsRDD: RDD[VertexPartition[VD]])
   extends RDD[(Vid, VD)](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
@@ -111,7 +113,7 @@ class VertexRDD[@specialized VD: ClassManifest](
   /**
    * Return a new VertexRDD by applying a function to each VertexPartition of this RDD.
    */
-  def mapVertexPartitions[VD2: ClassManifest](f: VertexPartition[VD] => VertexPartition[VD2])
+  def mapVertexPartitions[VD2: ClassTag](f: VertexPartition[VD] => VertexPartition[VD2])
     : VertexRDD[VD2] = {
     val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
     new VertexRDD(newPartitionsRDD)
@@ -121,7 +123,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * Return a new VertexRDD by applying a function to corresponding
    * VertexPartitions of this VertexRDD and another one.
    */
-  def zipVertexPartitions[VD2: ClassManifest, VD3: ClassManifest]
+  def zipVertexPartitions[VD2: ClassTag, VD3: ClassTag]
     (other: VertexRDD[VD2])
     (f: (VertexPartition[VD], VertexPartition[VD2]) => VertexPartition[VD3]): VertexRDD[VD3] = {
     val newPartitionsRDD = partitionsRDD.zipPartitions(
@@ -160,7 +162,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * each of the entries in the original VertexRDD.  The resulting
    * VertexRDD retains the same index.
    */
-  def mapValues[VD2: ClassManifest](f: VD => VD2): VertexRDD[VD2] =
+  def mapValues[VD2: ClassTag](f: VD => VD2): VertexRDD[VD2] =
     this.mapVertexPartitions(_.map((vid, attr) => f(attr)))
 
   /**
@@ -174,7 +176,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * each of the entries in the original VertexRDD.  The resulting
    * VertexRDD retains the same index.
    */
-  def mapValues[VD2: ClassManifest](f: (Vid, VD) => VD2): VertexRDD[VD2] =
+  def mapValues[VD2: ClassTag](f: (Vid, VD) => VD2): VertexRDD[VD2] =
     this.mapVertexPartitions(_.map(f))
 
   /**
@@ -205,7 +207,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * other VertexSet.
    *
    */
-  def leftZipJoin[VD2: ClassManifest, VD3: ClassManifest]
+  def leftZipJoin[VD2: ClassTag, VD3: ClassTag]
       (other: VertexRDD[VD2])(f: (Vid, VD, Option[VD2]) => VD3): VertexRDD[VD3] = {
     this.zipVertexPartitions(other) { (thisPart, otherPart) =>
       thisPart.leftJoin(otherPart)(f)
@@ -231,7 +233,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * @return a VertexRDD containing all the vertices in this
    * VertexRDD with the attribute emitted by f.
    */
-  def leftJoin[VD2: ClassManifest, VD3: ClassManifest]
+  def leftJoin[VD2: ClassTag, VD3: ClassTag]
       (other: RDD[(Vid, VD2)])
       (f: (Vid, VD, Option[VD2]) => VD3)
     : VertexRDD[VD3] =
@@ -257,7 +259,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * Same effect as leftJoin(other) { (vid, a, bOpt) => bOpt.getOrElse(a) }, but `this` and `other`
    * must have the same index.
    */
-  def innerZipJoin[U: ClassManifest, VD2: ClassManifest](other: VertexRDD[U])
+  def innerZipJoin[U: ClassTag, VD2: ClassTag](other: VertexRDD[U])
       (f: (Vid, VD, U) => VD2): VertexRDD[VD2] = {
     this.zipVertexPartitions(other) { (thisPart, otherPart) =>
       thisPart.innerJoin(otherPart)(f)
@@ -268,7 +270,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * Replace vertices with corresponding vertices in `other`, and drop vertices without a
    * corresponding vertex in `other`.
    */
-  def innerJoin[U: ClassManifest, VD2: ClassManifest](other: RDD[(Vid, U)])
+  def innerJoin[U: ClassTag, VD2: ClassTag](other: RDD[(Vid, U)])
       (f: (Vid, VD, U) => VD2): VertexRDD[VD2] = {
     // Test if the other vertex is a VertexRDD to choose the optimal join strategy.
     // If the other set is a VertexRDD then we use the much more efficient innerZipJoin
@@ -291,7 +293,7 @@ class VertexRDD[@specialized VD: ClassManifest](
    * Aggregate messages with the same ids using `reduceFunc`, returning a VertexRDD that is
    * co-indexed with this one.
    */
-  def aggregateUsingIndex[VD2: ClassManifest](
+  def aggregateUsingIndex[VD2: ClassTag](
       messages: RDD[(Vid, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2] =
   {
     val shuffled = MsgRDDFunctions.partitionForAggregation(messages, this.partitioner.get)
@@ -318,7 +320,7 @@ object VertexRDD {
    *
    * @param rdd the collection of vertex-attribute pairs
    */
-  def apply[VD: ClassManifest](rdd: RDD[(Vid, VD)]): VertexRDD[VD] = {
+  def apply[VD: ClassTag](rdd: RDD[(Vid, VD)]): VertexRDD[VD] = {
     val partitioned: RDD[(Vid, VD)] = rdd.partitioner match {
       case Some(p) => rdd
       case None => rdd.partitionBy(new HashPartitioner(rdd.partitions.size))
@@ -338,7 +340,7 @@ object VertexRDD {
    * @param rdd the collection of vertex-attribute pairs
    * @param mergeFunc the associative, commutative merge function.
    */
-  def apply[VD: ClassManifest](rdd: RDD[(Vid, VD)], mergeFunc: (VD, VD) => VD): VertexRDD[VD] =
+  def apply[VD: ClassTag](rdd: RDD[(Vid, VD)], mergeFunc: (VD, VD) => VD): VertexRDD[VD] =
   {
     val partitioned: RDD[(Vid, VD)] = rdd.partitioner match {
       case Some(p) => rdd
@@ -350,7 +352,7 @@ object VertexRDD {
     new VertexRDD(vertexPartitions)
   }
 
-  def apply[VD: ClassManifest](vids: RDD[Vid], rdd: RDD[(Vid, VD)], defaultVal: VD)
+  def apply[VD: ClassTag](vids: RDD[Vid], rdd: RDD[(Vid, VD)], defaultVal: VD)
     : VertexRDD[VD] =
   {
     VertexRDD(vids.map(vid => (vid, defaultVal))).leftJoin(rdd) { (vid, default, value) =>

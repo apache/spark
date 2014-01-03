@@ -1,5 +1,7 @@
 package org.apache.spark.graph.impl
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.graph._
 import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
@@ -10,7 +12,7 @@ import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
  * debug / profile.
  */
 private[impl]
-class EdgeTripletIterator[VD: ClassManifest, ED: ClassManifest](
+class EdgeTripletIterator[VD: ClassTag, ED: ClassTag](
     val vidToIndex: VertexIdToIndexMap,
     val vertexArray: Array[VD],
     val edgePartition: EdgePartition[ED])

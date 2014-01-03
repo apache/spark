@@ -1,5 +1,7 @@
 package org.apache.spark.graph
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.Logging
 import scala.collection.JavaConversions._
 import org.apache.spark.rdd.RDD
@@ -36,7 +38,7 @@ object GraphLab extends Logging {
    * @tparam A The type accumulated during the gather phase
    * @return the resulting graph after the algorithm converges
    */
-  def apply[VD: ClassManifest, ED: ClassManifest, A: ClassManifest]
+  def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
     (graph: Graph[VD, ED], numIter: Int,
      gatherDirection: EdgeDirection = EdgeDirection.In,
      scatterDirection: EdgeDirection = EdgeDirection.Out)

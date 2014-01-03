@@ -1,6 +1,8 @@
 package org.apache.spark.graph
 
 import java.util.{Arrays => JArrays}
+import scala.reflect.ClassTag
+
 import org.apache.spark.graph.impl.EdgePartitionBuilder
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.graph.impl.{EdgePartition, GraphImpl}
@@ -22,7 +24,7 @@ object GraphLoader extends Logging {
    * the Edge RDD
    *
    */
-  def textFile[ED: ClassManifest](
+  def textFile[ED: ClassTag](
       sc: SparkContext,
       path: String,
       edgeParser: Array[String] => ED,

@@ -335,7 +335,7 @@ object Analytics extends Logging {
   // /**
   //  *
   //  */
-  // def alternatingLeastSquares[VD: ClassManifest, ED: ClassManifest](graph: Graph[VD, Double],
+  // def alternatingLeastSquares[VD: ClassTag, ED: ClassTag](graph: Graph[VD, Double],
   //   latentK: Int, lambda: Double, numIter: Int) = {
   //   val vertices = graph.vertices.mapPartitions( _.map {
   //       case (vid, _) => (vid,  Array.fill(latentK){ scala.util.Random.nextDouble() } )

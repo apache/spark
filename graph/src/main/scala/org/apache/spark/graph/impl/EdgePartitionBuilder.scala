@@ -1,5 +1,6 @@
 package org.apache.spark.graph.impl
 
+import scala.reflect.ClassTag
 import scala.util.Sorting
 
 import org.apache.spark.graph._
@@ -7,7 +8,7 @@ import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVecto
 
 
 //private[graph]
-class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassManifest](size: Int = 64) {
+class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag](size: Int = 64) {
 
   var edges = new PrimitiveVector[Edge[ED]](size)
 

@@ -1,5 +1,7 @@
 package org.apache.spark.graph.impl
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.util.collection.{BitSet, PrimitiveKeyOpenHashMap}
 
 import org.apache.spark.Logging
@@ -8,7 +10,7 @@ import org.apache.spark.graph._
 
 private[graph] object VertexPartition {
 
-  def apply[VD: ClassManifest](iter: Iterator[(Vid, VD)]): VertexPartition[VD] = {
+  def apply[VD: ClassTag](iter: Iterator[(Vid, VD)]): VertexPartition[VD] = {
     val map = new PrimitiveKeyOpenHashMap[Vid, VD]
     iter.foreach { case (k, v) =>
       map(k) = v
@@ -16,7 +18,7 @@ private[graph] object VertexPartition {
     new VertexPartition(map.keySet, map._values, map.keySet.getBitSet)
   }
 
-  def apply[VD: ClassManifest](iter: Iterator[(Vid, VD)], mergeFunc: (VD, VD) => VD)
+  def apply[VD: ClassTag](iter: Iterator[(Vid, VD)], mergeFunc: (VD, VD) => VD)
     : VertexPartition[VD] =
   {
     val map = new PrimitiveKeyOpenHashMap[Vid, VD]
@@ -29,7 +31,7 @@ private[graph] object VertexPartition {
 
 
 private[graph]
-class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
+class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
     val index: VertexIdToIndexMap,
     val values: Array[VD],
     val mask: BitSet,
@@ -70,7 +72,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
    * each of the entries in the original VertexRDD.  The resulting
    * VertexPartition retains the same index.
    */
-  def map[VD2: ClassManifest](f: (Vid, VD) => VD2): VertexPartition[VD2] = {
+  def map[VD2: ClassTag](f: (Vid, VD) => VD2): VertexPartition[VD2] = {
     // Construct a view of the map transformation
     val newValues = new Array[VD2](capacity)
     var i = mask.nextSetBit(0)
@@ -126,7 +128,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   }
 
   /** Left outer join another VertexPartition. */
-  def leftJoin[VD2: ClassManifest, VD3: ClassManifest]
+  def leftJoin[VD2: ClassTag, VD3: ClassTag]
       (other: VertexPartition[VD2])
       (f: (Vid, VD, Option[VD2]) => VD3): VertexPartition[VD3] = {
     if (index != other.index) {
@@ -146,14 +148,14 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   }
 
   /** Left outer join another iterator of messages. */
-  def leftJoin[VD2: ClassManifest, VD3: ClassManifest]
+  def leftJoin[VD2: ClassTag, VD3: ClassTag]
       (other: Iterator[(Vid, VD2)])
       (f: (Vid, VD, Option[VD2]) => VD3): VertexPartition[VD3] = {
     leftJoin(createUsingIndex(other))(f)
   }
 
   /** Inner join another VertexPartition. */
-  def innerJoin[U: ClassManifest, VD2: ClassManifest](other: VertexPartition[U])
+  def innerJoin[U: ClassTag, VD2: ClassTag](other: VertexPartition[U])
       (f: (Vid, VD, U) => VD2): VertexPartition[VD2] = {
     if (index != other.index) {
       logWarning("Joining two VertexPartitions with different indexes is slow.")
@@ -173,7 +175,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   /**
    * Inner join an iterator of messages.
    */
-  def innerJoin[U: ClassManifest, VD2: ClassManifest]
+  def innerJoin[U: ClassTag, VD2: ClassTag]
       (iter: Iterator[Product2[Vid, U]])
       (f: (Vid, VD, U) => VD2): VertexPartition[VD2] = {
     innerJoin(createUsingIndex(iter))(f)
@@ -182,7 +184,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
   /**
    * Similar effect as aggregateUsingIndex((a, b) => a)
    */
-  def createUsingIndex[VD2: ClassManifest](iter: Iterator[Product2[Vid, VD2]])
+  def createUsingIndex[VD2: ClassTag](iter: Iterator[Product2[Vid, VD2]])
     : VertexPartition[VD2] = {
     val newMask = new BitSet(capacity)
     val newValues = new Array[VD2](capacity)
@@ -214,7 +216,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassManifest](
     new VertexPartition(index, newValues, newMask)
   }
 
-  def aggregateUsingIndex[VD2: ClassManifest](
+  def aggregateUsingIndex[VD2: ClassTag](
       iter: Iterator[Product2[Vid, VD2]], reduceFunc: (VD2, VD2) => VD2): VertexPartition[VD2] =
   {
     val newMask = new BitSet(capacity)

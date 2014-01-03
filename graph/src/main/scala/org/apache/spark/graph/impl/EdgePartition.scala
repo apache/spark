@@ -1,5 +1,7 @@
 package org.apache.spark.graph.impl
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.graph._
 import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
@@ -13,7 +15,7 @@ import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
  * @param index a clustered index on source vertex id
  * @tparam ED the edge attribute type.
  */
-class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest](
+class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag](
     val srcIds: Array[Vid],
     val dstIds: Array[Vid],
     val data: Array[ED],
@@ -41,7 +43,7 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    * @return a new edge partition with the result of the function `f`
    *         applied to each edge
    */
-  def map[ED2: ClassManifest](f: Edge[ED] => ED2): EdgePartition[ED2] = {
+  def map[ED2: ClassTag](f: Edge[ED] => ED2): EdgePartition[ED2] = {
     val newData = new Array[ED2](data.size)
     val edge = new Edge[ED]()
     val size = data.size
@@ -69,7 +71,7 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    * @return a new edge partition with the result of the function `f`
    *         applied to each edge
    */
-  def map[ED2: ClassManifest](iter: Iterator[ED2]): EdgePartition[ED2] = {
+  def map[ED2: ClassTag](iter: Iterator[ED2]): EdgePartition[ED2] = {
     val newData = new Array[ED2](data.size)
     var i = 0
     while (iter.hasNext) {
@@ -132,7 +134,7 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    * If there are multiple edges with the same src and dst in `other`, `f` will only be invoked
    * once.
    */
-  def innerJoin[ED2: ClassManifest, ED3: ClassManifest]
+  def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgePartition[ED2])
       (f: (Vid, Vid, ED, ED2) => ED3): EdgePartition[ED3] = {
     val builder = new EdgePartitionBuilder[ED3]

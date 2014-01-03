@@ -1,12 +1,14 @@
 package org.apache.spark.graph
 
+import scala.reflect.{classTag, ClassTag}
+
 import org.apache.spark.{OneToOneDependency, Partition, Partitioner, TaskContext}
 import org.apache.spark.graph.impl.EdgePartition
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 
-class EdgeRDD[@specialized ED: ClassManifest](
+class EdgeRDD[@specialized ED: ClassTag](
     val partitionsRDD: RDD[(Pid, EdgePartition[ED])])
   extends RDD[Edge[ED]](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
@@ -42,7 +44,7 @@ class EdgeRDD[@specialized ED: ClassManifest](
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   override def cache(): EdgeRDD[ED] = persist()
 
-  def mapEdgePartitions[ED2: ClassManifest](f: (Pid, EdgePartition[ED]) => EdgePartition[ED2])
+  def mapEdgePartitions[ED2: ClassTag](f: (Pid, EdgePartition[ED]) => EdgePartition[ED2])
     : EdgeRDD[ED2] = {
 //       iter => iter.map { case (pid, ep) => (pid, f(ep)) }
     new EdgeRDD[ED2](partitionsRDD.mapPartitions({ iter =>
@@ -51,7 +53,7 @@ class EdgeRDD[@specialized ED: ClassManifest](
     }, preservesPartitioning = true))
   }
 
-  def zipEdgePartitions[T: ClassManifest, U: ClassManifest]
+  def zipEdgePartitions[T: ClassTag, U: ClassTag]
       (other: RDD[T])
       (f: (Pid, EdgePartition[ED], Iterator[T]) => Iterator[U]): RDD[U] = {
     partitionsRDD.zipPartitions(other, preservesPartitioning = true) { (ePartIter, otherIter) =>
@@ -60,7 +62,7 @@ class EdgeRDD[@specialized ED: ClassManifest](
     }
   }
 
-  def zipEdgePartitions[ED2: ClassManifest, ED3: ClassManifest]
+  def zipEdgePartitions[ED2: ClassTag, ED3: ClassTag]
       (other: EdgeRDD[ED2])
       (f: (Pid, EdgePartition[ED], EdgePartition[ED2]) => EdgePartition[ED3]): EdgeRDD[ED3] = {
     new EdgeRDD[ED3](partitionsRDD.zipPartitions(other.partitionsRDD, preservesPartitioning = true) {
@@ -71,11 +73,11 @@ class EdgeRDD[@specialized ED: ClassManifest](
     })
   }
 
-  def innerJoin[ED2: ClassManifest, ED3: ClassManifest]
+  def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgeRDD[ED2])
       (f: (Vid, Vid, ED, ED2) => ED3): EdgeRDD[ED3] = {
-    val ed2Manifest = classManifest[ED2]
-    val ed3Manifest = classManifest[ED3]
+    val ed2Manifest = classTag[ED2]
+    val ed3Manifest = classTag[ED3]
     zipEdgePartitions(other) { (pid, thisEPart, otherEPart) =>
       thisEPart.innerJoin(otherEPart)(f)(ed2Manifest, ed3Manifest)
     }

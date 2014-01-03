@@ -1,5 +1,7 @@
 package org.apache.spark.graph
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.graph.impl._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
@@ -23,7 +25,7 @@ import org.apache.spark.storage.StorageLevel
  * @tparam VD the vertex attribute type
  * @tparam ED the edge attribute type
  */
-abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
+abstract class Graph[VD: ClassTag, ED: ClassTag] {
 
   /**
    * Get the vertices and their data.
@@ -123,7 +125,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    *
    */
-  def mapVertices[VD2: ClassManifest](map: (Vid, VD) => VD2): Graph[VD2, ED]
+  def mapVertices[VD2: ClassTag](map: (Vid, VD) => VD2): Graph[VD2, ED]
 
   /**
    * Construct a new graph where the value of each edge is
@@ -143,7 +145,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * attributes.
    *
    */
-  def mapEdges[ED2: ClassManifest](map: Edge[ED] => ED2): Graph[VD, ED2] = {
+  def mapEdges[ED2: ClassTag](map: Edge[ED] => ED2): Graph[VD, ED2] = {
     mapEdges((pid, iter) => iter.map(map))
   }
 
@@ -167,7 +169,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @tparam ED2 the new edge data type
    *
    */
-  def mapEdges[ED2: ClassManifest](
+  def mapEdges[ED2: ClassTag](
       map: (Pid, Iterator[Edge[ED]]) => Iterator[ED2]):
     Graph[VD, ED2]
 
@@ -195,7 +197,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    *
    */
-  def mapTriplets[ED2: ClassManifest](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
+  def mapTriplets[ED2: ClassTag](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
     mapTriplets((pid, iter) => iter.map(map))
   }
 
@@ -219,7 +221,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @tparam ED2 the new edge data type
    *
    */
-  def mapTriplets[ED2: ClassManifest](
+  def mapTriplets[ED2: ClassTag](
       map: (Pid, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]):
     Graph[VD, ED2]
 
@@ -261,7 +263,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * @return a graph with vertices and edges that exists in both the current graph and other,
    * with vertex and edge data from the current graph.
    */
-  def mask[VD2: ClassManifest, ED2: ClassManifest](other: Graph[VD2, ED2]): Graph[VD, ED]
+  def mask[VD2: ClassTag, ED2: ClassTag](other: Graph[VD2, ED2]): Graph[VD, ED]
 
   /**
    * This function merges multiple edges between two vertices into a single Edge. For correct
@@ -313,7 +315,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * predicate or implement PageRank.
    *
    */
-  def mapReduceTriplets[A: ClassManifest](
+  def mapReduceTriplets[A: ClassTag](
       mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
       reduceFunc: (A, A) => A,
       activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None)
@@ -348,7 +350,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    *
    */
-  def outerJoinVertices[U: ClassManifest, VD2: ClassManifest](table: RDD[(Vid, U)])
+  def outerJoinVertices[U: ClassTag, VD2: ClassTag](table: RDD[(Vid, U)])
       (mapFunc: (Vid, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
 
@@ -376,7 +378,7 @@ object Graph {
    * @return a graph with edge attributes containing either the count of duplicate edges or 1
    * (if `uniqueEdges=None`) and vertex attributes containing the total degree of each vertex.
    */
-  def fromEdgeTuples[VD: ClassManifest](
+  def fromEdgeTuples[VD: ClassTag](
       rawEdges: RDD[(Vid, Vid)],
       defaultValue: VD,
       uniqueEdges: Option[PartitionStrategy] = None): Graph[VD, Int] = {
@@ -397,7 +399,7 @@ object Graph {
    * @return a graph with edge attributes described by `edges` and vertices
    *         given by all vertices in `edges` with value `defaultValue`
    */
-  def fromEdges[VD: ClassManifest, ED: ClassManifest](
+  def fromEdges[VD: ClassTag, ED: ClassTag](
       edges: RDD[Edge[ED]],
       defaultValue: VD): Graph[VD, ED] = {
     GraphImpl(edges, defaultValue)
@@ -418,7 +420,7 @@ object Graph {
    * @param partitionStrategy the partition strategy to use when
    * partitioning the edges.
    */
-  def apply[VD: ClassManifest, ED: ClassManifest](
+  def apply[VD: ClassTag, ED: ClassTag](
       vertices: RDD[(Vid, VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD = null.asInstanceOf[VD]): Graph[VD, ED] = {
@@ -432,5 +434,5 @@ object Graph {
    * convenience operations are defined in the GraphOps class which may be shared across multiple
    * graph implementations.
    */
-  implicit def graphToGraphOps[VD: ClassManifest, ED: ClassManifest](g: Graph[VD, ED]) = g.ops
+  implicit def graphToGraphOps[VD: ClassTag, ED: ClassTag](g: Graph[VD, ED]) = g.ops
 } // end of Graph object

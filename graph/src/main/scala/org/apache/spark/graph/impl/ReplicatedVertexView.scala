@@ -1,5 +1,7 @@
 package org.apache.spark.graph.impl
 
+import scala.reflect.{classTag, ClassTag}
+
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.collection.{PrimitiveVector, OpenHashSet}
@@ -17,7 +19,7 @@ import org.apache.spark.graph._
  * example.
  */
 private[impl]
-class ReplicatedVertexView[VD: ClassManifest](
+class ReplicatedVertexView[VD: ClassTag](
     updatedVerts: VertexRDD[VD],
     edges: EdgeRDD[_],
     routingTable: RoutingTable,
@@ -80,7 +82,7 @@ class ReplicatedVertexView[VD: ClassManifest](
 
   private def create(includeSrc: Boolean, includeDst: Boolean)
     : RDD[(Pid, VertexPartition[VD])] = {
-    val vdManifest = classManifest[VD]
+    val vdManifest = classTag[VD]
 
     // Ship vertex attributes to edge partitions according to vertexPlacement
     val verts = updatedVerts.partitionsRDD
@@ -125,7 +127,7 @@ class ReplicatedVertexView[VD: ClassManifest](
 }
 
 object ReplicatedVertexView {
-  protected def buildBuffer[VD: ClassManifest](
+  protected def buildBuffer[VD: ClassTag](
       pid2vidIter: Iterator[Array[Array[Vid]]],
       vertexPartIter: Iterator[VertexPartition[VD]]) = {
     val pid2vid: Array[Array[Vid]] = pid2vidIter.next()
@@ -173,6 +175,6 @@ object ReplicatedVertexView {
   }
 }
 
-class VertexAttributeBlock[VD: ClassManifest](val vids: Array[Vid], val attrs: Array[VD]) {
+class VertexAttributeBlock[VD: ClassTag](val vids: Array[Vid], val attrs: Array[VD]) {
   def iterator: Iterator[(Vid, VD)] = (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
 }

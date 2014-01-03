@@ -14,8 +14,8 @@ import org.apache.spark.graph.impl.VertexPartition
  * that is not a trait.
  */
 class EdgeTriplet[VD, ED] extends Edge[ED] {
-// class EdgeTriplet[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD: ClassManifest,
-//                   @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassManifest] extends Edge[ED] {
+// class EdgeTriplet[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) VD: ClassTag,
+//                   @specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag] extends Edge[ED] {
 
 
   /**
