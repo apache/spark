@@ -25,18 +25,18 @@ abstract class Row extends Seq[Any] with Serializable {
  * A row with no data.  Calling any methods will result in an error.  Can be used as a placeholder.
  */
 object EmptyRow extends Row {
-  def apply(i: Int): Any = ???
+  def apply(i: Int): Any = throw new UnsupportedOperationException
 
   def iterator = Iterator.empty
   def length = 0
-  def isNullAt(i: Int): Boolean = ???
+  def isNullAt(i: Int): Boolean = throw new UnsupportedOperationException
 
-  def getInt(i: Int): Int = ???
-  def getLong(i: Int): Long = ???
-  def getDouble(i: Int): Double = ???
-  def getBoolean(i: Int): Boolean = ???
-  def getShort(i: Int): Short = ???
-  def getByte(i: Int): Byte = ???
+  def getInt(i: Int): Int = throw new UnsupportedOperationException
+  def getLong(i: Int): Long = throw new UnsupportedOperationException
+  def getDouble(i: Int): Double = throw new UnsupportedOperationException
+  def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
+  def getShort(i: Int): Short = throw new UnsupportedOperationException
+  def getByte(i: Int): Byte = throw new UnsupportedOperationException
 }
 
 /**
