@@ -3,6 +3,7 @@ package optimizer
 
 import catalyst.expressions._
 import catalyst.expressions.Alias
+import catalyst.plans.Inner
 import catalyst.plans.logical._
 import catalyst.plans.logical.Filter
 import catalyst.plans.logical.Project
@@ -16,8 +17,7 @@ object Optimize extends RuleExecutor[LogicalPlan] {
       EliminateSubqueries,
       CombineFilters,
       PredicatePushDownThoughProject,
-      PushPredicateThroughInnerEqualJoin) :: Nil
-
+      PushPredicateThroughInnerJoin) :: Nil
 }
 
 object EliminateSubqueries extends Rule[LogicalPlan] {
@@ -55,138 +55,28 @@ object PredicatePushDownThoughProject extends Rule[LogicalPlan] {
   }
 }
 
-object EmptyExpression extends EmptyExpressionType(null, null)
-
-case class EmptyExpressionType(left: Expression, right: Expression) extends Expression {
-  self: Product =>
-
-  /** Returns a Seq of the children of this node */
-
-  def children: Seq[Expression] = Seq.empty
-
-  def dataType: DataType = NullType
-
-  def nullable: Boolean = true
-
-  def references: Set[Attribute] = Set.empty
-}
-
 /**
- * Pushes predicate through inner join
+ * Pushes down predicates that can be evaluated using only the attributes of the left or right side
+ * of a join.  Other predicates are left as a single filter on top of the join.
  */
-object PushPredicateThroughInnerEqualJoin extends Rule[LogicalPlan] {
-  class BinaryConditionStatus {
-    var left = false
-    var right = false
-  }
-
-  abstract class Direction
-  case object Left extends Direction
-  case object Right extends Direction
-
+object PushPredicateThroughInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter@Filter(_, join@Join(l, r, _, _)) => {
-      var joinLeftExpression: Option[Expression] = None
-      var joinRightExpression: Option[Expression] = None
+    case f @ Filter(filterCondition, Join(left, right, Inner, joinCondition)) =>
+      val allConditions =
+        splitConjunctivePredicates(filterCondition) ++
+        joinCondition.map(splitConjunctivePredicates).getOrElse(Nil)
 
-      val conditions = filter.splitConjunctivePredicates(filter.condition).filter(
-        e => {
-          var changed = false
-          if(e.references subsetOf l.outputSet) {
-            joinLeftExpression = combineExpression(joinLeftExpression, Option(e), And)
-            changed = true
-          }
+      // Split the predicates into those that can be evaluated on the left, right, and those that
+      // must be evaluated after the join.
+      val (rightConditions, leftOrJoinConditions) =
+        allConditions.partition(_.references subsetOf right.outputSet)
+      val (leftConditions, joinConditions) =
+        leftOrJoinConditions.partition(_.references subsetOf left.outputSet)
 
-          if(e.references subsetOf r.outputSet) {
-            joinRightExpression = combineExpression(joinRightExpression, Option(e), And)
-            changed = true
-          }
-
-          changed
-        }
-      ).toSet
-
-      val newFilterCondition = rewriteCondition (filter.condition, conditions)
-
-      (newFilterCondition, joinLeftExpression, joinRightExpression) match {
-        case (EmptyExpression, _, _) =>
-          copyJoin(join, joinLeftExpression, joinRightExpression)
-        case (_, None, None) => filter
-        case _ => {
-          filter.copy(condition = newFilterCondition,
-            child = copyJoin(
-              join, joinLeftExpression, joinRightExpression
-            )
-          )
-        }
-      }
-    }
-  }
-
-  def rewriteCondition(exp: Expression, removedExps: Set[Expression]): Expression = {
-    exp match {
-      case b: And => b match {
-        case And(e1: Expression, e2:Expression) => {
-          val r1 = rewriteCondition(e1, removedExps)
-          val r2 = rewriteCondition(e2, removedExps)
-
-          (r1, r2) match {
-            case (EmptyExpression, e: Expression) => e
-            case (e: Expression, EmptyExpression) => e
-            case (EmptyExpression, EmptyExpression) => EmptyExpression
-            case _ => And(r1, r2)
-          }
-        }
-      }
-      case e => {
-        if(removedExps.contains(e))
-          EmptyExpression
-        else
-          e
-      }
-    }
-  }
-
-  def combineExpression[T1, T2](firstExp: Option[T1],
-                                secondExp: Option[T2],
-                                combineFunc: (T1, T2) => T2): Option[T2] = {
-    (firstExp, secondExp) match {
-      case (Some(o1), Some(o2)) => Option(combineFunc(o1, o2))
-      case (None, Some(o2)) => Option(o2)
-      case (Some(o1), None) => Option(o1.asInstanceOf[T2])
-      case (None, None) => None
-    }
-  }
-
-  def copyJoin(join: Join,
-               joinLeftExpression: Option[Expression],
-               joinRightExpression: Option[Expression]): Join = {
-    join.copy(
-      left =
-        combineExpression(
-          joinLeftExpression,
-          Option(join.left),
-          Filter
-        ).get,
-      right =
-        combineExpression(
-          joinRightExpression,
-          Option(join.right),
-          Filter
-        ).get
-    )
-  }
-
-  def joinFilter(status: BinaryConditionStatus,
-                 dir: Direction,
-                 expression: Expression,
-                 outputSet: Set[Attribute]): Option[Expression] = {
-    if (expression.references subsetOf outputSet) {
-      dir match {
-        case Left => status.left = true
-        case Right => status.right = true
-      }
-      Option(expression)
-    } else None
+      // Build the new left and right side, optionally with the pushed down filters.
+      val newLeft = leftConditions.reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
+      val newRight = rightConditions.reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
+      val newJoin = Join(newLeft, newRight, Inner, None)
+      joinConditions.reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
   }
 }
