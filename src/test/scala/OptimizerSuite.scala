@@ -2,11 +2,9 @@ package catalyst
 
 import org.scalatest.FunSuite
 
-import analysis._
 import expressions._
 import optimizer.Optimize
 import plans.logical._
-import types._
 import util._
 
 /* Implicit conversions for creating query plans */

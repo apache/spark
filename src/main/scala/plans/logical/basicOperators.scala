@@ -9,7 +9,7 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
   def references = projectList.flatMap(_.references).toSet
 }
 
-case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
+case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode with PredicateHelper {
   def output = child.output
   def references = condition.references
 }

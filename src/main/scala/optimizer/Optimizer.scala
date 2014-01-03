@@ -3,21 +3,19 @@ package optimizer
 
 import catalyst.expressions._
 import catalyst.expressions.Alias
-import catalyst.plans.Inner
 import catalyst.plans.logical._
 import catalyst.plans.logical.Filter
 import catalyst.plans.logical.Project
 import catalyst.plans.logical.Subquery
 import catalyst.rules._
-import catalyst.types.DataType
+import catalyst.types.{NullType, DataType}
 
 object Optimize extends RuleExecutor[LogicalPlan] {
   val batches =
     Batch("Subqueries", Once,
       EliminateSubqueries,
       CombineFilters,
-      PredicatePushDown,
-      PredicatePushDownWithAlias,
+      PredicatePushDownThoughProject,
       PushPredicateThroughInnerEqualJoin) :: Nil
 
 }
@@ -28,17 +26,32 @@ object EliminateSubqueries extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Combines two filter operators into one
+ */
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case ff@Filter(fc, nf@Filter(nc, grandChild)) => Filter(And(nc, fc), grandChild)
   }
 }
 
-object PredicatePushDown extends Rule[LogicalPlan] {
+/**
+ * Pushes predicate through project, also inlines project's aliases in filter
+ */
+object PredicatePushDownThoughProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter@Filter(_, project@Project(_, grandChild))
-      if filter.references subsetOf (grandChild.outputSet) =>
-      project.copy(child = filter.copy(child = grandChild))
+    case filter@Filter(condition, project@Project(fields, grandChild)) =>
+      val sourceAliases = fields.collect { case a@Alias(c, _) => a.toAttribute -> c }.toMap
+      project.copy(child = filter.copy(
+        replaceAlias(condition, sourceAliases),
+        grandChild))
+  }
+
+  // Assuming the expression cost is minimal, we can replace condition with the alias's child to push down predicate
+  def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]): Expression = {
+    condition transform {
+      case a: AttributeReference => sourceAliases.getOrElse(a, a)
+    }
   }
 }
 
@@ -46,8 +59,6 @@ object EmptyExpression extends EmptyExpressionType(null, null)
 
 case class EmptyExpressionType(left: Expression, right: Expression) extends Expression {
   self: Product =>
-
-  case object NullType extends DataType
 
   /** Returns a Seq of the children of this node */
 
@@ -60,60 +71,42 @@ case class EmptyExpressionType(left: Expression, right: Expression) extends Expr
   def references: Set[Attribute] = Set.empty
 }
 
+/**
+ * Pushes predicate through inner join
+ */
 object PushPredicateThroughInnerEqualJoin extends Rule[LogicalPlan] {
   class BinaryConditionStatus {
     var left = false
     var right = false
   }
 
-  object Direction extends Enumeration {
-    type Direction = Value
-    val Left, Right = Value
-  }
+  abstract class Direction
+  case object Left extends Direction
+  case object Right extends Direction
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter@Filter(_, join@Join(l, r, joinType@Inner, cond)) => {
+    case filter@Filter(_, join@Join(l, r, _, _)) => {
       var joinLeftExpression: Option[Expression] = None
       var joinRightExpression: Option[Expression] = None
 
-      val newFilterCondition = rewriteCondition (filter.condition transform {
-        case and: And => {
-          val status = new BinaryConditionStatus
-
-          val rightFilter =
-            combineExpression(
-              joinFilter(status, Direction.Left, and.left, r.outputSet),
-              joinFilter(status, Direction.Right, and.right, r.outputSet),
-              And
-            )
-          val leftFilter =
-            combineExpression(
-              joinFilter(status, Direction.Left, and.left, l.outputSet),
-              joinFilter(status, Direction.Right, and.right, l.outputSet),
-              And
-            )
-
-          joinLeftExpression = combineExpression(joinLeftExpression, leftFilter, And)
-          joinRightExpression = combineExpression(joinRightExpression, rightFilter, And)
-
-          (status.left, status.right) match {
-            case (true, true) => EmptyExpression
-            case (true, false) => and.right
-            case (false, true) => and.left
-            case (false, false) => and
+      val conditions = filter.splitConjunctivePredicates(filter.condition).filter(
+        e => {
+          var changed = false
+          if(e.references subsetOf l.outputSet) {
+            joinLeftExpression = combineExpression(joinLeftExpression, Option(e), And)
+            changed = true
           }
-        }
 
-        case u: BinaryExpression if u.references subsetOf (l.outputSet) => {
-          joinLeftExpression = combineExpression(joinLeftExpression, Option(u), And)
-          EmptyExpression
-        }
+          if(e.references subsetOf r.outputSet) {
+            joinRightExpression = combineExpression(joinRightExpression, Option(e), And)
+            changed = true
+          }
 
-        case u: BinaryExpression if u.references subsetOf (r.outputSet) => {
-          joinRightExpression = combineExpression(joinRightExpression, Option(u), And)
-          EmptyExpression
+          changed
         }
-      })
+      ).toSet
+
+      val newFilterCondition = rewriteCondition (filter.condition, conditions)
 
       (newFilterCondition, joinLeftExpression, joinRightExpression) match {
         case (EmptyExpression, _, _) =>
@@ -130,15 +123,27 @@ object PushPredicateThroughInnerEqualJoin extends Rule[LogicalPlan] {
     }
   }
 
-  def rewriteCondition(exp: Expression): Expression = {
+  def rewriteCondition(exp: Expression, removedExps: Set[Expression]): Expression = {
     exp match {
       case b: And => b match {
-        case And(EmptyExpression, e:Expression) => rewriteCondition(e)
-        case And(e:Expression, EmptyExpression) => rewriteCondition(e)
-        case And(e:Expression, e2:Expression) => And(rewriteCondition(e), rewriteCondition(e2))
-        case And(EmptyExpression, EmptyExpression) => EmptyExpression
+        case And(e1: Expression, e2:Expression) => {
+          val r1 = rewriteCondition(e1, removedExps)
+          val r2 = rewriteCondition(e2, removedExps)
+
+          (r1, r2) match {
+            case (EmptyExpression, e: Expression) => e
+            case (e: Expression, EmptyExpression) => e
+            case (EmptyExpression, EmptyExpression) => EmptyExpression
+            case _ => And(r1, r2)
+          }
+        }
       }
-      case _ => exp
+      case e => {
+        if(removedExps.contains(e))
+          EmptyExpression
+        else
+          e
+      }
     }
   }
 
@@ -146,9 +151,9 @@ object PushPredicateThroughInnerEqualJoin extends Rule[LogicalPlan] {
                                 secondExp: Option[T2],
                                 combineFunc: (T1, T2) => T2): Option[T2] = {
     (firstExp, secondExp) match {
-      case (o1: Some[T1], o2: Some[T2]) => Option(combineFunc(o1.get, o2.get))
-      case (None, o2: Some[T2]) => o2
-      case (o1: Some[T1], None) => Option(o1.get.asInstanceOf[T2])
+      case (Some(o1), Some(o2)) => Option(combineFunc(o1, o2))
+      case (None, Some(o2)) => Option(o2)
+      case (Some(o1), None) => Option(o1.asInstanceOf[T2])
       case (None, None) => None
     }
   }
@@ -173,40 +178,15 @@ object PushPredicateThroughInnerEqualJoin extends Rule[LogicalPlan] {
   }
 
   def joinFilter(status: BinaryConditionStatus,
-                 dir: Direction.Value,
+                 dir: Direction,
                  expression: Expression,
                  outputSet: Set[Attribute]): Option[Expression] = {
-    if (expression.references subsetOf (outputSet)) {
+    if (expression.references subsetOf outputSet) {
       dir match {
-        case Direction.Left => status.left = true
-        case Direction.Right => status.right = true
+        case Left => status.left = true
+        case Right => status.right = true
       }
       Option(expression)
     } else None
-  }
-}
-
-object PredicatePushDownWithAlias extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case filter@Filter(condition, project@Project(fields, grandChild)) =>
-      val refMissing = filter.references &~ (filter.references intersect grandChild.outputSet)
-      val sourceAliases = fields.filter(_.isInstanceOf[Alias]).map(_.asInstanceOf[Alias]).toSet
-      if (isAliasOf(refMissing, sourceAliases))
-        project.copy(child = filter.copy(
-          replaceAlias(condition, sourceAliases),
-          grandChild))
-      else filter
-  }
-
-  def isAliasOf(refMissing: Set[Attribute], sourceAliases: Set[Alias]): Boolean = {
-    refMissing.forall(r => sourceAliases.exists(_.exprId == r.exprId))
-  }
-
-  // Assuming the expression cost is minimal, we can replace condition with the alias's child to push down predicate
-  def replaceAlias(condition: Expression, sourceAliases: Set[Alias]): Expression = {
-    condition transform {
-      case a: AttributeReference if sourceAliases.exists(_.exprId == a.exprId) =>
-        sourceAliases.find(_.exprId == a.exprId).get.child
-    }
   }
 }
