@@ -12,7 +12,7 @@ was added to Spark in version 0.6.0, and improved in 0.7.0 and 0.8.0.
 We need a consolidated Spark JAR (which bundles all the required dependencies) to run Spark jobs on a YARN cluster.
 This can be built by setting the Hadoop version and `SPARK_YARN` environment variable, as follows:
 
-    SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true ./sbt assembly
+    SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt assembly
 
 The assembled JAR will be something like this:
 `./assembly/target/scala-{{site.SCALA_VERSION}}/spark-assembly_{{site.SPARK_VERSION}}-hadoop2.0.5.jar`.
@@ -72,7 +72,7 @@ The command to launch the YARN Client is as follows:
 For example:
 
     # Build the Spark assembly JAR and the Spark examples JAR
-    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true ./sbt assembly
+    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt assembly
 
     # Configure logging
     $ cp conf/log4j.properties.template conf/log4j.properties
