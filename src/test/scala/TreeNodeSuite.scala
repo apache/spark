@@ -45,6 +45,7 @@ class TreeNodeSuite extends FunSuite {
       case b: BinaryExpression => {actual.append(b.symbol); b}
       case l: Literal => {actual.append(l.toString); l}
     }
+
     assert(expected === actual)
   }
 
@@ -56,6 +57,7 @@ class TreeNodeSuite extends FunSuite {
       case b: BinaryExpression => {actual.append(b.symbol); b}
       case l: Literal => {actual.append(l.toString); l}
     }
+
     assert(expected === actual)
   }
 }
