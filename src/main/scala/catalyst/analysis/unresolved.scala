@@ -6,7 +6,8 @@ import plans.logical.BaseRelation
 import trees.TreeNode
 
 /**
- * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully resolved.
+ * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
+ * resolved.
  */
 class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String) extends
   errors.OptimizationException(tree, s"Invalid call to $function on unresolved object")
@@ -16,6 +17,7 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
  */
 case class UnresolvedRelation(name: String, alias: Option[String] = None) extends BaseRelation {
   def output = Nil
+  override lazy val resolved = false
 }
 
 /**

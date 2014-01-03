@@ -10,9 +10,13 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def output: Seq[Attribute]
 
   /**
+   * Returns the set of attributes that are output by this node.
+   */
+  def outputSet: Set[Attribute] = output.toSet
+
+  /**
    * Runs [[transform]] with [[rule]] on all expressions present in this query operator.
    * @param rule the rule to be applied to every expression in this operator.
-   * @return
    */
   def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false

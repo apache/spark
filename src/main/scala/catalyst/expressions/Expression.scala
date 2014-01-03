@@ -12,12 +12,17 @@ abstract class Expression extends TreeNode[Expression] {
   def references: Set[Attribute]
 
   /**
-   * Returns true if this expression and all its children have been resolved to a specific schema and false if it is
-   * still contains any unresolved placeholders.
+   * Returns true if this expression and all its children have been resolved to a specific schema
+   * and false if it is still contains any unresolved placeholders. Implementations of expressions
+   * should override this.
    */
   lazy val resolved: Boolean = childrenResolved
 
-  def childrenResolved = children.map(_.resolved).reduceLeftOption(_&&_).getOrElse(true)
+  /**
+   * Returns true if  all the children of this expression have been resolved to a specific schema
+   * and false if it is still contains any unresolved placeholders.
+   */
+  def childrenResolved = !children.exists(!_.resolved)
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {
@@ -36,5 +41,6 @@ abstract class LeafExpression extends Expression with trees.LeafNode[Expression]
 
 abstract class UnaryExpression extends Expression with trees.UnaryNode[Expression] {
   self: Product =>
+
   def references = child.references
 }

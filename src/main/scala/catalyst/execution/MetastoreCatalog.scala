@@ -28,6 +28,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
     val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
     val partitions =
       if (hiveQlTable.isPartitioned) {
+        // TODO: Is 255 the right number to pick?
         client.listPartitions(databaseName, tableName, 255).toSeq
       } else {
         Nil
