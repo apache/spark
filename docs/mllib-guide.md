@@ -297,8 +297,9 @@ val numIterations = 20
 val model = ALS.train(ratings, 1, 20, 0.01)
 
 // Evaluate the model on rating data
-val ratesAndPreds = ratings.map{ case Rating(user, item, rate) => (rate, model.predict(user, item))}
-val MSE = ratesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.reduce(_ + _)/ratesAndPreds.count
+//val ratesAndPreds = ratings.map{ case Rating(user, item, rate) => (rate, model.predict(user, item))}
+//val MSE = ratesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.reduce(_ + _)/ratesAndPreds.count
+//println("Mean Squared Error = " + MSE)
 {% endhighlight %}
 
 If the rating matrix is derived from other source of information (i.e., it is inferred from
@@ -406,9 +407,9 @@ ratings = data.map(lambda line: array([float(x) for x in line.split(',')]))
 model = ALS.train(sc, ratings, 1, 20)
 
 # Evaluate the model on training data
-ratesAndPreds = ratings.map(lambda p: (p[2], model.predict(int(p[0]), int(p[1]))))
-MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y)/valuesAndPreds.count()
-print("Mean Squared Error = " + str(MSE))
+#ratesAndPreds = ratings.map(lambda p: (p[2], model.predict(int(p[0]), int(p[1]))))
+#MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y)/valuesAndPreds.count()
+#print("Mean Squared Error = " + str(MSE))
 
 {% endhighlight %}
 
