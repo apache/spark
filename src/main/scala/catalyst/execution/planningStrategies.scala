@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 import shark.SharkContext
 
@@ -25,9 +25,9 @@ abstract trait PlanningStrategies {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       // Push attributes into table scan when possible.
       case p @ logical.Project(projectList, m: MetastoreRelation) if isSimpleProject(projectList) =>
-        shark2.HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m) :: Nil
+        execution.HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m) :: Nil
       case m: MetastoreRelation =>
-        shark2.HiveTableScan(m.output, m) :: Nil
+        execution.HiveTableScan(m.output, m) :: Nil
       case _ => Nil
     }
 
@@ -59,7 +59,7 @@ abstract trait PlanningStrategies {
 
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Aggregate(Nil, agg, child) if onlyAllowedAggregates(agg) =>
-        shark2.SparkAggregate(agg, planLater(child))(sc) :: Nil
+        execution.SparkAggregate(agg, planLater(child))(sc) :: Nil
       case _ => Nil
     }
   }
@@ -87,11 +87,11 @@ abstract trait PlanningStrategies {
           val leftKeys = joinKeys.map(_._1)
           val rightKeys = joinKeys.map(_._2)
 
-          val joinOp = shark2.SparkEquiInnerJoin(leftKeys, rightKeys, planLater(left), planLater(right))
+          val joinOp = execution.SparkEquiInnerJoin(leftKeys, rightKeys, planLater(left), planLater(right))
 
           // Make sure other conditions are met if present.
           if(otherPredicates.nonEmpty)
-            shark2.Filter(combineConjunctivePredicates(otherPredicates), joinOp) :: Nil
+            execution.Filter(combineConjunctivePredicates(otherPredicates), joinOp) :: Nil
           else
             joinOp :: Nil
         } else {
@@ -112,17 +112,17 @@ abstract trait PlanningStrategies {
   object BroadcastNestedLoopJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
-        shark2.BroadcastNestedLoopJoin(planLater(left), planLater(right), joinType, condition)(sc) :: Nil
+        execution.BroadcastNestedLoopJoin(planLater(left), planLater(right), joinType, condition)(sc) :: Nil
       case _ => Nil
     }
   }
 
   object CartesianProduct extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
-      case logical.Join(left, right, _, None) => shark2.CartesianProduct(planLater(left), planLater(right)) :: Nil
+      case logical.Join(left, right, _, None) => execution.CartesianProduct(planLater(left), planLater(right)) :: Nil
       case logical.Join(left, right, Inner, Some(condition)) =>
-        shark2.Filter(condition,
-          shark2.CartesianProduct(planLater(left), planLater(right))) :: Nil
+        execution.Filter(condition,
+          execution.CartesianProduct(planLater(left), planLater(right))) :: Nil
       case _ => Nil
     }
   }
@@ -131,21 +131,21 @@ abstract trait PlanningStrategies {
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Sort(sortExprs, child) =>
-        shark2.Sort(sortExprs, planLater(child)) :: Nil
+        execution.Sort(sortExprs, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
-        shark2.Project(projectList, planLater(child)) :: Nil
+        execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
-        shark2.Filter(condition, planLater(child)) :: Nil
+        execution.Filter(condition, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
-        shark2.Aggregate(group, agg, planLater(child)) :: Nil
+        execution.Aggregate(group, agg, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
-        shark2.LocalRelation(output, data.map(_.productIterator.toVector))(sc) :: Nil
+        execution.LocalRelation(output, data.map(_.productIterator.toVector))(sc) :: Nil
       case logical.StopAfter(limit, child) =>
-        shark2.StopAfter(Evaluate(limit, Nil).asInstanceOf[Int], planLater(child))(sc) :: Nil
+        execution.StopAfter(Evaluate(limit, Nil).asInstanceOf[Int], planLater(child))(sc) :: Nil
       case logical.Union(left, right) =>
-        shark2.Union(planLater(left), planLater(right))(sc) :: Nil
+        execution.Union(planLater(left), planLater(right))(sc) :: Nil
       case logical.Transform(input, script, output, child) =>
-        shark2.Transform(input, script, output, planLater(child))(sc) :: Nil
+        execution.Transform(input, script, output, planLater(child))(sc) :: Nil
       case _ => Nil
     }
   }

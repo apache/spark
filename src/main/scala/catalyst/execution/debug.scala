@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 object DebugQuery {
   def apply(plan: SharkPlan): SharkPlan = {

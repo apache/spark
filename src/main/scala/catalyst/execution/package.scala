@@ -13,7 +13,7 @@ import types._
  * Currently functions that are not supported by this implementation are passed back to the original Shark
  * implementation for execution.
  */
-package object shark2 {
+package object execution {
   type Row = catalyst.expressions.Row
 
   implicit class typeInfoConversions(dt: DataType) {

@@ -45,7 +45,7 @@ import catalyst.plans.logical._
 import catalyst.rules._
 import catalyst.types._
 import catalyst.util._
-import catalyst.shark2.TestShark._"""
+import catalyst.execution.TestShark._"""
 
 site.settings
 

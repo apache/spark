@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 import catalyst.expressions._
 import shark.SharkContext

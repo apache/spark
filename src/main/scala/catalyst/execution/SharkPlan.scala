@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 import catalyst.plans.QueryPlan
 import org.apache.spark.rdd.RDD

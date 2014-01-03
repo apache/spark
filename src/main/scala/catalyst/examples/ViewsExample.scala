@@ -6,7 +6,7 @@ import catalyst.plans.logical._
 
 /* Implicit Conversions */
 import dsl._
-import shark2.TestShark._ // For .toRdd execution using locally running test Shark.
+import execution.TestShark._ // For .toRdd execution using locally running test Shark.
 
 object ViewsExample {
   def main(args: Array[String]): Unit = {

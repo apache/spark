@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 

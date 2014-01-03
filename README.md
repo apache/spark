@@ -22,7 +22,7 @@ $ sbt/sbt
 > test:compile
 [info] Compiling 10 Scala sources to catalyst/target/scala-2.10/test-classes...
 [success] Total time: 15 s, completed Dec 20, 2013 12:00:06 PM
-> test-only catalyst.shark2.DslQueryTests
+> test-only catalyst.execution.DslQueryTests
 ```
 
 Any command that is prefixed with a `~` (e.g. `~compile`) will be run automatically in a loop each time any dependent files have changed.
@@ -54,13 +54,13 @@ import catalyst.plans.logical._
 import catalyst.rules._
 import catalyst.types._
 import catalyst.util._
-import catalyst.shark2.TestShark._
+import catalyst.execution.TestShark._
 Welcome to Scala version 2.10.3 (Java HotSpot(TM) 64-Bit Server VM, Java 1.7.0_45).
 Type in expressions to have them evaluated.
 Type :help for more information.
 
 scala> val query = "SELECT * FROM (SELECT * FROM src) a".q
-query: catalyst.shark2.TestShark.SharkSqlQuery = 
+query: catalyst.execution.TestShark.SharkSqlQuery =
 SELECT * FROM (SELECT * FROM src) a
 == Logical Plan ==
 Project {key#0,value#1}

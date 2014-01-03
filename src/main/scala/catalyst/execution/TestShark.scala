@@ -1,5 +1,5 @@
 package catalyst
-package shark2
+package execution
 
 import java.io.File
 import scala.collection.mutable
@@ -56,7 +56,7 @@ object TestShark extends SharkInstance {
     System.clearProperty("spark.driver.port")
     System.clearProperty("spark.hostPort")
 
-    SharkEnv.initWithSharkContext("catalyst.shark2.TestShark", master)
+    SharkEnv.initWithSharkContext("catalyst.execution.TestShark", master)
   }
 
   /** The location of the compiled hive distribution */
