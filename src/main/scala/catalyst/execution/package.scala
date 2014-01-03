@@ -1,7 +1,5 @@
 package catalyst
 
-import org.apache.hadoop.hive.serde2.typeinfo.TypeInfo
-
 import types._
 
 /**

@@ -5,8 +5,8 @@ package expressions
  * Represents one row of output from a relational operator.  Allows both generic access by ordinal,
  * which will incur boxing overhead for primitives, as well as native primitive access.
  *
- * It is invalid to use the native primitive interface to retrieve a value that is null, instead a user
- * must check [[isNullAt]] before attempting to retrieve a value that might be null.
+ * It is invalid to use the native primitive interface to retrieve a value that is null, instead a
+ * user must check [[isNullAt]] before attempting to retrieve a value that might be null.
  */
 abstract class Row extends Seq[Any] with Serializable {
   def apply(i: Int): Any

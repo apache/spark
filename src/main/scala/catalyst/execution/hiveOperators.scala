@@ -9,9 +9,6 @@ import org.apache.hadoop.hive.serde2.`lazy`.LazyStruct
 import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.mapred.JobConf
 
-import shark.execution.HadoopTableReader
-import shark.SharkContext
-
 import expressions.Attribute
 import util._
 
@@ -34,8 +31,8 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
    * Functions that extract the requested attributes from the hive output.
    */
   @transient
-  protected lazy val attributeFunctions = attributes.map { a =>
-    if(relation.partitionKeys.contains(a)) {
+  protected lazy val attributeFunctions: Seq[(LazyStruct, Array[String]) => AnyRef] = attributes.map { a =>
+    if (relation.partitionKeys.contains(a)) {
       val ordinal = relation.partitionKeys.indexOf(a)
       (struct: LazyStruct, partitionKeys: Array[String]) => partitionKeys(ordinal)
     } else {
@@ -53,11 +50,11 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
   }
 
   @transient
-  def inputRdd =
-    if(!relation.hiveQlTable.isPartitioned)
-      hadoopReader.makeRDDForTable(relation.hiveQlTable)
-    else
-      hadoopReader.makeRDDForPartitionedTable(relation.hiveQlPartitions)
+  def inputRdd = if (!relation.hiveQlTable.isPartitioned) {
+    hadoopReader.makeRDDForTable(relation.hiveQlTable)
+  } else {
+    hadoopReader.makeRDDForPartitionedTable(relation.hiveQlPartitions)
+  }
 
   def execute() = {
     inputRdd.map { row =>
@@ -117,7 +114,7 @@ case class InsertIntoHiveTable(table: MetastoreRelation, partition: Map[String, 
         s"PARTITION (${partition.map { case (k,v) => s"$k=$v" }.mkString(",")})"
       else
         ""
-    sc.runSql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName} $partitionSpec")
+    sc.sql(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName} $partitionSpec")
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

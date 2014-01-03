@@ -2,20 +2,18 @@ package catalyst
 package execution
 
 import java.io.File
-import scala.collection.mutable
 
+import scala.collection.mutable
+import scala.collection.JavaConversions._
+
+import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
-import shark.SharkEnv
+import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 
 import analysis._
 import plans.logical.LogicalPlan
 import frontend.hive._
 import util._
-
-import collection.JavaConversions._
-import org.apache.hadoop.hive.ql.exec.FunctionRegistry
-import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
-
 
 /**
  * A locally running test instance of spark.  The lifecycle for a given query is managed by the inner class

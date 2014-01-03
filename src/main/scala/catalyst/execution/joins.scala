@@ -1,15 +1,13 @@
 package catalyst
 package execution
 
+import scala.collection.mutable
+
 import org.apache.spark.rdd.RDD
 
 import errors._
 import expressions._
 import plans._
-import shark.SharkContext
-import org.apache.spark.util.collection.BitSet
-import scala.collection
-import scala.collection.mutable
 
 /* Implicits */
 import org.apache.spark.SparkContext._

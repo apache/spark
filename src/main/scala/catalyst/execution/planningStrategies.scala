@@ -1,14 +1,12 @@
 package catalyst
 package execution
 
-import shark.SharkContext
-
 import expressions._
 import planning._
 import plans._
 import plans.logical.LogicalPlan
 
-abstract trait PlanningStrategies {
+trait PlanningStrategies {
   self: QueryPlanner[SharkPlan] =>
 
   val sc: SharkContext

@@ -3,8 +3,6 @@ package execution
 
 import catalyst.errors._
 import catalyst.expressions._
-import catalyst.types.IntegerType
-import shark.SharkContext
 
 /* Implicits */
 import org.apache.spark.SparkContext._

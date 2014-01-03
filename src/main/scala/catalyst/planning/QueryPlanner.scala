@@ -6,10 +6,11 @@ import plans.logical.LogicalPlan
 import trees._
 
 /**
- * Extended by classes that transform [[plans.logical.LogicalPlan]]s into Physical plans.  Child classes are
- * responsible for specifying a list of [[Strategy]] objects that each of which can return a list of possible
- * physical plan options.  If a given strategy is unable to plan all of the remaining operators in the tree, it can
- * call [[planLater]], which returns a placeholder object that will be filled in using other available strategies.
+ * Extended by classes that transform [[LogicalPlan]]s into physical plans.  Child classes are
+ * responsible for specifying a list of [[Strategy]] objects that each of which can return a list
+ * of possible physical plan options.  If a given strategy is unable to plan all of the remaining
+ * operators in the tree, it can call [[planLater]], which returns a placeholder object that will
+ * be filled in using other available strategies.
  *
  * NOTE: RIGHT NOW ONLY ONE PLAN IS RETURNED EVER... PLAN SPACE EXPLORATION WILL BE IMPLEMENTED LATER.
  *
@@ -20,17 +21,18 @@ abstract class QueryPlanner[PhysicalPlan <: TreeNode[PhysicalPlan]] {
   def strategies: Seq[Strategy]
 
   /**
-   * Given a [[plan.logical.LogicalPlan]], returns a list of [[PhysicalPlans]] that can be used for execution. If this
-   * strategy does not apply to the give logical operation then an empty list should be returned.
+   * Given a [[LogicalPlan]], returns a list of [[PhysicalPlans]] that can be used for execution.
+   * If this strategy does not apply to the give logical operation then an empty list should be
+   * returned.
    */
   abstract protected class Strategy extends Logging {
     def apply(plan: LogicalPlan): Seq[PhysicalPlan]
-
   }
 
   /**
-   * Returns a placeholder for a physical plan that executes [[plan]].  This placeholder will be filled in automatically
-   * by the QueryPlanner using the other execution strategies that are available.
+   * Returns a placeholder for a physical plan that executes [[plan]]. This placeholder will be
+   * filled in automatically by the QueryPlanner using the other execution strategies that are
+   * available.
    */
   protected def planLater(plan: LogicalPlan) = apply(plan).next()
 

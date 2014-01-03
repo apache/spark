@@ -1,21 +1,10 @@
 package catalyst
 package execution
 
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
-import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, StructObjectInspector}
-import shark.execution.HadoopTableReader
-import shark.{SharkContext, SharkEnv}
-
 import errors._
 import expressions._
 import types._
 
-import collection.JavaConversions._
-import org.apache.hadoop.hive.ql.exec.OperatorFactory
-import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
-import org.apache.hadoop.hive.serde2.Serializer
-import org.apache.hadoop.mapred.JobConf
-import org.apache.hadoop.fs.Path
 
 import org.apache.spark.SparkContext._
 
