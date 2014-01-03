@@ -121,7 +121,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
         val fetcher = SparkEnv.get.shuffleFetcher
-        val ser = SparkEnv.get.serializerManager.get(serializerClass)
+        val ser = SparkEnv.get.serializerManager.get(serializerClass, SparkEnv.get.conf)
         val it = fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser)
         rddIterators += ((it, depNum))
       }

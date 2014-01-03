@@ -25,15 +25,13 @@ import org.apache.spark.streaming._
 
 /**
  * This class schedules jobs to be run on Spark. It uses the JobGenerator to generate
- * the jobs and runs them using a thread pool. Number of threads 
+ * the jobs and runs them using a thread pool. Number of threads
  */
 private[streaming]
 class JobScheduler(val ssc: StreamingContext) extends Logging {
 
-  initLogging()
-
   val jobSets = new ConcurrentHashMap[Time, JobSet]
-  val numConcurrentJobs = System.getProperty("spark.streaming.concurrentJobs", "1").toInt
+  val numConcurrentJobs = ssc.conf.get("spark.streaming.concurrentJobs", "1").toInt
   val executor = Executors.newFixedThreadPool(numConcurrentJobs)
   val generator = new JobGenerator(this)
   val listenerBus = new StreamingListenerBus()

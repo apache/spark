@@ -17,6 +17,7 @@
 
 package org.apache.spark.deploy.yarn
 
+import org.apache.spark.SparkConf
 import org.apache.spark.util.MemoryParam
 import org.apache.spark.util.IntParam
 import collection.mutable.{ArrayBuffer, HashMap}
@@ -33,7 +34,7 @@ class ClientArguments(val args: Array[String]) {
   var workerMemory = 1024
   var workerCores = 1
   var numWorkers = 2
-  var amQueue = System.getProperty("QUEUE", "default")
+  var amQueue = new SparkConf().get("QUEUE", "default")
   var amMemory: Int = 512
   var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
   var appName: String = "Spark"

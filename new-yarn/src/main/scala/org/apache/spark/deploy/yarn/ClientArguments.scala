@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 
+import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.{InputFormatInfo, SplitInfo}
 import org.apache.spark.util.IntParam
 import org.apache.spark.util.MemoryParam
@@ -35,7 +36,7 @@ class ClientArguments(val args: Array[String]) {
   var workerMemory = 1024 // MB
   var workerCores = 1
   var numWorkers = 2
-  var amQueue = System.getProperty("QUEUE", "default")
+  var amQueue = new SparkConf().get("QUEUE", "default")
   var amMemory: Int = 512 // MB
   var amClass: String = "org.apache.spark.deploy.yarn.ApplicationMaster"
   var appName: String = "Spark"
