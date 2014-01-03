@@ -30,7 +30,7 @@ if exist "%FWDIR%conf\spark-env.cmd" call "%FWDIR%conf\spark-env.cmd"
 
 rem Test that an argument was given
 if not "x%1"=="x" goto arg_given
-  echo Usage: bin/run-example ^<example-class^> [^<args^>]
+  echo Usage: run-example ^<example-class^> [^<args^>]
   goto exit
 :arg_given
 

@@ -90,10 +90,10 @@ if $cygwin; then
     # "Backspace sends ^H" setting in "Keys" section of the Mintty options
     # (see https://github.com/sbt/sbt/issues/562).
     stty -icanon min 1 -echo > /dev/null 2>&1
-    $FWDIR/sbin/spark-class -Djline.terminal=unix $OPTIONS org.apache.spark.repl.Main "$@"
+    $FWDIR/bin/spark-class -Djline.terminal=unix $OPTIONS org.apache.spark.repl.Main "$@"
     stty icanon echo > /dev/null 2>&1
 else
-    $FWDIR/sbin/spark-class $OPTIONS org.apache.spark.repl.Main "$@"
+    $FWDIR/bin/spark-class $OPTIONS org.apache.spark.repl.Main "$@"
 fi
 
 # record the exit status lest it be overwritten:
