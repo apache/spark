@@ -1,15 +1,13 @@
 package catalyst
 package execution
 
+import scala.collection.mutable
+
 import org.apache.spark.rdd.RDD
 
 import errors._
 import expressions._
 import plans._
-import shark.SharkContext
-import org.apache.spark.util.collection.BitSet
-import scala.collection
-import scala.collection.mutable
 
 /* Implicits */
 import org.apache.spark.SparkContext._
@@ -18,7 +16,8 @@ case class SparkEquiInnerJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SharkPlan,
-    right: SharkPlan) extends BinaryNode {
+    right: SharkPlan)
+  extends BinaryNode {
 
   def output = left.output ++ right.output
 
@@ -59,9 +58,13 @@ case class CartesianProduct(left: SharkPlan, right: SharkPlan) extends BinaryNod
   }
 }
 
-case class BroadcastNestedLoopJoin(streamed: SharkPlan, broadcast: SharkPlan, joinType: JoinType, condition: Option[Expression])
-                                  (@transient sc: SharkContext) extends BinaryNode {
+case class BroadcastNestedLoopJoin(
+    streamed: SharkPlan, broadcast: SharkPlan, joinType: JoinType, condition: Option[Expression])
+    (@transient sc: SharkContext)
+  extends BinaryNode {
+
   override  def otherCopyArgs = sc :: Nil
+
   def output = left.output ++ right.output
 
   /** The Streamed Relation */
@@ -75,27 +78,28 @@ case class BroadcastNestedLoopJoin(streamed: SharkPlan, broadcast: SharkPlan, jo
     val streamedPlusMatches = streamed.execute().map { streamedRow =>
       var i = 0
       val matchedRows = new mutable.ArrayBuffer[Row]
-      val includedBroadcastTuples =  new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
+      val includedBroadcastTuples =  new mutable.BitSet(broadcastedRelation.value.size)
 
-      while(i < broadcastedRelation.value.size) {
+      while (i < broadcastedRelation.value.size) {
         // TODO: One bitset per partition instead of per row.
         val broadcastedRow = broadcastedRelation.value(i)
         val includeRow = condition match {
           case None => true
           case Some(c) => Evaluate(c, Vector(streamedRow, broadcastedRow)).asInstanceOf[Boolean]
         }
-        if(includeRow) {
+        if (includeRow) {
           matchedRows += buildRow(streamedRow ++ broadcastedRow)
           includedBroadcastTuples += i
         }
         i += 1
       }
-      val outputRows = if(matchedRows.size > 0)
+      val outputRows = if (matchedRows.size > 0) {
         matchedRows
-      else if(joinType == LeftOuter || joinType == FullOuter)
+      } else if(joinType == LeftOuter || joinType == FullOuter) {
         Vector(buildRow(streamedRow ++ Array.fill(right.output.size)(null)))
-      else
+      } else {
         Vector()
+      }
       (outputRows, includedBroadcastTuples)
     }
 
@@ -107,14 +111,15 @@ case class BroadcastNestedLoopJoin(streamed: SharkPlan, broadcast: SharkPlan, jo
         streamedPlusMatches.map(_._2).reduce(_ ++ _)
 
     val rightOuterMatches: Seq[Row] =
-      if(joinType == RightOuter || joinType == FullOuter)
+      if (joinType == RightOuter || joinType == FullOuter) {
         broadcastedRelation.value.zipWithIndex.filter {
           case (row, i) => !allIncludedBroadcastTuples.contains(i)
         }.map {
           case (row, _) => buildRow(Vector.fill(left.output.size)(null) ++ row)
         }
-      else
+      } else {
         Vector()
+      }
 
     sc.union(streamedPlusMatches.flatMap(_._1), sc.makeRDD(rightOuterMatches))
   }

@@ -1,8 +1,6 @@
 package catalyst
 package expressions
 
-import types._
-
 abstract sealed class SortDirection
 case object Ascending extends SortDirection
 case object Descending extends SortDirection

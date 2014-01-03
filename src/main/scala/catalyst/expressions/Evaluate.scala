@@ -252,7 +252,7 @@ object Evaluate extends Logging {
       }
 
       /* Functions */
-      case Rand => scala.util.Random.nextDouble
+      case Rand => scala.util.Random.nextDouble()
 
       /* UDFs */
       case implementedFunction: ImplementedUdf =>

@@ -1,11 +1,12 @@
 package catalyst
 package execution
 
-import catalyst.expressions._
-import shark.SharkContext
 import java.io.{InputStreamReader, BufferedReader}
 
-import collection.JavaConversions._
+import scala.collection.JavaConversions._
+
+import catalyst.expressions._
+
 
 /**
  * Transforms the input by forking and running the specified script.

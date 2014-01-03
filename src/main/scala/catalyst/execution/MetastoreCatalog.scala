@@ -5,6 +5,8 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table, StorageDescriptor, SerDeInfo}
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
 import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.mapred.InputFormat
 
 import analysis.Catalog
 import expressions._
@@ -25,17 +27,20 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
     val table = client.getTable(databaseName, tableName)
     val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
     val partitions =
-      if(hiveQlTable.isPartitioned)
+      if (hiveQlTable.isPartitioned) {
+        // TODO: Is 255 the right number to pick?
         client.listPartitions(databaseName, tableName, 255).toSeq
-      else
+      } else {
         Nil
+      }
 
     // Since HiveQL is case insensitive for table names we make them all lowercase.
     MetastoreRelation(databaseName.toLowerCase, tableName.toLowerCase, alias)(table, partitions)
   }
 
   /**
-   * Creates any tables required for query execution.  For example, because of a CREATE TABLE X AS statement.
+   * Creates any tables required for query execution.
+   * For example, because of a CREATE TABLE X AS statement.
    */
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -81,25 +86,30 @@ object HiveMetatoreTypes {
     }
 }
 
-case class MetastoreRelation(databaseName: String, tableName: String, alias: Option[String])(val table: Table, val partitions: Seq[Partition])
-    extends BaseRelation {
+case class MetastoreRelation(databaseName: String, tableName: String, alias: Option[String])
+    (val table: Table, val partitions: Seq[Partition])
+  extends BaseRelation {
 
   def hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
-  def hiveQlPartitions = partitions.map(new org.apache.hadoop.hive.ql.metadata.Partition(hiveQlTable, _))
+
+  def hiveQlPartitions = partitions.map { p =>
+    new org.apache.hadoop.hive.ql.metadata.Partition(hiveQlTable, p)
+  }
+
   val tableDesc = new TableDesc(
-    Class.forName(table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[org.apache.hadoop.hive.serde2.Deserializer]],
-    Class.forName(table.getSd.getInputFormat).asInstanceOf[Class[org.apache.hadoop.mapred.InputFormat[_,_]]],
+    Class.forName(table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[Deserializer]],
+    Class.forName(table.getSd.getInputFormat).asInstanceOf[Class[InputFormat[_,_]]],
     Class.forName(table.getSd.getOutputFormat),
     hiveQlTable.getSchema
   )
 
    implicit class SchemaAttribute(f: FieldSchema) {
-     def toAttribute =
-       AttributeReference(
-         f.getName,
-         HiveMetatoreTypes.toDataType(f.getType),
-         true // Since data can be dumped in randomly with no validation, everything is nullable.
-       )(qualifiers = tableName +: alias.toSeq)
+     def toAttribute = AttributeReference(
+       f.getName,
+       HiveMetatoreTypes.toDataType(f.getType),
+       // Since data can be dumped in randomly with no validation, everything is nullable.
+       nullable = true
+     )(qualifiers = tableName +: alias.toSeq)
    }
 
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
@@ -107,4 +117,3 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
   // Must be a stable value since new attributes are born here.
   val output = partitionKeys ++ table.getSd.getCols.map(_.toAttribute)
 }
-

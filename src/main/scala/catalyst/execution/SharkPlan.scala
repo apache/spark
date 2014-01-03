@@ -1,8 +1,9 @@
 package catalyst
 package execution
 
-import catalyst.plans.QueryPlan
 import org.apache.spark.rdd.RDD
+
+import catalyst.plans.QueryPlan
 
 abstract class SharkPlan extends QueryPlan[SharkPlan] with Logging {
   self: Product =>
@@ -12,17 +13,22 @@ abstract class SharkPlan extends QueryPlan[SharkPlan] with Logging {
    */
   def execute(): RDD[Row]
 
+  /**
+   * Runs this query returning the result as an array.
+   */
+  def executeCollect(): Array[Row] = execute().collect()
+
   protected def buildRow(values: Seq[Any]): Row = new catalyst.expressions.GenericRow(values)
 }
 
-abstract trait LeafNode extends SharkPlan with trees.LeafNode[SharkPlan] {
+trait LeafNode extends SharkPlan with trees.LeafNode[SharkPlan] {
   self: Product =>
 }
 
-abstract trait UnaryNode extends SharkPlan with trees.UnaryNode[SharkPlan] {
+trait UnaryNode extends SharkPlan with trees.UnaryNode[SharkPlan] {
   self: Product =>
 }
 
-abstract trait BinaryNode extends SharkPlan with trees.BinaryNode[SharkPlan] {
+trait BinaryNode extends SharkPlan with trees.BinaryNode[SharkPlan] {
   self: Product =>
 }

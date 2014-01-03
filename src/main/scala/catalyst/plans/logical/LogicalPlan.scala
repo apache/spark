@@ -4,7 +4,6 @@ package logical
 
 import expressions.Attribute
 import errors._
-import trees._
 
 abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   self: Product =>
@@ -16,26 +15,28 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   def references: Set[Attribute]
 
   /**
-   * Returns the set of attributes that are output by this node.
-   */
-  def outputSet: Set[Attribute] = output.toSet
-
-  /**
    * Returns the set of attributes that this node takes as
    * input from its children.
    */
   def inputSet: Set[Attribute] = children.flatMap(_.output).toSet
 
+  /**
+   * Returns true if this expression and all its children have been resolved to a specific schema
+   * and false if it is still contains any unresolved placeholders. Implementations of LogicalPlan
+   * can override this (e.g. [[UnresolvedRelation]] can set this to false).
+   */
+  lazy val resolved: Boolean = !expressions.exists(!_.resolved) && childrenResolved
+
+  /**
+   * Returns true if all its children of this query plan have been resolved.
+   */
+  def childrenResolved = !children.exists(!_.resolved)
+
   def resolve(name: String): Option[Attribute] = {
     val parts = name.split("\\.")
-    val options = children.flatMap(_.output).filter {option =>
-     // If the first part of the desired name matches a qualifier for this possible match, drop it.
-     val remainingParts =
-      if(option.qualifiers contains parts.head)
-        parts.drop(1)
-      else
-        parts
-
+    val options = children.flatMap(_.output).filter { option =>
+      // If the first part of the desired name matches a qualifier for this possible match, drop it.
+      val remainingParts = if (option.qualifiers contains parts.head) parts.drop(1) else parts
       option.name == remainingParts.head
     }
 

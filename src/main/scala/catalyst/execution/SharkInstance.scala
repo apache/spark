@@ -3,8 +3,6 @@ package execution
 
 import java.io.File
 
-import shark.{SharkConfVars, SharkContext, SharkEnv}
-
 import analysis.{SimpleAnalyzer, Analyzer}
 import frontend.hive._
 import optimizer.Optimize
@@ -39,18 +37,15 @@ abstract class SharkInstance extends Logging {
   /** The SharkContext */
   lazy val sc = createContext()
 
-  protected def createContext() = {
+  protected def createContext(): SharkContext = {
     SharkEnv.initWithSharkContext("catalyst.execution", master)
   }
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
-    // Use hive natively for queries that won't be executed by catalyst. This is because
-    // shark has dependencies on a custom version of hive that we are trying to avoid in catalyst.
-    SharkConfVars.setVar(SharkContext.hiveconf, SharkConfVars.EXEC_MODE, "hive")
-
     // TODO: refactor this so we can work with other databases.
-    runSqlHive("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + metastorePath + ";create=true")
+    runSqlHive("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + metastorePath +
+      ";create=true")
     runSqlHive("set hive.metastore.warehouse.dir=" + warehousePath)
   }
 
@@ -67,7 +62,7 @@ abstract class SharkInstance extends Logging {
    */
   def runSqlHive(sql: String): Seq[String] = {
     val maxResults = 100000
-    val results = sc.sql(sql, 100000)
+    val results = sc.runHive(sql, 100000)
     // It is very confusing when you only get back some of the results...
     if (results.size == maxResults) sys.error("RESULTS POSSIBLY TRUNCATED")
     results

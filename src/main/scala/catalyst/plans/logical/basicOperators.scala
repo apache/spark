@@ -30,7 +30,8 @@ case class Join(
   def output = left.output ++ right.output
 }
 
-case class InsertIntoTable(table: BaseRelation, partition: Map[String, String], child: LogicalPlan) extends LogicalPlan {
+case class InsertIntoTable(table: BaseRelation, partition: Map[String, String], child: LogicalPlan)
+  extends LogicalPlan {
   // The table being inserted into is a child for the purposes of transformations.
   def children = table :: child :: Nil
   def references = Set.empty
@@ -50,7 +51,8 @@ case class Sort(order: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan)
+  extends UnaryNode {
 
   def output = aggregateExpressions.map(_.toAttribute)
   def references = child.references

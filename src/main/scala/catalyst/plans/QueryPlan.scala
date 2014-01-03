@@ -10,16 +10,20 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def output: Seq[Attribute]
 
   /**
+   * Returns the set of attributes that are output by this node.
+   */
+  def outputSet: Set[Attribute] = output.toSet
+
+  /**
    * Runs [[transform]] with [[rule]] on all expressions present in this query operator.
    * @param rule the rule to be applied to every expression in this operator.
-   * @return
    */
   def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
     @inline def transformExpression(e: Expression) = {
       val newE = e.transform(rule)
-      if(newE.id != e.id && newE != e) {
+      if (newE.id != e.id && newE != e) {
         changed = true
         newE
       } else {
@@ -37,7 +41,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case other: AnyRef => other
     }.toArray
 
-    if(changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs) else this
   }
 
   /** Returns the result of running [[transformExpressions]] on this node and all its children */

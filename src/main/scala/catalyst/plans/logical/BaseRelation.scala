@@ -4,5 +4,4 @@ package logical
 
 abstract class BaseRelation extends LeafNode {
   self: Product =>
-
 }

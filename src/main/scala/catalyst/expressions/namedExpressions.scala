@@ -1,7 +1,7 @@
 package catalyst
 package expressions
 
-import catalyst.analysis.{UnresolvedAttribute, UnresolvedException}
+import catalyst.analysis.UnresolvedAttribute
 import types._
 
 object NamedExpression {
@@ -43,25 +43,26 @@ abstract class Attribute extends NamedExpression {
  *
  * @param child the computation being performed
  * @param name the name to be associated with the result of computing [[child]].
- * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this alias.
- *               Auto-assigned if left blank.
+ * @param exprId A globally unique id used to check if an [[AttributeReference]] refers to this
+ *               alias. Auto-assigned if left blank.
  */
 case class Alias(child: Expression, name: String)
-                (val exprId: ExprId = NamedExpression.newExprId,
-                 val qualifiers: Seq[String] = Nil)
+    (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
   extends NamedExpression with trees.UnaryNode[Expression] {
 
   def dataType = child.dataType
   def nullable = child.nullable
   def references = child.references
 
-  def toAttribute =
-    if(resolved)
+  def toAttribute = {
+    if (resolved) {
       AttributeReference(name, child.dataType, child.nullable)(exprId, qualifiers)
-    else
+    } else {
       UnresolvedAttribute(name)
+    }
+  }
 
-  override def toString(): String = s"$child AS $name#${exprId.id}"
+  override def toString: String = s"$child AS $name#${exprId.id}"
 
   override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
 }
@@ -72,12 +73,14 @@ case class Alias(child: Expression, name: String)
  * @param name The name of this attribute, should only be used during analysis or for debugging.
  * @param dataType The [[DataType]] of this attribute.
  * @param nullable True if null is a valid value for this attribute.
- * @param exprId A globally unique id used to check if different AttributeReferences refer to the same attribute.
- * @param qualifiers a list of strings that can be used to referred to this attribute in a fully qualified way. Consider
- *                   the examples tableName.name, subQueryAlias.name. tableName and subQueryAlias are possible qualifiers.
+ * @param exprId A globally unique id used to check if different AttributeReferences refer to the
+ *               same attribute.
+ * @param qualifiers a list of strings that can be used to referred to this attribute in a fully
+ *                   qualified way. Consider the examples tableName.name, subQueryAlias.name.
+ *                   tableName and subQueryAlias are possible qualifiers.
  */
 case class AttributeReference(name: String, dataType: DataType, nullable: Boolean = true)
-                             (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
+    (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
   extends Attribute with trees.LeafNode[Expression] {
 
   override def equals(other: Any) = other match {
@@ -106,5 +109,5 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     else
       AttributeReference(name, dataType, nullable)(exprId, newQualifiers)
 
-  override def toString(): String = s"$name#${exprId.id}"
+  override def toString: String = s"$name#${exprId.id}"
 }

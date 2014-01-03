@@ -1,15 +1,11 @@
 package catalyst
 package execution
 
-import shark.{SharkContext, SharkEnv}
-
 import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import frontend.hive.{ExplainCommand, Command}
 import util._
-
-import collection.JavaConversions._
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -17,6 +13,7 @@ import collection.JavaConversions._
  *
  * The "golden" results from Hive are cached in [[answerCache]] to speed up testing.
  */
+// TODO: correct the mispelled name.
 abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
   protected val targetDir = new File("target")
   protected val answerCache = new File(targetDir, "comparison-test-cache")

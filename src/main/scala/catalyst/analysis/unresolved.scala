@@ -6,7 +6,8 @@ import plans.logical.BaseRelation
 import trees.TreeNode
 
 /**
- * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully resolved.
+ * Thrown when an invalid attempt is made to access a property of a tree that has yet to be fully
+ * resolved.
  */
 class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String) extends
   errors.OptimizationException(tree, s"Invalid call to $function on unresolved object")
@@ -16,6 +17,7 @@ class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: Str
  */
 case class UnresolvedRelation(name: String, alias: Option[String] = None) extends BaseRelation {
   def output = Nil
+  override lazy val resolved = false
 }
 
 /**
@@ -31,7 +33,7 @@ case class UnresolvedAttribute(name: String) extends Attribute with trees.LeafNo
   def newInstance = this
   def withQualifiers(newQualifiers: Seq[String]) = this
 
-  override def toString(): String = s"'$name"
+  override def toString: String = s"'$name"
 }
 
 case class UnresolvedFunction(name: String, children: Seq[Expression]) extends Expression {
@@ -67,8 +69,10 @@ case class Star(
   def withQualifiers(newQualifiers: Seq[String]) = this
 
   def expand(input: Seq[Attribute]): Seq[NamedExpression] = {
-    val expandedAttributes = table match {
+    val expandedAttributes: Seq[Attribute] = table match {
+      // If there is no table specified, use all input attributes.
       case None => input
+      // If there is a table, pick out attributes that are part of this table.
       case Some(table) => input.filter(_.qualifiers contains table)
     }
     val mappedAttributes = expandedAttributes.map(mapFunction).zip(input).map {

@@ -15,9 +15,9 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil) exten
   def loadData(newData: Seq[Product]) = new LocalRelation(output, data ++ newData)
 
   /**
-   * Returns an identical copy of this relation with new exprIds for all attributes.  Different attributes are required
-   * when a relation is going to be included multiple times in the same query.
-   * @return
+   * Returns an identical copy of this relation with new exprIds for all attributes.  Different
+   * attributes are required when a relation is going to be included multiple times in the same
+   * query.
    */
   def newInstance: LocalRelation = {
     LocalRelation(output.map(_.newInstance), data)
@@ -27,14 +27,17 @@ case class LocalRelation(output: Seq[Attribute], data: Seq[Product] = Nil) exten
 }
 
 /**
- * If any local relation appears more than once in the query plan then the plan is updated so that each instance has
- * unique expression ids for the attributes produced.
+ * If any local relation appears more than once in the query plan then the plan is updated so that
+ * each instance has unique expression ids for the attributes produced.
  */
 object NewLocalRelationInstances extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = {
     val localRelations = plan collect { case l: LocalRelation => l}
-    val multiAppearance =
-      localRelations.groupBy(identity[LocalRelation]).filter { case (_, ls) => ls.size > 1 }.map(_._1).toSet
+    val multiAppearance = localRelations
+      .groupBy(identity[LocalRelation])
+      .filter { case (_, ls) => ls.size > 1 }
+      .map(_._1)
+      .toSet
 
     plan transform {
       case l: LocalRelation if multiAppearance contains l => l.newInstance
