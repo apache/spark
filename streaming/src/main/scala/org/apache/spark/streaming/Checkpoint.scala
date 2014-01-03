@@ -24,7 +24,7 @@ import java.util.concurrent.RejectedExecutionException
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkException, Logging}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.util.MetadataCleaner
 
@@ -141,9 +141,15 @@ class CheckpointWriter(checkpointDir: String) extends Logging {
 private[streaming]
 object CheckpointReader extends Logging {
 
+  def doesCheckpointExist(path: String): Boolean = {
+    val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"))
+    val fs = new Path(path).getFileSystem(new Configuration())
+    (attempts.count(p => fs.exists(p)) > 1)
+  }
+
   def read(path: String): Checkpoint = {
     val fs = new Path(path).getFileSystem(new Configuration())
-    val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"), new Path(path), new Path(path + ".bk"))
+    val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"))
 
     val compressionCodec = CompressionCodec.createCodec()
 
@@ -175,7 +181,7 @@ object CheckpointReader extends Logging {
       }
 
     })
-    throw new Exception("Could not read checkpoint from path '" + path + "'")
+    throw new SparkException("Could not read checkpoint from path '" + path + "'")
   }
 }
 

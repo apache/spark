@@ -570,10 +570,26 @@ class StreamingContext private (
 }
 
 
-object StreamingContext {
+object StreamingContext extends Logging {
 
   implicit def toPairDStreamFunctions[K: ClassTag, V: ClassTag](stream: DStream[(K,V)]) = {
     new PairDStreamFunctions[K, V](stream)
+  }
+
+  def getOrCreate(
+      checkpointPath: String,
+      creatingFunc: () => StreamingContext,
+      createOnCheckpointError: Boolean = false
+    ): StreamingContext = {
+    if (CheckpointReader.doesCheckpointExist(checkpointPath)) {
+      logInfo("Creating streaming context from checkpoint file")
+      new StreamingContext(checkpointPath)
+    } else {
+      logInfo("Creating new streaming context")
+      val ssc = creatingFunc()
+      ssc.checkpoint(checkpointPath)
+      ssc
+    }
   }
 
   protected[streaming] def createNewSparkContext(
