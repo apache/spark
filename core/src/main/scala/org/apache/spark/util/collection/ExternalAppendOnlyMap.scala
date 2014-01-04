@@ -24,7 +24,7 @@ import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 import scala.collection.mutable.{ArrayBuffer, PriorityQueue}
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.{SparkConf, Logging, SparkEnv}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{DiskBlockManager, DiskBlockObjectWriter}
 
@@ -57,14 +57,16 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskIterator]
+
+  private val sparkConf = new SparkConf()
   private val memoryThresholdMB = {
     // TODO: Turn this into a fraction of memory per reducer
-    val bufferSize = System.getProperty("spark.shuffle.buffer.mb", "1024").toLong
-    val bufferPercent = System.getProperty("spark.shuffle.buffer.fraction", "0.8").toFloat
+    val bufferSize = sparkConf.getLong("spark.shuffle.buffer.mb", 1024)
+    val bufferPercent = sparkConf.getDouble("spark.shuffle.buffer.fraction", 0.8)
     bufferSize * bufferPercent
   }
-  private val fileBufferSize =
-    System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
+  private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
+  private val syncWrites = sparkConf.get("spark.shuffle.sync", "false").toBoolean
   private val comparator = new KCComparator[K, C]
   private val ser = serializer.newInstance()
   private var spillCount = 0
@@ -84,7 +86,8 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
     logWarning(s"In-memory KV map exceeded threshold of $memoryThresholdMB MB!")
     logWarning(s"Spilling to disk ($spillCount time"+(if (spillCount > 1) "s" else "")+" so far)")
     val (blockId, file) = diskBlockManager.createTempBlock()
-    val writer = new DiskBlockObjectWriter(blockId, file, serializer, fileBufferSize, identity)
+    val writer =
+      new DiskBlockObjectWriter(blockId, file, serializer, fileBufferSize, identity, syncWrites)
     try {
       val it = currentMap.destructiveSortedIterator(comparator)
       while (it.hasNext) {

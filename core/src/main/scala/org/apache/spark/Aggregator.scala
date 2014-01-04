@@ -33,8 +33,10 @@ case class Aggregator[K, V, C: ClassTag] (
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C) {
 
+  private val sparkConf = new SparkConf()
+  private val externalSorting = sparkConf.get("spark.shuffle.externalSorting", "false").toBoolean
+
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
-    val externalSorting = System.getProperty("spark.shuffle.externalSorting", "false").toBoolean
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kv: Product2[K, V] = null
@@ -58,7 +60,6 @@ case class Aggregator[K, V, C: ClassTag] (
   }
 
   def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] = {
-    val externalSorting = System.getProperty("spark.shuffle.externalSorting", "false").toBoolean
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kc: Product2[K, C] = null

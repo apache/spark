@@ -4,20 +4,17 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.{HashPartitioner, SparkContext, SparkEnv, LocalSparkContext}
+import org.apache.spark._
 import org.apache.spark.SparkContext.rddToPairRDDFunctions
 
 class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
   override def beforeEach() {
-    sc = new SparkContext("local", "test")
-    System.setProperty("spark.shuffle.externalSorting", "true")
-  }
-
-  after {
-    System.setProperty("spark.shuffle.externalSorting", "false")
-    System.setProperty("spark.shuffle.buffer.mb", "1024")
-    System.setProperty("spark.shuffle.buffer.fraction", "0.8")
+    val conf = new SparkConf(false)
+    conf.set("spark.shuffle.externalSorting", "true")
+    conf.set("spark.shuffle.buffer.mb", "1024")
+    conf.set("spark.shuffle.buffer.fraction", "0.8")
+    sc = new SparkContext("local", "test", conf)
   }
 
   val createCombiner: (Int => ArrayBuffer[Int]) = i => ArrayBuffer[Int](i)

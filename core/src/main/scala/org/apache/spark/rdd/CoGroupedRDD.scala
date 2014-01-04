@@ -22,7 +22,7 @@ import java.io.{ObjectOutputStream, IOException}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
-import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
+import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency, SparkConf}
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap}
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
@@ -66,6 +66,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Seq[CoGroup]
 
+  private val sparkConf = new SparkConf()
   private var serializerClass: String = null
 
   def setSerializer(cls: String): CoGroupedRDD[K] = {
@@ -106,7 +107,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, CoGroupCombiner)] = {
 
-    val externalSorting = System.getProperty("spark.shuffle.externalSorting", "false").toBoolean
+    val externalSorting = sparkConf.get("spark.shuffle.externalSorting", "false").toBoolean
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
 
