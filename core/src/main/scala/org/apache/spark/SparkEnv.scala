@@ -59,6 +59,9 @@ class SparkEnv private[spark] (
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
+  // Number of tasks currently running across all threads
+  @volatile private var _numRunningTasks = 0
+
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
   private[spark] val hadoopJobMetadata = new MapMaker().softValues().makeMap[String, Any]()
@@ -85,6 +88,19 @@ class SparkEnv private[spark] (
       val key = (pythonExec, envVars)
       pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
     }
+  }
+
+  /**
+   * Return the number of tasks currently running across all threads
+   */
+  def numRunningTasks: Int = _numRunningTasks
+
+  def incrementNumRunningTasks() = synchronized {
+    _numRunningTasks += 1
+  }
+
+  def decrementNumRunningTasks() = synchronized {
+    _numRunningTasks -= 1
   }
 }
 

@@ -17,8 +17,7 @@
 
 package org.apache.spark.util.collection
 
-import java.util
-import java.util.Comparator
+import java.util.{Arrays, Comparator}
 
 /**
  * A simple open hash table optimized for the append-only use case, where keys
@@ -270,7 +269,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
         cmp.compare(x.asInstanceOf[(K, V)], y.asInstanceOf[(K, V)])
       }
     }
-    util.Arrays.sort(data, 0, newIndex, rawOrdering)
+    Arrays.sort(data, 0, newIndex, rawOrdering)
 
     new Iterator[(K, V)] {
       var i = 0

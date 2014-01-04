@@ -32,17 +32,28 @@ import org.apache.spark.storage.{DiskBlockManager, DiskBlockObjectWriter}
  * An append-only map that spills sorted content to disk when the memory threshold is exceeded.
  *
  * This map takes two passes over the data:
- *   (1) Values are merged into combiners, which are sorted and spilled to disk in as necessary.
+ *
+ *   (1) Values are merged into combiners, which are sorted and spilled to disk as necessary
  *   (2) Combiners are read from disk and merged together
  *
- * Two parameters control the memory threshold: `spark.shuffle.buffer.mb` specifies the maximum
- * size of the in-memory map before a spill, and `spark.shuffle.buffer.fraction` specifies an
- * additional margin of safety. The second parameter is important for the following reason:
+ * The setting of the spill threshold faces the following trade-off: If the spill threshold is
+ * too high, the in-memory map may occupy more memory than is available, resulting in OOM.
+ * However, if the spill threshold is too low, we spill frequently and incur unnecessary disk
+ * writes. This may lead to a performance regression compared to the normal case of using the
+ * non-spilling AppendOnlyMap.
  *
- * If the spill threshold is set too high, the in-memory map may occupy more memory than is
- * available, resulting in OOM. However, if the spill threshold is set too low, we spill
- * frequently and incur unnecessary disk writes. This may lead to a performance regression
- * compared to the normal case of using the non-spilling AppendOnlyMap.
+ * A few parameters control the memory threshold:
+ *
+ *   `spark.shuffle.memoryFraction` specifies the collective amount of memory used for storing
+ *   these maps as a fraction of the executor's total memory. Since each concurrently running
+ *   task maintains one map, the actual threshold for each map is this quantity divided by the
+ *   number of running tasks.
+ *
+ *   `spark.shuffle.safetyFraction` specifies an additional margin of safety as a fraction of
+ *   this threshold, in case map size estimation is not sufficiently accurate.
+ *
+ *   `spark.shuffle.updateThresholdInterval` controls how frequently each thread checks on
+ *   shared executor state to update its local memory threshold.
  */
 
 private[spark] class ExternalAppendOnlyMap[K, V, C](
@@ -56,35 +67,54 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   import ExternalAppendOnlyMap._
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
-  private val spilledMaps = new ArrayBuffer[DiskIterator]
-
+  private val spilledMaps = new ArrayBuffer[DiskMapIterator]
   private val sparkConf = new SparkConf()
-  private val memoryThresholdMB = {
-    // TODO: Turn this into a fraction of memory per reducer
-    val bufferSize = sparkConf.getLong("spark.shuffle.buffer.mb", 1024)
-    val bufferPercent = sparkConf.getDouble("spark.shuffle.buffer.fraction", 0.8)
-    bufferSize * bufferPercent
+
+  // Collective memory threshold shared across all running tasks
+  private val maxMemoryThreshold = {
+    val memoryFraction = sparkConf.getDouble("spark.shuffle.memoryFraction", 0.75)
+    val safetyFraction = sparkConf.getDouble("spark.shuffle.safetyFraction", 0.8)
+    (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
+
+  // Maximum size for this map before a spill is triggered
+  private var spillThreshold = maxMemoryThreshold
+
+  // How often to update spillThreshold
+  private val updateThresholdInterval =
+    sparkConf.getInt("spark.shuffle.updateThresholdInterval", 100)
+
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
   private val syncWrites = sparkConf.get("spark.shuffle.sync", "false").toBoolean
   private val comparator = new KCComparator[K, C]
   private val ser = serializer.newInstance()
+  private var insertCount = 0
   private var spillCount = 0
 
-  def insert(key: K, value: V): Unit = {
+  def insert(key: K, value: V) {
+    insertCount += 1
     val update: (Boolean, C) => C = (hadVal, oldVal) => {
       if (hadVal) mergeValue(oldVal, value) else createCombiner(value)
     }
     currentMap.changeValue(key, update)
-    if (currentMap.estimateSize() > memoryThresholdMB * 1024 * 1024) {
+    if (insertCount % updateThresholdInterval == 1) {
+      updateSpillThreshold()
+    }
+    if (currentMap.estimateSize() > spillThreshold) {
       spill()
     }
   }
 
-  private def spill(): Unit = {
+  // TODO: differentiate ShuffleMapTask's from ResultTask's
+  private def updateSpillThreshold() {
+    val numRunningTasks = math.max(SparkEnv.get.numRunningTasks, 1)
+    spillThreshold = maxMemoryThreshold / numRunningTasks
+  }
+
+  private def spill() {
     spillCount += 1
-    logWarning(s"In-memory KV map exceeded threshold of $memoryThresholdMB MB!")
-    logWarning(s"Spilling to disk ($spillCount time"+(if (spillCount > 1) "s" else "")+" so far)")
+    logWarning("In-memory map exceeded %s MB! Spilling to disk (%d time%s so far)"
+      .format(spillThreshold / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
     val (blockId, file) = diskBlockManager.createTempBlock()
     val writer =
       new DiskBlockObjectWriter(blockId, file, serializer, fileBufferSize, identity, syncWrites)
@@ -100,7 +130,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
       writer.close()
     }
     currentMap = new SizeTrackingAppendOnlyMap[K, C]
-    spilledMaps.append(new DiskIterator(file))
+    spilledMaps.append(new DiskMapIterator(file))
   }
 
   override def iterator: Iterator[(K, C)] = {
@@ -228,7 +258,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   }
 
   // Iterate through (K, C) pairs in sorted order from an on-disk map
-  private class DiskIterator(file: File) extends Iterator[(K, C)] {
+  private class DiskMapIterator(file: File) extends Iterator[(K, C)] {
     val fileStream = new FileInputStream(file)
     val bufferedStream = new FastBufferedInputStream(fileStream)
     val deserializeStream = ser.deserializeStream(bufferedStream)

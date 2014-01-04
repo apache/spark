@@ -5,15 +5,13 @@ import scala.collection.mutable.ArrayBuffer
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
 import org.apache.spark._
-import org.apache.spark.SparkContext.rddToPairRDDFunctions
+import org.apache.spark.SparkContext._
 
 class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
 
   override def beforeEach() {
     val conf = new SparkConf(false)
     conf.set("spark.shuffle.externalSorting", "true")
-    conf.set("spark.shuffle.buffer.mb", "1024")
-    conf.set("spark.shuffle.buffer.fraction", "0.8")
     sc = new SparkContext("local", "test", conf)
   }
 
@@ -27,14 +25,14 @@ class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with Local
     }
 
   test("simple insert") {
-    var map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
+    val map = new ExternalAppendOnlyMap[Int, Int, ArrayBuffer[Int]](createCombiner,
       mergeValue, mergeCombiners)
 
     // Single insert
     map.insert(1, 10)
     var it = map.iterator
     assert(it.hasNext)
-    var kv = it.next()
+    val kv = it.next()
     assert(kv._1 == 1 && kv._2 == ArrayBuffer[Int](10))
     assert(!it.hasNext)
 
@@ -59,7 +57,7 @@ class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with Local
     map.insert(1, 100)
     map.insert(2, 200)
     map.insert(1, 1000)
-    var it = map.iterator
+    val it = map.iterator
     assert(it.hasNext)
     val result = it.toSet[(Int, ArrayBuffer[Int])].map(kv => (kv._1, kv._2.toSet))
     assert(result == Set[(Int, Set[Int])](
@@ -177,8 +175,9 @@ class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with Local
   }
 
   test("spilling") {
-    System.setProperty("spark.shuffle.buffer.mb", "1")
-    System.setProperty("spark.shuffle.buffer.fraction", "0.05")
+    // TODO: Figure out correct memory parameters to actually induce spilling
+    // System.setProperty("spark.shuffle.buffer.mb", "1")
+    // System.setProperty("spark.shuffle.buffer.fraction", "0.05")
 
     // reduceByKey - should spill exactly 6 times
     val rddA = sc.parallelize(0 until 10000).map(i => (i/2, i))
@@ -226,4 +225,6 @@ class ExternalAppendOnlyMapSuite extends FunSuite with BeforeAndAfter with Local
       }
     }
   }
+
+  // TODO: Test memory allocation for multiple concurrently running tasks
 }
