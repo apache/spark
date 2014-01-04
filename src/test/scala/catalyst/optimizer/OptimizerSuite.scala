@@ -58,7 +58,7 @@ class OptimizerSuite extends FunSuite {
   }
 
   /*
-  * Unit tests for evaluating literals in expressions.
+  * Unit tests for constant folding in expressions.
   * */
   test("Constant folding test: expressions only have literals") {
     val originalQuery =
