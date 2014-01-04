@@ -17,8 +17,9 @@
 
 package org.apache.spark
 
-import collection.mutable
-import serializer.Serializer
+import java.util.concurrent.atomic.AtomicInteger
+
+import scala.collection.mutable
 
 import akka.actor._
 import akka.remote.RemoteActorRefProvider
@@ -60,7 +61,7 @@ class SparkEnv private[spark] (
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   // Number of tasks currently running across all threads
-  @volatile private var _numRunningTasks = 0
+  private val _numRunningTasks = new AtomicInteger(0)
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
@@ -93,15 +94,9 @@ class SparkEnv private[spark] (
   /**
    * Return the number of tasks currently running across all threads
    */
-  def numRunningTasks: Int = _numRunningTasks
-
-  def incrementNumRunningTasks() = synchronized {
-    _numRunningTasks += 1
-  }
-
-  def decrementNumRunningTasks() = synchronized {
-    _numRunningTasks -= 1
-  }
+  def numRunningTasks: Int = _numRunningTasks.intValue()
+  def incrementNumRunningTasks(): Int = _numRunningTasks.incrementAndGet()
+  def decrementNumRunningTasks(): Int = _numRunningTasks.decrementAndGet()
 }
 
 object SparkEnv extends Logging {
