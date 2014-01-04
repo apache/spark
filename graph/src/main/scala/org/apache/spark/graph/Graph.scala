@@ -72,9 +72,15 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    */
   val triplets: RDD[EdgeTriplet[VD, ED]]
 
+  /**
+   * Cache the vertices and edges associated with this graph.
+   *
+   * @param newLevel the level at which to cache the graph.
 
-
-  def persist(newLevel: StorageLevel): Graph[VD, ED]
+   * @return A reference to this graph for convenience.
+   *
+   */
+  def persist(newLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED]
 
   /**
    * Return a graph that is cached when first created. This is used to
@@ -120,7 +126,7 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
   def mapVertices[VD2: ClassManifest](map: (Vid, VD) => VD2): Graph[VD2, ED]
 
   /**
-   * Construct a new graph where each the value of each edge is
+   * Construct a new graph where the value of each edge is
    * transformed by the map operation.  This function is not passed
    * the vertex value for the vertices adjacent to the edge.  If
    * vertex values are desired use the mapTriplets function.
@@ -137,18 +143,44 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * attributes.
    *
    */
-  def mapEdges[ED2: ClassManifest](map: Edge[ED] => ED2): Graph[VD, ED2]
+  def mapEdges[ED2: ClassManifest](map: Edge[ED] => ED2): Graph[VD, ED2] = {
+    mapEdges((pid, iter) => iter.map(map))
+  }
 
   /**
-   * Construct a new graph where each the value of each edge is
+   * Construct a new graph transforming the value of each edge using
+   * the user defined iterator transform.  The iterator transform is
+   * given an iterator over edge triplets within a logical partition
+   * and should yield a new iterator over the new values of each edge
+   * in the order in which they are provided to the iterator transform
+   * If adjacent vertex values are not required, consider using the
+   * mapEdges function instead.
+   *
+   * @note This that this does not change the structure of the
+   * graph or modify the values of this graph.  As a consequence
+   * the underlying index structures can be reused.
+   *
+   * @param map the function which takes a partition id and an iterator
+   * over all the edges in the partition and must return an iterator over
+   * the new values for each edge in the order of the input iterator.
+   *
+   * @tparam ED2 the new edge data type
+   *
+   */
+  def mapEdges[ED2: ClassManifest](
+      map: (Pid, Iterator[Edge[ED]]) => Iterator[ED2]):
+    Graph[VD, ED2]
+
+  /**
+   * Construct a new graph where the value of each edge is
    * transformed by the map operation.  This function passes vertex
    * values for the adjacent vertices to the map function.  If
    * adjacent vertex values are not required, consider using the
    * mapEdges function instead.
    *
-   * @note This graph is not changed and that the new graph has the
-   * same structure.  As a consequence the underlying index structures
-   * can be reused.
+   * @note This that this does not change the structure of the
+   * graph or modify the values of this graph.  As a consequence
+   * the underlying index structures can be reused.
    *
    * @param map the function from an edge object to a new edge value.
    *
@@ -163,7 +195,33 @@ abstract class Graph[VD: ClassManifest, ED: ClassManifest] {
    * }}}
    *
    */
-  def mapTriplets[ED2: ClassManifest](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
+  def mapTriplets[ED2: ClassManifest](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
+    mapTriplets((pid, iter) => iter.map(map))
+  }
+
+  /**
+   * Construct a new graph transforming the value of each edge using
+   * the user defined iterator transform.  The iterator transform is
+   * given an iterator over edge triplets within a logical partition
+   * and should yield a new iterator over the new values of each edge
+   * in the order in which they are provided to the iterator transform
+   * If adjacent vertex values are not required, consider using the
+   * mapEdges function instead.
+   *
+   * @note This that this does not change the structure of the
+   * graph or modify the values of this graph.  As a consequence
+   * the underlying index structures can be reused.
+   *
+   * @param map the function which takes a partition id and an iterator
+   * over all the edges in the partition and must return an iterator over
+   * the new values for each edge in the order of the input iterator.
+   *
+   * @tparam ED2 the new edge data type
+   *
+   */
+  def mapTriplets[ED2: ClassManifest](
+      map: (Pid, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]):
+    Graph[VD, ED2]
 
   /**
    * Construct a new graph with all the edges reversed.  If this graph
