@@ -31,7 +31,7 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
  * @param m number of rows
  * @param n number of columns
  */
-class GradientDescent(var data: RDD[MatrixEntry], var m: Int, var n: Int) {
+class SVD(var data: RDD[MatrixEntry], var m: Int, var n: Int) {
   private var k: Int = 1
 
   /**
@@ -64,6 +64,13 @@ class GradientDescent(var data: RDD[MatrixEntry], var m: Int, var n: Int) {
   def setNumCols(n: Int): this.type = {
     this.n = n
     this
+  }
+
+   /**
+   * Compute SVD using the current set parameters
+   */
+  def computeSVD() : SVDecomposedMatrix = {
+    SVD.sparseSVD(data, m, n, k)
   }
 }
 
@@ -169,33 +176,36 @@ object SVD {
     SVDecomposedMatrix(retU, retS, retV)  
   }
 
-/*
+
   def main(args: Array[String]) {
     if (args.length < 8) {
-      println("Usage: SVD <master> <matrix_file> <m> <n>
-              <minimum_singular_value> <output_U_file> <output_S_file> <output_V_file>")
+      println("Usage: SVD <master> <matrix_file> <m> <n>" +
+              "<k> <output_U_file> <output_S_file> <output_V_file>")
       System.exit(1)
     }
-    val (master, inputFile, m, n, min_svalue, output_u, output_s, output_v) = 
+    val (master, inputFile, m, n, k, output_u, output_s, output_v) = 
       (args(0), args(1), args(2).toInt, args(3).toInt,
-      args(4).toDouble, args(5), args(6), args(7))
+      args(4).toInt, args(5), args(6), args(7))
     
     val sc = new SparkContext(master, "SVD")
     
     val rawdata = sc.textFile(inputFile)
     val data = rawdata.map { line =>
       val parts = line.split(',')
-      ((parts(0).toInt, parts(1).toInt), parts(2).toDouble)
+      MatrixEntry(parts(0).toInt, parts(1).toInt, parts(2).toDouble)
     }
 
-    val (u, s, v) = SVD.sparseSVD(data, m, n, min_svalue)
+    val decomposed = SVD.sparseSVD(data, m, n, k)
+    val u = decomposed.U
+    val s = decomposed.S
+    val v = decomposed.V
+    
     println("Computed " + s.toArray.length + " singular values and vectors")
     u.saveAsTextFile(output_u)
     s.saveAsTextFile(output_s)
     v.saveAsTextFile(output_v)
     System.exit(0)
   }
-*/
 }
 
 

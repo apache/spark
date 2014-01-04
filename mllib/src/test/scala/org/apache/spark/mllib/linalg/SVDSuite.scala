@@ -87,15 +87,18 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
      // check multiplication guarantee
     assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)  
   }
-/*
+
  test("rank one matrix svd") {
     val m = 10
     val n = 3   
-    val data = sc.makeRDD(Array.tabulate(m,n){ (a,b)=>
-      ((a+1,b+1), 1.0) }.flatten )
-    val min_svalue = 1.0e-4
+    val data = sc.makeRDD(Array.tabulate(m, n){ (a,b) =>
+      MatrixEntry(a + 1, b + 1, 1.0) }.flatten )
+    val k = 1
 
-    val (u, s, v) = SVD.sparseSVD(data, m, n, min_svalue)
+    val decomposed = SVD.sparseSVD(data, m, n, k)
+    val u = decomposed.U
+    val s = decomposed.S
+    val v = decomposed.V
     val retrank = s.toArray.length
 
     assert(retrank == 1, "rank returned not one")
@@ -116,15 +119,18 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)  
   }
 
- test("truncated with min singular value") {
+ test("truncated with k") {
     val m = 10
     val n = 3
-    val data = sc.makeRDD(Array.tabulate(m,n){ (a,b)=>
-      ((a+1,b+1), (a+2).toDouble*(b+1)/(1+a+b)) }.flatten )
+    val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a + 1, b + 1, (a + 2).toDouble*(b + 1)/(1 + a + b)) }.flatten )
     
-    val min_svalue = 5.0 // only one svalue above this
+    val k = 1 // only one svalue above this
 
-    val (u, s, v) = SVD.sparseSVD(data, m, n, min_svalue)
+    val decomposed = SVD.sparseSVD(data, m, n, k)
+    val u = decomposed.U
+    val s = decomposed.S
+    val v = decomposed.V
     val retrank = s.toArray.length
 
     val densea = getDenseMatrix(data, m, n)
@@ -140,5 +146,5 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     assertMatrixEquals(retu, svd(0).getColumn(0))
     assertMatrixEquals(rets, DoubleMatrix.diag(svd(1).getRow(0)))
     assertMatrixEquals(retv, svd(2).getColumn(0))
-  }*/
+  }
 }
