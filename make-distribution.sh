@@ -45,7 +45,8 @@ DISTDIR="$FWDIR/dist"
 export TERM=dumb   # Prevents color codes in SBT output
 
 if ! test `which sbt` ;then
-    echo -e "You need sbt installed and available on path, please follow the instructions here: http://www.scala-sbt.org/release/docs/Getting-Started/Setup.html"
+    echo -e "You need sbt installed and available on your path."
+    echo -e "Download sbt from http://www.scala-sbt.org/"
     exit -1;
 fi
 

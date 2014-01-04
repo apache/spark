@@ -72,6 +72,7 @@ object SparkBuild extends Build {
   val sparkHome = System.getProperty("user.dir")
   System.setProperty("spark.home", sparkHome)
   System.setProperty("spark.testing", "1")
+  
   // Allows build configuration to be set through environment variables
   lazy val hadoopVersion = Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
   lazy val isNewHadoop = Properties.envOrNone("SPARK_IS_NEW_HADOOP") match {

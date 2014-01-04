@@ -27,54 +27,39 @@ import org.scalatest.FunSuite
 class FileServerSuite extends FunSuite with LocalSparkContext {
 
   @transient var tmpFile: File = _
-  @transient var testJarFile: String = _
-
+  @transient var tmpJarUrl: String = _
 
   override def beforeAll() {
     super.beforeAll()
-    val buffer = new Array[Byte](10240)
-    val tmpdir = new File(Files.createTempDir(), "test")
-    tmpdir.mkdir()
-    val tmpJarEntry = new File(tmpdir, "FileServerSuite2.txt")
-    val pw = new PrintWriter(tmpJarEntry)
-    pw.println("test String in the file named FileServerSuite2.txt")
+    val tmpDir = new File(Files.createTempDir(), "test")
+    tmpDir.mkdir()
+
+    val textFile = new File(tmpDir, "FileServerSuite.txt")
+    val pw = new PrintWriter(textFile)
+    pw.println("100")
     pw.close()
-    // The ugliest code possible, was translated from java.
-    val tmpFile2 = new File(tmpdir, "test.jar")
-    val stream = new FileOutputStream(tmpFile2)
-    val jar = new JarOutputStream(stream, new java.util.jar.Manifest())
-    val jarAdd = new JarEntry(tmpJarEntry.getName)
-    jarAdd.setTime(tmpJarEntry.lastModified)
-    jar.putNextEntry(jarAdd)
-    val in = new FileInputStream(tmpJarEntry)
+    
+    val jarFile = new File(tmpDir, "test.jar")
+    val jarStream = new FileOutputStream(jarFile)
+    val jar = new JarOutputStream(jarStream, new java.util.jar.Manifest())
+
+    val jarEntry = new JarEntry(textFile.getName)
+    jar.putNextEntry(jarEntry)
+    
+    val in = new FileInputStream(textFile)
+    val buffer = new Array[Byte](10240)
     var nRead = 0
-      while (nRead <= 0) {
+    while (nRead <= 0) {
       nRead = in.read(buffer, 0, buffer.length)
       jar.write(buffer, 0, nRead)
     }
+
     in.close()
     jar.close()
-    stream.close()
-    testJarFile = tmpFile2.toURI.toURL.toString
-  }
+    jarStream.close()
 
-  override def beforeEach() {
-    super.beforeEach()
-    // Create a sample text file
-    val tmpdir = new File(Files.createTempDir(), "test")
-    tmpdir.mkdir()
-    tmpFile = new File(tmpdir, "FileServerSuite.txt")
-    val pw = new PrintWriter(tmpFile)
-    pw.println("100")
-    pw.close()
-  }
-
-  override def afterEach() {
-    super.afterEach()
-    // Clean up downloaded file
-    if (tmpFile.exists) {
-      tmpFile.delete()
-    }
+    tmpFile = textFile
+    tmpJarUrl = jarFile.toURI.toURL.toString
   }
 
   test("Distributing files locally") {
@@ -108,10 +93,10 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
 
   test ("Dynamically adding JARS locally") {
     sc = new SparkContext("local[4]", "test")
-    sc.addJar(testJarFile)
+    sc.addJar(tmpJarUrl)
     val testData = Array((1, 1))
-    sc.parallelize(testData).foreach { (x) =>
-      if (Thread.currentThread.getContextClassLoader.getResource("FileServerSuite2.txt") == null) {
+    sc.parallelize(testData).foreach { x =>
+      if (Thread.currentThread.getContextClassLoader.getResource("FileServerSuite.txt") == null) {
         throw new SparkException("jar not added")
       }
     }
@@ -133,10 +118,10 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
 
   test ("Dynamically adding JARS on a standalone cluster") {
     sc = new SparkContext("local-cluster[1,1,512]", "test")
-    sc.addJar(testJarFile)
+    sc.addJar(tmpJarUrl)
     val testData = Array((1,1))
-    sc.parallelize(testData).foreach { (x) =>
-      if (Thread.currentThread.getContextClassLoader.getResource("FileServerSuite2.txt") == null) {
+    sc.parallelize(testData).foreach { x =>
+      if (Thread.currentThread.getContextClassLoader.getResource("FileServerSuite.txt") == null) {
         throw new SparkException("jar not added")
       }
     }
@@ -144,10 +129,10 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
 
   test ("Dynamically adding JARS on a standalone cluster using local: URL") {
     sc = new SparkContext("local-cluster[1,1,512]", "test")
-    sc.addJar(testJarFile.replace("file", "local"))
+    sc.addJar(tmpJarUrl.replace("file", "local"))
     val testData = Array((1,1))
-    sc.parallelize(testData).foreach { (x) =>
-      if (Thread.currentThread.getContextClassLoader.getResource("FileServerSuite2.txt") == null) {
+    sc.parallelize(testData).foreach { x =>
+      if (Thread.currentThread.getContextClassLoader.getResource("FileServerSuite.txt") == null) {
         throw new SparkException("jar not added")
       }
     }

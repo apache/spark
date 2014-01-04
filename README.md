@@ -13,7 +13,7 @@ This README file only contains basic setup instructions.
 ## Building
 
 Spark requires Scala 2.10. The project is built using Simple Build Tool (SBT),
-which can be obtained from [here](http://www.scala-sbt.org). To build Spark and its example programs, run:
+which can be obtained [here](http://www.scala-sbt.org). To build Spark and its example programs, run:
 
     sbt assembly
 
@@ -38,24 +38,11 @@ locally with one thread, or "local[N]" to run locally with N threads.
 
 ## Running tests
 
-### With sbt (Much faster to run compared to maven)
-Once you have built spark with `sbt assembly` mentioned in [Building](#Building) section. Test suits can be run as follows using sbt.
+Testing first requires [Building](#Building) Spark. Once Spark is built, tests
+can be run using:
 
 `sbt test`
  
-### With maven.
-1. Export these necessary environment variables as follows.
-
- `export SCALA_HOME=<scala distribution>`
-
- `export MAVEN_OPTS="-Xmx1512m -XX:MaxPermSize=512m"`
-
-2. Build assembly by
-`mvn package -DskipTests`
-
-3. Run tests
-`mvn test`
-
 ## A Note About Hadoop Versions
 
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
