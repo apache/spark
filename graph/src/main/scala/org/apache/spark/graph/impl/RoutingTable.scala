@@ -7,12 +7,12 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.util.collection.PrimitiveVector
 
 /**
- * Stores the locations of edge-partition join sites for each vertex attribute in `vTable`; that is,
- * the routing information for shipping vertex attributes to edge partitions. This is always cached
- * because it may be used multiple times in VTableReplicated -- once to ship the vertex attributes
- * and (possibly) once to ship the active-set information.
+ * Stores the locations of edge-partition join sites for each vertex attribute; that is, the routing
+ * information for shipping vertex attributes to edge partitions. This is always cached because it
+ * may be used multiple times in ReplicatedVertexView -- once to ship the vertex attributes and
+ * (possibly) once to ship the active-set information.
  */
-class VertexPlacement(eTable: EdgeRDD[_], vTable: VertexRDD[_]) {
+class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
 
   val bothAttrs: RDD[Array[Array[Vid]]] = createPid2Vid(true, true)
   val srcAttrOnly: RDD[Array[Array[Vid]]] = createPid2Vid(true, false)
@@ -30,7 +30,7 @@ class VertexPlacement(eTable: EdgeRDD[_], vTable: VertexRDD[_]) {
   private def createPid2Vid(
       includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[Vid]]] = {
     // Determine which vertices each edge partition needs by creating a mapping from vid to pid.
-    val vid2pid: RDD[(Vid, Pid)] = eTable.partitionsRDD.mapPartitions { iter =>
+    val vid2pid: RDD[(Vid, Pid)] = edges.partitionsRDD.mapPartitions { iter =>
       val (pid: Pid, edgePartition: EdgePartition[_]) = iter.next()
       val numEdges = edgePartition.size
       val vSet = new VertexSet
@@ -51,14 +51,14 @@ class VertexPlacement(eTable: EdgeRDD[_], vTable: VertexRDD[_]) {
       vSet.iterator.map { vid => (vid, pid) }
     }
 
-    val numPartitions = vTable.partitions.size
-    vid2pid.partitionBy(vTable.partitioner.get).mapPartitions { iter =>
+    val numPartitions = vertices.partitions.size
+    vid2pid.partitionBy(vertices.partitioner.get).mapPartitions { iter =>
       val pid2vid = Array.fill(numPartitions)(new PrimitiveVector[Vid])
       for ((vid, pid) <- iter) {
         pid2vid(pid) += vid
       }
 
       Iterator(pid2vid.map(_.trim().array))
-    }.cache().setName("VertexPlacement %s %s".format(includeSrcAttr, includeDstAttr))
+    }.cache().setName("RoutingTable %s %s".format(includeSrcAttr, includeDstAttr))
   }
 }

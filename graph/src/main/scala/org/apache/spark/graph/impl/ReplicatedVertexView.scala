@@ -8,20 +8,20 @@ import org.apache.spark.graph._
 
 /**
  * A view of the vertices after they are shipped to the join sites specified in
- * `vertexPlacement`. The resulting view is co-partitioned with `edges`. If `prevVTableReplicated`
- * is specified, `updatedVerts` are treated as incremental updates to the previous view. Otherwise,
- * a fresh view is created.
+ * `vertexPlacement`. The resulting view is co-partitioned with `edges`. If `prevViewOpt` is
+ * specified, `updatedVerts` are treated as incremental updates to the previous view. Otherwise, a
+ * fresh view is created.
  *
  * The view is always cached (i.e., once it is created, it remains materialized). This avoids
  * constructing it twice if the user calls graph.triplets followed by graph.mapReduceTriplets, for
  * example.
  */
 private[impl]
-class VTableReplicated[VD: ClassManifest](
+class ReplicatedVertexView[VD: ClassManifest](
     updatedVerts: VertexRDD[VD],
     edges: EdgeRDD[_],
-    vertexPlacement: VertexPlacement,
-    prevVTableReplicated: Option[VTableReplicated[VD]] = None) {
+    routingTable: RoutingTable,
+    prevViewOpt: Option[ReplicatedVertexView[VD]] = None) {
 
   /**
    * Within each edge partition, create a local map from vid to an index into the attribute
@@ -29,9 +29,9 @@ class VTableReplicated[VD: ClassManifest](
    * vids from both the source and destination of edges. It must always include both source and
    * destination vids because some operations, such as GraphImpl.mapReduceTriplets, rely on this.
    */
-  private val localVidMap: RDD[(Int, VertexIdToIndexMap)] = prevVTableReplicated match {
-    case Some(prev) =>
-      prev.localVidMap
+  private val localVidMap: RDD[(Int, VertexIdToIndexMap)] = prevViewOpt match {
+    case Some(prevView) =>
+      prevView.localVidMap
     case None =>
       edges.partitionsRDD.mapPartitions(_.map {
         case (pid, epart) =>
@@ -41,7 +41,7 @@ class VTableReplicated[VD: ClassManifest](
             vidToIndex.add(e.dstId)
           }
           (pid, vidToIndex)
-      }, preservesPartitioning = true).cache().setName("VTableReplicated localVidMap")
+      }, preservesPartitioning = true).cache().setName("ReplicatedVertexView localVidMap")
   }
 
   private lazy val bothAttrs: RDD[(Pid, VertexPartition[VD])] = create(true, true)
@@ -62,15 +62,14 @@ class VTableReplicated[VD: ClassManifest](
       includeSrc: Boolean,
       includeDst: Boolean,
       actives: VertexRDD[_]): RDD[(Pid, VertexPartition[VD])] = {
-
     // Ship active sets to edge partitions using vertexPlacement, but ignoring includeSrc and
     // includeDst. These flags govern attribute shipping, but the activeness of a vertex must be
     // shipped to all edges mentioning that vertex, regardless of whether the vertex attribute is
     // also shipped there.
-    val shippedActives = vertexPlacement.get(true, true)
-      .zipPartitions(actives.partitionsRDD)(VTableReplicated.buildActiveBuffer(_, _))
+    val shippedActives = routingTable.get(true, true)
+      .zipPartitions(actives.partitionsRDD)(ReplicatedVertexView.buildActiveBuffer(_, _))
       .partitionBy(edges.partitioner.get)
-    // Update vTableReplicated with shippedActives, setting activeness flags in the resulting
+    // Update the view with shippedActives, setting activeness flags in the resulting
     // VertexPartitions
     get(includeSrc, includeDst).zipPartitions(shippedActives) { (viewIter, shippedActivesIter) =>
       val (pid, vPart) = viewIter.next()
@@ -85,23 +84,21 @@ class VTableReplicated[VD: ClassManifest](
 
     // Ship vertex attributes to edge partitions according to vertexPlacement
     val verts = updatedVerts.partitionsRDD
-    val shippedVerts = vertexPlacement.get(includeSrc, includeDst)
-      .zipPartitions(verts)(VTableReplicated.buildBuffer(_, _)(vdManifest))
+    val shippedVerts = routingTable.get(includeSrc, includeDst)
+      .zipPartitions(verts)(ReplicatedVertexView.buildBuffer(_, _)(vdManifest))
       .partitionBy(edges.partitioner.get)
     // TODO: Consider using a specialized shuffler.
 
-    prevVTableReplicated match {
-      case Some(vTableReplicated) =>
-        val prevView: RDD[(Pid, VertexPartition[VD])] =
-          vTableReplicated.get(includeSrc, includeDst)
-
-        // Update vTableReplicated with shippedVerts, setting staleness flags in the resulting
+    prevViewOpt match {
+      case Some(prevView) =>
+        // Update prevView with shippedVerts, setting staleness flags in the resulting
         // VertexPartitions
-        prevView.zipPartitions(shippedVerts) { (prevViewIter, shippedVertsIter) =>
-          val (pid, prevVPart) = prevViewIter.next()
-          val newVPart = prevVPart.innerJoinKeepLeft(shippedVertsIter.flatMap(_._2.iterator))
-          Iterator((pid, newVPart))
-        }.cache().setName("VTableReplicated delta %s %s".format(includeSrc, includeDst))
+        prevView.get(includeSrc, includeDst).zipPartitions(shippedVerts) {
+          (prevViewIter, shippedVertsIter) =>
+            val (pid, prevVPart) = prevViewIter.next()
+            val newVPart = prevVPart.innerJoinKeepLeft(shippedVertsIter.flatMap(_._2.iterator))
+            Iterator((pid, newVPart))
+        }.cache().setName("ReplicatedVertexView delta %s %s".format(includeSrc, includeDst))
 
       case None =>
         // Within each edge partition, place the shipped vertex attributes into the correct
@@ -122,12 +119,12 @@ class VTableReplicated[VD: ClassManifest](
           val newVPart = new VertexPartition(
             vidToIndex, vertexArray, vidToIndex.getBitSet)(vdManifest)
           Iterator((pid, newVPart))
-        }.cache().setName("VTableReplicated %s %s".format(includeSrc, includeDst))
+        }.cache().setName("ReplicatedVertexView %s %s".format(includeSrc, includeDst))
     }
   }
 }
 
-object VTableReplicated {
+object ReplicatedVertexView {
   protected def buildBuffer[VD: ClassManifest](
       pid2vidIter: Iterator[Array[Array[Vid]]],
       vertexPartIter: Iterator[VertexPartition[VD]]) = {
