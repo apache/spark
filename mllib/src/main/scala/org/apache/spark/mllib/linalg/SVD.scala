@@ -136,7 +136,7 @@ object SVD {
     // Construct jblas A^T A locally
     val ata = DoubleMatrix.zeros(n, n)
     for (entry <- emits.toArray) {
-      ata.put(entry._1._1-1, entry._1._2-1, entry._2)
+      ata.put(entry._1._1 - 1, entry._1._2 - 1, entry._2)
     }
 
     // Since A^T A is small, we can compute its SVD directly
@@ -158,12 +158,12 @@ object SVD {
                     MatrixEntry(i + 1, j + 1, V.get(i,j)) }.flatten)
 
     val retS = sc.makeRDD(Array.tabulate(sigma.length){
-      x => MatrixEntry(x + 1,x + 1, sigma(x))})
+      x => MatrixEntry(x + 1, x + 1, sigma(x))})
 
     // Compute U as U = A V S^-1
     // turn V S^-1 into an RDD as a sparse matrix
     val vsirdd = sc.makeRDD(Array.tabulate(V.rows, sigma.length)
-                { (i,j) => ((i + 1, j + 1), V.get(i,j)/sigma(j))  }.flatten)
+                { (i,j) => ((i + 1, j + 1), V.get(i,j) / sigma(j))  }.flatten)
 
     // Multiply A by VS^-1
     val aCols = data.map(entry => (entry.j, (entry.i, entry.mval)))
@@ -178,10 +178,11 @@ object SVD {
 
   def main(args: Array[String]) {
     if (args.length < 8) {
-      println("Usage: SVD <master> <matrix_file> <m> <n>" +
+      println("Usage: SVD <master> <matrix_file> <m> <n> " +
               "<k> <output_U_file> <output_S_file> <output_V_file>")
       System.exit(1)
     }
+
     val (master, inputFile, m, n, k, output_u, output_s, output_v) = 
       (args(0), args(1), args(2).toInt, args(3).toInt,
       args(4).toInt, args(5), args(6), args(7))

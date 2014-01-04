@@ -47,25 +47,25 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
   // Return jblas matrix from sparse matrix RDD
   def getDenseMatrix(matrix:RDD[MatrixEntry], m:Int, n:Int) : DoubleMatrix = {
     val ret = DoubleMatrix.zeros(m, n)
-    matrix.toArray.map(x => ret.put(x.i-1, x.j-1, x.mval))
+    matrix.toArray.map(x => ret.put(x.i - 1, x.j - 1, x.mval))
     ret
   }
 
   def assertMatrixEquals(a:DoubleMatrix, b:DoubleMatrix) {
     assert(a.rows == b.rows && a.columns == b.columns, "dimension mismatch")
     val diff = DoubleMatrix.zeros(a.rows, a.columns)
-    Array.tabulate(a.rows, a.columns){(i,j) =>
-      diff.put(i,j,
-          Math.min(Math.abs(a.get(i,j)-b.get(i,j)),
-          Math.abs(a.get(i,j)+b.get(i,j))))  }
+    Array.tabulate(a.rows, a.columns){(i, j) =>
+      diff.put(i, j,
+          Math.min(Math.abs(a.get(i, j) - b.get(i, j)),
+          Math.abs(a.get(i, j) + b.get(i, j))))  }
     assert(diff.norm1 < EPSILON, "matrix mismatch: " + diff.norm1)
   }
 
   test("full rank matrix svd") {
     val m = 10
     val n = 3
-    val data = sc.makeRDD(Array.tabulate(m,n){ (a,b)=>
-      MatrixEntry(a+1,b+1, (a+2).toDouble*(b+1)/(1+a+b)) }.flatten )
+    val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a + 1, b + 1, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten )
 
     val decomposed = SVD.sparseSVD(data, m, n, n)
     val u = decomposed.U
@@ -75,9 +75,9 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val densea = getDenseMatrix(data, m, n)
     val svd = Singular.sparseSVD(densea)
 
-    val retu = getDenseMatrix(u,m,n)
-    val rets = getDenseMatrix(s,n,n)
-    val retv = getDenseMatrix(v,n,n)
+    val retu = getDenseMatrix(u, m, n)
+    val rets = getDenseMatrix(s, n, n)
+    val retv = getDenseMatrix(v, n, n)
   
     // check individual decomposition  
     assertMatrixEquals(retu, svd(0))
@@ -106,9 +106,9 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val densea = getDenseMatrix(data, m, n)
     val svd = Singular.sparseSVD(densea)
 
-    val retu = getDenseMatrix(u,m,retrank)
-    val rets = getDenseMatrix(s,retrank,retrank)
-    val retv = getDenseMatrix(v,n,retrank)
+    val retu = getDenseMatrix(u, m, retrank)
+    val rets = getDenseMatrix(s, retrank, retrank)
+    val retv = getDenseMatrix(v, n, retrank)
 
     // check individual decomposition  
     assertMatrixEquals(retu, svd(0).getColumn(0))
@@ -123,7 +123,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val m = 10
     val n = 3
     val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a + 1, b + 1, (a + 2).toDouble*(b + 1)/(1 + a + b)) }.flatten )
+      MatrixEntry(a + 1, b + 1, (a + 2).toDouble * (b + 1)/(1 + a + b)) }.flatten )
     
     val k = 1 // only one svalue above this
 
@@ -136,9 +136,9 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val densea = getDenseMatrix(data, m, n)
     val svd = Singular.sparseSVD(densea)
 
-    val retu = getDenseMatrix(u,m,retrank)
-    val rets = getDenseMatrix(s,retrank,retrank)
-    val retv = getDenseMatrix(v,n,retrank)
+    val retu = getDenseMatrix(u, m, retrank)
+    val rets = getDenseMatrix(s, retrank, retrank)
+    val retv = getDenseMatrix(v, n, retrank)
 
     assert(retrank == 1, "rank returned not one")
     
