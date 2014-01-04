@@ -67,7 +67,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
 
   /** Set JAR files to distribute to the cluster. */
   def setJars(jars: Seq[String]): SparkConf = {
-    set("spark.jars", jars.mkString(","))
+    set("spark.jars", jars.filter(_ != null).mkString(","))
   }
 
   /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
