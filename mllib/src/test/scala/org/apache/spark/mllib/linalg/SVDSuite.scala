@@ -45,9 +45,12 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
   val EPSILON = 1e-4
 
   // Return jblas matrix from sparse matrix RDD
-  def getDenseMatrix(matrix:RDD[MatrixEntry], m:Int, n:Int) : DoubleMatrix = {
+  def getDenseMatrix(matrix:SparseMatrix) : DoubleMatrix = {
+    val data = matrix.data
+    val m = matrix.m
+    val n = matrix.n
     val ret = DoubleMatrix.zeros(m, n)
-    matrix.toArray.map(x => ret.put(x.i - 1, x.j - 1, x.mval))
+    matrix.data.toArray.map(x => ret.put(x.i - 1, x.j - 1, x.mval))
     ret
   }
 
@@ -67,24 +70,26 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
       MatrixEntry(a + 1, b + 1, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten )
 
-    val decomposed = SVD.sparseSVD(data, m, n, n)
+    val a = SparseMatrix(data, m, n)
+
+    val decomposed = SVD.sparseSVD(a, n)
     val u = decomposed.U
     val v = decomposed.V
-    val s = decomposed.S    
+    val s = decomposed.S
 
-    val densea = getDenseMatrix(data, m, n)
+    val densea = getDenseMatrix(a)
     val svd = Singular.sparseSVD(densea)
 
-    val retu = getDenseMatrix(u, m, n)
-    val rets = getDenseMatrix(s, n, n)
-    val retv = getDenseMatrix(v, n, n)
+    val retu = getDenseMatrix(u)
+    val rets = getDenseMatrix(s)
+    val retv = getDenseMatrix(v)
   
     // check individual decomposition  
     assertMatrixEquals(retu, svd(0))
     assertMatrixEquals(rets, DoubleMatrix.diag(svd(1)))
     assertMatrixEquals(retv, svd(2))
 
-     // check multiplication guarantee
+    // check multiplication guarantee
     assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)  
   }
 
@@ -95,20 +100,22 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
       MatrixEntry(a + 1, b + 1, 1.0) }.flatten )
     val k = 1
 
-    val decomposed = SVD.sparseSVD(data, m, n, k)
+    val a = SparseMatrix(data, m, n)
+
+    val decomposed = SVD.sparseSVD(a, k)
     val u = decomposed.U
     val s = decomposed.S
     val v = decomposed.V
-    val retrank = s.toArray.length
+    val retrank = s.data.toArray.length
 
     assert(retrank == 1, "rank returned not one")
 
-    val densea = getDenseMatrix(data, m, n)
+    val densea = getDenseMatrix(a)
     val svd = Singular.sparseSVD(densea)
 
-    val retu = getDenseMatrix(u, m, retrank)
-    val rets = getDenseMatrix(s, retrank, retrank)
-    val retv = getDenseMatrix(v, n, retrank)
+    val retu = getDenseMatrix(u)
+    val rets = getDenseMatrix(s)
+    val retv = getDenseMatrix(v)
 
     // check individual decomposition  
     assertMatrixEquals(retu, svd(0).getColumn(0))
@@ -124,21 +131,22 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val n = 3
     val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
       MatrixEntry(a + 1, b + 1, (a + 2).toDouble * (b + 1)/(1 + a + b)) }.flatten )
+    val a = SparseMatrix(data, m, n)
     
     val k = 1 // only one svalue above this
 
-    val decomposed = SVD.sparseSVD(data, m, n, k)
+    val decomposed = SVD.sparseSVD(a, k)
     val u = decomposed.U
     val s = decomposed.S
     val v = decomposed.V
-    val retrank = s.toArray.length
+    val retrank = s.data.toArray.length
 
-    val densea = getDenseMatrix(data, m, n)
+    val densea = getDenseMatrix(a)
     val svd = Singular.sparseSVD(densea)
 
-    val retu = getDenseMatrix(u, m, retrank)
-    val rets = getDenseMatrix(s, retrank, retrank)
-    val retv = getDenseMatrix(v, n, retrank)
+    val retu = getDenseMatrix(u)
+    val rets = getDenseMatrix(s)
+    val retv = getDenseMatrix(v)
 
     assert(retrank == 1, "rank returned not one")
     

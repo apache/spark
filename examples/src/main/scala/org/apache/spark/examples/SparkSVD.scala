@@ -20,6 +20,7 @@ package org.apache.spark.examples
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.SVD
 import org.apache.spark.mllib.linalg.MatrixEntry
+import org.apache.spark.mllib.linalg.SparseMatrix
 
 /**
  * Compute SVD of an example matrix
@@ -48,10 +49,10 @@ object SparkSVD {
     val n = 4
 
     // recover largest singular vector
-    val decomposed = SVD.sparseSVD(data, m, n, 1)
-    val u = decomposed.U
-    val s = decomposed.S
-    val v = decomposed.V
+    val decomposed = SVD.sparseSVD(SparseMatrix(data, m, n), 1)
+    val u = decomposed.U.data
+    val s = decomposed.S.data
+    val v = decomposed.V.data
 
     println("singular values = " + s.toArray.mkString)
   }

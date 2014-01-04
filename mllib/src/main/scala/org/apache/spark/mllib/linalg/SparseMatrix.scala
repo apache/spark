@@ -17,13 +17,14 @@
 
 package org.apache.spark.mllib.linalg
 
+import org.apache.spark.rdd.RDD
+
+
 /**
- * Class that represents the SV decomposition of a matrix
+ * Class that represents a sparse matrix
  *
- * @param U such that A = USV^T
- * @param S such that A = USV^T
- * @param V such that A = USV^T
+ * @param data RDD of nonzero entries
+ * @param m number of rows
+ * @param n numner of columns
  */
-case class SVDecomposedMatrix(val U: SparseMatrix,
-                              val S: SparseMatrix,
-                              val V: SparseMatrix)
+case class SparseMatrix(val data: RDD[MatrixEntry], val m: Int, val n: Int)

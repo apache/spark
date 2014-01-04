@@ -26,11 +26,8 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 
 /**
  * Class used to obtain singular value decompositions
- * @param data Matrix in sparse matrix format
- * @param m number of rows
- * @param n number of columns
  */
-class SVD(var data: RDD[MatrixEntry], var m: Int, var n: Int) {
+class SVD {
   private var k: Int = 1
 
   /**
@@ -41,35 +38,11 @@ class SVD(var data: RDD[MatrixEntry], var m: Int, var n: Int) {
     this
   }
 
-  /**
-   * Set matrix to be used for SVD
-   */
-  def setDatadata(data: RDD[MatrixEntry]): this.type = {
-    this.data = data
-    this
-  }
-
-  /**
-   * Set dimensions of matrix: rows
-   */
-  def setNumRows(m: Int): this.type = {
-    this.m = m
-    this
-  }
-
-  /**
-   * Set dimensions of matrix: columns
-   */
-  def setNumCols(n: Int): this.type = {
-    this.n = n
-    this
-  }
-
    /**
    * Compute SVD using the current set parameters
    */
-  def computeSVD() : SVDecomposedMatrix = {
-    SVD.sparseSVD(data, m, n, k)
+  def computeSVD(matrix: SparseMatrix) : SVDecomposedMatrix = {
+    SVD.sparseSVD(matrix, k)
   }
 }
 
@@ -103,19 +76,19 @@ object SVD {
  * All input and output is expected in sparse matrix format, 1-indexed
  * as tuples of the form ((i,j),value) all in RDDs
  *
- * @param data RDD Matrix in sparse 1-index format ((int, int), value)
- * @param m number of rows
- * @param n number of columns
+ * @param matrix sparse matrix to factorize
  * @param k Recover k singular values and vectors
  * @return Three sparse matrices: U, S, V such that A = USV^T
  */
   def sparseSVD(
-      data: RDD[MatrixEntry],
-      m: Int,
-      n: Int,
+      matrix: SparseMatrix,
       k: Int)
     : SVDecomposedMatrix =
   {
+    val data = matrix.data
+    val m = matrix.m
+    val n = matrix.n
+
     if (m < n || m <= 0 || n <= 0) {
       throw new IllegalArgumentException("Expecting a tall and skinny matrix")
     }
@@ -153,12 +126,15 @@ object SVD {
     val sc = data.sparkContext
 
     // prepare V for returning
-    val retV = sc.makeRDD(
+    val retVdata = sc.makeRDD(
             Array.tabulate(V.rows, sigma.length){ (i,j) =>
                     MatrixEntry(i + 1, j + 1, V.get(i,j)) }.flatten)
-
-    val retS = sc.makeRDD(Array.tabulate(sigma.length){
+    val retV = SparseMatrix(retVdata, V.rows, sigma.length)
+     
+    val retSdata = sc.makeRDD(Array.tabulate(sigma.length){
       x => MatrixEntry(x + 1, x + 1, sigma(x))})
+
+    val retS = SparseMatrix(retSdata, sigma.length, sigma.length)
 
     // Compute U as U = A V S^-1
     // turn V S^-1 into an RDD as a sparse matrix
@@ -168,10 +144,11 @@ object SVD {
     // Multiply A by VS^-1
     val aCols = data.map(entry => (entry.j, (entry.i, entry.mval)))
     val bRows = vsirdd.map(entry => (entry._1._1, (entry._1._2, entry._2)))
-    val retU = aCols.join(bRows).map( {case (key, ( (rowInd, rowVal), (colInd, colVal)) )
+    val retUdata = aCols.join(bRows).map( {case (key, ( (rowInd, rowVal), (colInd, colVal)) )
         => ((rowInd, colInd), rowVal*colVal)}).reduceByKey(_+_)
           .map{ case ((row, col), mval) => MatrixEntry(row, col, mval)}
-     
+    val retU = SparseMatrix(retUdata, m, sigma.length) 
+   
     SVDecomposedMatrix(retU, retS, retV)  
   }
 
@@ -195,10 +172,10 @@ object SVD {
       MatrixEntry(parts(0).toInt, parts(1).toInt, parts(2).toDouble)
     }
 
-    val decomposed = SVD.sparseSVD(data, m, n, k)
-    val u = decomposed.U
-    val s = decomposed.S
-    val v = decomposed.V
+    val decomposed = SVD.sparseSVD(SparseMatrix(data, m, n), k)
+    val u = decomposed.U.data
+    val s = decomposed.S.data
+    val v = decomposed.V.data
     
     println("Computed " + s.toArray.length + " singular values and vectors")
     u.saveAsTextFile(output_u)
