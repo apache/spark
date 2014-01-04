@@ -280,6 +280,7 @@ private[yarn] class YarnAllocationHandler(
           val workerRunnable = new WorkerRunnable(
             container,
             conf,
+            sparkConf,
             driverUrl,
             workerId,
             workerHostname,
