@@ -3,6 +3,9 @@ layout: global
 title: Machine Learning Library (MLlib)
 ---
 
+* Table of contests
+{:toc}
+
 MLlib is a Spark implementation of some common machine learning (ML)
 functionality, as well associated tests and data generators.  MLlib
 currently supports four common types of machine learning problem settings,
@@ -297,9 +300,17 @@ val numIterations = 20
 val model = ALS.train(ratings, 1, 20, 0.01)
 
 // Evaluate the model on rating data
-//val ratesAndPreds = ratings.map{ case Rating(user, item, rate) => (rate, model.predict(user, item))}
-//val MSE = ratesAndPreds.map{ case(v, p) => math.pow((v - p), 2)}.reduce(_ + _)/ratesAndPreds.count
-//println("Mean Squared Error = " + MSE)
+val usersProducts = ratings.map{ case Rating(user, product, rate)  => (user, product)}
+val predictions = model.predict(usersProducts).map{
+    case Rating(user, product, rate) => ((user, product), rate)
+}
+val ratesAndPreds = ratings.map{
+    case Rating(user, product, rate) => ((user, product), rate)
+}.join(predictions)
+val MSE = ratesAndPreds.map{
+    case ((user, product), (r1, r2)) =>  math.pow((r1- r2), 2)
+}.reduce(_ + _)/ratesAndPreds.count
+println("Mean Squared Error = " + MSE)
 {% endhighlight %}
 
 If the rating matrix is derived from other source of information (i.e., it is inferred from
@@ -393,7 +404,7 @@ Errors.
 ## Collaborative Filtering
 In the following example we load rating data. Each row consists of a user, a product and a rating.
 We use the default ALS.train() method which assumes ratings are explicit. We evaluate the recommendation
-model by measuring the Mean Squared Error of rating prediction.
+on one example.
 
 {% highlight python %}
 from pyspark.mllib.recommendation import ALS
@@ -407,10 +418,7 @@ ratings = data.map(lambda line: array([float(x) for x in line.split(',')]))
 model = ALS.train(sc, ratings, 1, 20)
 
 # Evaluate the model on training data
-#ratesAndPreds = ratings.map(lambda p: (p[2], model.predict(int(p[0]), int(p[1]))))
-#MSE = valuesAndPreds.map(lambda (v, p): (v - p)**2).reduce(lambda x, y: x + y)/valuesAndPreds.count()
-#print("Mean Squared Error = " + str(MSE))
-
+print("predicted rating of user {0} for item {1} is {2:.6}".format(1, 2, model.predict(1, 2)))
 {% endhighlight %}
 
 If the rating matrix is derived from other source of information (i.e., it is inferred from other
