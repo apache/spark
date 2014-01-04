@@ -39,7 +39,7 @@ where `path/to/event-log` is where you want the event log to go relative to `$SP
 
 ### Loading the event log into the debugger
 
-1. Run a Spark shell with `MASTER=<i>host</i> ./spark-shell`.
+1. Run a Spark shell with `MASTER=<i>host</i> ./bin/spark-shell`.
 2. Use `EventLogReader` to load the event log as follows:
     {% highlight scala %}
 spark> val r = new spark.EventLogReader(sc, Some("path/to/event-log"))

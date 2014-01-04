@@ -48,8 +48,7 @@ fi
 export JAVA_OPTS
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH"
-CLASSPATH+=":$FWDIR/conf"
+CLASSPATH=":$FWDIR/conf"
 for jar in `find $FWDIR -name '*jar'`; do
   CLASSPATH+=":$jar"
 done
