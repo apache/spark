@@ -20,6 +20,7 @@ import sbt.Classpaths.publishTask
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
+import scala.util.Properties
 // For Sonatype publishing
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
@@ -68,10 +69,13 @@ object SparkBuild extends Build {
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
-
+  val sparkHome = System.getProperty("user.dir")
+  System.setProperty("spark.home", sparkHome)
+  System.setProperty("spark.testing", "1")
+  
   // Allows build configuration to be set through environment variables
-  lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
-  lazy val isNewHadoop = scala.util.Properties.envOrNone("SPARK_IS_NEW_HADOOP") match {
+  lazy val hadoopVersion = Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
+  lazy val isNewHadoop = Properties.envOrNone("SPARK_IS_NEW_HADOOP") match {
     case None => {
       val isNewHadoopVersion = "2.[2-9]+".r.findFirstIn(hadoopVersion).isDefined
       (isNewHadoopVersion|| DEFAULT_IS_NEW_HADOOP)
@@ -79,7 +83,7 @@ object SparkBuild extends Build {
     case Some(v) => v.toBoolean
   }
 
-  lazy val isYarnEnabled = scala.util.Properties.envOrNone("SPARK_YARN") match {
+  lazy val isYarnEnabled = Properties.envOrNone("SPARK_YARN") match {
     case None => DEFAULT_YARN
     case Some(v) => v.toBoolean
   }
@@ -111,8 +115,9 @@ object SparkBuild extends Build {
 
     // Fork new JVMs for tests and set Java options for those
     fork := true,
+    javaOptions += "-Dspark.home=" + sparkHome,
+    javaOptions += "-Dspark.testing=1",
     javaOptions += "-Xmx3g",
-
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
 
@@ -357,6 +362,7 @@ object SparkBuild extends Build {
   )
 
   def assemblyProjSettings = sharedSettings ++ Seq(
+    libraryDependencies += "net.sf.py4j" % "py4j" % "0.8.1",
     name := "spark-assembly",
     assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
     jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },

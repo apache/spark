@@ -69,7 +69,7 @@ The script automatically adds the `bin/pyspark` package to the `PYTHONPATH`.
 The `bin/pyspark` script launches a Python interpreter that is configured to run PySpark applications. To use `pyspark` interactively, first build Spark, then launch it directly from the command line without any options:
 
 {% highlight bash %}
-$ sbt/sbt assembly
+$ sbt assembly
 $ ./bin/pyspark
 {% endhighlight %}
 

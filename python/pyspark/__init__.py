@@ -40,7 +40,7 @@ Public classes:
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.environ["SPARK_HOME"], "python/lib/py4j0.7.egg"))
+sys.path.insert(0, os.path.join(os.environ["SPARK_HOME"], "python/lib/py4j-0.8.1-src.zip"))
 
 
 from pyspark.conf import SparkConf
