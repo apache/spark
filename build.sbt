@@ -10,7 +10,7 @@ scalaVersion := "2.10.3"
 
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
-libraryDependencies += "edu.berkeley.cs.amplab" %% "shark" % "0.9.0-SNAPSHOT"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "0.9.0-incubating-SNAPSHOT"
 
 // Hive 0.10.0 relies on a weird version of jdo that is not published anywhere... Remove when we upgrade to 0.11.0
 libraryDependencies += "javax.jdo" % "jdo2-api" % "2.3-ec" from "http://www.datanucleus.org/downloads/maven2/javax/jdo/jdo2-api/2.3-ec/jdo2-api-2.3-ec.jar"
@@ -45,7 +45,7 @@ import catalyst.plans.logical._
 import catalyst.rules._
 import catalyst.types._
 import catalyst.util._
-import catalyst.shark2.TestShark._"""
+import catalyst.execution.TestShark._"""
 
 site.settings
 
