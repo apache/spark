@@ -66,9 +66,8 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val n = 3
     val data = sc.makeRDD(Array.tabulate(m,n){ (a,b)=>
       MatrixEntry(a+1,b+1, (a+2).toDouble*(b+1)/(1+a+b)) }.flatten )
-    val min_svalue = 1.0e-8
 
-    val decomposed = SVD.sparseSVD(data, m, n, min_svalue)
+    val decomposed = SVD.sparseSVD(data, m, n, n)
     val u = decomposed.U
     val v = decomposed.V
     val s = decomposed.S    

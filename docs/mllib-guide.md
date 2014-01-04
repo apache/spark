@@ -251,9 +251,10 @@ val data = sc.textFile("mllib/data/als/test.data").map { line =>
 }
 val m = 4
 val n = 4
+val k = 1
 
-// recover singular vectors for singular values at or above 1e-5
-val (u, s, v) = SVD.sparseSVD(data, m, n, 1e-5)
+// recover largest singular vector
+val (u, s, v) = SVD.sparseSVD(data, m, n, 1)
 
 println("singular values = " + s.toArray.mkString)
 

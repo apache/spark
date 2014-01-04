@@ -43,9 +43,8 @@ object SVD {
  * Then we compute U via easy matrix multiplication
  * as U =  A * V * S^-1
  * 
- * Only singular vectors associated with singular values
- * greater or equal to MIN_SVALUE are recovered. If there are k
- * such values, then the dimensions of the return will be:
+ * Only the k largest singular values and associated vectors are found.
+ * If there are k such values, then the dimensions of the return will be:
  *
  * S is k x k and diagonal, holding the singular values on diagonal
  * U is m x k and satisfies U'U = eye(k)
@@ -57,22 +56,22 @@ object SVD {
  * @param data RDD Matrix in sparse 1-index format ((int, int), value)
  * @param m number of rows
  * @param n number of columns
- * @param min_svalue Recover singular values greater or equal to min_svalue
+ * @param k Recover k singular values and vectors
  * @return Three sparse matrices: U, S, V such that A = USV^T
  */
   def sparseSVD(
       data: RDD[MatrixEntry],
       m: Int,
       n: Int,
-      min_svalue: Double)
+      k: Int)
     : SVDecomposedMatrix =
   {
     if (m < n || m <= 0 || n <= 0) {
       throw new IllegalArgumentException("Expecting a tall and skinny matrix")
     }
 
-    if (min_svalue < 1.0e-8) {
-      throw new IllegalArgumentException("Minimum singular value requested is too small")
+    if (k < 1 || k > n) {
+      throw new IllegalArgumentException("Must request up to n singular values")
     }
 
     // Compute A^T A, assuming rows are sparse enough to fit in memory
@@ -93,12 +92,13 @@ object SVD {
     // Since A^T A is small, we can compute its SVD directly
     val svd = Singular.sparseSVD(ata)
     val V = svd(0)
-    val sigma = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x >= min_svalue)
+    val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > 1e-9)
 
-    // threshold s values
-    if(sigma.isEmpty) {
-      throw new Exception("All singular values are smaller than min_svalue: " + min_svalue)
-    }
+    if(sigmas.size < k) {
+      throw new Exception("Not enough singular values to return")
+    } 
+
+    val sigma = sigmas.take(k)
 
     val sc = data.sparkContext
 
