@@ -19,19 +19,28 @@ import org.apache.spark.util.ClosureCleaner
  * edge-partitioned. `vertices` contains vertex attributes, which are vertex-partitioned. `edges`
  * contains edge attributes, which are edge-partitioned. For operations on vertex neighborhoods,
  * vertex attributes are replicated to the edge partitions where they appear as sources or
- * destinations. `replicatedVertexView` stores a view of the replicated vertex attributes, which are
- * co-partitioned with the relevant edges.
+ * destinations. `routingTable` stores the routing information for shipping vertex attributes to
+ * edge partitions. `replicatedVertexView` stores a view of the replicated vertex attributes created
+ * using the routing table.
  */
 class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     @transient val vertices: VertexRDD[VD],
     @transient val edges: EdgeRDD[ED],
+    @transient val routingTable: RoutingTable,
     @transient val replicatedVertexView: ReplicatedVertexView[VD])
   extends Graph[VD, ED] {
 
   def this(
       vertices: VertexRDD[VD],
+      edges: EdgeRDD[ED],
+      routingTable: RoutingTable) = {
+    this(vertices, edges, routingTable, new ReplicatedVertexView(vertices, edges, routingTable))
+  }
+
+  def this(
+      vertices: VertexRDD[VD],
       edges: EdgeRDD[ED]) = {
-    this(vertices, edges, new ReplicatedVertexView(vertices, edges))
+    this(vertices, edges, new RoutingTable(edges, vertices))
   }
 
   /** Return a RDD that brings edges together with their source and destination vertices. */
@@ -76,8 +85,16 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
   }
 
   override def statistics: Map[String, Any] = {
+    // Get the total number of vertices after replication, used to compute the replication ratio.
+    def numReplicatedVertices(vid2pids: RDD[Array[Array[Vid]]]): Double = {
+      vid2pids.map(_.map(_.size).sum.toLong).reduce(_ + _).toDouble
+    }
+
     val numVertices = this.ops.numVertices
     val numEdges = this.ops.numEdges
+    val replicationRatioBoth = numReplicatedVertices(routingTable.bothAttrs) / numVertices
+    val replicationRatioSrcOnly = numReplicatedVertices(routingTable.srcAttrOnly) / numVertices
+    val replicationRatioDstOnly = numReplicatedVertices(routingTable.dstAttrOnly) / numVertices
     // One entry for each partition, indicate the total number of edges on that partition.
     val loadArray = edges.partitionsRDD.map(_._2.size).collect().map(_.toDouble / numEdges)
     val minLoad = loadArray.min
@@ -85,6 +102,9 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     Map(
       "Num Vertices" -> numVertices,
       "Num Edges" -> numEdges,
+      "Replication (both)" -> replicationRatioBoth,
+      "Replication (src only)" -> replicationRatioSrcOnly,
+      "Replication (dest only)" -> replicationRatioDstOnly,
       "Load Array" -> loadArray,
       "Min Load" -> minLoad,
       "Max Load" -> maxLoad)
@@ -121,13 +141,16 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     println("\n\nvertices ------------------------------------------")
     traverseLineage(vertices, "  ", visited)
     visited += (vertices.id -> "vertices")
+    println("\n\nroutingTable.bothAttrs -------------------------------")
+    traverseLineage(routingTable.bothAttrs, "  ", visited)
+    visited += (routingTable.bothAttrs.id -> "routingTable.bothAttrs")
     println("\n\ntriplets ----------------------------------------")
     traverseLineage(triplets, "  ", visited)
     println(visited)
   } // end of printLineage
 
   override def reverse: Graph[VD, ED] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.reverse), replicatedVertexView)
+    new GraphImpl(vertices, edges.mapEdgePartitions(_.reverse), routingTable, replicatedVertexView)
 
   override def mapVertices[VD2: ClassManifest](f: (Vid, VD) => VD2): Graph[VD2, ED] = {
     if (classManifest[VD] equals classManifest[VD2]) {
@@ -135,16 +158,17 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       val newVerts = vertices.mapVertexPartitions(_.map(f))
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newReplicatedVertexView = new ReplicatedVertexView[VD2](
-        changedVerts, edges, Some(replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2]]))
-      new GraphImpl(newVerts, edges, newReplicatedVertexView)
+        changedVerts, edges, routingTable,
+        Some(replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2]]))
+      new GraphImpl(newVerts, edges, routingTable, newReplicatedVertexView)
     } else {
       // The map does not preserve type, so we must re-replicate all vertices
-      new GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges)
+      new GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, routingTable)
     }
   }
 
   override def mapEdges[ED2: ClassManifest](f: Edge[ED] => ED2): Graph[VD, ED2] =
-    new GraphImpl(vertices, edges.mapEdgePartitions(_.map(f)), replicatedVertexView)
+    new GraphImpl(vertices, edges.mapEdgePartitions(_.map(f)), routingTable, replicatedVertexView)
 
   override def mapTriplets[ED2: ClassManifest](f: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2] = {
     // Use an explicit manifest in PrimitiveKeyOpenHashMap init so we don't pull in the implicit
@@ -162,7 +186,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
         }
         Iterator((pid, newEdgePartition))
     }
-    new GraphImpl(vertices, new EdgeRDD(newEdgePartitions), replicatedVertexView)
+    new GraphImpl(vertices, new EdgeRDD(newEdgePartitions), routingTable, replicatedVertexView)
   }
 
   override def subgraph(
@@ -185,7 +209,7 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // Reuse the previous ReplicatedVertexView unmodified. The replicated vertices that have been
     // removed will be ignored, since we only refer to replicated vertices when they are adjacent to
     // an edge.
-    new GraphImpl(newVerts, newEdges, replicatedVertexView)
+    new GraphImpl(newVerts, newEdges, new RoutingTable(newEdges, newVerts), replicatedVertexView)
   } // end of subgraph
 
   override def mask[VD2: ClassManifest, ED2: ClassManifest] (
@@ -195,13 +219,13 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
     // Reuse the previous ReplicatedVertexView unmodified. The replicated vertices that have been
     // removed will be ignored, since we only refer to replicated vertices when they are adjacent to
     // an edge.
-    new GraphImpl(newVerts, newEdges, replicatedVertexView)
+    new GraphImpl(newVerts, newEdges, routingTable, replicatedVertexView)
   }
 
   override def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED] = {
     ClosureCleaner.clean(merge)
     val newEdges = edges.mapEdgePartitions(_.groupEdges(merge))
-    new GraphImpl(vertices, newEdges, replicatedVertexView)
+    new GraphImpl(vertices, newEdges, routingTable, replicatedVertexView)
   }
 
   //////////////////////////////////////////////////////////////////////////////////////////////////
@@ -281,12 +305,13 @@ class GraphImpl[VD: ClassManifest, ED: ClassManifest] protected (
       val newVerts = vertices.leftJoin(updates)(updateF)
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newReplicatedVertexView = new ReplicatedVertexView[VD2](
-        changedVerts, edges, Some(replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2]]))
-      new GraphImpl(newVerts, edges, newReplicatedVertexView)
+        changedVerts, edges, routingTable,
+        Some(replicatedVertexView.asInstanceOf[ReplicatedVertexView[VD2]]))
+      new GraphImpl(newVerts, edges, routingTable, newReplicatedVertexView)
     } else {
       // updateF does not preserve type, so we must re-replicate all vertices
       val newVerts = vertices.leftJoin(updates)(updateF)
-      new GraphImpl(newVerts, edges)
+      new GraphImpl(newVerts, edges, routingTable)
     }
   }
 

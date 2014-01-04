@@ -1,12 +1,10 @@
 package org.apache.spark.graph.impl
 
-import org.apache.spark.Partitioner
-import scala.collection.mutable
-
 import org.apache.spark.SparkContext._
-import org.apache.spark.graph._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.collection.{PrimitiveVector, OpenHashSet}
+
+import org.apache.spark.graph._
 
 /**
  * A view of the vertices after they are shipped to the join sites specified in
@@ -22,6 +20,7 @@ private[impl]
 class ReplicatedVertexView[VD: ClassManifest](
     updatedVerts: VertexRDD[VD],
     edges: EdgeRDD[_],
+    routingTable: RoutingTable,
     prevViewOpt: Option[ReplicatedVertexView[VD]] = None) {
 
   /**
@@ -50,9 +49,6 @@ class ReplicatedVertexView[VD: ClassManifest](
   private lazy val dstAttrOnly: RDD[(Pid, VertexPartition[VD])] = create(false, true)
   private lazy val noAttrs: RDD[(Pid, VertexPartition[VD])] = create(false, false)
 
-  private val routingTables: mutable.Map[(Boolean, Boolean), RDD[Array[Array[Vid]]]] =
-    new mutable.HashMap[(Boolean, Boolean), RDD[Array[Array[Vid]]]]
-
   def get(includeSrc: Boolean, includeDst: Boolean): RDD[(Pid, VertexPartition[VD])] = {
     (includeSrc, includeDst) match {
       case (true, true) => bothAttrs
@@ -70,7 +66,7 @@ class ReplicatedVertexView[VD: ClassManifest](
     // includeDst. These flags govern attribute shipping, but the activeness of a vertex must be
     // shipped to all edges mentioning that vertex, regardless of whether the vertex attribute is
     // also shipped there.
-    val shippedActives = getRoutingTable(true, true)
+    val shippedActives = routingTable.get(true, true)
       .zipPartitions(actives.partitionsRDD)(ReplicatedVertexView.buildActiveBuffer(_, _))
       .partitionBy(edges.partitioner.get)
     // Update the view with shippedActives, setting activeness flags in the resulting
@@ -88,7 +84,7 @@ class ReplicatedVertexView[VD: ClassManifest](
 
     // Ship vertex attributes to edge partitions according to vertexPlacement
     val verts = updatedVerts.partitionsRDD
-    val shippedVerts = getRoutingTable(includeSrc, includeDst)
+    val shippedVerts = routingTable.get(includeSrc, includeDst)
       .zipPartitions(verts)(ReplicatedVertexView.buildBuffer(_, _)(vdManifest))
       .partitionBy(edges.partitioner.get)
     // TODO: Consider using a specialized shuffler.
@@ -125,19 +121,6 @@ class ReplicatedVertexView[VD: ClassManifest](
           Iterator((pid, newVPart))
         }.cache().setName("ReplicatedVertexView %s %s".format(includeSrc, includeDst))
     }
-  }
-
-  /**
-   * Returns an RDD with the locations of edge-partition join sites for each vertex attribute in
-   * `vertices`; that is, the routing information for shipping vertex attributes to edge
-   * partitions. The routing information is stored as a compressed bitmap for each vertex partition.
-   */
-  private def getRoutingTable(
-      includeSrc: Boolean, includeDst: Boolean): RDD[Array[Array[Vid]]] = {
-    routingTables.getOrElseUpdate(
-      (includeSrc, includeDst),
-      ReplicatedVertexView.createRoutingTable(
-        edges, updatedVerts.partitioner.get, includeSrc, includeDst))
   }
 }
 
@@ -187,44 +170,6 @@ object ReplicatedVertexView {
       }
       (pid, actives.trim().array)
     }
-  }
-
-  private def createRoutingTable(
-      edges: EdgeRDD[_],
-      vertexPartitioner: Partitioner,
-      includeSrc: Boolean,
-      includeDst: Boolean): RDD[Array[Array[Vid]]] = {
-    // Determine which vertices each edge partition needs by creating a mapping from vid to pid.
-    val vid2pid: RDD[(Vid, Pid)] = edges.partitionsRDD.mapPartitions { iter =>
-      val (pid: Pid, edgePartition: EdgePartition[_]) = iter.next()
-      val numEdges = edgePartition.size
-      val vSet = new VertexSet
-      if (includeSrc) {  // Add src vertices to the set.
-        var i = 0
-        while (i < numEdges) {
-          vSet.add(edgePartition.srcIds(i))
-          i += 1
-        }
-      }
-      if (includeDst) {  // Add dst vertices to the set.
-        var i = 0
-        while (i < numEdges) {
-          vSet.add(edgePartition.dstIds(i))
-          i += 1
-        }
-      }
-      vSet.iterator.map { vid => (vid, pid) }
-    }
-
-    val numPartitions = vertexPartitioner.numPartitions
-    vid2pid.partitionBy(vertexPartitioner).mapPartitions { iter =>
-      val pid2vid = Array.fill(numPartitions)(new PrimitiveVector[Vid])
-      for ((vid, pid) <- iter) {
-        pid2vid(pid) += vid
-      }
-
-      Iterator(pid2vid.map(_.trim().array))
-    }.cache().setName("VertexPlacement %s %s".format(includeSrc, includeDst))
   }
 }
 
