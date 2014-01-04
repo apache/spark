@@ -168,7 +168,7 @@ private[spark] class DriverRunner(
       val exitCode = process.get.waitFor()
 
       if (supervise && exitCode != 0 && !killed) {
-        waitSeconds = waitSeconds * 2 // exponential back-off
+        waitSeconds = waitSeconds * 1 // exponential back-off
         logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")
         (0 until waitSeconds).takeWhile(f => {Thread.sleep(1000); !killed})
       }
