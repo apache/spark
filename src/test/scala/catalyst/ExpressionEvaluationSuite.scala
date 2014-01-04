@@ -45,7 +45,7 @@ class ExpressionEvaluationSuite extends FunSuite {
       case (v, answer) =>
         val expr = Not(Literal(v, BooleanType))
         val result = Evaluate(expr, Nil)
-        if(result != answer)
+        if (result != answer)
           fail(s"$expr should not evaluate to $result, expected: $answer")    }
   }
 
@@ -88,7 +88,7 @@ class ExpressionEvaluationSuite extends FunSuite {
         case (l,r,answer) =>
           val expr = op(Literal(l, BooleanType), Literal(r, BooleanType))
           val result = Evaluate(expr, Nil)
-          if(result != answer)
+          if (result != answer)
             fail(s"$expr should not evaluate to $result, expected: $answer")
       }
     }

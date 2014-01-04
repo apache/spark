@@ -176,7 +176,7 @@ object HiveQl {
      */
     def checkEquals(other: ASTNode) {
       def check(field: String, f: ASTNode => Any) =
-        if(f(n) != f(other))
+        if (f(n) != f(other))
           sys.error(s"$field does not match for trees. '${f(n)}' != '${f(other)}' left: ${dumpTree(n)}, right: ${dumpTree(other)}")
 
       check("name", _.getName)
@@ -205,22 +205,22 @@ object HiveQl {
 
   def parseSql(sql: String): LogicalPlan = {
     try {
-      if(sql.toLowerCase.startsWith("set"))
+      if (sql.toLowerCase.startsWith("set"))
         ConfigurationAssignment(sql)
-      else if(sql.toLowerCase.startsWith("add jar"))
+      else if (sql.toLowerCase.startsWith("add jar"))
         AddJar(sql.drop(8))
-      else if(sql.toLowerCase.startsWith("add file"))
+      else if (sql.toLowerCase.startsWith("add file"))
         AddFile(sql.drop(9))
-      else if(sql.startsWith("dfs"))
+      else if (sql.startsWith("dfs"))
         DfsCommand(sql)
-      else if(sql.startsWith("source"))
+      else if (sql.startsWith("source"))
         SourceCommand(sql.split(" ").toSeq match { case Seq("source", filePath) => filePath })
-      else if(sql.startsWith("!"))
+      else if (sql.startsWith("!"))
         ShellCommand(sql.drop(1))
       else {
         val tree = getAst(sql)
 
-        if(nativeCommands contains tree.getText)
+        if (nativeCommands contains tree.getText)
           NativeCommand(sql)
         else
           nodeToPlan(tree) match {
@@ -266,7 +266,7 @@ object HiveQl {
     var remainingNodes = nodeList
     val clauses = clauseNames.map { clauseName =>
       val (matches, nonMatches) = remainingNodes.partition(_.getText.toUpperCase == clauseName)
-      remainingNodes = nonMatches ++ (if(matches.nonEmpty) matches.tail else Nil)
+      remainingNodes = nonMatches ++ (if (matches.nonEmpty) matches.tail else Nil)
       matches.headOption
     }
 
@@ -474,7 +474,7 @@ object HiveQl {
       val joinedTables = tables.reduceLeft(Join(_,_, Inner, None))
 
       // Must be transform down.
-      val joinedResult = joinedTables transform {
+      val joinedResult = joinedTables transformDown {
         case j: Join =>
           j.copy(
             condition = Some(joinConditions.remove(joinConditions.length - 1)),
@@ -698,7 +698,7 @@ object HiveQl {
         case nfe: NumberFormatException => // Do nothing
       }
 
-      if(v == null)
+      if (v == null)
         sys.error(s"Failed to parse number ${ast.getText}")
       else
         v

@@ -6,7 +6,7 @@ import catalyst.analysis.UnresolvedException
 
 case class UnaryMinus(child: Expression) extends UnaryExpression {
   def dataType = child.dataType
-  def foldable = child.foldable
+  override def foldable = child.foldable
   def nullable = child.nullable
   override def toString = s"-$child"
 }
@@ -19,7 +19,7 @@ abstract class BinaryArithmetic extends BinaryExpression {
     left.resolved && right.resolved && left.dataType == right.dataType
 
   def dataType = {
-    if(!resolved)
+    if (!resolved)
       throw new UnresolvedException(
         this, s"datatype. Can not resolve due to differing types ${left.dataType}, ${right.dataType}")
     left.dataType

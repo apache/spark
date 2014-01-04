@@ -91,7 +91,7 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
             sys.error(s"Comparison not yet implemented for: $curDataType")
           }
 
-        if(comparison != 0) return comparison
+        if (comparison != 0) return comparison
         i += 1
       }
       return 0

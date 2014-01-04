@@ -6,7 +6,6 @@ import catalyst.types._
 abstract class AggregateExpression extends Expression {
   self: Product =>
 
-  def foldable = false
 }
 
 /**

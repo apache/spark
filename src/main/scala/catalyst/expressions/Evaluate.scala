@@ -21,7 +21,7 @@ object Evaluate extends Logging {
     @inline
     def n1(e: Expression, f: ((Numeric[Any], Any) => Any)): Any  = {
       val evalE = eval(e)
-      if(evalE == null)
+      if (evalE == null)
         null
       else
         e.dataType match {
@@ -54,7 +54,7 @@ object Evaluate extends Logging {
 
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
-      if(evalE1 == null || evalE2 == null)
+      if (evalE1 == null || evalE2 == null)
         null
       else
         e1.dataType match {
@@ -87,7 +87,7 @@ object Evaluate extends Logging {
 
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
-      if(evalE1 == null || evalE2 == null)
+      if (evalE1 == null || evalE2 == null)
         null
       else
         e1.dataType match {
@@ -106,7 +106,7 @@ object Evaluate extends Logging {
       if (e1.dataType != e2.dataType) throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
-      if(evalE1 == null || evalE2 == null)
+      if (evalE1 == null || evalE2 == null)
         null
       else
         e1.dataType match {
@@ -143,7 +143,7 @@ object Evaluate extends Logging {
       case Subtract(l, r) => n2(l,r, _.minus(_, _))
       case Multiply(l, r) => n2(l,r, _.times(_, _))
       // Divide & remainder implementation are different for fractional and integral dataTypes.
-      case Divide(l, r) if(l.dataType == DoubleType || l.dataType == FloatType) => f2(l,r, _.div(_, _))
+      case Divide(l, r) if (l.dataType == DoubleType || l.dataType == FloatType) => f2(l,r, _.div(_, _))
       case Divide(l, r) => i2(l,r, _.quot(_, _))
       // Remainder is only allowed on Integral types.
       case Remainder(l, r) => i2(l,r, _.rem(_, _))
@@ -153,7 +153,7 @@ object Evaluate extends Logging {
       case Equals(l, r) =>
         val left = eval(l)
         val right = eval(r)
-        if(left == null || right == null)
+        if (left == null || right == null)
           null
         else
           left == right
@@ -229,18 +229,18 @@ object Evaluate extends Logging {
       case And(l,r) =>
         val left = eval(l)
         val right = eval(r)
-        if(left == false || right == false)
+        if (left == false || right == false)
           false
-        else if(left == null || right == null )
+        else if (left == null || right == null )
           null
         else
           true
       case Or(l,r) =>
         val left = eval(l)
         val right = eval(r)
-        if(left == true || right == true)
+        if (left == true || right == true)
           true
-        else if(left == null || right == null)
+        else if (left == null || right == null)
           null
         else
           false
@@ -261,7 +261,7 @@ object Evaluate extends Logging {
       case other => throw new OptimizationException(other, "evaluation not implemented")
     }
 
-    logger.debug(s"Evaluated $e => $result of type ${if(result == null) "null" else result.getClass.getName}, expected: ${e.dataType}")
+    logger.debug(s"Evaluated $e => $result of type ${if (result == null) "null" else result.getClass.getName}, expected: ${e.dataType}")
     result
   }
 }

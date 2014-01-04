@@ -15,14 +15,14 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def outputSet: Set[Attribute] = output.toSet
 
   /**
-   * Runs [[transform]] with [[rule]] on all expressions present in this query operator.
+   * Runs [[transformDown]] with [[rule]] on all expressions present in this query operator.
    * @param rule the rule to be applied to every expression in this operator.
    */
-  def transformExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
+  def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
-    @inline def transformExpression(e: Expression) = {
-      val newE = e.transform(rule)
+    @inline def transformExpressionDown(e: Expression) = {
+      val newE = e.transformDown(rule)
       if (newE.id != e.id && newE != e) {
         changed = true
         newE
@@ -32,10 +32,10 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }
 
     val newArgs = productIterator.map {
-      case e: Expression => transformExpression(e)
-      case Some(e: Expression) => Some(transformExpression(e))
+      case e: Expression => transformExpressionDown(e)
+      case Some(e: Expression) => Some(transformExpressionDown(e))
       case seq: Seq[_] => seq.map {
-        case e: Expression => transformExpression(e)
+        case e: Expression => transformExpressionDown(e)
         case other => other
       }
       case other: AnyRef => other
@@ -45,16 +45,16 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   }
 
   /**
-   * Runs [[transformPostOrder]] with [[rule]] on all expressions present in this query operator.
+   * Runs [[transformUp]] with [[rule]] on all expressions present in this query operator.
    * @param rule the rule to be applied to every expression in this operator.
    * @return
    */
-  def transformExpressionsPostOrder(rule: PartialFunction[Expression, Expression]): this.type = {
+  def transformExpressionsUp(rule: PartialFunction[Expression, Expression]): this.type = {
     var changed = false
 
-    @inline def transformExpressionPostOrder(e: Expression) = {
-      val newE = e.transformPostOrder(rule)
-      if(newE.id != e.id && newE != e) {
+    @inline def transformExpressionUp(e: Expression) = {
+      val newE = e.transformUp(rule)
+      if (newE.id != e.id && newE != e) {
         changed = true
         newE
       } else {
@@ -63,22 +63,23 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     }
 
     val newArgs = productIterator.map {
-      case e: Expression => transformExpressionPostOrder(e)
-      case Some(e: Expression) => Some(transformExpressionPostOrder(e))
+      case e: Expression => transformExpressionUp(e)
+      case Some(e: Expression) => Some(transformExpressionUp(e))
       case seq: Seq[_] => seq.map {
-        case e: Expression => transformExpressionPostOrder(e)
+        case e: Expression => transformExpressionUp(e)
         case other => other
       }
       case other: AnyRef => other
     }.toArray
 
-    if(changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs) else this
   }
 
-  /** Returns the result of running [[transformExpressions]] on this node and all its children */
+  /** Returns the result of running [[transformExpressionsDown]] on this node
+    * and all its children. */
   def transformAllExpressions(rule: PartialFunction[Expression, Expression]): this.type = {
-    transform {
-      case q: QueryPlan[_] => q.transformExpressions(rule).asInstanceOf[PlanType]
+    transformDown {
+      case q: QueryPlan[_] => q.transformExpressionsDown(rule).asInstanceOf[PlanType]
     }.asInstanceOf[this.type]
   }
 

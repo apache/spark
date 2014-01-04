@@ -16,7 +16,7 @@ abstract class BinaryPredicate extends BinaryExpression with Predicate {
 
 case class Not(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
   def references = child.references
-  def foldable = child.foldable
+  override def foldable = child.foldable
   def nullable = child.nullable
   override def toString = s"NOT $child"
 }
@@ -55,12 +55,12 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
 
 case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
   def references = child.references
-  def foldable = child.foldable
+  override def foldable = child.foldable
   def nullable = false
 }
 
 case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
   def references = child.references
-  def foldable = child.foldable
+  override def foldable = child.foldable
   def nullable = false
 }

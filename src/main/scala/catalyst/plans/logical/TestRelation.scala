@@ -39,7 +39,7 @@ object NewLocalRelationInstances extends Rule[LogicalPlan] {
       .map(_._1)
       .toSet
 
-    plan transform {
+    plan transformDown {
       case l: LocalRelation if multiAppearance contains l => l.newInstance
     }
   }

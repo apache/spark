@@ -65,7 +65,7 @@ case class Aggregate(
 
     def apply(input: Seq[Row]): Unit = {
       val evaluatedExpr = expr.map(Evaluate(_, input))
-      if(evaluatedExpr.map(_ != null).reduceLeft(_ && _))
+      if (evaluatedExpr.map(_ != null).reduceLeft(_ && _))
         seen += evaluatedExpr
     }
 
@@ -78,7 +78,7 @@ case class Aggregate(
     var result: Any = null
 
     def apply(input: Seq[Row]): Unit = {
-      if(result == null)
+      if (result == null)
         result = Evaluate(expr, input)
     }
   }
@@ -93,7 +93,7 @@ case class Aggregate(
     grouped.map { case (group, rows) =>
       // Replace all aggregate expressions with spark functions that will compute the result.
       val aggImplementations = aggregateExpressions.map { agg =>
-        val impl = agg transform {
+        val impl = agg transformDown {
           case base @ Average(expr) => new AverageFunction(expr, base)
           case base @ Sum(expr) => new SumFunction(expr, base)
           case base @ Count(expr) => new CountFunction(expr, base)
@@ -105,7 +105,7 @@ case class Aggregate(
         // If any references exist that are not inside agg functions then the must be grouping exprs
         // in this case we must rebind them to the grouping tuple.
         if (remainingAttributes.nonEmpty) {
-          val unaliasedAggregateExpr = agg transform { case Alias(c, _) => c }
+          val unaliasedAggregateExpr = agg transformDown { case Alias(c, _) => c }
 
           // An exact match with a grouping expression
           val exactGroupingExpr = groupingExpressions.indexOf(unaliasedAggregateExpr) match {
@@ -163,7 +163,7 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
     val count = sc.accumulable(0)
 
     def apply(input: Seq[Row]): Unit =
-      if(Evaluate(expr, input) != null)
+      if (Evaluate(expr, input) != null)
         count += 1
 
     def result: Any = count.value.toLong
@@ -171,7 +171,7 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
 
   override def executeCollect() = attachTree(this, "SparkAggregate") {
     // Replace all aggregate expressions with spark functions that will compute the result.
-    val aggImplementations = aggregateExprs.map { _ transform {
+    val aggImplementations = aggregateExprs.map { _ transformDown {
       case base @ Average(expr) => new AverageFunction(expr, base)
       case base @ Count(expr) => new CountFunction(expr, base)
     }}

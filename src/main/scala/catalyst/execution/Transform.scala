@@ -36,7 +36,7 @@ case class Transform(
       val readerThread = new Thread("Transform OutoutReader") {
         override def run() {
           var curLine = reader.readLine()
-          while(curLine != null) {
+          while (curLine != null) {
             outputLines += buildRow(curLine.split("\t"))
             curLine = reader.readLine()
           }

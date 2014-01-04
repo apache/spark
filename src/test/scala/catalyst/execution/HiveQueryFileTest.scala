@@ -31,9 +31,9 @@ abstract class HiveQueryFileTest extends HiveComaparisionTest {
   // Go through all the test cases and add them to scala test.
   testCases.foreach {
     case (testCaseName, testCaseFile) =>
-      if(blackList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_)) {
+      if (blackList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_)) {
         logger.warn(s"Blacklisted test skipped $testCaseName")
-      } else if(realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) || runAll) {
+      } else if (realWhiteList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_) || runAll) {
         // Build a test case and submit it to scala test framework...
         val queriesString = fileToString(testCaseFile)
         createQueryTest(testCaseName, queriesString)

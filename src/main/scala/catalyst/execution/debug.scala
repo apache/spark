@@ -4,7 +4,7 @@ package execution
 object DebugQuery {
   def apply(plan: SharkPlan): SharkPlan = {
     val visited = new collection.mutable.HashSet[Long]()
-    plan transform {
+    plan transformDown {
       case s: SharkPlan if !visited.contains(s.id) =>
         visited += s.id
         DebugNode(s)

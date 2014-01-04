@@ -73,7 +73,7 @@ Project {key#0,value#1}
  HiveTableScan {key#0,value#1}, (MetastoreRelation default, src, None)
 ```
 
-From the console you can even write rules that transform query plans.  For example, the above query has redundant project operators that aren't doing anything.  This redundancy can be eliminated using the `transform` function that is available on all [`TreeNode`](http://marmbrus.github.io/catalyst/latest/api/index.html#catalyst.trees.TreeNode) objects.
+From the console you can even write rules that transform query plans.  For example, the above query has redundant project operators that aren't doing anything.  This redundancy can be eliminated using the `transformDown` function that is available on all [`TreeNode`](http://marmbrus.github.io/catalyst/latest/api/index.html#catalyst.trees.TreeNode) objects.
 ```scala
 scala> query.optimizedPlan
 res1: catalyst.plans.logical.LogicalPlan = 
@@ -82,7 +82,7 @@ Project {key#0,value#1}
   MetastoreRelation default, src, None
 
 
-scala> res0.optimizedPlan transform {
+scala> res0.optimizedPlan transformDown {
      |   case Project(projectList, child) if projectList == child.output => child
      | }
 res2: catalyst.plans.logical.LogicalPlan = 

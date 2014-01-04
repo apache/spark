@@ -8,7 +8,17 @@ abstract class Expression extends TreeNode[Expression] {
   self: Product =>
 
   def dataType: DataType
-  def foldable: Boolean
+  /**
+   * foldable is used to indicate if an expression can be folded.
+   * Right now, we consider expressions listed below as foldable expressions.
+   * - A Coalesce is foldable if all of its children are foldable
+   * - A BinaryExpression is foldable if its both left and right child are foldable.
+   * - A Not, isNull, or isNotNull is foldable if its child is foldable.
+   * - A Literal is foldable.
+   * - A Cast or UnaryMinus is foldable if its child is foldable.
+   */
+  // TODO: Supporting more folded expressions. For example, deterministic Hive UDFs.
+  def foldable: Boolean = false
   def nullable: Boolean
   def references: Set[Attribute]
 
@@ -31,7 +41,7 @@ abstract class BinaryExpression extends Expression with trees.BinaryNode[Express
 
   def symbol: String
 
-  def foldable = left.foldable && right.foldable
+  override def foldable = left.foldable && right.foldable
 
   def references = left.references ++ right.references
 

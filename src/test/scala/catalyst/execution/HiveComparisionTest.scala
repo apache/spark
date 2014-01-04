@@ -17,7 +17,7 @@ import util._
 abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
   protected val targetDir = new File("target")
   protected val answerCache = new File(targetDir, "comparison-test-cache")
-  if(!answerCache.exists)
+  if (!answerCache.exists)
     answerCache.mkdir()
 
   val passedFile = new File(targetDir, s"$suiteName.passed")
@@ -40,7 +40,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
       case _ =>
         val isOrdered = sharkQuery.executedPlan.collect { case s: Sort => s}.nonEmpty
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
-        if(!isOrdered) answer.sorted else answer
+        if (!isOrdered) answer.sorted else answer
     }
     orderedAnswer.map(cleanPaths).map(clearTimes)
   }
@@ -78,10 +78,10 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
         }
 
         val hiveCachedResults = hiveCacheFiles.flatMap { cachedAnswerFile =>
-          if(cachedAnswerFile.exists) {
+          if (cachedAnswerFile.exists) {
             val cachedString = fileToString(cachedAnswerFile)
             val cachedAnswer =
-              if(cachedString == "")
+              if (cachedString == "")
                 Nil
               else
                 cachedString.split("\n").toSeq
@@ -93,7 +93,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
         }
 
         val hiveResults: Seq[Seq[String]] =
-          if(hiveCachedResults.size == queryList.size) {
+          if (hiveCachedResults.size == queryList.size) {
             logger.warn(s"Using answer cache for test: $testCaseName")
             hiveCachedResults
           } else {
@@ -146,7 +146,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
             // Check that the results match unless its an EXPLAIN query.
             val preparedHive = prepareAnswer(sharkQuery,hive)
 
-            if((!sharkQuery.parsed.isInstanceOf[ExplainCommand]) && preparedHive != catalyst) {
+            if ((!sharkQuery.parsed.isInstanceOf[ExplainCommand]) && preparedHive != catalyst) {
 
               val hivePrintOut = s"== HIVE - ${hive.size} row(s) ==" +: preparedHive
               val catalystPrintOut = s"== CATALYST - ${catalyst.size} row(s) ==" +: catalyst
@@ -166,7 +166,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
       } catch {
         case tf: org.scalatest.exceptions.TestFailedException => throw tf
         case originalException: Exception =>
-          if(System.getProperty("shark.hive.canarytest") != null) {
+          if (System.getProperty("shark.hive.canarytest") != null) {
             // When we encounter an error we check to see if the environment is still okay by running a simple query.
             // If this fails then we halt testing since something must have gone seriously wrong.
             try {

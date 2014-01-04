@@ -12,14 +12,14 @@ import dsl._
 /* Implicit conversions for creating query plans */
 
 class OptimizerSuite extends FunSuite {
-  // Test relations.  Feel free to create more.
+
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
   // Helper functions for comparing plans.
 
   /**
-   * Since attribute references are given globally unique ids during analysis we must normalize them to check if two
-   * different queries are identical.
+   * Since attribute references are given globally unique ids during analysis,
+   * we must normalize them to check if two different queries are identical.
    */
   protected def normalizeExprIds(plan: LogicalPlan) = {
     val minId = plan.flatMap(_.expressions.flatMap(_.references).map(_.exprId.id)).min
@@ -33,7 +33,7 @@ class OptimizerSuite extends FunSuite {
   protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
     val normalized1 = normalizeExprIds(plan1)
     val normalized2 = normalizeExprIds(plan2)
-    if(normalized1 != normalized2)
+    if (normalized1 != normalized2)
       fail(
         s"""
           |== FAIL: Plans do not match ===
@@ -85,7 +85,7 @@ class OptimizerSuite extends FunSuite {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Constant folding test: expressions have attribute references and literals in" +
+  test("Constant folding test: expressions have attribute references and literals in " +
     "arithmetic operations") {
     val originalQuery =
       testRelation
@@ -107,7 +107,7 @@ class OptimizerSuite extends FunSuite {
     comparePlans(optimized, correctAnswer)
   }
 
-  test("Constant folding test: expressions have attribute references and literals in" +
+  test("Constant folding test: expressions have attribute references and literals in " +
     "predicates") {
     val originalQuery =
       testRelation

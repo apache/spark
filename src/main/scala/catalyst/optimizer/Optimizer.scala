@@ -11,20 +11,29 @@ object Optimize extends RuleExecutor[LogicalPlan] {
     Batch("Subqueries", Once,
       EliminateSubqueries) ::
     Batch("ConstantFolding", Once,
-      ConstantFolding
+      ConstantFolding,
+      BooleanSimpliﬁcation
     ) :: Nil
 }
 
 object EliminateSubqueries extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case Subquery(_, child) => child
   }
 }
 
 object ConstantFolding extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case q: LogicalPlan => q transformExpressionsPostOrder {
-      case a @ And(left, right) if !a.foldable => {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case e if e.foldable => {Literal(Evaluate(e, Nil))}
+    }
+  }
+}
+
+object BooleanSimpliﬁcation extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    case q: LogicalPlan => q transformExpressionsUp {
+      case a @ And(left, right) => {
         (left, right) match {
           case (Literal(true, BooleanType), r) => r
           case (l, Literal(true, BooleanType)) => l
@@ -33,7 +42,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
           case (_, _) => a
         }
       }
-      case o @ Or(left, right) if !o.foldable => {
+      case o @ Or(left, right) => {
         (left, right) match {
           case (Literal(true, BooleanType), _) => Literal(true)
           case (_, Literal(true, BooleanType)) => Literal(true)
@@ -42,7 +51,6 @@ object ConstantFolding extends Rule[LogicalPlan] {
           case (_, _) => o
         }
       }
-      case e if e.foldable => {Literal(Evaluate(e, Nil))}
     }
   }
 }
