@@ -24,7 +24,6 @@ import org.apache.spark.rdd.RDD
 import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 
 
-
 /**
  * Class used to obtain singular value decompositions
  * @param data Matrix in sparse matrix format
