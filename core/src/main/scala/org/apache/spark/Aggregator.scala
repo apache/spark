@@ -50,8 +50,8 @@ case class Aggregator[K, V, C] (
       val combiners =
         new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
       while (iter.hasNext) {
-        val kv = iter.next()
-        combiners.insert(kv._1, kv._2)
+        val (k, v) = iter.next()
+        combiners.insert(k, v)
       }
       combiners.iterator
     }
@@ -72,8 +72,8 @@ case class Aggregator[K, V, C] (
     } else {
       val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
       while (iter.hasNext) {
-        val kc = iter.next()
-        combiners.insert(kc._1, kc._2)
+        val (k, c) = iter.next()
+        combiners.insert(k, c)
       }
       combiners.iterator
     }

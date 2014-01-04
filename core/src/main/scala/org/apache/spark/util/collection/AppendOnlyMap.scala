@@ -49,12 +49,13 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
 
   // Triggered by destructiveSortedIterator; the underlying data array may no longer be used
   private var destroyed = false
+  private val destructionMessage = "Map state is invalid from destructive sorting!"
 
   private val LOAD_FACTOR = 0.7
 
   /** Get the value for a given key */
   def apply(key: K): V = {
-    checkValidityOrThrowException()
+    assert(!destroyed, destructionMessage)
     val k = key.asInstanceOf[AnyRef]
     if (k.eq(null)) {
       return nullValue
@@ -78,7 +79,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
 
   /** Set the value for a key */
   def update(key: K, value: V): Unit = {
-    checkValidityOrThrowException()
+    assert(!destroyed, destructionMessage)
     val k = key.asInstanceOf[AnyRef]
     if (k.eq(null)) {
       if (!haveNullValue) {
@@ -113,7 +114,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
    * for key, if any, or null otherwise. Returns the newly updated value.
    */
   def changeValue(key: K, updateFunc: (Boolean, V) => V): V = {
-    checkValidityOrThrowException()
+    assert(!destroyed, destructionMessage)
     val k = key.asInstanceOf[AnyRef]
     if (k.eq(null)) {
       if (!haveNullValue) {
@@ -148,7 +149,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
 
   /** Iterator method from Iterable */
   override def iterator: Iterator[(K, V)] = {
-    checkValidityOrThrowException()
+    assert(!destroyed, destructionMessage)
     new Iterator[(K, V)] {
       var pos = -1
 
@@ -285,12 +286,6 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
           item
         }
       }
-    }
-  }
-
-  private def checkValidityOrThrowException(): Unit = {
-    if (destroyed) {
-      throw new IllegalStateException("Map state is invalid from destructive sorting!")
     }
   }
 }
