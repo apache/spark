@@ -21,7 +21,6 @@ object EliminateSubqueries extends Rule[LogicalPlan] {
   }
 }
 
-// Do I really need post order traversal at here????
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsPostOrder {
