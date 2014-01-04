@@ -23,7 +23,6 @@ import org.apache.spark.rdd.RDD
 
 import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
 
-import org.apache.spark.linalg.MatrixEntry
 
 /**
  * Top-level methods for calling Singular Value Decomposition
@@ -66,9 +65,7 @@ object SVD {
       m: Int,
       n: Int,
       min_svalue: Double)
-    : (  RDD[MatrixEntry],
-         RDD[MatrixEntry],
-         RDD[MatrixEntry]) =
+    : SVDecomposedMatrix =
   {
     if (m < n || m <= 0 || n <= 0) {
       throw new IllegalArgumentException("Expecting a tall and skinny matrix")
@@ -118,16 +115,16 @@ object SVD {
                 { (i,j) => ((i+1, j+1), V.get(i,j)/sigma(j))  }.flatten).cache()
 
     // Multiply A by VS^-1
-    val aCols = data.map(entry => (entry._1._2, (entry._1._1, entry._2)))
+    val aCols = data.map(entry => (entry.j, (entry.i, entry.mval)))
     val bRows = vsirdd.map(entry => (entry._1._1, (entry._1._2, entry._2)))
     val retU = aCols.join(bRows).map( {case (key, ( (rowInd, rowVal), (colInd, colVal)) )
         => ((rowInd, colInd), rowVal*colVal)}).reduceByKey(_+_)
-          .map( case (row, col, mval) => MatrixEntry(row, col, mval))
+          .map{ case ((row, col), mval) => MatrixEntry(row, col, mval)}
      
-    (retU, retS, retV)  
+    SVDecomposedMatrix(retU, retS, retV)  
   }
 
-
+/*
   def main(args: Array[String]) {
     if (args.length < 8) {
       println("Usage: SVD <master> <matrix_file> <m> <n>
@@ -153,6 +150,7 @@ object SVD {
     v.saveAsTextFile(output_v)
     System.exit(0)
   }
+*/
 }
 
 

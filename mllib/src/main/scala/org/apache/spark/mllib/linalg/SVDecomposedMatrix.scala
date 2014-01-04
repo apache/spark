@@ -19,8 +19,6 @@ package org.apache.spark.mllib.linalg
 
 import org.apache.spark.rdd.RDD
 
-import org.apache.spark.linalg.MatrixEntry
-
 /**
  * Class that represents the SV decomposition of a matrix
  *
