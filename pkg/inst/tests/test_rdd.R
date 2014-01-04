@@ -58,8 +58,7 @@ test_that("lapplyPartitionsWithIndex on RDDs", {
 })
 
 test_that("sampleRDD() on RDDs", {
-  expect_equal(collect(sampleRDD(rdd, FALSE, 1.0, 2014L)), nums)
-  expect_equal(collect(sampleRDD(rdd, TRUE, 1.0, 20140103L)), nums)
+  expect_equal(unlist(collect(sampleRDD(rdd, FALSE, 1.0, 2014L))), nums)
 })
 
 test_that("takeSample() on RDDs", {
