@@ -1,15 +1,15 @@
 package catalyst
+package optimizer
 
 import org.scalatest.FunSuite
 
-import expressions._
-import optimizer.Optimize
-import plans.logical._
-import catalyst.types.{DoubleType, IntegerType}
+import types.IntegerType
 import util._
+import plans.logical.{LogicalPlan, LocalRelation}
+import expressions._
+import dsl._
 
 /* Implicit conversions for creating query plans */
-import dsl._
 
 class OptimizerSuite extends FunSuite {
   // Test relations.  Feel free to create more.
@@ -161,7 +161,7 @@ class OptimizerSuite extends FunSuite {
     val correctAnswer =
       testRelation
         .select(Rand + Literal(1.0) as Symbol("c1"),
-          Sum('a) as Symbol("c2"))
+                Sum('a) as Symbol("c2"))
         .analyze
 
     comparePlans(optimized, correctAnswer)
