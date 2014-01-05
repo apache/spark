@@ -26,6 +26,16 @@ class HiveCompatability extends HiveQueryFileTest {
     "index_compact_binary_search",
     "bucket_num_reducers",
 
+    // User specific test answers, breaks the caching mechanism.
+    "authorization_3",
+    "authorization_5",
+    "keyword_1",
+    "misc_json",
+
+    // Timezone specific test answers.
+    "udf_unix_timestamp",
+    "udf_to_unix_timestamp",
+
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
     "ops_comparison",
