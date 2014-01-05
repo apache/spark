@@ -25,7 +25,7 @@ object EliminateSubqueries extends Rule[LogicalPlan] {
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case q: LogicalPlan => q transformExpressionsUp {
-      case e if e.foldable => {Literal(Evaluate(e, Nil))}
+      case e if e.foldable => Literal(Evaluate(e, Nil), e.dataType)
     }
   }
 }
@@ -33,22 +33,22 @@ object ConstantFolding extends Rule[LogicalPlan] {
 object BooleanSimpliﬁcation extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case q: LogicalPlan => q transformExpressionsUp {
-      case a @ And(left, right) => {
+      case and @ And(left, right) => {
         (left, right) match {
           case (Literal(true, BooleanType), r) => r
           case (l, Literal(true, BooleanType)) => l
           case (Literal(false, BooleanType), _) => Literal(false)
           case (_, Literal(false, BooleanType)) => Literal(false)
-          case (_, _) => a
+          case (_, _) => and
         }
       }
-      case o @ Or(left, right) => {
+      case or @ Or(left, right) => {
         (left, right) match {
           case (Literal(true, BooleanType), _) => Literal(true)
           case (_, Literal(true, BooleanType)) => Literal(true)
           case (Literal(false, BooleanType), r) => r
           case (l, Literal(false, BooleanType)) => l
-          case (_, _) => o
+          case (_, _) => or
         }
       }
     }
