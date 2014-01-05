@@ -213,6 +213,16 @@ def _serialize_rating(r):
     intpart[0], intpart[1], doublepart[0] = r
     return ba
 
+def _deserialize_rating(ba):
+    ar = ndarray(shape=(3, ), buffer=ba, dtype="float64", order='C')
+    return ar.copy()
+
+def _serialize_tuple(t):
+    ba = bytearray(8)
+    intpart = ndarray(shape=[2], buffer=ba, dtype=int32)
+    intpart[0], intpart[1] = t
+    return ba
+
 def _test():
     import doctest
     globs = globals().copy()

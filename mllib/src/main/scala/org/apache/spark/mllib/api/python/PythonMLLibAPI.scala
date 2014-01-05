@@ -206,6 +206,24 @@ class PythonMLLibAPI extends Serializable {
     return new Rating(user, product, rating)
   }
 
+  private[spark] def unpackTuple(tupleBytes: Array[Byte]): (Int, Int) = {
+    val bb = ByteBuffer.wrap(tupleBytes)
+    bb.order(ByteOrder.nativeOrder())
+    val v1 = bb.getInt()
+    val v2 = bb.getInt()
+    (v1, v2)
+  }
+
+  private[spark] def serializeRating(rate: Rating): Array[Byte] = {
+    val bytes = new Array[Byte](24)
+    val bb = ByteBuffer.wrap(bytes)
+    bb.order(ByteOrder.nativeOrder())
+    bb.putDouble(rate.user.toDouble)
+    bb.putDouble(rate.product.toDouble)
+    bb.putDouble(rate.rating)
+    bytes
+  }
+
   /**
    * Java stub for Python mllib ALS.train().  This stub returns a handle
    * to the Java object instead of the content of the Java object.  Extra care

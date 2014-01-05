@@ -19,9 +19,11 @@ package org.apache.spark.mllib.recommendation
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.api.python.PythonMLLibAPI
 
 import org.jblas._
-import java.nio.{ByteOrder, ByteBuffer}
+import org.apache.spark.api.java.JavaRDD
+
 
 /**
  * Model representing the result of matrix factorization.
@@ -63,6 +65,12 @@ class MatrixFactorizationModel(
         val productVector = new DoubleMatrix(pFeatures)
         Rating(user, product, userVector.dot(productVector))
     }
+  }
+
+  def predictJavaRDD(usersProductsJRDD: JavaRDD[Array[Byte]]): JavaRDD[Array[Byte]] = {
+    val pythonAPI = new PythonMLLibAPI()
+    val usersProducts = usersProductsJRDD.rdd.map(xBytes => pythonAPI.unpackTuple(xBytes))
+    predict(usersProducts).map(rate => pythonAPI.serializeRating(rate))
   }
 
   // TODO: Figure out what other good bulk prediction methods would look like.
