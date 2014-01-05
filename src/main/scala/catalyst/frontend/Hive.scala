@@ -629,6 +629,7 @@ object HiveQl {
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
     case Token("DIV", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))
