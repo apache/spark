@@ -40,6 +40,7 @@ class HiveCompatability extends HiveQueryFileTest {
     "index_auto_update",
     "index_auto_self_join",
     "index_stale",
+    "type_cast_1",
 
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
