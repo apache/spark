@@ -17,7 +17,7 @@ abstract class Expression extends TreeNode[Expression] {
    * - A Literal is foldable.
    * - A Cast or UnaryMinus is foldable if its child is foldable.
    */
-  // TODO: Supporting more folded expressions. For example, deterministic Hive UDFs.
+  // TODO: Supporting more foldable expressions. For example, deterministic Hive UDFs.
   def foldable: Boolean = false
   def nullable: Boolean
   def references: Set[Attribute]
