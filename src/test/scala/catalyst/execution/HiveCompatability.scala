@@ -36,6 +36,11 @@ class HiveCompatability extends HiveQueryFileTest {
     "udf_unix_timestamp",
     "udf_to_unix_timestamp",
 
+    // Cant run without local map/reduce.
+    "index_auto_update",
+    "index_auto_self_join",
+    "index_stale",
+
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
     "ops_comparison",
