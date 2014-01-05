@@ -15,7 +15,7 @@ This README file only contains basic setup instructions.
 Spark requires Scala 2.10. The project is built using Simple Build Tool (SBT),
 which can be obtained [here](http://www.scala-sbt.org). To build Spark and its example programs, run:
 
-    sbt assembly
+    ./sbt assembly
 
 Once you've built Spark, the easiest way to start using it is the shell:
 
@@ -41,7 +41,7 @@ locally with one thread, or "local[N]" to run locally with N threads.
 Testing first requires [Building](#Building) Spark. Once Spark is built, tests
 can be run using:
 
-`sbt test`
+`./sbt test`
  
 ## A Note About Hadoop Versions
 
