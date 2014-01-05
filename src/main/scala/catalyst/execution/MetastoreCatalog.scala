@@ -100,7 +100,7 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
     Class.forName(table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[Deserializer]],
     Class.forName(table.getSd.getInputFormat).asInstanceOf[Class[InputFormat[_,_]]],
     Class.forName(table.getSd.getOutputFormat),
-    hiveQlTable.getSchema
+    hiveQlTable.getMetadata
   )
 
    implicit class SchemaAttribute(f: FieldSchema) {
