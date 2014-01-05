@@ -51,7 +51,7 @@ site.settings
 
 ghpages.settings
 
-git.remoteRepo := "git@github.com:marmbrus/catalyst.git"
+git.remoteRepo := "git@github.com:databricks/catalyst.git"
 
 site.settings
 
