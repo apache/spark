@@ -182,7 +182,6 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
                 // The testing setup traps exits so wait here for a long time so the developer can see when things started
                 // to go wrong.
                 Thread.sleep(1000000)
-                System.exit(1)
             }
           }
 
