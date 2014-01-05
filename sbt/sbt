@@ -5,7 +5,7 @@
 SBT_VERSION=0.12.4
 URL1=http://typesafe.artifactoryonline.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch.jar
 URL2=http://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch.jar
-JAR=.sbtlib/sbt-launch-${SBT_VERSION}.jar
+JAR=sbt/sbt-launch-${SBT_VERSION}.jar
 
 printf "Checking for system sbt ["
 if hash sbt 2>/dev/null; then 
