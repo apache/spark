@@ -58,6 +58,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
     str.replaceAll("file:\\/.*\\/", "<PATH>")
   }
 
+  val installHooksCommand = "SET.*hooks".r
   def createQueryTest(testCaseName: String, sql: String) = {
     test(testCaseName) {
       logger.error(
@@ -70,6 +71,9 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
 
       try {
         TestShark.reset()
+
+        if (queryList.filter(installHooksCommand.findAllMatchIn(_).nonEmpty).nonEmpty)
+          sys.error("hive exec hooks not supported for tests.")
 
         val hiveCacheFiles = queryList.zipWithIndex.map {
           case (queryString, i)  =>

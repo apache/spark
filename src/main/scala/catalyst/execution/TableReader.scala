@@ -1,6 +1,7 @@
 package catalyst.execution
 
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.conf.HiveConf
@@ -132,9 +133,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
       val partSpec = partDesc.getPartSpec()
       val partProps = partDesc.getProperties()
 
-      // TODO: fix this.
-      //val partColsDelimited: String = partProps.getProperty(META_TABLE_PARTITION_COLUMNS)
-      val partColsDelimited = ";"
+      val partColsDelimited: String = partProps.getProperty(META_TABLE_PARTITION_COLUMNS)
       // Partitioning columns are delimited by "/"
       val partCols = partColsDelimited.trim().split("/").toSeq
       // 'partValues[i]' contains the value for the partitioning column at 'partCols[i]'.

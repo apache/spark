@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 
-SHARK_CONF_DIR=`dirname $0`/../conf
-if [ -e $SHARK_CONF_DIR/shark-env.sh ] ; then
-   . $SHARK_CONF_DIR/shark-env.sh
-fi
+HADOOP_CLASSPATH=""
+
+for i in $HIVE_HOME/lib/*
+do HADOOP_CLASSPATH=$HADOOP_CLASSPATH:$i
+done
+
+export HADOOP_CLASSPATH
 
 realpath () {
 (

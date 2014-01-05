@@ -5,8 +5,8 @@ import types._
 
 object Literal {
   def apply(v: Any): Literal = v match {
-    // TODO(marmbrus): Use bigInt type for value?
     case i: Int => Literal(i, IntegerType)
+    case l: Long => Literal(l, LongType)
     case d: Double => Literal(d, DoubleType)
     case f: Float => Literal(f, FloatType)
     case b: Byte => Literal(b, ByteType)

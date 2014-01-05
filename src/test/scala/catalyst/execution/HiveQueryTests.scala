@@ -41,9 +41,11 @@ class HiveQueryTests extends HiveComaparisionTest {
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
 
-  createQueryTest("partitioned table scan",
-    "SELECT ds, hr, key, value FROM srcpart")
 
+  ignore("partitioned table scan") {
+    createQueryTest("partitioned table scan",
+      "SELECT ds, hr, key, value FROM srcpart")
+  }
   createQueryTest("hash",
     "SELECT hash('test') FROM src LIMIT 1")
 

@@ -16,6 +16,10 @@ object Optimize extends RuleExecutor[LogicalPlan] {
     ) :: Nil
 }
 
+/**
+ * Removes subqueries from the plan.  Subqueries are only required to provide scoping information
+ * for attributes and can be removed once analysis is complete.
+ */
 object EliminateSubqueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
     case Subquery(_, child) => child
