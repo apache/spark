@@ -8,7 +8,7 @@ import rules._
 
 class RuleExecutorSuite extends FunSuite {
   object DecrementLiterals extends Rule[Expression] {
-    def apply(e: Expression): Expression = e transformDown {
+    def apply(e: Expression): Expression = e transform {
       case IntegerLiteral(i) if i > 0 => Literal(i - 1)
     }
   }

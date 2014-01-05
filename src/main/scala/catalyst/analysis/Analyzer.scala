@@ -46,7 +46,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case UnresolvedRelation(name, alias) => catalog.lookupRelation(name, alias)
     }
   }
@@ -55,10 +55,10 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    * Makes attribute naming case insensitive by turning all UnresolvedAttributes to lowercase.
    */
   object LowercaseAttributeReferences extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case UnresolvedRelation(name, alias) => UnresolvedRelation(name, alias.map(_.toLowerCase))
       case Subquery(alias, child) => Subquery(alias.toLowerCase, child)
-      case q: LogicalPlan => q transformExpressionsDown {
+      case q: LogicalPlan => q transformExpressions {
         case s: Star => s.copy(table = s.table.map(_.toLowerCase))
         case UnresolvedAttribute(name) => UnresolvedAttribute(name.toLowerCase)
         case Alias(c, name) => Alias(c, name.toLowerCase)()
@@ -71,10 +71,10 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    * from a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case q: LogicalPlan if childIsFullyResolved(q) =>
         logger.trace(s"Attempting to resolve ${q.simpleString}")
-        q transformExpressionsDown {
+        q transformExpressions {
           case u @ UnresolvedAttribute(name) =>
             // Leave unchanged if resolution fails.  Hopefully will be resolved next round.
             val result = q.resolve(name).getOrElse(u)
@@ -88,9 +88,9 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
-        q transformExpressionsDown {
+        q transformExpressions {
           case UnresolvedFunction(name, children) if children.map(_.resolved).reduceLeft(_&&_) =>
             registry.lookupFunction(name, children)
         }
@@ -101,7 +101,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    * Turns projections that contain aggregate expressions into aggregations.
    */
   object GlobalAggregates extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case Project(projectList, child) if containsAggregates(projectList) =>
         Aggregate(Nil, projectList, child)
     }
@@ -119,7 +119,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    * Expands any references to [[Star]] (*) in project operators.
    */
   object StarExpansion extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved
       case p: LogicalPlan if !childIsFullyResolved(p) => p
       // If the projection list contains Stars, expand it.

@@ -43,7 +43,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
    * For example, because of a CREATE TABLE X AS statement.
    */
   object CreateTables extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case InsertIntoCreatedTable(name, child) =>
         val (databaseName, tableName) = name.split("\\.") match {
           case Array(tableOnly) => ("default", tableOnly)

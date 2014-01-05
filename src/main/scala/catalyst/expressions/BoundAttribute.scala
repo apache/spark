@@ -30,11 +30,11 @@ case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: Attribut
 // TODO: Should run against any query plan, not just SharkPlans
 object BindReferences extends Rule[SharkPlan] {
   def apply(plan: SharkPlan): SharkPlan = {
-    plan.transformDown {
+    plan.transform {
       case leafNode: SharkPlan if leafNode.children.isEmpty => leafNode
       case nonLeaf: SharkPlan => attachTree(nonLeaf, "Binding references in operator") {
         logger.debug(s"Binding references in node ${nonLeaf.simpleString}")
-        nonLeaf.transformExpressionsDown {
+        nonLeaf.transformExpressions {
           case a: AttributeReference => attachTree(a, "Binding attribute") {
             val inputTuple = nonLeaf.children.indexWhere(_.output contains a)
             val ordinal = if (inputTuple == -1) -1 else nonLeaf.children(inputTuple).output.indexWhere(_ == a)

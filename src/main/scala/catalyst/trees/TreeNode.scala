@@ -83,6 +83,17 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Returns a copy of this node where [[rule]] has been recursively applied to the tree.
+   * When [[rule]] does not apply to a given node it is left unchanged.
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * transformDown or transformUp should be used.
+   * @param rule the function use to transform this nodes children
+   */
+  def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    transformDown(rule)
+  }
+
+  /**
    * Returns a copy of this node where [[rule]] has been recursively
    * applied to it and all of its children (pre-order). When [[rule]] does not
    * apply to a given node it is left unchanged.

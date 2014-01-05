@@ -93,7 +93,7 @@ case class Aggregate(
     grouped.map { case (group, rows) =>
       // Replace all aggregate expressions with spark functions that will compute the result.
       val aggImplementations = aggregateExpressions.map { agg =>
-        val impl = agg transformDown {
+        val impl = agg transform {
           case base @ Average(expr) => new AverageFunction(expr, base)
           case base @ Sum(expr) => new SumFunction(expr, base)
           case base @ Count(expr) => new CountFunction(expr, base)
@@ -105,7 +105,7 @@ case class Aggregate(
         // If any references exist that are not inside agg functions then the must be grouping exprs
         // in this case we must rebind them to the grouping tuple.
         if (remainingAttributes.nonEmpty) {
-          val unaliasedAggregateExpr = agg transformDown { case Alias(c, _) => c }
+          val unaliasedAggregateExpr = agg transform { case Alias(c, _) => c }
 
           // An exact match with a grouping expression
           val exactGroupingExpr = groupingExpressions.indexOf(unaliasedAggregateExpr) match {
@@ -171,7 +171,7 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
 
   override def executeCollect() = attachTree(this, "SparkAggregate") {
     // Replace all aggregate expressions with spark functions that will compute the result.
-    val aggImplementations = aggregateExprs.map { _ transformDown {
+    val aggImplementations = aggregateExprs.map { _ transform {
       case base @ Average(expr) => new AverageFunction(expr, base)
       case base @ Count(expr) => new CountFunction(expr, base)
     }}

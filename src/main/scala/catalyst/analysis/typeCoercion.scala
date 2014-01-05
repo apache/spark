@@ -13,8 +13,8 @@ import types._
 object ConvertNaNs extends Rule[LogicalPlan] {
   val stringNaN = Literal("NaN", StringType)
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case q: LogicalPlan => q transformExpressionsDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
@@ -57,8 +57,8 @@ object PromoteNumericTypes extends Rule[LogicalPlan] {
   val toFloat = Seq(ByteType, ShortType, IntegerType) :+ FloatType
   val allPromotions = integralPrecedence :: toDouble :: toFloat :: Nil
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case q: LogicalPlan => q transformExpressionsDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 

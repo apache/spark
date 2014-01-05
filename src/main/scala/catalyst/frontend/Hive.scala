@@ -474,7 +474,7 @@ object HiveQl {
       val joinedTables = tables.reduceLeft(Join(_,_, Inner, None))
 
       // Must be transform down.
-      val joinedResult = joinedTables transformDown {
+      val joinedResult = joinedTables transform {
         case j: Join =>
           j.copy(
             condition = Some(joinConditions.remove(joinConditions.length - 1)),

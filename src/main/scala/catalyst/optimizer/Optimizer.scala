@@ -21,21 +21,21 @@ object Optimize extends RuleExecutor[LogicalPlan] {
  * for attributes and can be removed once analysis is complete.
  */
 object EliminateSubqueries extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case Subquery(_, child) => child
   }
 }
 
 object ConstantFolding extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
-    case q: LogicalPlan => q transformExpressionsUp {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case q: LogicalPlan => q transformExpressionsDown {
       case e if e.foldable => Literal(Evaluate(e, Nil), e.dataType)
     }
   }
 }
 
 object BooleanSimpliﬁcation extends Rule[LogicalPlan] {
-  def apply(plan: LogicalPlan): LogicalPlan = plan transformDown {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case and @ And(left, right) => {
         (left, right) match {

@@ -28,7 +28,7 @@ object ViewsExample {
     println(s"Unresolved Plan:\n$unresolvedPlan")
 
     // Replace UnresolvedRelations with logical plans from the views map.
-    val withRelations = unresolvedPlan transformDown {
+    val withRelations = unresolvedPlan transform {
       case UnresolvedRelation(name, _) => views(name)
     }
 
