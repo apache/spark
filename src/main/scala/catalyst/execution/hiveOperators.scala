@@ -68,6 +68,7 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
       buildRow(values.map {
         case "NULL" => null
         case "null" => null
+        case varchar: org.apache.hadoop.hive.common.`type`.HiveVarchar => varchar.getValue
         case other => other
       })
     }
