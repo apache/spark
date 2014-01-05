@@ -11,7 +11,7 @@ printf "Checking for system sbt ["
 if hash sbt 2>/dev/null; then 
     printf "FOUND]\n"
     # Use System SBT
-    sbt
+    sbt $@
 else
     printf "NOT FOUND]\n"
     # Download sbt or use allready downloaded
