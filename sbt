@@ -14,7 +14,7 @@ if hash sbt 2>/dev/null; then
     sbt $@
 else
     printf "NOT FOUND]\n"
-    # Download sbt or use allready downloaded
+    # Download sbt or use already downloaded
     if [ ! -d .sbtlib ]; then
 	mkdir .sbtlib
     fi
