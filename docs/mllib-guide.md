@@ -243,18 +243,21 @@ as tuples of the form ((i,j),value) all in RDDs. Below is example usage.
 
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.SVD
+import org.apache.spark.mllib.linalg.SparseMatrix
+import org.apache.spark.mllib.linalg.MatrixEntry
 
 // Load and parse the data file
 val data = sc.textFile("mllib/data/als/test.data").map { line =>
       val parts = line.split(',')
-      ((parts(0).toInt, parts(1).toInt), parts(2).toDouble)
+      MatrixEntry(parts(0).toInt, parts(1).toInt, parts(2).toDouble)
 }
 val m = 4
 val n = 4
 val k = 1
 
 // recover largest singular vector
-val (u, s, v) = SVD.sparseSVD(data, m, n, 1)
+val decomposed = SVD.sparseSVD(SparseMatrix(data, m, n), k)
+val = decomposed.S.data
 
 println("singular values = " + s.toArray.mkString)
 
