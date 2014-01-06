@@ -19,6 +19,7 @@ package org.apache.spark.streaming.mqtt;
 
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.api.java.JavaDStream;
+import org.apache.spark.streaming.api.java.mqtt.MQTTFunctions;
 import org.junit.Test;
 
 import org.apache.spark.streaming.LocalJavaStreamingContext;
@@ -28,14 +29,11 @@ public class JavaMQTTStreamSuite extends LocalJavaStreamingContext {
   public void testMQTTStream() {
     String brokerUrl = "abc";
     String topic = "def";
-    JavaStreamingContextWithMQTT sscWithMQTT = new JavaStreamingContextWithMQTT(ssc);
+    MQTTFunctions mqttFunc = new MQTTFunctions(ssc);
 
     // tests the API, does not actually test data receiving
-    JavaDStream<String> test1 = sscWithMQTT.mqttStream(brokerUrl, topic);
-    JavaDStream<String> test2 = sscWithMQTT.mqttStream(brokerUrl, topic,
+    JavaDStream<String> test1 = mqttFunc.mqttStream(brokerUrl, topic);
+    JavaDStream<String> test2 = mqttFunc.mqttStream(brokerUrl, topic,
       StorageLevel.MEMORY_AND_DISK_SER_2());
-
-    // To verify that JavaStreamingContextWithKafka is also StreamingContext
-    JavaDStream<String> socketStream = sscWithMQTT.socketTextStream("localhost", 9999);
   }
 }

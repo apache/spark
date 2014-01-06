@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.zeromq
+package org.apache.spark.streaming.api.java.zeromq
 
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -27,13 +27,13 @@ import akka.zeromq.Subscribe
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaStreamingContext}
+import org.apache.spark.streaming.zeromq._
 
 /**
  * Subclass of [[org.apache.spark.streaming.api.java.JavaStreamingContext]] that has extra
  * functions for creating ZeroMQ input streams.
  */
-class JavaStreamingContextWithZeroMQ(javaStreamingContext: JavaStreamingContext)
-  extends JavaStreamingContext(javaStreamingContext.ssc) {
+class ZeroMQFunctions(javaStreamingContext: JavaStreamingContext) {
 
   /**
    * Create an input stream that receives messages pushed by a zeromq publisher.
@@ -55,7 +55,7 @@ class JavaStreamingContextWithZeroMQ(javaStreamingContext: JavaStreamingContext)
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     def fn(x: Seq[ByteString]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
-    ssc.zeroMQStream[T](publisherUrl, subscribe, fn, storageLevel, supervisorStrategy)
+    javaStreamingContext.ssc.zeroMQStream[T](publisherUrl, subscribe, fn, storageLevel, supervisorStrategy)
   }
 
   /**
@@ -77,7 +77,7 @@ class JavaStreamingContextWithZeroMQ(javaStreamingContext: JavaStreamingContext)
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     def fn(x: Seq[ByteString]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
-    ssc.zeroMQStream[T](publisherUrl, subscribe, fn, storageLevel)
+    javaStreamingContext.ssc.zeroMQStream[T](publisherUrl, subscribe, fn, storageLevel)
   }
 
   /**
@@ -97,6 +97,6 @@ class JavaStreamingContextWithZeroMQ(javaStreamingContext: JavaStreamingContext)
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     def fn(x: Seq[ByteString]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
-    ssc.zeroMQStream[T](publisherUrl, subscribe, fn)
+    javaStreamingContext.ssc.zeroMQStream[T](publisherUrl, subscribe, fn)
   }
 }

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.kafka
+package org.apache.spark.streaming.api.java.kafka
 
 import scala.reflect.ClassTag
 import scala.collection.JavaConversions._
@@ -27,13 +27,13 @@ import kafka.serializer.Decoder
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.api.java.{JavaStreamingContext, JavaPairDStream}
+import org.apache.spark.streaming.kafka._
 
 /**
  * Subclass of [[org.apache.spark.streaming.api.java.JavaStreamingContext]] that has extra
  * functions for creating Kafka input streams.
  */
-class JavaStreamingContextWithKafka(javaStreamingContext: JavaStreamingContext)
-  extends JavaStreamingContext(javaStreamingContext.ssc) {
+class KafkaFunctions(javaStreamingContext: JavaStreamingContext) {
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
@@ -49,7 +49,7 @@ class JavaStreamingContextWithKafka(javaStreamingContext: JavaStreamingContext)
     ): JavaPairDStream[String, String] = {
       implicit val cmt: ClassTag[String] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
-      ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
+      javaStreamingContext.ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*))
   }
 
   /**
@@ -69,7 +69,7 @@ class JavaStreamingContextWithKafka(javaStreamingContext: JavaStreamingContext)
     ): JavaPairDStream[String, String] = {
     implicit val cmt: ClassTag[String] =
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
-    ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
+    javaStreamingContext.ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
   }
 
   /**
@@ -101,7 +101,7 @@ class JavaStreamingContextWithKafka(javaStreamingContext: JavaStreamingContext)
     implicit val keyCmd: Manifest[U] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[U]]
     implicit val valueCmd: Manifest[T] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[T]]
 
-    ssc.kafkaStream[K, V, U, T](
+    javaStreamingContext.ssc.kafkaStream[K, V, U, T](
       kafkaParams.toMap, Map(topics.mapValues(_.intValue()).toSeq: _*), storageLevel)
   }
 }

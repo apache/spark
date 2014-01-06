@@ -18,6 +18,8 @@
 package org.apache.spark.streaming.twitter;
 
 import java.util.Arrays;
+
+import org.apache.spark.streaming.api.java.twitter.TwitterFunctions;
 import org.junit.Test;
 
 import twitter4j.Status;
@@ -31,21 +33,18 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testTwitterStream() {
-    JavaStreamingContextWithTwitter sscWithTwitter = new JavaStreamingContextWithTwitter(ssc);
+    TwitterFunctions twitterFunc = new TwitterFunctions(ssc);
     String[] filters = (String[])Arrays.<String>asList("filter1", "filter2").toArray();
     Authorization auth = NullAuthorization.getInstance();
 
     // tests the API, does not actually test data receiving
-    JavaDStream<Status> test1 = sscWithTwitter.twitterStream();
-    JavaDStream<Status> test2 = sscWithTwitter.twitterStream(filters);
+    JavaDStream<Status> test1 = twitterFunc.twitterStream();
+    JavaDStream<Status> test2 = twitterFunc.twitterStream(filters);
     JavaDStream<Status> test3 =
-      sscWithTwitter.twitterStream(filters, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test4 = sscWithTwitter.twitterStream(auth);
-    JavaDStream<Status> test5 = sscWithTwitter.twitterStream(auth, filters);
+      twitterFunc.twitterStream(filters, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<Status> test4 = twitterFunc.twitterStream(auth);
+    JavaDStream<Status> test5 = twitterFunc.twitterStream(auth, filters);
     JavaDStream<Status> test6 =
-      sscWithTwitter.twitterStream(auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
-
-    // To verify that JavaStreamingContextWithKafka is also StreamingContext
-    JavaDStream<String> socketStream = sscWithTwitter.socketTextStream("localhost", 9999);
+      twitterFunc.twitterStream(auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
   }
 }

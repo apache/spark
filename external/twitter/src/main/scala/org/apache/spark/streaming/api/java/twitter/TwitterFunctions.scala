@@ -15,20 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.twitter
+package org.apache.spark.streaming.api.java.twitter
 
 import twitter4j.Status
 import twitter4j.auth.Authorization
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaStreamingContext}
+import org.apache.spark.streaming.twitter._
 
 /**
  * Subclass of [[org.apache.spark.streaming.api.java.JavaStreamingContext]] that has extra
  * functions for creating Twitter input streams.
  */
-class JavaStreamingContextWithTwitter(javaStreamingContext: JavaStreamingContext)
-  extends JavaStreamingContext(javaStreamingContext.ssc) {
+class TwitterFunctions(javaStreamingContext: JavaStreamingContext) {
 
   /**
    * Create a input stream that returns tweets received from Twitter using Twitter4J's default
@@ -37,7 +37,7 @@ class JavaStreamingContextWithTwitter(javaStreamingContext: JavaStreamingContext
    * twitter4j.oauth.accessTokenSecret.
    */
   def twitterStream(): JavaDStream[Status] = {
-    ssc.twitterStream(None)
+    javaStreamingContext.ssc.twitterStream(None)
   }
 
   /**
@@ -48,7 +48,7 @@ class JavaStreamingContextWithTwitter(javaStreamingContext: JavaStreamingContext
    * @param filters Set of filter strings to get only those tweets that match them
    */
   def twitterStream(filters: Array[String]): JavaDStream[Status] = {
-    ssc.twitterStream(None, filters)
+    javaStreamingContext.ssc.twitterStream(None, filters)
   }
 
   /**
@@ -60,7 +60,7 @@ class JavaStreamingContextWithTwitter(javaStreamingContext: JavaStreamingContext
    * @param storageLevel Storage level to use for storing the received objects
    */
   def twitterStream(filters: Array[String], storageLevel: StorageLevel): JavaDStream[Status] = {
-    ssc.twitterStream(None, filters, storageLevel)
+    javaStreamingContext.ssc.twitterStream(None, filters, storageLevel)
   }
 
   /**
@@ -68,7 +68,7 @@ class JavaStreamingContextWithTwitter(javaStreamingContext: JavaStreamingContext
    * @param twitterAuth Twitter4J Authorization
    */
   def twitterStream(twitterAuth: Authorization): JavaDStream[Status] = {
-    ssc.twitterStream(Some(twitterAuth))
+    javaStreamingContext.ssc.twitterStream(Some(twitterAuth))
   }
 
   /**
@@ -80,7 +80,7 @@ class JavaStreamingContextWithTwitter(javaStreamingContext: JavaStreamingContext
       twitterAuth: Authorization,
       filters: Array[String]
     ): JavaDStream[Status] = {
-    ssc.twitterStream(Some(twitterAuth), filters)
+    javaStreamingContext.ssc.twitterStream(Some(twitterAuth), filters)
   }
 
   /**
@@ -94,6 +94,6 @@ class JavaStreamingContextWithTwitter(javaStreamingContext: JavaStreamingContext
       filters: Array[String],
       storageLevel: StorageLevel
     ): JavaDStream[Status] = {
-    ssc.twitterStream(Some(twitterAuth), filters, storageLevel)
+    javaStreamingContext.ssc.twitterStream(Some(twitterAuth), filters, storageLevel)
   }
 }

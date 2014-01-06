@@ -15,19 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.mqtt
+package org.apache.spark.streaming.api.java.mqtt
 
 import scala.reflect.ClassTag
 
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaStreamingContext}
+import org.apache.spark.streaming.mqtt._
 
 /**
  * Subclass of [[org.apache.spark.streaming.api.java.JavaStreamingContext]] that has extra
  * functions for creating MQTT input streams.
  */
-class JavaStreamingContextWithMQTT(javaStreamingContext: JavaStreamingContext)
-  extends JavaStreamingContext(javaStreamingContext.ssc) {
+class MQTTFunctions(javaStreamingContext: JavaStreamingContext) {
 
   /**
    * Create an input stream that receives messages pushed by a MQTT publisher.
@@ -39,7 +39,7 @@ class JavaStreamingContextWithMQTT(javaStreamingContext: JavaStreamingContext)
       topic: String
     ): JavaDStream[String] = {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
-    ssc.mqttStream(brokerUrl, topic)
+    javaStreamingContext.ssc.mqttStream(brokerUrl, topic)
   }
 
   /**
@@ -54,6 +54,6 @@ class JavaStreamingContextWithMQTT(javaStreamingContext: JavaStreamingContext)
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): JavaDStream[String] = {
     implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
-    ssc.mqttStream(brokerUrl, topic, storageLevel)
+    javaStreamingContext.ssc.mqttStream(brokerUrl, topic, storageLevel)
   }
 }

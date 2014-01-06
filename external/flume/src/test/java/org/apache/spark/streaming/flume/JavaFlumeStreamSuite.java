@@ -1,4 +1,4 @@
-/*
+package org.apache.spark.streaming.flume;/*
  * Licensed to the Apache Software Foundation (ASF) under one or more
  * contributor license agreements.  See the NOTICE file distributed with
  * this work for additional information regarding copyright ownership.
@@ -18,21 +18,18 @@
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.api.java.JavaDStream;
-import org.apache.spark.streaming.flume.JavaStreamingContextWithFlume;
+import org.apache.spark.streaming.api.java.flume.FlumeFunctions;
 import org.apache.spark.streaming.flume.SparkFlumeEvent;
 import org.junit.Test;
 
 public class JavaFlumeStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testFlumeStream() {
-    JavaStreamingContextWithFlume sscWithFlume = new JavaStreamingContextWithFlume(ssc);
+    FlumeFunctions flumeFunc = new FlumeFunctions(ssc);
 
     // tests the API, does not actually test data receiving
-    JavaDStream<SparkFlumeEvent> test1 = sscWithFlume.flumeStream("localhost", 12345);
-    JavaDStream<SparkFlumeEvent> test2 = sscWithFlume.flumeStream("localhost", 12345,
+    JavaDStream<SparkFlumeEvent> test1 = flumeFunc.flumeStream("localhost", 12345);
+    JavaDStream<SparkFlumeEvent> test2 = flumeFunc.flumeStream("localhost", 12345,
       StorageLevel.MEMORY_AND_DISK_SER_2());
-
-    // To verify that JavaStreamingContextWithKafka is also StreamingContext
-    JavaDStream<String> socketStream = sscWithFlume.socketTextStream("localhost", 9999);
   }
 }

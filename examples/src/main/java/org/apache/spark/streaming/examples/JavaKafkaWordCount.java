@@ -29,7 +29,7 @@ import org.apache.spark.streaming.Duration;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.kafka.JavaStreamingContextWithKafka;
+import org.apache.spark.streaming.api.java.kafka.KafkaFunctions;
 import scala.Tuple2;
 
 /**
@@ -64,8 +64,8 @@ public class JavaKafkaWordCount {
       topicMap.put(topic, numThreads);
     }
 
-    JavaStreamingContextWithKafka sscWithKafka = new JavaStreamingContextWithKafka(ssc);
-    JavaPairDStream<String, String> messages = sscWithKafka.kafkaStream(args[1], args[2], topicMap);
+    KafkaFunctions kafkaFunc = new KafkaFunctions(ssc);
+    JavaPairDStream<String, String> messages = kafkaFunc.kafkaStream(args[1], args[2], topicMap);
 
     JavaDStream<String> lines = messages.map(new Function<Tuple2<String, String>, String>() {
       @Override
