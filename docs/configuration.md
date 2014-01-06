@@ -81,7 +81,8 @@ there are at least five properties that you will commonly want to control:
   <td>
     When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
     <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
-    sharing mode</a>, how many CPU cores to request at most. The default will use all available cores
+    sharing mode</a>, the maximum amount of CPU cores to request for the application from
+    across the cluster (not from each machine). The default will use all available cores
     offered by the cluster manager.
   </td>
 </tr>
