@@ -17,12 +17,13 @@
 
 package org.apache.spark.util
 
+import scala.collection.JavaConversions.mapAsJavaMap
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import akka.actor.{ActorSystem, ExtendedActorSystem, IndestructibleActorSystem}
 import com.typesafe.config.ConfigFactory
-import org.apache.log4j.{Level, Logger}
 
+import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
 
 /**
@@ -64,7 +65,8 @@ private[spark] object AkkaUtils {
       conf.get("spark.akka.failure-detector.threshold", "300.0").toDouble
     val akkaHeartBeatInterval = conf.get("spark.akka.heartbeat.interval", "1000").toInt
 
-    val akkaConf = ConfigFactory.parseString(
+    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]).withFallback(
+      ConfigFactory.parseString(
       s"""
       |akka.daemonic = on
       |akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
@@ -86,7 +88,7 @@ private[spark] object AkkaUtils {
       |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
       |akka.log-dead-letters = $lifecycleEvents
       |akka.log-dead-letters-during-shutdown = $lifecycleEvents
-      """.stripMargin)
+      """.stripMargin))
 
     val actorSystem = if (indestructible) {
       IndestructibleActorSystem(name, akkaConf)
