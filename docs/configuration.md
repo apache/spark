@@ -403,6 +403,13 @@ Apart from these, the following properties are also available, and may be useful
     How many times slower a task is than the median to be considered for speculation.
   </td>
 </tr>
+<tr>
+  <td>spark.log-conf</td>
+  <td>false</td>
+  <td>
+    Log the supplied SparkConf as INFO at start of spark context.
+  </td>
+</tr>
 </table>
 
 ## Viewing Spark Properties
