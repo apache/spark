@@ -350,7 +350,7 @@ object BlockManagerMasterActor {
         // isValid means it is either stored in-memory or on-disk.
         // But the memSize here indicates the data size in or dropped from memory,
         // and the diskSize here indicates the data size in or dropped to disk.
-        // They can be both large than 0, when a block is dropped from memory to disk.
+        // They can be both larger than 0, when a block is dropped from memory to disk.
         // Therefore, a safe way to set BlockStatus is to set its info in accurate modes.
         if (storageLevel.useMemory) {
           _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0))
