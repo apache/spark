@@ -727,7 +727,6 @@
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
         <hadoop.version>0.23.7</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
         <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
 
