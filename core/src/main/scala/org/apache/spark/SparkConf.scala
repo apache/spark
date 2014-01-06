@@ -24,7 +24,7 @@ import com.typesafe.config.ConfigFactory
  *
  * @param loadDefaults whether to load values from the system properties and classpath
  */
-class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
+class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with Logging {
 
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
@@ -67,6 +67,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
 
   /** Set JAR files to distribute to the cluster. */
   def setJars(jars: Seq[String]): SparkConf = {
+    for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor") 
     set("spark.jars", jars.filter(_ != null).mkString(","))
   }
 
