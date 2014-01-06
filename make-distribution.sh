@@ -95,7 +95,7 @@ export SPARK_HADOOP_VERSION
 export SPARK_YARN
 cd $FWDIR
 
-"sbt" "assembly/assembly"
+"sbt/sbt" "assembly/assembly"
 
 # Make directories
 rm -rf "$DISTDIR"
