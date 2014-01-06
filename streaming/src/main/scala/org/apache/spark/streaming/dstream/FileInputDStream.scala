@@ -175,7 +175,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     override def cleanup() { }
 
     override def restore() {
-      hadoopFiles.foreach {
+      hadoopFiles.toSeq.sortBy(_._1)(Time.ordering).foreach {
         case (t, f) => {
           // Restore the metadata in both files and generatedRDDs
           logInfo("Restoring files for time " + t + " - " +

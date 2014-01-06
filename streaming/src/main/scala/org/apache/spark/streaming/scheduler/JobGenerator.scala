@@ -85,14 +85,14 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     val checkpointTime = ssc.initialCheckpoint.checkpointTime
     val restartTime = new Time(timer.getRestartTime(graph.zeroTime.milliseconds))
     val downTimes = checkpointTime.until(restartTime, batchDuration)
-    logInfo("Batches during down time: " + downTimes.mkString(", "))
+    logInfo("Batches during down time (" + downTimes.size + " batches): " + downTimes.mkString(", "))
 
     // Batches that were unprocessed before failure
-    val pendingTimes = ssc.initialCheckpoint.pendingTimes
-    logInfo("Batches pending processing: " + pendingTimes.mkString(", "))
+    val pendingTimes = ssc.initialCheckpoint.pendingTimes.sorted(Time.ordering)
+    logInfo("Batches pending processing (" + pendingTimes.size + " batches): " + pendingTimes.mkString(", "))
     // Reschedule jobs for these times
     val timesToReschedule = (pendingTimes ++ downTimes).distinct.sorted(Time.ordering)
-    logInfo("Batches to reschedule: " + timesToReschedule.mkString(", "))
+    logInfo("Batches to reschedule (" + timesToReschedule.size + " batches): " + timesToReschedule.mkString(", "))
     timesToReschedule.foreach(time =>
       jobScheduler.runJobs(time, graph.generateJobs(time))
     )
