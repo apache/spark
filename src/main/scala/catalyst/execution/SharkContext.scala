@@ -30,7 +30,7 @@ class SharkContext(
   import SharkContext._
 
   /**
-   * Execute the command and return the results as a sequence. Each element
+   * Execute the command using Hive and return the results as a sequence. Each element
    * in the sequence is one row.
    */
   def runHive(cmd: String, maxRows: Int = 1000): Seq[String] = {
