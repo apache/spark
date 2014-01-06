@@ -82,18 +82,18 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
         }
 
         val hiveCachedResults = hiveCacheFiles.flatMap { cachedAnswerFile =>
-          if(cachedAnswerFile.exists) {
-            val cachedString = fileToString(cachedAnswerFile)
-            val cachedAnswer =
-              if(cachedString == "")
-                Nil
-              else
-                cachedString.split("\n").toSeq
-            Some(cachedAnswer)
+          logger.debug(s"Looking for cached answer file $cachedAnswerFile.")
+          if (cachedAnswerFile.exists) {
+            Some(fileToString(cachedAnswerFile))
+          } else if (getClass.getClassLoader.getResourceAsStream(cachedAnswerFile.toString) != null) {
+            Some(resourceToString(cachedAnswerFile.toString))
           } else {
             logger.debug(s"File $cachedAnswerFile not found")
             None
           }
+        }.map {
+          case "" => Nil
+          case other => other.split("\n").toSeq
         }
 
         val hiveResults: Seq[Seq[String]] =
@@ -182,7 +182,6 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
                 // The testing setup traps exits so wait here for a long time so the developer can see when things started
                 // to go wrong.
                 Thread.sleep(1000000)
-                System.exit(1)
             }
           }
 

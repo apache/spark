@@ -34,6 +34,28 @@ package object util {
     new String(outStream.toByteArray(), encoding)
   }
 
+  def resourceToString(
+      resource:String,
+      encoding: String = "UTF-8",
+      classLoader: ClassLoader = this.getClass.getClassLoader) = {
+    val inStream = classLoader.getResourceAsStream(resource)
+    val outStream = new ByteArrayOutputStream
+    try {
+      var reading = true
+      while ( reading ) {
+        inStream.read() match {
+          case -1 => reading = false
+          case c => outStream.write(c)
+        }
+      }
+      outStream.flush()
+    }
+    finally {
+      inStream.close()
+    }
+    new String(outStream.toByteArray(), encoding)
+  }
+
   def stringToFile(file: File, str: String): File = {
     val out = new PrintWriter(file)
     out.write(str)
