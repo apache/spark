@@ -197,6 +197,7 @@ class PythonMLLibAPI extends Serializable {
     return ret
   }
 
+  /** Unpack a Rating object from an array of bytes */
   private def unpackRating(ratingBytes: Array[Byte]): Rating = {
     val bb = ByteBuffer.wrap(ratingBytes)
     bb.order(ByteOrder.nativeOrder())
@@ -206,6 +207,7 @@ class PythonMLLibAPI extends Serializable {
     return new Rating(user, product, rating)
   }
 
+  /** Unpack a tuple of Ints from an array of bytes */
   private[spark] def unpackTuple(tupleBytes: Array[Byte]): (Int, Int) = {
     val bb = ByteBuffer.wrap(tupleBytes)
     bb.order(ByteOrder.nativeOrder())
@@ -214,13 +216,23 @@ class PythonMLLibAPI extends Serializable {
     (v1, v2)
   }
 
+  /**
+    * Serialize a Rating object into an array of bytes.
+    * It can be deserialized using RatingDeserializer().
+    *
+    * @param rate
+    * @return
+    */
   private[spark] def serializeRating(rate: Rating): Array[Byte] = {
-    val bytes = new Array[Byte](24)
+    val len = 3
+    val bytes = new Array[Byte](4 + 8 * len)
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    bb.putDouble(rate.user.toDouble)
-    bb.putDouble(rate.product.toDouble)
-    bb.putDouble(rate.rating)
+    bb.putInt(len)
+    val db = bb.asDoubleBuffer()
+    db.put(rate.user.toDouble)
+    db.put(rate.product.toDouble)
+    db.put(rate.rating)
     bytes
   }
 
