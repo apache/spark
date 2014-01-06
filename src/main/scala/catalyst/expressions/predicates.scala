@@ -11,12 +11,12 @@ trait Predicate extends Expression {
 
 abstract class BinaryPredicate extends BinaryExpression with Predicate {
   self: Product =>
-
   def nullable = left.nullable || right.nullable
 }
 
 case class Not(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
   def references = child.references
+  override def foldable = child.foldable
   def nullable = child.nullable
   override def toString = s"NOT $child"
 }
@@ -55,10 +55,12 @@ case class GreaterThanOrEqual(left: Expression, right: Expression) extends Binar
 
 case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
   def references = child.references
+  override def foldable = child.foldable
   def nullable = false
 }
 
 case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
   def references = child.references
+  override def foldable = child.foldable
   def nullable = false
 }

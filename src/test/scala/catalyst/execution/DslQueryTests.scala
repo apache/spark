@@ -242,7 +242,7 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
     }
 
     val isSorted = plan.collect { case s: logical.Sort => s}.nonEmpty
-    def prepareAnswer(answer: Seq[Any]) = if(!isSorted) answer.sortBy(_.toString) else answer
+    def prepareAnswer(answer: Seq[Any]) = if (!isSorted) answer.sortBy(_.toString) else answer
     val sharkAnswer = try plan.toRdd.collect().toSeq catch {
       case e: Exception =>
         fail(

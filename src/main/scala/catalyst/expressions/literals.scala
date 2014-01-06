@@ -12,6 +12,8 @@ object Literal {
     case b: Byte => Literal(b, ByteType)
     case s: Short => Literal(s, ShortType)
     case s: String => Literal(s, StringType)
+    case b: Boolean => Literal(b, BooleanType)
+    case null => Literal(null, NullType)
   }
 }
 
@@ -26,8 +28,9 @@ object IntegerLiteral {
 }
 
 case class Literal(value: Any, dataType: DataType) extends LeafExpression {
+  override def foldable = true
   def nullable = false
   def references = Set.empty
 
-  override def toString = if(value != null) value.toString else "null"
+  override def toString = if (value != null) value.toString else "null"
 }

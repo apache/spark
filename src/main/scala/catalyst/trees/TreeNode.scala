@@ -83,18 +83,29 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
-   * Returns a copy of this node where [[rule]] has been recursively
-   * applied to it and all of its children.  When [[rule]] does not
-   * apply to a given node it is left unchanged.
+   * Returns a copy of this node where [[rule]] has been recursively applied to the tree.
+   * When [[rule]] does not apply to a given node it is left unchanged.
+   * Users should not expect a specific directionality. If a specific directionality is needed,
+   * transformDown or transformUp should be used.
    * @param rule the function use to transform this nodes children
    */
   def transform(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    transformDown(rule)
+  }
+
+  /**
+   * Returns a copy of this node where [[rule]] has been recursively
+   * applied to it and all of its children (pre-order). When [[rule]] does not
+   * apply to a given node it is left unchanged.
+   * @param rule the function use to transform this nodes children
+   */
+  def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRule = rule.applyOrElse(this, identity[BaseType])
     // Check if unchanged and then possibly return old copy to avoid gc churn.
     if (this fastEquals afterRule) {
-      transformChildren(rule)
+      transformChildrenDown(rule)
     } else {
-      afterRule.transformChildren(rule)
+      afterRule.transformChildrenDown(rule)
     }
   }
 
@@ -104,11 +115,11 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
    * apply to a given node it is left unchanged.
    * @param rule the function use to transform this nodes children
    */
-  def transformChildren(rule: PartialFunction[BaseType, BaseType]): this.type = {
+  def transformChildrenDown(rule: PartialFunction[BaseType, BaseType]): this.type = {
     var changed = false
     val newArgs = productIterator.map {
       case arg: TreeNode[_] if (children contains arg) =>
-        val newChild = arg.asInstanceOf[BaseType].transform(rule)
+        val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
         if (!(newChild fastEquals arg)) {
           changed = true
           newChild
@@ -117,8 +128,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         }
       case args: Seq[_] => args.map {
         case arg: TreeNode[_] if (children contains arg) =>
-          val newChild = arg.asInstanceOf[BaseType].transform(rule)
-          if(!(newChild fastEquals arg)) {
+          val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
+          if (!(newChild fastEquals arg)) {
             changed = true
             newChild
           } else {
@@ -129,7 +140,50 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       case nonChild: AnyRef => nonChild
       case null => null
     }.toArray
-    if(changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs) else this
+  }
+
+  /**
+   * Returns a copy of this node where [[rule]] has been recursively
+   * applied first to all of its children and then itself (post-order).
+   * When [[rule]] does not apply to a given node, it is left unchanged.
+   * @param rule the function use to transform this nodes children
+   */
+  def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
+    val afterRuleOnChildren = transformChildrenUp(rule);
+    if (this fastEquals afterRuleOnChildren) {
+      rule.applyOrElse(this, identity[BaseType])
+    } else {
+      rule.applyOrElse(afterRuleOnChildren, identity[BaseType])
+    }
+  }
+
+  def transformChildrenUp(rule: PartialFunction[BaseType, BaseType]): this.type = {
+    var changed = false
+    val newArgs = productIterator.map {
+      case arg: TreeNode[_] if (children contains arg) =>
+        val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
+        if (!(newChild fastEquals arg)) {
+          changed = true
+          newChild
+        } else {
+          arg
+        }
+      case args: Seq[_] => args.map {
+        case arg: TreeNode[_] if (children contains arg) =>
+          val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
+          if (!(newChild fastEquals arg)) {
+            changed = true
+            newChild
+          } else {
+            arg
+          }
+        case other => other
+      }
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }.toArray
+    if (changed) makeCopy(newArgs) else this
   }
 
   /**

@@ -1,7 +1,8 @@
 package catalyst
 package trees
 
-import catalyst.types.IntegerType
+import scala.collection.mutable.ArrayBuffer
+
 import expressions._
 
 import org.scalatest.{FunSuite}
@@ -34,5 +35,29 @@ class TreeNodeSuite extends FunSuite {
 
     assert(literals.size === 4)
     (1 to 4).foreach(i => assert(literals contains Literal(i)))
+  }
+
+  test("pre-order transform") {
+    val actual = new ArrayBuffer[String]()
+    val expected = Seq("+", "1", "*", "2", "-", "3", "4")
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    expression transformDown {
+      case b: BinaryExpression => {actual.append(b.symbol); b}
+      case l: Literal => {actual.append(l.toString); l}
+    }
+
+    assert(expected === actual)
+  }
+
+  test("post-order transform") {
+    val actual = new ArrayBuffer[String]()
+    val expected = Seq("1", "2", "3", "4", "-", "*", "+")
+    val expression = Add(Literal(1), Multiply(Literal(2), Subtract(Literal(3), Literal(4))))
+    expression transformUp {
+      case b: BinaryExpression => {actual.append(b.symbol); b}
+      case l: Literal => {actual.append(l.toString); l}
+    }
+
+    assert(expected === actual)
   }
 }

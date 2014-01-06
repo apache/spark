@@ -9,6 +9,8 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
   def nullable = !children.exists(!_.nullable)
 
   def references = children.flatMap(_.references).toSet
+  // Coalesce is foldable if all children are foldable.
+  override def foldable = !children.exists(!_.foldable)
 
   // Only resolved if all the children are of the same type.
   override lazy val resolved = childrenResolved && (children.map(_.dataType).distinct.size == 1)

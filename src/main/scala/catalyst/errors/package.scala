@@ -12,7 +12,7 @@ package object errors {
 
     override def getMessage: String = {
       val treeString = tree.toString
-      s"${super.getMessage}, tree:${if(treeString contains "\n") "\n" else " "}$tree"
+      s"${super.getMessage}, tree:${if (treeString contains "\n") "\n" else " "}$tree"
     }
   }
 

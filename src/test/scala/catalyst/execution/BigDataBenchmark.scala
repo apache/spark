@@ -59,7 +59,7 @@ class BigDataBenchmarkTests extends HiveComaparisionTest {
 
   testTables.foreach(registerTestTable)
 
-  if(!testDataDirectory.exists()) {
+  if (!testDataDirectory.exists()) {
     // TODO: Auto download the files on demand.
     ignore("No data files found for BigDataBenchmark tests.") {}
   } else {

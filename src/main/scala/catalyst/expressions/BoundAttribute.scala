@@ -37,8 +37,8 @@ object BindReferences extends Rule[SharkPlan] {
         nonLeaf.transformExpressions {
           case a: AttributeReference => attachTree(a, "Binding attribute") {
             val inputTuple = nonLeaf.children.indexWhere(_.output contains a)
-            val ordinal = if(inputTuple == -1) -1 else nonLeaf.children(inputTuple).output.indexWhere(_ == a)
-            if(ordinal == -1) {
+            val ordinal = if (inputTuple == -1) -1 else nonLeaf.children(inputTuple).output.indexWhere(_ == a)
+            if (ordinal == -1) {
               logger.debug(s"No binding found for $a given input ${nonLeaf.children.map(_.output.mkString("{", ",", "}")).mkString(",")}")
               a
             } else {

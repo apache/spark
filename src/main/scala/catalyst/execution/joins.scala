@@ -95,7 +95,7 @@ case class BroadcastNestedLoopJoin(
       }
       val outputRows = if (matchedRows.size > 0) {
         matchedRows
-      } else if(joinType == LeftOuter || joinType == FullOuter) {
+      } else if (joinType == LeftOuter || joinType == FullOuter) {
         Vector(buildRow(streamedRow ++ Array.fill(right.output.size)(null)))
       } else {
         Vector()
@@ -105,7 +105,7 @@ case class BroadcastNestedLoopJoin(
 
     val includedBroadcastTuples = streamedPlusMatches.map(_._2)
     val allIncludedBroadcastTuples =
-      if(includedBroadcastTuples.count == 0)
+      if (includedBroadcastTuples.count == 0)
         new scala.collection.mutable.BitSet(broadcastedRelation.value.size)
       else
         streamedPlusMatches.map(_._2).reduce(_ ++ _)

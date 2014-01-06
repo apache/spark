@@ -71,7 +71,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    * from a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
-    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
       case q: LogicalPlan if childIsFullyResolved(q) =>
         logger.trace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {

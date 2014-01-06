@@ -95,7 +95,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
    * Returns a copy of this [[AttributeReference]] with changed nullability.
    */
   def withNullability(newNullability: Boolean) =
-    if(nullable == newNullability)
+    if (nullable == newNullability)
       this
     else
       AttributeReference(name, dataType, newNullability)(exprId, qualifiers)
@@ -104,7 +104,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
    * Returns a copy of this [[AttributeReference]] with new qualifiers.
    */
   def withQualifiers(newQualifiers: Seq[String]) =
-    if(newQualifiers == qualifiers)
+    if (newQualifiers == qualifiers)
       this
     else
       AttributeReference(name, dataType, nullable)(exprId, newQualifiers)

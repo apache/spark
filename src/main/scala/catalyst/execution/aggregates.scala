@@ -65,7 +65,7 @@ case class Aggregate(
 
     def apply(input: Seq[Row]): Unit = {
       val evaluatedExpr = expr.map(Evaluate(_, input))
-      if(evaluatedExpr.map(_ != null).reduceLeft(_ && _))
+      if (evaluatedExpr.map(_ != null).reduceLeft(_ && _))
         seen += evaluatedExpr
     }
 
@@ -78,7 +78,7 @@ case class Aggregate(
     var result: Any = null
 
     def apply(input: Seq[Row]): Unit = {
-      if(result == null)
+      if (result == null)
         result = Evaluate(expr, input)
     }
   }
@@ -163,7 +163,7 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
     val count = sc.accumulable(0)
 
     def apply(input: Seq[Row]): Unit =
-      if(Evaluate(expr, input) != null)
+      if (Evaluate(expr, input) != null)
         count += 1
 
     def result: Any = count.value.toLong
