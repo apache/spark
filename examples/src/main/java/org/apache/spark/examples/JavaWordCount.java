@@ -42,7 +42,7 @@ public final class JavaWordCount {
     }
 
     JavaSparkContext ctx = new JavaSparkContext(args[0], "JavaWordCount",
-        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaWordCount.class));
     JavaRDD<String> lines = ctx.textFile(args[1], 1);
 
     JavaRDD<String> words = lines.flatMap(new FlatMapFunction<String, String>() {

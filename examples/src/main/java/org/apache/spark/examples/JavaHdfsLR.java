@@ -112,7 +112,7 @@ public final class JavaHdfsLR {
     }
 
     JavaSparkContext sc = new JavaSparkContext(args[0], "JavaHdfsLR",
-        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaHdfsLR.class));
     JavaRDD<String> lines = sc.textFile(args[1]);
     JavaRDD<DataPoint> points = lines.map(new ParsePoint()).cache();
     int ITERATIONS = Integer.parseInt(args[2]);

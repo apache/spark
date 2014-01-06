@@ -285,7 +285,8 @@ private[spark] class TaskSchedulerImpl(
               }
             }
           case None =>
-            logInfo("Ignoring update from TID " + tid + " because its task set is gone")
+            logInfo("Ignoring update with state %s from TID %s because its task set is gone"
+              .format(state, tid))
         }
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
@@ -328,7 +329,7 @@ private[spark] class TaskSchedulerImpl(
         // Have each task set throw a SparkException with the error
         for ((taskSetId, manager) <- activeTaskSets) {
           try {
-            manager.error(message)
+            manager.abort(message)
           } catch {
             case e: Exception => logError("Exception in error callback", e)
           }

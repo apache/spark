@@ -82,7 +82,7 @@ public final class JavaKMeans {
       System.exit(1);
     }
     JavaSparkContext sc = new JavaSparkContext(args[0], "JavaKMeans",
-      System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+      System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaKMeans.class));
     String path = args[1];
     int K = Integer.parseInt(args[2]);
     double convergeDist = Double.parseDouble(args[3]);

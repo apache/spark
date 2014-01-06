@@ -53,7 +53,8 @@ public final class JavaFlumeEventCount {
     Duration batchInterval = new Duration(2000);
 
     JavaStreamingContext sc = new JavaStreamingContext(master, "FlumeEventCount", batchInterval,
-            System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+            System.getenv("SPARK_HOME"),
+            JavaStreamingContext.jarOfClass(JavaFlumeEventCount.class));
 
     JavaDStream<SparkFlumeEvent> flumeStream = sc.flumeStream("localhost", port);
 

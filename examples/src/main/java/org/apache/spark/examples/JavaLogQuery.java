@@ -107,7 +107,7 @@ public final class JavaLogQuery {
     }
 
     JavaSparkContext jsc = new JavaSparkContext(args[0], "JavaLogQuery",
-      System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+      System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaLogQuery.class));
 
     JavaRDD<String> dataSet = (args.length == 2) ? jsc.textFile(args[1]) : jsc.parallelize(exampleApacheLogs);
 

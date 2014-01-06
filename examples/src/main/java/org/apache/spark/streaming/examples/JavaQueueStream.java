@@ -43,7 +43,7 @@ public final class JavaQueueStream {
 
     // Create the context
     JavaStreamingContext ssc = new JavaStreamingContext(args[0], "QueueStream", new Duration(1000),
-            System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+            System.getenv("SPARK_HOME"), JavaStreamingContext.jarOfClass(JavaQueueStream.class));
 
     // Create the queue through which RDDs can be pushed to
     // a QueueInputDStream

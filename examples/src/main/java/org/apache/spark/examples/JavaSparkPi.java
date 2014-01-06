@@ -38,7 +38,7 @@ public final class JavaSparkPi {
     }
 
     JavaSparkContext jsc = new JavaSparkContext(args[0], "JavaLogQuery",
-      System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+      System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaSparkPi.class));
 
     int slices = (args.length == 2) ? Integer.parseInt(args[1]) : 2;
     int n = 100000 * slices;
