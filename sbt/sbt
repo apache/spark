@@ -35,7 +35,7 @@ else
     printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
     exit -1
   fi
-  printf "Launching sbt from .sbtlib\n"
+  printf "Launching sbt from ${JAR}\n"
   java \
     -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m \
     -jar ${JAR} \
