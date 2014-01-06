@@ -114,6 +114,8 @@ For example:
     SPARK_YARN_APP_JAR=examples/target/scala-{{site.SCALA_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
     MASTER=yarn-client ./bin/spark-shell
 
+You can also send extra files to yarn cluster for worker to use by exporting SPARK_YARN_DIST_FILES=file1,file2... etc.
+
 # Building Spark for Hadoop/YARN 2.2.x
 
 See [Building Spark with Maven](building-with-maven.html) for instructions on how to build Spark using the Maven process.
