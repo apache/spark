@@ -30,12 +30,16 @@ import org.apache.spark.Logging
  * threshold time can them be removed using the clearOldValues method. This is intended to be a drop-in
  * replacement of scala.collection.mutable.HashMap.
  */
-class TimeStampedHashMap[A, B] extends Map[A, B]() with Logging {
+class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = false)
+  extends Map[A, B]() with Logging {
   val internalMap = new ConcurrentHashMap[A, (B, Long)]()
 
   def get(key: A): Option[B] = {
     val value = internalMap.get(key)
-    if (value != null) Some(value._1) else None
+    if (value != null && updateTimeStampOnGet) {
+      internalMap.replace(key, value, (value._1, currentTime))
+    }
+    Option(value).map(_._1)
   }
 
   def iterator: Iterator[(A, B)] = {
