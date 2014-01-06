@@ -91,4 +91,9 @@ private[spark] object AkkaUtils {
   def askTimeout(conf: SparkConf): FiniteDuration = {
     Duration.create(conf.get("spark.akka.askTimeout", "30").toLong, "seconds")
   }
+
+  /** Returns the default Spark timeout to use for Akka remote actor lookup. */
+  def lookupTimeout(conf: SparkConf): FiniteDuration = {
+    Duration.create(conf.get("spark.akka.lookupTimeout", "30").toLong, "seconds")
+  }
 }
