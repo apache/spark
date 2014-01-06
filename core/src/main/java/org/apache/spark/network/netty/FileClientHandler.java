@@ -19,11 +19,11 @@ package org.apache.spark.network.netty;
 
 import io.netty.buffer.ByteBuf;
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundByteHandlerAdapter;
+import io.netty.channel.SimpleChannelInboundHandler;
 
 import org.apache.spark.storage.BlockId;
 
-abstract class FileClientHandler extends ChannelInboundByteHandlerAdapter {
+abstract class FileClientHandler extends SimpleChannelInboundHandler<ByteBuf> {
 
   private FileHeader currentHeader = null;
 
@@ -37,13 +37,7 @@ abstract class FileClientHandler extends ChannelInboundByteHandlerAdapter {
   public abstract void handleError(BlockId blockId);
 
   @Override
-  public ByteBuf newInboundBuffer(ChannelHandlerContext ctx) {
-    // Use direct buffer if possible.
-    return ctx.alloc().ioBuffer();
-  }
-
-  @Override
-  public void inboundBufferUpdated(ChannelHandlerContext ctx, ByteBuf in) {
+  public void channelRead0(ChannelHandlerContext ctx, ByteBuf in) {
     // get header
     if (currentHeader == null && in.readableBytes() >= FileHeader.HEADER_SIZE()) {
       currentHeader = FileHeader.create(in.readBytes(FileHeader.HEADER_SIZE()));

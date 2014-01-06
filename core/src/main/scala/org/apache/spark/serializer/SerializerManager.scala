@@ -18,6 +18,7 @@
 package org.apache.spark.serializer
 
 import java.util.concurrent.ConcurrentHashMap
+import org.apache.spark.SparkConf
 
 
 /**
@@ -26,18 +27,19 @@ import java.util.concurrent.ConcurrentHashMap
  * creating a new one.
  */
 private[spark] class SerializerManager {
+  // TODO: Consider moving this into SparkConf itself to remove the global singleton.
 
   private val serializers = new ConcurrentHashMap[String, Serializer]
   private var _default: Serializer = _
 
   def default = _default
 
-  def setDefault(clsName: String): Serializer = {
-    _default = get(clsName)
+  def setDefault(clsName: String, conf: SparkConf): Serializer = {
+    _default = get(clsName, conf)
     _default
   }
 
-  def get(clsName: String): Serializer = {
+  def get(clsName: String, conf: SparkConf): Serializer = {
     if (clsName == null) {
       default
     } else {
@@ -51,8 +53,19 @@ private[spark] class SerializerManager {
         serializer = serializers.get(clsName)
         if (serializer == null) {
           val clsLoader = Thread.currentThread.getContextClassLoader
-          serializer =
-            Class.forName(clsName, true, clsLoader).newInstance().asInstanceOf[Serializer]
+          val cls = Class.forName(clsName, true, clsLoader)
+
+          // First try with the constructor that takes SparkConf. If we can't find one,
+          // use a no-arg constructor instead.
+          try {
+            val constructor = cls.getConstructor(classOf[SparkConf])
+            serializer = constructor.newInstance(conf).asInstanceOf[Serializer]
+          } catch {
+            case _: NoSuchMethodException =>
+              val constructor = cls.getConstructor()
+              serializer = constructor.newInstance().asInstanceOf[Serializer]
+          }
+
           serializers.put(clsName, serializer)
         }
         serializer

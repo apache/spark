@@ -19,20 +19,21 @@ package org.apache.spark
 
 import org.scalatest.{FunSuite, PrivateMethodTester}
 
-import org.apache.spark.scheduler.TaskScheduler
-import org.apache.spark.scheduler.cluster.{ClusterScheduler, SimrSchedulerBackend, SparkDeploySchedulerBackend}
+import org.apache.spark.scheduler.{TaskSchedulerImpl, TaskScheduler}
+import org.apache.spark.scheduler.cluster.{SimrSchedulerBackend, SparkDeploySchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
-import org.apache.spark.scheduler.local.LocalScheduler
+import org.apache.spark.scheduler.local.LocalBackend
 
 class SparkContextSchedulerCreationSuite
   extends FunSuite with PrivateMethodTester with LocalSparkContext with Logging {
 
-  def createTaskScheduler(master: String): TaskScheduler = {
+  def createTaskScheduler(master: String): TaskSchedulerImpl = {
     // Create local SparkContext to setup a SparkEnv. We don't actually want to start() the
     // real schedulers, so we don't want to create a full SparkContext with the desired scheduler.
     sc = new SparkContext("local", "test")
     val createTaskSchedulerMethod = PrivateMethod[TaskScheduler]('createTaskScheduler)
-    SparkContext invokePrivate createTaskSchedulerMethod(sc, master, "test")
+    val sched = SparkContext invokePrivate createTaskSchedulerMethod(sc, master, "test")
+    sched.asInstanceOf[TaskSchedulerImpl]
   }
 
   test("bad-master") {
@@ -43,55 +44,49 @@ class SparkContextSchedulerCreationSuite
   }
 
   test("local") {
-    createTaskScheduler("local") match {
-      case s: LocalScheduler =>
-        assert(s.threads === 1)
-        assert(s.maxFailures === 0)
+    val sched = createTaskScheduler("local")
+    sched.backend match {
+      case s: LocalBackend => assert(s.totalCores === 1)
       case _ => fail()
     }
   }
 
   test("local-n") {
-    createTaskScheduler("local[5]") match {
-      case s: LocalScheduler =>
-        assert(s.threads === 5)
-        assert(s.maxFailures === 0)
+    val sched = createTaskScheduler("local[5]")
+    assert(sched.maxTaskFailures === 1)
+    sched.backend match {
+      case s: LocalBackend => assert(s.totalCores === 5)
       case _ => fail()
     }
   }
 
   test("local-n-failures") {
-    createTaskScheduler("local[4, 2]") match {
-      case s: LocalScheduler =>
-        assert(s.threads === 4)
-        assert(s.maxFailures === 2)
+    val sched = createTaskScheduler("local[4, 2]")
+    assert(sched.maxTaskFailures === 2)
+    sched.backend match {
+      case s: LocalBackend => assert(s.totalCores === 4)
       case _ => fail()
     }
   }
 
   test("simr") {
-    createTaskScheduler("simr://uri") match {
-      case s: ClusterScheduler =>
-        assert(s.backend.isInstanceOf[SimrSchedulerBackend])
+    createTaskScheduler("simr://uri").backend match {
+      case s: SimrSchedulerBackend => // OK
       case _ => fail()
     }
   }
 
   test("local-cluster") {
-    createTaskScheduler("local-cluster[3, 14, 512]") match {
-      case s: ClusterScheduler =>
-        assert(s.backend.isInstanceOf[SparkDeploySchedulerBackend])
+    createTaskScheduler("local-cluster[3, 14, 512]").backend match {
+      case s: SparkDeploySchedulerBackend => // OK
       case _ => fail()
     }
   }
 
   def testYarn(master: String, expectedClassName: String) {
     try {
-      createTaskScheduler(master) match {
-        case s: ClusterScheduler =>
-          assert(s.getClass === Class.forName(expectedClassName))
-        case _ => fail()
-      }
+      val sched = createTaskScheduler(master)
+      assert(sched.getClass === Class.forName(expectedClassName))
     } catch {
       case e: SparkException =>
         assert(e.getMessage.contains("YARN mode not available"))
@@ -110,11 +105,8 @@ class SparkContextSchedulerCreationSuite
 
   def testMesos(master: String, expectedClass: Class[_]) {
     try {
-      createTaskScheduler(master) match {
-        case s: ClusterScheduler =>
-          assert(s.backend.getClass === expectedClass)
-        case _ => fail()
-      }
+      val sched = createTaskScheduler(master)
+      assert(sched.backend.getClass === expectedClass)
     } catch {
       case e: UnsatisfiedLinkError =>
         assert(e.getMessage.contains("no mesos in"))

@@ -13,20 +13,20 @@ This README file only contains basic setup instructions.
 ## Building
 
 Spark requires Scala 2.10. The project is built using Simple Build Tool (SBT),
-which is packaged with it. To build Spark and its example programs, run:
+which can be obtained [here](http://www.scala-sbt.org). To build Spark and its example programs, run:
 
-    sbt/sbt assembly
+    sbt assembly
 
 Once you've built Spark, the easiest way to start using it is the shell:
 
-    ./spark-shell
+    ./bin/spark-shell
 
-Or, for the Python API, the Python shell (`./pyspark`).
+Or, for the Python API, the Python shell (`./bin/pyspark`).
 
 Spark also comes with several sample programs in the `examples` directory.
-To run one of them, use `./run-example <class> <params>`. For example:
+To run one of them, use `./bin/run-example <class> <params>`. For example:
 
-    ./run-example org.apache.spark.examples.SparkLR local[2]
+    ./bin/run-example org.apache.spark.examples.SparkLR local[2]
 
 will run the Logistic Regression example locally on 2 CPUs.
 
@@ -36,7 +36,13 @@ All of the Spark samples take a `<master>` parameter that is the cluster URL
 to connect to. This can be a mesos:// or spark:// URL, or "local" to run
 locally with one thread, or "local[N]" to run locally with N threads.
 
+## Running tests
 
+Testing first requires [Building](#Building) Spark. Once Spark is built, tests
+can be run using:
+
+`sbt test`
+ 
 ## A Note About Hadoop Versions
 
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported
@@ -49,22 +55,22 @@ For Apache Hadoop versions 1.x, Cloudera CDH MRv1, and other Hadoop
 versions without YARN, use:
 
     # Apache Hadoop 1.2.1
-    $ SPARK_HADOOP_VERSION=1.2.1 sbt/sbt assembly
+    $ SPARK_HADOOP_VERSION=1.2.1 sbt assembly
 
     # Cloudera CDH 4.2.0 with MapReduce v1
-    $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt/sbt assembly
+    $ SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 sbt assembly
 
 For Apache Hadoop 2.2.X, 2.1.X, 2.0.X, 0.23.x, Cloudera CDH MRv2, and other Hadoop versions
 with YARN, also set `SPARK_YARN=true`:
 
     # Apache Hadoop 2.0.5-alpha
-    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
+    $ SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt assembly
 
     # Cloudera CDH 4.2.0 with MapReduce v2
-    $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_YARN=true sbt/sbt assembly
+    $ SPARK_HADOOP_VERSION=2.0.0-cdh4.2.0 SPARK_YARN=true sbt assembly
 
     # Apache Hadoop 2.2.X and newer
-    $ SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt/sbt assembly
+    $ SPARK_HADOOP_VERSION=2.2.0 SPARK_YARN=true sbt assembly
 
 When developing a Spark application, specify the Hadoop version by adding the
 "hadoop-client" artifact to your project's dependencies. For example, if you're

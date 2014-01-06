@@ -68,7 +68,7 @@ public class  JavaALS {
     }
 
     JavaSparkContext sc = new JavaSparkContext(args[0], "JavaALS",
-        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaALS.class));
     JavaRDD<String> lines = sc.textFile(args[1]);
 
     JavaRDD<Rating> ratings = lines.map(new ParseRating());

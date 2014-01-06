@@ -19,19 +19,18 @@ package org.apache.spark.deploy.client
 
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.duration._
 import scala.concurrent.Await
+import scala.concurrent.duration._
 
 import akka.actor._
 import akka.pattern.ask
-import akka.remote.{RemotingLifecycleEvent, DisassociatedEvent}
+import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.util.AkkaUtils
-
 
 /**
  * The main class used to talk to a Spark deploy cluster. Takes a master URL, an app description,
@@ -43,7 +42,8 @@ private[spark] class Client(
     actorSystem: ActorSystem,
     masterUrls: Array[String],
     appDescription: ApplicationDescription,
-    listener: ClientListener)
+    listener: ClientListener,
+    conf: SparkConf)
   extends Logging {
 
   val REGISTRATION_TIMEOUT = 20.seconds
@@ -111,6 +111,12 @@ private[spark] class Client(
       }
     }
 
+    private def isPossibleMaster(remoteUrl: Address) = {
+      masterUrls.map(s => Master.toAkkaUrl(s))
+        .map(u => AddressFromURIString(u).hostPort)
+        .contains(remoteUrl.hostPort)
+    }
+
     override def receive = {
       case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
@@ -146,6 +152,9 @@ private[spark] class Client(
         logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
 
+      case AssociationErrorEvent(cause, _, address, _) if isPossibleMaster(address) =>
+        logWarning(s"Could not connect to $address: $cause")
+
       case StopClient =>
         markDead()
         sender ! true
@@ -178,7 +187,7 @@ private[spark] class Client(
   def stop() {
     if (actor != null) {
       try {
-        val timeout = AkkaUtils.askTimeout
+        val timeout = AkkaUtils.askTimeout(conf)
         val future = actor.ask(StopClient)(timeout)
         Await.result(future, timeout)
       } catch {

@@ -41,7 +41,7 @@ private[spark] class SparkListenerBus() extends Logging {
         event match {
           case stageSubmitted: SparkListenerStageSubmitted =>
             sparkListeners.foreach(_.onStageSubmitted(stageSubmitted))
-          case stageCompleted: StageCompleted =>
+          case stageCompleted: SparkListenerStageCompleted =>
             sparkListeners.foreach(_.onStageCompleted(stageCompleted))
           case jobStart: SparkListenerJobStart =>
             sparkListeners.foreach(_.onJobStart(jobStart))
@@ -91,4 +91,3 @@ private[spark] class SparkListenerBus() extends Logging {
     return true
   }
 }
-

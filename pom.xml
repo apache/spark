@@ -200,6 +200,11 @@
         <artifactId>asm</artifactId>
         <version>4.0</version>
       </dependency>
+      <dependency>
+        <groupId>com.clearspring.analytics</groupId>
+        <artifactId>stream</artifactId>
+        <version>2.4.0</version>
+      </dependency>
       <!-- In theory we need not directly depend on protobuf since Spark does not directly
            use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
            the protobuf version up from the one Mesos gives. For now we include this variable 
@@ -282,7 +287,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.0.CR1</version>
+        <version>4.0.13.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -717,7 +722,7 @@
 
   <profiles>
     <profile>
-      <id>hadoop2-yarn</id>
+      <id>yarn-alpha</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
@@ -730,57 +735,20 @@
         <module>yarn</module>
       </modules>
 
-      <repositories>
-        <repository>
-          <id>maven-root</id>
-          <name>Maven root repository</name>
-          <url>http://repo1.maven.org/maven2</url>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-        </repository>
-      </repositories>
-
-      <dependencyManagement>
-        <dependencies>
-        </dependencies>
-      </dependencyManagement>
     </profile>
 
     <profile>
-      <id>new-yarn</id>
-       <properties>
-         <hadoop.major.version>2</hadoop.major.version>
-         <hadoop.version>2.2.0</hadoop.version>
-         <protobuf.version>2.5.0</protobuf.version>
-       </properties>
+      <id>yarn</id>
+      <properties>
+        <hadoop.major.version>2</hadoop.major.version>
+        <hadoop.version>2.2.0</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+      </properties>
+      <modules>
+        <module>yarn</module>
+      </modules>
 
-       <modules>
-         <module>new-yarn</module>
-       </modules>
-
-       <repositories>
-         <repository>
-           <id>maven-root</id>
-           <name>Maven root repository</name>
-           <url>http://repo1.maven.org/maven2</url>
-           <releases>
-             <enabled>true</enabled>
-           </releases>
-           <snapshots>
-             <enabled>false</enabled>
-           </snapshots>
-         </repository>
-       </repositories>
-
-       <dependencyManagement>
-         <dependencies>
-         </dependencies>
-       </dependencyManagement>
-     </profile>
+    </profile>
 
     <profile>
       <id>repl-bin</id>

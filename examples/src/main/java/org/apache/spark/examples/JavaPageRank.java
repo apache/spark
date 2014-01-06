@@ -17,6 +17,7 @@
 
 package org.apache.spark.examples;
 
+import org.apache.spark.SparkContext;
 import scala.Tuple2;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -53,7 +54,7 @@ public class JavaPageRank {
     }
 
     JavaSparkContext ctx = new JavaSparkContext(args[0], "JavaPageRank",
-      System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+      System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaPageRank.class));
 
     // Loads in input file. It should be in format of:
     //     URL         neighbor URL

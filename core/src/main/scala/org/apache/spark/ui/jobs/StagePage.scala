@@ -66,7 +66,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         <div>
           <ul class="unstyled">
             <li>
-              <strong>Total duration across all tasks: </strong>
+              <strong>Total task time across all tasks: </strong>
               {parent.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
             </li>
             {if (hasShuffleRead)
@@ -166,11 +166,12 @@ private[spark] class StagePage(parent: JobProgressUI) {
           def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
           Some(listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
-
+      val executorTable = new ExecutorTable(parent, stageId)
       val content =
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
+        <h4>Aggregated Metrics by Executors</h4> ++ executorTable.toNodeSeq() ++
         <h4>Tasks</h4> ++ taskTable
 
       headerSparkPage(content, parent.sc, "Details for Stage %d".format(stageId), Stages)
