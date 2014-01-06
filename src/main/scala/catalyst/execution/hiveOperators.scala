@@ -4,7 +4,7 @@ package execution
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
-import org.apache.hadoop.hive.serde2.Serializer
+import org.apache.hadoop.hive.serde2.AbstractSerializer
 import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, StructObjectInspector}
 import org.apache.hadoop.hive.serde2.`lazy`.LazyStruct
 import org.apache.hadoop.mapred.JobConf
@@ -89,7 +89,8 @@ case class InsertIntoHiveTable(
   val desc = new FileSinkDesc("./", table.tableDesc, false)
 
   val outputClass = {
-    val serializer = table.tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
+    val serializer =
+      table.tableDesc.getDeserializerClass.newInstance().asInstanceOf[AbstractSerializer]
     serializer.initialize(null, table.tableDesc.getProperties)
     serializer.getSerializedClass
   }
