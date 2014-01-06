@@ -24,7 +24,8 @@ import scala.concurrent.duration._
 
 import akka.actor._
 import akka.pattern.ask
-import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
+import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
+
 import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
@@ -110,6 +111,12 @@ private[spark] class Client(
       }
     }
 
+    private def isPossibleMaster(remoteUrl: Address) = {
+      masterUrls.map(s => Master.toAkkaUrl(s))
+        .map(u => AddressFromURIString(u).hostPort)
+        .contains(remoteUrl.hostPort)
+    }
+
     override def receive = {
       case RegisteredApplication(appId_, masterUrl) =>
         appId = appId_
@@ -144,6 +151,9 @@ private[spark] class Client(
       case DisassociatedEvent(_, address, _) if address == masterAddress =>
         logWarning(s"Connection to $address failed; waiting for master to reconnect...")
         markDisconnected()
+
+      case AssociationErrorEvent(cause, _, address, _) if isPossibleMaster(address) =>
+        logWarning(s"Could not connect to $address: $cause")
 
       case StopClient =>
         markDead()
