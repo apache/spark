@@ -23,6 +23,7 @@ import akka.actor._
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
+import scala.concurrent.Await
 
 class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
   private val conf = new SparkConf
@@ -101,13 +102,15 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     System.setProperty("spark.hostPort", hostname + ":" + boundPort)
 
     val masterTracker = new MapOutputTrackerMaster(conf)
-    masterTracker.trackerActor = Left(actorSystem.actorOf(
-        Props(new MapOutputTrackerMasterActor(masterTracker)), "MapOutputTracker"))
+    masterTracker.trackerActor = actorSystem.actorOf(
+        Props(new MapOutputTrackerMasterActor(masterTracker)), "MapOutputTracker")
 
     val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0, conf = conf)
     val slaveTracker = new MapOutputTracker(conf)
-    slaveTracker.trackerActor = Right(slaveSystem.actorSelection(
-        "akka.tcp://spark@localhost:" + boundPort + "/user/MapOutputTracker"))
+    val selection = slaveSystem.actorSelection(
+      s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
+    val timeout = AkkaUtils.lookupTimeout(conf)
+    slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
 
     masterTracker.registerShuffle(10, 1)
     masterTracker.incrementEpoch()
