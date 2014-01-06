@@ -20,6 +20,7 @@ import sbt.Classpaths.publishTask
 import Keys._
 import sbtassembly.Plugin._
 import AssemblyKeys._
+import scala.util.Properties
 // For Sonatype publishing
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
@@ -65,10 +66,13 @@ object SparkBuild extends Build {
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
-
+  val sparkHome = System.getProperty("user.dir")
+  System.setProperty("spark.home", sparkHome)
+  System.setProperty("spark.testing", "1")
+  
   // Allows build configuration to be set through environment variables
-  lazy val hadoopVersion = scala.util.Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
-  lazy val isNewHadoop = scala.util.Properties.envOrNone("SPARK_IS_NEW_HADOOP") match {
+  lazy val hadoopVersion = Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
+  lazy val isNewHadoop = Properties.envOrNone("SPARK_IS_NEW_HADOOP") match {
     case None => {
       val isNewHadoopVersion = "2.[2-9]+".r.findFirstIn(hadoopVersion).isDefined
       (isNewHadoopVersion|| DEFAULT_IS_NEW_HADOOP)
@@ -76,18 +80,17 @@ object SparkBuild extends Build {
     case Some(v) => v.toBoolean
   }
 
-  lazy val isYarnEnabled = scala.util.Properties.envOrNone("SPARK_YARN") match {
+  lazy val isYarnEnabled = Properties.envOrNone("SPARK_YARN") match {
     case None => DEFAULT_YARN
     case Some(v) => v.toBoolean
   }
 
   // Conditionally include the yarn sub-project
-  lazy val yarn = Project("yarn", file(if (isNewHadoop) "new-yarn" else "yarn"), settings = yarnSettings) dependsOn(core)
+  lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
+  lazy val yarn = Project("yarn", file("yarn/stable"), settings = yarnSettings) dependsOn(core)
 
-  //lazy val yarn = Project("yarn", file("yarn"), settings = yarnSettings) dependsOn(core)
-
-  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](yarn) else Seq[ClasspathDependency]()
-  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](yarn) else Seq[ProjectReference]()
+  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](if (isNewHadoop) yarn else yarnAlpha) else Seq[ClasspathDependency]()
+  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](if (isNewHadoop) yarn else yarnAlpha) else Seq[ProjectReference]()
 
   lazy val externalTwitter = Project("external-twitter", file("external/twitter"), settings = twitterSettings) 
     .dependsOn(streaming % "compile->compile;test->test")
@@ -130,8 +133,9 @@ object SparkBuild extends Build {
 
     // Fork new JVMs for tests and set Java options for those
     fork := true,
+    javaOptions += "-Dspark.home=" + sparkHome,
+    javaOptions += "-Dspark.testing=1",
     javaOptions += "-Xmx3g",
-
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
 
@@ -195,7 +199,7 @@ object SparkBuild extends Build {
     */
 
     libraryDependencies ++= Seq(
-        "io.netty"          % "netty-all"       % "4.0.0.CR1",
+        "io.netty"          % "netty-all"       % "4.0.13.Final",
         "org.eclipse.jetty" % "jetty-server"    % "7.6.8.v20121106",
         /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
         "org.eclipse.jetty.orbit" % "javax.servlet" % "2.5.0.v201103041518" artifacts Artifact("javax.servlet", "jar", "jar"),
@@ -264,7 +268,9 @@ object SparkBuild extends Build {
         "com.codahale.metrics"     % "metrics-ganglia"  % "3.0.0",
         "com.codahale.metrics"     % "metrics-graphite" % "3.0.0",
         "com.twitter"             %% "chill"            % "0.3.1",
-        "com.twitter"              % "chill-java"       % "0.3.1"
+        "com.twitter"              % "chill-java"       % "0.3.1",
+        "com.typesafe"             % "config"           % "1.0.2",
+        "com.clearspring.analytics" % "stream"          % "2.5.1"
       )
   )
 
@@ -320,9 +326,28 @@ object SparkBuild extends Build {
     )
   )
 
-  def yarnSettings = sharedSettings ++ Seq(
-    name := "spark-yarn"
+  def yarnCommonSettings = sharedSettings ++ Seq(
+    unmanagedSourceDirectories in Compile <++= baseDirectory { base =>
+      Seq(
+         base / "../common/src/main/scala"
+      )
+    },
+
+    unmanagedSourceDirectories in Test <++= baseDirectory { base =>
+      Seq(
+         base / "../common/src/test/scala"
+      )
+    }
+
   ) ++ extraYarnSettings
+
+  def yarnAlphaSettings = yarnCommonSettings ++ Seq(
+    name := "spark-yarn-alpha"
+  )
+
+  def yarnSettings = yarnCommonSettings ++ Seq(
+    name := "spark-yarn"
+  )
 
   // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain
   // if we refer to nonexistent dependencies (e.g. hadoop-yarn-api from a Hadoop version without YARN).
@@ -339,6 +364,7 @@ object SparkBuild extends Build {
   )
 
   def assemblyProjSettings = sharedSettings ++ Seq(
+    libraryDependencies += "net.sf.py4j" % "py4j" % "0.8.1",
     name := "spark-assembly",
     assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
     jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },

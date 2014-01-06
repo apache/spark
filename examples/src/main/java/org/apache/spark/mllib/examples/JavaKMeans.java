@@ -62,7 +62,7 @@ public class JavaKMeans {
     }
 
     JavaSparkContext sc = new JavaSparkContext(args[0], "JavaKMeans",
-        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaKMeans.class));
     JavaRDD<String> lines = sc.textFile(args[1]);
 
     JavaRDD<double[]> points = lines.map(new ParsePoint());

@@ -17,20 +17,22 @@
 
 package org.apache.spark.streaming.api.java
 
+
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
 import java.io.InputStream
-import java.util.{Map => JMap, List => JList}
+import java.lang.{Integer => JInt}
+import java.util.{List => JList, Map => JMap}
 
+import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-import akka.actor.Props
-import akka.actor.SupervisorStrategy
 
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
-import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaRDD}
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamingListener
 
@@ -117,6 +119,14 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     this(new StreamingContext(sparkContext.sc, batchDuration))
 
   /**
+   * Creates a StreamingContext using an existing SparkContext.
+   * @param conf A Spark application configuration
+   * @param batchDuration The time interval at which streaming data will be divided into batches
+   */
+  def this(conf: SparkConf, batchDuration: Duration) =
+    this(new StreamingContext(conf, batchDuration))
+
+  /**
    * Re-creates a StreamingContext from a checkpoint file.
    * @param path Path either to the directory that was specified as the checkpoint directory, or
    *             to the checkpoint file 'graph' or 'graph.bk'.
@@ -174,9 +184,11 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   }
 
   /**
-   * Creates a input stream that monitors a Hadoop-compatible filesystem
+   * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
-   * as Text and input format as TextInputFormat). File names starting with . are ignored.
+   * as Text and input format as TextInputFormat). Files must be written to the
+   * monitored directory by "moving" them from another location within the same
+   * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): JavaDStream[String] = {
@@ -218,9 +230,10 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   }
 
   /**
-   * Creates a input stream that monitors a Hadoop-compatible filesystem
+   * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
-   * File names starting with . are ignored.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
@@ -466,5 +479,12 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * Sstops the execution of the streams.
    */
   def stop() = ssc.stop()
+}
 
+object JavaStreamingContext {
+  /**
+   * Find the JAR from which a given class was loaded, to make it easy for users to pass
+   * their JARs to SparkContext.
+   */
+  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls).toArray
 }

@@ -21,6 +21,9 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import akka.actor.{ActorSystem, ExtendedActorSystem, IndestructibleActorSystem}
 import com.typesafe.config.ConfigFactory
+import org.apache.log4j.{Level, Logger}
+
+import org.apache.spark.SparkConf
 
 /**
  * Various utility classes for working with Akka.
@@ -37,22 +40,29 @@ private[spark] object AkkaUtils {
    * If indestructible is set to true, the Actor System will continue running in the event
    * of a fatal exception. This is used by [[org.apache.spark.executor.Executor]].
    */
-  def createActorSystem(name: String, host: String, port: Int, indestructible: Boolean = false)
-    : (ActorSystem, Int) = {
+  def createActorSystem(name: String, host: String, port: Int, indestructible: Boolean = false,
+    conf: SparkConf): (ActorSystem, Int) = {
 
-    val akkaThreads   = System.getProperty("spark.akka.threads", "4").toInt
-    val akkaBatchSize = System.getProperty("spark.akka.batchSize", "15").toInt
+    val akkaThreads   = conf.get("spark.akka.threads", "4").toInt
+    val akkaBatchSize = conf.get("spark.akka.batchSize", "15").toInt
 
-    val akkaTimeout = System.getProperty("spark.akka.timeout", "100").toInt
+    val akkaTimeout = conf.get("spark.akka.timeout", "100").toInt
 
-    val akkaFrameSize = System.getProperty("spark.akka.frameSize", "10").toInt
-    val lifecycleEvents =
-      if (System.getProperty("spark.akka.logLifecycleEvents", "false").toBoolean) "on" else "off"
+    val akkaFrameSize = conf.get("spark.akka.frameSize", "10").toInt
+    val akkaLogLifecycleEvents = conf.get("spark.akka.logLifecycleEvents", "false").toBoolean
+    val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
+    if (!akkaLogLifecycleEvents) {
+      // As a workaround for Akka issue #3787, we coerce the "EndpointWriter" log to be silent.
+      // See: https://www.assembla.com/spaces/akka/tickets/3787#/
+      Option(Logger.getLogger("akka.remote.EndpointWriter")).map(l => l.setLevel(Level.FATAL))
+    }
 
-    val akkaHeartBeatPauses = System.getProperty("spark.akka.heartbeat.pauses", "600").toInt
+    val logAkkaConfig = if (conf.get("spark.akka.logAkkaConfig", "false").toBoolean) "on" else "off"
+
+    val akkaHeartBeatPauses = conf.get("spark.akka.heartbeat.pauses", "600").toInt
     val akkaFailureDetector =
-      System.getProperty("spark.akka.failure-detector.threshold", "300.0").toDouble
-    val akkaHeartBeatInterval = System.getProperty("spark.akka.heartbeat.interval", "1000").toInt
+      conf.get("spark.akka.failure-detector.threshold", "300.0").toDouble
+    val akkaHeartBeatInterval = conf.get("spark.akka.heartbeat.interval", "1000").toInt
 
     val akkaConf = ConfigFactory.parseString(
       s"""
@@ -72,7 +82,10 @@ private[spark] object AkkaUtils {
       |akka.remote.netty.tcp.maximum-frame-size = ${akkaFrameSize}MiB
       |akka.remote.netty.tcp.execution-pool-size = $akkaThreads
       |akka.actor.default-dispatcher.throughput = $akkaBatchSize
+      |akka.log-config-on-start = $logAkkaConfig
       |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
+      |akka.log-dead-letters = $lifecycleEvents
+      |akka.log-dead-letters-during-shutdown = $lifecycleEvents
       """.stripMargin)
 
     val actorSystem = if (indestructible) {
@@ -87,7 +100,7 @@ private[spark] object AkkaUtils {
   }
 
   /** Returns the default Spark timeout to use for Akka ask operations. */
-  def askTimeout: FiniteDuration = {
-    Duration.create(System.getProperty("spark.akka.askTimeout", "30").toLong, "seconds")
+  def askTimeout(conf: SparkConf): FiniteDuration = {
+    Duration.create(conf.get("spark.akka.askTimeout", "30").toLong, "seconds")
   }
 }

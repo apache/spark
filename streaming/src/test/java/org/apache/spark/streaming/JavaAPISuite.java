@@ -19,6 +19,7 @@ package org.apache.spark.streaming;
 
 import scala.Tuple2;
 
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import java.io.*;
@@ -28,6 +29,7 @@ import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -67,7 +69,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList("hello", "world"),
         Arrays.asList("goodnight", "moon"));
 
-   List<List<Integer>> expected = Arrays.asList(
+    List<List<Integer>> expected = Arrays.asList(
         Arrays.asList(5,5),
         Arrays.asList(9,4));
 

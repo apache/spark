@@ -21,22 +21,26 @@ import java.io.File;
 import java.io.FileInputStream;
 
 import io.netty.channel.ChannelHandlerContext;
-import io.netty.channel.ChannelInboundMessageHandlerAdapter;
+import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.DefaultFileRegion;
 
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.FileSegment;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
-class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
+class FileServerHandler extends SimpleChannelInboundHandler<String> {
 
-  PathResolver pResolver;
+  private Logger LOG = LoggerFactory.getLogger(this.getClass().getName());
+
+  private final PathResolver pResolver;
 
   public FileServerHandler(PathResolver pResolver){
     this.pResolver = pResolver;
   }
 
   @Override
-  public void messageReceived(ChannelHandlerContext ctx, String blockIdString) {
+  public void channelRead0(ChannelHandlerContext ctx, String blockIdString) {
     BlockId blockId = BlockId.apply(blockIdString);
     FileSegment fileSegment = pResolver.getBlockLocation(blockId);
     // if getBlockLocation returns null, close the channel
@@ -60,10 +64,10 @@ class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
       int len = new Long(length).intValue();
       ctx.write((new FileHeader(len, blockId)).buffer());
       try {
-        ctx.sendFile(new DefaultFileRegion(new FileInputStream(file)
+        ctx.write(new DefaultFileRegion(new FileInputStream(file)
           .getChannel(), fileSegment.offset(), fileSegment.length()));
       } catch (Exception e) {
-        e.printStackTrace();
+          LOG.error("Exception: ", e);
       }
     } else {
       ctx.write(new FileHeader(0, blockId).buffer());
@@ -73,7 +77,7 @@ class FileServerHandler extends ChannelInboundMessageHandlerAdapter<String> {
 
   @Override
   public void exceptionCaught(ChannelHandlerContext ctx, Throwable cause) {
-    cause.printStackTrace();
+    LOG.error("Exception: ", cause);
     ctx.close();
   }
 }

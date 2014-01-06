@@ -23,7 +23,6 @@ import scala.reflect.ClassTag
 
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.UUID
 
 import akka.actor.Props
 import akka.actor.SupervisorStrategy
@@ -41,7 +40,6 @@ import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receivers._
 import org.apache.spark.streaming.scheduler._
 
-
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
  * information (such as, cluster URL and job name) to internally create a SparkContext, it provides
@@ -55,18 +53,27 @@ class StreamingContext private (
 
   /**
    * Create a StreamingContext using an existing SparkContext.
-   * @param sparkContext Existing SparkContext
-   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param sparkContext existing SparkContext
+   * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(sparkContext: SparkContext, batchDuration: Duration) = {
     this(sparkContext, null, batchDuration)
   }
 
   /**
+   * Create a StreamingContext by providing the configuration necessary for a new SparkContext.
+   * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
+   * @param batchDuration the time interval at which streaming data will be divided into batches
+   */
+  def this(conf: SparkConf, batchDuration: Duration) = {
+    this(StreamingContext.createNewSparkContext(conf), null, batchDuration)
+  }
+
+  /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param appName A name for your job, to display on the cluster web UI
-   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param master cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName a name for your job, to display on the cluster web UI
+   * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(
       master: String,
@@ -79,26 +86,25 @@ class StreamingContext private (
          null, batchDuration)
   }
 
-
   /**
    * Re-create a StreamingContext from a checkpoint file.
    * @param path Path either to the directory that was specified as the checkpoint directory, or
    *             to the checkpoint file 'graph' or 'graph.bk'.
    */
-  def this(path: String) = this(null, CheckpointReader.read(path), null)
-
-  initLogging()
+  def this(path: String) = this(null, CheckpointReader.read(new SparkConf(), path), null)
 
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
       "both SparkContext and checkpoint as null")
   }
 
-  if(cp_ != null && cp_.delaySeconds >= 0 && MetadataCleaner.getDelaySeconds < 0) {
-    MetadataCleaner.setDelaySeconds(cp_.delaySeconds)
+  private val conf_ = Option(sc_).map(_.conf).getOrElse(cp_.sparkConf)
+
+  if(cp_ != null && cp_.delaySeconds >= 0 && MetadataCleaner.getDelaySeconds(conf_) < 0) {
+    MetadataCleaner.setDelaySeconds(conf_, cp_.delaySeconds)
   }
 
-  if (MetadataCleaner.getDelaySeconds < 0) {
+  if (MetadataCleaner.getDelaySeconds(conf_) < 0) {
     throw new SparkException("Spark Streaming cannot be used without setting spark.cleaner.ttl; "
       + "set this property before creating a SparkContext (use SPARK_JAVA_OPTS for the shell)")
   }
@@ -107,11 +113,13 @@ class StreamingContext private (
 
   protected[streaming] val sc: SparkContext = {
     if (isCheckpointPresent) {
-      new SparkContext(cp_.master, cp_.framework, cp_.sparkHome, cp_.jars, cp_.environment)
+      new SparkContext(cp_.sparkConf)
     } else {
       sc_
     }
   }
+
+  protected[streaming] val conf = sc.conf
 
   protected[streaming] val env = SparkEnv.get
 
@@ -133,7 +141,7 @@ class StreamingContext private (
 
   protected[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
-      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(cp_.checkpointDir), true)
+      sc.setCheckpointDir(cp_.checkpointDir)
       cp_.checkpointDir
     } else {
       null
@@ -168,8 +176,12 @@ class StreamingContext private (
    */
   def checkpoint(directory: String) {
     if (directory != null) {
-      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(directory))
-      checkpointDir = directory
+      val path = new Path(directory)
+      val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+      fs.mkdirs(path)
+      val fullPath = fs.getFileStatus(path).getPath().toString
+      sc.setCheckpointDir(fullPath)
+      checkpointDir = fullPath
     } else {
       checkpointDir = null
     }
@@ -276,7 +288,8 @@ class StreamingContext private (
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
-   * File names starting with . are ignored.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
@@ -295,6 +308,8 @@ class StreamingContext private (
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system.
    * @param directory HDFS directory to monitor for new file
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
@@ -315,7 +330,9 @@ class StreamingContext private (
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
-   * as Text and input format as TextInputFormat). File names starting with . are ignored.
+   * as Text and input format as TextInputFormat). Files must be written to the
+   * monitored directory by "moving" them from another location within the same
+   * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): DStream[String] = {
@@ -451,18 +468,36 @@ object StreamingContext {
     new PairDStreamFunctions[K, V](stream)
   }
 
+  /**
+   * Find the JAR from which a given class was loaded, to make it easy for users to pass
+   * their JARs to SparkContext.
+   */
+  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls)
+
+  protected[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
+    // Set the default cleaner delay to an hour if not already set.
+    // This should be sufficient for even 1 second batch intervals.
+    val sc = new SparkContext(conf)
+    if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
+      MetadataCleaner.setDelaySeconds(sc.conf, 3600)
+    }
+    sc
+  }
+
   protected[streaming] def createNewSparkContext(
       master: String,
       appName: String,
       sparkHome: String,
       jars: Seq[String],
-      environment: Map[String, String]): SparkContext = {
+      environment: Map[String, String]): SparkContext =
+  {
+    val sc = new SparkContext(master, appName, sparkHome, jars, environment)
     // Set the default cleaner delay to an hour if not already set.
-    // This should be sufficient for even 1 second interval.
-    if (MetadataCleaner.getDelaySeconds < 0) {
-      MetadataCleaner.setDelaySeconds(3600)
+    // This should be sufficient for even 1 second batch intervals.
+    if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
+      MetadataCleaner.setDelaySeconds(sc.conf, 3600)
     }
-    new SparkContext(master, appName, sparkHome, jars, environment)
+    sc
   }
 
   protected[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
@@ -473,9 +508,5 @@ object StreamingContext {
     } else {
       prefix + "-" + time.milliseconds + "." + suffix
     }
-  }
-
-  protected[streaming] def getSparkCheckpointDir(sscCheckpointDir: String): String = {
-    new Path(sscCheckpointDir, UUID.randomUUID.toString).toString
   }
 }

@@ -1,6 +1,8 @@
 *~
 *.swp
+*.ipr
 *.iml
+*.iws
 .idea/
 .settings
 .cache
