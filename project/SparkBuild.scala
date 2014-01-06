@@ -70,9 +70,7 @@ object SparkBuild extends Build {
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
   val sparkHome = System.getProperty("user.dir")
-  System.setProperty("spark.home", sparkHome)
-  System.setProperty("spark.testing", "1")
-  
+
   // Allows build configuration to be set through environment variables
   lazy val hadoopVersion = Properties.envOrElse("SPARK_HADOOP_VERSION", DEFAULT_HADOOP_VERSION)
   lazy val isNewHadoop = Properties.envOrNone("SPARK_IS_NEW_HADOOP") match {
@@ -115,8 +113,8 @@ object SparkBuild extends Build {
 
     // Fork new JVMs for tests and set Java options for those
     fork := true,
-    javaOptions += "-Dspark.home=" + sparkHome,
-    javaOptions += "-Dspark.testing=1",
+    javaOptions in Test += "-Dspark.home=" + sparkHome,
+    javaOptions in Test += "-Dspark.testing=1",
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
