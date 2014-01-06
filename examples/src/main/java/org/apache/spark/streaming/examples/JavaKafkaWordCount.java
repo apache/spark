@@ -54,7 +54,8 @@ public class JavaKafkaWordCount {
 
     // Create the context with a 1 second batch size
     JavaStreamingContext ssc = new JavaStreamingContext(args[0], "KafkaWordCount",
-            new Duration(2000), System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+            new Duration(2000), System.getenv("SPARK_HOME"),
+            JavaStreamingContext.jarOfClass(JavaKafkaWordCount.class));
 
     int numThreads = Integer.parseInt(args[4]);
     Map<String, Integer> topicMap = new HashMap<String, Integer>();

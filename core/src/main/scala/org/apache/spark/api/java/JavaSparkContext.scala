@@ -431,4 +431,10 @@ object JavaSparkContext {
   implicit def fromSparkContext(sc: SparkContext): JavaSparkContext = new JavaSparkContext(sc)
 
   implicit def toSparkContext(jsc: JavaSparkContext): SparkContext = jsc.sc
+
+  /**
+   * Find the JAR from which a given class was loaded, to make it easy for users to pass
+   * their JARs to SparkContext.
+   */
+  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls).toArray
 }
