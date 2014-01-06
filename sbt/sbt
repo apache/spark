@@ -27,22 +27,17 @@ else
 	    wget --progress=bar ${URL1} -O ${JAR} || wget --progress=bar ${URL2} -O ${JAR}
 	  else
 	    printf "You do not have curl or wget installed, please install sbt manually from http://www.scala-sbt.org/\n"
-	    exit
+	    exit -1
 	  fi
   fi
   if [ ! -f ${JAR} ]; then
 	  # We failed to download
-	  printf "Our attempt to download sbt locally to {$JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
-	  exit
+	  printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
+	  exit -1
   fi
   printf "Launching sbt from .sbtlib\n"
   java \
-	  -Duser.timezone=UTC \
-	  -Djava.awt.headless=true \
-	  -Dfile.encoding=UTF-8 \
-	  -XX:MaxPermSize=256m \
-	  -Xmx1g \
-	  -noverify \
+    -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m \
 	  -jar ${JAR} \
 	  "$@"
 fi
