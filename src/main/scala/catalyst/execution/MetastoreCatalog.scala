@@ -77,12 +77,15 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
 }
 
 object HiveMetatoreTypes {
+  val VARCHAR = "(?i)VARCHAR\\((\\d+)\\)".r
   def toDataType(metastoreType: String): DataType =
     metastoreType match {
       case "string" => StringType
       case "int" => IntegerType
       case "double" => DoubleType
       case "bigint" => LongType
+      case "binary" => BinaryType
+      case VARCHAR(_) => StringType
     }
 }
 

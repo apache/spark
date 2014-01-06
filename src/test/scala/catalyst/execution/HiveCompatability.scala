@@ -188,12 +188,12 @@ class HiveCompatability extends HiveQueryFileTest {
     "literal_string",
     "load_file_with_space_in_the_name",
     "mapjoin_subquery2",
+    "mapreduce3",
     "mergejoins",
     "mergejoins_mixed",
     "misc_json",
     "multi_join_union",
     "multigroupby_singlemr",
-    "no_hooks",
     "noalias_subq1",
     "nomore_ambiguous_table_col",
     "notable_alias1",
@@ -301,6 +301,7 @@ class HiveCompatability extends HiveQueryFileTest {
     "udf_minute",
     "udf_modulo",
     "udf_month",
+    "udf_negative",
     "udf_not",
     "udf_notequal",
     "udf_nvl",
@@ -374,6 +375,9 @@ class HiveCompatability extends HiveQueryFileTest {
     "union7",
     "union8",
     "union9",
-    "union_script"
+    "union_script",
+    "varchar_2",
+    "varchar_join1",
+    "varchar_union1"
   )
 }

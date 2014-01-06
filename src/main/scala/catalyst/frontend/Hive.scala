@@ -615,6 +615,7 @@ object HiveQl {
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), StringType)
     case Token("TOK_FUNCTION", Token("TOK_INT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), IntegerType)
+    case Token("TOK_FUNCTION", Token("TOK_BIGINT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), LongType)
     case Token("TOK_FUNCTION", Token("TOK_FLOAT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), FloatType)
     case Token("TOK_FUNCTION", Token("TOK_DOUBLE", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), DoubleType)
     case Token("TOK_FUNCTION", Token("TOK_SMALLINT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), ShortType)
@@ -628,6 +629,7 @@ object HiveQl {
     case Token("*", left :: right:: Nil) => Multiply(nodeToExpr(left), nodeToExpr(right))
     case Token("/", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
     case Token("DIV", left :: right:: Nil) => Divide(nodeToExpr(left), nodeToExpr(right))
+    case Token("%", left :: right:: Nil) => Remainder(nodeToExpr(left), nodeToExpr(right))
 
     /* Comparisons */
     case Token("=", left :: right:: Nil) => Equals(nodeToExpr(left), nodeToExpr(right))

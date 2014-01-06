@@ -58,7 +58,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
     str.replaceAll("file:\\/.*\\/", "<PATH>")
   }
 
-  val installHooksCommand = "SET.*hooks".r
+  val installHooksCommand = "(?i)SET.*hooks".r
   def createQueryTest(testCaseName: String, sql: String) = {
     test(testCaseName) {
       logger.error(
