@@ -21,8 +21,7 @@ from pyspark.mllib._common import \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
     _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
-    _serialize_tuple, _deserialize_rating
-from pyspark.serializers import BatchedSerializer
+    _serialize_tuple, RatingDeserializer
 from pyspark.rdd import RDD
 
 class MatrixFactorizationModel(object):
@@ -35,6 +34,9 @@ class MatrixFactorizationModel(object):
     >>> ratings = sc.parallelize([r1, r2, r3])
     >>> model = ALS.trainImplicit(sc, ratings, 1)
     >>> model.predict(2,2) is not None
+    True
+    >>> testset = sc.parallelize([(1, 2), (1, 1)])
+    >>> model.predictAll(testset).count == 2
     True
     """
 
@@ -50,8 +52,8 @@ class MatrixFactorizationModel(object):
 
     def predictAll(self, usersProducts):
         usersProductsJRDD = _get_unmangled_rdd(usersProducts, _serialize_tuple)
-        return RDD(self._java_model.predictJavaRDD(usersProductsJRDD._jrdd),
-                   self._context, BatchedSerializer(_deserialize_rating, self._context._batchSize))
+        return RDD(self._java_model.predict(usersProductsJRDD._jrdd),
+                   self._context, RatingDeserializer())
 
 class ALS(object):
     @classmethod
