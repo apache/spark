@@ -26,6 +26,22 @@ class HiveCompatability extends HiveQueryFileTest {
     "index_compact_binary_search",
     "bucket_num_reducers",
 
+    // User specific test answers, breaks the caching mechanism.
+    "authorization_3",
+    "authorization_5",
+    "keyword_1",
+    "misc_json",
+
+    // Timezone specific test answers.
+    "udf_unix_timestamp",
+    "udf_to_unix_timestamp",
+
+    // Cant run without local map/reduce.
+    "index_auto_update",
+    "index_auto_self_join",
+    "index_stale",
+    "type_cast_1",
+
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
     "ops_comparison",
@@ -188,12 +204,12 @@ class HiveCompatability extends HiveQueryFileTest {
     "literal_string",
     "load_file_with_space_in_the_name",
     "mapjoin_subquery2",
+    "mapreduce3",
     "mergejoins",
     "mergejoins_mixed",
     "misc_json",
     "multi_join_union",
     "multigroupby_singlemr",
-    "no_hooks",
     "noalias_subq1",
     "nomore_ambiguous_table_col",
     "notable_alias1",
@@ -301,6 +317,7 @@ class HiveCompatability extends HiveQueryFileTest {
     "udf_minute",
     "udf_modulo",
     "udf_month",
+    "udf_negative",
     "udf_not",
     "udf_notequal",
     "udf_nvl",
@@ -374,6 +391,9 @@ class HiveCompatability extends HiveQueryFileTest {
     "union7",
     "union8",
     "union9",
-    "union_script"
+    "union_script",
+    "varchar_2",
+    "varchar_join1",
+    "varchar_union1"
   )
 }
