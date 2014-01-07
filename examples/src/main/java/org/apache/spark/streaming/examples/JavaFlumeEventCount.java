@@ -20,7 +20,7 @@ package org.apache.spark.streaming.examples;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.streaming.*;
 import org.apache.spark.streaming.api.java.*;
-import org.apache.spark.streaming.api.java.flume.FlumeFunctions;
+import org.apache.spark.streaming.flume.FlumeUtils;
 import org.apache.spark.streaming.flume.SparkFlumeEvent;
 
 /**
@@ -53,8 +53,7 @@ public class JavaFlumeEventCount {
     JavaStreamingContext ssc = new JavaStreamingContext(master, "FlumeEventCount", batchInterval,
             System.getenv("SPARK_HOME"),
             JavaStreamingContext.jarOfClass(JavaFlumeEventCount.class));
-    FlumeFunctions flumeFunc = new FlumeFunctions(ssc);
-    JavaDStream<SparkFlumeEvent> flumeStream = flumeFunc.flumeStream("localhost", port);
+    JavaDStream<SparkFlumeEvent> flumeStream = FlumeUtils.createStream(ssc, "localhost", port);
 
     flumeStream.count();
 

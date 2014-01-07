@@ -52,7 +52,7 @@ object FlumeEventCount {
       System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
 
     // Create a flume stream
-    val stream = ssc.flumeStream(host,port,StorageLevel.MEMORY_ONLY)
+    val stream = FlumeUtils.createStream(ssc, host,port,StorageLevel.MEMORY_ONLY_SER_2)
 
     // Print out the count of events received from this server in each batch
     stream.count().map(cnt => "Received " + cnt + " flume events." ).print()

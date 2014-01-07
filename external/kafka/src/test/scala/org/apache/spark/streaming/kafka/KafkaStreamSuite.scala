@@ -28,11 +28,11 @@ class KafkaStreamSuite extends TestSuiteBase {
     val topics = Map("my-topic" -> 1)
 
     // tests the API, does not actually test data receiving
-    val test1 = ssc.kafkaStream("localhost:12345", "group", topics)
-    val test2 = ssc.kafkaStream("localhost:12345", "group", topics, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test1 = KafkaUtils.createStream(ssc, "localhost:1234", "group", topics)
+    val test2 = KafkaUtils.createStream(ssc, "localhost:12345", "group", topics, StorageLevel.MEMORY_AND_DISK_SER_2)
     val kafkaParams = Map("zookeeper.connect"->"localhost:12345","group.id"->"consumer-group")
-    val test3 = ssc.kafkaStream[String, String, StringDecoder, StringDecoder](
-      kafkaParams, topics, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test3 = KafkaUtils.createStream[String, String, StringDecoder, StringDecoder](
+      ssc, kafkaParams, topics, StorageLevel.MEMORY_AND_DISK_SER_2)
 
     // TODO: Actually test receiving data
   }

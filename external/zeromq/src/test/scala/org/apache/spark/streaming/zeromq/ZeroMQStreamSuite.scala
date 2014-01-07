@@ -33,10 +33,10 @@ class ZeroMQStreamSuite extends TestSuiteBase {
     val bytesToObjects = (bytes: Seq[ByteString]) => null.asInstanceOf[Iterator[String]]
 
     // tests the API, does not actually test data receiving
-    val test1 = ssc.zeroMQStream(publishUrl, subscribe, bytesToObjects)
-    val test2 = ssc.zeroMQStream(
-      publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2)
-    val test3 = ssc.zeroMQStream(publishUrl, subscribe, bytesToObjects,
+    val test1 = ZeroMQUtils.createStream(ssc, publishUrl, subscribe, bytesToObjects)
+    val test2 = ZeroMQUtils.createStream(
+      ssc, publishUrl, subscribe, bytesToObjects, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test3 = ZeroMQUtils.createStream(ssc, publishUrl, subscribe, bytesToObjects,
       StorageLevel.MEMORY_AND_DISK_SER_2, SupervisorStrategy.defaultStrategy)
 
     // TODO: Actually test data receiving

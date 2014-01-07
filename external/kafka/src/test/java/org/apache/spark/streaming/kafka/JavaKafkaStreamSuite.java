@@ -18,32 +18,27 @@
 package org.apache.spark.streaming.kafka;
 
 import java.util.HashMap;
-
-import org.apache.spark.streaming.api.java.kafka.KafkaFunctions;
 import org.junit.Test;
 import com.google.common.collect.Maps;
 import kafka.serializer.StringDecoder;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
-import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 
 public class JavaKafkaStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testKafkaStream() {
-
     HashMap<String, Integer> topics = Maps.newHashMap();
-    KafkaFunctions kafkaFunc = new KafkaFunctions(ssc);
 
     // tests the API, does not actually test data receiving
-    JavaPairDStream<String, String> test1 = kafkaFunc.kafkaStream("localhost:12345", "group", topics);
-    JavaPairDStream<String, String> test2 = kafkaFunc.kafkaStream("localhost:12345", "group", topics,
+    JavaPairDStream<String, String> test1 = KafkaUtils.createStream(ssc, "localhost:12345", "group", topics);
+    JavaPairDStream<String, String> test2 = KafkaUtils.createStream(ssc, "localhost:12345", "group", topics,
       StorageLevel.MEMORY_AND_DISK_SER_2());
 
     HashMap<String, String> kafkaParams = Maps.newHashMap();
     kafkaParams.put("zookeeper.connect", "localhost:12345");
     kafkaParams.put("group.id","consumer-group");
-    JavaPairDStream<String, String> test3 = kafkaFunc.kafkaStream(
+    JavaPairDStream<String, String> test3 = KafkaUtils.createStream(ssc,
       String.class, String.class, StringDecoder.class, StringDecoder.class,
       kafkaParams, topics, StorageLevel.MEMORY_AND_DISK_SER_2());
   }

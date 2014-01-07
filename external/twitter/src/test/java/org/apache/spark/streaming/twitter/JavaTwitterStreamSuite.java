@@ -19,13 +19,10 @@ package org.apache.spark.streaming.twitter;
 
 import java.util.Arrays;
 
-import org.apache.spark.streaming.api.java.twitter.TwitterFunctions;
 import org.junit.Test;
-
 import twitter4j.Status;
 import twitter4j.auth.Authorization;
 import twitter4j.auth.NullAuthorization;
-
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.api.java.JavaDStream;
@@ -33,18 +30,17 @@ import org.apache.spark.streaming.api.java.JavaDStream;
 public class JavaTwitterStreamSuite extends LocalJavaStreamingContext {
   @Test
   public void testTwitterStream() {
-    TwitterFunctions twitterFunc = new TwitterFunctions(ssc);
     String[] filters = (String[])Arrays.<String>asList("filter1", "filter2").toArray();
     Authorization auth = NullAuthorization.getInstance();
 
     // tests the API, does not actually test data receiving
-    JavaDStream<Status> test1 = twitterFunc.twitterStream();
-    JavaDStream<Status> test2 = twitterFunc.twitterStream(filters);
-    JavaDStream<Status> test3 =
-      twitterFunc.twitterStream(filters, StorageLevel.MEMORY_AND_DISK_SER_2());
-    JavaDStream<Status> test4 = twitterFunc.twitterStream(auth);
-    JavaDStream<Status> test5 = twitterFunc.twitterStream(auth, filters);
-    JavaDStream<Status> test6 =
-      twitterFunc.twitterStream(auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<Status> test1 = TwitterUtils.createStream(ssc);
+    JavaDStream<Status> test2 = TwitterUtils.createStream(ssc, filters);
+    JavaDStream<Status> test3 = TwitterUtils.createStream(
+      ssc, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
+    JavaDStream<Status> test4 = TwitterUtils.createStream(ssc, auth);
+    JavaDStream<Status> test5 = TwitterUtils.createStream(ssc, auth, filters);
+    JavaDStream<Status> test6 = TwitterUtils.createStream(ssc,
+      auth, filters, StorageLevel.MEMORY_AND_DISK_SER_2());
   }
 }

@@ -15,24 +15,42 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.api.java.flume
+package org.apache.spark.streaming.flume
 
-import org.apache.spark.streaming.api.java.{JavaDStream, JavaStreamingContext}
-import org.apache.spark.streaming.flume._
 import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{StreamingContext, DStream}
+import org.apache.spark.streaming.api.java.{JavaStreamingContext, JavaDStream}
 
-/**
- * Subclass of [[org.apache.spark.streaming.api.java.JavaStreamingContext]] that has extra
- * functions for creating Flume input streams.
- */
-class FlumeFunctions(javaStreamingContext: JavaStreamingContext) {
+object FlumeUtils {
+  /**
+   * Create a input stream from a Flume source.
+   * @param ssc      StreamingContext object
+   * @param hostname Hostname of the slave machine to which the flume data will be sent
+   * @param port     Port of the slave machine to which the flume data will be sent
+   * @param storageLevel  Storage level to use for storing the received objects
+   */
+  def createStream (
+      ssc: StreamingContext,
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
+    ): DStream[SparkFlumeEvent] = {
+    val inputStream = new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel)
+    ssc.registerInputStream(inputStream)
+    inputStream
+  }
+
   /**
    * Creates a input stream from a Flume source.
    * @param hostname Hostname of the slave machine to which the flume data will be sent
    * @param port     Port of the slave machine to which the flume data will be sent
    */
-  def flumeStream(hostname: String, port: Int): JavaDStream[SparkFlumeEvent] = {
-    javaStreamingContext.ssc.flumeStream(hostname, port)
+  def createStream(
+      jssc: JavaStreamingContext,
+      hostname: String,
+      port: Int
+    ): JavaDStream[SparkFlumeEvent] = {
+    createStream(jssc.ssc, hostname, port)
   }
 
   /**
@@ -41,8 +59,12 @@ class FlumeFunctions(javaStreamingContext: JavaStreamingContext) {
    * @param port     Port of the slave machine to which the flume data will be sent
    * @param storageLevel  Storage level to use for storing the received objects
    */
-  def flumeStream(hostname: String, port: Int, storageLevel: StorageLevel):
-    JavaDStream[SparkFlumeEvent] = {
-    javaStreamingContext.ssc.flumeStream(hostname, port, storageLevel)
+  def createStream(
+      jssc: JavaStreamingContext,
+      hostname: String,
+      port: Int,
+      storageLevel: StorageLevel
+    ): JavaDStream[SparkFlumeEvent] = {
+    createStream(jssc.ssc, hostname, port, storageLevel)
   }
 }

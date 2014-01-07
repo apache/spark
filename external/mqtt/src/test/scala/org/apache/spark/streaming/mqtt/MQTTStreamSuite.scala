@@ -28,8 +28,8 @@ class MQTTStreamSuite extends TestSuiteBase {
     val topic = "def"
 
     // tests the API, does not actually test data receiving
-    val test1 = ssc.mqttStream(brokerUrl, topic)
-    val test2 = ssc.mqttStream(brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
+    val test1 = MQTTUtils.createStream(ssc, brokerUrl, topic)
+    val test2 = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
 
     // TODO: Actually test receiving data
   }

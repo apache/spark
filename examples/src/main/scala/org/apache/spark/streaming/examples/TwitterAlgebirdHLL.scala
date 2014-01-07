@@ -50,7 +50,7 @@ object TwitterAlgebirdHLL {
 
     val ssc = new StreamingContext(master, "TwitterAlgebirdHLL", Seconds(5),
       System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
-    val stream = ssc.twitterStream(None, filters, StorageLevel.MEMORY_ONLY_SER)
+    val stream = TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_ONLY_SER)
 
     val users = stream.map(status => status.getUser.getId)
 
