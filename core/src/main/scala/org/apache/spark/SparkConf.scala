@@ -173,11 +173,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with 
   }
 
   /** Get all akka conf variables set on this SparkConf */
-  def getAkkaConf: Seq[(String, String)] = {
-    getAll.filter {
-      case (k, v) => k.startsWith("akka.")
-    }
-  }
+  def getAkkaConf: Seq[(String, String)] =  getAll.filter {case (k, v) => k.startsWith("akka.")}
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)
