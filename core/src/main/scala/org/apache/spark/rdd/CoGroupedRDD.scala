@@ -22,7 +22,7 @@ import java.io.{ObjectOutputStream, IOException}
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{InterruptibleIterator, Partition, Partitioner, SparkEnv, TaskContext}
-import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency, SparkConf}
+import org.apache.spark.{Dependency, OneToOneDependency, ShuffleDependency}
 import org.apache.spark.util.collection.{ExternalAppendOnlyMap, AppendOnlyMap}
 
 private[spark] sealed trait CoGroupSplitDep extends Serializable
@@ -66,7 +66,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Seq[CoGroup]
 
-  private val sparkConf = new SparkConf()
+  private val sparkConf = SparkEnv.get.conf
   private var serializerClass: String = null
 
   def setSerializer(cls: String): CoGroupedRDD[K] = {
@@ -122,7 +122,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
       case ShuffleCoGroupSplitDep(shuffleId) => {
         // Read map outputs of shuffle
         val fetcher = SparkEnv.get.shuffleFetcher
-        val ser = SparkEnv.get.serializerManager.get(serializerClass, SparkEnv.get.conf)
+        val ser = SparkEnv.get.serializerManager.get(serializerClass, sparkConf)
         val it = fetcher.fetch[Product2[K, Any]](shuffleId, split.index, context, ser)
         rddIterators += ((it, depNum))
       }

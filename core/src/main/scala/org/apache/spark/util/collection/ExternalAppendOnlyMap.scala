@@ -24,7 +24,7 @@ import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 import scala.collection.mutable.{ArrayBuffer, PriorityQueue}
 
-import org.apache.spark.{SparkConf, Logging, SparkEnv}
+import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{DiskBlockManager, DiskBlockObjectWriter}
 
@@ -68,7 +68,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
 
   private var currentMap = new SizeTrackingAppendOnlyMap[K, C]
   private val spilledMaps = new ArrayBuffer[DiskMapIterator]
-  private val sparkConf = new SparkConf()
+  private val sparkConf = SparkEnv.get.conf
 
   // Collective memory threshold shared across all running tasks
   private val maxMemoryThreshold = {
