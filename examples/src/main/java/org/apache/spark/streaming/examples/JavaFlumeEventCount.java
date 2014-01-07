@@ -36,7 +36,10 @@ import org.apache.spark.streaming.dstream.SparkFlumeEvent;
  *           creates a server and listens for flume events.
  *    <port> is the port the Flume receiver will listen on.
  */
-public class JavaFlumeEventCount {
+public final class JavaFlumeEventCount {
+  private JavaFlumeEventCount() {
+  }
+
   public static void main(String[] args) {
     if (args.length != 3) {
       System.err.println("Usage: JavaFlumeEventCount <master> <host> <port>");
@@ -50,7 +53,8 @@ public class JavaFlumeEventCount {
     Duration batchInterval = new Duration(2000);
 
     JavaStreamingContext sc = new JavaStreamingContext(master, "FlumeEventCount", batchInterval,
-            System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+            System.getenv("SPARK_HOME"),
+            JavaStreamingContext.jarOfClass(JavaFlumeEventCount.class));
 
     JavaDStream<SparkFlumeEvent> flumeStream = sc.flumeStream("localhost", port);
 

@@ -81,7 +81,8 @@ there are at least five properties that you will commonly want to control:
   <td>
     When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
     <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
-    sharing mode</a>, how many CPU cores to request at most. The default will use all available cores
+    sharing mode</a>, the maximum amount of CPU cores to request for the application from
+    across the cluster (not from each machine). The default will use all available cores
     offered by the cluster manager.
   </td>
 </tr>
@@ -360,6 +361,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>akka.x.y....</td>
+  <td>value</td>
+  <td>
+    An arbitrary akka configuration can be set directly on spark conf and it is applied for all the ActorSystems created spark wide for that SparkContext and its assigned executors as well.
+  </td>
+</tr>
+
+<tr>
   <td>spark.shuffle.consolidateFiles</td>
   <td>false</td>
   <td>
@@ -392,6 +401,13 @@ Apart from these, the following properties are also available, and may be useful
   <td>1.5</td>
   <td>
     How many times slower a task is than the median to be considered for speculation.
+  </td>
+</tr>
+<tr>
+  <td>spark.log-conf</td>
+  <td>false</td>
+  <td>
+    Log the supplied SparkConf as INFO at start of spark context.
   </td>
 </tr>
 </table>

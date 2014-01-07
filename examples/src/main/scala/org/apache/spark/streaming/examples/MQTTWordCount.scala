@@ -79,9 +79,9 @@ object MQTTPublisher {
  *   <MqttbrokerUrl> and <topic> describe where Mqtt publisher is running.
  *
  * To run this example locally, you may run publisher as
- *    `$ ./run-example org.apache.spark.streaming.examples.MQTTPublisher tcp://localhost:1883 foo`
+ *    `$ ./bin/run-example org.apache.spark.streaming.examples.MQTTPublisher tcp://localhost:1883 foo`
  * and run the example as
- *    `$ ./run-example org.apache.spark.streaming.examples.MQTTWordCount local[2] tcp://localhost:1883 foo`
+ *    `$ ./bin/run-example org.apache.spark.streaming.examples.MQTTWordCount local[2] tcp://localhost:1883 foo`
  */
 object MQTTWordCount {
 
@@ -96,7 +96,7 @@ object MQTTWordCount {
     val Seq(master, brokerUrl, topic) = args.toSeq
 
     val ssc = new StreamingContext(master, "MqttWordCount", Seconds(2), System.getenv("SPARK_HOME"), 
-    Seq(System.getenv("SPARK_EXAMPLES_JAR")))
+    StreamingContext.jarOfClass(this.getClass))
     val lines = ssc.mqttStream(brokerUrl, topic, StorageLevel.MEMORY_ONLY)
 
     val words = lines.flatMap(x => x.toString.split(" "))

@@ -595,6 +595,12 @@ object StreamingContext {
     new PairDStreamFunctions[K, V](stream)
   }
 
+  /**
+   * Find the JAR from which a given class was loaded, to make it easy for users to pass
+   * their JARs to SparkContext.
+   */
+  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls)
+
   protected[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second batch intervals.

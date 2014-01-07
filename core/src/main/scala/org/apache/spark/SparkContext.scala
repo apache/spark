@@ -116,6 +116,10 @@ class SparkContext(
     throw new SparkException("An application must be set in your configuration")
   }
 
+  if (conf.get("spark.log-conf", "false").toBoolean) {
+    logInfo("Spark configuration:\n" + conf.toDebugString)
+  }
+
   // Set Spark driver host and port system properties
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")
@@ -169,9 +173,15 @@ class SparkContext(
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
   // Note: SPARK_MEM is included for Mesos, but overwritten for standalone mode in ExecutorRunner
-  for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS", "SPARK_TESTING");
+  for (key <- Seq("SPARK_CLASSPATH", "SPARK_LIBRARY_PATH", "SPARK_JAVA_OPTS");
       value <- Option(System.getenv(key))) {
     executorEnvs(key) = value
+  }
+  // Convert java options to env vars as a work around
+  // since we can't set env vars directly in sbt.
+  for { (envKey, propKey) <- Seq(("SPARK_HOME", "spark.home"), ("SPARK_TESTING", "spark.testing"))
+    value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
+    executorEnvs(envKey) = value
   }
   // Since memory can be set with a system property too, use that
   executorEnvs("SPARK_MEM") = executorMemory + "m"

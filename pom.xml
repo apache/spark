@@ -188,7 +188,7 @@
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
-        <version>0.8.4</version>
+        <version>1.0.0</version>
       </dependency>
       <dependency>
         <groupId>org.xerial.snappy</groupId>
@@ -722,12 +722,11 @@
 
   <profiles>
     <profile>
-      <id>hadoop2-yarn</id>
+      <id>yarn-alpha</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
         <hadoop.version>0.23.7</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
         <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
 
@@ -735,57 +734,20 @@
         <module>yarn</module>
       </modules>
 
-      <repositories>
-        <repository>
-          <id>maven-root</id>
-          <name>Maven root repository</name>
-          <url>http://repo1.maven.org/maven2</url>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-        </repository>
-      </repositories>
-
-      <dependencyManagement>
-        <dependencies>
-        </dependencies>
-      </dependencyManagement>
     </profile>
 
     <profile>
-      <id>new-yarn</id>
-       <properties>
-         <hadoop.major.version>2</hadoop.major.version>
-         <hadoop.version>2.2.0</hadoop.version>
-         <protobuf.version>2.5.0</protobuf.version>
-       </properties>
+      <id>yarn</id>
+      <properties>
+        <hadoop.major.version>2</hadoop.major.version>
+        <hadoop.version>2.2.0</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+      </properties>
+      <modules>
+        <module>yarn</module>
+      </modules>
 
-       <modules>
-         <module>new-yarn</module>
-       </modules>
-
-       <repositories>
-         <repository>
-           <id>maven-root</id>
-           <name>Maven root repository</name>
-           <url>http://repo1.maven.org/maven2</url>
-           <releases>
-             <enabled>true</enabled>
-           </releases>
-           <snapshots>
-             <enabled>false</enabled>
-           </snapshots>
-         </repository>
-       </repositories>
-
-       <dependencyManagement>
-         <dependencies>
-         </dependencies>
-       </dependencyManagement>
-     </profile>
+    </profile>
 
     <profile>
       <id>repl-bin</id>

@@ -24,7 +24,7 @@ import com.typesafe.config.ConfigFactory
  *
  * @param loadDefaults whether to load values from the system properties and classpath
  */
-class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
+class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with Logging {
 
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
@@ -67,7 +67,8 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
 
   /** Set JAR files to distribute to the cluster. */
   def setJars(jars: Seq[String]): SparkConf = {
-    set("spark.jars", jars.mkString(","))
+    for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor") 
+    set("spark.jars", jars.filter(_ != null).mkString(","))
   }
 
   /** Set JAR files to distribute to the cluster. (Java-friendly version.) */
@@ -170,6 +171,9 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable {
     getAll.filter{case (k, v) => k.startsWith(prefix)}
           .map{case (k, v) => (k.substring(prefix.length), v)}
   }
+
+  /** Get all akka conf variables set on this SparkConf */
+  def getAkkaConf: Seq[(String, String)] =  getAll.filter {case (k, v) => k.startsWith("akka.")}
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)

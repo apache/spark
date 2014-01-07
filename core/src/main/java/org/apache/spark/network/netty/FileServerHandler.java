@@ -31,11 +31,11 @@ import org.slf4j.LoggerFactory;
 
 class FileServerHandler extends SimpleChannelInboundHandler<String> {
 
-  private Logger LOG = LoggerFactory.getLogger(this.getClass().getName());
+  private static final Logger LOG = LoggerFactory.getLogger(FileServerHandler.class.getName());
 
   private final PathResolver pResolver;
 
-  public FileServerHandler(PathResolver pResolver){
+  FileServerHandler(PathResolver pResolver){
     this.pResolver = pResolver;
   }
 
@@ -61,7 +61,7 @@ class FileServerHandler extends SimpleChannelInboundHandler<String> {
         ctx.flush();
         return;
       }
-      int len = new Long(length).intValue();
+      int len = (int) length;
       ctx.write((new FileHeader(len, blockId)).buffer());
       try {
         ctx.write(new DefaultFileRegion(new FileInputStream(file)
