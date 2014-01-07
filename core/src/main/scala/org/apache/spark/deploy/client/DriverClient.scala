@@ -23,7 +23,7 @@ import scala.concurrent._
 
 import akka.actor._
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
@@ -59,11 +59,12 @@ object DriverClient extends Logging {
 
   def main(args: Array[String]) {
     val driverArgs = new DriverClientArguments(args)
+    val conf = new SparkConf()
 
     // TODO: See if we can initialize akka so return messages are sent back using the same TCP
     //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
     val (actorSystem, _) = AkkaUtils.createActorSystem(
-      "driverClient", Utils.localHostName(), 0)
+      "driverClient", Utils.localHostName(), 0, false, conf)
     val master = driverArgs.master
     val response = promise[(Boolean, String)]
     val driver: ActorRef = actorSystem.actorOf(Props(new DriverActor(driverArgs.master, response)))
@@ -95,7 +96,7 @@ object DriverClient extends Logging {
 
     val (success, message) =
       try {
-        Await.result(response.future, AkkaUtils.askTimeout)
+        Await.result(response.future, AkkaUtils.askTimeout(conf))
       } catch {
         case e: TimeoutException => (false, s"Master $master failed to respond in time")
       }

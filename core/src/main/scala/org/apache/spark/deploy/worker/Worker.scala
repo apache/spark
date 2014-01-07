@@ -335,7 +335,7 @@ private[spark] object Worker {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
       conf = conf)
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, workDir, conf), name = actorName)
+      masterUrls, systemName, actorName,  workDir, conf), name = actorName)
     (actorSystem, boundPort)
   }
 
