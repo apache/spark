@@ -19,6 +19,7 @@ package org.apache.spark.streaming.examples;
 
 import java.util.Map;
 import java.util.HashMap;
+import java.util.regex.Pattern;
 
 import com.google.common.collect.Lists;
 import org.apache.spark.api.java.function.FlatMapFunction;
@@ -45,7 +46,12 @@ import scala.Tuple2;
  *    zoo03 my-consumer-group topic1,topic2 1`
  */
 
-public class JavaKafkaWordCount {
+public final class JavaKafkaWordCount {
+  private static final Pattern SPACE = Pattern.compile(" ");
+
+  private JavaKafkaWordCount() {
+  }
+
   public static void main(String[] args) {
     if (args.length < 5) {
       System.err.println("Usage: KafkaWordCount <master> <zkQuorum> <group> <topics> <numThreads>");
@@ -68,7 +74,7 @@ public class JavaKafkaWordCount {
 
     JavaDStream<String> lines = messages.map(new Function<Tuple2<String, String>, String>() {
       @Override
-      public String call(Tuple2<String, String> tuple2) throws Exception {
+      public String call(Tuple2<String, String> tuple2) {
         return tuple2._2();
       }
     });
@@ -76,19 +82,19 @@ public class JavaKafkaWordCount {
     JavaDStream<String> words = lines.flatMap(new FlatMapFunction<String, String>() {
       @Override
       public Iterable<String> call(String x) {
-        return Lists.newArrayList(x.split(" "));
+        return Lists.newArrayList(SPACE.split(x));
       }
     });
 
     JavaPairDStream<String, Integer> wordCounts = words.map(
       new PairFunction<String, String, Integer>() {
         @Override
-        public Tuple2<String, Integer> call(String s) throws Exception {
+        public Tuple2<String, Integer> call(String s) {
           return new Tuple2<String, Integer>(s, 1);
         }
       }).reduceByKey(new Function2<Integer, Integer, Integer>() {
         @Override
-        public Integer call(Integer i1, Integer i2) throws Exception {
+        public Integer call(Integer i1, Integer i2) {
           return i1 + i2;
         }
       });

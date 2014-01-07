@@ -31,7 +31,8 @@ import java.util.concurrent.TimeUnit;
 
 class FileClient {
 
-  private Logger LOG = LoggerFactory.getLogger(this.getClass().getName());
+  private static final Logger LOG = LoggerFactory.getLogger(FileClient.class.getName());
+
   private final FileClientHandler handler;
   private Channel channel = null;
   private Bootstrap bootstrap = null;
@@ -39,7 +40,7 @@ class FileClient {
   private final int connectTimeout;
   private final int sendTimeout = 60; // 1 min
 
-  public FileClient(FileClientHandler handler, int connectTimeout) {
+  FileClient(FileClientHandler handler, int connectTimeout) {
     this.handler = handler;
     this.connectTimeout = connectTimeout;
   }

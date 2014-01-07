@@ -25,9 +25,9 @@ import io.netty.handler.codec.string.StringDecoder;
 
 class FileServerChannelInitializer extends ChannelInitializer<SocketChannel> {
 
-  PathResolver pResolver;
+  private final PathResolver pResolver;
 
-  public FileServerChannelInitializer(PathResolver pResolver) {
+  FileServerChannelInitializer(PathResolver pResolver) {
     this.pResolver = pResolver;
   }
 

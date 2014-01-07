@@ -36,7 +36,10 @@ import org.apache.spark.streaming.dstream.SparkFlumeEvent;
  *           creates a server and listens for flume events.
  *    <port> is the port the Flume receiver will listen on.
  */
-public class JavaFlumeEventCount {
+public final class JavaFlumeEventCount {
+  private JavaFlumeEventCount() {
+  }
+
   public static void main(String[] args) {
     if (args.length != 3) {
       System.err.println("Usage: JavaFlumeEventCount <master> <host> <port>");
