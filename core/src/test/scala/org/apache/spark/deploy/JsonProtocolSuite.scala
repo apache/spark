@@ -73,7 +73,8 @@ class JsonProtocolSuite extends FunSuite {
     new ApplicationDescription("name", 4, 1234, cmd, "sparkHome", "appUiUrl")
   }
   def createAppInfo() : ApplicationInfo = {
-    new ApplicationInfo(3, "id", createAppDesc(), new Date(123456789), null, "appUriStr")
+    new ApplicationInfo(
+      3, "id", createAppDesc(), new Date(123456789), null, "appUriStr", Int.MaxValue)
   }
   def createWorkerInfo() : WorkerInfo = {
     new WorkerInfo("id", "host", 8080, 4, 1234, null, 80, "publicAddress")
