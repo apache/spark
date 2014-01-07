@@ -54,9 +54,6 @@ public final class JavaLogQuery {
   public static final Pattern apacheLogRegex = Pattern.compile(
     "^([\\d.]+) (\\S+) (\\S+) \\[([\\w\\d:/]+\\s[+\\-]\\d{4})\\] \"(.+?)\" (\\d{3}) ([\\d\\-]+) \"([^\"]+)\" \"([^\"]+)\".*");
 
-  private JavaLogQuery() {
-  }
-
   /** Tracks the total query count and number of aggregate bytes for a particular group. */
   public static class Stats implements Serializable {
 

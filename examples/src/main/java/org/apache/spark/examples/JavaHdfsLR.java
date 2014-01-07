@@ -35,9 +35,6 @@ public final class JavaHdfsLR {
   private static final int D = 10;   // Number of dimensions
   private static final Random rand = new Random(42);
 
-  private JavaHdfsLR() {
-  }
-
   static class DataPoint implements Serializable {
     DataPoint(double[] x, double y) {
       this.x = x;
@@ -57,7 +54,7 @@ public final class JavaHdfsLR {
       double y = Double.parseDouble(tok[0]);
       double[] x = new double[D];
       for (int i = 0; i < D; i++) {
-        x[i] = Double.parseDouble(tok[i+1]);
+        x[i] = Double.parseDouble(tok[i + 1]);
       }
       return new DataPoint(x, y);
     }

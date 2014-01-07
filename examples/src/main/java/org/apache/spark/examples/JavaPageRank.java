@@ -17,7 +17,6 @@
 
 package org.apache.spark.examples;
 
-import org.apache.spark.SparkContext;
 import scala.Tuple2;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -42,9 +41,6 @@ import java.util.regex.Pattern;
  */
 public final class JavaPageRank {
   private static final Pattern SPACES = Pattern.compile("\\s+");
-
-  private JavaPageRank() {
-  }
 
   private static class Sum extends Function2<Double, Double, Double> {
     @Override

@@ -37,9 +37,6 @@ public final class JavaTC {
   private static final int numVertices = 100;
   private static final Random rand = new Random(42);
 
-  private JavaTC() {
-  }
-
   static List<Tuple2<Integer, Integer>> generateGraph() {
     Set<Tuple2<Integer, Integer>> edges = new HashSet<Tuple2<Integer, Integer>>(numEdges);
     while (edges.size() < numEdges) {

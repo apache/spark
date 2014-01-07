@@ -28,9 +28,6 @@ import java.util.List;
 /** Computes an approximation to pi */
 public final class JavaSparkPi {
 
-  private JavaSparkPi() {
-  }
-
   public static void main(String[] args) throws Exception {
     if (args.length == 0) {
       System.err.println("Usage: JavaLogQuery <master> [slices]");

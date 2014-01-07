@@ -32,9 +32,6 @@ import java.util.regex.Pattern;
  */
 public final class JavaKMeans {
 
-  private JavaKMeans() {
-  }
-
   static class ParsePoint extends Function<String, double[]> {
     private static final Pattern SPACE = Pattern.compile(" ");
 

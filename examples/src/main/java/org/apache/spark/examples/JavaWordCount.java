@@ -32,9 +32,6 @@ import java.util.regex.Pattern;
 public final class JavaWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
 
-  private JavaWordCount() {
-  }
-
   public static void main(String[] args) throws Exception {
     if (args.length < 2) {
       System.err.println("Usage: JavaWordCount <master> <file>");

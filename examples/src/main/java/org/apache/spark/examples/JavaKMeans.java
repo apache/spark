@@ -36,9 +36,6 @@ public final class JavaKMeans {
 
   private static final Pattern SPACE = Pattern.compile(" ");
 
-  private JavaKMeans() {
-  }
-
   /** Parses numbers split by whitespace to a vector */
   static Vector parseVector(String line) {
     String[] splits = SPACE.split(line);

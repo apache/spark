@@ -33,10 +33,7 @@ import scala.Tuple2;
 /**
  * Example using MLLib ALS from Java.
  */
-public final class  JavaALS {
-
-  private JavaALS() {
-  }
+public final class JavaALS {
 
   static class ParseRating extends Function<String, Rating> {
     private static final Pattern COMMA = Pattern.compile(",");
