@@ -28,7 +28,8 @@ private[spark] class ApplicationInfo(
     val desc: ApplicationDescription,
     val submitDate: Date,
     val driver: ActorRef,
-    val appUiUrl: String)
+    val appUiUrl: String,
+    defaultCores: Int)
   extends Serializable {
 
   @transient var state: ApplicationState.Value = _
@@ -81,7 +82,9 @@ private[spark] class ApplicationInfo(
     }
   }
 
-  def coresLeft: Int = desc.maxCores - coresGranted
+  private val myMaxCores = if (desc.maxCores == Int.MaxValue) defaultCores else desc.maxCores
+
+  def coresLeft: Int = myMaxCores - coresGranted
 
   private var _retryCount = 0
 
