@@ -41,7 +41,7 @@ import scala.Tuple2;
  *   <numThreads> is the number of threads the kafka consumer should use
  *
  * Example:
- *    `./run-example org.apache.spark.streaming.examples.JavaKafkaWordCount local[2] zoo01,zoo02,
+ *    `./bin/run-example org.apache.spark.streaming.examples.JavaKafkaWordCount local[2] zoo01,zoo02,
  *    zoo03 my-consumer-group topic1,topic2 1`
  */
 
@@ -53,8 +53,9 @@ public class JavaKafkaWordCount {
     }
 
     // Create the context with a 1 second batch size
-    JavaStreamingContext ssc = new JavaStreamingContext(args[0], "NetworkWordCount",
-            new Duration(2000), System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+    JavaStreamingContext ssc = new JavaStreamingContext(args[0], "KafkaWordCount",
+            new Duration(2000), System.getenv("SPARK_HOME"),
+            JavaStreamingContext.jarOfClass(JavaKafkaWordCount.class));
 
     int numThreads = Integer.parseInt(args[4]);
     Map<String, Integer> topicMap = new HashMap<String, Integer>();

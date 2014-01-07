@@ -47,7 +47,8 @@ private[spark] class LocalActor(
   private val localExecutorId = "localhost"
   private val localExecutorHostname = "localhost"
 
-  val executor = new Executor(localExecutorId, localExecutorHostname, Seq.empty, isLocal = true)
+  val executor = new Executor(
+    localExecutorId, localExecutorHostname, scheduler.conf.getAll, isLocal = true)
 
   def receive = {
     case ReviveOffers =>

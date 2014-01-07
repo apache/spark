@@ -34,7 +34,7 @@ object GroupByTest {
     var numReducers = if (args.length > 4) args(4).toInt else numMappers
 
     val sc = new SparkContext(args(0), "GroupBy Test",
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
     
     val pairs1 = sc.parallelize(0 until numMappers, numMappers).flatMap { p =>
       val ranGen = new Random
