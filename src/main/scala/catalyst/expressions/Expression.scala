@@ -9,13 +9,14 @@ abstract class Expression extends TreeNode[Expression] {
 
   def dataType: DataType
   /**
-   * foldable is used to indicate if an expression can be folded.
-   * Right now, we consider expressions listed below as foldable expressions.
-   * - A Coalesce is foldable if all of its children are foldable
-   * - A BinaryExpression is foldable if its both left and right child are foldable.
-   * - A Not, isNull, or isNotNull is foldable if its child is foldable.
-   * - A Literal is foldable.
-   * - A Cast or UnaryMinus is foldable if its child is foldable.
+   * Returns true when an expression is a candidate for static evaluation before the query is
+   * executed.
+   * The following conditions are used to determine suitability for constant folding:
+   *  - A Coalesce is foldable if all of its children are foldable
+   *  - A BinaryExpression is foldable if its both left and right child are foldable.
+   *  - A Not, isNull, or isNotNull is foldable if its child is foldable.
+   *  - A Literal is foldable.
+   *  - A Cast or UnaryMinus is foldable if its child is foldable.
    */
   // TODO: Supporting more foldable expressions. For example, deterministic Hive UDFs.
   def foldable: Boolean = false

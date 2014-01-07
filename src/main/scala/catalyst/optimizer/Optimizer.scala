@@ -12,7 +12,7 @@ object Optimize extends RuleExecutor[LogicalPlan] {
       EliminateSubqueries) ::
     Batch("ConstantFolding", Once,
       ConstantFolding,
-      BooleanSimpliﬁcation
+      BooleanSimplification
     ) :: Nil
 }
 
@@ -26,6 +26,10 @@ object EliminateSubqueries extends Rule[LogicalPlan] {
   }
 }
 
+/**
+ * Replaces expressions that can be statically evaluated with equivalent [[expressions.Literal]]
+ * values.
+ */
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
@@ -34,7 +38,12 @@ object ConstantFolding extends Rule[LogicalPlan] {
   }
 }
 
-object BooleanSimpliﬁcation extends Rule[LogicalPlan] {
+/**
+ * Simplifies boolean expressions where the answer can be determined without evaluating both sides.
+ * Note that this rule can eliminate expressions that might otherwise have been evaluated and thus
+ * is only safe when evaluations of expressions does not result in side effects.
+ */
+object BooleanSimplification extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsUp {
       case and @ And(left, right) => {
