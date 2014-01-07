@@ -98,6 +98,12 @@ private[spark] class ExecutorRunner(
     case other => other
   }
 
+  def getCommandSeq = {
+    val command = Command(appDesc.command.mainClass,
+      appDesc.command.arguments.map(substituteVariables), appDesc.command.environment)
+    CommandUtils.buildCommandSeq(command, memory, sparkHome.getAbsolutePath)
+  }
+
   /**
    * Download and run the executor described in our ApplicationDescription
    */
@@ -110,9 +116,7 @@ private[spark] class ExecutorRunner(
       }
 
       // Launch the process
-      val fullCommand = new Command(appDesc.command.mainClass,
-        appDesc.command.arguments.map(substituteVariables), appDesc.command.environment)
-      val command = CommandUtils.buildCommandSeq(fullCommand, memory, sparkHome.getAbsolutePath)
+      val command = getCommandSeq
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
       val builder = new ProcessBuilder(command: _*).directory(executorDir)
       val env = builder.environment()

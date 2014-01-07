@@ -10,7 +10,8 @@ import org.apache.spark.deploy.DeployMessages.SendHeartbeat
  * Actor which connects to a worker process and terminates the JVM if the connection is severed.
  * Provides fate sharing between a worker and its associated child processes.
  */
-private[spark] class WorkerWatcher(workerUrl: String) extends Actor with Logging {
+private[spark] class WorkerWatcher(workerUrl: String) extends Actor
+    with Logging {
   override def preStart() {
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
@@ -19,9 +20,16 @@ private[spark] class WorkerWatcher(workerUrl: String) extends Actor with Logging
     worker ! SendHeartbeat // need to send a message here to initiate connection
   }
 
+  // Used to avoid shutting down JVM during tests
+  private[deploy] var isShutDown = false
+  private[deploy] def setTesting(testing: Boolean) = isTesting = testing
+  private var isTesting = false
+
   // Lets us filter events only from the worker's actor system
   private val expectedHostPort = AddressFromURIString(workerUrl).hostPort
   private def isWorker(address: Address) = address.hostPort == expectedHostPort
+
+  def exitNonZero() = if (isTesting) isShutDown = true else System.exit(-1)
 
   override def receive = {
     case AssociatedEvent(localAddress, remoteAddress, inbound) if isWorker(remoteAddress) =>
@@ -32,12 +40,12 @@ private[spark] class WorkerWatcher(workerUrl: String) extends Actor with Logging
       // These logs may not be seen if the worker (and associated pipe) has died
       logError(s"Could not initialize connection to worker $workerUrl. Exiting.")
       logError(s"Error was: $cause")
-      System.exit(-1)
+      exitNonZero()
 
     case DisassociatedEvent(localAddress, remoteAddress, inbound) if isWorker(remoteAddress) =>
       // This log message will never be seen
       logError(s"Lost connection to worker actor $workerUrl. Exiting.")
-      System.exit(-1)
+      exitNonZero()
 
     case e: AssociationEvent =>
       // pass through association events relating to other remote actor systems

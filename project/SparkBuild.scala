@@ -233,6 +233,7 @@ object SparkBuild extends Build {
         "org.ow2.asm"              % "asm"              % "4.0",
         "org.spark-project.akka"  %% "akka-remote"      % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
         "org.spark-project.akka"  %% "akka-slf4j"       % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
+        "org.spark-project.akka"  %% "akka-testkit"     % "2.2.3-shaded-protobuf" % "test",
         "net.liftweb"             %% "lift-json"        % "2.5.1"  excludeAll(excludeNetty),
         "it.unimi.dsi"             % "fastutil"         % "6.4.4",
         "colt"                     % "colt"             % "1.2.0",

@@ -86,7 +86,7 @@ class JsonProtocolSuite extends FunSuite {
   )
 
   def createDriverDesc() = new DriverDescription("hdfs://some-dir/some.jar", 100, 3,
-    createDriverCommand())
+    false, createDriverCommand())
 
   def createDriverInfo(): DriverInfo = new DriverInfo(3, "driver-3", createDriverDesc(), new Date())
 
