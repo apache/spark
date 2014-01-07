@@ -157,8 +157,7 @@ You may also run your application entirely inside of the cluster by submitting y
        [application-options]
 
     cluster-url: The URL of the master node.
-    application-jar-url: Path to a bundled jar including your application and all dependencies.
-                         Accepts hdfs://, file://, and http:// paths.
+    application-jar-url: Path to a bundled jar including your application and all dependencies. Currently, the URL must be visible from inside of your cluster, for instance, in an HDFS directory. 
     main-class: The entry point for your application.
 
     Client Options:
@@ -170,7 +169,7 @@ Keep in mind that your driver program will be executed on a remote worker machin
 
  * _Environment variables_: These will be captured from the environment in which you launch the client and applied when launching the driver program.
  * _Java options_: You can add java options by setting `SPARK_JAVA_OPTS` in the environment in which you launch the submission client.
-  * _Dependencies_: You'll still need to call `sc.addJar` inside of your driver program to add your application jar and any dependencies. If you submit a local application jar to the client (e.g one with a `file://` URL), it will be uploaded into the working directory of your driver program. Then, you can add it using `sc.addJar("jar-name.jar")`.
+ * _Dependencies_: You'll still need to call `sc.addJar` inside of your program to make your bundled application jar visible on all worker nodes.
 
 Once you submit a driver program, it will appear in the cluster management UI at port 8080 and
 be assigned an identifier. If you'd like to prematurely terminate the program, you can do so using
