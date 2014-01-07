@@ -35,8 +35,15 @@ class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassManifest,
   /**
    * Allocate an OpenHashMap with a fixed initial capacity
    */
-  def this(initialCapacity: Int = 64) =
+  def this(initialCapacity: Int) =
     this(new OpenHashSet[K](initialCapacity), new Array[V](initialCapacity))
+    
+  /**
+   * Allocate an OpenHashMap with a default initial capacity, providing a true
+   * no-argument constructor.
+   */
+  def this() = this(64)
+
 
   /**
    * Allocate an OpenHashMap with a fixed initial capacity
