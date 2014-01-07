@@ -17,8 +17,8 @@
 # limitations under the License.
 #
 
-bin=`dirname "$0"`
-bin=`cd "$sbin"; pwd`
+sbin=`dirname "$0"`
+sbin=`cd "$sbin"; pwd`
 
 . "$sbin/spark-config.sh"
 
