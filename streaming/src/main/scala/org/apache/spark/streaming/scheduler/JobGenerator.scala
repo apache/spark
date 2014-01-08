@@ -26,8 +26,9 @@ import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
 /** Event classes for JobGenerator */
 private[scheduler] sealed trait JobGeneratorEvent
 private[scheduler] case class GenerateJobs(time: Time) extends JobGeneratorEvent
-private[scheduler] case class ClearOldMetadata(time: Time) extends JobGeneratorEvent
+private[scheduler] case class ClearMetadata(time: Time) extends JobGeneratorEvent
 private[scheduler] case class DoCheckpoint(time: Time) extends JobGeneratorEvent
+private[scheduler] case class ClearCheckpointData(time: Time) extends JobGeneratorEvent
 
 /**
  * This class generates jobs from DStreams as well as drives checkpointing and cleaning
@@ -55,7 +56,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
     longTime => eventProcessorActor ! GenerateJobs(new Time(longTime)))
   lazy val checkpointWriter = if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
-    new CheckpointWriter(ssc.checkpointDir, ssc.sparkContext.hadoopConfiguration)
+    new CheckpointWriter(this, ssc.checkpointDir, ssc.sparkContext.hadoopConfiguration)
   } else {
     null
   }
@@ -79,15 +80,20 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
    * On batch completion, clear old metadata and checkpoint computation.
    */
   private[scheduler] def onBatchCompletion(time: Time) {
-    eventProcessorActor ! ClearOldMetadata(time)
+    eventProcessorActor ! ClearMetadata(time)
+  }
+  
+  private[streaming] def onCheckpointCompletion(time: Time) {
+    eventProcessorActor ! ClearCheckpointData(time)
   }
 
   /** Processes all events */
   private def processEvent(event: JobGeneratorEvent) {
     event match {
       case GenerateJobs(time) => generateJobs(time)
-      case ClearOldMetadata(time) => clearOldMetadata(time)
+      case ClearMetadata(time) => clearMetadata(time)
       case DoCheckpoint(time) => doCheckpoint(time)
+      case ClearCheckpointData(time) => clearCheckpointData(time)
     }
   }
 
@@ -143,9 +149,14 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
 
   /** Clear DStream metadata for the given `time`. */
-  private def clearOldMetadata(time: Time) {
-    ssc.graph.clearOldMetadata(time)
+  private def clearMetadata(time: Time) {
+    ssc.graph.clearMetadata(time)
     eventProcessorActor ! DoCheckpoint(time)
+  }
+
+  /** Clear DStream checkpoint data for the given `time`. */
+  private def clearCheckpointData(time: Time) {
+    ssc.graph.clearCheckpointData(time)
   }
 
   /** Perform checkpoint for the give `time`. */

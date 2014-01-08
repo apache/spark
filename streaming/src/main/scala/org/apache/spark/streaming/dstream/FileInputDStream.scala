@@ -90,8 +90,8 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   /** Clear the old time-to-files mappings along with old RDDs */
-  protected[streaming] override def clearOldMetadata(time: Time) {
-    super.clearOldMetadata(time)
+  protected[streaming] override def clearMetadata(time: Time) {
+    super.clearMetadata(time)
     val oldFiles = files.filter(_._1 <= (time - rememberDuration))
     files --= oldFiles.keys
     logInfo("Cleared " + oldFiles.size + " old files that were older than " +
@@ -172,12 +172,12 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
 
     def hadoopFiles = data.asInstanceOf[HashMap[Time, Array[String]]]
 
-    override def update() {
+    override def update(time: Time) {
       hadoopFiles.clear()
       hadoopFiles ++= files
     }
 
-    override def cleanup() { }
+    override def cleanup(time: Time) { }
 
     override def restore() {
       hadoopFiles.toSeq.sortBy(_._1)(Time.ordering).foreach {
