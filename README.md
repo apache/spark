@@ -2,7 +2,7 @@ catalyst
 ========
 Catalyst is a functional framework for optimizing relational query plans.
 
-More documentation can be found in the project's [scaladoc](http://marmbrus.github.io/catalyst/latest/api/#catalyst.package)
+More documentation can be found in the project's [scaladoc](http://databricks.github.io/catalyst/latest/api/#catalyst.package)
 
 Getting Started
 ===============
