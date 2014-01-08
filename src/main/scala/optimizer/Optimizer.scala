@@ -76,7 +76,6 @@ object PushPredicateThroughInnerJoin extends Rule[LogicalPlan] with PredicateHel
       // Build the new left and right side, optionally with the pushed down filters.
       val newLeft = leftConditions.reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
       val newRight = rightConditions.reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
-      val newJoin = Join(newLeft, newRight, Inner, None)
-      joinConditions.reduceLeftOption(And).map(Filter(_, newJoin)).getOrElse(newJoin)
+      Join(newLeft, newRight, Inner, joinConditions.reduceLeftOption(And))
   }
 }
