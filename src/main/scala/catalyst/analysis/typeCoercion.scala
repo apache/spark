@@ -43,11 +43,11 @@ object ConvertNaNs extends Rule[LogicalPlan] {
  * Loosely based on rules from "Hadoop: The Definitive Guide" 2nd edition, by Tom White
  *
  * The implicit conversion rules can be summarized as follows:
- * $ - Any integral numeric type can be implicitly converted to a wider type.
- * $ - All the integral numeric types, FLOAT, and (perhaps surprisingly) STRING can be implicitly
+ *   - Any integral numeric type can be implicitly converted to a wider type.
+ *   - All the integral numeric types, FLOAT, and (perhaps surprisingly) STRING can be implicitly
  *     converted to DOUBLE.
- * $ - TINYINT, SMALLINT, and INT can all be converted to FLOAT.
- * $ - BOOLEAN types cannot be converted to any other type.
+ *   - TINYINT, SMALLINT, and INT can all be converted to FLOAT.
+ *   - BOOLEAN types cannot be converted to any other type.
  *
  * String conversions are handled by the PromoteStrings rule.
  */

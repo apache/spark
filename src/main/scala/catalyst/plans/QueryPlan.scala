@@ -15,7 +15,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   def outputSet: Set[Attribute] = output.toSet
 
   /**
-   * Runs [[transform]] with [[rule]] on all expressions present in this query operator.
+   * Runs [[transform]] with `rule` on all expressions present in this query operator.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformExpressionsDown or transformExpressionsUp should be used.
    * @param rule the rule to be applied to every expression in this operator.
@@ -25,7 +25,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   }
 
   /**
-   * Runs [[transformDown]] with [[rule]] on all expressions present in this query operator.
+   * Runs [[transformDown]] with `rule` on all expressions present in this query operator.
    * @param rule the rule to be applied to every expression in this operator.
    */
   def transformExpressionsDown(rule: PartialFunction[Expression, Expression]): this.type = {
@@ -55,7 +55,7 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
   }
 
   /**
-   * Runs [[transformUp]] with [[rule]] on all expressions present in this query operator.
+   * Runs [[transformUp]] with `rule` on all expressions present in this query operator.
    * @param rule the rule to be applied to every expression in this operator.
    * @return
    */

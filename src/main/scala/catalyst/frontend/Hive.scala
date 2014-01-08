@@ -126,9 +126,8 @@ object HiveQl {
    */
   implicit class TransformableNode(n: ASTNode) {
     /**
-     * Returns a copy of this node where [[rule]] has been recursively
-     * applied to it and all of its children.  When [[rule]] does not
-     * apply to a given node it is left unchanged.
+     * Returns a copy of this node where `rule` has been recursively applied to it and all of its
+     * children.  When `rule` does not apply to a given node it is left unchanged.
      * @param rule the function use to transform this nodes children
      */
     def transform(rule: PartialFunction[ASTNode, ASTNode]): ASTNode = {
@@ -152,7 +151,7 @@ object HiveQl {
       Option(s).map(_.toSeq).getOrElse(Nil)
 
     /**
-     * Returns this ASTNode with the text changed to [[newText]].
+     * Returns this ASTNode with the text changed to `newText``.
      */
     def withText(newText: String): ASTNode = {
       n.token.asInstanceOf[org.antlr.runtime.CommonToken].setText(newText)
@@ -160,7 +159,7 @@ object HiveQl {
     }
 
     /**
-     * Returns this ASTNode with the children changed to [[newChildren]].
+     * Returns this ASTNode with the children changed to `newChildren`.
      */
     def withChildren(newChildren: Seq[ASTNode]): ASTNode = {
       (1 to n.getChildCount).foreach(_ => n.deleteChild(0))

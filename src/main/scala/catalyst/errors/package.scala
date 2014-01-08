@@ -17,8 +17,8 @@ package object errors {
   }
 
   /**
-   *  Wraps any exceptions that are thrown while executing [[f]] in an [[OptimizationException]], attaching the provided
-   *  [[tree]].
+   *  Wraps any exceptions that are thrown while executing `f` in an [[OptimizationException]],
+   *  attaching the provided `tree`.
    */
   def attachTree[TreeType <: TreeNode[_], A](tree: TreeType, msg: String = "")(f: => A): A = {
     try f catch {
@@ -27,8 +27,8 @@ package object errors {
   }
 
   /**
-   * Executes [[f]] which is expected to throw an OptimizationException. The first tree encountered in the stack
-   * of exceptions of type [[TreeType]] is returned.
+   * Executes `f` which is expected to throw an OptimizationException. The first tree encountered in
+   * the stack of exceptions of type `TreeType` is returned.
    */
   def getTree[TreeType <: TreeNode[_]](f: => Unit): TreeType = ??? // TODO: Implement
 }

@@ -8,6 +8,8 @@ version := "0.1-SNAPSHOT"
 
 scalaVersion := "2.10.3"
 
+scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
+
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
 libraryDependencies += "org.apache.spark" %% "spark-core" % "0.9.0-incubating-SNAPSHOT"

@@ -6,6 +6,7 @@ import java.util.{Set => JavaSet}
 
 import scala.collection.mutable
 import scala.collection.JavaConversions._
+import scala.language.implicitConversions
 
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.metastore.MetaStoreUtils

@@ -30,8 +30,8 @@ trait PlanningStrategies {
     }
 
     /**
-     * Returns true if [[projectList]] only performs column pruning and
-     * does not evaluate other complex expressions.
+     * Returns true if `projectList` only performs column pruning and does not evaluate other
+     * complex expressions.
      */
     def isSimpleProject(projectList: Seq[NamedExpression]) = {
       projectList.map {
@@ -50,7 +50,7 @@ trait PlanningStrategies {
       classOf[Average])
 
     /**
-     * Returns true if [[exprs]] contains only aggregates that can be computed using Accumulators.
+     * Returns true if `exprs` only contains aggregates that can be computed using Accumulators.
      */
     def onlyAllowedAggregates(exprs: Seq[Expression]): Boolean = {
       val aggs = exprs.flatMap(_.collect { case a: AggregateExpression => a}).map(_.getClass)
@@ -106,7 +106,7 @@ trait PlanningStrategies {
     private def combineConjunctivePredicates(predicates: Seq[Expression]) =
       predicates.reduceLeft(And(_, _))
 
-    /** Returns true if [[expr]] can be evaluated using only the output of [[plan]]. */
+    /** Returns true if `expr` can be evaluated using only the output of `plan`. */
     protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
       expr.references subsetOf plan.outputSet
   }

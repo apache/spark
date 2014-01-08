@@ -2,6 +2,7 @@ package catalyst
 package execution
 
 import java.io.File
+import scala.language.implicitConversions
 
 import analysis.{SimpleAnalyzer, Analyzer}
 import frontend.hive._

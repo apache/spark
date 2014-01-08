@@ -67,8 +67,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
-   * Replaces [[UnresolvedAttribute]]s with concrete [[AttributeReference]]s
-   * from a logical plan node's children.
+   * Replaces [[UnresolvedAttribute]]s with concrete
+   * [[expressions.AttributeReference AttributeReferences]] from a logical plan node's children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -85,7 +85,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
-   * Replaces [[UnresolvedFunction]]s with concrete [[Expression]]s.
+   * Replaces [[UnresolvedFunction]]s with concrete [[expressions.Expression Expressions]].
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -141,7 +141,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     }
 
     /**
-     * Returns true if [[exprs]] contains a star.
+     * Returns true if `exprs` contains a [[Star]].
      */
     protected def containsStar(exprs: Seq[NamedExpression]): Boolean =
       exprs.collect { case _: Star => true }.nonEmpty

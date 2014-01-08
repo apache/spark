@@ -8,7 +8,7 @@ object TreeNode {
   protected def nextId() = currentId.getAndIncrement()
 }
 
-/** Used when traversing the tree for a node at a given depth */
+/** Used by [[TreeNode.getNodeNumbered]] when traversing the tree for a given number */
 private class MutableInt(var i: Int)
 
 abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
@@ -19,14 +19,15 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
 
   /**
    * A globally unique id for this specific instance. Not preserved across copies.
-   * Unlike [[equals]] [[id]] be used to differentiate distinct but structurally
+   * Unlike `equals`, `id` can be used to differentiate distinct but structurally
    * identical branches of a tree.
    */
   val id = TreeNode.nextId()
 
   /**
-   * Returns true if other is the same [[TreeNode]] instance.  Unlike [[equals]] this function will
-   * return false for different instances of structurally identical trees.
+   * Returns true if other is the same [[catalyst.trees.TreeNode TreeNode]] instance.  Unlike
+   * `equals` this function will return false for different instances of structurally identical
+   * trees.
    */
   def sameInstance(other: TreeNode[_]): Boolean = {
     this.id == other.id
@@ -35,14 +36,14 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   /**
    * Faster version of equality which short-circuits when two treeNodes are the same instance.
    * We don't just override Object.Equals, as doing so prevents the scala compiler from from
-   * generating case class [[equals]] methods.
+   * generating case class `equals` methods
    */
   def fastEquals(other: TreeNode[_]): Boolean = {
     sameInstance(other) || this == other
   }
 
   /**
-   * Runs [[f]] on this node and then recursively on [[children]].
+   * Runs the given function on this node and then recursively on [[children]].
    * @param f the function to be applied to each node in the tree.
    */
   def foreach(f: BaseType => Unit): Unit = {
@@ -51,7 +52,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
-   * Returns a Seq containing the result of applying [[f]] to each
+   * Returns a Seq containing the result of applying the given function to each
    * node in this tree in a preorder traversal.
    * @param f the function to be applied.
    */
@@ -83,8 +84,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
-   * Returns a copy of this node where [[rule]] has been recursively applied to the tree.
-   * When [[rule]] does not apply to a given node it is left unchanged.
+   * Returns a copy of this node where `rule` has been recursively applied to the tree.
+   * When `rule` does not apply to a given node it is left unchanged.
    * Users should not expect a specific directionality. If a specific directionality is needed,
    * transformDown or transformUp should be used.
    * @param rule the function use to transform this nodes children
@@ -94,10 +95,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
-   * Returns a copy of this node where [[rule]] has been recursively
-   * applied to it and all of its children (pre-order). When [[rule]] does not
-   * apply to a given node it is left unchanged.
-   * @param rule the function use to transform this nodes children
+   * Returns a copy of this node where `rule` has been recursively applied to it and all of its
+   * children (pre-order). When `rule` does not apply to a given node it is left unchanged.
+   * @param rule the function used to transform this nodes children
    */
   def transformDown(rule: PartialFunction[BaseType, BaseType]): BaseType = {
     val afterRule = rule.applyOrElse(this, identity[BaseType])
@@ -110,10 +110,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
-   * Returns a copy of this node where [[rule]] has been recursively
-   * applied to all the children of this node.  When [[rule]] does not
-   * apply to a given node it is left unchanged.
-   * @param rule the function use to transform this nodes children
+   * Returns a copy of this node where `rule` has been recursively applied to all the children of
+   * this node.  When `rule` does not apply to a given node it is left unchanged.
+   * @param rule the function used to transform this nodes children
    */
   def transformChildrenDown(rule: PartialFunction[BaseType, BaseType]): this.type = {
     var changed = false
@@ -144,9 +143,9 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
-   * Returns a copy of this node where [[rule]] has been recursively
-   * applied first to all of its children and then itself (post-order).
-   * When [[rule]] does not apply to a given node, it is left unchanged.
+   * Returns a copy of this node where `rule` has been recursively applied first to all of its
+   * children and then itself (post-order). When `rule` does not apply to a given node, it is left
+   * unchanged.
    * @param rule the function use to transform this nodes children
    */
   def transformUp(rule: PartialFunction[BaseType, BaseType]): BaseType = {
@@ -196,7 +195,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   /**
    * Creates a copy of this type of tree node after a transformation.
    * Must be overridden by child classes that have constructor arguments
-   * that are not present in the [[productIterator]].
+   * that are not present in the productIterator.
    * @param newArgs the new product arguments.
    */
   def makeCopy(newArgs: Array[AnyRef]): this.type = attachTree(this, "makeCopy") {
@@ -218,7 +217,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def nodeName = getClass.getSimpleName
 
   /**
-   * The arguments that should be included in the arg string.  Defaults to the [[productIterator]].
+   * The arguments that should be included in the arg string.  Defaults to the `productIterator`.
    */
   protected def stringArgs = productIterator
 
@@ -240,25 +239,29 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
 
   /**
    * Returns a string representation of the nodes in this tree, where each operator is numbered.
-   * The numbers can be used with [[apply]] to easily access specific subtrees.
+   * The numbers can be used with [[trees.TreeNode.apply apply]] to easily access specific subtrees.
    */
   def numberedTreeString =
     treeString.split("\n").zipWithIndex.map { case (line, i) => f"$i%02d $line" }.mkString("\n")
 
-  def apply(depth: Int): BaseType = getNodeAtDepth(new MutableInt(depth))
+  /**
+   * Returns the tree node at the specified number.
+   * Numbers for each node can be found in the [[numberedTreeString]].
+   */
+  def apply(number: Int): BaseType = getNodeNumbered(new MutableInt(number))
 
-  protected def getNodeAtDepth(depth: MutableInt): BaseType = {
-    if (depth.i < 0) {
+  protected def getNodeNumbered(number: MutableInt): BaseType = {
+    if (number.i < 0) {
       null.asInstanceOf[BaseType]
-    } else if (depth.i == 0) {
+    } else if (number.i == 0) {
       this
     } else {
-      depth.i -= 1
-      children.map(_.getNodeAtDepth(depth)).find(_ != null).getOrElse(sys.error("Invalid depth"))
+      number.i -= 1
+      children.map(_.getNodeNumbered(number)).find(_ != null).getOrElse(sys.error("No such node."))
     }
   }
 
-  /** Appends the string represent of this node and its children to [[builder]]. */
+  /** Appends the string represent of this node and its children to the given StringBuilder. */
   protected def generateTreeString(depth: Int, builder: StringBuilder): StringBuilder = {
     builder.append(" " * depth)
     builder.append(simpleString)

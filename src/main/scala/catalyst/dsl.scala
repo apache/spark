@@ -1,5 +1,7 @@
 package catalyst
 
+import scala.language.implicitConversions
+
 import analysis.UnresolvedAttribute
 import expressions._
 import plans._

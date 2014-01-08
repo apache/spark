@@ -1,4 +1,5 @@
 package catalyst
+package examples
 
 import catalyst.analysis.UnresolvedRelation
 import catalyst.plans.Inner

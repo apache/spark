@@ -15,13 +15,14 @@ object SchemaRddExample {
       ("12/2/2013", "WARN: blah blah") :: Nil
     )
 
+    val dateRegEx = "(\\d+)\\/(\\d+)\\/(\\d+)".r
     /**
      * Example using the symbol based API.  In this example, the attribute names that are passed to
      * the first constructor are resolved during catalyst's analysis phase.  Then at runtime only
      * the requested attributes are passed to the UDF.  Since this analysis occurs at runtime,
      * the developer must manually annotate their function with the correct argument types.
      */
-    val filtered = testLogs.filter('date)((date: String) => new java.util.Date(date).getDay == 1)
+    val filtered = testLogs.filter('date) { case dateRegEx(_,day,_) => day.toInt == 1 }
     filtered.toRdd.collect.foreach(println)
 
 
@@ -35,7 +36,7 @@ object SchemaRddExample {
      * being resolved at runtime.  Thus, we cannot return typed results.  As such all dynamic calls
      * always return strings.
      */
-    val filtered2 = testLogs.filter(row => new java.util.Date(row.date).getDay == 1)
+    val filtered2 = testLogs.filter( _.date match { case dateRegEx(_,day,_) => day.toInt == 1 } )
     filtered2.toRdd.collect.foreach(println)
   }
 }

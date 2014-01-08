@@ -23,7 +23,8 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
   /**
    * Returns true if this expression and all its children have been resolved to a specific schema
    * and false if it is still contains any unresolved placeholders. Implementations of LogicalPlan
-   * can override this (e.g. [[UnresolvedRelation]] can set this to false).
+   * can override this (e.g. [[catalyst.analysis.UnresolvedRelation UnresolvedRelation]] should
+   * return `false`).
    */
   lazy val resolved: Boolean = !expressions.exists(!_.resolved) && childrenResolved
 
