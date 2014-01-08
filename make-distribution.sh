@@ -44,7 +44,7 @@ DISTDIR="$FWDIR/dist"
 # Get version from SBT
 export TERM=dumb   # Prevents color codes in SBT output
 
-VERSIONSTRING=$FWDIR/sbt/sbt "show version"
+VERSIONSTRING=$($FWDIR/sbt/sbt "show version")
 
 if [ $? == -1 ] ;then
     echo -e "You need sbt installed and available on your path."
