@@ -45,19 +45,14 @@ fi
 EXAMPLES_DIR="$FWDIR"/examples
 SPARK_EXAMPLES_JAR=""
 if [ -e "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar ]; then
-  # Use the JAR from the SBT build
   export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/scala-$SCALA_VERSION/*assembly*[0-9Tg].jar`
-fi
-if [ -e "$EXAMPLES_DIR"/target/spark-examples*[0-9Tg].jar ]; then
-  # Use the JAR from the Maven build
-  # TODO: this also needs to become an assembly!
-  export SPARK_EXAMPLES_JAR=`ls "$EXAMPLES_DIR"/target/spark-examples*[0-9Tg].jar`
 fi
 if [[ -z $SPARK_EXAMPLES_JAR ]]; then
   echo "Failed to find Spark examples assembly in $FWDIR/examples/target" >&2
   echo "You need to build Spark with sbt/sbt assembly before running this program" >&2
   exit 1
 fi
+
 
 # Since the examples JAR ideally shouldn't include spark-core (that dependency should be
 # "provided"), also add our standard Spark classpath, built using compute-classpath.sh.
