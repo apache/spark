@@ -32,6 +32,7 @@ import org.apache.spark.Logging
 import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.deploy.master.DriverState.DriverState
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
@@ -48,6 +49,10 @@ private[spark] class DriverRunner(
   @volatile var process: Option[Process] = None
   @volatile var killed = false
 
+  // Populated once finished
+  var finalState: Option[DriverState] = None
+  var finalException: Option[Exception] = None
+
   // Decoupled for testing
   private[deploy] def setClock(_clock: Clock) = clock = _clock
   private[deploy] def setSleeper(_sleeper: Sleeper) = sleeper = _sleeper
@@ -62,8 +67,6 @@ private[spark] class DriverRunner(
   def start() = {
     new Thread("DriverRunner for " + driverId) {
       override def run() {
-        var exn: Option[Exception] = None
-
         try {
           val driverDir = createWorkingDirectory()
           val localJarFilename = downloadUserJar(driverDir)
@@ -79,15 +82,16 @@ private[spark] class DriverRunner(
           launchDriver(command, env, driverDir, driverDesc.supervise)
         }
         catch {
-          case e: Exception => exn = Some(e)
+          case e: Exception => finalException = Some(e)
         }
 
-        val finalState =
+        val state =
           if (killed) { DriverState.KILLED }
-          else if (exn.isDefined) { DriverState.FAILED }
+          else if (finalException.isDefined) { DriverState.FAILED }
           else { DriverState.FINISHED }
+        finalState = Some(state)
 
-        worker ! DriverStateChanged(driverId, finalState, exn)
+        worker ! DriverStateChanged(driverId, state, finalException)
       }
     }.start()
   }

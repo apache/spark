@@ -18,7 +18,6 @@
 package org.apache.spark.deploy.worker.ui
 
 import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.xml.Node
 
 import akka.pattern.ask
@@ -27,6 +26,7 @@ import net.liftweb.json.JsonAST.JValue
 
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
+import org.apache.spark.deploy.master.DriverState
 import org.apache.spark.deploy.worker.{DriverRunner, ExecutorRunner}
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
@@ -52,7 +52,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
     val finishedExecutorTable =
       UIUtils.listingTable(executorHeaders, executorRow, workerState.finishedExecutors)
 
-    val driverHeaders = Seq("DriverID", "Main Class", "Cores", "Memory", "Logs")
+    val driverHeaders = Seq("DriverID", "Main Class", "State", "Cores", "Memory", "Logs", "Notes")
     val runningDrivers = workerState.drivers.sortBy(_.driverId).reverse
     val runningDriverTable = UIUtils.listingTable(driverHeaders, driverRow, runningDrivers)
     val finishedDrivers = workerState.finishedDrivers.sortBy(_.driverId).reverse
@@ -134,6 +134,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
     <tr>
       <td>{driver.driverId}</td>
       <td>{driver.driverDesc.command.mainClass}</td>
+      <td>{driver.finalState.getOrElse(DriverState.RUNNING)}</td>
       <td sorttable_customkey={driver.driverDesc.cores.toString}>
         {driver.driverDesc.cores.toString}
       </td>
@@ -143,6 +144,9 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
       <td>
         <a href={s"logPage?driverId=${driver.driverId}&logType=stdout"}>stdout</a>
         <a href={s"logPage?driverId=${driver.driverId}&logType=stderr"}>stderr</a>
+      </td>
+      <td>
+        {driver.finalException.getOrElse("")}
       </td>
     </tr>
   }

@@ -162,7 +162,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     <tr>
       <td>{driver.id} </td>
       <td>{driver.submitDate}</td>
-      <td>{driver.worker.map(w => w.id.toString).getOrElse("None")}</td>
+      <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}</td>
       <td>{driver.state}</td>
       <td sorttable_customkey={driver.desc.cores.toString}>
         {driver.desc.cores}
