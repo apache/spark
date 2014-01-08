@@ -69,7 +69,8 @@ parallelize <- function(sc, coll, numSlices = 1) {
   # 2-tuples of raws
   serializedSlices <- lapply(slices, serialize, connection = NULL)
 
-  javaSerializedSlices <- .jarray(lapply(serializedSlices, .jarray), contents.class = "[B")
+  javaSerializedSlices <- .jarray(lapply(serializedSlices, .jarray),
+                                  contents.class = "[B")
 
   jrddType = "Lorg/apache/spark/api/java/JavaRDD;"
 
@@ -103,10 +104,10 @@ parallelize <- function(sc, coll, numSlices = 1) {
 #'  # Include the matrix library we will be using
 #'  includePackage(Matrix)
 #'
-#'  generateSparse <- function(x) { 
-#'    sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3)) 
+#'  generateSparse <- function(x) {
+#'    sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3))
 #'  }
-#'  
+#'
 #'  rdd <- lapplyPartition(parallelize(sc, 1:2, 2L), generateSparse)
 #'  collect(rdd)
 #'}

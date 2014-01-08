@@ -22,7 +22,10 @@ rLibDir <- readLines(inputCon, n = 1)
 
 suppressPackageStartupMessages(library(SparkR))
 
-# First read the function; if used for pairwise RRDD, this is the hash function.
+# read the index of the current partition inside the RDD
+splitIndex <- readInt(inputCon)
+
+# read the function; if used for pairwise RRDD, this is the hash function.
 execLen <- readInt(inputCon)
 execFunctionName <- unserialize(readRawLen(inputCon, execLen))
 
@@ -69,7 +72,7 @@ if (isEmpty != 0) {
     } else {
       data <- readLines(inputCon)
     }
-    output <- do.call(execFunctionName, list(data))
+    output <- do.call(execFunctionName, list(splitIndex, data))
     writeRaw(outputCon, output)
   } else {
     if (isSerialized) {

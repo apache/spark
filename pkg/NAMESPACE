@@ -11,11 +11,12 @@ exportMethods(
               "length",
               "lapply",
               "lapplyPartition",
+              "lapplyPartitionsWithIndex",
               "map",
               "partitionBy",
               "reduce",
               "reduceByKey",
-              "sample",
+              "sampleRDD",
               "take",
               "takeSample"
              )
