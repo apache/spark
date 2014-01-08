@@ -116,7 +116,7 @@ class SparkContext(
     throw new SparkException("An application must be set in your configuration")
   }
 
-  if (conf.get("spark.log-conf", "false").toBoolean) {
+  if (conf.get("spark.logConf", "false").toBoolean) {
     logInfo("Spark configuration:\n" + conf.toDebugString)
   }
 

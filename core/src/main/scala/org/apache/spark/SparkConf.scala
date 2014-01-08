@@ -67,7 +67,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with 
 
   /** Set JAR files to distribute to the cluster. */
   def setJars(jars: Seq[String]): SparkConf = {
-    for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor") 
+    for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor")
     set("spark.jars", jars.filter(_ != null).mkString(","))
   }
 
@@ -163,6 +163,11 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with 
   /** Get a parameter as a double, falling back to a default if not set */
   def getDouble(key: String, defaultValue: Double): Double = {
     getOption(key).map(_.toDouble).getOrElse(defaultValue)
+  }
+
+  /** Get a parameter as a boolean, falling back to a default if not set */
+  def getBoolean(key: String, defaultValue: Boolean): Boolean = {
+    getOption(key).map(_.toBoolean).getOrElse(defaultValue)
   }
 
   /** Get all executor environment variables set on this SparkConf */
