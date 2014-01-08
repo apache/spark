@@ -23,9 +23,7 @@ import scala.collection.mutable
 
 import com.google.common.io.Files
 import org.apache.spark.SparkConf
-import org.scalatest.{BeforeAndAfterAll, BeforeAndAfterEach, FunSuite}
-import scala.util.Try
-import akka.actor.{Props, ActorSelection, ActorSystem}
+import org.scalatest.{BeforeAndAfterEach, FunSuite}
 
 class DiskBlockManagerSuite extends FunSuite with BeforeAndAfterEach {
   private val testConf = new SparkConf(false)
