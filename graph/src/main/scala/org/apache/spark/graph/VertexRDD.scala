@@ -119,22 +119,6 @@ class VertexRDD[@specialized VD: ClassTag](
     new VertexRDD(newPartitionsRDD)
   }
 
-  /**
-   * Return a new VertexRDD by applying a function to corresponding
-   * VertexPartitions of this VertexRDD and another one.
-   */
-  def zipVertexPartitions[VD2: ClassTag, VD3: ClassTag]
-    (other: VertexRDD[VD2])
-    (f: (VertexPartition[VD], VertexPartition[VD2]) => VertexPartition[VD3]): VertexRDD[VD3] = {
-    val newPartitionsRDD = partitionsRDD.zipPartitions(
-      other.partitionsRDD, preservesPartitioning = true
-    ) { (thisIter, otherIter) =>
-      val thisPart = thisIter.next()
-      val otherPart = otherIter.next()
-      Iterator(f(thisPart, otherPart))
-    }
-    new VertexRDD(newPartitionsRDD)
-  }
 
   /**
    * Restrict the vertex set to the set of vertices satisfying the
@@ -184,9 +168,14 @@ class VertexRDD[@specialized VD: ClassTag](
    * the values from `other`.
    */
   def diff(other: VertexRDD[VD]): VertexRDD[VD] = {
-    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
-      thisPart.diff(otherPart)
+    val newPartitionsRDD = partitionsRDD.zipPartitions(
+      other.partitionsRDD, preservesPartitioning = true
+    ) { (thisIter, otherIter) =>
+      val thisPart = thisIter.next()
+      val otherPart = otherIter.next()
+      Iterator(thisPart.diff(otherPart))
     }
+    new VertexRDD(newPartitionsRDD)
   }
 
   /**
@@ -209,9 +198,14 @@ class VertexRDD[@specialized VD: ClassTag](
    */
   def leftZipJoin[VD2: ClassTag, VD3: ClassTag]
       (other: VertexRDD[VD2])(f: (Vid, VD, Option[VD2]) => VD3): VertexRDD[VD3] = {
-    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
-      thisPart.leftJoin(otherPart)(f)
+    val newPartitionsRDD = partitionsRDD.zipPartitions(
+      other.partitionsRDD, preservesPartitioning = true
+    ) { (thisIter, otherIter) =>
+      val thisPart = thisIter.next()
+      val otherPart = otherIter.next()
+      Iterator(thisPart.leftJoin(otherPart)(f))
     }
+    new VertexRDD(newPartitionsRDD)
   }
 
   /**
@@ -261,9 +255,14 @@ class VertexRDD[@specialized VD: ClassTag](
    */
   def innerZipJoin[U: ClassTag, VD2: ClassTag](other: VertexRDD[U])
       (f: (Vid, VD, U) => VD2): VertexRDD[VD2] = {
-    this.zipVertexPartitions(other) { (thisPart, otherPart) =>
-      thisPart.innerJoin(otherPart)(f)
+    val newPartitionsRDD = partitionsRDD.zipPartitions(
+      other.partitionsRDD, preservesPartitioning = true
+    ) { (thisIter, otherIter) =>
+      val thisPart = thisIter.next()
+      val otherPart = otherIter.next()
+      Iterator(thisPart.innerJoin(otherPart)(f))
     }
+    new VertexRDD(newPartitionsRDD)
   }
 
   /**

@@ -49,7 +49,9 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
     val vdTag = classTag[VD]
     val edTag = classTag[ED]
-    edges.zipEdgePartitions(replicatedVertexView.get(true, true)) { (pid, ePart, vPartIter) =>
+    edges.partitionsRDD.zipPartitions(
+      replicatedVertexView.get(true, true), true) { (ePartIter, vPartIter) =>
+      val (pid, ePart) = ePartIter.next()
       val (_, vPart) = vPartIter.next()
       new EdgeTripletIterator(vPart.index, vPart.values, ePart)(vdTag, edTag)
     }
@@ -182,8 +184,9 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     // manifest from GraphImpl (which would require serializing GraphImpl).
     val vdTag = classTag[VD]
     val newEdgePartitions =
-      edges.zipEdgePartitions(replicatedVertexView.get(true, true)) {
-        (ePid, edgePartition, vTableReplicatedIter) =>
+      edges.partitionsRDD.zipPartitions(replicatedVertexView.get(true, true), true) {
+        (ePartIter, vTableReplicatedIter) =>
+        val (ePid, edgePartition) = ePartIter.next()
         val (vPid, vPart) = vTableReplicatedIter.next()
         assert(!vTableReplicatedIter.hasNext)
         assert(ePid == vPid)
@@ -267,7 +270,8 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     val activeDirectionOpt = activeSetOpt.map(_._2)
 
     // Map and combine.
-    val preAgg = edges.zipEdgePartitions(vs) { (ePid, edgePartition, vPartIter) =>
+    val preAgg = edges.partitionsRDD.zipPartitions(vs, true) { (ePartIter, vPartIter) =>
+      val (ePid, edgePartition) = ePartIter.next()
       val (vPid, vPart) = vPartIter.next()
       assert(!vPartIter.hasNext)
       assert(ePid == vPid)

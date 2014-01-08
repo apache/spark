@@ -53,34 +53,17 @@ class EdgeRDD[@specialized ED: ClassTag](
     }, preservesPartitioning = true))
   }
 
-  def zipEdgePartitions[T: ClassTag, U: ClassTag]
-      (other: RDD[T])
-      (f: (Pid, EdgePartition[ED], Iterator[T]) => Iterator[U]): RDD[U] = {
-    partitionsRDD.zipPartitions(other, preservesPartitioning = true) { (ePartIter, otherIter) =>
-      val (pid, edgePartition) = ePartIter.next()
-      f(pid, edgePartition, otherIter)
-    }
-  }
-
-  def zipEdgePartitions[ED2: ClassTag, ED3: ClassTag]
-      (other: EdgeRDD[ED2])
-      (f: (Pid, EdgePartition[ED], EdgePartition[ED2]) => EdgePartition[ED3]): EdgeRDD[ED3] = {
-    new EdgeRDD[ED3](partitionsRDD.zipPartitions(other.partitionsRDD, preservesPartitioning = true) {
-      (thisIter, otherIter) =>
-        val (pid, thisEPart) = thisIter.next()
-        val (_, otherEPart) = otherIter.next()
-      Iterator(Tuple2(pid, f(pid, thisEPart, otherEPart)))
-    })
-  }
-
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgeRDD[ED2])
       (f: (Vid, Vid, ED, ED2) => ED3): EdgeRDD[ED3] = {
     val ed2Tag = classTag[ED2]
     val ed3Tag = classTag[ED3]
-    zipEdgePartitions(other) { (pid, thisEPart, otherEPart) =>
-      thisEPart.innerJoin(otherEPart)(f)(ed2Tag, ed3Tag)
-    }
+    new EdgeRDD[ED3](partitionsRDD.zipPartitions(other.partitionsRDD, true) {
+      (thisIter, otherIter) =>
+        val (pid, thisEPart) = thisIter.next()
+        val (_, otherEPart) = otherIter.next()
+        Iterator(Tuple2(pid, thisEPart.innerJoin(otherEPart)(f)(ed2Tag, ed3Tag)))
+    })
   }
 
   def collectVids(): RDD[Vid] = {
