@@ -228,8 +228,8 @@ from which we recover S and V.
 Then we compute U via easy matrix multiplication
 as *U =  A * V * S^-1*
  
-Only singular vectors associated with singular values
-greater or equal to MIN_SVALUE are recovered. If there are k
+Only singular vectors associated with largest k singular values
+are recovered. If there are k
 such values, then the dimensions of the return will be:
 
 * *S* is *k x k* and diagonal, holding the singular values on diagonal.
@@ -237,7 +237,8 @@ such values, then the dimensions of the return will be:
 * *V* is *n x k* and satisfies V^TV = eye(k).
 
 All input and output is expected in sparse matrix format, 1-indexed
-as tuples of the form ((i,j),value) all in RDDs. Below is example usage.
+as tuples of the form ((i,j),value) all in 
+SparseMatrix RDDs. Below is example usage.
 
 {% highlight scala %}
 
