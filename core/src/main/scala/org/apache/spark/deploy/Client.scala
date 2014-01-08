@@ -55,7 +55,7 @@ class DriverActor(master: String, response: Promise[(Boolean, String)]) extends 
 /**
  * Executable utility for starting and terminating drivers inside of a standalone cluster.
  */
-object DriverClient {
+object Client {
 
   def main(args: Array[String]) {
     val driverArgs = new ClientArguments(args)

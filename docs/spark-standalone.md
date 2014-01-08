@@ -151,19 +151,20 @@ You can also pass an option `-c <numCores>` to control the number of cores that 
 You may also run your application entirely inside of the cluster by submitting your application driver using the submission client. The syntax for submitting applications is as follows:
 
 
-    ./spark-class org.apache.spark.deploy.client.DriverClient launch 
+    ./spark-class org.apache.spark.deploy.Client launch 
        [client-options] \
        <cluster-url> <application-jar-url> <main-class> \
        [application-options]
 
     cluster-url: The URL of the master node.
-    application-jar-url: Path to a bundled jar including your application and all dependencies. Currently, the URL must be visible from inside of your cluster, for instance, in an HDFS directory. 
+    application-jar-url: Path to a bundled jar including your application and all dependencies. Currently, the URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes. 
     main-class: The entry point for your application.
 
     Client Options:
       --memory <count> (amount of memory, in MB, allocated for your driver program)
       --cores <count> (number of cores allocated for your driver program)
       --supervise (whether to automatically restart your driver on application or node failure)
+      --verbose (prints increased logging output)
 
 Keep in mind that your driver program will be executed on a remote worker machine. You can control the execution environment in the following ways:
 
