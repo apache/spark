@@ -22,12 +22,15 @@ import scala.collection.mutable.Map
 import scala.concurrent._
 
 import akka.actor._
+import akka.actor.Actor
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.log4j.{Logger, Level}
+import akka.remote.RemotingLifecycleEvent
 
 /**
  * Actor that sends a single message to the standalone master and returns the response in the
@@ -55,11 +58,17 @@ class DriverActor(master: String, response: Promise[(Boolean, String)]) extends 
 /**
  * Executable utility for starting and terminating drivers inside of a standalone cluster.
  */
-object DriverClient extends Logging {
+object DriverClient {
 
   def main(args: Array[String]) {
     val driverArgs = new DriverClientArguments(args)
     val conf = new SparkConf()
+
+    if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
+      conf.set("spark.akka.logLifecycleEvents", "true")
+    }
+    conf.set("spark.akka.askTimeout", "5")
+    Logger.getRootLogger.setLevel(driverArgs.logLevel)
 
     // TODO: See if we can initialize akka so return messages are sent back using the same TCP
     //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
@@ -69,6 +78,7 @@ object DriverClient extends Logging {
     val response = promise[(Boolean, String)]
     val driver: ActorRef = actorSystem.actorOf(Props(new DriverActor(driverArgs.master, response)))
 
+    println(s"Sending ${driverArgs.cmd} command to ${driverArgs.master}")
     driverArgs.cmd match {
       case "launch" =>
         // TODO: We could add an env variable here and intercept it in `sc.addJar` that would
@@ -98,9 +108,9 @@ object DriverClient extends Logging {
       try {
         Await.result(response.future, AkkaUtils.askTimeout(conf))
       } catch {
-        case e: TimeoutException => (false, s"Master $master failed to respond in time")
+        case e: TimeoutException => (false, s"Error: Timed out sending message to $master")
       }
-    if (success) logInfo(message) else logError(message)
+    println(message)
     actorSystem.shutdown()
     actorSystem.awaitTermination()
   }

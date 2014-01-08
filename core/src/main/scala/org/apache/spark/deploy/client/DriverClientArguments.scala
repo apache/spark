@@ -19,6 +19,8 @@ package org.apache.spark.deploy.client
 
 import scala.collection.mutable.ListBuffer
 
+import org.apache.log4j.Level
+
 /**
  * Command-line parser for the driver client.
  */
@@ -27,6 +29,7 @@ private[spark] class DriverClientArguments(args: Array[String]) {
   val defaultMemory = 512
 
   var cmd: String = "" // 'launch' or 'kill'
+  var logLevel = Level.WARN
 
   // launch parameters
   var master: String = ""
@@ -59,6 +62,10 @@ private[spark] class DriverClientArguments(args: Array[String]) {
     case ("--help" | "-h") :: tail =>
       printUsageAndExit(0)
 
+    case ("--verbose" | "-v") :: tail =>
+      logLevel = Level.INFO
+      parse(tail)
+
     case "launch" :: _master :: _jarUrl :: _mainClass :: tail =>
       cmd = "launch"
       master = _master
@@ -90,6 +97,7 @@ private[spark] class DriverClientArguments(args: Array[String]) {
         |   -c CORES, --cores CORES        Number of cores to request (default: $defaultCores)
         |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $defaultMemory)
         |   -s, --supervise                Whether to restart the driver on failure
+        |   -v, --verbose                  Print more debugging output
       """.stripMargin
     System.err.println(usage)
     System.exit(exitCode)
