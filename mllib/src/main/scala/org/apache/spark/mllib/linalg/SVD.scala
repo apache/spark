@@ -74,7 +74,8 @@ object SVD {
  * V is n x k and satisfies V'V = eye(k)
  *
  * All input and output is expected in sparse matrix format, 1-indexed
- * as tuples of the form ((i,j),value) all in RDDs
+ * as tuples of the form ((i,j),value) all in RDDs using the
+ * SparseMatrix class
  *
  * @param matrix sparse matrix to factorize
  * @param k Recover k singular values and vectors
