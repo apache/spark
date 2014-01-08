@@ -44,13 +44,16 @@ DISTDIR="$FWDIR/dist"
 # Get version from SBT
 export TERM=dumb   # Prevents color codes in SBT output
 
-if ! test `which sbt` ;then
+VERSIONSTRING=$FWDIR/sbt/sbt "show version"
+
+if [ $? == -1 ] ;then
     echo -e "You need sbt installed and available on your path."
     echo -e "Download sbt from http://www.scala-sbt.org/"
     exit -1;
 fi
 
-VERSION=$(sbt "show version" | tail -1 | cut -f 2 | sed 's/^\([a-zA-Z0-9.-]*\).*/\1/')
+VERSION=$(echo "${VERSIONSTRING}" | tail -1 | cut -f 2 | sed 's/^\([a-zA-Z0-9.-]*\).*/\1/')
+echo "Version is ${VERSION}"
 
 # Initialize defaults
 SPARK_HADOOP_VERSION=1.0.4
@@ -92,7 +95,7 @@ export SPARK_HADOOP_VERSION
 export SPARK_YARN
 cd $FWDIR
 
-"sbt" "assembly/assembly"
+"sbt/sbt" "assembly/assembly"
 
 # Make directories
 rm -rf "$DISTDIR"

@@ -19,7 +19,7 @@ package org.apache.spark.deploy
 
 private[spark] class ApplicationDescription(
     val name: String,
-    val maxCores: Int, /* Integer.MAX_VALUE denotes an unlimited number of cores */
+    val maxCores: Option[Int],
     val memoryPerSlave: Int,
     val command: Command,
     val sparkHome: String,

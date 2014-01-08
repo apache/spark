@@ -87,12 +87,17 @@
   <modules>
     <module>core</module>
     <module>bagel</module>
-    <module>examples</module>
     <module>mllib</module>
     <module>tools</module>
     <module>streaming</module>
     <module>repl</module>
     <module>assembly</module>
+    <module>external/twitter</module>
+    <module>external/kafka</module>
+    <module>external/flume</module>
+    <module>external/zeromq</module>
+    <module>external/mqtt</module>
+    <module>examples</module>
   </modules>
 
   <properties>
@@ -140,17 +145,6 @@
         <enabled>false</enabled>
       </snapshots>
     </repository>
-    <repository>
-      <id>mqtt-repo</id>
-      <name>MQTT Repository</name>
-      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
   </repositories>
 
   <dependencyManagement>
@@ -188,7 +182,7 @@
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
-        <version>0.8.4</version>
+        <version>1.0.0</version>
       </dependency>
       <dependency>
         <groupId>org.xerial.snappy</groupId>
@@ -250,17 +244,6 @@
       <dependency>
         <groupId>${akka.group}</groupId>
         <artifactId>akka-slf4j_${scala.binary.version}</artifactId>
-        <version>${akka.version}</version>
-        <exclusions>
-          <exclusion>
-            <groupId>org.jboss.netty</groupId>
-            <artifactId>netty</artifactId>
-          </exclusion>
-        </exclusions>
-      </dependency>
-      <dependency>
-        <groupId>${akka.group}</groupId>
-        <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -727,7 +710,6 @@
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
         <hadoop.version>0.23.7</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
         <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
 

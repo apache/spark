@@ -17,11 +17,10 @@
 
 package org.apache.spark
 
-import collection.mutable
-import serializer.Serializer
+import scala.collection.mutable
+import scala.concurrent.Await
 
 import akka.actor._
-import akka.remote.RemoteActorRefProvider
 
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
@@ -157,17 +156,18 @@ object SparkEnv extends Logging {
       conf.get("spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer"),
       conf)
 
-    def registerOrLookup(name: String, newActor: => Actor): Either[ActorRef, ActorSelection] = {
+    def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
       if (isDriver) {
         logInfo("Registering " + name)
-        Left(actorSystem.actorOf(Props(newActor), name = name))
+        actorSystem.actorOf(Props(newActor), name = name)
       } else {
         val driverHost: String = conf.get("spark.driver.host", "localhost")
         val driverPort: Int = conf.get("spark.driver.port", "7077").toInt
         Utils.checkHost(driverHost, "Expected hostname")
-        val url = "akka.tcp://spark@%s:%s/user/%s".format(driverHost, driverPort, name)
-        logInfo("Connecting to " + name + ": " + url)
-        Right(actorSystem.actorSelection(url))
+        val url = s"akka.tcp://spark@$driverHost:$driverPort/user/$name"
+        val timeout = AkkaUtils.lookupTimeout(conf)
+        logInfo(s"Connecting to $name: $url")
+        Await.result(actorSystem.actorSelection(url).resolveOne(timeout), timeout)
       }
     }
 

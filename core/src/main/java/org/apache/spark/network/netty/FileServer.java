@@ -33,15 +33,14 @@ import org.slf4j.LoggerFactory;
  */
 class FileServer {
 
-  private Logger LOG = LoggerFactory.getLogger(this.getClass().getName());
+  private static final Logger LOG = LoggerFactory.getLogger(FileServer.class.getName());
 
   private EventLoopGroup bossGroup = null;
   private EventLoopGroup workerGroup = null;
   private ChannelFuture channelFuture = null;
   private int port = 0;
-  private Thread blockingThread = null;
 
-  public FileServer(PathResolver pResolver, int port) {
+  FileServer(PathResolver pResolver, int port) {
     InetSocketAddress addr = new InetSocketAddress(port);
 
     // Configure the server.
@@ -70,7 +69,8 @@ class FileServer {
    * Start the file server asynchronously in a new thread.
    */
   public void start() {
-    blockingThread = new Thread() {
+    Thread blockingThread = new Thread() {
+      @Override
       public void run() {
         try {
           channelFuture.channel().closeFuture().sync();

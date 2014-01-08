@@ -15,11 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.dstream
+package org.apache.spark.streaming.kafka
 
-import org.apache.spark.Logging
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.StreamingContext
+import scala.collection.Map
+import scala.reflect.ClassTag
 
 import java.util.Properties
 import java.util.concurrent.Executors
@@ -30,8 +29,10 @@ import kafka.utils.VerifiableProperties
 import kafka.utils.ZKStringSerializer
 import org.I0Itec.zkclient._
 
-import scala.collection.Map
-import scala.reflect.ClassTag
+import org.apache.spark.Logging
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.dstream._
 
 /**
  * Input stream that pulls messages from a Kafka Broker.

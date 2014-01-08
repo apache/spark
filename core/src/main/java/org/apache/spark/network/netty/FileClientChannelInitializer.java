@@ -25,7 +25,7 @@ class FileClientChannelInitializer extends ChannelInitializer<SocketChannel> {
 
   private final FileClientHandler fhandler;
 
-  public FileClientChannelInitializer(FileClientHandler handler) {
+  FileClientChannelInitializer(FileClientHandler handler) {
     fhandler = handler;
   }
 

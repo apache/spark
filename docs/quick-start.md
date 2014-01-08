@@ -12,7 +12,7 @@ See the [programming guide](scala-programming-guide.html) for a more complete re
 To follow along with this guide, you only need to have successfully built Spark on one machine. Simply go into your Spark directory and run:
 
 {% highlight bash %}
-$ sbt assembly
+$ sbt/sbt assembly
 {% endhighlight %}
 
 # Interactive Analysis with the Spark Shell
@@ -146,7 +146,7 @@ If you also wish to read data from Hadoop's HDFS, you will also need to add a de
 libraryDependencies += "org.apache.hadoop" % "hadoop-client" % "<your-hdfs-version>"
 {% endhighlight %}
 
-Finally, for sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the application's code, then use `sbt run` to execute our program.
+Finally, for sbt to work correctly, we'll need to layout `SimpleApp.scala` and `simple.sbt` according to the typical directory structure. Once that is in place, we can create a JAR package containing the application's code, then use `sbt/sbt run` to execute our program.
 
 {% highlight bash %}
 $ find .
@@ -157,8 +157,8 @@ $ find .
 ./src/main/scala
 ./src/main/scala/SimpleApp.scala
 
-$ sbt package
-$ sbt run
+$ sbt/sbt package
+$ sbt/sbt run
 ...
 Lines with a: 46, Lines with b: 23
 {% endhighlight %}

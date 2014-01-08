@@ -142,16 +142,12 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   // Default before function for any streaming test suite. Override this
   // if you want to add your stuff to "before" (i.e., don't call before { } )
   def beforeFunction() {
-    //if (useManualClock) {
-    //  System.setProperty(
-    //    "spark.streaming.clock",
-    //    "org.apache.spark.streaming.util.ManualClock"
-    //  )
-    //} else {
-    //  System.clearProperty("spark.streaming.clock")
-    //}
     if (useManualClock) {
+      logInfo("Using manual clock")
       conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    } else {
+      logInfo("Using real clock")
+      conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
     }
   }
 
@@ -175,9 +171,8 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       operation: DStream[U] => DStream[V],
       numPartitions: Int = numInputPartitions
     ): StreamingContext = {
-    val sc = new SparkContext(conf)
     // Create StreamingContext
-    val ssc = new StreamingContext(sc, batchDuration)
+    val ssc = new StreamingContext(conf, batchDuration)
     if (checkpointDir != null) {
       ssc.checkpoint(checkpointDir)
     }
@@ -201,9 +196,8 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       input2: Seq[Seq[V]],
       operation: (DStream[U], DStream[V]) => DStream[W]
     ): StreamingContext = {
-    val sc = new SparkContext(conf)
     // Create StreamingContext
-    val ssc = new StreamingContext(sc, batchDuration)
+    val ssc = new StreamingContext(conf, batchDuration)
     if (checkpointDir != null) {
       ssc.checkpoint(checkpointDir)
     }
@@ -279,7 +273,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       val startTime = System.currentTimeMillis()
       while (output.size < numExpectedOutput && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
-        Thread.sleep(100)
+        Thread.sleep(10)
       }
       val timeTaken = System.currentTimeMillis() - startTime
 

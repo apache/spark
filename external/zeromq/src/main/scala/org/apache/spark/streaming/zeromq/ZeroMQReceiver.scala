@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming.receivers
+package org.apache.spark.streaming.zeromq
 
 import scala.reflect.ClassTag
 
@@ -24,6 +24,7 @@ import akka.util.ByteString
 import akka.zeromq._
 
 import org.apache.spark.Logging
+import org.apache.spark.streaming.receivers._
 
 /**
  * A receiver to subscribe to ZeroMQ stream.
