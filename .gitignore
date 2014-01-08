@@ -4,6 +4,7 @@
 *.iml
 *.iws
 .idea/
+sbt/*.jar
 .settings
 .cache
 /build/

@@ -50,8 +50,8 @@ class LogisticGradient extends Gradient {
 
     val gradient = data.mul(gradientMultiplier)
     val loss =
-      if (margin > 0) {
-        math.log(1 + math.exp(0 - margin))
+      if (label > 0) {
+        math.log(1 + math.exp(margin))
       } else {
         math.log(1 + math.exp(margin)) - margin
       }

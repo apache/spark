@@ -12,7 +12,7 @@ with these distributions:
 When compiling Spark, you'll need to 
 [set the SPARK_HADOOP_VERSION flag](index.html#a-note-about-hadoop-versions):
 
-    SPARK_HADOOP_VERSION=1.0.4 sbt assembly
+    SPARK_HADOOP_VERSION=1.0.4 sbt/sbt assembly
 
 The table below lists the corresponding `SPARK_HADOOP_VERSION` code for each CDH/HDP release. Note that
 some Hadoop releases are binary compatible across client versions. This means the pre-built Spark

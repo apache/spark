@@ -95,7 +95,13 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   // As a temporary workaround before better ways of configuring memory, we allow users to set
   // a flag that will perform round-robin scheduling across the nodes (spreading out each app
   // among all the nodes) instead of trying to consolidate each app onto a small # of nodes.
-  val spreadOutApps = conf.get("spark.deploy.spreadOut", "true").toBoolean
+  val spreadOutApps = conf.getBoolean("spark.deploy.spreadOut", true)
+
+  // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
+  val defaultCores = conf.getInt("spark.deploy.defaultCores", Int.MaxValue)
+  if (defaultCores < 1) {
+    throw new SparkException("spark.deploy.defaultCores must be positive")
+  }
 
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)
@@ -549,7 +555,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    new ApplicationInfo(now, newApplicationId(date), desc, date, driver, desc.appUiUrl)
+    new ApplicationInfo(
+      now, newApplicationId(date), desc, date, driver, desc.appUiUrl, defaultCores)
   }
 
   def registerApplication(app: ApplicationInfo): Unit = {

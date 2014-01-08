@@ -104,13 +104,15 @@ trait Logging {
     // If Log4j doesn't seem initialized, load a default properties file
     val log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
     if (!log4jInitialized) {
-      val defaultLogProps = "org/apache/spark/default-log4j.properties"
+      val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
       val classLoader = this.getClass.getClassLoader
       Option(classLoader.getResource(defaultLogProps)) match {
-        case Some(url) => PropertyConfigurator.configure(url)
-        case None => System.err.println(s"Spark was unable to load $defaultLogProps")
+        case Some(url) => 
+          PropertyConfigurator.configure(url)
+          log.info(s"Using Spark's default log4j profile: $defaultLogProps")
+        case None => 
+          System.err.println(s"Spark was unable to load $defaultLogProps")
       }
-      log.info(s"Using Spark's default log4j profile: $defaultLogProps")
     }
     Logging.initialized = true
 

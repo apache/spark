@@ -67,7 +67,7 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with 
 
   /** Set JAR files to distribute to the cluster. */
   def setJars(jars: Seq[String]): SparkConf = {
-    for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor") 
+    for (jar <- jars if (jar == null)) logWarning("null jar passed to SparkContext constructor")
     set("spark.jars", jars.filter(_ != null).mkString(","))
   }
 
@@ -165,12 +165,20 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with 
     getOption(key).map(_.toDouble).getOrElse(defaultValue)
   }
 
+  /** Get a parameter as a boolean, falling back to a default if not set */
+  def getBoolean(key: String, defaultValue: Boolean): Boolean = {
+    getOption(key).map(_.toBoolean).getOrElse(defaultValue)
+  }
+
   /** Get all executor environment variables set on this SparkConf */
   def getExecutorEnv: Seq[(String, String)] = {
     val prefix = "spark.executorEnv."
     getAll.filter{case (k, v) => k.startsWith(prefix)}
           .map{case (k, v) => (k.substring(prefix.length), v)}
   }
+
+  /** Get all akka conf variables set on this SparkConf */
+  def getAkkaConf: Seq[(String, String)] =  getAll.filter {case (k, v) => k.startsWith("akka.")}
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)

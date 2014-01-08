@@ -50,9 +50,6 @@ object SparkBuild extends Build {
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
     .dependsOn(core, bagel, mllib)
 
-  lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, bagel, streaming)
-
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn(core)
@@ -93,10 +90,31 @@ object SparkBuild extends Build {
   lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](if (isNewHadoop) yarn else yarnAlpha) else Seq[ClasspathDependency]()
   lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](if (isNewHadoop) yarn else yarnAlpha) else Seq[ProjectReference]()
 
+  lazy val externalTwitter = Project("external-twitter", file("external/twitter"), settings = twitterSettings) 
+    .dependsOn(streaming % "compile->compile;test->test")
+
+  lazy val externalKafka = Project("external-kafka", file("external/kafka"), settings = kafkaSettings)
+    .dependsOn(streaming % "compile->compile;test->test")
+
+  lazy val externalFlume = Project("external-flume", file("external/flume"), settings = flumeSettings)
+    .dependsOn(streaming % "compile->compile;test->test")
+  
+  lazy val externalZeromq = Project("external-zeromq", file("external/zeromq"), settings = zeromqSettings)
+    .dependsOn(streaming % "compile->compile;test->test")
+  
+  lazy val externalMqtt = Project("external-mqtt", file("external/mqtt"), settings = mqttSettings)
+    .dependsOn(streaming % "compile->compile;test->test")
+
+  lazy val allExternal = Seq[ClasspathDependency](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
+  lazy val allExternalRefs = Seq[ProjectReference](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
+  
+  lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
+    .dependsOn(core, mllib, bagel, streaming, externalTwitter) dependsOn(allExternal: _*)
+
   // Everything except assembly, tools and examples belong to packageProjects
   lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib) ++ maybeYarnRef
 
-  lazy val allProjects = packageProjects ++ Seq[ProjectReference](examples, tools, assemblyProj)
+  lazy val allProjects = packageProjects ++ allExternalRefs ++ Seq[ProjectReference](examples, tools, assemblyProj) 
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.apache.spark",
@@ -125,7 +143,7 @@ object SparkBuild extends Build {
     // also check the local Maven repository ~/.m2
     resolvers ++= Seq(Resolver.file("Local Maven Repo", file(Path.userHome + "/.m2/repository"))),
 
-   // For Sonatype publishing
+    // For Sonatype publishing
     resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
       "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
 
@@ -167,7 +185,7 @@ object SparkBuild extends Build {
       </issueManagement>
     ),
 
-/*
+    /*
     publishTo <<= version { (v: String) =>
       val nexus = "https://oss.sonatype.org/"
       if (v.trim.endsWith("SNAPSHOT"))
@@ -176,8 +194,7 @@ object SparkBuild extends Build {
         Some("sonatype-staging"  at nexus + "service/local/staging/deploy/maven2")
     },
 
-*/
-
+    */
 
     libraryDependencies ++= Seq(
         "io.netty"          % "netty-all"       % "4.0.13.Final",
@@ -267,7 +284,6 @@ object SparkBuild extends Build {
    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-reflect"  % v )
   )
 
-
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
     libraryDependencies ++= Seq(
@@ -304,22 +320,8 @@ object SparkBuild extends Build {
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
-    resolvers ++= Seq(
-      "Eclipse Repository" at "https://repo.eclipse.org/content/repositories/paho-releases/",
-      "Apache repo" at "https://repository.apache.org/content/repositories/releases"
-    ),
-
     libraryDependencies ++= Seq(
-      "org.apache.flume"        % "flume-ng-sdk"     % "1.2.0" % "compile"     excludeAll(excludeNetty, excludeSnappy),
-      "com.sksamuel.kafka"     %% "kafka"            % "0.8.0-beta1"
-        exclude("com.sun.jdmk", "jmxtools")
-        exclude("com.sun.jmx", "jmxri")
-        exclude("net.sf.jopt-simple", "jopt-simple")
-        excludeAll(excludeNetty),
-      "org.eclipse.paho"        % "mqtt-client"      % "0.4.0",
-      "com.github.sgroschupf"   % "zkclient"         % "0.1"                   excludeAll(excludeNetty),
-      "org.twitter4j"           % "twitter4j-stream" % "3.0.3"                 excludeAll(excludeNetty),
-      "org.spark-project.akka" %% "akka-zeromq"      % "2.2.3-shaded-protobuf" excludeAll(excludeNetty)
+      "commons-io" % "commons-io" % "2.4" 
     )
   )
 
@@ -353,8 +355,8 @@ object SparkBuild extends Build {
   def yarnEnabledSettings = Seq(
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
-      "org.apache.hadoop" % "hadoop-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
-      "org.apache.hadoop" % "hadoop-yarn-api" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+      "org.apache.hadoop" % "hadoop-client"      % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
       "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
       "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
     )
@@ -378,5 +380,44 @@ object SparkBuild extends Build {
       case "reference.conf" => MergeStrategy.concat
       case _ => MergeStrategy.first
     }
+  )
+
+  def twitterSettings() = sharedSettings ++ Seq(
+    name := "spark-streaming-twitter",
+    libraryDependencies ++= Seq(
+      "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty)
+    )
+  )
+  
+  def kafkaSettings() = sharedSettings ++ Seq(
+    name := "spark-streaming-kafka",
+    libraryDependencies ++= Seq(
+      "com.github.sgroschupf"    % "zkclient"   % "0.1"          excludeAll(excludeNetty),
+      "com.sksamuel.kafka"      %% "kafka"      % "0.8.0-beta1"
+        exclude("com.sun.jdmk", "jmxtools")
+        exclude("com.sun.jmx", "jmxri")
+        exclude("net.sf.jopt-simple", "jopt-simple")
+        excludeAll(excludeNetty)
+    )
+  )
+  
+  def flumeSettings() = sharedSettings ++ Seq(
+    name := "spark-streaming-flume",
+    libraryDependencies ++= Seq(
+      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty, excludeSnappy)
+    )
+  )
+
+  def zeromqSettings() = sharedSettings ++ Seq(
+    name := "spark-streaming-zeromq",
+    libraryDependencies ++= Seq(
+      "org.spark-project.akka" %% "akka-zeromq" % "2.2.3-shaded-protobuf" excludeAll(excludeNetty)
+    )
+  )
+
+  def mqttSettings() = streamingSettings ++ Seq(
+    name := "spark-streaming-mqtt",
+    resolvers ++= Seq("Eclipse Repo" at "https://repo.eclipse.org/content/repositories/paho-releases/"),
+    libraryDependencies ++= Seq("org.eclipse.paho" % "mqtt-client" % "0.4.0")
   )
 }

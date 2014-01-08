@@ -116,6 +116,10 @@ class SparkContext(
     throw new SparkException("An application must be set in your configuration")
   }
 
+  if (conf.get("spark.logConf", "false").toBoolean) {
+    logInfo("Spark configuration:\n" + conf.toDebugString)
+  }
+
   // Set Spark driver host and port system properties
   conf.setIfMissing("spark.driver.host", Utils.localHostName())
   conf.setIfMissing("spark.driver.port", "0")

@@ -21,7 +21,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.storage.StorageLevel
 import com.twitter.algebird.HyperLogLog._
 import com.twitter.algebird.HyperLogLogMonoid
-import org.apache.spark.streaming.dstream.TwitterInputDStream
+import org.apache.spark.streaming.twitter._
 
 /**
  * Illustrates the use of the HyperLogLog algorithm, from Twitter's Algebird library, to compute
@@ -50,7 +50,7 @@ object TwitterAlgebirdHLL {
 
     val ssc = new StreamingContext(master, "TwitterAlgebirdHLL", Seconds(5),
       System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
-    val stream = ssc.twitterStream(None, filters, StorageLevel.MEMORY_ONLY_SER)
+    val stream = TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_ONLY_SER)
 
     val users = stream.map(status => status.getUser.getId)
 
