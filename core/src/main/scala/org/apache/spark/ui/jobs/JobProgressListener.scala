@@ -33,7 +33,7 @@ import org.apache.spark.scheduler._
  */
 private[spark] class JobProgressListener(val sc: SparkContext) extends SparkListener {
   // How many stages to remember
-  val RETAINED_STAGES = sc.conf.get("spark.ui.retainedStages", "1000").toInt
+  val RETAINED_STAGES = sc.conf.getInt("spark.ui.retainedStages", 1000)
   val DEFAULT_POOL_NAME = "default"
 
   val stageIdToPool = new HashMap[Int, String]()

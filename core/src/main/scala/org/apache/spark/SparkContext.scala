@@ -116,7 +116,7 @@ class SparkContext(
     throw new SparkException("An application must be set in your configuration")
   }
 
-  if (conf.get("spark.logConf", "false").toBoolean) {
+  if (conf.getBoolean("spark.logConf", false)) {
     logInfo("Spark configuration:\n" + conf.toDebugString)
   }
 
@@ -1203,7 +1203,7 @@ object SparkContext {
       case mesosUrl @ MESOS_REGEX(_) =>
         MesosNativeLibrary.load()
         val scheduler = new TaskSchedulerImpl(sc)
-        val coarseGrained = sc.conf.get("spark.mesos.coarse", "false").toBoolean
+        val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
           new CoarseMesosSchedulerBackend(scheduler, sc, url, appName)

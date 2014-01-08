@@ -43,9 +43,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val conf = new SparkConf
 
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For application IDs
-  val WORKER_TIMEOUT = conf.get("spark.worker.timeout", "60").toLong * 1000
-  val RETAINED_APPLICATIONS = conf.get("spark.deploy.retainedApplications", "200").toInt
-  val REAPER_ITERATIONS = conf.get("spark.dead.worker.persistence", "15").toInt
+  val WORKER_TIMEOUT = conf.getLong("spark.worker.timeout", 60) * 1000
+  val RETAINED_APPLICATIONS = conf.getInt("spark.deploy.retainedApplications", 200)
+  val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
   val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
 
