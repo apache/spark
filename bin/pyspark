@@ -51,7 +51,6 @@ export PYSPARK_PYTHON
 export PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
 
 # Load the PySpark shell.py script when ./pyspark is used interactively:
-export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
 export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
 
 if [ -n "$IPYTHON_OPTS" ]; then
@@ -59,12 +58,7 @@ if [ -n "$IPYTHON_OPTS" ]; then
 fi
 
 if [[ "$IPYTHON" = "1" ]] ; then
-  # IPython <1.0.0 doesn't honor PYTHONSTARTUP, while 1.0.0+ does. 
-  # Hence we clear PYTHONSTARTUP and use the -c "%run $IPYTHONSTARTUP" command which works on all versions
-  # We also force interactive mode with "-i"
-  IPYTHONSTARTUP=$PYTHONSTARTUP
-  PYTHONSTARTUP=
-  exec ipython "$IPYTHON_OPTS" -i -c "%run $IPYTHONSTARTUP"
+  exec ipython $IPYTHON_OPTS
 else
   exec "$PYSPARK_PYTHON" "$@"
 fi
