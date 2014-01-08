@@ -49,7 +49,7 @@ object SparkLR {
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "SparkLR",
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
     val numSlices = if (args.length > 1) args(1).toInt else 2
     val points = sc.parallelize(generateData, numSlices).cache()
 

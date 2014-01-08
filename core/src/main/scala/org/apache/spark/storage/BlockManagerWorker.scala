@@ -30,7 +30,6 @@ import org.apache.spark.util.Utils
  * TODO: Use event model.
  */
 private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends Logging {
-  initLogging()
 
   blockManager.connectionManager.onReceiveMessage(onBlockMessageReceive)
 
@@ -100,8 +99,6 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
 
 private[spark] object BlockManagerWorker extends Logging {
   private var blockManagerWorker: BlockManagerWorker = null
-
-  initLogging()
 
   def startBlockManagerWorker(manager: BlockManager) {
     blockManagerWorker = new BlockManagerWorker(manager)

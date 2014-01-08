@@ -20,7 +20,9 @@ from pyspark.mllib._common import \
     _get_unmangled_rdd, _get_unmangled_double_vector_rdd, \
     _serialize_double_matrix, _deserialize_double_matrix, \
     _serialize_double_vector, _deserialize_double_vector, \
-    _get_initial_weights, _serialize_rating, _regression_train_wrapper
+    _get_initial_weights, _serialize_rating, _regression_train_wrapper, \
+    _serialize_tuple, RatingDeserializer
+from pyspark.rdd import RDD
 
 class MatrixFactorizationModel(object):
     """A matrix factorisation model trained by regularized alternating
@@ -33,6 +35,9 @@ class MatrixFactorizationModel(object):
     >>> model = ALS.trainImplicit(sc, ratings, 1)
     >>> model.predict(2,2) is not None
     True
+    >>> testset = sc.parallelize([(1, 2), (1, 1)])
+    >>> model.predictAll(testset).count == 2
+    True
     """
 
     def __init__(self, sc, java_model):
@@ -44,6 +49,11 @@ class MatrixFactorizationModel(object):
 
     def predict(self, user, product):
         return self._java_model.predict(user, product)
+
+    def predictAll(self, usersProducts):
+        usersProductsJRDD = _get_unmangled_rdd(usersProducts, _serialize_tuple)
+        return RDD(self._java_model.predict(usersProductsJRDD._jrdd),
+                   self._context, RatingDeserializer())
 
 class ALS(object):
     @classmethod

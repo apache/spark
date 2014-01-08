@@ -18,13 +18,15 @@
 package org.apache.spark.deploy.worker
 
 import java.io.File
+
 import org.scalatest.FunSuite
+
 import org.apache.spark.deploy.{ExecutorState, Command, ApplicationDescription}
 
 class ExecutorRunnerTest extends FunSuite {
   test("command includes appId") {
     def f(s:String) = new File(s)
-    val sparkHome = sys.env("SPARK_HOME")
+    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
     val appDesc = new ApplicationDescription("app name", 8, 500, Command("foo", Seq(),Map()),
       sparkHome, "appUiUrl")
     val appId = "12345-worker321-9876"

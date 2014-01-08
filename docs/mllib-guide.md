@@ -42,10 +42,6 @@ underlying gradient descent primitive (described
 parameter (*regParam*) along with various parameters associated with gradient
 descent (*stepSize*, *numIterations*, *miniBatchFraction*). 
 
-
-
-
-
 Available algorithms for binary classification:
 
 * [SVMWithSGD](api/mllib/index.html#org.apache.spark.mllib.classification.SVMWithSGD)
