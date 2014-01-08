@@ -40,8 +40,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
   var oldArch: String = null
-  var oldOops: String = null
-  var oldHeartBeat: String = null
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   conf.set("spark.kryoserializer.buffer.mb", "1")
@@ -61,7 +59,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
       Left(actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf)))), conf)
 
     // Set the arch to 64-bit and compressedOops to true to get a deterministic test-case
-    System.setProperty("os.arch", "amd64")
+    oldArch = System.setProperty("os.arch", "amd64")
     conf.set("os.arch", "amd64")
     conf.set("spark.test.useCompressedOops", "true")
     conf.set("spark.storage.disableBlockManagerHeartBeat", "true")
@@ -94,11 +92,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
       System.clearProperty("os.arch")
     }
 
-    if (oldOops != null) {
-      conf.set("spark.test.useCompressedOops", oldOops)
-    } else {
-      System.clearProperty("spark.test.useCompressedOops")
-    }
+    System.clearProperty("spark.test.useCompressedOops")
   }
 
   test("StorageLevel object caching") {
