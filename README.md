@@ -40,7 +40,7 @@ locally with one thread, or "local[N]" to run locally with N threads.
 
 ## Running tests
 
-Testing first requires [Building](#Building) Spark. Once Spark is built, tests
+Testing first requires [Building](#building) Spark. Once Spark is built, tests
 can be run using:
 
 `./sbt/sbt test`
