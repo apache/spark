@@ -15,22 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.client
+package org.apache.spark.deploy
 
 import scala.collection.JavaConversions._
 import scala.collection.mutable.Map
 import scala.concurrent._
 
 import akka.actor._
-import akka.actor.Actor
+import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{Logging, SparkConf}
-import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.util.{AkkaUtils, Utils}
-import org.apache.log4j.{Logger, Level}
-import akka.remote.RemotingLifecycleEvent
 
 /**
  * Actor that sends a single message to the standalone master and returns the response in the
@@ -61,7 +58,7 @@ class DriverActor(master: String, response: Promise[(Boolean, String)]) extends 
 object DriverClient {
 
   def main(args: Array[String]) {
-    val driverArgs = new DriverClientArguments(args)
+    val driverArgs = new ClientArguments(args)
     val conf = new SparkConf()
 
     if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {

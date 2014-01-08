@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.client
+package org.apache.spark.deploy
 
 import scala.collection.mutable.ListBuffer
 
@@ -24,7 +24,7 @@ import org.apache.log4j.Level
 /**
  * Command-line parser for the driver client.
  */
-private[spark] class DriverClientArguments(args: Array[String]) {
+private[spark] class ClientArguments(args: Array[String]) {
   val defaultCores = 1
   val defaultMemory = 512
 
