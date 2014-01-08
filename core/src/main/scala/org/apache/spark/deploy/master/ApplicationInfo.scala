@@ -82,7 +82,7 @@ private[spark] class ApplicationInfo(
     }
   }
 
-  private val myMaxCores = if (desc.maxCores == Int.MaxValue) defaultCores else desc.maxCores
+  private val myMaxCores = desc.maxCores.getOrElse(defaultCores)
 
   def coresLeft: Int = myMaxCores - coresGranted
 

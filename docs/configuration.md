@@ -418,7 +418,7 @@ Apart from these, the following properties are also available, and may be useful
     Whether the standalone cluster manager should spread applications out across nodes or try
     to consolidate them onto as few nodes as possible. Spreading out is usually better for
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
-    <b>Note:</b> this setting needs to be configured in the cluster master, not in individual
+    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
     applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
   </td>
 </tr>
@@ -431,7 +431,7 @@ Apart from these, the following properties are also available, and may be useful
     cores unless they configure <code>spark.cores.max</code> themselves.
     Set this lower on a shared cluster to prevent users from grabbing
     the whole cluster by default. <br/>
-    <b>Note:</b> this setting needs to be configured in the cluster master, not in individual
+    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
     applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
   </td>
 </tr>

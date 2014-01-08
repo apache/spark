@@ -92,6 +92,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   // Default maxCores for applications that don't specify it (i.e. pass Int.MaxValue)
   val defaultCores = conf.getInt("spark.deploy.defaultCores", Int.MaxValue)
+  if (defaultCores < 1) {
+    throw new SparkException("spark.deploy.defaultCores must be positive")
+  }
 
   override def preStart() {
     logInfo("Starting Spark master at " + masterUrl)
