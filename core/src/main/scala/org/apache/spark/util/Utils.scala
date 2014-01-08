@@ -26,23 +26,42 @@ import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
-import scala.reflect.ClassTag
+import scala.reflect.{classTag, ClassTag}
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
+import org.apache.hadoop.io._
 
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.deploy.SparkHadoopUtil
 import java.nio.ByteBuffer
-import org.apache.spark.{SparkConf, SparkContext, SparkException, Logging}
+import org.apache.spark.{SparkConf, SparkException, Logging}
 
 
 /**
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
+
+  /**
+   *  We try to clone for most common types of writables and we call WritableUtils.clone otherwise
+   *  intention is to optimize, for example for NullWritable there is no need and for Long, int and
+   *  String creating a new object with value set would be faster.
+   */
+  def cloneWritables[T: ClassTag](obj: T, conf: Configuration): T = {
+    val cloned = classTag[T] match {
+      case ClassTag(_: Text) => new Text(obj.asInstanceOf[Text].getBytes)
+      case ClassTag(_: LongWritable) => new LongWritable(obj.asInstanceOf[LongWritable].get)
+      case ClassTag(_: IntWritable) => new IntWritable(obj.asInstanceOf[IntWritable].get)
+      case ClassTag(_: NullWritable) => obj // TODO: should we clone this ?
+      case _ => WritableUtils.clone(obj.asInstanceOf[Writable], conf) // slower way of cloning.
+    }
+    cloned.asInstanceOf[T]
+  }
+
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
