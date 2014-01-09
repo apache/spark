@@ -11,7 +11,7 @@ import util._
  * TestSuites that derive from this class must provide a map of testCaseName -> testCaseFiles that should be included.
  * Additionally, there is support for whitelisting and blacklisting tests as development progresses.
  */
-abstract class HiveQueryFileTest extends HiveComaparisionTest {
+abstract class HiveQueryFileTest extends HiveComparisonTest {
   /** A list of tests deemed out of scope and thus completely disregarded */
   def blackList: Seq[String] = Nil
 

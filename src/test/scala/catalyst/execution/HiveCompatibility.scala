@@ -8,7 +8,7 @@ import util._
 /**
  * Runs the test cases that are included in the hive distribution.
  */
-class HiveCompatability extends HiveQueryFileTest {
+class HiveCompatibility extends HiveQueryFileTest {
   // TODO: bundle in jar files... get from classpath
   lazy val hiveQueryDir = new File(TestShark.hiveDevHome, "ql/src/test/queries/clientpositive")
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)

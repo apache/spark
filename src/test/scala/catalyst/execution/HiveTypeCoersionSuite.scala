@@ -4,7 +4,7 @@ package execution
 /**
  * A set of tests that validate type promotion rules.
  */
-class HiveTypeCoersionSuite extends HiveComaparisionTest {
+class HiveTypeCoersionSuite extends HiveComparisonTest {
   import TestShark._
 
   val baseTypes = Seq("1", "1.0", "1L", "1S", "1Y", "'1'")
