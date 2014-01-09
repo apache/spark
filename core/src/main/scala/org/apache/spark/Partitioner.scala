@@ -17,8 +17,10 @@
 
 package org.apache.spark
 
-import org.apache.spark.util.Utils
+import scala.reflect.ClassTag
+
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.Utils
 
 /**
  * An object that defines how the elements in a key-value pair RDD are partitioned by key.
@@ -50,7 +52,7 @@ object Partitioner {
     for (r <- bySize if r.partitioner != None) {
       return r.partitioner.get
     }
-    if (System.getProperty("spark.default.parallelism") != null) {
+    if (rdd.context.conf.contains("spark.default.parallelism")) {
       return new HashPartitioner(rdd.context.defaultParallelism)
     } else {
       return new HashPartitioner(bySize.head.partitions.size)
@@ -72,7 +74,7 @@ class HashPartitioner(partitions: Int) extends Partitioner {
     case null => 0
     case _ => Utils.nonNegativeMod(key.hashCode, numPartitions)
   }
-  
+
   override def equals(other: Any): Boolean = other match {
     case h: HashPartitioner =>
       h.numPartitions == numPartitions
@@ -85,10 +87,10 @@ class HashPartitioner(partitions: Int) extends Partitioner {
  * A [[org.apache.spark.Partitioner]] that partitions sortable records by range into roughly equal ranges.
  * Determines the ranges by sampling the RDD passed in.
  */
-class RangePartitioner[K <% Ordered[K]: ClassManifest, V](
+class RangePartitioner[K <% Ordered[K]: ClassTag, V](
     partitions: Int,
     @transient rdd: RDD[_ <: Product2[K,V]],
-    private val ascending: Boolean = true) 
+    private val ascending: Boolean = true)
   extends Partitioner {
 
   // An array of upper bounds for the first (partitions - 1) partitions

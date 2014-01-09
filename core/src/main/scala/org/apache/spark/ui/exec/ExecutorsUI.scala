@@ -56,7 +56,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize)).fold(0L)(_+_)
 
     val execHead = Seq("Executor ID", "Address", "RDD blocks", "Memory used", "Disk used",
-      "Active tasks", "Failed tasks", "Complete tasks", "Total tasks")
+      "Active tasks", "Failed tasks", "Complete tasks", "Total tasks", "Task Time", "Shuffle Read",
+      "Shuffle Write")
 
     def execRow(kv: Seq[String]) = {
       <tr>
@@ -73,6 +74,9 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
         <td>{kv(7)}</td>
         <td>{kv(8)}</td>
         <td>{kv(9)}</td>
+        <td>{Utils.msDurationToString(kv(10).toLong)}</td>
+        <td>{Utils.bytesToString(kv(11).toLong)}</td>
+        <td>{Utils.bytesToString(kv(12).toLong)}</td>
       </tr>
     }
 
@@ -111,6 +115,9 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
     val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
     val totalTasks = activeTasks + failedTasks + completedTasks
+    val totalDuration = listener.executorToDuration.getOrElse(execId, 0)
+    val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0)
+    val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0)
 
     Seq(
       execId,
@@ -122,7 +129,10 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       activeTasks.toString,
       failedTasks.toString,
       completedTasks.toString,
-      totalTasks.toString
+      totalTasks.toString,
+      totalDuration.toString,
+      totalShuffleRead.toString,
+      totalShuffleWrite.toString
     )
   }
 
@@ -130,6 +140,9 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     val executorToTasksActive = HashMap[String, HashSet[TaskInfo]]()
     val executorToTasksComplete = HashMap[String, Int]()
     val executorToTasksFailed = HashMap[String, Int]()
+    val executorToDuration = HashMap[String, Long]()
+    val executorToShuffleRead = HashMap[String, Long]()
+    val executorToShuffleWrite = HashMap[String, Long]()
 
     override def onTaskStart(taskStart: SparkListenerTaskStart) {
       val eid = taskStart.taskInfo.executorId
@@ -140,6 +153,9 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
       val eid = taskEnd.taskInfo.executorId
       val activeTasks = executorToTasksActive.getOrElseUpdate(eid, new HashSet[TaskInfo]())
+      val newDuration = executorToDuration.getOrElse(eid, 0L) + taskEnd.taskInfo.duration
+      executorToDuration.put(eid, newDuration)
+
       activeTasks -= taskEnd.taskInfo
       val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
@@ -150,6 +166,17 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
             executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
             (None, Option(taskEnd.taskMetrics))
         }
+
+      // update shuffle read/write
+      if (null != taskEnd.taskMetrics) {
+        taskEnd.taskMetrics.shuffleReadMetrics.foreach(shuffleRead =>
+          executorToShuffleRead.put(eid, executorToShuffleRead.getOrElse(eid, 0L) +
+            shuffleRead.remoteBytesRead))
+
+        taskEnd.taskMetrics.shuffleWriteMetrics.foreach(shuffleWrite =>
+          executorToShuffleWrite.put(eid, executorToShuffleWrite.getOrElse(eid, 0L) +
+            shuffleWrite.shuffleBytesWritten))
+      }
     }
   }
 }

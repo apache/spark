@@ -20,7 +20,7 @@ then modify `conf/spark-env.sh` in the `dist/` directory before deploying to all
 
 You can start a standalone master server by executing:
 
-    ./bin/start-master.sh
+    ./sbin/start-master.sh
 
 Once started, the master will print out a `spark://HOST:PORT` URL for itself, which you can use to connect workers to it,
 or pass as the "master" argument to `SparkContext`. You can also find this URL on
@@ -28,7 +28,7 @@ the master's web UI, which is [http://localhost:8080](http://localhost:8080) by 
 
 Similarly, you can start one or more workers and connect them to the master via:
 
-    ./spark-class org.apache.spark.deploy.worker.Worker spark://IP:PORT
+    ./bin/spark-class org.apache.spark.deploy.worker.Worker spark://IP:PORT
 
 Once you have started a worker, look at the master's web UI ([http://localhost:8080](http://localhost:8080) by default).
 You should see the new node listed there, along with its number of CPUs and memory (minus one gigabyte left for the OS).
@@ -51,11 +51,11 @@ Finally, the following configuration options can be passed to the master and wor
   </tr>
   <tr>
     <td><code>-c CORES</code>, <code>--cores CORES</code></td>
-    <td>Total CPU cores to allow Spark applicatons to use on the machine (default: all available); only on worker</td>
+    <td>Total CPU cores to allow Spark applications to use on the machine (default: all available); only on worker</td>
   </tr>
   <tr>
     <td><code>-m MEM</code>, <code>--memory MEM</code></td>
-    <td>Total amount of memory to allow Spark applicatons to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GB); only on worker</td>
+    <td>Total amount of memory to allow Spark applications to use on the machine, in a format like 1000M or 2G (default: your machine's total RAM minus 1 GB); only on worker</td>
   </tr>
   <tr>
     <td><code>-d DIR</code>, <code>--work-dir DIR</code></td>
@@ -70,12 +70,12 @@ To launch a Spark standalone cluster with the launch scripts, you need to create
 
 Once you've set up this file, you can launch or stop your cluster with the following shell scripts, based on Hadoop's deploy scripts, and available in `SPARK_HOME/bin`:
 
-- `bin/start-master.sh` - Starts a master instance on the machine the script is executed on.
-- `bin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
-- `bin/start-all.sh` - Starts both a master and a number of slaves as described above.
-- `bin/stop-master.sh` - Stops the master that was started via the `bin/start-master.sh` script.
-- `bin/stop-slaves.sh` - Stops the slave instances that were started via `bin/start-slaves.sh`.
-- `bin/stop-all.sh` - Stops both the master and the slaves as described above.
+- `sbin/start-master.sh` - Starts a master instance on the machine the script is executed on.
+- `sbin/start-slaves.sh` - Starts a slave instance on each machine specified in the `conf/slaves` file.
+- `sbin/start-all.sh` - Starts both a master and a number of slaves as described above.
+- `sbin/stop-master.sh` - Stops the master that was started via the `bin/start-master.sh` script.
+- `sbin/stop-slaves.sh` - Stops the slave instances that were started via `bin/start-slaves.sh`.
+- `sbin/stop-all.sh` - Stops both the master and the slaves as described above.
 
 Note that these scripts must be executed on the machine you want to run the Spark master on, not your local machine.
 
@@ -143,9 +143,9 @@ constructor](scala-programming-guide.html#initializing-spark).
 
 To run an interactive Spark shell against the cluster, run the following command:
 
-    MASTER=spark://IP:PORT ./spark-shell
+    MASTER=spark://IP:PORT ./bin/spark-shell
 
-Note that if you are running spark-shell from one of the spark cluster machines, the `spark-shell` script will
+Note that if you are running spark-shell from one of the spark cluster machines, the `bin/spark-shell` script will
 automatically set MASTER from the `SPARK_MASTER_IP` and `SPARK_MASTER_PORT` variables in `conf/spark-env.sh`.
 
 You can also pass an option `-c <numCores>` to control the number of cores that spark-shell uses on the cluster.
@@ -154,12 +154,29 @@ You can also pass an option `-c <numCores>` to control the number of cores that 
 
 The standalone cluster mode currently only supports a simple FIFO scheduler across applications.
 However, to allow multiple concurrent users, you can control the maximum number of resources each
-application will acquire.
+application will use.
 By default, it will acquire *all* cores in the cluster, which only makes sense if you just run one
-application at a time. You can cap the number of cores using
-`System.setProperty("spark.cores.max", "10")` (for example).
-This value must be set *before* initializing your SparkContext.
+application at a time. You can cap the number of cores by setting `spark.cores.max` in your
+[SparkConf](configuration.html#spark-properties). For example:
 
+{% highlight scala %}
+val conf = new SparkConf()
+             .setMaster(...)
+             .setAppName(...)
+             .set("spark.cores.max", "10")
+val sc = new SparkContext(conf)
+{% endhighlight %}
+
+In addition, you can configure `spark.deploy.defaultCores` on the cluster master process to change the
+default for applications that don't set `spark.cores.max` to something less than infinite.
+Do this by adding the following to `conf/spark-env.sh`:
+
+{% highlight bash %}
+export SPARK_JAVA_OPTS="-Dspark.deploy.defaultCores=<value>"
+{% endhighlight %}
+
+This is useful on shared clusters where users might not have configured a maximum number of cores
+individually.
 
 # Monitoring and Logging
 

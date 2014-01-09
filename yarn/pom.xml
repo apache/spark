@@ -25,15 +25,14 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-yarn_2.9.3</artifactId>
-  <packaging>jar</packaging>
-  <name>Spark Project YARN Support</name>
-  <url>http://spark.incubator.apache.org/</url>
-
+  <artifactId>yarn-parent_2.10</artifactId>
+  <packaging>pom</packaging>
+  <name>Spark Project YARN Parent POM</name>
+  
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_2.9.3</artifactId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
@@ -63,7 +62,7 @@
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_2.9.3</artifactId>
+      <artifactId>scalatest_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
@@ -73,45 +72,52 @@
     </dependency>
   </dependencies>
 
+  <profiles>
+    <profile>
+      <id>yarn-alpha</id>
+      <modules>
+        <module>alpha</module>
+      </modules>
+    </profile>
+
+    <profile>
+      <id>yarn</id>
+      <modules>
+        <module>stable</module>
+      </modules>
+    </profile>
+  </profiles>
+
   <build>
-    <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
-        <groupId>org.apache.maven.plugins</groupId>
-        <artifactId>maven-shade-plugin</artifactId>
-        <configuration>
-          <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/${project.artifactId}-${project.version}-shaded.jar</outputFile>
-          <artifactSet>
-            <includes>
-              <include>*:*</include>
-            </includes>
-          </artifactSet>
-          <filters>
-            <filter>
-              <artifact>*:*</artifact>
-              <excludes>
-                <exclude>META-INF/*.SF</exclude>
-                <exclude>META-INF/*.DSA</exclude>
-                <exclude>META-INF/*.RSA</exclude>
-              </excludes>
-            </filter>
-          </filters>
-        </configuration>
+        <groupId>org.codehaus.mojo</groupId>
+        <artifactId>build-helper-maven-plugin</artifactId>
         <executions>
           <execution>
-            <phase>package</phase>
+           <id>add-scala-sources</id>
+            <phase>generate-sources</phase>
             <goals>
-              <goal>shade</goal>
+              <goal>add-source</goal>
             </goals>
             <configuration>
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
-                <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
-                  <resource>reference.conf</resource>
-                </transformer>
-              </transformers>
+              <sources>
+                <source>src/main/scala</source>
+                <source>../common/src/main/scala</source>
+              </sources>
+            </configuration>
+          </execution>
+          <execution>
+            <id>add-scala-test-sources</id>
+            <phase>generate-test-sources</phase>
+            <goals>
+              <goal>add-test-source</goal>
+            </goals>
+            <configuration>
+              <sources>
+                <source>src/test/scala</source>
+                <source>../common/src/test/scala</source>
+              </sources>
             </configuration>
           </execution>
         </executions>
@@ -150,12 +156,16 @@
         <artifactId>scalatest-maven-plugin</artifactId>
         <configuration>
           <environmentVariables>
-            <SPARK_HOME>${basedir}/..</SPARK_HOME>
+            <SPARK_HOME>${basedir}/../..</SPARK_HOME>
             <SPARK_TESTING>1</SPARK_TESTING>
             <SPARK_CLASSPATH>${spark.classpath}</SPARK_CLASSPATH>
           </environmentVariables>
         </configuration>
       </plugin>
     </plugins>
+
+    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
   </build>
+
 </project>

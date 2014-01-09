@@ -63,12 +63,52 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("countApproxDistinct") {
+
+    def error(est: Long, size: Long) = math.abs(est - size) / size.toDouble
+
+    val size = 100
+    val uniformDistro = for (i <- 1 to 100000) yield i % size
+    val simpleRdd = sc.makeRDD(uniformDistro)
+    assert(error(simpleRdd.countApproxDistinct(0.2), size) < 0.2)
+    assert(error(simpleRdd.countApproxDistinct(0.05), size) < 0.05)
+    assert(error(simpleRdd.countApproxDistinct(0.01), size) < 0.01)
+    assert(error(simpleRdd.countApproxDistinct(0.001), size) < 0.001)
+  }
+
   test("SparkContext.union") {
     val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
     assert(sc.union(nums).collect().toList === List(1, 2, 3, 4))
     assert(sc.union(nums, nums).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
     assert(sc.union(Seq(nums)).collect().toList === List(1, 2, 3, 4))
     assert(sc.union(Seq(nums, nums)).collect().toList === List(1, 2, 3, 4, 1, 2, 3, 4))
+  }
+
+  test("partitioner aware union") {
+    import SparkContext._
+    def makeRDDWithPartitioner(seq: Seq[Int]) = {
+      sc.makeRDD(seq, 1)
+        .map(x => (x, null))
+        .partitionBy(new HashPartitioner(2))
+        .mapPartitions(_.map(_._1), true)
+    }
+
+    val nums1 = makeRDDWithPartitioner(1 to 4)
+    val nums2 = makeRDDWithPartitioner(5 to 8)
+    assert(nums1.partitioner == nums2.partitioner)
+    assert(new PartitionerAwareUnionRDD(sc, Seq(nums1)).collect().toSet === Set(1, 2, 3, 4))
+
+    val union = new PartitionerAwareUnionRDD(sc, Seq(nums1, nums2))
+    assert(union.collect().toSet === Set(1, 2, 3, 4, 5, 6, 7, 8))
+    val nums1Parts = nums1.collectPartitions()
+    val nums2Parts = nums2.collectPartitions()
+    val unionParts = union.collectPartitions()
+    assert(nums1Parts.length === 2)
+    assert(nums2Parts.length === 2)
+    assert(unionParts.length === 2)
+    assert((nums1Parts(0) ++ nums2Parts(0)).toList === unionParts(0).toList)
+    assert((nums1Parts(1) ++ nums2Parts(1)).toList === unionParts(1).toList)
+    assert(union.partitioner === nums1.partitioner)
   }
 
   test("aggregate") {
@@ -244,8 +284,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     // test that you get over 90% locality in each group
     val minLocality = coalesced2.partitions
       .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
-      .foldLeft(1.)((perc, loc) => math.min(perc,loc))
-    assert(minLocality >= 0.90, "Expected 90% locality but got " + (minLocality*100.).toInt + "%")
+      .foldLeft(1.0)((perc, loc) => math.min(perc,loc))
+    assert(minLocality >= 0.90, "Expected 90% locality but got " + (minLocality*100.0).toInt + "%")
 
     // test that the groups are load balanced with 100 +/- 20 elements in each
     val maxImbalance = coalesced2.partitions
@@ -257,9 +297,9 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val coalesced3 = data3.coalesce(numMachines*2)
     val minLocality2 = coalesced3.partitions
       .map(part => part.asInstanceOf[CoalescedRDDPartition].localFraction)
-      .foldLeft(1.)((perc, loc) => math.min(perc,loc))
+      .foldLeft(1.0)((perc, loc) => math.min(perc,loc))
     assert(minLocality2 >= 0.90, "Expected 90% locality for derived RDD but got " +
-      (minLocality2*100.).toInt + "%")
+      (minLocality2*100.0).toInt + "%")
   }
 
   test("zipped RDDs") {

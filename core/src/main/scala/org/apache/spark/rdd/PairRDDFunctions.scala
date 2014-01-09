@@ -25,6 +25,7 @@ import java.util.{HashMap => JHashMap}
 import scala.collection.{mutable, Map}
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
+import scala.reflect.{ClassTag, classTag}
 
 import org.apache.hadoop.mapred._
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -39,18 +40,21 @@ import org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
 import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
+
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.Aggregator
 import org.apache.spark.Partitioner
 import org.apache.spark.Partitioner.defaultPartitioner
+import org.apache.spark.util.SerializableHyperLogLog
 
 /**
  * Extra functions available on RDDs of (key, value) pairs through an implicit conversion.
  * Import `org.apache.spark.SparkContext._` at the top of your program to use these functions.
  */
-class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
+class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   extends Logging
   with SparkHadoopMapReduceUtil
   with Serializable {
@@ -204,6 +208,45 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
   def countByKeyApprox(timeout: Long, confidence: Double = 0.95)
       : PartialResult[Map[K, BoundedDouble]] = {
     self.map(_._1).countByValueApprox(timeout, confidence)
+  }
+
+  /**
+   * Return approximate number of distinct values for each key in this RDD.
+   * The accuracy of approximation can be controlled through the relative standard deviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. Uses the provided
+   * Partitioner to partition the output RDD.
+   */
+  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): RDD[(K, Long)] = {
+    val createHLL = (v: V) => new SerializableHyperLogLog(new HyperLogLog(relativeSD)).add(v)
+    val mergeValueHLL = (hll: SerializableHyperLogLog, v: V) => hll.add(v)
+    val mergeHLL = (h1: SerializableHyperLogLog, h2: SerializableHyperLogLog) => h1.merge(h2)
+
+    combineByKey(createHLL, mergeValueHLL, mergeHLL, partitioner).mapValues(_.value.cardinality())
+  }
+
+  /**
+   * Return approximate number of distinct values for each key in this RDD. 
+   * The accuracy of approximation can be controlled through the relative standard deviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. HashPartitions the
+   * output RDD into numPartitions.
+   *
+   */
+  def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): RDD[(K, Long)] = {
+    countApproxDistinctByKey(relativeSD, new HashPartitioner(numPartitions))
+  }
+
+  /**
+   * Return approximate number of distinct values for each key this RDD.
+   * The accuracy of approximation can be controlled through the relative standard deviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. The default value of
+   * relativeSD is 0.05. Hash-partitions the output RDD using the existing partitioner/parallelism
+   * level.
+   */
+  def countApproxDistinctByKey(relativeSD: Double = 0.05): RDD[(K, Long)] = {
+    countApproxDistinctByKey(relativeSD, defaultPartitioner(self))
   }
 
   /**
@@ -415,7 +458,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
-    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
+    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classTag[K], ClassTags.seqSeqClassTag)
     prfs.mapValues { case Seq(vs, ws) =>
       (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
     }
@@ -431,7 +474,7 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
-    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classManifest[K], Manifests.seqSeqManifest)
+    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classTag[K], ClassTags.seqSeqClassTag)
     prfs.mapValues { case Seq(vs, w1s, w2s) =>
       (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]])
     }
@@ -488,15 +531,15 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
-  def subtractByKey[W: ClassManifest](other: RDD[(K, W)]): RDD[(K, V)] =
+  def subtractByKey[W: ClassTag](other: RDD[(K, W)]): RDD[(K, V)] =
     subtractByKey(other, self.partitioner.getOrElse(new HashPartitioner(self.partitions.size)))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
-  def subtractByKey[W: ClassManifest](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] =
+  def subtractByKey[W: ClassTag](other: RDD[(K, W)], numPartitions: Int): RDD[(K, V)] =
     subtractByKey(other, new HashPartitioner(numPartitions))
 
   /** Return an RDD with the pairs from `this` whose keys are not in `other`. */
-  def subtractByKey[W: ClassManifest](other: RDD[(K, W)], p: Partitioner): RDD[(K, V)] =
+  def subtractByKey[W: ClassTag](other: RDD[(K, W)], p: Partitioner): RDD[(K, V)] =
     new SubtractedRDD[K, V, W](self, other, p)
 
   /**
@@ -525,8 +568,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * Output the RDD to any Hadoop-supported file system, using a Hadoop `OutputFormat` class
    * supporting the key and value types K and V in this RDD.
    */
-  def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassManifest[F]) {
-    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
+  def saveAsHadoopFile[F <: OutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
+    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**
@@ -535,16 +578,16 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    * supplied codec.
    */
   def saveAsHadoopFile[F <: OutputFormat[K, V]](
-      path: String, codec: Class[_ <: CompressionCodec]) (implicit fm: ClassManifest[F]) {
-    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]], codec)
+      path: String, codec: Class[_ <: CompressionCodec]) (implicit fm: ClassTag[F]) {
+    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]], codec)
   }
 
   /**
    * Output the RDD to any Hadoop-supported file system, using a new Hadoop API `OutputFormat`
    * (mapreduce.OutputFormat) object supporting the key and value types K and V in this RDD.
    */
-  def saveAsNewAPIHadoopFile[F <: NewOutputFormat[K, V]](path: String)(implicit fm: ClassManifest[F]) {
-    saveAsNewAPIHadoopFile(path, getKeyClass, getValueClass, fm.erasure.asInstanceOf[Class[F]])
+  def saveAsNewAPIHadoopFile[F <: NewOutputFormat[K, V]](path: String)(implicit fm: ClassTag[F]) {
+    saveAsNewAPIHadoopFile(path, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**
@@ -570,7 +613,8 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = newTaskAttemptID(jobtrackerID, stageId, false, context.partitionId, attemptNumber)
+      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
+        attemptNumber)
       val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = outputFormatClass.newInstance
       val committer = format.getOutputCommitter(hadoopContext)
@@ -589,13 +633,12 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
      * however we're only going to use this local OutputCommitter for
      * setupJob/commitJob, so we just use a dummy "map" task.
      */
-    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, true, 0, 0)
+    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
     val count = self.context.runJob(self, writeShard _).sum
     jobCommitter.commitJob(jobTaskContext)
-    jobCommitter.cleanupJob(jobTaskContext)
   }
 
   /**
@@ -685,7 +728,6 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
 
     self.context.runJob(self, writeToFile _)
     writer.commitJob()
-    writer.cleanup()
   }
 
   /**
@@ -698,11 +740,11 @@ class PairRDDFunctions[K: ClassManifest, V: ClassManifest](self: RDD[(K, V)])
    */
   def values: RDD[V] = self.map(_._2)
 
-  private[spark] def getKeyClass() = implicitly[ClassManifest[K]].erasure
+  private[spark] def getKeyClass() = implicitly[ClassTag[K]].runtimeClass
 
-  private[spark] def getValueClass() = implicitly[ClassManifest[V]].erasure
+  private[spark] def getValueClass() = implicitly[ClassTag[V]].runtimeClass
 }
 
-private[spark] object Manifests {
-  val seqSeqManifest = classManifest[Seq[Seq[_]]]
+private[spark] object ClassTags {
+  val seqSeqClassTag = classTag[Seq[Seq[_]]]
 }

@@ -17,21 +17,14 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.{Map, HashMap}
+import scala.Tuple2
+import scala.collection.mutable.{HashMap, Map}
 
-import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
-
-import org.apache.spark.LocalSparkContext
-import org.apache.spark.MapOutputTrackerMaster
-import org.apache.spark.SparkContext
-import org.apache.spark.Partition
-import org.apache.spark.TaskContext
-import org.apache.spark.{Dependency, ShuffleDependency, OneToOneDependency}
-import org.apache.spark.{FetchFailed, Success, TaskEndReason}
+import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
+import org.scalatest.{BeforeAndAfter, FunSuite}
 
 /**
  * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler
@@ -46,7 +39,7 @@ import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
  * and capturing the resulting TaskSets from the mock TaskScheduler.
  */
 class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkContext {
-
+  val conf = new SparkConf
   /** Set of TaskSets the DAGScheduler has requested executed. */
   val taskSets = scala.collection.mutable.Buffer[TaskSet]()
   val taskScheduler = new TaskScheduler() {
@@ -74,7 +67,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
    */
   val cacheLocations = new HashMap[(Int, Int), Seq[BlockManagerId]]
   // stub out BlockManagerMaster.getLocations to use our cacheLocations
-  val blockManagerMaster = new BlockManagerMaster(null) {
+  val blockManagerMaster = new BlockManagerMaster(null, conf) {
       override def getLocations(blockIds: Array[BlockId]): Seq[Seq[BlockManagerId]] = {
         blockIds.map {
           _.asRDDId.map(id => (id.rddId -> id.splitIndex)).flatMap(key => cacheLocations.get(key)).
@@ -99,7 +92,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     taskSets.clear()
     cacheLocations.clear()
     results.clear()
-    mapOutputTracker = new MapOutputTrackerMaster()
+    mapOutputTracker = new MapOutputTrackerMaster(conf)
     scheduler = new DAGScheduler(taskScheduler, mapOutputTracker, blockManagerMaster, sc.env) {
       override def runLocally(job: ActiveJob) {
         // don't bother with the thread while unit testing
@@ -206,6 +199,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     submit(rdd, Array(0))
     complete(taskSets(0), List((Success, 42)))
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
   }
 
   test("local job") {
@@ -219,6 +213,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     val jobId = scheduler.nextJobId.getAndIncrement()
     runEvent(JobSubmitted(jobId, rdd, jobComputeFunc, Array(0), true, null, listener))
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
   }
 
   test("run trivial job w/ dependency") {
@@ -227,6 +222,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     submit(finalRdd, Array(0))
     complete(taskSets(0), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
   }
 
   test("cache location preferences w/ dependency") {
@@ -239,12 +235,14 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assertLocations(taskSet, Seq(Seq("hostA", "hostB")))
     complete(taskSet, Seq((Success, 42)))
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
   }
 
   test("trivial job failure") {
     submit(makeRdd(1, Nil), Array(0))
     failed(taskSets(0), "some failure")
     assert(failure.getMessage === "Job aborted: some failure")
+    assertDataStructuresEmpty
   }
 
   test("run trivial shuffle") {
@@ -260,6 +258,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
            Array(makeBlockManagerId("hostA"), makeBlockManagerId("hostB")))
     complete(taskSets(1), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
   }
 
   test("run trivial shuffle with fetch failure") {
@@ -285,6 +284,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1.host) === Array("hostA", "hostB"))
     complete(taskSets(3), Seq((Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty
   }
 
   test("ignore late map task completions") {
@@ -313,6 +313,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
            Array(makeBlockManagerId("hostB"), makeBlockManagerId("hostA")))
     complete(taskSets(1), Seq((Success, 42), (Success, 43)))
     assert(results === Map(0 -> 42, 1 -> 43))
+    assertDataStructuresEmpty
   }
 
   test("run trivial shuffle with out-of-band failure and retry") {
@@ -329,15 +330,16 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     complete(taskSets(0), Seq(
         (Success, makeMapStatus("hostA", 1)),
        (Success, makeMapStatus("hostB", 1))))
-   // have hostC complete the resubmitted task
-   complete(taskSets(1), Seq((Success, makeMapStatus("hostC", 1))))
-   assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
-          Array(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
-   complete(taskSets(2), Seq((Success, 42)))
-   assert(results === Map(0 -> 42))
- }
+    // have hostC complete the resubmitted task
+    complete(taskSets(1), Seq((Success, makeMapStatus("hostC", 1))))
+    assert(mapOutputTracker.getServerStatuses(shuffleId, 0).map(_._1) ===
+           Array(makeBlockManagerId("hostC"), makeBlockManagerId("hostB")))
+    complete(taskSets(2), Seq((Success, 42)))
+    assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
+  }
 
- test("recursive shuffle failures") {
+  test("recursive shuffle failures") {
     val shuffleOneRdd = makeRdd(2, Nil)
     val shuffleDepOne = new ShuffleDependency(shuffleOneRdd, null)
     val shuffleTwoRdd = makeRdd(2, List(shuffleDepOne))
@@ -363,6 +365,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     complete(taskSets(4), Seq((Success, makeMapStatus("hostA", 1))))
     complete(taskSets(5), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
   }
 
   test("cached post-shuffle") {
@@ -394,6 +397,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
     complete(taskSets(3), Seq((Success, makeMapStatus("hostD", 1))))
     complete(taskSets(4), Seq((Success, 42)))
     assert(results === Map(0 -> 42))
+    assertDataStructuresEmpty
   }
 
   /**
@@ -413,4 +417,18 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
   private def makeBlockManagerId(host: String): BlockManagerId =
     BlockManagerId("exec-" + host, host, 12345, 0)
 
+  private def assertDataStructuresEmpty = {
+    assert(scheduler.pendingTasks.isEmpty)
+    assert(scheduler.activeJobs.isEmpty)
+    assert(scheduler.failed.isEmpty)
+    assert(scheduler.idToActiveJob.isEmpty)
+    assert(scheduler.jobIdToStageIds.isEmpty)
+    assert(scheduler.stageIdToJobIds.isEmpty)
+    assert(scheduler.stageIdToStage.isEmpty)
+    assert(scheduler.stageToInfos.isEmpty)
+    assert(scheduler.resultStageToJob.isEmpty)
+    assert(scheduler.running.isEmpty)
+    assert(scheduler.shuffleToMapStage.isEmpty)
+    assert(scheduler.waiting.isEmpty)
+  }
 }

@@ -25,8 +25,8 @@ import scala.io.Source
 import java.nio.ByteBuffer
 import java.net.InetAddress
 
-import akka.dispatch.Await
-import akka.util.duration._
+import scala.concurrent.Await
+import scala.concurrent.duration._
 
 private[spark] object ConnectionManagerTest extends Logging{
   def main(args: Array[String]) {

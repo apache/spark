@@ -31,6 +31,7 @@ import org.apache.spark.rdd.RDD
 
 
 class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
+  val WAIT_TIMEOUT_MILLIS = 10000
 
   test("inner method") {
     sc = new SparkContext("local", "joblogger")
@@ -92,7 +93,9 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     val rdd = sc.parallelize(1 to 1e2.toInt, 4).map{ i => (i % 12, 2 * i) }
     rdd.reduceByKey(_+_).collect()
 
-    val user = System.getProperty("user.name", SparkContext.SPARK_UNKNOWN_USER)
+    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+
+    val user = System.getProperty("user.name",  SparkContext.SPARK_UNKNOWN_USER)
     
     joblogger.getLogDir should be ("/tmp/spark-%s".format(user))
     joblogger.getJobIDtoPrintWriter.size should be (1)
@@ -114,13 +117,15 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd)  = onTaskEndCount += 1
       override def onJobEnd(jobEnd: SparkListenerJobEnd) = onJobEndCount += 1
       override def onJobStart(jobStart: SparkListenerJobStart) = onJobStartCount += 1
-      override def onStageCompleted(stageCompleted: StageCompleted) = onStageCompletedCount += 1
+      override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = onStageCompletedCount += 1
       override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = onStageSubmittedCount += 1
     }
     sc.addSparkListener(joblogger)
     val rdd = sc.parallelize(1 to 1e2.toInt, 4).map{ i => (i % 12, 2 * i) }
     rdd.reduceByKey(_+_).collect()
-    
+
+    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+
     joblogger.onJobStartCount should be (1)
     joblogger.onJobEndCount should be (1)
     joblogger.onTaskEndCount should be (8)

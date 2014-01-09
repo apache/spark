@@ -59,32 +59,40 @@ private[spark] trait ShuffleWriterGroup {
  */
 private[spark]
 class ShuffleBlockManager(blockManager: BlockManager) {
+  def conf = blockManager.conf
+
   // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
   // TODO: Remove this once the shuffle file consolidation feature is stable.
   val consolidateShuffleFiles =
-    System.getProperty("spark.shuffle.consolidateFiles", "true").toBoolean
+    conf.get("spark.shuffle.consolidateFiles", "false").toBoolean
 
-  private val bufferSize = System.getProperty("spark.shuffle.file.buffer.kb", "100").toInt * 1024
+  private val bufferSize = conf.get("spark.shuffle.file.buffer.kb", "100").toInt * 1024
 
   /**
    * Contains all the state related to a particular shuffle. This includes a pool of unused
    * ShuffleFileGroups, as well as all ShuffleFileGroups that have been created for the shuffle.
    */
-  private class ShuffleState() {
+  private class ShuffleState(val numBuckets: Int) {
     val nextFileId = new AtomicInteger(0)
     val unusedFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()
     val allFileGroups = new ConcurrentLinkedQueue[ShuffleFileGroup]()
+
+    /**
+     * The mapIds of all map tasks completed on this Executor for this shuffle.
+     * NB: This is only populated if consolidateShuffleFiles is FALSE. We don't need it otherwise.
+     */
+    val completedMapTasks = new ConcurrentLinkedQueue[Int]()
   }
 
   type ShuffleId = Int
   private val shuffleStates = new TimeStampedHashMap[ShuffleId, ShuffleState]
 
-  private
-  val metadataCleaner = new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup)
+  private val metadataCleaner =
+    new MetadataCleaner(MetadataCleanerType.SHUFFLE_BLOCK_MANAGER, this.cleanup, conf)
 
   def forMapTask(shuffleId: Int, mapId: Int, numBuckets: Int, serializer: Serializer) = {
     new ShuffleWriterGroup {
-      shuffleStates.putIfAbsent(shuffleId, new ShuffleState())
+      shuffleStates.putIfAbsent(shuffleId, new ShuffleState(numBuckets))
       private val shuffleState = shuffleStates(shuffleId)
       private var fileGroup: ShuffleFileGroup = null
 
@@ -109,6 +117,8 @@ class ShuffleBlockManager(blockManager: BlockManager) {
             fileGroup.recordMapOutput(mapId, offsets)
           }
           recycleFileGroup(fileGroup)
+        } else {
+          shuffleState.completedMapTasks.add(mapId)
         }
       }
 
@@ -154,7 +164,18 @@ class ShuffleBlockManager(blockManager: BlockManager) {
   }
 
   private def cleanup(cleanupTime: Long) {
-    shuffleStates.clearOldValues(cleanupTime)
+    shuffleStates.clearOldValues(cleanupTime, (shuffleId, state) => {
+      if (consolidateShuffleFiles) {
+        for (fileGroup <- state.allFileGroups; file <- fileGroup.files) {
+          file.delete()
+        }
+      } else {
+        for (mapId <- state.completedMapTasks; reduceId <- 0 until state.numBuckets) {
+          val blockId = new ShuffleBlockId(shuffleId, mapId, reduceId)
+          blockManager.diskBlockManager.getFile(blockId).delete()
+        }
+      }
+    })
   }
 }
 

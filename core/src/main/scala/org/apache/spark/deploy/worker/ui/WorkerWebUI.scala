@@ -17,20 +17,16 @@
 
 package org.apache.spark.deploy.worker.ui
 
-import akka.util.{Duration, Timeout}
-
-import java.io.{FileInputStream, File}
+import java.io.File
 
 import javax.servlet.http.HttpServletRequest
-
 import org.eclipse.jetty.server.{Handler, Server}
 
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.{Logging}
-import org.apache.spark.ui.JettyUtils
+import org.apache.spark.ui.{JettyUtils, UIUtils}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.UIUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Web UI server for the standalone worker.
@@ -38,11 +34,10 @@ import org.apache.spark.util.Utils
 private[spark]
 class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[Int] = None)
   extends Logging {
-  implicit val timeout = Timeout(
-    Duration.create(System.getProperty("spark.akka.askTimeout", "10").toLong, "seconds"))
+  val timeout = AkkaUtils.askTimeout(worker.conf)
   val host = Utils.localHostName()
   val port = requestedPort.getOrElse(
-    System.getProperty("worker.ui.port", WorkerWebUI.DEFAULT_PORT).toInt)
+    worker.conf.get("worker.ui.port",  WorkerWebUI.DEFAULT_PORT).toInt)
 
   var server: Option[Server] = None
   var boundPort: Option[Int] = None
@@ -145,12 +140,12 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
         <body>
           {linkToMaster}
           <div>
-            <div style="float:left;width:40%">{backButton}</div>
+            <div style="float:left; margin-right:10px">{backButton}</div>
             <div style="float:left;">{range}</div>
-            <div style="float:right;">{nextButton}</div>
+            <div style="float:right; margin-left:10px">{nextButton}</div>
           </div>
           <br />
-          <div style="height:500px;overflow:auto;padding:5px;">
+          <div style="height:500px; overflow:auto; padding:5px;">
             <pre>{logText}</pre>
           </div>
         </body>

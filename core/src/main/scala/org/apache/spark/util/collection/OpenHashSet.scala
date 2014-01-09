@@ -17,6 +17,7 @@
 
 package org.apache.spark.util.collection
 
+import scala.reflect._
 
 /**
  * A simple, fast hash set optimized for non-null insertion-only use case, where keys are never
@@ -36,7 +37,7 @@ package org.apache.spark.util.collection
  * to explore all spaces for each key (see http://en.wikipedia.org/wiki/Quadratic_probing).
  */
 private[spark]
-class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
+class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     initialCapacity: Int,
     loadFactor: Double)
   extends Serializable {
@@ -62,14 +63,14 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
     // throws:
     // scala.tools.nsc.symtab.Types$TypeError: type mismatch;
     //  found   : scala.reflect.AnyValManifest[Long]
-    //  required: scala.reflect.ClassManifest[Int]
+    //  required: scala.reflect.ClassTag[Int]
     //         at scala.tools.nsc.typechecker.Contexts$Context.error(Contexts.scala:298)
     //         at scala.tools.nsc.typechecker.Infer$Inferencer.error(Infer.scala:207)
     //         ...
-    val mt = classManifest[T]
-    if (mt == ClassManifest.Long) {
+    val mt = classTag[T]
+    if (mt == ClassTag.Long) {
       (new LongHasher).asInstanceOf[Hasher[T]]
-    } else if (mt == ClassManifest.Int) {
+    } else if (mt == ClassTag.Int) {
       (new IntHasher).asInstanceOf[Hasher[T]]
     } else {
       new Hasher[T]
@@ -79,6 +80,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
   protected var _capacity = nextPowerOf2(initialCapacity)
   protected var _mask = _capacity - 1
   protected var _size = 0
+  protected var _growThreshold = (loadFactor * _capacity).toInt
 
   protected var _bitset = new BitSet(_capacity)
 
@@ -117,7 +119,29 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
    * @return The position where the key is placed, plus the highest order bit is set if the key
    *         exists previously.
    */
-  def addWithoutResize(k: T): Int = putInto(_bitset, _data, k)
+  def addWithoutResize(k: T): Int = {
+    var pos = hashcode(hasher.hash(k)) & _mask
+    var i = 1
+    while (true) {
+      if (!_bitset.get(pos)) {
+        // This is a new key.
+        _data(pos) = k
+        _bitset.set(pos)
+        _size += 1
+        return pos | NONEXISTENCE_MASK
+      } else if (_data(pos) == k) {
+        // Found an existing key.
+        return pos
+      } else {
+        val delta = i
+        pos = (pos + delta) & _mask
+        i += 1
+      }
+    }
+    // Never reached here
+    assert(INVALID_POS != INVALID_POS)
+    INVALID_POS
+  }
 
   /**
    * Rehash the set if it is overloaded.
@@ -128,7 +152,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
    *                 to a new position (in the new data array).
    */
   def rehashIfNeeded(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
-    if (_size > loadFactor * _capacity) {
+    if (_size > _growThreshold) {
       rehash(k, allocateFunc, moveFunc)
     }
   }
@@ -181,37 +205,6 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
   def nextPos(fromPos: Int): Int = _bitset.nextSetBit(fromPos)
 
   /**
-   * Put an entry into the set. Return the position where the key is placed. In addition, the
-   * highest bit in the returned position is set if the key exists prior to this put.
-   *
-   * This function assumes the data array has at least one empty slot.
-   */
-  private def putInto(bitset: BitSet, data: Array[T], k: T): Int = {
-    val mask = data.length - 1
-    var pos = hashcode(hasher.hash(k)) & mask
-    var i = 1
-    while (true) {
-      if (!bitset.get(pos)) {
-        // This is a new key.
-        data(pos) = k
-        bitset.set(pos)
-        _size += 1
-        return pos | NONEXISTENCE_MASK
-      } else if (data(pos) == k) {
-        // Found an existing key.
-        return pos
-      } else {
-        val delta = i
-        pos = (pos + delta) & mask
-        i += 1
-      }
-    }
-    // Never reached here
-    assert(INVALID_POS != INVALID_POS)
-    INVALID_POS
-  }
-
-  /**
    * Double the table's size and re-hash everything. We are not really using k, but it is declared
    * so Scala compiler can specialize this method (which leads to calling the specialized version
    * of putInto).
@@ -224,33 +217,49 @@ class OpenHashSet[@specialized(Long, Int) T: ClassManifest](
    */
   private def rehash(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
     val newCapacity = _capacity * 2
-    require(newCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
-
     allocateFunc(newCapacity)
-    val newData = new Array[T](newCapacity)
     val newBitset = new BitSet(newCapacity)
-    var pos = 0
-    _size = 0
-    while (pos < _capacity) {
-      if (_bitset.get(pos)) {
-        val newPos = putInto(newBitset, newData, _data(pos))
-        moveFunc(pos, newPos & POSITION_MASK)
+    val newData = new Array[T](newCapacity)
+    val newMask = newCapacity - 1
+
+    var oldPos = 0
+    while (oldPos < capacity) {
+      if (_bitset.get(oldPos)) {
+        val key = _data(oldPos)
+        var newPos = hashcode(hasher.hash(key)) & newMask
+        var i = 1
+        var keepGoing = true
+        // No need to check for equality here when we insert so this has one less if branch than
+        // the similar code path in addWithoutResize.
+        while (keepGoing) {
+          if (!newBitset.get(newPos)) {
+            // Inserting the key at newPos
+            newData(newPos) = key
+            newBitset.set(newPos)
+            moveFunc(oldPos, newPos)
+            keepGoing = false
+          } else {
+            val delta = i
+            newPos = (newPos + delta) & newMask
+            i += 1
+          }
+        }
       }
-      pos += 1
+      oldPos += 1
     }
+
     _bitset = newBitset
     _data = newData
     _capacity = newCapacity
-    _mask = newCapacity - 1
+    _mask = newMask
+    _growThreshold = (loadFactor * newCapacity).toInt
   }
 
   /**
-   * Re-hash a value to deal better with hash functions that don't differ
-   * in the lower bits, similar to java.util.HashMap
+   * Re-hash a value to deal better with hash functions that don't differ in the lower bits.
+   * We use the Murmur Hash 3 finalization step that's also used in fastutil.
    */
-  private def hashcode(h: Int): Int = {
-    it.unimi.dsi.fastutil.HashCommon.murmurHash3(h)
-  }
+  private def hashcode(h: Int): Int = it.unimi.dsi.fastutil.HashCommon.murmurHash3(h)
 
   private def nextPowerOf2(n: Int): Int = {
     val highBit = Integer.highestOneBit(n)

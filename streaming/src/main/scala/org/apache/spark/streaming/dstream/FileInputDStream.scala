@@ -17,30 +17,31 @@
 
 package org.apache.spark.streaming.dstream
 
+import java.io.{ObjectInputStream, IOException}
+import scala.collection.mutable.{HashSet, HashMap}
+import scala.reflect.ClassTag
+import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
+import org.apache.spark.SparkException
 import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.UnionRDD
 import org.apache.spark.streaming.{DStreamCheckpointData, StreamingContext, Time}
 
-import org.apache.hadoop.fs.{FileSystem, Path, PathFilter}
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-
-import scala.collection.mutable.{HashSet, HashMap}
-import java.io.{ObjectInputStream, IOException}
 
 private[streaming]
-class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K,V] : ClassManifest](
+class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : ClassTag](
     @transient ssc_ : StreamingContext,
     directory: String,
     filter: Path => Boolean = FileInputDStream.defaultFilter,
-    newFilesOnly: Boolean = true) 
+    newFilesOnly: Boolean = true)
   extends InputDStream[(K, V)](ssc_) {
 
   protected[streaming] override val checkpointData = new FileInputDStreamCheckpointData
 
   // Latest file mod time seen till any point of time
-  private val lastModTimeFiles = new HashSet[String]()
-  private var lastModTime = 0L
+  private val prevModTimeFiles = new HashSet[String]()
+  private var prevModTime = 0L
 
   @transient private var path_ : Path = null
   @transient private var fs_ : FileSystem = null
@@ -48,13 +49,13 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
 
   override def start() {
     if (newFilesOnly) {
-      lastModTime = graph.zeroTime.milliseconds
+      prevModTime = graph.zeroTime.milliseconds
     } else {
-      lastModTime = 0
+      prevModTime = 0
     }
-    logDebug("LastModTime initialized to " + lastModTime + ", new files only = " + newFilesOnly)
+    logDebug("LastModTime initialized to " + prevModTime + ", new files only = " + newFilesOnly)
   }
-  
+
   override def stop() { }
 
   /**
@@ -67,55 +68,22 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
    * the previous call.
    */
   override def compute(validTime: Time): Option[RDD[(K, V)]] = {
-    assert(validTime.milliseconds >= lastModTime, "Trying to get new files for really old time [" + validTime + " < " + lastModTime)
+    assert(validTime.milliseconds >= prevModTime,
+      "Trying to get new files for really old time [" + validTime + " < " + prevModTime + "]")
 
-    // Create the filter for selecting new files
-    val newFilter = new PathFilter() {
-      // Latest file mod time seen in this round of fetching files and its corresponding files
-      var latestModTime = 0L
-      val latestModTimeFiles = new HashSet[String]()
-
-      def accept(path: Path): Boolean = {
-        if (!filter(path)) {  // Reject file if it does not satisfy filter
-          logDebug("Rejected by filter " + path)
-          return false
-        } else {              // Accept file only if
-          val modTime = fs.getFileStatus(path).getModificationTime()
-          logDebug("Mod time for " + path + " is " + modTime)
-          if (modTime < lastModTime) {
-            logDebug("Mod time less than last mod time")
-            return false  // If the file was created before the last time it was called
-          } else if (modTime == lastModTime && lastModTimeFiles.contains(path.toString)) {
-            logDebug("Mod time equal to last mod time, but file considered already")
-            return false  // If the file was created exactly as lastModTime but not reported yet
-          } else if (modTime > validTime.milliseconds) {
-            logDebug("Mod time more than valid time")
-            return false  // If the file was created after the time this function call requires
-          }
-          if (modTime > latestModTime) {
-            latestModTime = modTime
-            latestModTimeFiles.clear()
-            logDebug("Latest mod time updated to " + latestModTime)
-          }
-          latestModTimeFiles += path.toString
-          logDebug("Accepted " + path)
-          return true
-        }        
-      }
-    }
-    logDebug("Finding new files at time " + validTime + " for last mod time = " + lastModTime)
-    val newFiles = fs.listStatus(path, newFilter).map(_.getPath.toString)
+    // Find new files
+    val (newFiles, latestModTime, latestModTimeFiles) = findNewFiles(validTime.milliseconds)
     logInfo("New files at time " + validTime + ":\n" + newFiles.mkString("\n"))
     if (newFiles.length > 0) {
       // Update the modification time and the files processed for that modification time
-      if (lastModTime != newFilter.latestModTime) {
-        lastModTime = newFilter.latestModTime
-        lastModTimeFiles.clear()
+      if (prevModTime < latestModTime) {
+        prevModTime = latestModTime
+        prevModTimeFiles.clear()
       }
-      lastModTimeFiles ++= newFilter.latestModTimeFiles
-      logDebug("Last mod time updated to " + lastModTime)
+      prevModTimeFiles ++= latestModTimeFiles
+      logDebug("Last mod time updated to " + prevModTime)
     }
-    files += ((validTime, newFiles))
+    files += ((validTime, newFiles.toArray))
     Some(filesToRDD(newFiles))
   }
 
@@ -130,12 +98,28 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
       oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
   }
 
+  /**
+   * Find files which have modification timestamp <= current time and return a 3-tuple of
+   * (new files found, latest modification time among them, files with latest modification time)
+   */
+  private def findNewFiles(currentTime: Long): (Seq[String], Long, Seq[String]) = {
+    logDebug("Trying to get new files for time " + currentTime)
+    val filter = new CustomPathFilter(currentTime)
+    val newFiles = fs.listStatus(path, filter).map(_.getPath.toString)
+    (newFiles, filter.latestModTime, filter.latestModTimeFiles.toSeq)
+  }
+
   /** Generate one RDD from an array of files */
-  protected[streaming] def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
-    new UnionRDD(
-      context.sparkContext,
-      files.map(file => context.sparkContext.newAPIHadoopFile[K, V, F](file))
-    )
+  private def filesToRDD(files: Seq[String]): RDD[(K, V)] = {
+    val fileRDDs = files.map(file => context.sparkContext.newAPIHadoopFile[K, V, F](file))
+    files.zip(fileRDDs).foreach { case (file, rdd) => {
+      if (rdd.partitions.size == 0) {
+        logError("File " + file + " has no data in it. Spark Streaming can only ingest " +
+          "files that have been \"moved\" to the directory assigned to the file stream. " +
+          "Refer to the streaming programming guide for more details.")
+      }
+    }}
+    new UnionRDD(context.sparkContext, fileRDDs)
   }
 
   private def path: Path = {
@@ -146,6 +130,10 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
   private def fs: FileSystem = {
     if (fs_ == null) fs_ = path.getFileSystem(new Configuration())
     fs_
+  }
+
+  private def reset()  {
+    fs_ = null
   }
 
   @throws(classOf[IOException])
@@ -189,11 +177,54 @@ class FileInputDStream[K: ClassManifest, V: ClassManifest, F <: NewInputFormat[K
         hadoopFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n") + "\n]"
     }
   }
+
+  /**
+   * Custom PathFilter class to find new files that have modification timestamps <= current time,
+   * but have not been seen before (i.e. the file should not be in lastModTimeFiles)
+   */
+  private[streaming]
+  class CustomPathFilter(maxModTime: Long) extends PathFilter {
+    // Latest file mod time seen in this round of fetching files and its corresponding files
+    var latestModTime = 0L
+    val latestModTimeFiles = new HashSet[String]()
+
+    def accept(path: Path): Boolean = {
+      try {
+        if (!filter(path)) {  // Reject file if it does not satisfy filter
+          logDebug("Rejected by filter " + path)
+          return false
+        }
+        val modTime = fs.getFileStatus(path).getModificationTime()
+        logDebug("Mod time for " + path + " is " + modTime)
+        if (modTime < prevModTime) {
+          logDebug("Mod time less than last mod time")
+          return false  // If the file was created before the last time it was called
+        } else if (modTime == prevModTime && prevModTimeFiles.contains(path.toString)) {
+          logDebug("Mod time equal to last mod time, but file considered already")
+          return false  // If the file was created exactly as lastModTime but not reported yet
+        } else if (modTime > maxModTime) {
+          logDebug("Mod time more than ")
+          return false  // If the file is too new that considering it may give errors
+        }
+        if (modTime > latestModTime) {
+          latestModTime = modTime
+          latestModTimeFiles.clear()
+          logDebug("Latest mod time updated to " + latestModTime)
+        }
+        latestModTimeFiles += path.toString
+        logDebug("Accepted " + path)
+      } catch {
+        case fnfe: java.io.FileNotFoundException => 
+          logWarning("Error finding new files", fnfe)
+          reset()
+          return false
+      }
+      return true
+    }
+  }
 }
 
 private[streaming]
 object FileInputDStream {
   def defaultFilter(path: Path): Boolean = !path.getName().startsWith(".")
 }
-
-

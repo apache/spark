@@ -22,6 +22,7 @@ import java.util.Comparator
 
 import scala.Tuple2
 import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 
 import com.google.common.base.Optional
 import org.apache.hadoop.io.compress.CompressionCodec
@@ -43,13 +44,13 @@ import org.apache.spark.rdd.OrderedRDDFunctions
 import org.apache.spark.storage.StorageLevel
 
 
-class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManifest[K],
-  implicit val vManifest: ClassManifest[V]) extends JavaRDDLike[(K, V), JavaPairRDD[K, V]] {
+class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kClassTag: ClassTag[K],
+  implicit val vClassTag: ClassTag[V]) extends JavaRDDLike[(K, V), JavaPairRDD[K, V]] {
 
   override def wrapRDD(rdd: RDD[(K, V)]): JavaPairRDD[K, V] = JavaPairRDD.fromRDD(rdd)
 
-  override val classManifest: ClassManifest[(K, V)] =
-    implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[Tuple2[K, V]]]
+  override val classTag: ClassTag[(K, V)] =
+    implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[Tuple2[K, V]]]
 
   import JavaPairRDD._
 
@@ -58,7 +59,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   def cache(): JavaPairRDD[K, V] = new JavaPairRDD[K, V](rdd.cache())
 
-  /** 
+  /**
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. Can only be called once on each RDD.
    */
@@ -138,14 +139,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   override def first(): (K, V) = rdd.first()
 
   // Pair RDD functions
- 
+
   /**
-   * Generic function to combine the elements for each key using a custom set of aggregation 
-   * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a 
-   * "combined type" C * Note that V and C can be different -- for example, one might group an 
-   * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three 
+   * Generic function to combine the elements for each key using a custom set of aggregation
+   * functions. Turns a JavaPairRDD[(K, V)] into a result of type JavaPairRDD[(K, C)], for a
+   * "combined type" C * Note that V and C can be different -- for example, one might group an
+   * RDD of type (Int, Int) into an RDD of type (Int, List[Int]). Users provide three
    * functions:
-   * 
+   *
    * - `createCombiner`, which turns a V into a C (e.g., creates a one-element list)
    * - `mergeValue`, to merge a V into a C (e.g., adds it to the end of a list)
    * - `mergeCombiners`, to combine two C's into a single one.
@@ -157,8 +158,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
     mergeValue: JFunction2[C, V, C],
     mergeCombiners: JFunction2[C, C, C],
     partitioner: Partitioner): JavaPairRDD[K, C] = {
-    implicit val cm: ClassManifest[C] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[C]]
+    implicit val cm: ClassTag[C] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[C]]
     fromRDD(rdd.combineByKey(
       createCombiner,
       mergeValue,
@@ -195,14 +195,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   /** Count the number of elements for each key, and return the result to the master as a Map. */
   def countByKey(): java.util.Map[K, Long] = mapAsJavaMap(rdd.countByKey())
 
-  /** 
+  /**
    * (Experimental) Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
    */
   def countByKeyApprox(timeout: Long): PartialResult[java.util.Map[K, BoundedDouble]] =
     rdd.countByKeyApprox(timeout).map(mapAsJavaMap)
 
-  /** 
+  /**
    * (Experimental) Approximate version of countByKey that can return a partial result if it does
    * not finish within a timeout.
    */
@@ -258,7 +258,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
 
   /**
    * Return an RDD with the elements from `this` that are not in `other`.
-   * 
+   *
    * Uses `this` partitioner/partition size, because even if `other` is huge, the resulting
    * RDD will be <= us.
    */
@@ -315,15 +315,14 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
     fromRDD(joinResult.mapValues{case (v, w) => (JavaUtils.optionToOptional(v), w)})
   }
 
-  /** 
+  /**
    * Simplified version of combineByKey that hash-partitions the resulting RDD using the existing
    * partitioner/parallelism level.
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
     mergeValue: JFunction2[C, V, C],
     mergeCombiners: JFunction2[C, C, C]): JavaPairRDD[K, C] = {
-    implicit val cm: ClassManifest[C] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[C]]
+    implicit val cm: ClassTag[C] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[C]]
     fromRDD(combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(rdd)))
   }
 
@@ -414,8 +413,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * this also retains the original RDD's partitioning.
    */
   def mapValues[U](f: JFunction[V, U]): JavaPairRDD[K, U] = {
-    implicit val cm: ClassManifest[U] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[U]]
+    implicit val cm: ClassTag[U] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
     fromRDD(rdd.mapValues(f))
   }
 
@@ -426,8 +424,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairRDD[K, U] = {
     import scala.collection.JavaConverters._
     def fn = (x: V) => f.apply(x).asScala
-    implicit val cm: ClassManifest[U] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[U]]
+    implicit val cm: ClassTag[U] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
     fromRDD(rdd.flatMapValues(fn))
   }
 
@@ -592,6 +589,20 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
   }
 
   /**
+   * Sort the RDD by key, so that each partition contains a sorted range of the elements. Calling
+   * `collect` or `save` on the resulting RDD will return or output an ordered list of records
+   * (in the `save` case, they will be written to multiple `part-X` files in the filesystem, in
+   * order of the keys).
+   */
+  def sortByKey(comp: Comparator[K], ascending: Boolean, numPartitions: Int): JavaPairRDD[K, V] = {
+    class KeyOrdering(val a: K) extends Ordered[K] {
+      override def compare(b: K) = comp.compare(a, b)
+    }
+    implicit def toOrdered(x: K): Ordered[K] = new KeyOrdering(x)
+    fromRDD(new OrderedRDDFunctions[K, V, (K, V)](rdd).sortByKey(ascending, numPartitions))
+  }
+
+  /**
    * Return an RDD with the keys of each tuple.
    */
   def keys(): JavaRDD[K] = JavaRDD.fromRDD[K](rdd.map(_._1))
@@ -600,25 +611,61 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kManifest: ClassManif
    * Return an RDD with the values of each tuple.
    */
   def values(): JavaRDD[V] = JavaRDD.fromRDD[V](rdd.map(_._2))
+
+  /**
+   * Return approximate number of distinct values for each key in this RDD.
+   * The accuracy of approximation can be controlled through the relative standard deviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. Uses the provided
+   * Partitioner to partition the output RDD.
+   */
+  def countApproxDistinctByKey(relativeSD: Double, partitioner: Partitioner): JavaRDD[(K, Long)] = {
+    rdd.countApproxDistinctByKey(relativeSD, partitioner)
+  }
+
+  /**
+   * Return approximate number of distinct values for each key this RDD.
+   * The accuracy of approximation can be controlled through the relative standard deviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. The default value of
+   * relativeSD is 0.05. Hash-partitions the output RDD using the existing partitioner/parallelism
+   * level.
+   */
+  def countApproxDistinctByKey(relativeSD: Double = 0.05): JavaRDD[(K, Long)] = {
+    rdd.countApproxDistinctByKey(relativeSD)
+  }
+
+
+  /**
+   * Return approximate number of distinct values for each key in this RDD.
+   * The accuracy of approximation can be controlled through the relative standard deviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. HashPartitions the
+   * output RDD into numPartitions.
+   *
+   */
+  def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): JavaRDD[(K, Long)] = {
+    rdd.countApproxDistinctByKey(relativeSD, numPartitions)
+  }
 }
 
 object JavaPairRDD {
-  def groupByResultToJava[K, T](rdd: RDD[(K, Seq[T])])(implicit kcm: ClassManifest[K],
-    vcm: ClassManifest[T]): RDD[(K, JList[T])] =
+  def groupByResultToJava[K, T](rdd: RDD[(K, Seq[T])])(implicit kcm: ClassTag[K],
+    vcm: ClassTag[T]): RDD[(K, JList[T])] =
     rddToPairRDDFunctions(rdd).mapValues(seqAsJavaList _)
 
-  def cogroupResultToJava[W, K, V](rdd: RDD[(K, (Seq[V], Seq[W]))])(implicit kcm: ClassManifest[K],
-    vcm: ClassManifest[V]): RDD[(K, (JList[V], JList[W]))] = rddToPairRDDFunctions(rdd).mapValues((x: (Seq[V],
-    Seq[W])) => (seqAsJavaList(x._1), seqAsJavaList(x._2)))
+  def cogroupResultToJava[W, K, V](rdd: RDD[(K, (Seq[V], Seq[W]))])(implicit kcm: ClassTag[K],
+    vcm: ClassTag[V]): RDD[(K, (JList[V], JList[W]))] = rddToPairRDDFunctions(rdd)
+    .mapValues((x: (Seq[V], Seq[W])) => (seqAsJavaList(x._1), seqAsJavaList(x._2)))
 
   def cogroupResult2ToJava[W1, W2, K, V](rdd: RDD[(K, (Seq[V], Seq[W1],
-    Seq[W2]))])(implicit kcm: ClassManifest[K]) : RDD[(K, (JList[V], JList[W1],
+    Seq[W2]))])(implicit kcm: ClassTag[K]) : RDD[(K, (JList[V], JList[W1],
     JList[W2]))] = rddToPairRDDFunctions(rdd).mapValues(
     (x: (Seq[V], Seq[W1], Seq[W2])) => (seqAsJavaList(x._1),
       seqAsJavaList(x._2),
       seqAsJavaList(x._3)))
 
-  def fromRDD[K: ClassManifest, V: ClassManifest](rdd: RDD[(K, V)]): JavaPairRDD[K, V] =
+  def fromRDD[K: ClassTag, V: ClassTag](rdd: RDD[(K, V)]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd)
 
   implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
@@ -626,10 +673,8 @@ object JavaPairRDD {
 
   /** Convert a JavaRDD of key-value pairs to JavaPairRDD. */
   def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)]): JavaPairRDD[K, V] = {
-    implicit val cmk: ClassManifest[K] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[K]]
-    implicit val cmv: ClassManifest[V] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[V]]
+    implicit val cmk: ClassTag[K] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
+    implicit val cmv: ClassTag[V] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
     new JavaPairRDD[K, V](rdd.rdd)
   }
 

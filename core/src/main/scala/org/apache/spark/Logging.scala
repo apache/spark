@@ -17,8 +17,8 @@
 
 package org.apache.spark
 
-import org.slf4j.Logger
-import org.slf4j.LoggerFactory
+import org.apache.log4j.{LogManager, PropertyConfigurator}
+import org.slf4j.{Logger, LoggerFactory}
 
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
@@ -33,6 +33,7 @@ trait Logging {
   // Method to get or create the logger for this object
   protected def log: Logger = {
     if (log_ == null) {
+      initializeIfNecessary()
       var className = this.getClass.getName
       // Ignore trailing $'s in the class names for Scala objects
       if (className.endsWith("$")) {
@@ -89,7 +90,39 @@ trait Logging {
     log.isTraceEnabled
   }
 
-  // Method for ensuring that logging is initialized, to avoid having multiple
-  // threads do it concurrently (as SLF4J initialization is not thread safe).
-  protected def initLogging() { log }
+  private def initializeIfNecessary() {
+    if (!Logging.initialized) {
+      Logging.initLock.synchronized {
+        if (!Logging.initialized) {
+          initializeLogging()
+        }
+      }
+    }
+  }
+
+  private def initializeLogging() {
+    // If Log4j doesn't seem initialized, load a default properties file
+    val log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
+    if (!log4jInitialized) {
+      val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
+      val classLoader = this.getClass.getClassLoader
+      Option(classLoader.getResource(defaultLogProps)) match {
+        case Some(url) => 
+          PropertyConfigurator.configure(url)
+          log.info(s"Using Spark's default log4j profile: $defaultLogProps")
+        case None => 
+          System.err.println(s"Spark was unable to load $defaultLogProps")
+      }
+    }
+    Logging.initialized = true
+
+    // Force a call into slf4j to initialize it. Avoids this happening from mutliple threads
+    // and triggering this: http://mailman.qos.ch/pipermail/slf4j-dev/2010-April/002956.html
+    log
+  }
+}
+
+object Logging {
+  @volatile private var initialized = false
+  val initLock = new Object()
 }

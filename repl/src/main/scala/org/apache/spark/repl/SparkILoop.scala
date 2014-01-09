@@ -1,28 +1,41 @@
 /* NSC -- new Scala compiler
- * Copyright 2005-2011 LAMP/EPFL
+ * Copyright 2005-2013 LAMP/EPFL
  * @author Alexander Spoon
  */
 
 package org.apache.spark.repl
 
+
 import scala.tools.nsc._
 import scala.tools.nsc.interpreter._
 
-import Predef.{ println => _, _ }
-import java.io.{ BufferedReader, FileReader, PrintWriter }
-import scala.sys.process.Process
-import session._
 import scala.tools.nsc.interpreter.{ Results => IR }
-import scala.tools.util.{ SignalManager, Signallable, Javap }
+import Predef.{ println => _, _ }
+import java.io.{ BufferedReader, FileReader }
+import java.util.concurrent.locks.ReentrantLock
+import scala.sys.process.Process
+import scala.tools.nsc.interpreter.session._
+import scala.util.Properties.{ jdkHome, javaVersion }
+import scala.tools.util.{ Javap }
 import scala.annotation.tailrec
-import scala.util.control.Exception.{ ignoring }
 import scala.collection.mutable.ListBuffer
 import scala.concurrent.ops
-import util.{ ClassPath, Exceptional, stringFromWriter, stringFromStream }
-import interpreter._
-import io.{ File, Sources }
+import scala.tools.nsc.util.{ ClassPath, Exceptional, stringFromWriter, stringFromStream }
+import scala.tools.nsc.interpreter._
+import scala.tools.nsc.io.{ File, Directory }
+import scala.reflect.NameTransformer._
+import scala.tools.nsc.util.ScalaClassLoader
+import scala.tools.nsc.util.ScalaClassLoader._
+import scala.tools.util._
+import scala.language.{implicitConversions, existentials}
+import scala.reflect.{ClassTag, classTag}
+import scala.tools.reflect.StdRuntimeTags._
+
+import java.lang.{Class => jClass}
+import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 
 import org.apache.spark.Logging
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
@@ -37,44 +50,85 @@ import org.apache.spark.SparkContext
  *  @author  Lex Spoon
  *  @version 1.2
  */
-class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: Option[String])
+class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
+               val master: Option[String])
                 extends AnyRef
                    with LoopCommands
+                   with SparkILoopInit
                    with Logging
 {
-  def this(in0: BufferedReader, out: PrintWriter, master: String) = this(Some(in0), out, Some(master))
-  def this(in0: BufferedReader, out: PrintWriter) = this(Some(in0), out, None)
-  def this() = this(None, new PrintWriter(Console.out, true), None)
+  def this(in0: BufferedReader, out: JPrintWriter, master: String) = this(Some(in0), out, Some(master))
+  def this(in0: BufferedReader, out: JPrintWriter) = this(Some(in0), out, None)
+  def this() = this(None, new JPrintWriter(Console.out, true), None)
 
   var in: InteractiveReader = _   // the input stream from which commands come
   var settings: Settings = _
   var intp: SparkIMain = _
 
-  /*
-  lazy val power = {
-    val g = intp.global
-    Power[g.type](this, g)
+  @deprecated("Use `intp` instead.", "2.9.0") def interpreter = intp
+  @deprecated("Use `intp` instead.", "2.9.0") def interpreter_= (i: SparkIMain): Unit = intp = i
+
+  /** Having inherited the difficult "var-ness" of the repl instance,
+   *  I'm trying to work around it by moving operations into a class from
+   *  which it will appear a stable prefix.
+   */
+  private def onIntp[T](f: SparkIMain => T): T = f(intp)
+
+  class IMainOps[T <: SparkIMain](val intp: T) {
+    import intp._
+    import global._
+
+    def printAfterTyper(msg: => String) =
+      intp.reporter printMessage afterTyper(msg)
+
+    /** Strip NullaryMethodType artifacts. */
+    private def replInfo(sym: Symbol) = {
+      sym.info match {
+        case NullaryMethodType(restpe) if sym.isAccessor  => restpe
+        case info                                         => info
+      }
+    }
+    def echoTypeStructure(sym: Symbol) =
+      printAfterTyper("" + deconstruct.show(replInfo(sym)))
+
+    def echoTypeSignature(sym: Symbol, verbose: Boolean) = {
+      if (verbose) SparkILoop.this.echo("// Type signature")
+      printAfterTyper("" + replInfo(sym))
+
+      if (verbose) {
+        SparkILoop.this.echo("\n// Internal Type structure")
+        echoTypeStructure(sym)
+      }
+    }
   }
-  */
+  implicit def stabilizeIMain(intp: SparkIMain) = new IMainOps[intp.type](intp)
 
-  // TODO
-  // object opt extends AestheticSettings
-  //
-  @deprecated("Use `intp` instead.", "2.9.0")
-  def interpreter = intp
+  /** TODO -
+   *  -n normalize
+   *  -l label with case class parameter names
+   *  -c complete - leave nothing out
+   */
+  private def typeCommandInternal(expr: String, verbose: Boolean): Result = {
+    onIntp { intp =>
+      val sym = intp.symbolOfLine(expr)
+      if (sym.exists) intp.echoTypeSignature(sym, verbose)
+      else ""
+    }
+  }
 
-  @deprecated("Use `intp` instead.", "2.9.0")
-  def interpreter_= (i: SparkIMain): Unit = intp = i
+  var sparkContext: SparkContext = _
 
+  override def echoCommandMessage(msg: String) {
+    intp.reporter printMessage msg
+  }
+
+  // def isAsync = !settings.Yreplsync.value
+  def isAsync = false
+  // lazy val power = new Power(intp, new StdReplVals(this))(tagOfStdReplVals, classTag[StdReplVals])
   def history = in.history
 
   /** The context class loader at the time this object was created */
   protected val originalClassLoader = Thread.currentThread.getContextClassLoader
-
-  // Install a signal handler so we can be prodded.
-  private val signallable =
-    /*if (isReplDebug) Signallable("Dump repl state.")(dumpCommand())
-    else*/ null
 
   // classpath entries added via :cp
   var addedClasspath: String = ""
@@ -88,63 +142,40 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
   /** Record a command for replay should the user request a :replay */
   def addReplay(cmd: String) = replayCommandStack ::= cmd
 
-  /** Try to install sigint handler: ignore failure.  Signal handler
-   *  will interrupt current line execution if any is in progress.
-   *
-   *  Attempting to protect the repl from accidental exit, we only honor
-   *  a single ctrl-C if the current buffer is empty: otherwise we look
-   *  for a second one within a short time.
-   */
-  private def installSigIntHandler() {
-    def onExit() {
-      Console.println("") // avoiding "shell prompt in middle of line" syndrome
-      sys.exit(1)
-    }
-    ignoring(classOf[Exception]) {
-      SignalManager("INT") = {
-        if (intp == null)
-          onExit()
-        else if (intp.lineManager.running)
-          intp.lineManager.cancel()
-        else if (in.currentLine != "") {
-          // non-empty buffer, so make them hit ctrl-C a second time
-          SignalManager("INT") = onExit()
-          io.timer(5)(installSigIntHandler())  // and restore original handler if they don't
-        }
-        else onExit()
-      }
-    }
+  def savingReplayStack[T](body: => T): T = {
+    val saved = replayCommandStack
+    try body
+    finally replayCommandStack = saved
+  }
+  def savingReader[T](body: => T): T = {
+    val saved = in
+    try body
+    finally in = saved
   }
 
+
+  def sparkCleanUp(){
+    echo("Stopping spark context.")
+    intp.beQuietDuring {
+      command("sc.stop()")
+    }
+  }
   /** Close the interpreter and set the var to null. */
   def closeInterpreter() {
     if (intp ne null) {
-      intp.close
+      sparkCleanUp()
+      intp.close()
       intp = null
-      Thread.currentThread.setContextClassLoader(originalClassLoader)
     }
   }
 
   class SparkILoopInterpreter extends SparkIMain(settings, out) {
+    outer =>
+
     override lazy val formatting = new Formatting {
       def prompt = SparkILoop.this.prompt
     }
-    override protected def createLineManager() = new Line.Manager {
-      override def onRunaway(line: Line[_]): Unit = {
-        val template = """
-          |// She's gone rogue, captain! Have to take her out!
-          |// Calling Thread.stop on runaway %s with offending code:
-          |// scala> %s""".stripMargin
-
-        echo(template.format(line.thread, line.code))
-        // XXX no way to suppress the deprecation warning
-        line.thread.stop()
-        in.redrawLine()
-      }
-    }
-    override protected def parentClassLoader = {
-      SparkHelper.explicitParentLoader(settings).getOrElse( classOf[SparkILoop].getClassLoader )
-    }
+    override protected def parentClassLoader =  SparkHelper.explicitParentLoader(settings).getOrElse(classOf[SparkILoop].getClassLoader)
   }
 
   /** Create a new interpreter. */
@@ -153,8 +184,6 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
       settings.classpath append addedClasspath
 
     intp = new SparkILoopInterpreter
-    intp.setContextClassLoader()
-    installSigIntHandler()
   }
 
   /** print a friendly help message */
@@ -194,25 +223,6 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     }
   }
 
-  /** Print a welcome message */
-  def printWelcome() {
-    val prop = System.getenv("SPARK_BANNER_TEXT")
-    val bannerText =
-      if (prop != null) prop else
-        """Welcome to
-      ____              __
-     / __/__  ___ _____/ /__
-    _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 0.9.0-SNAPSHOT
-      /_/
-        """
-    echo(bannerText)
-    import Properties._
-    val welcomeMsg = "Using Scala %s (%s, Java %s)".format(
-      versionString, javaVmName, javaVersion)
-    echo(welcomeMsg)
-  }
-
   /** Show the history */
   lazy val historyCommand = new LoopCommand("history", "show the history (optional num is commands to show)") {
     override def usage = "[num]"
@@ -233,11 +243,17 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     }
   }
 
-  private def echo(msg: String) = {
+  // When you know you are most likely breaking into the middle
+  // of a line being typed.  This softens the blow.
+  protected def echoAndRefresh(msg: String) = {
+    echo("\n" + msg)
+    in.redrawLine()
+  }
+  protected def echo(msg: String) = {
     out println msg
     out.flush()
   }
-  private def echoNoNL(msg: String) = {
+  protected def echoNoNL(msg: String) = {
     out print msg
     out.flush()
   }
@@ -258,7 +274,7 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
 
   import LoopCommand.{ cmd, nullary }
 
-  /** Standard commands **/
+  /** Standard commands */
   lazy val standardCommands = List(
     cmd("cp", "<path>", "add a jar or directory to the classpath", addClasspath),
     cmd("help", "[command]", "print this summary or command-specific help", helpCommand),
@@ -267,52 +283,29 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     cmd("imports", "[name name ...]", "show import history, identifying sources of names", importsCommand),
     cmd("implicits", "[-v]", "show the implicits in scope", implicitsCommand),
     cmd("javap", "<path|class>", "disassemble a file or class name", javapCommand),
-    nullary("keybindings", "show how ctrl-[A-Z] and other keys are bound", keybindingsCommand),
     cmd("load", "<path>", "load and interpret a Scala file", loadCommand),
     nullary("paste", "enter paste mode: all input up to ctrl-D compiled together", pasteCommand),
-    //nullary("power", "enable power user mode", powerCmd),
-    nullary("quit", "exit the interpreter", () => Result(false, None)),
+//    nullary("power", "enable power user mode", powerCmd),
+    nullary("quit", "exit the repl", () => Result(false, None)),
     nullary("replay", "reset execution and replay all previous commands", replay),
+    nullary("reset", "reset the repl to its initial state, forgetting all session entries", resetCommand),
     shCommand,
     nullary("silent", "disable/enable automatic printing of results", verbosity),
-    cmd("type", "<expr>", "display the type of an expression without evaluating it", typeCommand)
+    cmd("type", "[-v] <expr>", "display the type of an expression without evaluating it", typeCommand),
+    nullary("warnings", "show the suppressed warnings from the most recent line which had any", warningsCommand)
   )
 
   /** Power user commands */
   lazy val powerCommands: List[LoopCommand] = List(
-    //nullary("dump", "displays a view of the interpreter's internal state", dumpCommand),
-    //cmd("phase", "<phase>", "set the implicit phase for power commands", phaseCommand),
-    cmd("wrap", "<method>", "name of method to wrap around each repl line", wrapCommand) withLongHelp ("""
-      |:wrap
-      |:wrap clear
-      |:wrap <method>
-      |
-      |Installs a wrapper around each line entered into the repl.
-      |Currently it must be the simple name of an existing method
-      |with the specific signature shown in the following example.
-      |
-      |def timed[T](body: => T): T = {
-      |  val start = System.nanoTime
-      |  try body
-      |  finally println((System.nanoTime - start) + " nanos elapsed.")
-      |}
-      |:wrap timed
-      |
-      |If given no argument, :wrap names the wrapper installed.
-      |An argument of clear will remove the wrapper if any is active.
-      |Note that wrappers do not compose (a new one replaces the old
-      |one) and also that the :phase command uses the same machinery,
-      |so setting :wrap will clear any :phase setting.
-    """.stripMargin.trim)
+    // cmd("phase", "<phase>", "set the implicit phase for power commands", phaseCommand)
   )
 
-  /*
-  private def dumpCommand(): Result = {
-    echo("" + power)
-    history.asStrings takeRight 30 foreach echo
-    in.redrawLine()
-  }
-  */
+  // private def dumpCommand(): Result = {
+  //   echo("" + power)
+  //   history.asStrings takeRight 30 foreach echo
+  //   in.redrawLine()
+  // }
+  // private def valsCommand(): Result = power.valsDescription
 
   private val typeTransforms = List(
     "scala.collection.immutable." -> "immutable.",
@@ -347,10 +340,9 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     }
   }
 
-  private def implicitsCommand(line: String): Result = {
-    val intp = SparkILoop.this.intp
+  private def implicitsCommand(line: String): Result = onIntp { intp =>
     import intp._
-    import global.Symbol
+    import global._
 
     def p(x: Any) = intp.reporter.printMessage("" + x)
 
@@ -374,7 +366,7 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
 
         // This groups the members by where the symbol is defined
         val byOwner = syms groupBy (_.owner)
-        val sortedOwners = byOwner.toList sortBy { case (owner, _) => intp.afterTyper(source.info.baseClasses indexOf owner) }
+        val sortedOwners = byOwner.toList sortBy { case (owner, _) => afterTyper(source.info.baseClasses indexOf owner) }
 
         sortedOwners foreach {
           case (owner, members) =>
@@ -405,157 +397,181 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     }
   }
 
-  protected def newJavap() = new Javap(intp.classLoader, new SparkIMain.ReplStrippingWriter(intp)) {
-    override def tryClass(path: String): Array[Byte] = {
-      // Look for Foo first, then Foo$, but if Foo$ is given explicitly,
-      // we have to drop the $ to find object Foo, then tack it back onto
-      // the end of the flattened name.
-      def className  = intp flatName path
-      def moduleName = (intp flatName path.stripSuffix("$")) + "$"
+  private def findToolsJar() = {
+    val jdkPath = Directory(jdkHome)
+    val jar     = jdkPath / "lib" / "tools.jar" toFile;
 
-      val bytes = super.tryClass(className)
-      if (bytes.nonEmpty) bytes
-      else super.tryClass(moduleName)
+    if (jar isFile)
+      Some(jar)
+    else if (jdkPath.isDirectory)
+      jdkPath.deepFiles find (_.name == "tools.jar")
+    else None
+  }
+  private def addToolsJarToLoader() = {
+    val cl = findToolsJar match {
+      case Some(tools) => ScalaClassLoader.fromURLs(Seq(tools.toURL), intp.classLoader)
+      case _           => intp.classLoader
+    }
+    if (Javap.isAvailable(cl)) {
+      logDebug(":javap available.")
+      cl
+    }
+    else {
+      logDebug(":javap unavailable: no tools.jar at " + jdkHome)
+      intp.classLoader
     }
   }
+
+  protected def newJavap() = new JavapClass(addToolsJarToLoader(), new SparkIMain.ReplStrippingWriter(intp)) {
+    override def tryClass(path: String): Array[Byte] = {
+      val hd :: rest = path split '.' toList;
+      // If there are dots in the name, the first segment is the
+      // key to finding it.
+      if (rest.nonEmpty) {
+        intp optFlatName hd match {
+          case Some(flat) =>
+            val clazz = flat :: rest mkString NAME_JOIN_STRING
+            val bytes = super.tryClass(clazz)
+            if (bytes.nonEmpty) bytes
+            else super.tryClass(clazz + MODULE_SUFFIX_STRING)
+          case _          => super.tryClass(path)
+        }
+      }
+      else {
+        // Look for Foo first, then Foo$, but if Foo$ is given explicitly,
+        // we have to drop the $ to find object Foo, then tack it back onto
+        // the end of the flattened name.
+        def className  = intp flatName path
+        def moduleName = (intp flatName path.stripSuffix(MODULE_SUFFIX_STRING)) + MODULE_SUFFIX_STRING
+
+        val bytes = super.tryClass(className)
+        if (bytes.nonEmpty) bytes
+        else super.tryClass(moduleName)
+      }
+    }
+  }
+  // private lazy val javap = substituteAndLog[Javap]("javap", NoJavap)(newJavap())
   private lazy val javap =
     try newJavap()
     catch { case _: Exception => null }
 
-  private def typeCommand(line: String): Result = {
-    intp.typeOfExpression(line) match {
-      case Some(tp) => tp.toString
-      case _        => "Failed to determine type."
+  // Still todo: modules.
+  private def typeCommand(line0: String): Result = {
+    line0.trim match {
+      case ""                      => ":type [-v] <expression>"
+      case s if s startsWith "-v " => typeCommandInternal(s stripPrefix "-v " trim, true)
+      case s                       => typeCommandInternal(s, false)
     }
+  }
+
+  private def warningsCommand(): Result = {
+    if (intp.lastWarnings.isEmpty)
+      "Can't find any cached warnings."
+    else
+      intp.lastWarnings foreach { case (pos, msg) => intp.reporter.warning(pos, msg) }
   }
 
   private def javapCommand(line: String): Result = {
     if (javap == null)
-      return ":javap unavailable on this platform."
-    if (line == "")
-      return ":javap [-lcsvp] [path1 path2 ...]"
+      ":javap unavailable, no tools.jar at %s.  Set JDK_HOME.".format(jdkHome)
+    else if (javaVersion startsWith "1.7")
+      ":javap not yet working with java 1.7"
+    else if (line == "")
+      ":javap [-lcsvp] [path1 path2 ...]"
+    else
+      javap(words(line)) foreach { res =>
+        if (res.isError) return "Failed: " + res.value
+        else res.show()
+      }
+  }
 
-    javap(words(line)) foreach { res =>
-      if (res.isError) return "Failed: " + res.value
-      else res.show()
-    }
-  }
-  private def keybindingsCommand(): Result = {
-    if (in.keyBindings.isEmpty) "Key bindings unavailable."
-    else {
-      echo("Reading jline properties for default key bindings.")
-      echo("Accuracy not guaranteed: treat this as a guideline only.\n")
-      in.keyBindings foreach (x => echo ("" + x))
-    }
-  }
   private def wrapCommand(line: String): Result = {
     def failMsg = "Argument to :wrap must be the name of a method with signature [T](=> T): T"
-    val intp = SparkILoop.this.intp
-    val g: intp.global.type = intp.global
-    import g._
+    onIntp { intp =>
+      import intp._
+      import global._
 
-    words(line) match {
-      case Nil            =>
-        intp.executionWrapper match {
-          case ""   => "No execution wrapper is set."
-          case s    => "Current execution wrapper: " + s
-        }
-      case "clear" :: Nil =>
-        intp.executionWrapper match {
-          case ""   => "No execution wrapper is set."
-          case s    => intp.clearExecutionWrapper() ; "Cleared execution wrapper."
-        }
-      case wrapper :: Nil =>
-        intp.typeOfExpression(wrapper) match {
-          case Some(PolyType(List(targ), MethodType(List(arg), restpe))) =>
-            intp setExecutionWrapper intp.pathToTerm(wrapper)
-            "Set wrapper to '" + wrapper + "'"
-          case Some(x) =>
-            failMsg + "\nFound: " + x
-          case _ =>
-            failMsg + "\nFound: <unknown>"
-        }
-      case _ => failMsg
+      words(line) match {
+        case Nil            =>
+          intp.executionWrapper match {
+            case ""   => "No execution wrapper is set."
+            case s    => "Current execution wrapper: " + s
+          }
+        case "clear" :: Nil =>
+          intp.executionWrapper match {
+            case ""   => "No execution wrapper is set."
+            case s    => intp.clearExecutionWrapper() ; "Cleared execution wrapper."
+          }
+        case wrapper :: Nil =>
+          intp.typeOfExpression(wrapper) match {
+            case PolyType(List(targ), MethodType(List(arg), restpe)) =>
+              intp setExecutionWrapper intp.pathToTerm(wrapper)
+              "Set wrapper to '" + wrapper + "'"
+            case tp =>
+              failMsg + "\nFound: <unknown>"
+          }
+        case _ => failMsg
+      }
     }
   }
 
   private def pathToPhaseWrapper = intp.pathToTerm("$r") + ".phased.atCurrent"
-  /*
-  private def phaseCommand(name: String): Result = {
-    // This line crashes us in TreeGen:
-    //
-    //   if (intp.power.phased set name) "..."
-    //
-    // Exception in thread "main" java.lang.AssertionError: assertion failed: ._7.type
-    //  at scala.Predef$.assert(Predef.scala:99)
-    //  at scala.tools.nsc.ast.TreeGen.mkAttributedQualifier(TreeGen.scala:69)
-    //  at scala.tools.nsc.ast.TreeGen.mkAttributedQualifier(TreeGen.scala:44)
-    //  at scala.tools.nsc.ast.TreeGen.mkAttributedRef(TreeGen.scala:101)
-    //  at scala.tools.nsc.ast.TreeGen.mkAttributedStableRef(TreeGen.scala:143)
-    //
-    // But it works like so, type annotated.
-    val phased: Phased = power.phased
-    import phased.NoPhaseName
+  // private def phaseCommand(name: String): Result = {
+  //   val phased: Phased = power.phased
+  //   import phased.NoPhaseName
 
-    if (name == "clear") {
-      phased.set(NoPhaseName)
-      intp.clearExecutionWrapper()
-      "Cleared active phase."
-    }
-    else if (name == "") phased.get match {
-      case NoPhaseName => "Usage: :phase <expr> (e.g. typer, erasure.next, erasure+3)"
-      case ph          => "Active phase is '%s'.  (To clear, :phase clear)".format(phased.get)
-    }
-    else {
-      val what = phased.parse(name)
-      if (what.isEmpty || !phased.set(what))
-        "'" + name + "' does not appear to represent a valid phase."
-      else {
-        intp.setExecutionWrapper(pathToPhaseWrapper)
-        val activeMessage =
-          if (what.toString.length == name.length) "" + what
-          else "%s (%s)".format(what, name)
+  //   if (name == "clear") {
+  //     phased.set(NoPhaseName)
+  //     intp.clearExecutionWrapper()
+  //     "Cleared active phase."
+  //   }
+  //   else if (name == "") phased.get match {
+  //     case NoPhaseName => "Usage: :phase <expr> (e.g. typer, erasure.next, erasure+3)"
+  //     case ph          => "Active phase is '%s'.  (To clear, :phase clear)".format(phased.get)
+  //   }
+  //   else {
+  //     val what = phased.parse(name)
+  //     if (what.isEmpty || !phased.set(what))
+  //       "'" + name + "' does not appear to represent a valid phase."
+  //     else {
+  //       intp.setExecutionWrapper(pathToPhaseWrapper)
+  //       val activeMessage =
+  //         if (what.toString.length == name.length) "" + what
+  //         else "%s (%s)".format(what, name)
 
-        "Active phase is now: " + activeMessage
-      }
-    }
-  }
-  */
+  //       "Active phase is now: " + activeMessage
+  //     }
+  //   }
+  // }
 
   /** Available commands */
-  def commands: List[LoopCommand] = standardCommands /* ++ (
+  def commands: List[LoopCommand] = standardCommands /*++ (
     if (isReplPower) powerCommands else Nil
   )*/
 
   val replayQuestionMessage =
-    """|The repl compiler has crashed spectacularly. Shall I replay your
-       |session? I can re-run all lines except the last one.
+    """|That entry seems to have slain the compiler.  Shall I replay
+       |your session? I can re-run each line except the last one.
        |[y/n]
     """.trim.stripMargin
 
-  private val crashRecovery: PartialFunction[Throwable, Unit] = {
+  private val crashRecovery: PartialFunction[Throwable, Boolean] = {
     case ex: Throwable =>
-      if (settings.YrichExes.value) {
-        val sources = implicitly[Sources]
-        echo("\n" + ex.getMessage)
-        echo(
-          if (isReplDebug) "[searching " + sources.path + " for exception contexts...]"
-          else "[searching for exception contexts...]"
-        )
-        echo(Exceptional(ex).force().context())
-      }
-      else {
-        echo(util.stackTraceString(ex))
-      }
+      echo(intp.global.throwableAsString(ex))
+
       ex match {
         case _: NoSuchMethodError | _: NoClassDefFoundError =>
-          echo("Unrecoverable error.")
+          echo("\nUnrecoverable error.")
           throw ex
         case _  =>
-          def fn(): Boolean = in.readYesOrNo(replayQuestionMessage, { echo("\nYou must enter y or n.") ; fn() })
+          def fn(): Boolean =
+            try in.readYesOrNo(replayQuestionMessage, { echo("\nYou must enter y or n.") ; fn() })
+            catch { case _: RuntimeException => false }
+
           if (fn()) replay()
           else echo("\nAbandoning crashed session.")
       }
+      true
   }
 
   /** The main read-eval-print loop for the repl.  It calls
@@ -568,45 +584,68 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
       in readLine prompt
     }
     // return false if repl should exit
-    def processLine(line: String): Boolean =
+    def processLine(line: String): Boolean = {
+      if (isAsync) {
+        if (!awaitInitialized()) return false
+        runThunks()
+      }
       if (line eq null) false               // assume null means EOF
       else command(line) match {
         case Result(false, _)           => false
         case Result(_, Some(finalLine)) => addReplay(finalLine) ; true
         case _                          => true
       }
-
-    while (true) {
-      try if (!processLine(readOneLine)) return
-      catch crashRecovery
     }
+    def innerLoop() {
+      if ( try processLine(readOneLine()) catch crashRecovery )
+        innerLoop()
+    }
+    innerLoop()
   }
 
   /** interpret all lines from a specified file */
   def interpretAllFrom(file: File) {
-    val oldIn = in
-    val oldReplay = replayCommandStack
-
-    try file applyReader { reader =>
-      in = SimpleReader(reader, out, false)
-      echo("Loading " + file + "...")
-      loop()
-    }
-    finally {
-      in = oldIn
-      replayCommandStack = oldReplay
+    savingReader {
+      savingReplayStack {
+        file applyReader { reader =>
+          in = SimpleReader(reader, out, false)
+          echo("Loading " + file + "...")
+          loop()
+        }
+      }
     }
   }
 
-  /** create a new interpreter and replay all commands so far */
+  /** create a new interpreter and replay the given commands */
   def replay() {
-    closeInterpreter()
-    createInterpreter()
-    for (cmd <- replayCommands) {
+    reset()
+    if (replayCommandStack.isEmpty)
+      echo("Nothing to replay.")
+    else for (cmd <- replayCommands) {
       echo("Replaying: " + cmd)  // flush because maybe cmd will have its own output
       command(cmd)
       echo("")
     }
+  }
+  def resetCommand() {
+    echo("Resetting repl state.")
+    if (replayCommandStack.nonEmpty) {
+      echo("Forgetting this session history:\n")
+      replayCommands foreach echo
+      echo("")
+      replayCommandStack = Nil
+    }
+    if (intp.namedDefinedTerms.nonEmpty)
+      echo("Forgetting all expression results and named terms: " + intp.namedDefinedTerms.mkString(", "))
+    if (intp.definedTypes.nonEmpty)
+      echo("Forgetting defined types: " + intp.definedTypes.mkString(", "))
+
+    reset()
+  }
+
+  def reset() {
+    intp.reset()
+    // unleashAndSetPhase()
   }
 
   /** fork a shell and run a command */
@@ -664,18 +703,31 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
 
   def powerCmd(): Result = {
     if (isReplPower) "Already in power mode."
-    else enablePowerMode()
+    else enablePowerMode(false)
   }
-  def enablePowerMode() = {
-    //replProps.power setValue true
-    //power.unleash()
-    //echo(power.banner)
+
+  def enablePowerMode(isDuringInit: Boolean) = {
+    // replProps.power setValue true
+    // unleashAndSetPhase()
+    // asyncEcho(isDuringInit, power.banner)
+  }
+  // private def unleashAndSetPhase() {
+//     if (isReplPower) {
+// //      power.unleash()
+//       // Set the phase to "typer"
+//       intp beSilentDuring phaseCommand("typer")
+//     }
+//   }
+
+  def asyncEcho(async: Boolean, msg: => String) {
+    if (async) asyncMessage(msg)
+    else echo(msg)
   }
 
   def verbosity() = {
-    val old = intp.printResults
-    intp.printResults = !old
-    echo("Switched " + (if (old) "off" else "on") + " result printing.")
+    // val old = intp.printResults
+    // intp.printResults = !old
+    // echo("Switched " + (if (old) "off" else "on") + " result printing.")
   }
 
   /** Run one command submitted by the user.  Two values are returned:
@@ -716,11 +768,7 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     }
 
     def transcript(start: String) = {
-      // Printing this message doesn't work very well because it's buried in the
-      // transcript they just pasted.  Todo: a short timer goes off when
-      // lines stop coming which tells them to hit ctrl-D.
-      //
-      // echo("// Detected repl transcript paste: ctrl-D to finish.")
+      echo("\n// Detected repl transcript paste: ctrl-D to finish.\n")
       apply(Iterator(start) ++ readWhile(_.trim != PromptString.trim))
     }
   }
@@ -777,33 +825,17 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     else if (Completion.looksLikeInvocation(code) && intp.mostRecentVar != "") {
       interpretStartingWith(intp.mostRecentVar + code)
     }
-    else {
-      def runCompletion = in.completion execute code map (intp bindValue _)
-      /** Due to my accidentally letting file completion execution sneak ahead
-       *  of actual parsing this now operates in such a way that the scala
-       *  interpretation always wins.  However to avoid losing useful file
-       *  completion I let it fail and then check the others.  So if you
-       *  type /tmp it will echo a failure and then give you a Directory object.
-       *  It's not pretty: maybe I'll implement the silence bits I need to avoid
-       *  echoing the failure.
-       */
-      if (intp isParseable code) {
-        val (code, result) = reallyInterpret
-        //if (power != null && code == IR.Error)
-        //  runCompletion
-
-        result
-      }
-      else runCompletion match {
-        case Some(_)  => None // completion hit: avoid the latent error
-        case _        => reallyInterpret._2  // trigger the latent error
-      }
+    else if (code.trim startsWith "//") {
+      // line comment, do nothing
+      None
     }
+    else
+      reallyInterpret._2
   }
 
   // runs :load `file` on any files passed via -i
   def loadFiles(settings: Settings) = settings match {
-    case settings: GenericRunnerSettings =>
+    case settings: SparkRunnerSettings =>
       for (filename <- settings.loadfiles.value) {
         val cmd = ":load " + filename
         command(cmd)
@@ -820,7 +852,7 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
   def chooseReader(settings: Settings): InteractiveReader = {
     if (settings.Xnojline.value || Properties.isEmacsShell)
       SimpleReader()
-    else try SparkJLineReader(
+    else try new SparkJLineReader(
       if (settings.noCompletion.value) NoCompletion
       else new SparkJLineCompletion(intp)
     )
@@ -831,32 +863,75 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
     }
   }
 
-  def initializeSpark() {
-    intp.beQuietDuring {
-      command("""
-        org.apache.spark.repl.Main.interp.out.println("Creating SparkContext...");
-        org.apache.spark.repl.Main.interp.out.flush();
-        @transient val sc = org.apache.spark.repl.Main.interp.createSparkContext();
-        org.apache.spark.repl.Main.interp.out.println("Spark context available as sc.");
-        org.apache.spark.repl.Main.interp.out.flush();
-        """)
-      command("import org.apache.spark.SparkContext._")
-      val prop = System.getenv("SPARK_SHELL_INIT_BLOCK")
-      if (prop != null) {
-        command(prop)
-      }
+  val u: scala.reflect.runtime.universe.type = scala.reflect.runtime.universe
+  val m = u.runtimeMirror(getClass.getClassLoader)
+  private def tagOfStaticClass[T: ClassTag]: u.TypeTag[T] =
+    u.TypeTag[T](
+      m,
+      new TypeCreator {
+        def apply[U <: ApiUniverse with Singleton](m: Mirror[U]): U # Type =
+          m.staticClass(classTag[T].runtimeClass.getName).toTypeConstructor.asInstanceOf[U # Type]
+      })
+
+  def process(settings: Settings): Boolean = savingContextLoader {
+    this.settings = settings
+    createInterpreter()
+
+    // sets in to some kind of reader depending on environmental cues
+    in = in0 match {
+      case Some(reader) => SimpleReader(reader, out, true)
+      case None         =>
+        // some post-initialization
+        chooseReader(settings) match {
+          case x: SparkJLineReader => addThunk(x.consoleReader.postInit) ; x
+          case x                   => x
+        }
     }
-    echo("Type in expressions to have them evaluated.")
-    echo("Type :help for more information.")
+    lazy val tagOfSparkIMain = tagOfStaticClass[org.apache.spark.repl.SparkIMain]
+    // Bind intp somewhere out of the regular namespace where
+    // we can get at it in generated code.
+    addThunk(intp.quietBind(NamedParam[SparkIMain]("$intp", intp)(tagOfSparkIMain, classTag[SparkIMain])))
+    addThunk({
+      import scala.tools.nsc.io._
+      import Properties.userHome
+      import scala.compat.Platform.EOL
+      val autorun = replProps.replAutorunCode.option flatMap (f => io.File(f).safeSlurp())
+      if (autorun.isDefined) intp.quietRun(autorun.get)
+    })
+
+    addThunk(printWelcome())
+    addThunk(initializeSpark())
+
+    // it is broken on startup; go ahead and exit
+    if (intp.reporter.hasErrors)
+      return false
+
+    // This is about the illusion of snappiness.  We call initialize()
+    // which spins off a separate thread, then print the prompt and try
+    // our best to look ready.  The interlocking lazy vals tend to
+    // inter-deadlock, so we break the cycle with a single asynchronous
+    // message to an actor.
+    if (isAsync) {
+      intp initialize initializedCallback()
+      createAsyncListener() // listens for signal to run postInitialization
+    }
+    else {
+      intp.initializeSynchronous()
+      postInitialization()
+    }
+    // printWelcome()
+
+    loadFiles(settings)
+
+    try loop()
+    catch AbstractOrMissingHandler()
+    finally closeInterpreter()
+
+    true
   }
 
-  var sparkContext: SparkContext = null
-
   def createSparkContext(): SparkContext = {
-    val uri = System.getenv("SPARK_EXECUTOR_URI")
-    if (uri != null) {
-      System.setProperty("spark.executor.uri", uri)
-    }
+    val execUri = System.getenv("SPARK_EXECUTOR_URI")
     val master = this.master match {
       case Some(m) => m
       case None => {
@@ -864,67 +939,26 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
         if (prop != null) prop else "local"
       }
     }
-    val jars = Option(System.getenv("ADD_JARS")).map(_.split(','))
-                                                .getOrElse(new Array[String](0))
-                                                .map(new java.io.File(_).getAbsolutePath)
-    try {
-      sparkContext = new SparkContext(master, "Spark shell", System.getenv("SPARK_HOME"), jars)
-    } catch {
-      case e: Exception =>
-        e.printStackTrace()
-        echo("Failed to create SparkContext, exiting...")
-        sys.exit(1)
+    val jars = SparkILoop.getAddedJars.map(new java.io.File(_).getAbsolutePath)
+    val conf = new SparkConf()
+      .setMaster(master)
+      .setAppName("Spark shell")
+      .setJars(jars)
+      .set("spark.repl.class.uri", intp.classServer.uri)
+    if (execUri != null) {
+      conf.set("spark.executor.uri", execUri)
     }
+    if (System.getenv("SPARK_HOME") != null) {
+      conf.setSparkHome(System.getenv("SPARK_HOME"))
+    }
+    sparkContext = new SparkContext(conf)
+    echo("Created spark context..")
     sparkContext
-  }
-
-  def process(settings: Settings): Boolean = {
-    // Ensure logging is initialized before any Spark threads try to use logs
-    // (because SLF4J initialization is not thread safe)
-    initLogging()
-
-    printWelcome()
-    echo("Initializing interpreter...")
-
-    // Add JARS specified in Spark's ADD_JARS variable to classpath
-    val jars = Option(System.getenv("ADD_JARS")).map(_.split(',')).getOrElse(new Array[String](0))
-    jars.foreach(settings.classpath.append(_))
-
-    this.settings = settings
-    createInterpreter()
-
-    // sets in to some kind of reader depending on environmental cues
-    in = in0 match {
-      case Some(reader) => SimpleReader(reader, out, true)
-      case None         => chooseReader(settings)
-    }
-
-    loadFiles(settings)
-    // it is broken on startup; go ahead and exit
-    if (intp.reporter.hasErrors)
-      return false
-
-    try {
-      // this is about the illusion of snappiness.  We call initialize()
-      // which spins off a separate thread, then print the prompt and try
-      // our best to look ready.  Ideally the user will spend a
-      // couple seconds saying "wow, it starts so fast!" and by the time
-      // they type a command the compiler is ready to roll.
-      intp.initialize()
-      initializeSpark()
-      if (isReplPower) {
-        echo("Starting in power mode, one moment...\n")
-        enablePowerMode()
-      }
-      loop()
-    }
-    finally closeInterpreter()
-    true
   }
 
   /** process command-line arguments and do as they request */
   def process(args: Array[String]): Boolean = {
-    val command = new CommandLine(args.toList, msg => echo("scala: " + msg))
+    val command = new SparkCommandLine(args.toList, msg => echo(msg))
     def neededHelp(): String =
       (if (command.settings.help.value) command.usageMsg + "\n" else "") +
       (if (command.settings.Xhelp.value) command.xusageMsg + "\n" else "")
@@ -937,19 +971,14 @@ class SparkILoop(in0: Option[BufferedReader], val out: PrintWriter, val master: 
   }
 
   @deprecated("Use `process` instead", "2.9.0")
-  def main(args: Array[String]): Unit = {
-    if (isReplDebug)
-      System.out.println(new java.util.Date)
-
-    process(args)
-  }
-  @deprecated("Use `process` instead", "2.9.0")
   def main(settings: Settings): Unit = process(settings)
 }
 
 object SparkILoop {
   implicit def loopToInterpreter(repl: SparkILoop): SparkIMain = repl.intp
   private def echo(msg: String) = Console println msg
+
+  def getAddedJars: Array[String] = Option(System.getenv("ADD_JARS")).map(_.split(',')).getOrElse(new Array[String](0))
 
   // Designed primarily for use by test code: take a String with a
   // bunch of code, and prints out a transcript of what it would look
@@ -959,7 +988,7 @@ object SparkILoop {
 
     stringFromStream { ostream =>
       Console.withOut(ostream) {
-        val output = new PrintWriter(new OutputStreamWriter(ostream), true) {
+        val output = new JPrintWriter(new OutputStreamWriter(ostream), true) {
           override def write(str: String) = {
             // completely skip continuation lines
             if (str forall (ch => ch.isWhitespace || ch == '|')) ()
@@ -978,8 +1007,11 @@ object SparkILoop {
           }
         }
         val repl = new SparkILoop(input, output)
+
         if (settings.classpath.isDefault)
           settings.classpath.value = sys.props("java.class.path")
+
+        getAddedJars.foreach(settings.classpath.append(_))
 
         repl process settings
       }
@@ -995,8 +1027,8 @@ object SparkILoop {
     stringFromStream { ostream =>
       Console.withOut(ostream) {
         val input    = new BufferedReader(new StringReader(code))
-        val output   = new PrintWriter(new OutputStreamWriter(ostream), true)
-        val repl     = new SparkILoop(input, output)
+        val output   = new JPrintWriter(new OutputStreamWriter(ostream), true)
+        val repl     = new ILoop(input, output)
 
         if (sets.classpath.isDefault)
           sets.classpath.value = sys.props("java.class.path")
@@ -1006,32 +1038,4 @@ object SparkILoop {
     }
   }
   def run(lines: List[String]): String = run(lines map (_ + "\n") mkString)
-
-  // provide the enclosing type T
-  // in order to set up the interpreter's classpath and parent class loader properly
-  def breakIf[T: Manifest](assertion: => Boolean, args: NamedParam*): Unit =
-    if (assertion) break[T](args.toList)
-
-  // start a repl, binding supplied args
-  def break[T: Manifest](args: List[NamedParam]): Unit = {
-    val msg = if (args.isEmpty) "" else "  Binding " + args.size + " value%s.".format(
-      if (args.size == 1) "" else "s"
-    )
-    echo("Debug repl starting." + msg)
-    val repl = new SparkILoop {
-      override def prompt = "\ndebug> "
-    }
-    repl.settings = new Settings(echo)
-    repl.settings.embeddedDefaults[T]
-    repl.createInterpreter()
-    repl.in = SparkJLineReader(repl)
-
-    // rebind exit so people don't accidentally call sys.exit by way of predef
-    repl.quietRun("""def exit = println("Type :quit to resume program execution.")""")
-    args foreach (p => repl.bind(p.name, p.tpe, p.value))
-    repl.loop()
-
-    echo("\nDebug repl exiting.")
-    repl.closeInterpreter()
-  }
 }

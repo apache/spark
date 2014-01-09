@@ -25,30 +25,33 @@ import org.apache.spark.mllib.recommendation.ALS;
 import org.apache.spark.mllib.recommendation.MatrixFactorizationModel;
 import org.apache.spark.mllib.recommendation.Rating;
 
-import java.io.Serializable;
 import java.util.Arrays;
-import java.util.StringTokenizer;
+import java.util.regex.Pattern;
 
 import scala.Tuple2;
 
 /**
  * Example using MLLib ALS from Java.
  */
-public class  JavaALS {
+public final class JavaALS {
 
   static class ParseRating extends Function<String, Rating> {
+    private static final Pattern COMMA = Pattern.compile(",");
+
+    @Override
     public Rating call(String line) {
-      StringTokenizer tok = new StringTokenizer(line, ",");
-      int x = Integer.parseInt(tok.nextToken());
-      int y = Integer.parseInt(tok.nextToken());
-      double rating = Double.parseDouble(tok.nextToken());
+      String[] tok = COMMA.split(line);
+      int x = Integer.parseInt(tok[0]);
+      int y = Integer.parseInt(tok[1]);
+      double rating = Double.parseDouble(tok[2]);
       return new Rating(x, y, rating);
     }
   }
 
   static class FeaturesToString extends Function<Tuple2<Object, double[]>, String> {
+    @Override
     public String call(Tuple2<Object, double[]> element) {
-      return element._1().toString() + "," + Arrays.toString(element._2());
+      return element._1() + "," + Arrays.toString(element._2());
     }
   }
 
@@ -69,7 +72,7 @@ public class  JavaALS {
     }
 
     JavaSparkContext sc = new JavaSparkContext(args[0], "JavaALS",
-        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaALS.class));
     JavaRDD<String> lines = sc.textFile(args[1]);
 
     JavaRDD<Rating> ratings = lines.map(new ParseRating());

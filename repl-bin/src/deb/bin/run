@@ -17,7 +17,7 @@
 # limitations under the License.
 #
 
-SCALA_VERSION=2.9.3
+SCALA_VERSION=2.10
 
 # Figure out where the Scala framework is installed
 FWDIR="$(cd `dirname $0`; pwd)"
@@ -48,8 +48,7 @@ fi
 export JAVA_OPTS
 
 # Build up classpath
-CLASSPATH="$SPARK_CLASSPATH"
-CLASSPATH+=":$FWDIR/conf"
+CLASSPATH=":$FWDIR/conf"
 for jar in `find $FWDIR -name '*jar'`; do
   CLASSPATH+=":$jar"
 done

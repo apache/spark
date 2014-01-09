@@ -18,12 +18,12 @@
 package org.apache.spark.deploy.master
 
 import scala.collection.JavaConversions._
-import scala.concurrent.ops._
 
-import org.apache.spark.Logging
 import org.apache.zookeeper._
-import org.apache.zookeeper.data.Stat
 import org.apache.zookeeper.Watcher.Event.KeeperState
+import org.apache.zookeeper.data.Stat
+
+import org.apache.spark.{SparkConf, Logging}
 
 /**
  * Provides a Scala-side interface to the standard ZooKeeper client, with the addition of retry
@@ -33,10 +33,11 @@ import org.apache.zookeeper.Watcher.Event.KeeperState
  * informed via zkDown().
  *
  * Additionally, all commands sent to ZooKeeper will be retried until they either fail too many
- * times or a semantic exception is thrown (e.g.., "node already exists").
+ * times or a semantic exception is thrown (e.g., "node already exists").
  */
-private[spark] class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher) extends Logging {
-  val ZK_URL = System.getProperty("spark.deploy.zookeeper.url", "")
+private[spark] class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher,
+    conf: SparkConf) extends Logging {
+  val ZK_URL = conf.get("spark.deploy.zookeeper.url", "")
 
   val ZK_ACL = ZooDefs.Ids.OPEN_ACL_UNSAFE
   val ZK_TIMEOUT_MILLIS = 30000
@@ -103,6 +104,7 @@ private[spark] class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher) ext
           connectToZooKeeper()
         case KeeperState.Disconnected =>
           logWarning("ZooKeeper disconnected, will retry...")
+        case s => // Do nothing
       }
     }
   }
@@ -179,7 +181,7 @@ private[spark] class SparkZooKeeperSession(zkWatcher: SparkZooKeeperWatcher) ext
     } catch {
       case e: KeeperException.NoNodeException => throw e
       case e: KeeperException.NodeExistsException => throw e
-      case e if n > 0 =>
+      case e: Exception if n > 0 =>
         logError("ZooKeeper exception, " + n + " more retries...", e)
         Thread.sleep(RETRY_WAIT_MILLIS)
         retry(fn, n-1)

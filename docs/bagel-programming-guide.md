@@ -106,7 +106,7 @@ _Example_
 
 ## Operations
 
-Here are the actions and types in the Bagel API. See [Bagel.scala](https://github.com/apache/incubator-spark/blob/master/bagel/src/main/scala/spark/bagel/Bagel.scala) for details.
+Here are the actions and types in the Bagel API. See [Bagel.scala](https://github.com/apache/incubator-spark/blob/master/bagel/src/main/scala/org/apache/spark/bagel/Bagel.scala) for details.
 
 ### Actions
 
@@ -157,8 +157,8 @@ trait Message[K] {
 
 # Where to Go from Here
 
-Two example jobs, PageRank and shortest path, are included in `examples/src/main/scala/org/apache/spark/examples/bagel`. You can run them by passing the class name to the `run-example` script included in Spark; e.g.:
+Two example jobs, PageRank and shortest path, are included in `examples/src/main/scala/org/apache/spark/examples/bagel`. You can run them by passing the class name to the `bin/run-example` script included in Spark; e.g.:
 
-    ./run-example org.apache.spark.examples.bagel.WikipediaPageRank
+    ./bin/run-example org.apache.spark.examples.bagel.WikipediaPageRank
 
 Each example program prints usage help when run without any arguments.

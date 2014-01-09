@@ -19,6 +19,8 @@
 Unit tests for PySpark; additional tests are implemented as doctests in
 individual modules.
 """
+from fileinput import input
+from glob import glob
 import os
 import shutil
 import sys
@@ -71,8 +73,8 @@ class TestCheckpoint(PySparkTestCase):
         time.sleep(1)  # 1 second
         self.assertTrue(flatMappedRDD.isCheckpointed())
         self.assertEqual(flatMappedRDD.collect(), result)
-        self.assertEqual(self.checkpointDir.name,
-                         os.path.dirname(flatMappedRDD.getCheckpointFile()))
+        self.assertEqual("file:" + self.checkpointDir.name,
+                         os.path.dirname(os.path.dirname(flatMappedRDD.getCheckpointFile())))
 
     def test_checkpoint_and_restore(self):
         parCollection = self.sc.parallelize([1, 2, 3, 4])
@@ -86,7 +88,8 @@ class TestCheckpoint(PySparkTestCase):
         time.sleep(1)  # 1 second
 
         self.assertTrue(flatMappedRDD.getCheckpointFile() is not None)
-        recovered = self.sc._checkpointFile(flatMappedRDD.getCheckpointFile())
+        recovered = self.sc._checkpointFile(flatMappedRDD.getCheckpointFile(),
+                                            flatMappedRDD._jrdd_deserializer)
         self.assertEquals([1, 2, 3, 4], recovered.collect())
 
 
@@ -135,6 +138,19 @@ class TestAddFile(PySparkTestCase):
         self.sc.addPyFile(path)
         from userlib import UserClass
         self.assertEqual("Hello World from inside a package!", UserClass().hello())
+
+
+class TestRDDFunctions(PySparkTestCase):
+
+    def test_save_as_textfile_with_unicode(self):
+        # Regression test for SPARK-970
+        x = u"\u00A1Hola, mundo!"
+        data = self.sc.parallelize([x])
+        tempFile = NamedTemporaryFile(delete=True)
+        tempFile.close()
+        data.saveAsTextFile(tempFile.name)
+        raw_contents = ''.join(input(glob(tempFile.name + "/part-0000*")))
+        self.assertEqual(x, unicode(raw_contents.strip(), "utf-8"))
 
 
 class TestIO(PySparkTestCase):

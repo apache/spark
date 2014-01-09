@@ -38,7 +38,7 @@ object SparkPageRank {
     }
     var iters = args(2).toInt
     val ctx = new SparkContext(args(0), "PageRank",
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
     val lines = ctx.textFile(args(1), 1)
     val links = lines.map{ s =>
       val parts = s.split("\\s+")

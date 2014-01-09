@@ -1,7 +1,10 @@
 *~
 *.swp
+*.ipr
 *.iml
+*.iws
 .idea/
+sbt/*.jar
 .settings
 .cache
 /build/
@@ -41,3 +44,4 @@ derby.log
 dist/
 spark-*-bin.tar.gz
 unit-tests.log
+lib/

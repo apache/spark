@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-assembly_2.9.3</artifactId>
+  <artifactId>spark-assembly_2.10</artifactId>
   <name>Spark Project Assembly</name>
   <url>http://spark.incubator.apache.org/</url>
 
@@ -41,33 +41,33 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_2.9.3</artifactId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_2.9.3</artifactId>
+      <artifactId>spark-bagel_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_2.9.3</artifactId>
+      <artifactId>spark-mllib_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-repl_2.9.3</artifactId>
+      <artifactId>spark-repl_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_2.9.3</artifactId>
+      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.7</version>
+      <version>0.8.1</version>
     </dependency>
   </dependencies>
 
@@ -79,7 +79,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala.version}/${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</outputFile>
+          <outputFile>${project.build.directory}/scala-${scala.binary.version}/${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>
@@ -108,11 +108,11 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>META-INF/services/org.apache.hadoop.fs.FileSystem</resource>
                 </transformer>
-              </transformers>
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>reference.conf</resource>
+                </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                  <resource>log4j.properties</resource>
                 </transformer>
               </transformers>
             </configuration>
@@ -124,11 +124,21 @@
 
   <profiles>
     <profile>
-      <id>hadoop2-yarn</id>
+      <id>yarn-alpha</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
-          <artifactId>spark-yarn_2.9.3</artifactId>
+          <artifactId>spark-yarn-alpha_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>yarn</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-yarn_${scala.binary.version}</artifactId>
           <version>${project.version}</version>
         </dependency>
       </dependencies>

@@ -44,6 +44,11 @@ class TaskMetrics extends Serializable {
   var jvmGCTime: Long = _
 
   /**
+   * Amount of time spent serializing the task result
+   */
+  var resultSerializationTime: Long = _
+
+  /**
    * If this task reads from shuffle output, metrics on getting shuffle data will be collected here
    */
   var shuffleReadMetrics: Option[ShuffleReadMetrics] = None
@@ -61,50 +66,53 @@ object TaskMetrics {
 
 class ShuffleReadMetrics extends Serializable {
   /**
-   * Time when shuffle finishs
+   * Absolute time when this task finished reading shuffle data
    */
   var shuffleFinishTime: Long = _
 
   /**
-   * Total number of blocks fetched in a shuffle (remote or local)
+   * Number of blocks fetched in this shuffle by this task (remote or local)
    */
   var totalBlocksFetched: Int = _
 
   /**
-   * Number of remote blocks fetched in a shuffle
+   * Number of remote blocks fetched in this shuffle by this task
    */
   var remoteBlocksFetched: Int = _
 
   /**
-   * Local blocks fetched in a shuffle
+   * Number of local blocks fetched in this shuffle by this task
    */
   var localBlocksFetched: Int = _
 
   /**
-   * Total time that is spent blocked waiting for shuffle to fetch data
+   * Time the task spent waiting for remote shuffle blocks. This only includes the time
+   * blocking on shuffle input data. For instance if block B is being fetched while the task is
+   * still not finished processing block A, it is not considered to be blocking on block B.
    */
   var fetchWaitTime: Long = _
 
   /**
-   * The total amount of time for all the shuffle fetches.  This adds up time from overlapping
-   *     shuffles, so can be longer than task time
+   * Total time spent fetching remote shuffle blocks. This aggregates the time spent fetching all
+   * input blocks. Since block fetches are both pipelined and parallelized, this can
+   * exceed fetchWaitTime and executorRunTime.
    */
   var remoteFetchTime: Long = _
 
   /**
-   * Total number of remote bytes read from a shuffle
+   * Total number of remote bytes read from the shuffle by this task
    */
   var remoteBytesRead: Long = _
 }
 
 class ShuffleWriteMetrics extends Serializable {
   /**
-   * Number of bytes written for a shuffle
+   * Number of bytes written for the shuffle by this task
    */
   var shuffleBytesWritten: Long = _
 
   /**
-   * Time spent blocking on writes to disk or buffer cache, in nanoseconds.
+   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
    */
   var shuffleWriteTime: Long = _
 }

@@ -26,7 +26,7 @@
   </parent>
 
   <groupId>org.apache.spark</groupId>
-  <artifactId>spark-examples_2.9.3</artifactId>
+  <artifactId>spark-examples_2.10</artifactId>
   <packaging>jar</packaging>
   <name>Spark Project Examples</name>
   <url>http://spark.incubator.apache.org/</url>
@@ -49,27 +49,52 @@
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_2.9.3</artifactId>
+      <artifactId>spark-core_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-streaming_2.9.3</artifactId>
+      <artifactId>spark-streaming_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-mllib_2.9.3</artifactId>
+      <artifactId>spark-mllib_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-bagel_2.9.3</artifactId>
+      <artifactId>spark-bagel_${scala.binary.version}</artifactId>
       <version>${project.version}</version>
       <scope>provided</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-twitter_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-kafka_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-flume_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-zeromq_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
+    </dependency>
+    <dependency>
+      <groupId>org.apache.spark</groupId>
+      <artifactId>spark-streaming-mqtt_${scala.binary.version}</artifactId>
+      <version>${project.version}</version>
     </dependency>
     <dependency>
       <groupId>org.apache.hbase</groupId>
@@ -87,43 +112,28 @@
       </exclusions>
     </dependency>
     <dependency>
-      <groupId>org.apache.kafka</groupId>
-      <artifactId>kafka_2.9.2</artifactId>
-      <version>0.8.0-beta1</version>
-      <exclusions>
-        <exclusion>
-          <groupId>com.sun.jmx</groupId>
-          <artifactId>jmxri</artifactId>
-        </exclusion>
-        <exclusion>
-          <groupId>com.sun.jdmk</groupId>
-          <artifactId>jmxtools</artifactId>
-        </exclusion>
-      </exclusions>
-    </dependency>
-    <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
     <dependency>
       <groupId>com.twitter</groupId>
-      <artifactId>algebird-core_2.9.2</artifactId>
+      <artifactId>algebird-core_${scala.binary.version}</artifactId>
       <version>0.1.11</version>
     </dependency>
     <dependency>
       <groupId>org.scalatest</groupId>
-      <artifactId>scalatest_2.9.3</artifactId>
+      <artifactId>scalatest_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.scalacheck</groupId>
-      <artifactId>scalacheck_2.9.3</artifactId>
+      <artifactId>scalacheck_${scala.binary.version}</artifactId>
       <scope>test</scope>
     </dependency>
     <dependency>
       <groupId>org.apache.cassandra</groupId>
       <artifactId>cassandra-all</artifactId>
-      <version>1.2.5</version>
+      <version>1.2.6</version>
       <exclusions>
         <exclusion>
           <groupId>com.google.guava</groupId>
@@ -166,15 +176,15 @@
   </dependencies>
 
   <build>
-    <outputDirectory>target/scala-${scala.version}/classes</outputDirectory>
-    <testOutputDirectory>target/scala-${scala.version}/test-classes</testOutputDirectory>
+    <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
+    <testOutputDirectory>target/scala-${scala.binary.version}/test-classes</testOutputDirectory>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala.version}/${project.artifactId}-assembly-${project.version}.jar</outputFile>
+          <outputFile>${project.build.directory}/scala-${scala.binary.version}/${project.artifactId}-assembly-${project.version}.jar</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>
@@ -202,6 +212,9 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>reference.conf</resource>
+                </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                  <resource>log4j.properties</resource>
                 </transformer>
               </transformers>
             </configuration>

@@ -21,6 +21,7 @@ import java.util.{Map => JMap}
 
 import scala.collection.JavaConversions
 import scala.collection.JavaConversions._
+import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.InputFormat
@@ -28,23 +29,36 @@ import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import com.google.common.base.Optional
 
-import org.apache.spark.{Accumulable, AccumulableParam, Accumulator, AccumulatorParam, SparkContext}
+import org.apache.spark._
 import org.apache.spark.SparkContext.IntAccumulatorParam
 import org.apache.spark.SparkContext.DoubleAccumulatorParam
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
+import scala.Tuple2
 
 /**
  * A Java-friendly version of [[org.apache.spark.SparkContext]] that returns [[org.apache.spark.api.java.JavaRDD]]s and
  * works with Java collections instead of Scala ones.
  */
 class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWorkaround {
+  /**
+   * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
+   */
+  def this(conf: SparkConf) = this(new SparkContext(conf))
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
    * @param appName A name for your application, to display on the cluster web UI
    */
   def this(master: String, appName: String) = this(new SparkContext(master, appName))
+
+  /**
+   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName A name for your application, to display on the cluster web UI
+   * @param conf a [[org.apache.spark.SparkConf]] object specifying other Spark parameters
+   */
+  def this(master: String, appName: String, conf: SparkConf) =
+    this(conf.setMaster(master).setAppName(appName))
 
   /**
    * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
@@ -82,8 +96,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
-    implicit val cm: ClassManifest[T] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    implicit val cm: ClassTag[T] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices)
   }
 
@@ -94,10 +107,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   /** Distribute a local Scala collection to form an RDD. */
   def parallelizePairs[K, V](list: java.util.List[Tuple2[K, V]], numSlices: Int)
   : JavaPairRDD[K, V] = {
-    implicit val kcm: ClassManifest[K] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[K]]
-    implicit val vcm: ClassManifest[V] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[V]]
+    implicit val kcm: ClassTag[K] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
+    implicit val vcm: ClassTag[V] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
     JavaPairRDD.fromRDD(sc.parallelize(JavaConversions.asScalaBuffer(list), numSlices))
   }
 
@@ -132,16 +143,16 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     valueClass: Class[V],
     minSplits: Int
     ): JavaPairRDD[K, V] = {
-    implicit val kcm = ClassManifest.fromClass(keyClass)
-    implicit val vcm = ClassManifest.fromClass(valueClass)
+    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
+    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minSplits))
   }
 
   /**Get an RDD for a Hadoop SequenceFile. */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]):
   JavaPairRDD[K, V] = {
-    implicit val kcm = ClassManifest.fromClass(keyClass)
-    implicit val vcm = ClassManifest.fromClass(valueClass)
+    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
+    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass))
   }
 
@@ -153,8 +164,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * that there's very little effort required to save arbitrary objects.
    */
   def objectFile[T](path: String, minSplits: Int): JavaRDD[T] = {
-    implicit val cm: ClassManifest[T] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    implicit val cm: ClassTag[T] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     sc.objectFile(path, minSplits)(cm)
   }
 
@@ -166,8 +176,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * that there's very little effort required to save arbitrary objects.
    */
   def objectFile[T](path: String): JavaRDD[T] = {
-    implicit val cm: ClassManifest[T] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    implicit val cm: ClassTag[T] = implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     sc.objectFile(path)(cm)
   }
 
@@ -183,8 +192,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     valueClass: Class[V],
     minSplits: Int
     ): JavaPairRDD[K, V] = {
-    implicit val kcm = ClassManifest.fromClass(keyClass)
-    implicit val vcm = ClassManifest.fromClass(valueClass)
+    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
+    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass, minSplits))
   }
 
@@ -199,8 +208,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     keyClass: Class[K],
     valueClass: Class[V]
     ): JavaPairRDD[K, V] = {
-    implicit val kcm = ClassManifest.fromClass(keyClass)
-    implicit val vcm = ClassManifest.fromClass(valueClass)
+    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
+    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass))
   }
 
@@ -212,8 +221,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     valueClass: Class[V],
     minSplits: Int
     ): JavaPairRDD[K, V] = {
-    implicit val kcm = ClassManifest.fromClass(keyClass)
-    implicit val vcm = ClassManifest.fromClass(valueClass)
+    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
+    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits))
   }
 
@@ -224,8 +233,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     keyClass: Class[K],
     valueClass: Class[V]
     ): JavaPairRDD[K, V] = {
-    implicit val kcm = ClassManifest.fromClass(keyClass)
-    implicit val vcm = ClassManifest.fromClass(valueClass)
+    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
+    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.hadoopFile(path,
       inputFormatClass, keyClass, valueClass))
   }
@@ -240,8 +249,8 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     kClass: Class[K],
     vClass: Class[V],
     conf: Configuration): JavaPairRDD[K, V] = {
-    implicit val kcm = ClassManifest.fromClass(kClass)
-    implicit val vcm = ClassManifest.fromClass(vClass)
+    implicit val kcm: ClassTag[K] = ClassTag(kClass)
+    implicit val vcm: ClassTag[V] = ClassTag(vClass)
     new JavaPairRDD(sc.newAPIHadoopFile(path, fClass, kClass, vClass, conf))
   }
 
@@ -254,15 +263,15 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     fClass: Class[F],
     kClass: Class[K],
     vClass: Class[V]): JavaPairRDD[K, V] = {
-    implicit val kcm = ClassManifest.fromClass(kClass)
-    implicit val vcm = ClassManifest.fromClass(vClass)
+    implicit val kcm: ClassTag[K] = ClassTag(kClass)
+    implicit val vcm: ClassTag[V] = ClassTag(vClass)
     new JavaPairRDD(sc.newAPIHadoopRDD(conf, fClass, kClass, vClass))
   }
 
   /** Build the union of two or more RDDs. */
   override def union[T](first: JavaRDD[T], rest: java.util.List[JavaRDD[T]]): JavaRDD[T] = {
     val rdds: Seq[RDD[T]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
-    implicit val cm: ClassManifest[T] = first.classManifest
+    implicit val cm: ClassTag[T] = first.classTag
     sc.union(rdds)(cm)
   }
 
@@ -270,9 +279,9 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   override def union[K, V](first: JavaPairRDD[K, V], rest: java.util.List[JavaPairRDD[K, V]])
       : JavaPairRDD[K, V] = {
     val rdds: Seq[RDD[(K, V)]] = (Seq(first) ++ asScalaBuffer(rest)).map(_.rdd)
-    implicit val cm: ClassManifest[(K, V)] = first.classManifest
-    implicit val kcm: ClassManifest[K] = first.kManifest
-    implicit val vcm: ClassManifest[V] = first.vManifest
+    implicit val cm: ClassTag[(K, V)] = first.classTag
+    implicit val kcm: ClassTag[K] = first.kClassTag
+    implicit val vcm: ClassTag[V] = first.vClassTag
     new JavaPairRDD(sc.union(rdds)(cm))(kcm, vcm)
   }
 
@@ -385,29 +394,36 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /**
    * Set the directory under which RDDs are going to be checkpointed. The directory must
-   * be a HDFS path if running on a cluster. If the directory does not exist, it will
-   * be created. If the directory exists and useExisting is set to true, then the
-   * exisiting directory will be used. Otherwise an exception will be thrown to
-   * prevent accidental overriding of checkpoint files in the existing directory.
-   */
-  def setCheckpointDir(dir: String, useExisting: Boolean) {
-    sc.setCheckpointDir(dir, useExisting)
-  }
-
-  /**
-   * Set the directory under which RDDs are going to be checkpointed. The directory must
-   * be a HDFS path if running on a cluster. If the directory does not exist, it will
-   * be created. If the directory exists, an exception will be thrown to prevent accidental
-   * overriding of checkpoint files.
+   * be a HDFS path if running on a cluster.
    */
   def setCheckpointDir(dir: String) {
     sc.setCheckpointDir(dir)
   }
 
   protected def checkpointFile[T](path: String): JavaRDD[T] = {
-    implicit val cm: ClassManifest[T] =
-      implicitly[ClassManifest[AnyRef]].asInstanceOf[ClassManifest[T]]
+    implicit val cm: ClassTag[T] =
+      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     new JavaRDD(sc.checkpointFile(path))
+  }
+
+  /**
+   * Return a copy of this JavaSparkContext's configuration. The configuration ''cannot'' be
+   * changed at runtime.
+   */
+  def getConf: SparkConf = sc.getConf
+
+  /**
+   * Pass-through to SparkContext.setCallSite.  For API support only.
+   */
+  def setCallSite(site: String) {
+    sc.setCallSite(site)
+  }
+
+  /**
+   * Pass-through to SparkContext.setCallSite.  For API support only.
+   */
+  def clearCallSite() {
+    sc.clearCallSite()
   }
 }
 
@@ -415,4 +431,10 @@ object JavaSparkContext {
   implicit def fromSparkContext(sc: SparkContext): JavaSparkContext = new JavaSparkContext(sc)
 
   implicit def toSparkContext(jsc: JavaSparkContext): SparkContext = jsc.sc
+
+  /**
+   * Find the JAR from which a given class was loaded, to make it easy for users to pass
+   * their JARs to SparkContext.
+   */
+  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls).toArray
 }

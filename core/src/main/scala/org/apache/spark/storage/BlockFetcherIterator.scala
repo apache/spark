@@ -312,7 +312,7 @@ object BlockFetcherIterator {
       logDebug("Sending request for %d blocks (%s) from %s".format(
         req.blocks.size, Utils.bytesToString(req.size), req.address.host))
       val cmId = new ConnectionManagerId(req.address.host, req.address.nettyPort)
-      val cpier = new ShuffleCopier
+      val cpier = new ShuffleCopier(blockManager.conf)
       cpier.getBlocks(cmId, req.blocks, putResult)
       logDebug("Sent request for remote blocks " + req.blocks + " from " + req.address.host )
     }
@@ -327,7 +327,7 @@ object BlockFetcherIterator {
         fetchRequestsSync.put(request)
       }
 
-      copiers = startCopiers(System.getProperty("spark.shuffle.copier.threads", "6").toInt)
+      copiers = startCopiers(conf.get("spark.shuffle.copier.threads", "6").toInt)
       logInfo("Started " + fetchRequestsSync.size + " remote gets in " +
         Utils.getUsedTimeMs(startTime))
 

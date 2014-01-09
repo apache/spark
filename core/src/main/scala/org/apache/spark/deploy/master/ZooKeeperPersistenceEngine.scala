@@ -17,19 +17,19 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.zookeeper._
 
 import akka.serialization.Serialization
 
-class ZooKeeperPersistenceEngine(serialization: Serialization)
+class ZooKeeperPersistenceEngine(serialization: Serialization, conf: SparkConf)
   extends PersistenceEngine
   with SparkZooKeeperWatcher
   with Logging
 {
-  val WORKING_DIR = System.getProperty("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
+  val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
 
-  val zk = new SparkZooKeeperSession(this)
+  val zk = new SparkZooKeeperSession(this, conf)
 
   zk.connect()
 
@@ -70,15 +70,15 @@ class ZooKeeperPersistenceEngine(serialization: Serialization)
     (apps, workers)
   }
 
-  private def serializeIntoFile(path: String, value: Serializable) {
+  private def serializeIntoFile(path: String, value: AnyRef) {
     val serializer = serialization.findSerializerFor(value)
     val serialized = serializer.toBinary(value)
     zk.create(path, serialized, CreateMode.PERSISTENT)
   }
 
-  def deserializeFromFile[T <: Serializable](filename: String)(implicit m: Manifest[T]): T = {
+  def deserializeFromFile[T](filename: String)(implicit m: Manifest[T]): T = {
     val fileData = zk.getData("/spark/master_status/" + filename)
-    val clazz = m.erasure.asInstanceOf[Class[T]]
+    val clazz = m.runtimeClass.asInstanceOf[Class[T]]
     val serializer = serialization.serializerFor(clazz)
     serializer.fromBinary(fileData).asInstanceOf[T]
   }

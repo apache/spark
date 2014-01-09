@@ -60,11 +60,13 @@ private[spark] class StagePage(parent: JobProgressUI) {
       var activeTime = 0L
       listener.stageIdToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
 
+      val finishedTasks = listener.stageIdToTaskInfos(stageId).filter(_._1.finished)
+
       val summary =
         <div>
           <ul class="unstyled">
             <li>
-              <strong>CPU time: </strong>
+              <strong>Total task time across all tasks: </strong>
               {parent.formatDuration(listener.stageIdToTime.getOrElse(stageId, 0L) + activeTime)}
             </li>
             {if (hasShuffleRead)
@@ -84,7 +86,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
 
       val taskHeaders: Seq[String] =
         Seq("Task Index", "Task ID", "Status", "Locality Level", "Executor", "Launch Time") ++
-        Seq("Duration", "GC Time") ++
+        Seq("Duration", "GC Time", "Result Ser Time") ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
         Seq("Errors")
@@ -99,10 +101,42 @@ private[spark] class StagePage(parent: JobProgressUI) {
           None
         }
         else {
+          val serializationTimes = validTasks.map{case (info, metrics, exception) =>
+            metrics.get.resultSerializationTime.toDouble}
+          val serializationQuantiles = "Result serialization time" +: Distribution(serializationTimes).get.getQuantiles().map(
+            ms => parent.formatDuration(ms.toLong))
+
           val serviceTimes = validTasks.map{case (info, metrics, exception) =>
             metrics.get.executorRunTime.toDouble}
           val serviceQuantiles = "Duration" +: Distribution(serviceTimes).get.getQuantiles().map(
             ms => parent.formatDuration(ms.toLong))
+
+          val gettingResultTimes = validTasks.map{case (info, metrics, exception) =>
+            if (info.gettingResultTime > 0) {
+              (info.finishTime - info.gettingResultTime).toDouble
+            } else {
+              0.0
+            }
+          }
+          val gettingResultQuantiles = ("Time spent fetching task results" +:
+            Distribution(gettingResultTimes).get.getQuantiles().map(
+              millis => parent.formatDuration(millis.toLong)))
+          // The scheduler delay includes the network delay to send the task to the worker
+          // machine and to send back the result (but not the time to fetch the task result,
+          // if it needed to be fetched from the block manager on the worker).
+          val schedulerDelays = validTasks.map{case (info, metrics, exception) =>
+            val totalExecutionTime = {
+              if (info.gettingResultTime > 0) {
+                (info.gettingResultTime - info.launchTime).toDouble
+              } else {
+                (info.finishTime - info.launchTime).toDouble
+              }
+            }
+            totalExecutionTime - metrics.get.executorRunTime
+          }
+          val schedulerDelayQuantiles = ("Scheduler delay" +:
+            Distribution(schedulerDelays).get.getQuantiles().map(
+              millis => parent.formatDuration(millis.toLong)))
 
           def getQuantileCols(data: Seq[Double]) =
             Distribution(data).get.getQuantiles().map(d => Utils.bytesToString(d.toLong))
@@ -119,7 +153,11 @@ private[spark] class StagePage(parent: JobProgressUI) {
           }
           val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
-          val listings: Seq[Seq[String]] = Seq(serviceQuantiles,
+          val listings: Seq[Seq[String]] = Seq(
+            serializationQuantiles,
+            serviceQuantiles,
+            gettingResultQuantiles,
+            schedulerDelayQuantiles,
             if (hasShuffleRead) shuffleReadQuantiles else Nil,
             if (hasShuffleWrite) shuffleWriteQuantiles else Nil)
 
@@ -128,11 +166,12 @@ private[spark] class StagePage(parent: JobProgressUI) {
           def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
           Some(listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
-
+      val executorTable = new ExecutorTable(parent, stageId)
       val content =
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
+        <h4>Aggregated Metrics by Executors</h4> ++ executorTable.toNodeSeq() ++
         <h4>Tasks</h4> ++ taskTable
 
       headerSparkPage(content, parent.sc, "Details for Stage %d".format(stageId), Stages)
@@ -151,22 +190,20 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val formatDuration = if (info.status == "RUNNING") parent.formatDuration(duration)
       else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
     val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
+    val serializationTime = metrics.map(m => m.resultSerializationTime).getOrElse(0L)
 
-    var shuffleReadSortable: String = ""
-    var shuffleReadReadable: String = ""
-    if (shuffleRead) {
-      shuffleReadSortable = metrics.flatMap{m => m.shuffleReadMetrics}.map{s => s.remoteBytesRead}.toString()
-      shuffleReadReadable = metrics.flatMap{m => m.shuffleReadMetrics}.map{s =>
-        Utils.bytesToString(s.remoteBytesRead)}.getOrElse("")
-    }
+    val maybeShuffleRead = metrics.flatMap{m => m.shuffleReadMetrics}.map{s => s.remoteBytesRead}
+    val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
+    val shuffleReadReadable = maybeShuffleRead.map{Utils.bytesToString(_)}.getOrElse("")
 
-    var shuffleWriteSortable: String = ""
-    var shuffleWriteReadable: String = ""
-    if (shuffleWrite) {
-      shuffleWriteSortable = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleBytesWritten}.toString()
-      shuffleWriteReadable = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
-        Utils.bytesToString(s.shuffleBytesWritten)}.getOrElse("")
-    }
+    val maybeShuffleWrite = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleBytesWritten}
+    val shuffleWriteSortable = maybeShuffleWrite.map(_.toString).getOrElse("")
+    val shuffleWriteReadable = maybeShuffleWrite.map{Utils.bytesToString(_)}.getOrElse("")
+
+    val maybeWriteTime = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleWriteTime}
+    val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
+    val writeTimeReadable = maybeWriteTime.map{ t => t / (1000 * 1000)}.map{ ms =>
+      if (ms == 0) "" else parent.formatDuration(ms)}.getOrElse("")
 
     <tr>
       <td>{info.index}</td>
@@ -181,14 +218,17 @@ private[spark] class StagePage(parent: JobProgressUI) {
       <td sorttable_customkey={gcTime.toString}>
         {if (gcTime > 0) parent.formatDuration(gcTime) else ""}
       </td>
+      <td sorttable_customkey={serializationTime.toString}>
+        {if (serializationTime > 0) parent.formatDuration(serializationTime) else ""}
+      </td>
       {if (shuffleRead) {
          <td sorttable_customkey={shuffleReadSortable}>
            {shuffleReadReadable}
          </td>
       }}
       {if (shuffleWrite) {
-         <td>{metrics.flatMap{m => m.shuffleWriteMetrics}.map{s =>
-           parent.formatDuration(s.shuffleWriteTime / (1000 * 1000))}.getOrElse("")}
+         <td sorttable_customkey={writeTimeSortable}>
+           {writeTimeReadable}
          </td>
          <td sorttable_customkey={shuffleWriteSortable}>
            {shuffleWriteReadable}

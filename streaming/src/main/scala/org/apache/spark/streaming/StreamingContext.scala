@@ -17,36 +17,28 @@
 
 package org.apache.spark.streaming
 
-import akka.actor.Props
-import akka.actor.SupervisorStrategy
-import akka.zeromq.Subscribe
-
-import org.apache.spark.streaming.dstream._
-
-import org.apache.spark._
-import org.apache.spark.rdd.RDD
-import org.apache.spark.streaming.receivers.ActorReceiver
-import org.apache.spark.streaming.receivers.ReceiverSupervisorStrategy
-import org.apache.spark.streaming.receivers.ZeroMQReceiver
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.MetadataCleaner
-import org.apache.spark.streaming.receivers.ActorReceiver
-
 import scala.collection.mutable.Queue
 import scala.collection.Map
+import scala.reflect.ClassTag
 
 import java.io.InputStream
 import java.util.concurrent.atomic.AtomicInteger
-import java.util.UUID
 
+import akka.actor.Props
+import akka.actor.SupervisorStrategy
 import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
 import org.apache.hadoop.fs.Path
-import twitter4j.Status
-import twitter4j.auth.Authorization
 
+import org.apache.spark._
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.MetadataCleaner
+import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.receivers._
+import org.apache.spark.streaming.scheduler._
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -61,18 +53,27 @@ class StreamingContext private (
 
   /**
    * Create a StreamingContext using an existing SparkContext.
-   * @param sparkContext Existing SparkContext
-   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param sparkContext existing SparkContext
+   * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(sparkContext: SparkContext, batchDuration: Duration) = {
     this(sparkContext, null, batchDuration)
   }
 
   /**
+   * Create a StreamingContext by providing the configuration necessary for a new SparkContext.
+   * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
+   * @param batchDuration the time interval at which streaming data will be divided into batches
+   */
+  def this(conf: SparkConf, batchDuration: Duration) = {
+    this(StreamingContext.createNewSparkContext(conf), null, batchDuration)
+  }
+
+  /**
    * Create a StreamingContext by providing the details necessary for creating a new SparkContext.
-   * @param master Cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
-   * @param appName A name for your job, to display on the cluster web UI
-   * @param batchDuration The time interval at which streaming data will be divided into batches
+   * @param master cluster URL to connect to (e.g. mesos://host:port, spark://host:port, local[4]).
+   * @param appName a name for your job, to display on the cluster web UI
+   * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(
       master: String,
@@ -85,26 +86,25 @@ class StreamingContext private (
          null, batchDuration)
   }
 
-
   /**
    * Re-create a StreamingContext from a checkpoint file.
    * @param path Path either to the directory that was specified as the checkpoint directory, or
    *             to the checkpoint file 'graph' or 'graph.bk'.
    */
-  def this(path: String) = this(null, CheckpointReader.read(path), null)
-
-  initLogging()
+  def this(path: String) = this(null, CheckpointReader.read(new SparkConf(), path), null)
 
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
       "both SparkContext and checkpoint as null")
   }
 
-  if(cp_ != null && cp_.delaySeconds >= 0 && MetadataCleaner.getDelaySeconds < 0) {
-    MetadataCleaner.setDelaySeconds(cp_.delaySeconds)
+  private val conf_ = Option(sc_).map(_.conf).getOrElse(cp_.sparkConf)
+
+  if(cp_ != null && cp_.delaySeconds >= 0 && MetadataCleaner.getDelaySeconds(conf_) < 0) {
+    MetadataCleaner.setDelaySeconds(conf_, cp_.delaySeconds)
   }
 
-  if (MetadataCleaner.getDelaySeconds < 0) {
+  if (MetadataCleaner.getDelaySeconds(conf_) < 0) {
     throw new SparkException("Spark Streaming cannot be used without setting spark.cleaner.ttl; "
       + "set this property before creating a SparkContext (use SPARK_JAVA_OPTS for the shell)")
   }
@@ -113,11 +113,13 @@ class StreamingContext private (
 
   protected[streaming] val sc: SparkContext = {
     if (isCheckpointPresent) {
-      new SparkContext(cp_.master, cp_.framework, cp_.sparkHome, cp_.jars, cp_.environment)
+      new SparkContext(cp_.sparkConf)
     } else {
       sc_
     }
   }
+
+  protected[streaming] val conf = sc.conf
 
   protected[streaming] val env = SparkEnv.get
 
@@ -139,16 +141,17 @@ class StreamingContext private (
 
   protected[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
-      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(cp_.checkpointDir), true)
+      sc.setCheckpointDir(cp_.checkpointDir)
       cp_.checkpointDir
     } else {
       null
     }
   }
 
-  protected[streaming] var checkpointDuration: Duration = if (isCheckpointPresent) cp_.checkpointDuration else null
-  protected[streaming] var receiverJobThread: Thread = null
-  protected[streaming] var scheduler: Scheduler = null
+  protected[streaming] val checkpointDuration: Duration = {
+    if (isCheckpointPresent) cp_.checkpointDuration else graph.batchDuration
+  }
+  protected[streaming] val scheduler = new JobScheduler(this)
 
   /**
    * Return the associated Spark context
@@ -173,8 +176,12 @@ class StreamingContext private (
    */
   def checkpoint(directory: String) {
     if (directory != null) {
-      sc.setCheckpointDir(StreamingContext.getSparkCheckpointDir(directory))
-      checkpointDir = directory
+      val path = new Path(directory)
+      val fs = path.getFileSystem(sparkContext.hadoopConfiguration)
+      fs.mkdirs(path)
+      val fullPath = fs.getFileStatus(path).getPath().toString
+      sc.setCheckpointDir(fullPath)
+      checkpointDir = fullPath
     } else {
       checkpointDir = null
     }
@@ -191,7 +198,7 @@ class StreamingContext private (
    * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
    * @param receiver Custom implementation of NetworkReceiver
    */
-  def networkStream[T: ClassManifest](
+  def networkStream[T: ClassTag](
     receiver: NetworkReceiver[T]): DStream[T] = {
     val inputStream = new PluggableInputDStream[T](this,
       receiver)
@@ -211,81 +218,13 @@ class StreamingContext private (
    *       to ensure the type safety, i.e parametrized type of data received and actorStream
    *       should be same.
    */
-  def actorStream[T: ClassManifest](
+  def actorStream[T: ClassTag](
       props: Props,
       name: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
       supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
     ): DStream[T] = {
     networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
-  }
-
-  /**
-   * Create an input stream that receives messages pushed by a zeromq publisher.
-   * @param publisherUrl Url of remote zeromq publisher
-   * @param subscribe topic to subscribe to
-   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic
-   *                       and each frame has sequence of byte thus it needs the converter
-   *                       (which might be deserializer of bytes) to translate from sequence
-   *                       of sequence of bytes, where sequence refer to a frame
-   *                       and sub sequence refer to its payload.
-   * @param storageLevel RDD storage level. Defaults to memory-only.
-   */
-  def zeroMQStream[T: ClassManifest](
-      publisherUrl:String,
-      subscribe: Subscribe,
-      bytesToObjects: Seq[Seq[Byte]] ⇒ Iterator[T],
-      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
-      supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
-    ): DStream[T] = {
-    actorStream(Props(new ZeroMQReceiver(publisherUrl,subscribe,bytesToObjects)),
-        "ZeroMQReceiver", storageLevel, supervisorStrategy)
-  }
-
-  /**
-   * Create an input stream that pulls messages from a Kafka Broker.
-   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
-   * @param groupId The group id for this consumer.
-   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *               in its own thread.
-   * @param storageLevel  Storage level to use for storing the received objects
-   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
-   */
-  def kafkaStream(
-      zkQuorum: String,
-      groupId: String,
-      topics: Map[String, Int],
-      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2
-    ): DStream[(String, String)] = {
-    val kafkaParams = Map[String, String](
-      "zookeeper.connect" -> zkQuorum, "group.id" -> groupId,
-      "zookeeper.connection.timeout.ms" -> "10000")
-    kafkaStream[String, String, kafka.serializer.StringDecoder, kafka.serializer.StringDecoder](
-      kafkaParams,
-      topics,
-      storageLevel)
-  }
-
-  /**
-   * Create an input stream that pulls messages from a Kafka Broker.
-   * @param kafkaParams Map of kafka configuration paramaters.
-   *                    See: http://kafka.apache.org/configuration.html
-   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *               in its own thread.
-   * @param storageLevel  Storage level to use for storing the received objects
-   */
-  def kafkaStream[
-    K: ClassManifest,
-    V: ClassManifest,
-    U <: kafka.serializer.Decoder[_]: Manifest,
-    T <: kafka.serializer.Decoder[_]: Manifest](
-      kafkaParams: Map[String, String],
-      topics: Map[String, Int],
-      storageLevel: StorageLevel
-    ): DStream[(K, V)] = {
-    val inputStream = new KafkaInputDStream[K, V, U, T](this, kafkaParams, topics, storageLevel)
-    registerInputStream(inputStream)
-    inputStream
   }
 
   /**
@@ -315,29 +254,13 @@ class StreamingContext private (
    * @param storageLevel  Storage level to use for storing the received objects
    * @tparam T            Type of the objects received (after converting bytes to objects)
    */
-  def socketStream[T: ClassManifest](
+  def socketStream[T: ClassTag](
       hostname: String,
       port: Int,
       converter: (InputStream) => Iterator[T],
       storageLevel: StorageLevel
     ): DStream[T] = {
     val inputStream = new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
-    registerInputStream(inputStream)
-    inputStream
-  }
-
-  /**
-   * Create a input stream from a Flume source.
-   * @param hostname Hostname of the slave machine to which the flume data will be sent
-   * @param port     Port of the slave machine to which the flume data will be sent
-   * @param storageLevel  Storage level to use for storing the received objects
-   */
-  def flumeStream (
-      hostname: String,
-      port: Int,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): DStream[SparkFlumeEvent] = {
-    val inputStream = new FlumeInputDStream(this, hostname, port, storageLevel)
     registerInputStream(inputStream)
     inputStream
   }
@@ -352,7 +275,7 @@ class StreamingContext private (
    * @param storageLevel  Storage level to use for storing the received objects
    * @tparam T            Type of the objects in the received blocks
    */
-  def rawSocketStream[T: ClassManifest](
+  def rawSocketStream[T: ClassTag](
       hostname: String,
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
@@ -365,16 +288,17 @@ class StreamingContext private (
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
-   * File names starting with . are ignored.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
    * @tparam F Input format for reading HDFS file
    */
   def fileStream[
-    K: ClassManifest,
-    V: ClassManifest,
-    F <: NewInputFormat[K, V]: ClassManifest
+    K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String): DStream[(K, V)] = {
     val inputStream = new FileInputDStream[K, V, F](this, directory)
     registerInputStream(inputStream)
@@ -384,6 +308,8 @@ class StreamingContext private (
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system.
    * @param directory HDFS directory to monitor for new file
    * @param filter Function to filter paths to process
    * @param newFilesOnly Should process only new files and ignore existing files in the directory
@@ -392,9 +318,9 @@ class StreamingContext private (
    * @tparam F Input format for reading HDFS file
    */
   def fileStream[
-    K: ClassManifest,
-    V: ClassManifest,
-    F <: NewInputFormat[K, V]: ClassManifest
+    K: ClassTag,
+    V: ClassTag,
+    F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): DStream[(K, V)] = {
     val inputStream = new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
     registerInputStream(inputStream)
@@ -404,29 +330,13 @@ class StreamingContext private (
   /**
    * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
-   * as Text and input format as TextInputFormat). File names starting with . are ignored.
+   * as Text and input format as TextInputFormat). Files must be written to the
+   * monitored directory by "moving" them from another location within the same
+   * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): DStream[String] = {
     fileStream[LongWritable, Text, TextInputFormat](directory).map(_._2.toString)
-  }
-
-  /**
-   * Create a input stream that returns tweets received from Twitter.
-   * @param twitterAuth Twitter4J authentication, or None to use Twitter4J's default OAuth
-   *        authorization; this uses the system properties twitter4j.oauth.consumerKey,
-   *        .consumerSecret, .accessToken and .accessTokenSecret.
-   * @param filters Set of filter strings to get only those tweets that match them
-   * @param storageLevel Storage level to use for storing the received objects
-   */
-  def twitterStream(
-      twitterAuth: Option[Authorization] = None,
-      filters: Seq[String] = Nil,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
-    ): DStream[Status] = {
-    val inputStream = new TwitterInputDStream(this, twitterAuth, filters, storageLevel)
-    registerInputStream(inputStream)
-    inputStream
   }
 
   /**
@@ -436,7 +346,7 @@ class StreamingContext private (
    * @param oneAtATime Whether only one RDD should be consumed from the queue in every interval
    * @tparam T         Type of objects in the RDD
    */
-  def queueStream[T: ClassManifest](
+  def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
       oneAtATime: Boolean = true
     ): DStream[T] = {
@@ -452,7 +362,7 @@ class StreamingContext private (
    *                   Set as null if no RDD should be returned when empty
    * @tparam T         Type of objects in the RDD
    */
-  def queueStream[T: ClassManifest](
+  def queueStream[T: ClassTag](
       queue: Queue[RDD[T]],
       oneAtATime: Boolean,
       defaultRDD: RDD[T]
@@ -462,25 +372,10 @@ class StreamingContext private (
     inputStream
   }
 
-/**
-   * Create an input stream that receives messages pushed by a mqtt publisher.
-   * @param brokerUrl Url of remote mqtt publisher
-   * @param topic topic name to subscribe to
-   * @param storageLevel RDD storage level. Defaults to memory-only.
-   */
-
-  def mqttStream(
-    brokerUrl: String,
-    topic: String,
-    storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2): DStream[String] = {
-    val inputStream = new MQTTInputDStream[String](this, brokerUrl, topic, storageLevel)
-    registerInputStream(inputStream)
-    inputStream
-  }
   /**
    * Create a unified DStream from multiple DStreams of the same type and same slide duration.
    */
-  def union[T: ClassManifest](streams: Seq[DStream[T]]): DStream[T] = {
+  def union[T: ClassTag](streams: Seq[DStream[T]]): DStream[T] = {
     new UnionDStream[T](streams.toArray)
   }
 
@@ -488,7 +383,7 @@ class StreamingContext private (
    * Create a new DStream in which each RDD is generated by applying a function on RDDs of
    * the DStreams.
    */
-  def transform[T: ClassManifest](
+  def transform[T: ClassTag](
       dstreams: Seq[DStream[_]],
       transformFunc: (Seq[RDD[_]], Time) => RDD[T]
     ): DStream[T] = {
@@ -510,6 +405,13 @@ class StreamingContext private (
     graph.addOutputStream(outputStream)
   }
 
+  /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+    * receiving system events related to streaming.
+    */
+  def addStreamingListener(streamingListener: StreamingListener) {
+    scheduler.listenerBus.addListener(streamingListener)
+  }
+
   protected def validate() {
     assert(graph != null, "Graph is null")
     graph.validate()
@@ -525,27 +427,22 @@ class StreamingContext private (
    * Start the execution of the streams.
    */
   def start() {
-    if (checkpointDir != null && checkpointDuration == null && graph != null) {
-      checkpointDuration = graph.batchDuration
-    }
-
     validate()
 
+    // Get the network input streams
     val networkInputStreams = graph.getInputStreams().filter(s => s match {
         case n: NetworkInputDStream[_] => true
         case _ => false
       }).map(_.asInstanceOf[NetworkInputDStream[_]]).toArray
 
+    // Start the network input tracker (must start before receivers)
     if (networkInputStreams.length > 0) {
-      // Start the network input tracker (must start before receivers)
       networkInputTracker = new NetworkInputTracker(this, networkInputStreams)
       networkInputTracker.start()
     }
-
     Thread.sleep(1000)
 
     // Start the scheduler
-    scheduler = new Scheduler(this)
     scheduler.start()
   }
 
@@ -556,7 +453,6 @@ class StreamingContext private (
     try {
       if (scheduler != null) scheduler.stop()
       if (networkInputTracker != null) networkInputTracker.stop()
-      if (receiverJobThread != null) receiverJobThread.interrupt()
       sc.stop()
       logInfo("StreamingContext stopped successfully")
     } catch {
@@ -568,8 +464,24 @@ class StreamingContext private (
 
 object StreamingContext {
 
-  implicit def toPairDStreamFunctions[K: ClassManifest, V: ClassManifest](stream: DStream[(K,V)]) = {
+  implicit def toPairDStreamFunctions[K: ClassTag, V: ClassTag](stream: DStream[(K,V)]) = {
     new PairDStreamFunctions[K, V](stream)
+  }
+
+  /**
+   * Find the JAR from which a given class was loaded, to make it easy for users to pass
+   * their JARs to SparkContext.
+   */
+  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls)
+
+  protected[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
+    // Set the default cleaner delay to an hour if not already set.
+    // This should be sufficient for even 1 second batch intervals.
+    val sc = new SparkContext(conf)
+    if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
+      MetadataCleaner.setDelaySeconds(sc.conf, 3600)
+    }
+    sc
   }
 
   protected[streaming] def createNewSparkContext(
@@ -577,13 +489,15 @@ object StreamingContext {
       appName: String,
       sparkHome: String,
       jars: Seq[String],
-      environment: Map[String, String]): SparkContext = {
+      environment: Map[String, String]): SparkContext =
+  {
+    val sc = new SparkContext(master, appName, sparkHome, jars, environment)
     // Set the default cleaner delay to an hour if not already set.
-    // This should be sufficient for even 1 second interval.
-    if (MetadataCleaner.getDelaySeconds < 0) {
-      MetadataCleaner.setDelaySeconds(3600)
+    // This should be sufficient for even 1 second batch intervals.
+    if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
+      MetadataCleaner.setDelaySeconds(sc.conf, 3600)
     }
-    new SparkContext(master, appName, sparkHome, jars, environment)
+    sc
   }
 
   protected[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
@@ -594,9 +508,5 @@ object StreamingContext {
     } else {
       prefix + "-" + time.milliseconds + "." + suffix
     }
-  }
-
-  protected[streaming] def getSparkCheckpointDir(sscCheckpointDir: String): String = {
-    new Path(sscCheckpointDir, UUID.randomUUID.toString).toString
   }
 }

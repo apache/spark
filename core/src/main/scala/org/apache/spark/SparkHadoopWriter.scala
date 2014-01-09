@@ -127,10 +127,6 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
     cmtr.commitJob(getJobContext())
   }
 
-  def cleanup() {
-    getOutputCommitter().cleanupJob(getJobContext())
-  }
-
   // ********* Private Functions *********
 
   private def getOutputFormat(): OutputFormat[AnyRef,AnyRef] = {

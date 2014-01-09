@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import akka.util.Duration
+import scala.concurrent.duration._
 
 import java.text.SimpleDateFormat
 

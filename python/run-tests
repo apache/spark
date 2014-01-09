@@ -29,14 +29,16 @@ FAILED=0
 rm -f unit-tests.log
 
 function run_test() {
-    $FWDIR/pyspark $1 2>&1 | tee -a unit-tests.log
+    SPARK_TESTING=0 $FWDIR/bin/pyspark $1 2>&1 | tee -a unit-tests.log
     FAILED=$((PIPESTATUS[0]||$FAILED))
 }
 
 run_test "pyspark/rdd.py"
 run_test "pyspark/context.py"
+run_test "pyspark/conf.py"
 run_test "-m doctest pyspark/broadcast.py"
 run_test "-m doctest pyspark/accumulators.py"
+run_test "-m doctest pyspark/serializers.py"
 run_test "pyspark/tests.py"
 
 if [[ $FAILED != 0 ]]; then

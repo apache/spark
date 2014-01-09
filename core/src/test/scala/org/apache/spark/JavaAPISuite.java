@@ -365,6 +365,20 @@ public class JavaAPISuite implements Serializable {
   }
 
   @Test
+  public void javaDoubleRDDHistoGram() {
+   JavaDoubleRDD rdd = sc.parallelizeDoubles(Arrays.asList(1.0, 2.0, 3.0, 4.0));
+   // Test using generated buckets
+   Tuple2<double[], long[]> results = rdd.histogram(2);
+   double[] expected_buckets = {1.0, 2.5, 4.0};
+   long[] expected_counts = {2, 2};
+   Assert.assertArrayEquals(expected_buckets, results._1, 0.1);
+   Assert.assertArrayEquals(expected_counts, results._2);
+   // Test with provided buckets
+   long[] histogram = rdd.histogram(expected_buckets);
+   Assert.assertArrayEquals(expected_counts, histogram);
+  }
+
+  @Test
   public void map() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     JavaDoubleRDD doubles = rdd.map(new DoubleFunction<Integer>() {
@@ -837,7 +851,7 @@ public class JavaAPISuite implements Serializable {
   public void checkpointAndComputation() {
     File tempDir = Files.createTempDir();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
-    sc.setCheckpointDir(tempDir.getAbsolutePath(), true);
+    sc.setCheckpointDir(tempDir.getAbsolutePath());
     Assert.assertEquals(false, rdd.isCheckpointed());
     rdd.checkpoint();
     rdd.count(); // Forces the DAG to cause a checkpoint
@@ -849,7 +863,7 @@ public class JavaAPISuite implements Serializable {
   public void checkpointAndRestore() {
     File tempDir = Files.createTempDir();
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
-    sc.setCheckpointDir(tempDir.getAbsolutePath(), true);
+    sc.setCheckpointDir(tempDir.getAbsolutePath());
     Assert.assertEquals(false, rdd.isCheckpointed());
     rdd.checkpoint();
     rdd.count(); // Forces the DAG to cause a checkpoint
@@ -881,6 +895,71 @@ public class JavaAPISuite implements Serializable {
         new Tuple2<Integer, Integer>(0, 2),
         new Tuple2<Integer, Integer>(1, 3),
         new Tuple2<Integer, Integer>(0, 4)), rdd3.collect());
+
+  }
+
+  @Test
+  public void collectPartitions() {
+    JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7), 3);
+
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.map(new PairFunction<Integer, Integer, Integer>() {
+      @Override
+      public Tuple2<Integer, Integer> call(Integer i) throws Exception {
+        return new Tuple2<Integer, Integer>(i, i % 2);
+      }
+    });
+
+    List[] parts = rdd1.collectPartitions(new int[] {0});
+    Assert.assertEquals(Arrays.asList(1, 2), parts[0]);
+
+    parts = rdd1.collectPartitions(new int[] {1, 2});
+    Assert.assertEquals(Arrays.asList(3, 4), parts[0]);
+    Assert.assertEquals(Arrays.asList(5, 6, 7), parts[1]);
+
+    Assert.assertEquals(Arrays.asList(new Tuple2<Integer, Integer>(1, 1),
+                                      new Tuple2<Integer, Integer>(2, 0)),
+                        rdd2.collectPartitions(new int[] {0})[0]);
+
+    parts = rdd2.collectPartitions(new int[] {1, 2});
+    Assert.assertEquals(Arrays.asList(new Tuple2<Integer, Integer>(3, 1),
+                                      new Tuple2<Integer, Integer>(4, 0)),
+                        parts[0]);
+    Assert.assertEquals(Arrays.asList(new Tuple2<Integer, Integer>(5, 1),
+                                      new Tuple2<Integer, Integer>(6, 0),
+                                      new Tuple2<Integer, Integer>(7, 1)),
+                        parts[1]);
+  }
+
+  @Test
+  public void countApproxDistinct() {
+    List<Integer> arrayData = new ArrayList<Integer>();
+    int size = 100;
+    for (int i = 0; i < 100000; i++) {
+      arrayData.add(i % size);
+    }
+    JavaRDD<Integer> simpleRdd = sc.parallelize(arrayData, 10);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.2) - size) / (size * 1.0)) < 0.2);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.05) - size) / (size * 1.0)) <= 0.05);
+    Assert.assertTrue(Math.abs((simpleRdd.countApproxDistinct(0.01) - size) / (size * 1.0)) <= 0.01);
+  }
+
+  @Test
+  public void countApproxDistinctByKey() {
+    double relativeSD = 0.001;
+
+    List<Tuple2<Integer, Integer>> arrayData = new ArrayList<Tuple2<Integer, Integer>>();
+    for (int i = 10; i < 100; i++)
+      for (int j = 0; j < i; j++)
+        arrayData.add(new Tuple2<Integer, Integer>(i, j));
+
+    JavaPairRDD<Integer, Integer> pairRdd = sc.parallelizePairs(arrayData);
+    List<Tuple2<Integer, Object>> res =  pairRdd.countApproxDistinctByKey(relativeSD).collect();
+    for (Tuple2<Integer, Object> resItem : res) {
+      double count = (double)resItem._1();
+      Long resCount = (Long)resItem._2();
+      Double error = Math.abs((resCount - count) / count);
+      Assert.assertTrue(error < relativeSD);
+    }
 
   }
 }

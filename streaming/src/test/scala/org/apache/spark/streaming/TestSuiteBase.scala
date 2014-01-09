@@ -20,14 +20,15 @@ package org.apache.spark.streaming
 import org.apache.spark.streaming.dstream.{InputDStream, ForEachDStream}
 import org.apache.spark.streaming.util.ManualClock
 
-import collection.mutable.ArrayBuffer
-import collection.mutable.SynchronizedBuffer
+import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.SynchronizedBuffer
+import scala.reflect.ClassTag
 
 import java.io.{ObjectInputStream, IOException}
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkContext, SparkConf, Logging}
 import org.apache.spark.rdd.RDD
 
 /**
@@ -35,7 +36,7 @@ import org.apache.spark.rdd.RDD
  * replayable, reliable message queue like Kafka. It requires a sequence as input, and
  * returns the i_th element at the i_th batch unde manual clock.
  */
-class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, input: Seq[Seq[T]], numPartitions: Int)
+class TestInputStream[T: ClassTag](ssc_ : StreamingContext, input: Seq[Seq[T]], numPartitions: Int)
   extends InputDStream[T](ssc_) {
 
   def start() {}
@@ -63,7 +64,7 @@ class TestInputStream[T: ClassManifest](ssc_ : StreamingContext, input: Seq[Seq[
  *
  * The buffer contains a sequence of RDD's, each containing a sequence of items
  */
-class TestOutputStream[T: ClassManifest](parent: DStream[T],
+class TestOutputStream[T: ClassTag](parent: DStream[T],
     val output: ArrayBuffer[Seq[T]] = ArrayBuffer[Seq[T]]())
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.collect()
@@ -85,7 +86,7 @@ class TestOutputStream[T: ClassManifest](parent: DStream[T],
  * The buffer contains a sequence of RDD's, each containing a sequence of partitions, each
  * containing a sequence of items.
  */
-class TestOutputStreamWithPartitions[T: ClassManifest](parent: DStream[T],
+class TestOutputStreamWithPartitions[T: ClassTag](parent: DStream[T],
     val output: ArrayBuffer[Seq[Seq[T]]] = ArrayBuffer[Seq[Seq[T]]]())
   extends ForEachDStream[T](parent, (rdd: RDD[T], t: Time) => {
     val collected = rdd.glom().collect().map(_.toSeq)
@@ -109,7 +110,7 @@ class TestOutputStreamWithPartitions[T: ClassManifest](parent: DStream[T],
 trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
 
   // Name of the framework for Spark context
-  def framework = "TestSuiteBase"
+  def framework = this.getClass.getSimpleName
 
   // Master for Spark context
   def master = "local[2]"
@@ -126,21 +127,52 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   // Maximum time to wait before the test times out
   def maxWaitTimeMillis = 10000
 
+  // Whether to use manual clock or not
+  def useManualClock = true
+
   // Whether to actually wait in real time before changing manual clock
   def actuallyWait = false
+
+  //// A SparkConf to use in tests. Can be modified before calling setupStreams to configure things.
+  val conf = new SparkConf()
+    .setMaster(master)
+    .setAppName(framework)
+    .set("spark.cleaner.ttl", "3600")
+
+  // Default before function for any streaming test suite. Override this
+  // if you want to add your stuff to "before" (i.e., don't call before { } )
+  def beforeFunction() {
+    if (useManualClock) {
+      logInfo("Using manual clock")
+      conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    } else {
+      logInfo("Using real clock")
+      conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
+    }
+  }
+
+  // Default after function for any streaming test suite. Override this
+  // if you want to add your stuff to "after" (i.e., don't call after { } )
+  def afterFunction() {
+    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
+    System.clearProperty("spark.driver.port")
+    System.clearProperty("spark.hostPort")
+  }
+
+  before(beforeFunction)
+  after(afterFunction)
 
   /**
    * Set up required DStreams to test the DStream operation using the two sequences
    * of input collections.
    */
-  def setupStreams[U: ClassManifest, V: ClassManifest](
+  def setupStreams[U: ClassTag, V: ClassTag](
       input: Seq[Seq[U]],
       operation: DStream[U] => DStream[V],
       numPartitions: Int = numInputPartitions
     ): StreamingContext = {
-
     // Create StreamingContext
-    val ssc = new StreamingContext(master, framework, batchDuration)
+    val ssc = new StreamingContext(conf, batchDuration)
     if (checkpointDir != null) {
       ssc.checkpoint(checkpointDir)
     }
@@ -159,14 +191,13 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
    * Set up required DStreams to test the binary operation using the sequence
    * of input collections.
    */
-  def setupStreams[U: ClassManifest, V: ClassManifest, W: ClassManifest](
+  def setupStreams[U: ClassTag, V: ClassTag, W: ClassTag](
       input1: Seq[Seq[U]],
       input2: Seq[Seq[V]],
       operation: (DStream[U], DStream[V]) => DStream[W]
     ): StreamingContext = {
-
     // Create StreamingContext
-    val ssc = new StreamingContext(master, framework, batchDuration)
+    val ssc = new StreamingContext(conf, batchDuration)
     if (checkpointDir != null) {
       ssc.checkpoint(checkpointDir)
     }
@@ -190,7 +221,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
    *
    * Returns a sequence of items for each RDD.
    */
-  def runStreams[V: ClassManifest](
+  def runStreams[V: ClassTag](
       ssc: StreamingContext,
       numBatches: Int,
       numExpectedOutput: Int
@@ -207,7 +238,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
    * Returns a sequence of RDD's. Each RDD is represented as several sequences of items, each
    * representing one partition.
    */
-  def runStreamsWithPartitions[V: ClassManifest](
+  def runStreamsWithPartitions[V: ClassTag](
       ssc: StreamingContext,
       numBatches: Int,
       numExpectedOutput: Int
@@ -242,7 +273,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       val startTime = System.currentTimeMillis()
       while (output.size < numExpectedOutput && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
-        Thread.sleep(100)
+        Thread.sleep(10)
       }
       val timeTaken = System.currentTimeMillis() - startTime
 
@@ -263,7 +294,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
    * is same as the expected output values, by comparing the output
    * collections either as lists (order matters) or sets (order does not matter)
    */
-  def verifyOutput[V: ClassManifest](
+  def verifyOutput[V: ClassTag](
       output: Seq[Seq[V]],
       expectedOutput: Seq[Seq[V]],
       useSet: Boolean
@@ -293,7 +324,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
    * Test unary DStream operation with a list of inputs, with number of
    * batches to run same as the number of expected output values
    */
-  def testOperation[U: ClassManifest, V: ClassManifest](
+  def testOperation[U: ClassTag, V: ClassTag](
       input: Seq[Seq[U]],
       operation: DStream[U] => DStream[V],
       expectedOutput: Seq[Seq[V]],
@@ -311,7 +342,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
    * @param useSet     Compare the output values with the expected output values
    *                   as sets (order matters) or as lists (order does not matter)
    */
-  def testOperation[U: ClassManifest, V: ClassManifest](
+  def testOperation[U: ClassTag, V: ClassTag](
       input: Seq[Seq[U]],
       operation: DStream[U] => DStream[V],
       expectedOutput: Seq[Seq[V]],
@@ -328,7 +359,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
    * Test binary DStream operation with two lists of inputs, with number of
    * batches to run same as the number of expected output values
    */
-  def testOperation[U: ClassManifest, V: ClassManifest, W: ClassManifest](
+  def testOperation[U: ClassTag, V: ClassTag, W: ClassTag](
       input1: Seq[Seq[U]],
       input2: Seq[Seq[V]],
       operation: (DStream[U], DStream[V]) => DStream[W],
@@ -348,7 +379,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
    * @param useSet     Compare the output values with the expected output values
    *                   as sets (order matters) or as lists (order does not matter)
    */
-  def testOperation[U: ClassManifest, V: ClassManifest, W: ClassManifest](
+  def testOperation[U: ClassTag, V: ClassTag, W: ClassTag](
       input1: Seq[Seq[U]],
       input2: Seq[Seq[V]],
       operation: (DStream[U], DStream[V]) => DStream[W],

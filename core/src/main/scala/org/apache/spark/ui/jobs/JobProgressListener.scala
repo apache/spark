@@ -33,7 +33,7 @@ import org.apache.spark.scheduler._
  */
 private[spark] class JobProgressListener(val sc: SparkContext) extends SparkListener {
   // How many stages to remember
-  val RETAINED_STAGES = System.getProperty("spark.ui.retained_stages", "1000").toInt
+  val RETAINED_STAGES = sc.conf.get("spark.ui.retained_stages", "1000").toInt
   val DEFAULT_POOL_NAME = "default"
 
   val stageIdToPool = new HashMap[Int, String]()
@@ -57,10 +57,11 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   val stageIdToTasksFailed = HashMap[Int, Int]()
   val stageIdToTaskInfos =
     HashMap[Int, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
+  val stageIdToExecutorSummaries = HashMap[Int, HashMap[String, ExecutorSummary]]()
 
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
-  override def onStageCompleted(stageCompleted: StageCompleted) = synchronized {
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stage
     poolToActiveStages(stageIdToPool(stage.stageId)) -= stage
     activeStages -= stage
@@ -105,7 +106,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[StageInfo]())
     stages += stage
   }
-  
+
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
     val sid = taskStart.task.stageId
     val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
@@ -124,8 +125,38 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val sid = taskEnd.task.stageId
+
+    // create executor summary map if necessary
+    val executorSummaryMap = stageIdToExecutorSummaries.getOrElseUpdate(key = sid,
+      op = new HashMap[String, ExecutorSummary]())
+    executorSummaryMap.getOrElseUpdate(key = taskEnd.taskInfo.executorId,
+      op = new ExecutorSummary())
+
+    val executorSummary = executorSummaryMap.get(taskEnd.taskInfo.executorId)
+    executorSummary match {
+      case Some(y) => {
+        // first update failed-task, succeed-task
+        taskEnd.reason match {
+          case Success =>
+            y.succeededTasks += 1
+          case _ =>
+            y.failedTasks += 1
+        }
+
+        // update duration
+        y.taskTime += taskEnd.taskInfo.duration
+
+        Option(taskEnd.taskMetrics).foreach { taskMetrics =>
+          taskMetrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
+          taskMetrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
+        }
+      }
+      case _ => {}
+    }
+
     val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive -= taskEnd.taskInfo
+
     val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
       taskEnd.reason match {
         case e: ExceptionFailure =>
