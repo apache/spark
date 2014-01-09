@@ -130,7 +130,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.ui.retained_stages</td>
+  <td>spark.ui.retainedStages</td>
   <td>1000</td>
   <td>
     How many stages the Spark UI remembers before garbage collecting.
