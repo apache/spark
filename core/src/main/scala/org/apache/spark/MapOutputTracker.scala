@@ -50,12 +50,12 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
   }
 }
 
-private[spark] class MapOutputTracker extends Logging {
+private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
 
-  private val timeout = AkkaUtils.askTimeout
+  private val timeout = AkkaUtils.askTimeout(conf)
 
   // Set to the MapOutputTrackerActor living on the driver
-  var trackerActor: Either[ActorRef, ActorSelection] = _
+  var trackerActor: ActorRef = _
 
   protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]
 
@@ -65,23 +65,13 @@ private[spark] class MapOutputTracker extends Logging {
   protected val epochLock = new java.lang.Object
 
   private val metadataCleaner =
-    new MetadataCleaner(MetadataCleanerType.MAP_OUTPUT_TRACKER, this.cleanup)
+    new MetadataCleaner(MetadataCleanerType.MAP_OUTPUT_TRACKER, this.cleanup, conf)
 
   // Send a message to the trackerActor and get its result within a default timeout, or
   // throw a SparkException if this fails.
   private def askTracker(message: Any): Any = {
     try {
-      /*
-        The difference between ActorRef and ActorSelection is well explained here:
-        http://doc.akka.io/docs/akka/2.2.3/project/migration-guide-2.1.x-2.2.x.html#Use_actorSelection_instead_of_actorFor
-        In spark a map output tracker can be either started on Driver where it is created which
-        is an ActorRef or it can be on executor from where it is looked up which is an
-        actorSelection.
-       */
-      val future = trackerActor match {
-        case Left(a: ActorRef) => a.ask(message)(timeout)
-        case Right(b: ActorSelection) => b.ask(message)(timeout)
-      }
+      val future = trackerActor.ask(message)(timeout)
       Await.result(future, timeout)
     } catch {
       case e: Exception =>
@@ -129,7 +119,7 @@ private[spark] class MapOutputTracker extends Logging {
       if (fetchedStatuses == null) {
         // We won the race to fetch the output locs; do so
         logInfo("Doing the fetch; tracker actor = " + trackerActor)
-        val hostPort = Utils.localHostPort()
+        val hostPort = Utils.localHostPort(conf)
         // This try-finally prevents hangs due to timeouts:
         try {
           val fetchedBytes =
@@ -192,7 +182,8 @@ private[spark] class MapOutputTracker extends Logging {
   }
 }
 
-private[spark] class MapOutputTrackerMaster extends MapOutputTracker {
+private[spark] class MapOutputTrackerMaster(conf: SparkConf)
+  extends MapOutputTracker(conf) {
 
   // Cache a serialized version of the output statuses for each shuffle to send them out faster
   private var cacheEpoch = epoch

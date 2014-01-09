@@ -63,6 +63,10 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
     val completedDriversTable = UIUtils.listingTable(driverHeaders, driverRow, completedDrivers)
 
+    // For now we only show driver information if the user has submitted drivers to the cluster.
+    // This is until we integrate the notion of drivers and applications in the UI.
+    def hasDrivers = activeDrivers.length > 0 || completedDrivers.length > 0
+
     val content =
         <div class="row-fluid">
           <div class="span12">
@@ -98,6 +102,17 @@ private[spark] class IndexPage(parent: MasterWebUI) {
           </div>
         </div>
 
+        <div>
+          {if (hasDrivers)
+          <div class="row-fluid">
+            <div class="span12">
+              <h4> Running Drivers </h4>
+              {activeDriversTable}
+            </div>
+          </div>
+          }
+        </div>
+
         <div class="row-fluid">
           <div class="span12">
             <h4> Completed Applications </h4>
@@ -105,19 +120,17 @@ private[spark] class IndexPage(parent: MasterWebUI) {
           </div>
         </div>
 
-        <div class="row-fluid">
-          <div class="span12">
-            <h4> Active Drivers </h4>
-            {activeDriversTable}
+        <div>
+          {if (hasDrivers)
+          <div class="row-fluid">
+            <div class="span12">
+              <h4> Completed Drivers </h4>
+              {completedDriversTable}
+            </div>
           </div>
-        </div>
-
-        <div class="row-fluid">
-          <div class="span12">
-            <h4> Completed Drivers </h4>
-            {completedDriversTable}
-          </div>
+          }
         </div>;
+
     UIUtils.basicSparkPage(content, "Spark Master at " + state.uri)
   }
 
@@ -162,7 +175,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     <tr>
       <td>{driver.id} </td>
       <td>{driver.submitDate}</td>
-      <td>{driver.worker.map(w => w.id.toString).getOrElse("None")}</td>
+      <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}</td>
       <td>{driver.state}</td>
       <td sorttable_customkey={driver.desc.cores.toString}>
         {driver.desc.cores}
@@ -170,7 +183,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
       <td sorttable_customkey={driver.desc.mem.toString}>
         {Utils.megabytesToString(driver.desc.mem.toLong)}
       </td>
-      <td>{driver.desc.command.mainClass}</td>
+      <td>{driver.desc.command.arguments(1)}</td>
     </tr>
   }
 }

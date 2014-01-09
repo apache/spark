@@ -27,6 +27,7 @@ private[spark] object DriverState extends Enumeration {
   // RELAUNCHING: Exited non-zero or due to worker failure, but has not yet started running again
   // UNKNOWN: The state of the driver is temporarily not known due to master failure recovery
   // KILLED: A user manually killed this driver
-  // FAILED: Unable to run due to an unrecoverable error (e.g. missing jar file)
-  val SUBMITTED, RUNNING, FINISHED, RELAUNCHING, UNKNOWN, KILLED, FAILED = Value
+  // FAILED: The driver exited non-zero and was not supervised
+  // ERROR: Unable to run or restart due to an unrecoverable error (e.g. missing jar file)
+  val SUBMITTED, RUNNING, FINISHED, RELAUNCHING, UNKNOWN, KILLED, FAILED, ERROR = Value
 }

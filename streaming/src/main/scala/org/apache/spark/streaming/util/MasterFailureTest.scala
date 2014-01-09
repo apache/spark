@@ -39,7 +39,6 @@ import org.apache.hadoop.conf.Configuration
 
 private[streaming]
 object MasterFailureTest extends Logging {
-  initLogging()
 
   @volatile var killed = false
   @volatile var killCount = 0
@@ -331,7 +330,6 @@ class TestOutputStream[T: ClassTag](
  */
 private[streaming]
 class KillingThread(ssc: StreamingContext, maxKillWaitTime: Long) extends Thread with Logging {
-  initLogging()
 
   override def run() {
     try {
@@ -366,7 +364,6 @@ class KillingThread(ssc: StreamingContext, maxKillWaitTime: Long) extends Thread
 private[streaming]
 class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
   extends Thread with Logging {
-  initLogging()
 
   override def run() {
     val localTestDir = Files.createTempDir()

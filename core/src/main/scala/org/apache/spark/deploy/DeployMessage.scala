@@ -112,11 +112,18 @@ private[deploy] object DeployMessages {
 
   case class RequestSubmitDriver(driverDescription: DriverDescription) extends DeployMessage
 
-  case class SubmitDriverResponse(success: Boolean, message: String) extends DeployMessage
+  case class SubmitDriverResponse(success: Boolean, driverId: Option[String], message: String)
+    extends DeployMessage
 
   case class RequestKillDriver(driverId: String) extends DeployMessage
 
-  case class KillDriverResponse(success: Boolean, message: String) extends DeployMessage
+  case class KillDriverResponse(driverId: String, success: Boolean, message: String)
+    extends DeployMessage
+
+  case class RequestDriverStatus(driverId: String) extends DeployMessage
+
+  case class DriverStatusResponse(found: Boolean, state: Option[DriverState],
+    workerId: Option[String], workerHostPort: Option[String], exception: Option[Exception])
 
   // Internal message in AppClient
 

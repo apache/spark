@@ -297,7 +297,7 @@ class JobLogger(val user: String, val logDirName: String)
    * When stage is completed, record stage completion status
    * @param stageCompleted Stage completed event
    */
-  override def onStageCompleted(stageCompleted: StageCompleted) {
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     stageLogInfo(stageCompleted.stage.stageId, "STAGE_ID=%d STATUS=COMPLETED".format(
         stageCompleted.stage.stageId))
   }
@@ -327,10 +327,6 @@ class JobLogger(val user: String, val logDirName: String)
         taskStatus += " STATUS=FETCHFAILED TID=" + taskInfo.taskId + " STAGE_ID=" +
                       task.stageId + " SHUFFLE_ID=" + shuffleId + " MAP_ID=" +
                       mapId + " REDUCE_ID=" + reduceId
-        stageLogInfo(task.stageId, taskStatus)
-      case OtherFailure(message) =>
-        taskStatus += " STATUS=FAILURE TID=" + taskInfo.taskId +
-                      " STAGE_ID=" + task.stageId + " INFO=" + message
         stageLogInfo(task.stageId, taskStatus)
       case _ =>
     }

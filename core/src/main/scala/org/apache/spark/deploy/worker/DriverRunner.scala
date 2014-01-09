@@ -19,6 +19,7 @@ package org.apache.spark.deploy.worker
 
 import java.io._
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable.Map
 
 import akka.actor.ActorRef
@@ -31,6 +32,7 @@ import org.apache.spark.Logging
 import org.apache.spark.deploy.{Command, DriverDescription}
 import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 import org.apache.spark.deploy.master.DriverState
+import org.apache.spark.deploy.master.DriverState.DriverState
 
 /**
  * Manages the execution of one driver, including automatically restarting the driver on failure.
@@ -47,12 +49,25 @@ private[spark] class DriverRunner(
   @volatile var process: Option[Process] = None
   @volatile var killed = false
 
+  // Populated once finished
+  var finalState: Option[DriverState] = None
+  var finalException: Option[Exception] = None
+  var finalExitCode: Option[Int] = None
+
+  // Decoupled for testing
+  private[deploy] def setClock(_clock: Clock) = clock = _clock
+  private[deploy] def setSleeper(_sleeper: Sleeper) = sleeper = _sleeper
+  private var clock = new Clock {
+    def currentTimeMillis(): Long = System.currentTimeMillis()
+  }
+  private var sleeper = new Sleeper {
+    def sleep(seconds: Int): Unit = (0 until seconds).takeWhile(f => {Thread.sleep(1000); !killed})
+  }
+
   /** Starts a thread to run and manage the driver. */
   def start() = {
     new Thread("DriverRunner for " + driverId) {
       override def run() {
-        var exn: Option[Exception] = None
-
         try {
           val driverDir = createWorkingDirectory()
           val localJarFilename = downloadUserJar(driverDir)
@@ -63,21 +78,27 @@ private[spark] class DriverRunner(
           env("SPARK_CLASSPATH") = env.getOrElse("SPARK_CLASSPATH", "") + s":$localJarFilename"
           val newCommand = Command(driverDesc.command.mainClass,
             driverDesc.command.arguments.map(substituteVariables), env)
-
           val command = CommandUtils.buildCommandSeq(newCommand, driverDesc.mem,
             sparkHome.getAbsolutePath)
-          runCommand(command, env, driverDir, driverDesc.supervise)
+          launchDriver(command, env, driverDir, driverDesc.supervise)
         }
         catch {
-          case e: Exception => exn = Some(e)
+          case e: Exception => finalException = Some(e)
         }
 
-        val finalState =
+        val state =
           if (killed) { DriverState.KILLED }
-          else if (exn.isDefined) { DriverState.FAILED }
-          else { DriverState.FINISHED }
+          else if (finalException.isDefined) { DriverState.ERROR }
+          else {
+            finalExitCode match {
+              case Some(0) => DriverState.FINISHED
+              case _ => DriverState.FAILED
+            }
+          }
 
-        worker ! DriverStateChanged(driverId, finalState, exn)
+        finalState = Some(state)
+
+        worker ! DriverStateChanged(driverId, state, finalException)
       }
     }.start()
   }
@@ -116,11 +137,10 @@ private[spark] class DriverRunner(
 
     val jarPath = new Path(driverDesc.jarUrl)
 
-    val emptyConf = new Configuration() // TODO: In docs explain it needs to be full HDFS path
+    val emptyConf = new Configuration()
     val jarFileSystem = jarPath.getFileSystem(emptyConf)
 
-    val destPath = new File(driverDir.getAbsolutePath(), jarPath.getName())
-    // val destFileSystem = destPath.getFileSystem(emptyConf)
+    val destPath = new File(driverDir.getAbsolutePath, jarPath.getName)
     val jarFileName = jarPath.getName
     val localJarFile = new File(driverDir, jarFileName)
     val localJarFilename = localJarFile.getAbsolutePath
@@ -137,43 +157,78 @@ private[spark] class DriverRunner(
     localJarFilename
   }
 
-  /** Launch the supplied command. */
-  private def runCommand(command: Seq[String], envVars: Map[String, String], baseDir: File,
-      supervise: Boolean) {
+  private def launchDriver(command: Seq[String], envVars: Map[String, String], baseDir: File,
+                           supervise: Boolean) {
+    val builder = new ProcessBuilder(command: _*).directory(baseDir)
+    envVars.map{ case(k,v) => builder.environment().put(k, v) }
+
+    def initialize(process: Process) = {
+      // Redirect stdout and stderr to files
+      val stdout = new File(baseDir, "stdout")
+      CommandUtils.redirectStream(process.getInputStream, stdout)
+
+      val stderr = new File(baseDir, "stderr")
+      val header = "Launch Command: %s\n%s\n\n".format(
+        command.mkString("\"", "\" \"", "\""), "=" * 40)
+      Files.append(header, stderr, Charsets.UTF_8)
+      CommandUtils.redirectStream(process.getErrorStream, stderr)
+    }
+    runCommandWithRetry(ProcessBuilderLike(builder), initialize, supervise)
+  }
+
+  private[deploy] def runCommandWithRetry(command: ProcessBuilderLike, initialize: Process => Unit,
+    supervise: Boolean) {
     // Time to wait between submission retries.
     var waitSeconds = 1
+    // A run of this many seconds resets the exponential back-off.
+    val successfulRunDuration = 5
+
     var keepTrying = !killed
 
     while (keepTrying) {
-      logInfo("Launch Command: " + command.mkString("\"", "\" \"", "\""))
-      val builder = new ProcessBuilder(command: _*).directory(baseDir)
-      envVars.map{ case(k,v) => builder.environment().put(k, v) }
+      logInfo("Launch Command: " + command.command.mkString("\"", "\" \"", "\""))
 
       synchronized {
         if (killed) { return }
-
-        process = Some(builder.start())
-
-        // Redirect stdout and stderr to files
-        val stdout = new File(baseDir, "stdout")
-        CommandUtils.redirectStream(process.get.getInputStream, stdout)
-
-        val stderr = new File(baseDir, "stderr")
-        val header = "Launch Command: %s\n%s\n\n".format(
-          command.mkString("\"", "\" \"", "\""), "=" * 40)
-        Files.append(header, stderr, Charsets.UTF_8)
-        CommandUtils.redirectStream(process.get.getErrorStream, stderr)
+        process = Some(command.start())
+        initialize(process.get)
       }
 
+      val processStart = clock.currentTimeMillis()
       val exitCode = process.get.waitFor()
+      if (clock.currentTimeMillis() - processStart > successfulRunDuration * 1000) {
+        waitSeconds = 1
+      }
 
       if (supervise && exitCode != 0 && !killed) {
-        waitSeconds = waitSeconds * 1 // exponential back-off
         logInfo(s"Command exited with status $exitCode, re-launching after $waitSeconds s.")
-        (0 until waitSeconds).takeWhile(f => {Thread.sleep(1000); !killed})
+        sleeper.sleep(waitSeconds)
+        waitSeconds = waitSeconds * 2 // exponential back-off
       }
 
       keepTrying = supervise && exitCode != 0 && !killed
+      finalExitCode = Some(exitCode)
     }
+  }
+}
+
+private[deploy] trait Clock {
+  def currentTimeMillis(): Long
+}
+
+private[deploy] trait Sleeper {
+  def sleep(seconds: Int)
+}
+
+// Needed because ProcessBuilder is a final class and cannot be mocked
+private[deploy] trait ProcessBuilderLike {
+  def start(): Process
+  def command: Seq[String]
+}
+
+private[deploy] object ProcessBuilderLike {
+  def apply(processBuilder: ProcessBuilder) = new ProcessBuilderLike {
+    def start() = processBuilder.start()
+    def command = processBuilder.command()
   }
 }

@@ -27,19 +27,24 @@ import org.apache.spark.util.Vector;
 
 import java.util.List;
 import java.util.Map;
+import java.util.regex.Pattern;
 
 /**
  * K-means clustering using Java API.
  */
-public class JavaKMeans {
+public final class JavaKMeans {
+
+  private static final Pattern SPACE = Pattern.compile(" ");
 
   /** Parses numbers split by whitespace to a vector */
   static Vector parseVector(String line) {
-    String[] splits = line.split(" ");
+    String[] splits = SPACE.split(line);
     double[] data = new double[splits.length];
     int i = 0;
-    for (String s : splits)
-      data[i] = Double.parseDouble(splits[i++]);
+    for (String s : splits) {
+      data[i] = Double.parseDouble(s);
+      i++;
+    }
     return new Vector(data);
   }
 
@@ -74,7 +79,7 @@ public class JavaKMeans {
       System.exit(1);
     }
     JavaSparkContext sc = new JavaSparkContext(args[0], "JavaKMeans",
-      System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+      System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaKMeans.class));
     String path = args[1];
     int K = Integer.parseInt(args[2]);
     double convergeDist = Double.parseDouble(args[3]);
@@ -82,7 +87,7 @@ public class JavaKMeans {
     JavaRDD<Vector> data = sc.textFile(path).map(
       new Function<String, Vector>() {
         @Override
-        public Vector call(String line) throws Exception {
+        public Vector call(String line) {
           return parseVector(line);
         }
       }
@@ -96,7 +101,7 @@ public class JavaKMeans {
       JavaPairRDD<Integer, Vector> closest = data.map(
         new PairFunction<Vector, Integer, Vector>() {
           @Override
-          public Tuple2<Integer, Vector> call(Vector vector) throws Exception {
+          public Tuple2<Integer, Vector> call(Vector vector) {
             return new Tuple2<Integer, Vector>(
               closestPoint(vector, centroids), vector);
           }
@@ -107,7 +112,8 @@ public class JavaKMeans {
       JavaPairRDD<Integer, List<Vector>> pointsGroup = closest.groupByKey();
       Map<Integer, Vector> newCentroids = pointsGroup.mapValues(
         new Function<List<Vector>, Vector>() {
-          public Vector call(List<Vector> ps) throws Exception {
+          @Override
+          public Vector call(List<Vector> ps) {
             return average(ps);
           }
         }).collectAsMap();
@@ -122,8 +128,9 @@ public class JavaKMeans {
     } while (tempDist > convergeDist);
 
     System.out.println("Final centers:");
-    for (Vector c : centroids)
+    for (Vector c : centroids) {
       System.out.println(c);
+    }
 
     System.exit(0);
 

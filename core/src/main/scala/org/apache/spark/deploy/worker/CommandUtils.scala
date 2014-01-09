@@ -21,7 +21,7 @@ object CommandUtils extends Logging {
   }
 
   private def getEnv(key: String, command: Command): Option[String] =
-    command.environment.get(key).orElse(Option(getenv(key)))
+    command.environment.get(key).orElse(Option(System.getenv(key)))
 
   /**
    * Attention: this must always be aligned with the environment variables in the run scripts and

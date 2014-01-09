@@ -2,6 +2,7 @@ package org.apache.spark.deploy.worker
 
 import akka.actor._
 
+import org.apache.spark.SparkConf
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
@@ -11,8 +12,8 @@ object DriverWrapper {
   def main(args: Array[String]) {
     args.toList match {
       case workerUrl :: mainClass :: extraArgs =>
-        val (actorSystem, boundPort) = AkkaUtils.createActorSystem("Driver",
-          Utils.localHostName(), 0)
+        val (actorSystem, _) = AkkaUtils.createActorSystem("Driver",
+          Utils.localHostName(), 0, false, new SparkConf())
         actorSystem.actorOf(Props(classOf[WorkerWatcher], workerUrl), name = "workerWatcher")
 
         // Delegate to supplied main class
@@ -20,7 +21,7 @@ object DriverWrapper {
         val mainMethod = clazz.getMethod("main", classOf[Array[String]])
         mainMethod.invoke(null, extraArgs.toArray[String])
 
-        actorSystem.awaitTermination()
+        actorSystem.shutdown()
 
       case _ =>
         System.err.println("Usage: DriverWrapper <workerUrl> <driverMainClass> [options]")
