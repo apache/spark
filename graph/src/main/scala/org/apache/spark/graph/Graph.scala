@@ -169,9 +169,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * @tparam ED2 the new edge data type
    *
    */
-  def mapEdges[ED2: ClassTag](
-      map: (Pid, Iterator[Edge[ED]]) => Iterator[ED2]):
-    Graph[VD, ED2]
+  def mapEdges[ED2: ClassTag](map: (Pid, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2]
 
   /**
    * Construct a new graph where the value of each edge is
