@@ -36,7 +36,7 @@ abstract class SharkInstance extends Logging {
   def metastorePath: String
 
   /** The SharkContext */
-  lazy val sc = createContext()
+  lazy val sc: SharkContext = createContext()
 
   protected def createContext(): SharkContext = {
     SharkEnv.initWithSharkContext("catalyst.execution", master)
