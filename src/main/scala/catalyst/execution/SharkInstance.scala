@@ -45,8 +45,8 @@ abstract class SharkInstance extends Logging {
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
     // TODO: refactor this so we can work with other databases.
-    runSqlHive("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + metastorePath +
-      ";create=true")
+    runSqlHive(
+      s"set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$metastorePath;create=true")
     runSqlHive("set hive.metastore.warehouse.dir=" + warehousePath)
   }
 
