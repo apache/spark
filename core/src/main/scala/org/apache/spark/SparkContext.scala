@@ -546,8 +546,8 @@ class SparkContext(
 
   /**
    * Broadcast a read-only variable to the cluster, returning a
-   * [[org.apache.spark.broadcast.Broadcast]] object for
-   * reading it in distributed functions. The variable will be sent to each cluster only once.
+   * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
+   * The variable will be sent to each cluster only once.
    */
   def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
 
