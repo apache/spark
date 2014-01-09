@@ -31,9 +31,9 @@ class ReplicatedVertexView[VD: ClassTag](
    * vids from both the source and destination of edges. It must always include both source and
    * destination vids because some operations, such as GraphImpl.mapReduceTriplets, rely on this.
    */
-  private val localVidMap: RDD[(Int, VertexIdToIndexMap)] = prevViewOpt match {
+  private val localVertexIDMap: RDD[(Int, VertexIdToIndexMap)] = prevViewOpt match {
     case Some(prevView) =>
-      prevView.localVidMap
+      prevView.localVertexIDMap
     case None =>
       edges.partitionsRDD.mapPartitions(_.map {
         case (pid, epart) =>
@@ -43,7 +43,7 @@ class ReplicatedVertexView[VD: ClassTag](
             vidToIndex.add(e.dstId)
           }
           (pid, vidToIndex)
-      }, preservesPartitioning = true).cache().setName("ReplicatedVertexView localVidMap")
+      }, preservesPartitioning = true).cache().setName("ReplicatedVertexView localVertexIDMap")
   }
 
   private lazy val bothAttrs: RDD[(Pid, VertexPartition[VD])] = create(true, true)
@@ -104,8 +104,8 @@ class ReplicatedVertexView[VD: ClassTag](
 
       case None =>
         // Within each edge partition, place the shipped vertex attributes into the correct
-        // locations specified in localVidMap
-        localVidMap.zipPartitions(shippedVerts) { (mapIter, shippedVertsIter) =>
+        // locations specified in localVertexIDMap
+        localVertexIDMap.zipPartitions(shippedVerts) { (mapIter, shippedVertsIter) =>
           val (pid, vidToIndex) = mapIter.next()
           assert(!mapIter.hasNext)
           // Populate the vertex array using the vidToIndex map
@@ -128,15 +128,15 @@ class ReplicatedVertexView[VD: ClassTag](
 
 object ReplicatedVertexView {
   protected def buildBuffer[VD: ClassTag](
-      pid2vidIter: Iterator[Array[Array[Vid]]],
+      pid2vidIter: Iterator[Array[Array[VertexID]]],
       vertexPartIter: Iterator[VertexPartition[VD]]) = {
-    val pid2vid: Array[Array[Vid]] = pid2vidIter.next()
+    val pid2vid: Array[Array[VertexID]] = pid2vidIter.next()
     val vertexPart: VertexPartition[VD] = vertexPartIter.next()
 
     Iterator.tabulate(pid2vid.size) { pid =>
       val vidsCandidate = pid2vid(pid)
       val size = vidsCandidate.length
-      val vids = new PrimitiveVector[Vid](pid2vid(pid).size)
+      val vids = new PrimitiveVector[VertexID](pid2vid(pid).size)
       val attrs = new PrimitiveVector[VD](pid2vid(pid).size)
       var i = 0
       while (i < size) {
@@ -152,16 +152,16 @@ object ReplicatedVertexView {
   }
 
   protected def buildActiveBuffer(
-      pid2vidIter: Iterator[Array[Array[Vid]]],
+      pid2vidIter: Iterator[Array[Array[VertexID]]],
       activePartIter: Iterator[VertexPartition[_]])
-    : Iterator[(Int, Array[Vid])] = {
-    val pid2vid: Array[Array[Vid]] = pid2vidIter.next()
+    : Iterator[(Int, Array[VertexID])] = {
+    val pid2vid: Array[Array[VertexID]] = pid2vidIter.next()
     val activePart: VertexPartition[_] = activePartIter.next()
 
     Iterator.tabulate(pid2vid.size) { pid =>
       val vidsCandidate = pid2vid(pid)
       val size = vidsCandidate.length
-      val actives = new PrimitiveVector[Vid](vidsCandidate.size)
+      val actives = new PrimitiveVector[VertexID](vidsCandidate.size)
       var i = 0
       while (i < size) {
         val vid = vidsCandidate(i)
@@ -175,7 +175,8 @@ object ReplicatedVertexView {
   }
 }
 
-class VertexAttributeBlock[VD: ClassTag](val vids: Array[Vid], val attrs: Array[VD])
+class VertexAttributeBlock[VD: ClassTag](val vids: Array[VertexID], val attrs: Array[VD])
   extends Serializable {
-  def iterator: Iterator[(Vid, VD)] = (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
+  def iterator: Iterator[(VertexID, VD)] =
+    (0 until vids.size).iterator.map { i => (vids(i), attrs(i)) }
 }

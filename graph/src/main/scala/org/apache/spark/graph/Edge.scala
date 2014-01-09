@@ -11,11 +11,11 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
   /**
    * The vertex id of the source vertex
    */
-  var srcId: Vid = 0,
+  var srcId: VertexID = 0,
   /**
    * The vertex id of the target vertex.
    */
-  var dstId: Vid = 0,
+  var dstId: VertexID = 0,
   /**
    * The attribute associated with the edge.
    */
@@ -27,7 +27,7 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
    * @param vid the id one of the two vertices on the edge.
    * @return the id of the other vertex on the edge.
    */
-  def otherVertexId(vid: Vid): Vid =
+  def otherVertexId(vid: VertexID): VertexID =
     if (srcId == vid) dstId else { assert(dstId == vid); srcId }
 
   /**
@@ -38,13 +38,13 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
    * @return the relative direction of the edge to the corresponding
    * vertex.
    */
-  def relativeDirection(vid: Vid): EdgeDirection =
+  def relativeDirection(vid: VertexID): EdgeDirection =
     if (vid == srcId) EdgeDirection.Out else { assert(vid == dstId); EdgeDirection.In }
 }
 
 object Edge {
   def lexicographicOrdering[ED] = new Ordering[Edge[ED]] {
     override def compare(a: Edge[ED], b: Edge[ED]): Int =
-      Ordering[(Vid, Vid)].compare((a.srcId, a.dstId), (b.srcId, b.dstId))
+      Ordering[(VertexID, VertexID)].compare((a.srcId, a.dstId), (b.srcId, b.dstId))
   }
 }

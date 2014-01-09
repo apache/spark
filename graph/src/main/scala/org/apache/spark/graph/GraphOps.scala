@@ -112,7 +112,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    *
    */
   def aggregateNeighbors[A: ClassTag](
-      mapFunc: (Vid, EdgeTriplet[VD, ED]) => Option[A],
+      mapFunc: (VertexID, EdgeTriplet[VD, ED]) => Option[A],
       reduceFunc: (A, A) => A,
       dir: EdgeDirection)
     : VertexRDD[A] = {
@@ -151,25 +151,27 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    * @return the vertex set of neighboring ids for each vertex.
    */
   def collectNeighborIds(edgeDirection: EdgeDirection) :
-    VertexRDD[Array[Vid]] = {
+    VertexRDD[Array[VertexID]] = {
     val nbrs =
       if (edgeDirection == EdgeDirection.Both) {
-        graph.mapReduceTriplets[Array[Vid]](
+        graph.mapReduceTriplets[Array[VertexID]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _
         )
       } else if (edgeDirection == EdgeDirection.Out) {
-        graph.mapReduceTriplets[Array[Vid]](
+        graph.mapReduceTriplets[Array[VertexID]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId))),
           reduceFunc = _ ++ _)
       } else if (edgeDirection == EdgeDirection.In) {
-        graph.mapReduceTriplets[Array[Vid]](
+        graph.mapReduceTriplets[Array[VertexID]](
           mapFunc = et => Iterator((et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _)
       } else {
         throw new SparkException("It doesn't make sense to collect neighbor ids without a direction.")
       }
-    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) => nbrsOpt.getOrElse(Array.empty[Vid]) }
+    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
+      nbrsOpt.getOrElse(Array.empty[VertexID])
+    }
   } // end of collectNeighborIds
 
 
@@ -187,14 +189,16 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    * vertex.
    */
   def collectNeighbors(edgeDirection: EdgeDirection) :
-    VertexRDD[ Array[(Vid, VD)] ] = {
-    val nbrs = graph.aggregateNeighbors[Array[(Vid,VD)]](
+    VertexRDD[ Array[(VertexID, VD)] ] = {
+    val nbrs = graph.aggregateNeighbors[Array[(VertexID,VD)]](
       (vid, edge) =>
         Some(Array( (edge.otherVertexId(vid), edge.otherVertexAttr(vid)) )),
       (a, b) => a ++ b,
       edgeDirection)
 
-    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) => nbrsOpt.getOrElse(Array.empty[(Vid, VD)]) }
+    graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
+      nbrsOpt.getOrElse(Array.empty[(VertexID, VD)])
+    }
   } // end of collectNeighbor
 
 
@@ -228,9 +232,9 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    * }}}
    *
    */
-  def joinVertices[U: ClassTag](table: RDD[(Vid, U)])(mapFunc: (Vid, VD, U) => VD)
+  def joinVertices[U: ClassTag](table: RDD[(VertexID, U)])(mapFunc: (VertexID, VD, U) => VD)
     : Graph[VD, ED] = {
-    val uf = (id: Vid, data: VD, o: Option[U]) => {
+    val uf = (id: VertexID, data: VD, o: Option[U]) => {
       o match {
         case Some(u) => mapFunc(id, data, u)
         case None => data
@@ -259,7 +263,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    *     val degrees: VertexSetRDD[Int] = graph.outDegrees
    *     graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
    *   },
-   *   vpred = (vid: Vid, deg:Int) => deg > 0
+   *   vpred = (vid: VertexID, deg:Int) => deg > 0
    * )
    * }}}
    *
@@ -267,7 +271,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
   def filter[VD2: ClassTag, ED2: ClassTag](
       preprocess: Graph[VD, ED] => Graph[VD2, ED2],
       epred: (EdgeTriplet[VD2, ED2]) => Boolean = (x: EdgeTriplet[VD2, ED2]) => true,
-      vpred: (Vid, VD2) => Boolean = (v:Vid, d:VD2) => true): Graph[VD, ED] = {
+      vpred: (VertexID, VD2) => Boolean = (v:VertexID, d:VD2) => true): Graph[VD, ED] = {
     graph.mask(preprocess(graph).subgraph(epred, vpred))
   }
 } // end of GraphOps

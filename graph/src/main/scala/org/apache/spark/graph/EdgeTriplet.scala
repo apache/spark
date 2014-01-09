@@ -47,7 +47,7 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
    * @param vid the id one of the two vertices on the edge.
    * @return the attribute for the other vertex on the edge.
    */
-  def otherVertexAttr(vid: Vid): VD =
+  def otherVertexAttr(vid: VertexID): VD =
     if (srcId == vid) dstAttr else { assert(dstId == vid); srcAttr }
 
   /**
@@ -56,7 +56,7 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
    * @param vid the id of one of the two vertices on the edge
    * @return the attr for the vertex with that id.
    */
-  def vertexAttr(vid: Vid): VD =
+  def vertexAttr(vid: VertexID): VD =
     if (srcId == vid) srcAttr else { assert(dstId == vid); dstAttr }
 
   override def toString() = ((srcId, srcAttr), (dstId, dstAttr), attr).toString()

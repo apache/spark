@@ -125,7 +125,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * }}}
    *
    */
-  def mapVertices[VD2: ClassTag](map: (Vid, VD) => VD2): Graph[VD2, ED]
+  def mapVertices[VD2: ClassTag](map: (VertexID, VD) => VD2): Graph[VD2, ED]
 
   /**
    * Construct a new graph where the value of each edge is
@@ -253,7 +253,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * satisfy the predicates.
    */
   def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
-    vpred: (Vid, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
+    vpred: (VertexID, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
 
   /**
    * Subgraph of this graph with only vertices and edges from the other graph.
@@ -302,7 +302,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * vertex
    * {{{
    * val rawGraph: Graph[(),()] = Graph.textFile("twittergraph")
-   * val inDeg: RDD[(Vid, Int)] =
+   * val inDeg: RDD[(VertexID, Int)] =
    *   mapReduceTriplets[Int](et => Array((et.dst.id, 1)), _ + _)
    * }}}
    *
@@ -314,7 +314,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    *
    */
   def mapReduceTriplets[A: ClassTag](
-      mapFunc: EdgeTriplet[VD, ED] => Iterator[(Vid, A)],
+      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexID, A)],
       reduceFunc: (A, A) => A,
       activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None)
     : VertexRDD[A]
@@ -341,15 +341,15 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    *
    * {{{
    * val rawGraph: Graph[(),()] = Graph.textFile("webgraph")
-   * val outDeg: RDD[(Vid, Int)] = rawGraph.outDegrees()
+   * val outDeg: RDD[(VertexID, Int)] = rawGraph.outDegrees()
    * val graph = rawGraph.outerJoinVertices(outDeg) {
    *   (vid, data, optDeg) => optDeg.getOrElse(0)
    * }
    * }}}
    *
    */
-  def outerJoinVertices[U: ClassTag, VD2: ClassTag](table: RDD[(Vid, U)])
-      (mapFunc: (Vid, VD, Option[U]) => VD2)
+  def outerJoinVertices[U: ClassTag, VD2: ClassTag](table: RDD[(VertexID, U)])
+      (mapFunc: (VertexID, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
 
   // Save a copy of the GraphOps object so there is always one unique GraphOps object
@@ -377,7 +377,7 @@ object Graph {
    * (if `uniqueEdges=None`) and vertex attributes containing the total degree of each vertex.
    */
   def fromEdgeTuples[VD: ClassTag](
-      rawEdges: RDD[(Vid, Vid)],
+      rawEdges: RDD[(VertexID, VertexID)],
       defaultValue: VD,
       uniqueEdges: Option[PartitionStrategy] = None): Graph[VD, Int] = {
     val edges = rawEdges.map(p => Edge(p._1, p._2, 1))
@@ -419,7 +419,7 @@ object Graph {
    * partitioning the edges.
    */
   def apply[VD: ClassTag, ED: ClassTag](
-      vertices: RDD[(Vid, VD)],
+      vertices: RDD[(VertexID, VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD = null.asInstanceOf[VD]): Graph[VD, ED] = {
     GraphImpl(vertices, edges, defaultVertexAttr)

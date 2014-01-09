@@ -82,7 +82,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
 
   test("IntAggMsgSerializer") {
     val conf = new SparkConf(false)
-    val outMsg = (4: Vid, 5)
+    val outMsg = (4: VertexID, 5)
     val bout = new ByteArrayOutputStream
     val outStrm = new IntAggMsgSerializer(conf).newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
@@ -90,8 +90,8 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     bout.flush()
     val bin = new ByteArrayInputStream(bout.toByteArray)
     val inStrm = new IntAggMsgSerializer(conf).newInstance().deserializeStream(bin)
-    val inMsg1: (Vid, Int) = inStrm.readObject()
-    val inMsg2: (Vid, Int) = inStrm.readObject()
+    val inMsg1: (VertexID, Int) = inStrm.readObject()
+    val inMsg2: (VertexID, Int) = inStrm.readObject()
     assert(outMsg === inMsg1)
     assert(outMsg === inMsg2)
 
@@ -102,7 +102,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
 
   test("LongAggMsgSerializer") {
     val conf = new SparkConf(false)
-    val outMsg = (4: Vid, 1L << 32)
+    val outMsg = (4: VertexID, 1L << 32)
     val bout = new ByteArrayOutputStream
     val outStrm = new LongAggMsgSerializer(conf).newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
@@ -110,8 +110,8 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     bout.flush()
     val bin = new ByteArrayInputStream(bout.toByteArray)
     val inStrm = new LongAggMsgSerializer(conf).newInstance().deserializeStream(bin)
-    val inMsg1: (Vid, Long) = inStrm.readObject()
-    val inMsg2: (Vid, Long) = inStrm.readObject()
+    val inMsg1: (VertexID, Long) = inStrm.readObject()
+    val inMsg2: (VertexID, Long) = inStrm.readObject()
     assert(outMsg === inMsg1)
     assert(outMsg === inMsg2)
 
@@ -122,7 +122,7 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
 
   test("DoubleAggMsgSerializer") {
     val conf = new SparkConf(false)
-    val outMsg = (4: Vid, 5.0)
+    val outMsg = (4: VertexID, 5.0)
     val bout = new ByteArrayOutputStream
     val outStrm = new DoubleAggMsgSerializer(conf).newInstance().serializeStream(bout)
     outStrm.writeObject(outMsg)
@@ -130,8 +130,8 @@ class SerializerSuite extends FunSuite with LocalSparkContext {
     bout.flush()
     val bin = new ByteArrayInputStream(bout.toByteArray)
     val inStrm = new DoubleAggMsgSerializer(conf).newInstance().deserializeStream(bin)
-    val inMsg1: (Vid, Double) = inStrm.readObject()
-    val inMsg2: (Vid, Double) = inStrm.readObject()
+    val inMsg1: (VertexID, Double) = inStrm.readObject()
+    val inMsg2: (VertexID, Double) = inStrm.readObject()
     assert(outMsg === inMsg1)
     assert(outMsg === inMsg2)
 

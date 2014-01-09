@@ -55,7 +55,7 @@ class EdgeRDD[@specialized ED: ClassTag](
 
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgeRDD[ED2])
-      (f: (Vid, Vid, ED, ED2) => ED3): EdgeRDD[ED3] = {
+      (f: (VertexID, VertexID, ED, ED2) => ED3): EdgeRDD[ED3] = {
     val ed2Tag = classTag[ED2]
     val ed3Tag = classTag[ED3]
     new EdgeRDD[ED3](partitionsRDD.zipPartitions(other.partitionsRDD, true) {
@@ -66,7 +66,7 @@ class EdgeRDD[@specialized ED: ClassTag](
     })
   }
 
-  def collectVids(): RDD[Vid] = {
+  def collectVertexIDs(): RDD[VertexID] = {
     partitionsRDD.flatMap { case (_, p) => Array.concat(p.srcIds, p.dstIds) }
   }
 

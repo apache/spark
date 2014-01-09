@@ -3,15 +3,15 @@ package org.apache.spark.graph.impl
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.Partitioner
-import org.apache.spark.graph.{Pid, Vid}
+import org.apache.spark.graph.{Pid, VertexID}
 import org.apache.spark.rdd.{ShuffledRDD, RDD}
 
 
 class VertexBroadcastMsg[@specialized(Int, Long, Double, Boolean) T](
     @transient var partition: Pid,
-    var vid: Vid,
+    var vid: VertexID,
     var data: T)
-  extends Product2[Pid, (Vid, T)] with Serializable {
+  extends Product2[Pid, (VertexID, T)] with Serializable {
 
   override def _1 = partition
 
@@ -41,7 +41,7 @@ class MessageToPartition[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef
 
 class VertexBroadcastMsgRDDFunctions[T: ClassTag](self: RDD[VertexBroadcastMsg[T]]) {
   def partitionBy(partitioner: Partitioner): RDD[VertexBroadcastMsg[T]] = {
-    val rdd = new ShuffledRDD[Pid, (Vid, T), VertexBroadcastMsg[T]](self, partitioner)
+    val rdd = new ShuffledRDD[Pid, (VertexID, T), VertexBroadcastMsg[T]](self, partitioner)
 
     // Set a custom serializer if the data is of int or double type.
     if (classTag[T] == ClassTag.Int) {
@@ -77,8 +77,8 @@ object MsgRDDFunctions {
     new VertexBroadcastMsgRDDFunctions(rdd)
   }
 
-  def partitionForAggregation[T: ClassTag](msgs: RDD[(Vid, T)], partitioner: Partitioner) = {
-    val rdd = new ShuffledRDD[Vid, T, (Vid, T)](msgs, partitioner)
+  def partitionForAggregation[T: ClassTag](msgs: RDD[(VertexID, T)], partitioner: Partitioner) = {
+    val rdd = new ShuffledRDD[VertexID, T, (VertexID, T)](msgs, partitioner)
 
     // Set a custom serializer if the data is of int or double type.
     if (classTag[T] == ClassTag.Int) {

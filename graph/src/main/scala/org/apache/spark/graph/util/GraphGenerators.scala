@@ -70,7 +70,7 @@ object GraphGenerators {
     val sigma = 1.3
     //val vertsAndEdges = (0 until numVertices).flatMap { src => {
 
-    val vertices: RDD[(Vid, Int)] = sc.parallelize(0 until numVertices).map{
+    val vertices: RDD[(VertexID, Int)] = sc.parallelize(0 until numVertices).map{
       src => (src, sampleLogNormal(mu, sigma, numVertices))
     }
 
@@ -92,11 +92,11 @@ object GraphGenerators {
   }
 
 
-  def generateRandomEdges(src: Int, numEdges: Int, maxVid: Int): Array[Edge[Int]] = {
+  def generateRandomEdges(src: Int, numEdges: Int, maxVertexID: Int): Array[Edge[Int]] = {
     val rand = new Random()
     var dsts: Set[Int] = Set()
     while (dsts.size < numEdges) {
-      val nextDst = rand.nextInt(maxVid)
+      val nextDst = rand.nextInt(maxVertexID)
       if (nextDst != src) {
         dsts += nextDst
       }
@@ -251,9 +251,9 @@ object GraphGenerators {
    */
   def gridGraph(sc: SparkContext, rows: Int, cols: Int): Graph[(Int,Int), Double] = {
     // Convert row column address into vertex ids (row major order)
-    def sub2ind(r: Int, c: Int): Vid = r * cols + c
+    def sub2ind(r: Int, c: Int): VertexID = r * cols + c
 
-    val vertices: RDD[(Vid, (Int,Int))] =
+    val vertices: RDD[(VertexID, (Int,Int))] =
       sc.parallelize(0 until rows).flatMap( r => (0 until cols).map( c => (sub2ind(r,c), (r,c)) ) )
     val edges: RDD[Edge[Double]] =
       vertices.flatMap{ case (vid, (r,c)) =>
@@ -273,7 +273,7 @@ object GraphGenerators {
    * being the center vertex.
    */
   def starGraph(sc: SparkContext, nverts: Int): Graph[Int, Int] = {
-    val edges: RDD[(Vid, Vid)] = sc.parallelize(1 until nverts).map(vid => (vid, 0))
+    val edges: RDD[(VertexID, VertexID)] = sc.parallelize(1 until nverts).map(vid => (vid, 0))
     Graph.fromEdgeTuples(edges, 1)
   } // end of starGraph
 

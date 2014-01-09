@@ -7,12 +7,12 @@ import org.apache.spark.SparkConf
 import org.apache.spark.graph._
 import org.apache.spark.serializer._
 
-class VidMsgSerializer(conf: SparkConf) extends Serializer {
+class VertexIDMsgSerializer(conf: SparkConf) extends Serializer {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[(Vid, _)]
+        val msg = t.asInstanceOf[(VertexID, _)]
         writeVarLong(msg._1, optimizePositive = false)
         this
       }
@@ -101,7 +101,7 @@ class IntAggMsgSerializer(conf: SparkConf) extends Serializer {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[(Vid, Int)]
+        val msg = t.asInstanceOf[(VertexID, Int)]
         writeVarLong(msg._1, optimizePositive = false)
         writeUnsignedVarInt(msg._2)
         this
@@ -124,7 +124,7 @@ class LongAggMsgSerializer(conf: SparkConf) extends Serializer {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[(Vid, Long)]
+        val msg = t.asInstanceOf[(VertexID, Long)]
         writeVarLong(msg._1, optimizePositive = false)
         writeVarLong(msg._2, optimizePositive = true)
         this
@@ -147,7 +147,7 @@ class DoubleAggMsgSerializer(conf: SparkConf) extends Serializer {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
       def writeObject[T](t: T) = {
-        val msg = t.asInstanceOf[(Vid, Double)]
+        val msg = t.asInstanceOf[(VertexID, Double)]
         writeVarLong(msg._1, optimizePositive = false)
         writeDouble(msg._2)
         this

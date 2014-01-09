@@ -25,9 +25,9 @@ import scala.reflect.ClassTag
  *   // Set the vertex attributes to the initial pagerank values
  *   .mapVertices( (id, attr) => 1.0 )
  *
- * def vertexProgram(id: Vid, attr: Double, msgSum: Double): Double =
+ * def vertexProgram(id: VertexID, attr: Double, msgSum: Double): Double =
  *   resetProb + (1.0 - resetProb) * msgSum
- * def sendMessage(id: Vid, edge: EdgeTriplet[Double, Double]): Option[Double] =
+ * def sendMessage(id: VertexID, edge: EdgeTriplet[Double, Double]): Option[Double] =
  *   Some(edge.srcAttr * edge.attr)
  * def messageCombiner(a: Double, b: Double): Double = a + b
  * val initialMessage = 0.0
@@ -88,8 +88,8 @@ object Pregel {
    */
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
     (graph: Graph[VD, ED], initialMsg: A, maxIterations: Int = Int.MaxValue)(
-      vprog: (Vid, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(Vid,A)],
+      vprog: (VertexID, VD, A) => VD,
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 

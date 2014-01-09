@@ -11,7 +11,8 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
   test("aggregateNeighbors") {
     withSpark { sc =>
       val n = 3
-      val star = Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: Vid, x: Vid))), 1)
+      val star =
+        Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: VertexID, x: VertexID))), 1)
 
       val indegrees = star.aggregateNeighbors(
         (vid, edge) => Some(1),
@@ -26,21 +27,22 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
       assert(outdegrees.collect().toSet === Set((0, n)))
 
       val noVertexValues = star.aggregateNeighbors[Int](
-        (vid: Vid, edge: EdgeTriplet[Int, Int]) => None,
+        (vid: VertexID, edge: EdgeTriplet[Int, Int]) => None,
         (a: Int, b: Int) => throw new Exception("reduceFunc called unexpectedly"),
         EdgeDirection.In)
-      assert(noVertexValues.collect().toSet === Set.empty[(Vid, Int)])
+      assert(noVertexValues.collect().toSet === Set.empty[(VertexID, Int)])
     }
   }
 
   test("joinVertices") {
     withSpark { sc =>
-      val vertices = sc.parallelize(Seq[(Vid, String)]((1, "one"), (2, "two"), (3, "three")), 2)
+      val vertices =
+        sc.parallelize(Seq[(VertexID, String)]((1, "one"), (2, "two"), (3, "three")), 2)
       val edges = sc.parallelize((Seq(Edge(1, 2, "onetwo"))))
       val g: Graph[String, String] = Graph(vertices, edges)
 
-      val tbl = sc.parallelize(Seq[(Vid, Int)]((1, 10), (2, 20)))
-      val g1 = g.joinVertices(tbl) { (vid: Vid, attr: String, u: Int) => attr + u }
+      val tbl = sc.parallelize(Seq[(VertexID, Int)]((1, 10), (2, 20)))
+      val g1 = g.joinVertices(tbl) { (vid: VertexID, attr: String, u: Int) => attr + u }
 
       val v = g1.vertices.collect().toSet
       assert(v === Set((1, "one10"), (2, "two20"), (3, "three")))
@@ -67,7 +69,7 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
   test ("filter") {
     withSpark { sc =>
       val n = 5
-      val vertices = sc.parallelize((0 to n).map(x => (x:Vid, x)))
+      val vertices = sc.parallelize((0 to n).map(x => (x:VertexID, x)))
       val edges = sc.parallelize((1 to n).map(x => Edge(0, x, x)))
       val graph: Graph[Int, Int] = Graph(vertices, edges)
       val filteredGraph = graph.filter(
@@ -75,7 +77,7 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
           val degrees: VertexRDD[Int] = graph.outDegrees
           graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
         },
-        vpred = (vid: Vid, deg:Int) => deg > 0
+        vpred = (vid: VertexID, deg:Int) => deg > 0
       )
 
       val v = filteredGraph.vertices.collect().toSet

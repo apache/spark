@@ -14,12 +14,12 @@ import org.apache.spark.util.collection.PrimitiveVector
  */
 class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
 
-  val bothAttrs: RDD[Array[Array[Vid]]] = createPid2Vid(true, true)
-  val srcAttrOnly: RDD[Array[Array[Vid]]] = createPid2Vid(true, false)
-  val dstAttrOnly: RDD[Array[Array[Vid]]] = createPid2Vid(false, true)
-  val noAttrs: RDD[Array[Array[Vid]]] = createPid2Vid(false, false)
+  val bothAttrs: RDD[Array[Array[VertexID]]] = createPid2Vid(true, true)
+  val srcAttrOnly: RDD[Array[Array[VertexID]]] = createPid2Vid(true, false)
+  val dstAttrOnly: RDD[Array[Array[VertexID]]] = createPid2Vid(false, true)
+  val noAttrs: RDD[Array[Array[VertexID]]] = createPid2Vid(false, false)
 
-  def get(includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[Vid]]] =
+  def get(includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[VertexID]]] =
     (includeSrcAttr, includeDstAttr) match {
       case (true, true) => bothAttrs
       case (true, false) => srcAttrOnly
@@ -28,9 +28,9 @@ class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
     }
 
   private def createPid2Vid(
-      includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[Vid]]] = {
+      includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[VertexID]]] = {
     // Determine which vertices each edge partition needs by creating a mapping from vid to pid.
-    val vid2pid: RDD[(Vid, Pid)] = edges.partitionsRDD.mapPartitions { iter =>
+    val vid2pid: RDD[(VertexID, Pid)] = edges.partitionsRDD.mapPartitions { iter =>
       val (pid: Pid, edgePartition: EdgePartition[_]) = iter.next()
       val numEdges = edgePartition.size
       val vSet = new VertexSet
@@ -53,7 +53,7 @@ class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
 
     val numPartitions = vertices.partitions.size
     vid2pid.partitionBy(vertices.partitioner.get).mapPartitions { iter =>
-      val pid2vid = Array.fill(numPartitions)(new PrimitiveVector[Vid])
+      val pid2vid = Array.fill(numPartitions)(new PrimitiveVector[VertexID])
       for ((vid, pid) <- iter) {
         pid2vid(pid) += vid
       }

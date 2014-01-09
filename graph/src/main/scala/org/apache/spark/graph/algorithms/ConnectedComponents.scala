@@ -16,10 +16,10 @@ object ConnectedComponents {
    * @return a graph with vertex attributes containing the smallest vertex in each
    *         connected component
    */
-  def run[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]): Graph[Vid, ED] = {
+  def run[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]): Graph[VertexID, ED] = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
 
-    def sendMessage(edge: EdgeTriplet[Vid, ED]) = {
+    def sendMessage(edge: EdgeTriplet[VertexID, ED]) = {
       if (edge.srcAttr < edge.dstAttr) {
         Iterator((edge.dstId, edge.srcAttr))
       } else if (edge.srcAttr > edge.dstAttr) {

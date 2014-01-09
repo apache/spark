@@ -15,7 +15,7 @@ object StronglyConnectedComponents {
    *
    * @return a graph with vertex attributes containing the smallest vertex id in each SCC
    */
-  def run[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int): Graph[Vid, ED] = {
+  def run[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int): Graph[VertexID, ED] = {
 
     // the graph we update with final SCC ids, and the graph we return at the end
     var sccGraph = graph.mapVertices { case (vid, _) => vid }
@@ -52,7 +52,7 @@ object StronglyConnectedComponents {
 
       // collect min of all my neighbor's scc values, update if it's smaller than mine
       // then notify any neighbors with scc values larger than mine
-      sccWorkGraph = GraphLab[(Vid, Boolean), ED, Vid](sccWorkGraph, Integer.MAX_VALUE)(
+      sccWorkGraph = GraphLab[(VertexID, Boolean), ED, VertexID](sccWorkGraph, Integer.MAX_VALUE)(
         (vid, e) => e.otherVertexAttr(vid)._1,
         (vid1, vid2) => math.min(vid1, vid2),
         (vid, scc, optScc) =>
@@ -62,7 +62,7 @@ object StronglyConnectedComponents {
 
       // start at root of SCCs. Traverse values in reverse, notify all my neighbors
       // do not propagate if colors do not match!
-      sccWorkGraph = GraphLab[(Vid, Boolean), ED, Boolean](
+      sccWorkGraph = GraphLab[(VertexID, Boolean), ED, Boolean](
         sccWorkGraph,
         Integer.MAX_VALUE,
         EdgeDirection.Out,

@@ -13,22 +13,22 @@ class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag](size: I
   var edges = new PrimitiveVector[Edge[ED]](size)
 
   /** Add a new edge to the partition. */
-  def add(src: Vid, dst: Vid, d: ED) {
+  def add(src: VertexID, dst: VertexID, d: ED) {
     edges += Edge(src, dst, d)
   }
 
   def toEdgePartition: EdgePartition[ED] = {
     val edgeArray = edges.trim().array
     Sorting.quickSort(edgeArray)(Edge.lexicographicOrdering)
-    val srcIds = new Array[Vid](edgeArray.size)
-    val dstIds = new Array[Vid](edgeArray.size)
+    val srcIds = new Array[VertexID](edgeArray.size)
+    val dstIds = new Array[VertexID](edgeArray.size)
     val data = new Array[ED](edgeArray.size)
-    val index = new PrimitiveKeyOpenHashMap[Vid, Int]
+    val index = new PrimitiveKeyOpenHashMap[VertexID, Int]
     // Copy edges into columnar structures, tracking the beginnings of source vertex id clusters and
     // adding them to the index
     if (edgeArray.length > 0) {
       index.update(srcIds(0), 0)
-      var currSrcId: Vid = srcIds(0)
+      var currSrcId: VertexID = srcIds(0)
       var i = 0
       while (i < edgeArray.size) {
         srcIds(i) = edgeArray(i).srcId

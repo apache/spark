@@ -5,15 +5,15 @@ import org.apache.spark.util.collection.OpenHashSet
 
 package object graph {
 
-  type Vid = Long
+  type VertexID = Long
 
   // TODO: Consider using Char.
   type Pid = Int
 
-  type VertexSet = OpenHashSet[Vid]
+  type VertexSet = OpenHashSet[VertexID]
 
   //  type VertexIdToIndexMap = it.unimi.dsi.fastutil.longs.Long2IntOpenHashMap
-  type VertexIdToIndexMap = OpenHashSet[Vid]
+  type VertexIdToIndexMap = OpenHashSet[VertexID]
 
   /**
    * Return the default null-like value for a data type T.

@@ -42,11 +42,12 @@ object GraphLab extends Logging {
     (graph: Graph[VD, ED], numIter: Int,
      gatherDirection: EdgeDirection = EdgeDirection.In,
      scatterDirection: EdgeDirection = EdgeDirection.Out)
-    (gatherFunc: (Vid, EdgeTriplet[VD, ED]) => A,
+    (gatherFunc: (VertexID, EdgeTriplet[VD, ED]) => A,
      mergeFunc: (A, A) => A,
-     applyFunc: (Vid, VD, Option[A]) => VD,
-     scatterFunc: (Vid, EdgeTriplet[VD, ED]) => Boolean,
-     startVertices: (Vid, VD) => Boolean = (vid: Vid, data: VD) => true): Graph[VD, ED] = {
+     applyFunc: (VertexID, VD, Option[A]) => VD,
+     scatterFunc: (VertexID, EdgeTriplet[VD, ED]) => Boolean,
+     startVertices: (VertexID, VD) => Boolean = (vid: VertexID, data: VD) => true)
+    : Graph[VD, ED] = {
 
 
     // Add an active attribute to all vertices to track convergence.
@@ -56,7 +57,7 @@ object GraphLab extends Logging {
 
     // The gather function wrapper strips the active attribute and
     // only invokes the gather function on active vertices
-    def gather(vid: Vid, e: EdgeTriplet[(Boolean, VD), ED]): Option[A] = {
+    def gather(vid: VertexID, e: EdgeTriplet[(Boolean, VD), ED]): Option[A] = {
       if (e.vertexAttr(vid)._1) {
         val edgeTriplet = new EdgeTriplet[VD,ED]
         edgeTriplet.set(e)
@@ -70,7 +71,7 @@ object GraphLab extends Logging {
 
     // The apply function wrapper strips the vertex of the active attribute
     // and only invokes the apply function on active vertices
-    def apply(vid: Vid, data: (Boolean, VD), accum: Option[A]): (Boolean, VD) = {
+    def apply(vid: VertexID, data: (Boolean, VD), accum: Option[A]): (Boolean, VD) = {
       val (active, vData) = data
       if (active) (true, applyFunc(vid, vData, accum))
       else (false, vData)
@@ -78,8 +79,8 @@ object GraphLab extends Logging {
 
     // The scatter function wrapper strips the vertex of the active attribute
     // and only invokes the scatter function on active vertices
-    def scatter(rawVid: Vid, e: EdgeTriplet[(Boolean, VD), ED]): Option[Boolean] = {
-      val vid = e.otherVertexId(rawVid)
+    def scatter(rawVertexID: VertexID, e: EdgeTriplet[(Boolean, VD), ED]): Option[Boolean] = {
+      val vid = e.otherVertexId(rawVertexID)
       if (e.vertexAttr(vid)._1) {
         val edgeTriplet = new EdgeTriplet[VD,ED]
         edgeTriplet.set(e)
@@ -92,7 +93,8 @@ object GraphLab extends Logging {
     }
 
     // Used to set the active status of vertices for the next round
-    def applyActive(vid: Vid, data: (Boolean, VD), newActiveOpt: Option[Boolean]): (Boolean, VD) = {
+    def applyActive(
+        vid: VertexID, data: (Boolean, VD), newActiveOpt: Option[Boolean]): (Boolean, VD) = {
       val (prevActive, vData) = data
       (newActiveOpt.getOrElse(false), vData)
     }
@@ -103,7 +105,7 @@ object GraphLab extends Logging {
     while (i < numIter && numActive > 0) {
 
       // Gather
-      val gathered: RDD[(Vid, A)] =
+      val gathered: RDD[(VertexID, A)] =
         activeGraph.aggregateNeighbors(gather, mergeFunc, gatherDirection)
 
       // Apply
@@ -113,7 +115,7 @@ object GraphLab extends Logging {
 
       // Scatter is basically a gather in the opposite direction so we reverse the edge direction
       // activeGraph: Graph[(Boolean, VD), ED]
-      val scattered: RDD[(Vid, Boolean)] =
+      val scattered: RDD[(VertexID, Boolean)] =
         activeGraph.aggregateNeighbors(scatter, _ || _, scatterDirection.reverse)
 
       activeGraph = activeGraph.outerJoinVertices(scattered)(applyActive).cache()
