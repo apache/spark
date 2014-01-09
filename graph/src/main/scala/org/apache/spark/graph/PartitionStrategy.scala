@@ -2,7 +2,7 @@ package org.apache.spark.graph
 
 
 sealed trait PartitionStrategy extends Serializable {
-  def getPartition(src: VertexID, dst: VertexID, numParts: Pid): Pid
+  def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID
 }
 
 
@@ -51,18 +51,18 @@ sealed trait PartitionStrategy extends Serializable {
  *
  */
 case object EdgePartition2D extends PartitionStrategy {
-  override def getPartition(src: VertexID, dst: VertexID, numParts: Pid): Pid = {
-    val ceilSqrtNumParts: Pid = math.ceil(math.sqrt(numParts)).toInt
+  override def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID = {
+    val ceilSqrtNumParts: PartitionID = math.ceil(math.sqrt(numParts)).toInt
     val mixingPrime: VertexID = 1125899906842597L
-    val col: Pid = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
-    val row: Pid = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
+    val col: PartitionID = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
+    val row: PartitionID = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
     (col * ceilSqrtNumParts + row) % numParts
   }
 }
 
 
 case object EdgePartition1D extends PartitionStrategy {
-  override def getPartition(src: VertexID, dst: VertexID, numParts: Pid): Pid = {
+  override def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID = {
     val mixingPrime: VertexID = 1125899906842597L
     (math.abs(src) * mixingPrime).toInt % numParts
   }
@@ -74,7 +74,7 @@ case object EdgePartition1D extends PartitionStrategy {
  * random vertex cut.
  */
 case object RandomVertexCut extends PartitionStrategy {
-  override def getPartition(src: VertexID, dst: VertexID, numParts: Pid): Pid = {
+  override def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID = {
     math.abs((src, dst).hashCode()) % numParts
   }
 }
@@ -86,7 +86,7 @@ case object RandomVertexCut extends PartitionStrategy {
  * will end up on the same partition.
  */
 case object CanonicalRandomVertexCut extends PartitionStrategy {
-  override def getPartition(src: VertexID, dst: VertexID, numParts: Pid): Pid = {
+  override def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID = {
     val lower = math.min(src, dst)
     val higher = math.max(src, dst)
     math.abs((lower, higher).hashCode()) % numParts

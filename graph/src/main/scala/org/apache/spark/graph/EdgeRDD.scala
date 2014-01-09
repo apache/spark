@@ -9,7 +9,7 @@ import org.apache.spark.storage.StorageLevel
 
 
 class EdgeRDD[@specialized ED: ClassTag](
-    val partitionsRDD: RDD[(Pid, EdgePartition[ED])])
+    val partitionsRDD: RDD[(PartitionID, EdgePartition[ED])])
   extends RDD[Edge[ED]](partitionsRDD.context, List(new OneToOneDependency(partitionsRDD))) {
 
   partitionsRDD.setName("EdgeRDD")
@@ -17,7 +17,7 @@ class EdgeRDD[@specialized ED: ClassTag](
   override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
 
   /**
-   * If partitionsRDD already has a partitioner, use it. Otherwise assume that the Pids in
+   * If partitionsRDD already has a partitioner, use it. Otherwise assume that the PartitionIDs in
    * partitionsRDD correspond to the actual partitions and create a new partitioner that allows
    * co-partitioning with partitionsRDD.
    */
@@ -25,7 +25,7 @@ class EdgeRDD[@specialized ED: ClassTag](
     partitionsRDD.partitioner.orElse(Some(Partitioner.defaultPartitioner(partitionsRDD)))
 
   override def compute(part: Partition, context: TaskContext): Iterator[Edge[ED]] = {
-    firstParent[(Pid, EdgePartition[ED])].iterator(part, context).next._2.iterator
+    firstParent[(PartitionID, EdgePartition[ED])].iterator(part, context).next._2.iterator
   }
 
   override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()
@@ -44,7 +44,7 @@ class EdgeRDD[@specialized ED: ClassTag](
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   override def cache(): EdgeRDD[ED] = persist()
 
-  def mapEdgePartitions[ED2: ClassTag](f: (Pid, EdgePartition[ED]) => EdgePartition[ED2])
+  def mapEdgePartitions[ED2: ClassTag](f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2])
     : EdgeRDD[ED2] = {
 //       iter => iter.map { case (pid, ep) => (pid, f(ep)) }
     new EdgeRDD[ED2](partitionsRDD.mapPartitions({ iter =>

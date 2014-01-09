@@ -46,12 +46,12 @@ class ReplicatedVertexView[VD: ClassTag](
       }, preservesPartitioning = true).cache().setName("ReplicatedVertexView localVertexIDMap")
   }
 
-  private lazy val bothAttrs: RDD[(Pid, VertexPartition[VD])] = create(true, true)
-  private lazy val srcAttrOnly: RDD[(Pid, VertexPartition[VD])] = create(true, false)
-  private lazy val dstAttrOnly: RDD[(Pid, VertexPartition[VD])] = create(false, true)
-  private lazy val noAttrs: RDD[(Pid, VertexPartition[VD])] = create(false, false)
+  private lazy val bothAttrs: RDD[(PartitionID, VertexPartition[VD])] = create(true, true)
+  private lazy val srcAttrOnly: RDD[(PartitionID, VertexPartition[VD])] = create(true, false)
+  private lazy val dstAttrOnly: RDD[(PartitionID, VertexPartition[VD])] = create(false, true)
+  private lazy val noAttrs: RDD[(PartitionID, VertexPartition[VD])] = create(false, false)
 
-  def get(includeSrc: Boolean, includeDst: Boolean): RDD[(Pid, VertexPartition[VD])] = {
+  def get(includeSrc: Boolean, includeDst: Boolean): RDD[(PartitionID, VertexPartition[VD])] = {
     (includeSrc, includeDst) match {
       case (true, true) => bothAttrs
       case (true, false) => srcAttrOnly
@@ -63,7 +63,7 @@ class ReplicatedVertexView[VD: ClassTag](
   def get(
       includeSrc: Boolean,
       includeDst: Boolean,
-      actives: VertexRDD[_]): RDD[(Pid, VertexPartition[VD])] = {
+      actives: VertexRDD[_]): RDD[(PartitionID, VertexPartition[VD])] = {
     // Ship active sets to edge partitions using vertexPlacement, but ignoring includeSrc and
     // includeDst. These flags govern attribute shipping, but the activeness of a vertex must be
     // shipped to all edges mentioning that vertex, regardless of whether the vertex attribute is
@@ -81,7 +81,7 @@ class ReplicatedVertexView[VD: ClassTag](
   }
 
   private def create(includeSrc: Boolean, includeDst: Boolean)
-    : RDD[(Pid, VertexPartition[VD])] = {
+    : RDD[(PartitionID, VertexPartition[VD])] = {
     val vdTag = classTag[VD]
 
     // Ship vertex attributes to edge partitions according to vertexPlacement

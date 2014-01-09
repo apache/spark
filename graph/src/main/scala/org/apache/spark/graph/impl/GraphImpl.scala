@@ -69,7 +69,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     val numPartitions = edges.partitions.size
     val edTag = classTag[ED]
     val newEdges = new EdgeRDD(edges.map { e =>
-      val part: Pid = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
+      val part: PartitionID = partitionStrategy.getPartition(e.srcId, e.dstId, numPartitions)
 
       // Should we be using 3-tuple or an optimized class
       new MessageToPartition(part, (e.srcId, e.dstId, e.attr))
@@ -173,13 +173,13 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   }
 
   override def mapEdges[ED2: ClassTag](
-      f: (Pid, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
+      f: (PartitionID, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
     val newETable = edges.mapEdgePartitions((pid, part) => part.map(f(pid, part.iterator)))
     new GraphImpl(vertices, newETable , routingTable, replicatedVertexView)
   }
 
   override def mapTriplets[ED2: ClassTag](
-      f: (Pid, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
+      f: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
     // Use an explicit manifest in PrimitiveKeyOpenHashMap init so we don't pull in the implicit
     // manifest from GraphImpl (which would require serializing GraphImpl).
     val vdTag = classTag[VD]
@@ -354,7 +354,7 @@ object GraphImpl {
   }
 
   def fromEdgePartitions[VD: ClassTag, ED: ClassTag](
-      edgePartitions: RDD[(Pid, EdgePartition[ED])],
+      edgePartitions: RDD[(PartitionID, EdgePartition[ED])],
       defaultVertexAttr: VD): GraphImpl[VD, ED] = {
     fromEdgeRDD(new EdgeRDD(edgePartitions), defaultVertexAttr)
   }

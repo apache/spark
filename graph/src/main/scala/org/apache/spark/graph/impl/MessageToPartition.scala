@@ -3,15 +3,15 @@ package org.apache.spark.graph.impl
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.Partitioner
-import org.apache.spark.graph.{Pid, VertexID}
+import org.apache.spark.graph.{PartitionID, VertexID}
 import org.apache.spark.rdd.{ShuffledRDD, RDD}
 
 
 class VertexBroadcastMsg[@specialized(Int, Long, Double, Boolean) T](
-    @transient var partition: Pid,
+    @transient var partition: PartitionID,
     var vid: VertexID,
     var data: T)
-  extends Product2[Pid, (VertexID, T)] with Serializable {
+  extends Product2[PartitionID, (VertexID, T)] with Serializable {
 
   override def _1 = partition
 
@@ -27,9 +27,9 @@ class VertexBroadcastMsg[@specialized(Int, Long, Double, Boolean) T](
  * @param data value to send
  */
 class MessageToPartition[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T](
-    @transient var partition: Pid,
+    @transient var partition: PartitionID,
     var data: T)
-  extends Product2[Pid, T] with Serializable {
+  extends Product2[PartitionID, T] with Serializable {
 
   override def _1 = partition
 
@@ -41,7 +41,7 @@ class MessageToPartition[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef
 
 class VertexBroadcastMsgRDDFunctions[T: ClassTag](self: RDD[VertexBroadcastMsg[T]]) {
   def partitionBy(partitioner: Partitioner): RDD[VertexBroadcastMsg[T]] = {
-    val rdd = new ShuffledRDD[Pid, (VertexID, T), VertexBroadcastMsg[T]](self, partitioner)
+    val rdd = new ShuffledRDD[PartitionID, (VertexID, T), VertexBroadcastMsg[T]](self, partitioner)
 
     // Set a custom serializer if the data is of int or double type.
     if (classTag[T] == ClassTag.Int) {
@@ -62,7 +62,7 @@ class MsgRDDFunctions[T: ClassTag](self: RDD[MessageToPartition[T]]) {
    * Return a copy of the RDD partitioned using the specified partitioner.
    */
   def partitionBy(partitioner: Partitioner): RDD[MessageToPartition[T]] = {
-    new ShuffledRDD[Pid, T, MessageToPartition[T]](self, partitioner)
+    new ShuffledRDD[PartitionID, T, MessageToPartition[T]](self, partitioner)
   }
 
 }

@@ -30,8 +30,8 @@ class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
   private def createPid2Vid(
       includeSrcAttr: Boolean, includeDstAttr: Boolean): RDD[Array[Array[VertexID]]] = {
     // Determine which vertices each edge partition needs by creating a mapping from vid to pid.
-    val vid2pid: RDD[(VertexID, Pid)] = edges.partitionsRDD.mapPartitions { iter =>
-      val (pid: Pid, edgePartition: EdgePartition[_]) = iter.next()
+    val vid2pid: RDD[(VertexID, PartitionID)] = edges.partitionsRDD.mapPartitions { iter =>
+      val (pid: PartitionID, edgePartition: EdgePartition[_]) = iter.next()
       val numEdges = edgePartition.size
       val vSet = new VertexSet
       if (includeSrcAttr) {  // Add src vertices to the set.

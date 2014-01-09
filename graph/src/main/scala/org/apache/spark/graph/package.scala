@@ -8,7 +8,7 @@ package object graph {
   type VertexID = Long
 
   // TODO: Consider using Char.
-  type Pid = Int
+  type PartitionID = Int
 
   type VertexSet = OpenHashSet[VertexID]
 
