@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.util.Random
+
 class Vector(val elements: Array[Double]) extends Serializable {
   def length = elements.length
 
@@ -123,6 +125,8 @@ object Vector {
   def zeros(length: Int) = new Vector(new Array[Double](length))
 
   def ones(length: Int) = Vector(length, _ => 1)
+
+  def random(length: Int, random: Random = new Random()) = Vector(length, _ => random.nextDouble());
 
   class Multiplier(num: Double) {
     def * (vec: Vector) = vec * num
