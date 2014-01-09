@@ -25,37 +25,26 @@ URL1=http://typesafe.artifactoryonline.com/typesafe/ivy-releases/org.scala-sbt/s
 URL2=http://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch.jar
 JAR=sbt/sbt-launch-${SBT_VERSION}.jar
 
-printf "Checking for system sbt ["
-if hash sbt 2>/dev/null; then 
-  printf "FOUND]\n"
-  # Use System SBT
-  sbt "$@"
-else
-  printf "NOT FOUND]\n"
-  # Download sbt or use already downloaded
-  if [ ! -d .sbtlib ]; then
-    mkdir .sbtlib
-  fi
-  if [ ! -f ${JAR} ]; then
-    # Download
-    printf "Attempting to fetch sbt\n"
-    if hash curl 2>/dev/null; then
-      curl --progress-bar ${URL1} > ${JAR} || curl --progress-bar ${URL2} > ${JAR}
-    elif hash wget 2>/dev/null; then
-      wget --progress=bar ${URL1} -O ${JAR} || wget --progress=bar ${URL2} -O ${JAR}
-    else
-      printf "You do not have curl or wget installed, please install sbt manually from http://www.scala-sbt.org/\n"
-      exit -1
-    fi
-  fi
-  if [ ! -f ${JAR} ]; then
-    # We failed to download
-    printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
+# Download sbt launch jar if it hasn't been downloaded yet
+if [ ! -f ${JAR} ]; then
+  # Download
+  printf "Attempting to fetch sbt\n"
+  if hash curl 2>/dev/null; then
+    curl --progress-bar ${URL1} > ${JAR} || curl --progress-bar ${URL2} > ${JAR}
+  elif hash wget 2>/dev/null; then
+    wget --progress=bar ${URL1} -O ${JAR} || wget --progress=bar ${URL2} -O ${JAR}
+  else
+    printf "You do not have curl or wget installed, please install sbt manually from http://www.scala-sbt.org/\n"
     exit -1
   fi
-  printf "Launching sbt from ${JAR}\n"
-  java \
-    -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m \
-    -jar ${JAR} \
-    "$@"
 fi
+if [ ! -f ${JAR} ]; then
+  # We failed to download
+  printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
+  exit -1
+fi
+printf "Launching sbt from ${JAR}\n"
+java \
+  -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m \
+  -jar ${JAR} \
+  "$@"
