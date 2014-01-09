@@ -25,7 +25,7 @@ URL1=http://typesafe.artifactoryonline.com/typesafe/ivy-releases/org.scala-sbt/s
 URL2=http://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch.jar
 JAR=sbt/sbt-launch-${SBT_VERSION}.jar
 
-# Download sbt or use already downloaded
+# Download sbt launch jar if it hasn't been downloaded yet
 if [ ! -f ${JAR} ]; then
   # Download
   printf "Attempting to fetch sbt\n"
