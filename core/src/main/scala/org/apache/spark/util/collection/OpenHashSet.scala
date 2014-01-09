@@ -279,7 +279,7 @@ object OpenHashSet {
    * A set of specialized hash function implementation to avoid boxing hash code computation
    * in the specialized implementation of OpenHashSet.
    */
-  sealed class Hasher[@specialized(Long, Int) T] {
+  sealed class Hasher[@specialized(Long, Int) T] extends Serializable {
     def hash(o: T): Int = o.hashCode()
   }
 

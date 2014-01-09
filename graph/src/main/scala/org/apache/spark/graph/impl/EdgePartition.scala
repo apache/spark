@@ -19,7 +19,7 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
     val srcIds: Array[Vid],
     val dstIds: Array[Vid],
     val data: Array[ED],
-    val index: PrimitiveKeyOpenHashMap[Vid, Int]) {
+    val index: PrimitiveKeyOpenHashMap[Vid, Int]) extends Serializable {
 
   /**
    * Reverse all the edges in this partition.

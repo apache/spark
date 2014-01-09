@@ -19,7 +19,7 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
   /**
    * The attribute associated with the edge.
    */
-  var attr: ED = nullValue[ED]) {
+  var attr: ED = nullValue[ED]) extends Serializable {
 
   /**
    * Given one vertex in the edge return the other vertex.

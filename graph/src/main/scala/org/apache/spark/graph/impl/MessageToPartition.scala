@@ -11,7 +11,7 @@ class VertexBroadcastMsg[@specialized(Int, Long, Double, Boolean) T](
     @transient var partition: Pid,
     var vid: Vid,
     var data: T)
-  extends Product2[Pid, (Vid, T)] {
+  extends Product2[Pid, (Vid, T)] with Serializable {
 
   override def _1 = partition
 
@@ -29,7 +29,7 @@ class VertexBroadcastMsg[@specialized(Int, Long, Double, Boolean) T](
 class MessageToPartition[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T](
     @transient var partition: Pid,
     var data: T)
-  extends Product2[Pid, T] {
+  extends Product2[Pid, T] with Serializable {
 
   override def _1 = partition
 

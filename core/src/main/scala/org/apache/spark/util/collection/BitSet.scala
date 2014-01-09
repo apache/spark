@@ -22,7 +22,7 @@ package org.apache.spark.util.collection
  * A simple, fixed-size bit set implementation. This implementation is fast because it avoids
  * safety/bound checking.
  */
-class BitSet(numBits: Int) {
+class BitSet(numBits: Int) extends Serializable {
 
   private val words = new Array[Long](bit2words(numBits))
   private val numWords = words.length
