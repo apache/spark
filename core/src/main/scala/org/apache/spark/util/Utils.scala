@@ -51,15 +51,20 @@ private[spark] object Utils extends Logging {
    *  intention is to optimize, for example for NullWritable there is no need and for Long, int and
    *  String creating a new object with value set would be faster.
    */
-  def cloneWritables[T: ClassTag](obj: T, conf: Configuration): T = {
-    val cloned = classTag[T] match {
-      case ClassTag(_: Text) => new Text(obj.asInstanceOf[Text].getBytes)
-      case ClassTag(_: LongWritable) => new LongWritable(obj.asInstanceOf[LongWritable].get)
-      case ClassTag(_: IntWritable) => new IntWritable(obj.asInstanceOf[IntWritable].get)
-      case ClassTag(_: NullWritable) => obj // TODO: should we clone this ?
-      case _ => WritableUtils.clone(obj.asInstanceOf[Writable], conf) // slower way of cloning.
+  def cloneWritables[T: ClassTag](conf: Configuration): Writable => T = {
+    val cloneFunc = classTag[T] match {
+      case ClassTag(_: Text) => 
+        (w: Writable) => new Text(w.asInstanceOf[Text].getBytes).asInstanceOf[T]
+      case ClassTag(_: LongWritable) => 
+        (w: Writable) => new LongWritable(w.asInstanceOf[LongWritable].get).asInstanceOf[T]
+      case ClassTag(_: IntWritable) => 
+        (w: Writable) => new IntWritable(w.asInstanceOf[IntWritable].get).asInstanceOf[T]
+      case ClassTag(_: NullWritable) => 
+        (w: Writable) => w.asInstanceOf[T] // TODO: should we clone this ?
+      case _ => 
+        (w: Writable) => WritableUtils.clone(w, conf).asInstanceOf[T] // slower way of cloning.
     }
-    cloned.asInstanceOf[T]
+    cloneFunc
   }
 
   /** Serialize an object using Java serialization */

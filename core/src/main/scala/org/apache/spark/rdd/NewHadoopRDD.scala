@@ -92,7 +92,8 @@ class NewHadoopRDD[K: ClassTag, V: ClassTag](
 
       // Register an on-task-completion callback to close the input stream.
       context.addOnCompleteCallback(() => close())
-
+      val keyCloneFunc = cloneWritables[K](conf)
+      val valueCloneFunc = cloneWritables[V](conf)
       var havePair = false
       var finished = false
 
@@ -112,9 +113,11 @@ class NewHadoopRDD[K: ClassTag, V: ClassTag](
         val key = reader.getCurrentKey
         val value = reader.getCurrentValue
         if (cloneKeyValues) {
-          (cloneWritables(key, conf), cloneWritables(value, conf))
-        } else
-        (key, value)
+          (keyCloneFunc(key.asInstanceOf[Writable]),
+            valueCloneFunc(value.asInstanceOf[Writable]))
+        } else {
+          (key, value)
+        }
       }
 
       private def close() {

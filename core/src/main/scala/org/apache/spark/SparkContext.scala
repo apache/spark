@@ -385,14 +385,14 @@ class SparkContext(
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path, minSplits)
    * }}}
    */
-  def hadoopFile[K, V, F <: InputFormat[K, V]](path: String, minSplits: Int,
-      cloneKeyValues: Boolean = true) (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]
-      ): RDD[(K, V)] = {
+  def hadoopFile[K, V, F <: InputFormat[K, V]]
+      (path: String, minSplits: Int, cloneKeyValues: Boolean = true)
+      (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     hadoopFile(path,
-        fm.runtimeClass.asInstanceOf[Class[F]],
-        km.runtimeClass.asInstanceOf[Class[K]],
-        vm.runtimeClass.asInstanceOf[Class[V]],
-        minSplits,
+      fm.runtimeClass.asInstanceOf[Class[F]],
+      km.runtimeClass.asInstanceOf[Class[K]],
+      vm.runtimeClass.asInstanceOf[Class[V]],
+      minSplits,
       cloneKeyValues = cloneKeyValues)
   }
 
@@ -409,15 +409,15 @@ class SparkContext(
     hadoopFile[K, V, F](path, defaultMinSplits, cloneKeyValues)
 
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
-  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](path: String,
-      cloneKeyValues: Boolean = true) (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]
-      ): RDD[(K, V)] = {
+  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
+      (path: String, cloneKeyValues: Boolean = true)
+      (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     newAPIHadoopFile(
-        path,
-        fm.runtimeClass.asInstanceOf[Class[F]],
-        km.runtimeClass.asInstanceOf[Class[K]],
-        vm.runtimeClass.asInstanceOf[Class[V]],
-        cloneKeyValues = cloneKeyValues)
+      path,
+      fm.runtimeClass.asInstanceOf[Class[F]],
+      km.runtimeClass.asInstanceOf[Class[K]],
+      vm.runtimeClass.asInstanceOf[Class[V]],
+      cloneKeyValues = cloneKeyValues)
   }
 
   /**

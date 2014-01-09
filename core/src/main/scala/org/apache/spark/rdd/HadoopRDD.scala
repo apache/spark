@@ -22,6 +22,7 @@ import java.io.EOFException
 import scala.reflect.ClassTag
 
 import org.apache.hadoop.conf.{Configuration, Configurable}
+import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
@@ -91,7 +92,8 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
       inputFormatClass,
       keyClass,
       valueClass,
-      minSplits, cloneKeyValues)
+      minSplits,
+      cloneKeyValues)
   }
 
   protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
@@ -162,10 +164,10 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
 
       // Register an on-task-completion callback to close the input stream.
       context.addOnCompleteCallback{ () => closeIfNeeded() }
-
       val key: K = reader.createKey()
+      val keyCloneFunc = cloneWritables[K](getConf)
       val value: V = reader.createValue()
-
+      val valueCloneFunc = cloneWritables[V](getConf)
       override def getNext() = {
         try {
           finished = !reader.next(key, value)
@@ -174,7 +176,8 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
             finished = true
         }
         if (cloneKeyValues) {
-          (cloneWritables(key, getConf), cloneWritables(value, getConf))
+          (keyCloneFunc(key.asInstanceOf[Writable]),
+            valueCloneFunc(value.asInstanceOf[Writable]))
         } else {
           (key, value)
         }
