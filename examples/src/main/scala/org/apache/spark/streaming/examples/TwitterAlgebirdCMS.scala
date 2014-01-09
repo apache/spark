@@ -17,12 +17,12 @@
 
 package org.apache.spark.streaming.examples
 
-import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.storage.StorageLevel
 import com.twitter.algebird._
-import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.SparkContext._
 
+import org.apache.spark.SparkContext._
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.twitter._
 
 /**
@@ -50,6 +50,8 @@ object TwitterAlgebirdCMS {
         " [filter1] [filter2] ... [filter n]")
       System.exit(1)
     }
+
+    StreamingExamples.setStreamingLogLevels()
 
     // CMS parameters
     val DELTA = 1E-3

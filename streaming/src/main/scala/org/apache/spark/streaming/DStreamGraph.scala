@@ -105,18 +105,18 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def generateJobs(time: Time): Seq[Job] = {
     this.synchronized {
-      logInfo("Generating jobs for time " + time)
+      logDebug("Generating jobs for time " + time)
       val jobs = outputStreams.flatMap(outputStream => outputStream.generateJob(time))
-      logInfo("Generated " + jobs.length + " jobs for time " + time)
+      logDebug("Generated " + jobs.length + " jobs for time " + time)
       jobs
     }
   }
 
   def clearOldMetadata(time: Time) {
     this.synchronized {
-      logInfo("Clearing old metadata for time " + time)
+      logDebug("Clearing old metadata for time " + time)
       outputStreams.foreach(_.clearOldMetadata(time))
-      logInfo("Cleared old metadata for time " + time)
+      logDebug("Cleared old metadata for time " + time)
     }
   }
 

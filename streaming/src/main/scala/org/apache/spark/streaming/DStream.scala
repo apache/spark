@@ -333,7 +333,7 @@ abstract class DStream[T: ClassTag] (
     var numForgotten = 0
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
     generatedRDDs --= oldRDDs.keys
-    logInfo("Cleared " + oldRDDs.size + " RDDs that were older than " +
+    logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
       (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
     dependencies.foreach(_.clearOldMetadata(time))
   }

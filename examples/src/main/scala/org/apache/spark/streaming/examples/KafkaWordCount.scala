@@ -23,8 +23,8 @@ import kafka.producer._
 
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.streaming.util.RawTextHelper._
 import org.apache.spark.streaming.kafka._
+import org.apache.spark.streaming.util.RawTextHelper._
 
 /**
  * Consumes messages from one or more topics in Kafka and does wordcount.
@@ -40,11 +40,12 @@ import org.apache.spark.streaming.kafka._
  */
 object KafkaWordCount {
   def main(args: Array[String]) {
-    
     if (args.length < 5) {
       System.err.println("Usage: KafkaWordCount <master> <zkQuorum> <group> <topics> <numThreads>")
       System.exit(1)
     }
+
+    StreamingExamples.setStreamingLogLevels()
 
     val Array(master, zkQuorum, group, topics, numThreads) = args
 

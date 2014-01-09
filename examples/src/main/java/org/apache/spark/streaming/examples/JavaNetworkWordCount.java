@@ -53,6 +53,8 @@ public final class JavaNetworkWordCount {
       System.exit(1);
     }
 
+    StreamingExamples.setStreamingLogLevels();
+
     // Create the context with a 1 second batch size
     JavaStreamingContext ssc = new JavaStreamingContext(args[0], "NetworkWordCount",
             new Duration(1000), System.getenv("SPARK_HOME"),
