@@ -5,7 +5,7 @@ import org.apache.spark.graph._
 import scala.util.Random
 import org.apache.commons.math.linear._
 
-class SvdppConf( // Svdpp parameters
+class SVDPlusPlusConf( // SVDPlusPlus parameters
   var rank: Int,
   var maxIters: Int,
   var minVal: Double,
@@ -15,7 +15,7 @@ class SvdppConf( // Svdpp parameters
   var gamma6: Double,
   var gamma7: Double) extends Serializable
 
-object Svdpp {
+object SVDPlusPlus {
   /**
    * Implement SVD++ based on "Factorization Meets the Neighborhood: a Multifaceted Collaborative Filtering Model",
    * paper is available at [[http://public.research.att.com/~volinsky/netflix/kdd08koren.pdf]].
@@ -23,12 +23,12 @@ object Svdpp {
    *
    * @param edges edges for constructing the graph
    *
-   * @param conf Svdpp parameters
+   * @param conf SVDPlusPlus parameters
    *
    * @return a graph with vertex attributes containing the trained model
    */
 
-  def run(edges: RDD[Edge[Double]], conf: SvdppConf): (Graph[(RealVector, RealVector, Double, Double), Double], Double) = {
+  def run(edges: RDD[Edge[Double]], conf: SVDPlusPlusConf): (Graph[(RealVector, RealVector, Double, Double), Double], Double) = {
 
     // generate default vertex attribute
     def defaultF(rank: Int): (RealVector, RealVector, Double, Double) = {
@@ -55,7 +55,7 @@ object Svdpp {
       (vd._1, vd._2, msg.get._2 / msg.get._1, 1.0 / scala.math.sqrt(msg.get._1))
     }
 
-    def mapTrainF(conf: SvdppConf, u: Double)(et: EdgeTriplet[(RealVector, RealVector, Double, Double), Double])
+    def mapTrainF(conf: SVDPlusPlusConf, u: Double)(et: EdgeTriplet[(RealVector, RealVector, Double, Double), Double])
       : Iterator[(VertexID, (RealVector, RealVector, Double))] = {
       val (usr, itm) = (et.srcAttr, et.dstAttr)
       val (p, q) = (usr._1, itm._1)
@@ -85,7 +85,7 @@ object Svdpp {
     }
 
     // calculate error on training set
-    def mapTestF(conf: SvdppConf, u: Double)(et: EdgeTriplet[(RealVector, RealVector, Double, Double), Double]): Iterator[(VertexID, Double)] = {
+    def mapTestF(conf: SVDPlusPlusConf, u: Double)(et: EdgeTriplet[(RealVector, RealVector, Double, Double), Double]): Iterator[(VertexID, Double)] = {
       val (usr, itm) = (et.srcAttr, et.dstAttr)
       val (p, q) = (usr._1, itm._1)
       var pred = u + usr._3 + itm._3 + q.dotProduct(usr._2)
