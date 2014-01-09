@@ -45,10 +45,11 @@ import org.apache.hadoop.io.LongWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
 import org.apache.hadoop.mapreduce.lib.input.TextInputFormat
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
 
 import twitter4j.Status
 import twitter4j.auth.Authorization
+import org.apache.hadoop.conf.Configuration
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -89,10 +90,12 @@ class StreamingContext private (
 
   /**
    * Re-create a StreamingContext from a checkpoint file.
-   * @param path Path either to the directory that was specified as the checkpoint directory, or
-   *             to the checkpoint file 'graph' or 'graph.bk'.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   * @param hadoopConf Optional, configuration object if necessary for reading from
+   *                   HDFS compatible filesystems
    */
-  def this(path: String) = this(null, CheckpointReader.read(path), null)
+  def this(path: String, hadoopConf: Configuration = new Configuration) =
+    this(null, CheckpointReader.read(path, hadoopConf).get, null)
 
   initLogging()
 
@@ -170,8 +173,9 @@ class StreamingContext private (
 
   /**
    * Set the context to periodically checkpoint the DStream operations for master
-   * fault-tolerance. The graph will be checkpointed every batch interval.
-   * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
+   * fault-tolerance.
+   * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored.
+   *                  Note that this must be a fault-tolerant file system like HDFS for
    */
   def checkpoint(directory: String) {
     if (directory != null) {
@@ -577,6 +581,10 @@ class StreamingContext private (
   }
 }
 
+/**
+ * StreamingContext object contains a number of utility functions related to the
+ * StreamingContext class.
+ */
 
 object StreamingContext extends Logging {
 
@@ -584,19 +592,45 @@ object StreamingContext extends Logging {
     new PairDStreamFunctions[K, V](stream)
   }
 
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
+   * will be created by called the provided `creatingFunc`.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param creatingFunc   Function to create a new StreamingContext
+   * @param hadoopConf     Optional Hadoop configuration if necessary for reading from the
+   *                       file system
+   * @param createOnError  Optional, whether to create a new StreamingContext if there is an
+   *                       error in reading checkpoint data. By default, an exception will be
+   *                       thrown on error.
+   */
   def getOrCreate(
       checkpointPath: String,
       creatingFunc: () => StreamingContext,
-      createOnCheckpointError: Boolean = false
+      hadoopConf: Configuration = new Configuration(),
+      createOnError: Boolean = false
     ): StreamingContext = {
-    if (CheckpointReader.doesCheckpointExist(checkpointPath)) {
-      logInfo("Creating streaming context from checkpoint file")
-      new StreamingContext(checkpointPath)
-    } else {
-      logInfo("Creating new streaming context")
-      val ssc = creatingFunc()
-      ssc.checkpoint(checkpointPath)
-      ssc
+
+    try {
+      CheckpointReader.read(checkpointPath, hadoopConf) match {
+        case Some(checkpoint) =>
+          return new StreamingContext(null, checkpoint, null)
+        case None =>
+          logInfo("Creating new StreamingContext")
+          return creatingFunc()
+      }
+    } catch {
+      case e: Exception =>
+        if (createOnError) {
+          logWarning("Error reading checkpoint", e)
+          logInfo("Creating new StreamingContext")
+          return creatingFunc()
+        } else {
+          logError("Error reading checkpoint", e)
+          throw e
+        }
     }
   }
 

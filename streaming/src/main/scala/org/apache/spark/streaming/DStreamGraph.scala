@@ -130,11 +130,11 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   }
 
   def clearCheckpointData(time: Time) {
-    logInfo("Restoring checkpoint data")
+    logInfo("Clearing checkpoint data for time " + time)
     this.synchronized {
       outputStreams.foreach(_.clearCheckpointData(time))
     }
-    logInfo("Restored checkpoint data")
+    logInfo("Cleared checkpoint data for time " + time)
   }
 
   def restoreCheckpointData() {

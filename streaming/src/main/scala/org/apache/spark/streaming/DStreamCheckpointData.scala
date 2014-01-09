@@ -27,18 +27,16 @@ import org.apache.spark.Logging
 
 import java.io.{ObjectInputStream, IOException}
 
-
 private[streaming]
 class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   extends Serializable with Logging {
   protected val data = new HashMap[Time, AnyRef]()
 
-  @transient private var allCheckpointFiles = new HashMap[Time, String]
-  @transient private var timeToLastCheckpointFileTime = new HashMap[Time, Time]
+  // Mapping of the batch time to the checkpointed RDD file of that time
+  @transient private var timeToCheckpointFile = new HashMap[Time, String]
+  // Mapping of the batch time to the time of the oldest checkpointed RDD in that batch's checkpoint data
+  @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time]
   @transient private var fileSystem : FileSystem = null
-
-  //@transient private var lastCheckpointFiles: HashMap[Time, String] = null
-
   protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]]
 
   /**
@@ -51,17 +49,14 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
     // Get the checkpointed RDDs from the generated RDDs
     val checkpointFiles = dstream.generatedRDDs.filter(_._2.getCheckpointFile.isDefined)
                                        .map(x => (x._1, x._2.getCheckpointFile.get))
+    logDebug("Current checkpoint files:\n" + checkpointFiles.toSeq.mkString("\n"))
 
-    logInfo("Current checkpoint files:\n" + checkpointFiles.toSeq.mkString("\n"))
-    // Make a copy of the existing checkpoint data (checkpointed RDDs)
-    // lastCheckpointFiles = checkpointFiles.clone()
-
-    // If the new checkpoint data has checkpoints then replace existing with the new one
+    // Add the checkpoint files to the data to be serialized 
     if (!currentCheckpointFiles.isEmpty) {
       currentCheckpointFiles.clear()
       currentCheckpointFiles ++= checkpointFiles
-      allCheckpointFiles ++= currentCheckpointFiles
-      timeToLastCheckpointFileTime(time) = currentCheckpointFiles.keys.min(Time.ordering)
+      timeToCheckpointFile ++= currentCheckpointFiles
+      timeToOldestCheckpointFileTime(time) = currentCheckpointFiles.keys.min(Time.ordering)
     }
   }
 
@@ -71,32 +66,10 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
    * implementation, cleans up old checkpoint files.
    */
   def cleanup(time: Time) {
-    /*
-    // If there is at least on checkpoint file in the current checkpoint files,
-    // then delete the old checkpoint files.
-    if (checkpointFiles.size > 0 && lastCheckpointFiles != null) {
-      (lastCheckpointFiles -- checkpointFiles.keySet).foreach {
-        case (time, file) => {
-          try {
-            val path = new Path(file)
-            if (fileSystem == null) {
-              fileSystem = path.getFileSystem(new Configuration())
-            }
-            fileSystem.delete(path, true)
-            logInfo("Deleted checkpoint file '" + file + "' for time " + time)
-          } catch {
-            case e: Exception =>
-              logWarning("Error deleting old checkpoint file '" + file + "' for time " + time, e)
-          }
-        }
-      }
-    }
-    */
-    timeToLastCheckpointFileTime.remove(time) match {
+    timeToOldestCheckpointFileTime.remove(time) match {
       case Some(lastCheckpointFileTime) =>
-        logInfo("Deleting all files before " + time)
-        val filesToDelete = allCheckpointFiles.filter(_._1 < lastCheckpointFileTime)
-        logInfo("Files to delete:\n" + filesToDelete.mkString(","))
+        val filesToDelete = timeToCheckpointFile.filter(_._1 < lastCheckpointFileTime)
+        logDebug("Files to delete:\n" + filesToDelete.mkString(","))
         filesToDelete.foreach {
           case (time, file) =>
             try {
@@ -105,11 +78,12 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
                 fileSystem = path.getFileSystem(dstream.ssc.sparkContext.hadoopConfiguration)
               }
               fileSystem.delete(path, true)
-              allCheckpointFiles -= time
+              timeToCheckpointFile -= time
               logInfo("Deleted checkpoint file '" + file + "' for time " + time)
             } catch {
               case e: Exception =>
                 logWarning("Error deleting old checkpoint file '" + file + "' for time " + time, e)
+                fileSystem = null
             }
         }
       case None =>
@@ -138,7 +112,8 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream) {
-    timeToLastCheckpointFileTime = new HashMap[Time, Time]
-    allCheckpointFiles = new HashMap[Time, String]
+    ois.defaultReadObject()
+    timeToOldestCheckpointFileTime = new HashMap[Time, Time]
+    timeToCheckpointFile = new HashMap[Time, String]
   }
 }

@@ -29,7 +29,7 @@ import scala.collection.mutable.HashMap
 import scala.reflect.{ClassTag, classTag}
 
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{LocalFileSystem, Path}
 import org.apache.hadoop.io.ArrayWritable
 import org.apache.hadoop.io.BooleanWritable
 import org.apache.hadoop.io.BytesWritable

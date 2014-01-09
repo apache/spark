@@ -82,22 +82,28 @@ class CheckpointWriter(jobGenerator: JobGenerator, checkpointDir: String, hadoop
         attempts += 1
         try {
           logInfo("Saving checkpoint for time " + checkpointTime + " to file '" + file + "'")
-          // This is inherently thread unsafe, so alleviating it by writing to '.new' and
+          // This is inherently thread unsafe, so alleviating it by writing to '.next' and
           // then moving it to the final file
           val fos = fs.create(writeFile)
           fos.write(bytes)
           fos.close()
+
+          // Back up existing checkpoint if it exists
           if (fs.exists(file) && fs.rename(file, bakFile)) {
             logDebug("Moved existing checkpoint file to " + bakFile)
           }
-          // paranoia
-          fs.delete(file, false)
-          fs.rename(writeFile, file)
+          fs.delete(file, false) // paranoia
 
-          val finishTime = System.currentTimeMillis()
-          logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + file +
-            "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " milliseconds")
-          jobGenerator.onCheckpointCompletion(checkpointTime)
+          // Rename temp written file to the right location
+          if (fs.rename(writeFile, file)) {
+            val finishTime = System.currentTimeMillis()
+            logInfo("Checkpoint for time " + checkpointTime + " saved to file '" + file +
+              "', took " + bytes.length + " bytes and " + (finishTime - startTime) + " ms")
+            jobGenerator.onCheckpointCompletion(checkpointTime)
+          } else {
+            throw new SparkException("Failed to rename checkpoint file from "
+              + writeFile + " to " + file)
+          }
           return
         } catch {
           case ioe: IOException =>
@@ -154,47 +160,47 @@ class CheckpointWriter(jobGenerator: JobGenerator, checkpointDir: String, hadoop
 private[streaming]
 object CheckpointReader extends Logging {
 
-  def doesCheckpointExist(path: String): Boolean = {
-    val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"))
-    val fs = new Path(path).getFileSystem(new Configuration())
-    (attempts.count(p => fs.exists(p)) > 1)
-  }
+  private val graphFileNames = Seq("graph", "graph.bk")
+  
+  def read(checkpointDir: String, hadoopConf: Configuration): Option[Checkpoint] = {
+    val checkpointPath = new Path(checkpointDir)
+    def fs = checkpointPath.getFileSystem(hadoopConf)
+    val existingFiles = graphFileNames.map(new Path(checkpointPath, _)).filter(fs.exists)
 
-  def read(path: String): Checkpoint = {
-    val fs = new Path(path).getFileSystem(new Configuration())
-    val attempts = Seq(new Path(path, "graph"), new Path(path, "graph.bk"))
+    // Log the file listing if graph checkpoint file was not found
+    if (existingFiles.isEmpty) {
+      logInfo("Could not find graph file in " + checkpointDir + ", which contains the files:\n" +
+        fs.listStatus(checkpointPath).mkString("\n"))
+      return None
+    }
+    logInfo("Checkpoint files found: " + existingFiles.mkString(","))
+
     val compressionCodec = CompressionCodec.createCodec()
-
-    attempts.foreach(file => {
-      if (fs.exists(file)) {
-        logInfo("Attempting to load checkpoint from file '" + file + "'")
-        try {
-          val fis = fs.open(file)
-          // ObjectInputStream uses the last defined user-defined class loader in the stack
-          // to find classes, which maybe the wrong class loader. Hence, a inherited version
-          // of ObjectInputStream is used to explicitly use the current thread's default class
-          // loader to find and load classes. This is a well know Java issue and has popped up
-          // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
-          val zis = compressionCodec.compressedInputStream(fis)
-          val ois = new ObjectInputStreamWithLoader(zis,
-            Thread.currentThread().getContextClassLoader)
-          val cp = ois.readObject.asInstanceOf[Checkpoint]
-          ois.close()
-          fs.close()
-          cp.validate()
-          logInfo("Checkpoint successfully loaded from file '" + file + "'")
-          logInfo("Checkpoint was generated at time " + cp.checkpointTime)
-          return cp
-        } catch {
-          case e: Exception =>
-            logError("Error loading checkpoint from file '" + file + "'", e)
-        }
-      } else {
-        logWarning("Could not read checkpoint from file '" + file + "' as it does not exist")
+    existingFiles.foreach(file => {
+      logInfo("Attempting to load checkpoint from file '" + file + "'")
+      try {
+        val fis = fs.open(file)
+        // ObjectInputStream uses the last defined user-defined class loader in the stack
+        // to find classes, which maybe the wrong class loader. Hence, a inherited version
+        // of ObjectInputStream is used to explicitly use the current thread's default class
+        // loader to find and load classes. This is a well know Java issue and has popped up
+        // in other places (e.g., http://jira.codehaus.org/browse/GROOVY-1627)
+        val zis = compressionCodec.compressedInputStream(fis)
+        val ois = new ObjectInputStreamWithLoader(zis,
+          Thread.currentThread().getContextClassLoader)
+        val cp = ois.readObject.asInstanceOf[Checkpoint]
+        ois.close()
+        fs.close()
+        cp.validate()
+        logInfo("Checkpoint successfully loaded from file '" + file + "'")
+        logInfo("Checkpoint was generated at time " + cp.checkpointTime)
+        return Some(cp)
+      } catch {
+        case e: Exception =>
+          logWarning("Error reading checkpoint from file '" + file + "'", e)
       }
-
     })
-    throw new SparkException("Could not read checkpoint from path '" + path + "'")
+    throw new SparkException("Failed to read checkpoint from directory '" + checkpointDir + "'")
   }
 }
 
