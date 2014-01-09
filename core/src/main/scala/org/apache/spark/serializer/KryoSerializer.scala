@@ -36,7 +36,7 @@ import org.apache.spark.storage.{GetBlock, GotBlock, PutBlock}
  */
 class KryoSerializer(conf: SparkConf) extends org.apache.spark.serializer.Serializer with Logging {
   private val bufferSize = {
-    conf.get("spark.kryoserializer.buffer.mb", "2").toInt * 1024 * 1024
+    conf.getInt("spark.kryoserializer.buffer.mb", 2) * 1024 * 1024
   }
 
   def newKryoOutput() = new KryoOutput(bufferSize)
@@ -48,7 +48,7 @@ class KryoSerializer(conf: SparkConf) extends org.apache.spark.serializer.Serial
 
     // Allow disabling Kryo reference tracking if user knows their object graphs don't have loops.
     // Do this before we invoke the user registrator so the user registrator can override this.
-    kryo.setReferences(conf.get("spark.kryo.referenceTracking", "true").toBoolean)
+    kryo.setReferences(conf.getBoolean("spark.kryo.referenceTracking", true))
 
     for (cls <- KryoSerializer.toRegister) kryo.register(cls)
 

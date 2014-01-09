@@ -30,8 +30,8 @@ import org.apache.spark.util.AkkaUtils
 private[spark]
 class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Logging {
 
-  val AKKA_RETRY_ATTEMPTS: Int = conf.get("spark.akka.num.retries", "3").toInt
-  val AKKA_RETRY_INTERVAL_MS: Int = conf.get("spark.akka.retry.wait", "3000").toInt
+  val AKKA_RETRY_ATTEMPTS: Int = conf.getInt("spark.akka.num.retries", 3)
+  val AKKA_RETRY_INTERVAL_MS: Int = conf.getInt("spark.akka.retry.wait", 3000)
 
   val DRIVER_AKKA_ACTOR_NAME = "BlockManagerMaster"
 
