@@ -272,7 +272,7 @@ private[spark] class Worker(
 
     case DriverStateChanged(driverId, state, exception) => {
       state match {
-        case DriverState.FAILED =>
+        case DriverState.ERROR =>
           logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
         case DriverState.FINISHED =>
           logInfo(s"Driver $driverId exited successfully")

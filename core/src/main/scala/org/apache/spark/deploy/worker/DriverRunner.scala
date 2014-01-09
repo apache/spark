@@ -52,6 +52,7 @@ private[spark] class DriverRunner(
   // Populated once finished
   var finalState: Option[DriverState] = None
   var finalException: Option[Exception] = None
+  var finalExitCode: Option[Int] = None
 
   // Decoupled for testing
   private[deploy] def setClock(_clock: Clock) = clock = _clock
@@ -87,8 +88,14 @@ private[spark] class DriverRunner(
 
         val state =
           if (killed) { DriverState.KILLED }
-          else if (finalException.isDefined) { DriverState.FAILED }
-          else { DriverState.FINISHED }
+          else if (finalException.isDefined) { DriverState.ERROR }
+          else {
+            finalExitCode match {
+              case Some(0) => DriverState.FINISHED
+              case _ => DriverState.FAILED
+            }
+          }
+
         finalState = Some(state)
 
         worker ! DriverStateChanged(driverId, state, finalException)
@@ -200,6 +207,7 @@ private[spark] class DriverRunner(
       }
 
       keepTrying = supervise && exitCode != 0 && !killed
+      finalExitCode = Some(exitCode)
     }
   }
 }

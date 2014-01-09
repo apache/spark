@@ -186,7 +186,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     case RequestSubmitDriver(description) => {
       if (state != RecoveryState.ALIVE) {
         val msg = s"Can only accept driver submissions in ALIVE state. Current state: $state."
-        sender ! SubmitDriverResponse(false, msg)
+        sender ! SubmitDriverResponse(false, None, msg)
       } else {
         logInfo("Driver submitted " + description.command.mainClass)
         val driver = createDriver(description)
@@ -198,14 +198,15 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         // TODO: It might be good to instead have the submission client poll the master to determine
         //       the current status of the driver. For now it's simply "fire and forget".
 
-        sender ! SubmitDriverResponse(true, s"Driver successfully submitted as ${driver.id}")
+        sender ! SubmitDriverResponse(true, Some(driver.id),
+          s"Driver successfully submitted as ${driver.id}")
       }
     }
 
     case RequestKillDriver(driverId) => {
       if (state != RecoveryState.ALIVE) {
         val msg = s"Can only kill drivers in ALIVE state. Current state: $state."
-        sender ! KillDriverResponse(false, msg)
+        sender ! KillDriverResponse(driverId, success = false, msg)
       } else {
         logInfo("Asked to kill driver " + driverId)
         val driver = drivers.find(_.id == driverId)
@@ -226,12 +227,22 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
             // TODO: It would be nice for this to be a synchronous response
             val msg = s"Kill request for $driverId submitted"
             logInfo(msg)
-            sender ! KillDriverResponse(true, msg)
+            sender ! KillDriverResponse(driverId, success = true, msg)
           case None =>
-            val msg = s"Could not find running driver $driverId"
+            val msg = s"Driver $driverId has already finished or does not exist"
             logWarning(msg)
-            sender ! KillDriverResponse(false, msg)
+            sender ! KillDriverResponse(driverId, success = false, msg)
         }
+      }
+    }
+
+    case RequestDriverStatus(driverId) => {
+      (drivers ++ completedDrivers).find(_.id == driverId) match {
+        case Some(driver) =>
+          sender ! DriverStatusResponse(found = true, Some(driver.state),
+            driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception)
+        case None =>
+          sender ! DriverStatusResponse(found = false, None, None, None, None)
       }
     }
 
@@ -279,7 +290,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     case DriverStateChanged(driverId, state, exception) => {
       state match {
-        case DriverState.FAILED | DriverState.FINISHED | DriverState.KILLED =>
+        case DriverState.ERROR | DriverState.FINISHED | DriverState.KILLED | DriverState.FAILED =>
           removeDriver(driverId, state, exception)
         case _ =>
           throw new Exception(s"Received unexpected state update for driver $driverId: $state")
@@ -410,7 +421,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         logWarning(s"Re-launching ${d.id}")
         relaunchDriver(d)
       } else {
-        removeDriver(d.id, DriverState.FAILED, None)
+        removeDriver(d.id, DriverState.ERROR, None)
         logWarning(s"Did not re-launch ${d.id} because it was not supervised")
       }
     }
@@ -539,7 +550,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         relaunchDriver(driver)
       } else {
         logInfo(s"Not re-launching ${driver.id} because it was not supervised")
-        removeDriver(driver.id, DriverState.FAILED, None)
+        removeDriver(driver.id, DriverState.ERROR, None)
       }
     }
     persistenceEngine.removeWorker(worker)

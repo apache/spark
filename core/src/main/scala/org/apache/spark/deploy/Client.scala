@@ -22,60 +22,30 @@ import scala.collection.mutable.Map
 import scala.concurrent._
 
 import akka.actor._
+import akka.pattern.ask
 import org.apache.log4j.{Level, Logger}
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.master.Master
+import org.apache.spark.deploy.master.{DriverState, Master}
 import org.apache.spark.util.{AkkaUtils, Utils}
+import akka.actor.Actor.emptyBehavior
+import akka.remote.{AssociationErrorEvent, DisassociatedEvent, RemotingLifecycleEvent}
 
 /**
- * Actor that sends a single message to the standalone master and returns the response in the
- * given promise.
+ * Proxy that relays messages to the driver.
  */
-class DriverActor(master: String, response: Promise[(Boolean, String)]) extends Actor with Logging {
-  override def receive = {
-    case SubmitDriverResponse(success, message) => {
-      response.success((success, message))
-    }
+class ClientActor(driverArgs: ClientArguments, conf: SparkConf) extends Actor with Logging {
+  var masterActor: ActorSelection = _
+  val timeout = AkkaUtils.askTimeout(conf)
 
-    case KillDriverResponse(success, message) => {
-      response.success((success, message))
-    }
+  override def preStart() = {
+    masterActor = context.actorSelection(Master.toAkkaUrl(driverArgs.master))
 
-    // Relay all other messages to the master.
-    case message => {
-      logInfo(s"Sending message to master $master...")
-      val masterActor = context.actorSelection(Master.toAkkaUrl(master))
-      masterActor ! message
-    }
-  }
-}
-
-/**
- * Executable utility for starting and terminating drivers inside of a standalone cluster.
- */
-object Client {
-
-  def main(args: Array[String]) {
-    val driverArgs = new ClientArguments(args)
-    val conf = new SparkConf()
-
-    if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
-      conf.set("spark.akka.logLifecycleEvents", "true")
-    }
-    conf.set("spark.akka.askTimeout", "5")
-    Logger.getRootLogger.setLevel(driverArgs.logLevel)
-
-    // TODO: See if we can initialize akka so return messages are sent back using the same TCP
-    //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
-    val (actorSystem, _) = AkkaUtils.createActorSystem(
-      "driverClient", Utils.localHostName(), 0, false, conf)
-    val master = driverArgs.master
-    val response = promise[(Boolean, String)]
-    val driver: ActorRef = actorSystem.actorOf(Props(new DriverActor(driverArgs.master, response)))
+    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
     println(s"Sending ${driverArgs.cmd} command to ${driverArgs.master}")
+
     driverArgs.cmd match {
       case "launch" =>
         // TODO: We could add an env variable here and intercept it in `sc.addJar` that would
@@ -94,21 +64,88 @@ object Client {
           driverArgs.cores,
           driverArgs.supervise,
           command)
-        driver ! RequestSubmitDriver(driverDescription)
+
+        masterActor ! RequestSubmitDriver(driverDescription)
 
       case "kill" =>
         val driverId = driverArgs.driverId
-        driver ! RequestKillDriver(driverId)
+        val killFuture = masterActor ! RequestKillDriver(driverId)
     }
+  }
 
-    val (success, message) =
-      try {
-        Await.result(response.future, AkkaUtils.askTimeout(conf))
-      } catch {
-        case e: TimeoutException => (false, s"Error: Timed out sending message to $master")
-      }
-    println(message)
-    actorSystem.shutdown()
+  /* Find out driver status then exit the JVM */
+  def pollAndReportStatus(driverId: String) {
+    println(s"... waiting before polling master for driver state")
+    Thread.sleep(5000)
+    println("... polling master for driver state")
+    val statusFuture = (masterActor ? RequestDriverStatus(driverId))(timeout)
+      .mapTo[DriverStatusResponse]
+    val statusResponse = Await.result(statusFuture, timeout)
+
+    statusResponse.found match {
+      case false =>
+        println(s"ERROR: Cluster master did not recognize $driverId")
+        System.exit(-1)
+      case true =>
+        println(s"State of $driverId is ${statusResponse.state.get}")
+        // Worker node, if present
+        (statusResponse.workerId, statusResponse.workerHostPort, statusResponse.state) match {
+          case (Some(id), Some(hostPort), Some(DriverState.RUNNING)) =>
+            println(s"Driver running on $hostPort ($id)")
+          case _ =>
+        }
+        // Exception, if present
+        statusResponse.exception.map { e =>
+          println(s"Exception from cluster was: $e")
+          System.exit(-1)
+        }
+        System.exit(0)
+    }
+  }
+
+  override def receive = {
+
+    case SubmitDriverResponse(success, driverId, message) =>
+      println(message)
+      if (success) pollAndReportStatus(driverId.get) else System.exit(-1)
+
+    case KillDriverResponse(driverId, success, message) =>
+      println(message)
+      if (success) pollAndReportStatus(driverId) else System.exit(-1)
+
+    case DisassociatedEvent(_, remoteAddress, _) =>
+      println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
+      System.exit(-1)
+
+    case AssociationErrorEvent(cause, _, remoteAddress, _) =>
+      println(s"Error connecting to master ${driverArgs.master} ($remoteAddress), exiting.")
+      println(s"Cause was: $cause")
+      System.exit(-1)
+  }
+}
+
+/**
+ * Executable utility for starting and terminating drivers inside of a standalone cluster.
+ */
+object Client {
+  def main(args: Array[String]) {
+    val conf = new SparkConf()
+    val driverArgs = new ClientArguments(args)
+
+    if (!driverArgs.logLevel.isGreaterOrEqual(Level.WARN)) {
+      conf.set("spark.akka.logLifecycleEvents", "true")
+    }
+    conf.set("spark.akka.askTimeout", "10")
+    conf.set("akka.loglevel", driverArgs.logLevel.toString.replace("WARN", "WARNING"))
+    Logger.getRootLogger.setLevel(driverArgs.logLevel)
+
+    // TODO: See if we can initialize akka so return messages are sent back using the same TCP
+    //       flow. Else, this (sadly) requires the DriverClient be routable from the Master.
+    val (actorSystem, _) = AkkaUtils.createActorSystem(
+      "driverClient", Utils.localHostName(), 0, false, conf)
+
+    actorSystem.actorOf(Props(classOf[ClientActor], driverArgs, conf))
+
     actorSystem.awaitTermination()
   }
 }
