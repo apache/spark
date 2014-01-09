@@ -30,7 +30,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     @transient val edges: EdgeRDD[ED],
     @transient val routingTable: RoutingTable,
     @transient val replicatedVertexView: ReplicatedVertexView[VD])
-  extends Graph[VD, ED] {
+  extends Graph[VD, ED] with Serializable {
 
   def this(
       vertices: VertexRDD[VD],
