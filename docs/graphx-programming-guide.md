@@ -1,4 +1,7 @@
-# GraphX: Unifying Graphs and Tables
+---
+layout: global
+title: "GraphX: Unifying Graphs and Tables"
+---
 
 
 GraphX extends the distributed fault-tolerant collections API and
@@ -26,11 +29,8 @@ execute graph algorithms.  Unfortunately, these systems do not address
 the challenges of graph construction and transformation and provide
 limited fault-tolerance and support for interactive analysis.
 
-<p align="center">
-  <img src="https://raw.github.com/amplab/graphx/master/docs/img/data_parallel_vs_graph_parallel.png" />
-</p>
-
-
+{:.pagination-centered}
+![Data-parallel vs. graph-parallel]({{ site.url }}/img/data_parallel_vs_graph_parallel.png)
 
 ## Solution
 
@@ -194,4 +194,3 @@ you state this explicitly, by submitting any copyrighted material via
 pull request, email, or other means you agree to license the material
 under the project's open source license and warrant that you have the
 legal authority to do so.
-
