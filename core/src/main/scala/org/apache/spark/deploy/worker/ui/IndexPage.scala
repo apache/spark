@@ -58,6 +58,10 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
     val finishedDrivers = workerState.finishedDrivers.sortBy(_.driverId).reverse
     def finishedDriverTable = UIUtils.listingTable(driverHeaders, driverRow, finishedDrivers)
 
+    // For now we only show driver information if the user has submitted drivers to the cluster.
+    // This is until we integrate the notion of drivers and applications in the UI.
+    def hasDrivers = runningDrivers.length > 0 || finishedDrivers.length > 0
+
     val content =
         <div class="row-fluid"> <!-- Worker Details -->
           <div class="span12">
@@ -81,6 +85,17 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
           </div>
         </div>
 
+        <div>
+          {if (hasDrivers)
+            <div class="row-fluid"> <!-- Running Drivers -->
+              <div class="span12">
+                <h4> Running Drivers {workerState.drivers.size} </h4>
+                {runningDriverTable}
+              </div>
+            </div>
+          }
+        </div>
+
         <div class="row-fluid"> <!-- Finished Executors  -->
           <div class="span12">
             <h4> Finished Executors </h4>
@@ -88,18 +103,15 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
           </div>
         </div>
 
-        <div class="row-fluid"> <!-- Running Drivers -->
-          <div class="span12">
-            <h4> Running Drivers {workerState.drivers.size} </h4>
-            {runningDriverTable}
-          </div>
-        </div>
-
-        <div class="row-fluid"> <!-- Finished Drivers  -->
-          <div class="span12">
-            <h4> Finished Drivers </h4>
-            {finishedDriverTable}
-          </div>
+        <div>
+          {if (hasDrivers)
+            <div class="row-fluid"> <!-- Finished Drivers  -->
+              <div class="span12">
+                <h4> Finished Drivers </h4>
+                {finishedDriverTable}
+              </div>
+            </div>
+          }
         </div>;
 
     UIUtils.basicSparkPage(content, "Spark Worker at %s:%s".format(
@@ -133,7 +145,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
   def driverRow(driver: DriverRunner): Seq[Node] = {
     <tr>
       <td>{driver.driverId}</td>
-      <td>{driver.driverDesc.command.mainClass}</td>
+      <td>{driver.driverDesc.command.arguments(1)}</td>
       <td>{driver.finalState.getOrElse(DriverState.RUNNING)}</td>
       <td sorttable_customkey={driver.driverDesc.cores.toString}>
         {driver.driverDesc.cores.toString}
