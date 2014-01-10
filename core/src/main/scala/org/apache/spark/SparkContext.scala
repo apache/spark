@@ -244,6 +244,10 @@ class SparkContext(
     localProperties.set(new Properties())
   }
 
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
   def setLocalProperty(key: String, value: String) {
     if (localProperties.get() == null) {
       localProperties.set(new Properties())
@@ -255,6 +259,10 @@ class SparkContext(
     }
   }
 
+  /**
+   * Get a local property set in this thread, or null if it is missing. See
+   * [[org.apache.spark.SparkContext.setLocalProperty]].
+   */
   def getLocalProperty(key: String): String =
     Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
 
@@ -265,7 +273,7 @@ class SparkContext(
   }
 
   /**
-   * Assigns a group id to all the jobs started by this thread until the group id is set to a
+   * Assigns a group ID to all the jobs started by this thread until the group ID is set to a
    * different value or cleared.
    *
    * Often, a unit of execution in an application consists of multiple Spark actions or jobs.
@@ -288,7 +296,7 @@ class SparkContext(
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
   }
 
-  /** Clear the job group id and its description. */
+  /** Clear the current thread's job group ID and its description. */
   def clearJobGroup() {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
