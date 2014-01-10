@@ -6,10 +6,7 @@ import scala.util.Sorting
 import org.apache.spark.graphx._
 import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
 
-
-//private[graph]
 class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag](size: Int = 64) {
-
   var edges = new PrimitiveVector[Edge[ED]](size)
 
   /** Add a new edge to the partition. */

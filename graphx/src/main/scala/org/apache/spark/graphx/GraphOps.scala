@@ -232,7 +232,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    * {{{
    * graph.filter(
    *   graph => {
-   *     val degrees: VertexSetRDD[Int] = graph.outDegrees
+   *     val degrees: VertexRDD[Int] = graph.outDegrees
    *     graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
    *   },
    *   vpred = (vid: VertexID, deg:Int) => deg > 0

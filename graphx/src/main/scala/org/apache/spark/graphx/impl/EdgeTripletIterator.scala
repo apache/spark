@@ -5,7 +5,6 @@ import scala.reflect.ClassTag
 import org.apache.spark.graphx._
 import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
 
-
 /**
  * The Iterator type returned when constructing edge triplets. This class technically could be
  * an anonymous class in GraphImpl.triplets, but we name it here explicitly so it is easier to
