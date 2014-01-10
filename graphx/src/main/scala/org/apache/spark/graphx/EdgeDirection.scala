@@ -2,8 +2,7 @@ package org.apache.spark.graphx
 
 
 /**
- * The direction of directed edge relative to a vertex used to select
- * the set of adjacent neighbors when running a neighborhood query.
+ * The direction of a directed edge relative to a vertex.
  */
 sealed abstract class EdgeDirection {
   /**

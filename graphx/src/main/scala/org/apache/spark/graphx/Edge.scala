@@ -3,7 +3,7 @@ package org.apache.spark.graphx
 
 /**
  * A single directed edge consisting of a source id, target id,
- * and the data associated with the Edgee.
+ * and the data associated with the edge.
  *
  * @tparam ED type of the edge attribute
  */

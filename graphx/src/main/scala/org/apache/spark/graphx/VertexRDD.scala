@@ -28,7 +28,7 @@ import org.apache.spark.graphx.impl.MsgRDDFunctions
 import org.apache.spark.graphx.impl.VertexPartition
 
 /**
- * A `VertexRDD[VD]` extends the `RDD[(VertexID, VD)]` by ensuring that there is only one entry for
+ * `VertexRDD[VD]` extends the `RDD[(VertexID, VD)]` by ensuring that there is only one entry for
  * each vertex and by pre-indexing the entries for fast, efficient joins. Two VertexRDDs with the
  * same index can be joined efficiently.
  *

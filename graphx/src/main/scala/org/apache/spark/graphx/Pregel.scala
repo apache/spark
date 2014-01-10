@@ -4,26 +4,24 @@ import scala.reflect.ClassTag
 
 
 /**
- * This object implements a Pregel-like bulk-synchronous
- * message-passing API.  However, unlike the original Pregel API the
- * GraphX pregel API factors the sendMessage computation over edges,
- * enables the message sending computation to read both vertex
- * attributes, and finally constrains messages to the graph structure.
- * These changes allow for substantially more efficient distributed
- * execution while also exposing greater flexibility for graph based
- * computation.
+ * Implements a Pregel-like bulk-synchronous message-passing API.
  *
- * @example We can use the Pregel abstraction to implement PageRank
+ * Unlike the original Pregel API, the GraphX Pregel API factors the sendMessage computation over
+ * edges, enables the message sending computation to read both vertex attributes, and constrains
+ * messages to the graph structure.  These changes allow for substantially more efficient
+ * distributed execution while also exposing greater flexibility for graph-based computation.
+ *
+ * @example We can use the Pregel abstraction to implement PageRank:
  * {{{
  * val pagerankGraph: Graph[Double, Double] = graph
  *   // Associate the degree with each vertex
- *   .outerJoinVertices(graph.outDegrees){
+ *   .outerJoinVertices(graph.outDegrees) {
  *     (vid, vdata, deg) => deg.getOrElse(0)
  *   }
  *   // Set the weight on the edges based on the degree
- *   .mapTriplets( e => 1.0 / e.srcAttr )
+ *   .mapTriplets(e => 1.0 / e.srcAttr)
  *   // Set the vertex attributes to the initial pagerank values
- *   .mapVertices( (id, attr) => 1.0 )
+ *   .mapVertices((id, attr) => 1.0)
  *
  * def vertexProgram(id: VertexID, attr: Double, msgSum: Double): Double =
  *   resetProb + (1.0 - resetProb) * msgSum
@@ -31,7 +29,7 @@ import scala.reflect.ClassTag
  *   Some(edge.srcAttr * edge.attr)
  * def messageCombiner(a: Double, b: Double): Double = a + b
  * val initialMessage = 0.0
- * // Execute pregel for a fixed number of iterations.
+ * // Execute Pregel for a fixed number of iterations.
  * Pregel(pagerankGraph, initialMessage, numIter)(
  *   vertexProgram, sendMessage, messageCombiner)
  * }}}
@@ -54,7 +52,7 @@ object Pregel {
    * then the vertex-program is not invoked.
    *
    * This function iterates until there are no remaining messages, or
-   * for maxIterations iterations.
+   * for `maxIterations` iterations.
    *
    * @tparam VD the vertex data type
    * @tparam ED the edge data type
@@ -63,9 +61,9 @@ object Pregel {
    * @param graph the input graph.
    *
    * @param initialMsg the message each vertex will receive at the on
-   * the first iteration.
+   * the first iteration
    *
-   * @param maxIterations the maximum number of iterations to run for.
+   * @param maxIterations the maximum number of iterations to run for
    *
    * @param vprog the user-defined vertex program which runs on each
    * vertex and receives the inbound message and computes a new vertex
@@ -76,7 +74,7 @@ object Pregel {
    *
    * @param sendMsg a user supplied function that is applied to out
    * edges of vertices that received messages in the current
-   * iteration.
+   * iteration
    *
    * @param mergeMsg a user supplied function that takes two incoming
    * messages of type A and merges them into a single message of type

@@ -7,7 +7,9 @@ import org.apache.spark.serializer.KryoRegistrator
 import org.apache.spark.util.collection.BitSet
 import org.apache.spark.util.BoundedPriorityQueue
 
-
+/**
+ * Registers GraphX classes with Kryo for improved performance.
+ */
 class GraphKryoRegistrator extends KryoRegistrator {
 
   def registerClasses(kryo: Kryo) {
