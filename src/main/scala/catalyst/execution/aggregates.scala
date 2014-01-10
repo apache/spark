@@ -3,15 +3,22 @@ package execution
 
 import catalyst.errors._
 import catalyst.expressions._
+import org.apache.spark.rdd.SharkPairRDDFunctions
 
 /* Implicits */
 import org.apache.spark.SparkContext._
+import SharkPairRDDFunctions._
 
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SharkPlan)
+    (override val outputDataProperty: DataProperty =
+       GroupProperty(groupingExpressions))
   extends UnaryNode {
+
+  override val requiredDataProperty: DataProperty = GroupProperty(groupingExpressions)
+  override def otherCopyArgs = outputDataProperty :: Nil
 
   case class AverageFunction(expr: Expression, base: AggregateExpression)
     extends AggregateFunction {
@@ -86,9 +93,12 @@ case class Aggregate(
   def output = aggregateExpressions.map(_.toAttribute)
 
   def execute() = attachTree(this, "execute") {
+    // TODO: If the child of it is an [[catalyst.execution.Exchange]],
+    // do not evaluate the groupingExpressions again since we have evaluated it
+    // in the [[catalyst.execution.Exchange]].
     val grouped = child.execute().map { row =>
       (buildRow(groupingExpressions.map(Evaluate(_, Vector(row)))), row)
-    }.groupByKey()
+    }.groupByKeyLocally()
 
     grouped.map { case (group, rows) =>
       // Replace all aggregate expressions with spark functions that will compute the result.
@@ -142,6 +152,7 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
                          (@transient sc: SharkContext) extends UnaryNode {
   def output = aggregateExprs.map(_.toAttribute)
   override def otherCopyArgs = Seq(sc)
+  override val requiredDataProperty: DataProperty = GroupProperty(Nil)
 
   case class AverageFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
     def this() = this(null, null) // Required for serialization.

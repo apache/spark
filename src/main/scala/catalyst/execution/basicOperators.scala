@@ -1,12 +1,12 @@
 package catalyst
 package execution
 
-import errors._
-import expressions._
-import types._
+import catalyst.errors._
+import catalyst.expressions._
+import catalyst.types._
 
-import org.apache.spark.SparkContext._
-
+/* Implicits */
+import org.apache.spark.rdd.SharkOrderedRDDFunctions._
 
 case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
@@ -45,12 +45,21 @@ case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) 
   def execute() = sc.makeRDD(executeCollect(), 1)
 }
 
-case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
+case class Sort(
+    sortExprs: Seq[SortOrder],
+    child: SharkPlan)
+    (override val outputDataProperty: DataProperty =
+       SortProperty(sortExprs)) extends UnaryNode {
   val numPartitions = 1 // TODO: Set with input cardinality
+
+  override val requiredDataProperty: DataProperty = SortProperty(sortExprs)
+  override def otherCopyArgs = outputDataProperty :: Nil
 
   private final val directions = sortExprs.map(_.direction).toIndexedSeq
   private final val dataTypes = sortExprs.map(_.dataType).toIndexedSeq
 
+  // TODO: This SortKey and the one in [[catalyst.execute.Exchange]] are the same.
+  // We should just define it only once.
   private class SortKey(val keyValues: IndexedSeq[Any]) extends Ordered[SortKey] with Serializable {
     def compare(other: SortKey): Int = {
       var i = 0
@@ -81,12 +90,6 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
             } else {
               right.asInstanceOf[Double] compare left.asInstanceOf[Double]
             }
-          } else if (curDataType == LongType) {
-            if (curDirection == Ascending) {
-              left.asInstanceOf[Long] compare right.asInstanceOf[Long]
-            } else {
-              right.asInstanceOf[Long] compare left.asInstanceOf[Long]
-            }
           } else if (curDataType == StringType) {
             if (curDirection == Ascending) {
               left.asInstanceOf[String] compare right.asInstanceOf[String]
@@ -106,12 +109,16 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
 
   // TODO: Don't include redundant expressions in both sortKey and row.
   def execute() = attachTree(this, "sort") {
+    // TODO: If the child of it is an [[catalyst.execution.Exchange]],
+    // do not evaluate the sortKey again since we have evaluated it
+    // in the [[catalyst.execution.Exchange]].
     child.execute().map { row =>
       val input = Vector(row)
-      val sortKey = new SortKey(sortExprs.map(s => Evaluate(s.child, input)).toIndexedSeq)
+      val sortKey = new SortKey(
+        sortExprs.map(s => Evaluate(s.child, input)).toIndexedSeq)
 
       (sortKey, row)
-    }.sortByKey(ascending = true, numPartitions).map(_._2)
+    }.sortByKeyLocally(ascending = true).map(_._2)
   }
 
   def output = child.output
@@ -120,6 +127,9 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
 // TODO: Rename: SchemaRDD
 case class LocalRelation(output: Seq[Attribute], data: Seq[IndexedSeq[Any]])
                         (@transient sc: SharkContext) extends LeafNode {
-  def execute() = sc.makeRDD(data.map(buildRow), 1)
+
+  // Since LocalRelation is used for unit tests, set the defaultParallelism to 2
+  // to make sure we can cover bugs appearing in a distributed environment.
+  def execute() = sc.makeRDD(data.map(buildRow), 2)
 }
 
