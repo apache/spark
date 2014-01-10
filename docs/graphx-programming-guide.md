@@ -16,7 +16,7 @@ title: GraphX Programming Guide
 # Overview
 
 GraphX is the new (alpha) Spark API for graphs and graph-parallel
-computation. At a high-level GraphX, extends the Spark
+computation. At a high-level, GraphX extends the Spark
 [RDD](api/core/index.html#org.apache.spark.rdd.RDD) by
 introducing the [Resilient Distributed property Graph (RDG)](#property_graph):
 a directed graph with properties attached to each vertex and edge.
@@ -77,12 +77,13 @@ graph-parallel systems while easily expressing the entire analytics pipelines.
 ## GraphX Replaces the Spark Bagel API
 
 Prior to the release of GraphX, graph computation in Spark was expressed using
-Bagel, an implementation of the Pregel API.  GraphX improves upon Bagel by exposing
-a richer property graph API, a more streamlined version of the Pregel abstraction,
-and system optimizations to improve performance and reduce memory
+Bagel, an implementation of the Pregel API.  GraphX improves upon Bagel by
+exposing a richer property graph API, a more streamlined version of the Pregel
+abstraction, and system optimizations to improve performance and reduce memory
 overhead.  While we plan to eventually deprecate the Bagel, we will continue to
-support the API and [Bagel programming guide](bagel-programming-guide.html). However,
-we encourage Bagel to explore the new GraphX API and comment on issues that may
+support the [Bagel API](api/bagel/index.html#org.apache.spark.bagel.package) and
+[Bagel programming guide](bagel-programming-guide.html). However, we encourage
+Bagel users to explore the new GraphX API and comment on issues that may
 complicate the transition from Bagel.
 
 # The Property Graph
@@ -168,4 +169,3 @@ val userInfoWithPageRank = subgraph.outerJoinVertices(pagerankGraph.vertices){
 println(userInfoWithPageRank.top(5))
 
 {% endhighlight %}
-
