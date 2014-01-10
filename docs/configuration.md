@@ -104,11 +104,22 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.storage.memoryFraction</td>
-  <td>0.66</td>
+  <td>0.6</td>
   <td>
     Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 2/3 of the heap, but you can increase
+    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can increase
     it if you configure your own old generation size.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.memoryFraction</td>
+  <td>0.3</td>
+  <td>
+    Fraction of Java heap to use for aggregation and cogroups during shuffles, if
+    <code>spark.shuffle.externalSorting</code> is enabled. At any given time, the collective size of
+    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
+    begin to spill to disk. If spills are often, consider increasing this value at the expense of
+    <code>spark.storage.memoryFraction</code>.
   </td>
 </tr>
 <tr>
@@ -374,6 +385,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.externalSorting</td>
+  <td>true</td>
+  <td>
+    If set to "true", spills in-memory maps used for shuffles to disk when a memory threshold is reached. This
+    threshold is specified by <code>spark.shuffle.memoryFraction</code>. Enable this especially for memory-intensive
+    applications.
   </td>
 </tr>
 <tr>
