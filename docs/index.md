@@ -5,7 +5,7 @@ title: Spark Overview
 
 Apache Spark is a fast and general-purpose cluster computing system.
 It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html) that make parallel jobs easy to write, and an optimized engine that supports general computation graphs.
-It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [MLlib](mllib-guide.html) for machine learning, [Bagel](bagel-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
+It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
 # Downloading
 
@@ -77,7 +77,7 @@ For this version of Spark (0.8.1) Hadoop 2.2.x (or newer) users will have to bui
   * [Python Programming Guide](python-programming-guide.html): using Spark from Python
 * [Spark Streaming](streaming-programming-guide.html): using the alpha release of Spark Streaming
 * [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library
-* [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
+* [GraphX (Graphs on Spark)](graphx-programming-guide.html): simple graph processing model
 
 **API Docs:**
 
@@ -85,7 +85,7 @@ For this version of Spark (0.8.1) Hadoop 2.2.x (or newer) users will have to bui
 * [Spark for Python (Epydoc)](api/pyspark/index.html)
 * [Spark Streaming for Java/Scala (Scaladoc)](api/streaming/index.html)
 * [MLlib (Machine Learning) for Java/Scala (Scaladoc)](api/mllib/index.html)
-* [Bagel (Pregel on Spark) for Scala (Scaladoc)](api/bagel/index.html)
+* [GraphX (Graphs on Spark) for Scala (Scaladoc)](api/graphx/index.html)
 
 
 **Deployment guides:**
