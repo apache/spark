@@ -113,6 +113,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
     val newFiles = fs.listStatus(directoryPath, filter).map(_.getPath.toString)
     val timeTaken = System.currentTimeMillis - lastNewFileFindingTime
     logInfo("Finding new files took " + timeTaken + " ms")
+    logDebug("# cached file times = " + fileModTimes.size)
     if (timeTaken > slideDuration.milliseconds) {
       logWarning(
         "Time taken to find new files exceeds the batch size. " +
