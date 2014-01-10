@@ -15,24 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.worker
+package org.apache.spark.deploy.master
 
-import java.io.File
+import java.util.Date
 
-import org.scalatest.FunSuite
+import org.apache.spark.deploy.DriverDescription
 
-import org.apache.spark.deploy.{ExecutorState, Command, ApplicationDescription}
+private[spark] class DriverInfo(
+    val startTime: Long,
+    val id: String,
+    val desc: DriverDescription,
+    val submitDate: Date)
+  extends Serializable {
 
-class ExecutorRunnerTest extends FunSuite {
-  test("command includes appId") {
-    def f(s:String) = new File(s)
-    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
-    val appDesc = new ApplicationDescription("app name", Some(8), 500, Command("foo", Seq(),Map()),
-      sparkHome, "appUiUrl")
-    val appId = "12345-worker321-9876"
-    val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321", f(sparkHome),
-      f("ooga"), "blah", ExecutorState.RUNNING)
-
-    assert(er.getCommandSeq.last === appId)
-  }
+  @transient var state: DriverState.Value = DriverState.SUBMITTED
+  /* If we fail when launching the driver, the exception is stored here. */
+  @transient var exception: Option[Exception] = None
+  /* Most recent worker assigned to this driver */
+  @transient var worker: Option[WorkerInfo] = None
 }

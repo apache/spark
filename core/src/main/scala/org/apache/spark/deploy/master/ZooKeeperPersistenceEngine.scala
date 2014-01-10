@@ -49,6 +49,14 @@ class ZooKeeperPersistenceEngine(serialization: Serialization, conf: SparkConf)
     zk.delete(WORKING_DIR + "/app_" + app.id)
   }
 
+  override def addDriver(driver: DriverInfo) {
+    serializeIntoFile(WORKING_DIR + "/driver_" + driver.id, driver)
+  }
+
+  override def removeDriver(driver: DriverInfo) {
+    zk.delete(WORKING_DIR + "/driver_" + driver.id)
+  }
+
   override def addWorker(worker: WorkerInfo) {
     serializeIntoFile(WORKING_DIR + "/worker_" + worker.id, worker)
   }
@@ -61,13 +69,15 @@ class ZooKeeperPersistenceEngine(serialization: Serialization, conf: SparkConf)
     zk.close()
   }
 
-  override def readPersistedData(): (Seq[ApplicationInfo], Seq[WorkerInfo]) = {
+  override def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
     val sortedFiles = zk.getChildren(WORKING_DIR).toList.sorted
     val appFiles = sortedFiles.filter(_.startsWith("app_"))
     val apps = appFiles.map(deserializeFromFile[ApplicationInfo])
+    val driverFiles = sortedFiles.filter(_.startsWith("driver_"))
+    val drivers = driverFiles.map(deserializeFromFile[DriverInfo])
     val workerFiles = sortedFiles.filter(_.startsWith("worker_"))
     val workers = workerFiles.map(deserializeFromFile[WorkerInfo])
-    (apps, workers)
+    (apps, drivers, workers)
   }
 
   private def serializeIntoFile(path: String, value: AnyRef) {

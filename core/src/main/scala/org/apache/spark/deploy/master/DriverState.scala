@@ -15,24 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.deploy.worker
+package org.apache.spark.deploy.master
 
-import java.io.File
+private[spark] object DriverState extends Enumeration {
 
-import org.scalatest.FunSuite
+  type DriverState = Value
 
-import org.apache.spark.deploy.{ExecutorState, Command, ApplicationDescription}
-
-class ExecutorRunnerTest extends FunSuite {
-  test("command includes appId") {
-    def f(s:String) = new File(s)
-    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
-    val appDesc = new ApplicationDescription("app name", Some(8), 500, Command("foo", Seq(),Map()),
-      sparkHome, "appUiUrl")
-    val appId = "12345-worker321-9876"
-    val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321", f(sparkHome),
-      f("ooga"), "blah", ExecutorState.RUNNING)
-
-    assert(er.getCommandSeq.last === appId)
-  }
+  // SUBMITTED: Submitted but not yet scheduled on a worker
+  // RUNNING: Has been allocated to a worker to run
+  // FINISHED: Previously ran and exited cleanly
+  // RELAUNCHING: Exited non-zero or due to worker failure, but has not yet started running again
+  // UNKNOWN: The state of the driver is temporarily not known due to master failure recovery
+  // KILLED: A user manually killed this driver
+  // FAILED: The driver exited non-zero and was not supervised
+  // ERROR: Unable to run or restart due to an unrecoverable error (e.g. missing jar file)
+  val SUBMITTED, RUNNING, FINISHED, RELAUNCHING, UNKNOWN, KILLED, FAILED, ERROR = Value
 }
