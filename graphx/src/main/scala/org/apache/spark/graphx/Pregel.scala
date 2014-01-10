@@ -106,23 +106,21 @@ object Pregel {
       // Update the graph with the new vertices.
       prevG = g
       g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }
-      g.vertices.cache()
+      g.cache()
 
       val oldMessages = messages
       // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't
       // get to send messages. We must cache messages so it can be materialized on the next line,
       // allowing us to uncache the previous iteration.
       messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, EdgeDirection.Out))).cache()
-      // Materializes messages, newVerts, and g.rvv (which materializes g.vertices). Hides
-      // oldMessages (depended on by newVerts), newVerts (depended on by messages), prevG.vertices
-      // (depended on by newVerts and g.vertices), and prevG.rvv (depended on by oldMessages and
-      // g.rvv).
+      // The call to count() materializes `messages`, `newVerts`, and the vertices of `g`. This
+      // hides oldMessages (depended on by newVerts), newVerts (depended on by messages), and the
+      // vertices of prevG (depended on by newVerts, oldMessages, and the vertices of g).
       activeMessages = messages.count()
-      // Unpersist hidden RDDs
+      // Unpersist the RDDs hidden by newly-materialized RDDs
       oldMessages.unpersist(blocking=false)
       newVerts.unpersist(blocking=false)
-      prevG.vertices.unpersist(blocking=false)
-      prevG.asInstanceOf[org.apache.spark.graphx.impl.GraphImpl[VD, ED]].replicatedVertexView.unpersist(blocking=false)
+      prevG.unpersistVertices(blocking=false)
       // count the iteration
       i += 1
     }

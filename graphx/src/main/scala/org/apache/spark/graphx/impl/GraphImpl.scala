@@ -65,6 +65,12 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   override def cache(): Graph[VD, ED] = persist(StorageLevel.MEMORY_ONLY)
 
+  override def unpersistVertices(blocking: Boolean = true): Graph[VD, ED] = {
+    vertices.unpersist(blocking)
+    replicatedVertexView.unpersist(blocking)
+    this
+  }
+
   override def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED] = {
     val numPartitions = edges.partitions.size
     val edTag = classTag[ED]

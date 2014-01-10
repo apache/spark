@@ -94,6 +94,12 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
   def cache(): Graph[VD, ED]
 
   /**
+   * Uncache only the vertices of this graph, leaving the edges alone. This is useful because most
+   * graph operations modify the vertices but reuse the edges.
+   */
+  def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
+
+  /**
    * Repartition the edges in the graph according to partitionStrategy.
    */
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
