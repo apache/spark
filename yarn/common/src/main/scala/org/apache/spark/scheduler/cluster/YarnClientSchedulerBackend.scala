@@ -39,6 +39,7 @@ private[spark] class YarnClientSchedulerBackend(
     val defaultWorkerNumber = "1"
 
     val userJar = System.getenv("SPARK_YARN_APP_JAR")
+    val distFiles = System.getenv("SPARK_YARN_DIST_FILES")
     var workerCores = System.getenv("SPARK_WORKER_CORES")
     var workerMemory = System.getenv("SPARK_WORKER_MEMORY")
     var workerNumber = System.getenv("SPARK_WORKER_INSTANCES")
@@ -64,7 +65,8 @@ private[spark] class YarnClientSchedulerBackend(
       "--worker-memory", workerMemory,
       "--worker-cores", workerCores,
       "--num-workers", workerNumber,
-      "--master-class", "org.apache.spark.deploy.yarn.WorkerLauncher"
+      "--master-class", "org.apache.spark.deploy.yarn.WorkerLauncher",
+      "--files", distFiles
     )
 
     val args = new ClientArguments(argsArray, conf)

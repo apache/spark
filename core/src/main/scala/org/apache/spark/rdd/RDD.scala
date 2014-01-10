@@ -23,7 +23,6 @@ import scala.collection.Map
 import scala.collection.JavaConversions.mapAsScalaMap
 import scala.collection.mutable.ArrayBuffer
 
-import scala.collection.mutable.HashMap
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.hadoop.io.BytesWritable
@@ -52,11 +51,13 @@ import org.apache.spark._
  * partitioned collection of elements that can be operated on in parallel. This class contains the
  * basic operations available on all RDDs, such as `map`, `filter`, and `persist`. In addition,
  * [[org.apache.spark.rdd.PairRDDFunctions]] contains operations available only on RDDs of key-value
- * pairs, such as `groupByKey` and `join`; [[org.apache.spark.rdd.DoubleRDDFunctions]] contains
- * operations available only on RDDs of Doubles; and [[org.apache.spark.rdd.SequenceFileRDDFunctions]]
- * contains operations available on RDDs that can be saved as SequenceFiles. These operations are
- * automatically available on any RDD of the right type (e.g. RDD[(Int, Int)] through implicit
- * conversions when you `import org.apache.spark.SparkContext._`.
+ * pairs, such as `groupByKey` and `join`;
+ * [[org.apache.spark.rdd.DoubleRDDFunctions]] contains operations available only on RDDs of
+ * Doubles; and
+ * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that
+ * can be saved as SequenceFiles.
+ * These operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
+ * through implicit conversions when you `import org.apache.spark.SparkContext._`.
  *
  * Internally, each RDD is characterized by five main properties:
  *
@@ -235,12 +236,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Compute an RDD partition or read it from a checkpoint if the RDD is checkpointing.
    */
-  private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] = {
-    if (isCheckpointed) {
-      firstParent[T].iterator(split, context)
-    } else {
-      compute(split, context)
-    }
+  private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
+  {
+    if (isCheckpointed) firstParent[T].iterator(split, context) else compute(split, context)
   }
 
   // Transformations (return a new RDD)
@@ -268,6 +266,9 @@ abstract class RDD[T: ClassTag](
   def distinct(numPartitions: Int): RDD[T] =
     map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
 
+  /**
+   * Return a new RDD containing the distinct elements in this RDD.
+   */
   def distinct(): RDD[T] = distinct(partitions.size)
 
   /**
@@ -280,7 +281,7 @@ abstract class RDD[T: ClassTag](
    * which can avoid performing a shuffle.
    */
   def repartition(numPartitions: Int): RDD[T] = {
-    coalesce(numPartitions, true)
+    coalesce(numPartitions, shuffle = true)
   }
 
   /**
@@ -646,7 +647,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Reduces the elements of this RDD using the specified commutative and associative binary operator.
+   * Reduces the elements of this RDD using the specified commutative and
+   * associative binary operator.
    */
   def reduce(f: (T, T) => T): T = {
     val cleanF = sc.clean(f)
@@ -953,7 +955,7 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** Record user function generating this RDD. */
-  @transient private[spark] val origin = sc.getCallSite
+  @transient private[spark] val origin = sc.getCallSite()
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 

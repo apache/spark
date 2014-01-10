@@ -54,22 +54,22 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
   private val selector = SelectorProvider.provider.openSelector()
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
-    conf.get("spark.core.connection.handler.threads.min", "20").toInt,
-    conf.get("spark.core.connection.handler.threads.max", "60").toInt,
-    conf.get("spark.core.connection.handler.threads.keepalive", "60").toInt, TimeUnit.SECONDS,
+    conf.getInt("spark.core.connection.handler.threads.min", 20),
+    conf.getInt("spark.core.connection.handler.threads.max", 60),
+    conf.getInt("spark.core.connection.handler.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable]())
 
   private val handleReadWriteExecutor = new ThreadPoolExecutor(
-    conf.get("spark.core.connection.io.threads.min", "4").toInt,
-    conf.get("spark.core.connection.io.threads.max", "32").toInt,
-    conf.get("spark.core.connection.io.threads.keepalive", "60").toInt, TimeUnit.SECONDS,
+    conf.getInt("spark.core.connection.io.threads.min", 4),
+    conf.getInt("spark.core.connection.io.threads.max", 32),
+    conf.getInt("spark.core.connection.io.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable]())
 
   // Use a different, yet smaller, thread pool - infrequently used with very short lived tasks : which should be executed asap
   private val handleConnectExecutor = new ThreadPoolExecutor(
-    conf.get("spark.core.connection.connect.threads.min", "1").toInt,
-    conf.get("spark.core.connection.connect.threads.max", "8").toInt,
-    conf.get("spark.core.connection.connect.threads.keepalive", "60").toInt, TimeUnit.SECONDS,
+    conf.getInt("spark.core.connection.connect.threads.min", 1),
+    conf.getInt("spark.core.connection.connect.threads.max", 8),
+    conf.getInt("spark.core.connection.connect.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable]())
 
   private val serverChannel = ServerSocketChannel.open()
