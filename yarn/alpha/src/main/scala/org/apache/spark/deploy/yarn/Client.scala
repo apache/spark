@@ -110,15 +110,15 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     appContext
   }
 
-  def calculateAMMemory(newApp: GetNewApplicationResponse) :Int = {
-    val minResMemory: Int = newApp.getMinimumResourceCapability().getMemory()
+  def calculateAMMemory(newApp: GetNewApplicationResponse): Int = {
+    val minResMemory = newApp.getMinimumResourceCapability().getMemory()
     val amMemory = ((args.amMemory / minResMemory) * minResMemory) +
           ((if ((args.amMemory % minResMemory) == 0) 0 else minResMemory) -
-            YarnAllocationHandler.MEMORY_OVERHEAD)
+          YarnAllocationHandler.MEMORY_OVERHEAD)
     amMemory
   }
 
-  def setupSecurityToken(amContainer :ContainerLaunchContext) = {
+  def setupSecurityToken(amContainer: ContainerLaunchContext) = {
     // Setup security tokens.
     val dob = new DataOutputBuffer()
     credentials.writeTokenStorageToStream(dob)
@@ -154,7 +154,6 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
       )
 
       val state = report.getYarnApplicationState()
-      val dsStatus = report.getFinalApplicationStatus()
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {

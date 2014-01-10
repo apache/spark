@@ -108,11 +108,11 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     val queueInfo: QueueInfo = super.getQueueInfo(args.amQueue)
     logInfo( """Queue info ... queueName: %s, queueCurrentCapacity: %s, queueMaxCapacity: %s,
       queueApplicationCount = %s, queueChildQueueCount = %s""".format(
-      queueInfo.getQueueName,
-      queueInfo.getCurrentCapacity,
-      queueInfo.getMaximumCapacity,
-      queueInfo.getApplications.size,
-      queueInfo.getChildQueues.size))
+        queueInfo.getQueueName,
+        queueInfo.getCurrentCapacity,
+        queueInfo.getMaximumCapacity,
+        queueInfo.getApplications.size,
+        queueInfo.getChildQueues.size))
   }
 
   def calculateAMMemory(newApp: GetNewApplicationResponse) :Int = {
@@ -124,7 +124,7 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
     args.amMemory
   }
 
-  def setupSecurityToken(amContainer :ContainerLaunchContext) = {
+  def setupSecurityToken(amContainer: ContainerLaunchContext) = {
     // Setup security tokens.
     val dob = new DataOutputBuffer()
     credentials.writeTokenStorageToStream(dob)
@@ -160,7 +160,6 @@ class Client(clientArgs: ClientArguments, hadoopConf: Configuration, spConf: Spa
       )
 
       val state = report.getYarnApplicationState()
-      val dsStatus = report.getFinalApplicationStatus()
       if (state == YarnApplicationState.FINISHED ||
         state == YarnApplicationState.FAILED ||
         state == YarnApplicationState.KILLED) {

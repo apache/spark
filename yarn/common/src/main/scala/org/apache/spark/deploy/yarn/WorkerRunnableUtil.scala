@@ -45,11 +45,12 @@ trait WorkerRunnableUtil extends Logging {
   val sparkConf: SparkConf
   lazy val env = prepareEnvironment
 
-  def prepareCommand(masterAddress: String,
-                     slaveId: String,
-                     hostname: String,
-                     workerMemory: Int,
-                     workerCores: Int) = {
+  def prepareCommand(
+      masterAddress: String,
+      slaveId: String,
+      hostname: String,
+      workerMemory: Int,
+      workerCores: Int) = {
     // Extra options for the JVM
     var JAVA_OPTS = ""
     // Set the JVM memory
