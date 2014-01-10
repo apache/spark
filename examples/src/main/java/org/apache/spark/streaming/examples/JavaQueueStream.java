@@ -31,8 +31,11 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Queue;
 
-public class JavaQueueStream {
-  public static void main(String[] args) throws InterruptedException {
+public final class JavaQueueStream {
+  private JavaQueueStream() {
+  }
+
+  public static void main(String[] args) throws Exception {
     if (args.length < 1) {
       System.err.println("Usage: JavaQueueStream <master>");
       System.exit(1);
@@ -40,7 +43,7 @@ public class JavaQueueStream {
 
     // Create the context
     JavaStreamingContext ssc = new JavaStreamingContext(args[0], "QueueStream", new Duration(1000),
-            System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+            System.getenv("SPARK_HOME"), JavaStreamingContext.jarOfClass(JavaQueueStream.class));
 
     // Create the queue through which RDDs can be pushed to
     // a QueueInputDStream
@@ -62,14 +65,14 @@ public class JavaQueueStream {
     JavaPairDStream<Integer, Integer> mappedStream = inputStream.map(
         new PairFunction<Integer, Integer, Integer>() {
           @Override
-          public Tuple2<Integer, Integer> call(Integer i) throws Exception {
+          public Tuple2<Integer, Integer> call(Integer i) {
             return new Tuple2<Integer, Integer>(i % 10, 1);
           }
         });
     JavaPairDStream<Integer, Integer> reducedStream = mappedStream.reduceByKey(
       new Function2<Integer, Integer, Integer>() {
         @Override
-        public Integer call(Integer i1, Integer i2) throws Exception {
+        public Integer call(Integer i1, Integer i2) {
           return i1 + i2;
         }
     });

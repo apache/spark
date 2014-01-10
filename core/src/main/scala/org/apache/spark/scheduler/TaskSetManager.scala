@@ -57,11 +57,11 @@ private[spark] class TaskSetManager(
   val conf = sched.sc.conf
 
   // CPUs to request per task
-  val CPUS_PER_TASK = conf.get("spark.task.cpus", "1").toInt
+  val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
 
   // Quantile of tasks at which to start speculation
-  val SPECULATION_QUANTILE = conf.get("spark.speculation.quantile", "0.75").toDouble
-  val SPECULATION_MULTIPLIER = conf.get("spark.speculation.multiplier", "1.5").toDouble
+  val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
+  val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
@@ -116,7 +116,7 @@ private[spark] class TaskSetManager(
 
   // How frequently to reprint duplicate exceptions in full, in milliseconds
   val EXCEPTION_PRINT_INTERVAL =
-    conf.get("spark.logging.exceptionPrintInterval", "10000").toLong
+    conf.getLong("spark.logging.exceptionPrintInterval", 10000)
 
   // Map of recent exceptions (identified by string representation and top stack frame) to
   // duplicate count (how many times the same exception has appeared) and time the full exception
@@ -546,11 +546,6 @@ private[spark] class TaskSetManager(
       logInfo("Ignoring task-lost event for TID " + tid +
         " because task " + index + " is already finished")
     }
-  }
-
-  def error(message: String) {
-    // Save the error message
-    abort("Error: " + message)
   }
 
   def abort(message: String) {

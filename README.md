@@ -13,20 +13,22 @@ This README file only contains basic setup instructions.
 ## Building
 
 Spark requires Scala 2.10. The project is built using Simple Build Tool (SBT),
-which is packaged with it. To build Spark and its example programs, run:
+which can be obtained [here](http://www.scala-sbt.org). If SBT is installed we
+will use the system version of sbt otherwise we will attempt to download it
+automatically. To build Spark and its example programs, run:
 
-    sbt/sbt assembly
+    ./sbt/sbt assembly
 
 Once you've built Spark, the easiest way to start using it is the shell:
 
-    ./spark-shell
+    ./bin/spark-shell
 
-Or, for the Python API, the Python shell (`./pyspark`).
+Or, for the Python API, the Python shell (`./bin/pyspark`).
 
 Spark also comes with several sample programs in the `examples` directory.
-To run one of them, use `./run-example <class> <params>`. For example:
+To run one of them, use `./bin/run-example <class> <params>`. For example:
 
-    ./run-example org.apache.spark.examples.SparkLR local[2]
+    ./bin/run-example org.apache.spark.examples.SparkLR local[2]
 
 will run the Logistic Regression example locally on 2 CPUs.
 
@@ -36,7 +38,13 @@ All of the Spark samples take a `<master>` parameter that is the cluster URL
 to connect to. This can be a mesos:// or spark:// URL, or "local" to run
 locally with one thread, or "local[N]" to run locally with N threads.
 
+## Running tests
 
+Testing first requires [Building](#building) Spark. Once Spark is built, tests
+can be run using:
+
+`./sbt/sbt test`
+ 
 ## A Note About Hadoop Versions
 
 Spark uses the Hadoop core library to talk to HDFS and other Hadoop-supported

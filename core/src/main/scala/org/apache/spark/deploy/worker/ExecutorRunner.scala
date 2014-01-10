@@ -18,17 +18,15 @@
 package org.apache.spark.deploy.worker
 
 import java.io._
-import java.lang.System.getenv
 
 import akka.actor.ActorRef
 
 import com.google.common.base.Charsets
 import com.google.common.io.Files
 
-import org.apache.spark.{Logging}
-import org.apache.spark.deploy.{ExecutorState, ApplicationDescription}
+import org.apache.spark.Logging
+import org.apache.spark.deploy.{ExecutorState, ApplicationDescription, Command}
 import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import org.apache.spark.util.Utils
 
 /**
  * Manages the execution of one executor process.
@@ -44,16 +42,17 @@ private[spark] class ExecutorRunner(
     val host: String,
     val sparkHome: File,
     val workDir: File,
+    val workerUrl: String,
     var state: ExecutorState.Value)
   extends Logging {
 
   val fullId = appId + "/" + execId
   var workerThread: Thread = null
   var process: Process = null
-  var shutdownHook: Thread = null
 
-  private def getAppEnv(key: String): Option[String] =
-    appDesc.command.environment.get(key).orElse(Option(getenv(key)))
+  // NOTE: This is now redundant with the automated shut-down enforced by the Executor. It might
+  // make sense to remove this in the future.
+  var shutdownHook: Thread = null
 
   def start() {
     workerThread = new Thread("ExecutorRunner for " + fullId) {
@@ -92,55 +91,17 @@ private[spark] class ExecutorRunner(
 
   /** Replace variables such as {{EXECUTOR_ID}} and {{CORES}} in a command argument passed to us */
   def substituteVariables(argument: String): String = argument match {
+    case "{{WORKER_URL}}" => workerUrl
     case "{{EXECUTOR_ID}}" => execId.toString
     case "{{HOSTNAME}}" => host
     case "{{CORES}}" => cores.toString
     case other => other
   }
 
-  def buildCommandSeq(): Seq[String] = {
-    val command = appDesc.command
-    val runner = getAppEnv("JAVA_HOME").map(_ + "/bin/java").getOrElse("java")
-    // SPARK-698: do not call the run.cmd script, as process.destroy()
-    // fails to kill a process tree on Windows
-    Seq(runner) ++ buildJavaOpts() ++ Seq(command.mainClass) ++
-      (command.arguments ++ Seq(appId)).map(substituteVariables)
-  }
-
-  /**
-   * Attention: this must always be aligned with the environment variables in the run scripts and
-   * the way the JAVA_OPTS are assembled there.
-   */
-  def buildJavaOpts(): Seq[String] = {
-    val libraryOpts = getAppEnv("SPARK_LIBRARY_PATH")
-      .map(p => List("-Djava.library.path=" + p))
-      .getOrElse(Nil)
-    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString).getOrElse(Nil)
-    val userOpts = getAppEnv("SPARK_JAVA_OPTS").map(Utils.splitCommandString).getOrElse(Nil)
-    val memoryOpts = Seq("-Xms" + memory + "M", "-Xmx" + memory + "M")
-
-    // Figure out our classpath with the external compute-classpath script
-    val ext = if (System.getProperty("os.name").startsWith("Windows")) ".cmd" else ".sh"
-    val classPath = Utils.executeAndGetOutput(
-        Seq(sparkHome + "/bin/compute-classpath" + ext),
-        extraEnvironment=appDesc.command.environment)
-
-    Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
-  }
-
-  /** Spawn a thread that will redirect a given stream to a file */
-  def redirectStream(in: InputStream, file: File) {
-    val out = new FileOutputStream(file, true)
-    new Thread("redirect output to " + file) {
-      override def run() {
-        try {
-          Utils.copyStream(in, out, true)
-        } catch {
-          case e: IOException =>
-            logInfo("Redirection to " + file + " closed: " + e.getMessage)
-        }
-      }
-    }.start()
+  def getCommandSeq = {
+    val command = Command(appDesc.command.mainClass,
+      appDesc.command.arguments.map(substituteVariables) ++ Seq(appId), appDesc.command.environment)
+    CommandUtils.buildCommandSeq(command, memory, sparkHome.getAbsolutePath)
   }
 
   /**
@@ -155,7 +116,7 @@ private[spark] class ExecutorRunner(
       }
 
       // Launch the process
-      val command = buildCommandSeq()
+      val command = getCommandSeq
       logInfo("Launch command: " + command.mkString("\"", "\" \"", "\""))
       val builder = new ProcessBuilder(command: _*).directory(executorDir)
       val env = builder.environment()
@@ -172,11 +133,11 @@ private[spark] class ExecutorRunner(
 
       // Redirect its stdout and stderr to files
       val stdout = new File(executorDir, "stdout")
-      redirectStream(process.getInputStream, stdout)
+      CommandUtils.redirectStream(process.getInputStream, stdout)
 
       val stderr = new File(executorDir, "stderr")
       Files.write(header, stderr, Charsets.UTF_8)
-      redirectStream(process.getErrorStream, stderr)
+      CommandUtils.redirectStream(process.getErrorStream, stderr)
 
       // Wait for it to exit; this is actually a bad thing if it happens, because we expect to run
       // long-lived processes only. However, in the future, we might restart the executor a few
