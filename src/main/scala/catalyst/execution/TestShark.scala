@@ -85,7 +85,7 @@ object TestShark extends SharkInstance {
    * hive test cases assume the system is set up.
    */
   private def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase startsWith "LOAD")
+    if (cmd.toUpperCase contains "LOAD DATA")
       cmd.replaceAll("\\.\\.", hiveDevHome.getCanonicalPath)
     else
       cmd
