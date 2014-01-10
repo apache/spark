@@ -126,7 +126,11 @@ object Vector {
 
   def ones(length: Int) = Vector(length, _ => 1)
 
-  def random(length: Int, random: Random = new Random()) = Vector(length, _ => random.nextDouble());
+  /**
+   * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers 
+   * between 0.0 and 1.0. Optional [[scala.util.Random]] number generator can be provided.
+   */
+  def random(length: Int, random: Random = new XORShiftRandom()) = Vector(length, _ => random.nextDouble())
 
   class Multiplier(num: Double) {
     def * (vec: Vector) = vec * num

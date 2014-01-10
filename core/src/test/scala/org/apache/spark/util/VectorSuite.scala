@@ -27,20 +27,18 @@ import org.scalatest.FunSuite
 class VectorSuite extends FunSuite {
 
   def verifyVector(vector: Vector, expectedLength: Int) = {
-    assert(vector.length == expectedLength); // Array must be of expected length
-    assert(vector.length == vector.elements.distinct.length); // Values should not repeat
-    assert(vector.sum > 0); // All values must not be 0
-    assert(vector.sum < vector.length); // All values must not be 1
-    assert(vector.elements.product > 0); // No value is 0
+    assert(vector.length == expectedLength)
+    assert(vector.elements.min > 0.0)
+    assert(vector.elements.max < 1.0)
   }
 
   test("random with default random number generator") {
-    val vector100 = Vector.random(100);
-    verifyVector(vector100, 100);
+    val vector100 = Vector.random(100)
+    verifyVector(vector100, 100)
   }
 
   test("random with given random number generator") {
-    val vector100 = Vector.random(100, new Random(100));
-    verifyVector(vector100, 100);
+    val vector100 = Vector.random(100, new Random(100))
+    verifyVector(vector100, 100)
   }
 }
