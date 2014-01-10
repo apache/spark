@@ -15,12 +15,9 @@ import org.apache.spark.storage.StorageLevel
  * RDDs, the graph is a functional data-structure in which mutating
  * operations return new graphs.
  *
- * @see GraphOps for additional graph member functions.
- *
- * @note The majority of the graph operations are implemented in
- * `GraphOps`.  All the convenience operations are defined in the
- * `GraphOps` class which may be shared across multiple graph
- * implementations.
+ * @note [[org.apache.spark.graphx.GraphOps]] contains additional convenience operations.
+ * [[org.apache.spark.graphx.algorithms.Algorithms]] contains graph algorithms; to access these,
+ * import `org.apache.spark.graphx.algorithms._`.
  *
  * @tparam VD the vertex attribute type
  * @tparam ED the edge attribute type
@@ -32,9 +29,6 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    *
    * @note vertex ids are unique.
    * @return An RDD containing the vertices in this graph
-   *
-   * @see Vertex for the vertex type.
-   *
    */
   val vertices: VertexRDD[VD]
 
@@ -45,8 +39,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    *
    * @return An RDD containing the edges in this graph
    *
-   * @see Edge for the edge type.
-   * @see edgesWithVertices to get an RDD which contains all the edges
+   * @see [[org.apache.spark.graphx.Edge]] for the edge type.
+   * @see `triplets` to get an RDD which contains all the edges
    * along with their vertex data.
    *
    */
@@ -64,11 +58,10 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * {{{
    * type Color = Int
    * val graph: Graph[Color, Int] = Graph.textFile("hdfs://file.tsv")
-   * val numInvalid = graph.edgesWithVertices()
-   *   .map(e => if (e.src.data == e.dst.data) 1 else 0).sum
+   * val numInvalid = graph.triplets.map(e => if (e.src.data == e.dst.data) 1 else 0).sum
    * }}}
    *
-   * @see edges() If only the edge data and adjacent vertex ids are
+   * @see `edges` if only the edge data and adjacent vertex ids are
    * required.
    *
    */
@@ -88,19 +81,19 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * Return a graph that is cached when first created. This is used to
    * pin a graph in memory enabling multiple queries to reuse the same
    * construction process.
-   *
-   * @see RDD.cache() for a more detailed explanation of caching.
    */
   def cache(): Graph[VD, ED]
 
   /**
-   * Uncache only the vertices of this graph, leaving the edges alone. This is useful because most
-   * graph operations modify the vertices but reuse the edges.
+   * Uncache only the vertices of this graph, leaving the edges alone. This is useful in iterative
+   * algorithms that modify the vertex attributes but reuse the edges. This method can be used to
+   * uncache the vertex attributes of previous iterations once they are no longer needed, improving
+   * GC performance.
    */
   def unpersistVertices(blocking: Boolean = true): Graph[VD, ED]
 
   /**
-   * Repartition the edges in the graph according to partitionStrategy.
+   * Repartition the edges in the graph according to `partitionStrategy`.
    */
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
 
@@ -113,8 +106,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * Construct a new graph where each vertex value has been
    * transformed by the map function.
    *
-   * @note This graph is not changed and that the new graph has the
-   * same structure.  As a consequence the underlying index structures
+   * @note The new graph has the same structure.  As a consequence the underlying index structures
    * can be reused.
    *
    * @param map the function from a vertex object to a new vertex value.
@@ -126,8 +118,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * {{{
    * val rawGraph: Graph[(), ()] = Graph.textFile("hdfs://file")
    * val root = 42
-   * var bfsGraph = rawGraph
-   *   .mapVertices[Int]((vid, data) => if (vid == root) 0 else Math.MaxValue)
+   * var bfsGraph = rawGraph.mapVertices[Int]((vid, data) => if (vid == root) 0 else Math.MaxValue)
    * }}}
    *
    */
@@ -137,7 +128,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * Construct a new graph where the value of each edge is
    * transformed by the map operation.  This function is not passed
    * the vertex value for the vertices adjacent to the edge.  If
-   * vertex values are desired use the mapTriplets function.
+   * vertex values are desired, use the `mapTriplets` method.
    *
    * @note This graph is not changed and that the new graph has the
    * same structure.  As a consequence the underlying index structures
@@ -156,15 +147,13 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
   }
 
   /**
-   * Construct a new graph transforming the value of each edge using
-   * the user defined iterator transform.  The iterator transform is
-   * given an iterator over edge triplets within a logical partition
-   * and should yield a new iterator over the new values of each edge
-   * in the order in which they are provided to the iterator transform
-   * If adjacent vertex values are not required, consider using the
-   * mapEdges function instead.
+   * Construct a new graph transforming the value of each edge using the user defined iterator
+   * transform.  The iterator transform is given an iterator over edges within a logical partition
+   * as well as the partition's ID, and it should return a new iterator over the new values of each
+   * edge. The new iterator's elements must correspond one-to-one with the old iterator's
+   * elements. If adjacent vertex values are desired, use the `mapTriplets` method.
    *
-   * @note This that this does not change the structure of the
+   * @note This does not change the structure of the
    * graph or modify the values of this graph.  As a consequence
    * the underlying index structures can be reused.
    *
@@ -183,9 +172,9 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * transformed by the map operation.  This function passes vertex
    * values for the adjacent vertices to the map function.  If
    * adjacent vertex values are not required, consider using the
-   * mapEdges function instead.
+   * `mapEdges` method instead.
    *
-   * @note This that this does not change the structure of the
+   * @note This does not change the structure of the
    * graph or modify the values of this graph.  As a consequence
    * the underlying index structures can be reused.
    *
