@@ -116,14 +116,13 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     // local dirs, so lets check both. We assume one of the 2 is set.
     // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
     val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
-      .getOrElse(Option(System.getenv("LOCAL_DIRS"))
-      .getOrElse(""))
-
-    if (localDirs.isEmpty()) {
-      throw new Exception("Yarn Local dirs can't be empty")
+      .orElse(Option(System.getenv("LOCAL_DIRS")))
+ 
+    localDirs match {
+      case None => throw new Exception("Yarn Local dirs can't be empty")
+      case Some(l) => l
     }
-    localDirs
-  }
+  } 
 
   private def getApplicationAttemptId(): ApplicationAttemptId = {
     val envs = System.getenv()
