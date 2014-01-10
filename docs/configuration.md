@@ -391,9 +391,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.shuffle.externalSorting</td>
   <td>true</td>
   <td>
-    If set to "true", spills in-memory maps used for shuffles to disk when a memory threshold is reached. This
-    threshold is specified by <code>spark.shuffle.memoryFraction</code>. Enable this especially for memory-intensive
-    applications.
+    If set to "true", limits the amount of memory used during reduces by spilling data out to disk. This spilling
+    threshold is specified by <code>spark.shuffle.memoryFraction</code>.
   </td>
 </tr>
 <tr>
