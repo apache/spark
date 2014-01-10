@@ -655,6 +655,8 @@ object HiveQl {
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
       UnresolvedFunction(name, args.map(nodeToExpr))
+    case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: args) =>
+      UnresolvedFunction(name, Star(None) :: Nil)
 
     /* Literals */
     case Token("TOK_NULL", Nil) => Literal(null, IntegerType) // TODO: What type is null?
