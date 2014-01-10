@@ -106,7 +106,7 @@ class DAGScheduler(
   // The time, in millis, to wait for fetch failure events to stop coming in after one is detected;
   // this is a simplistic way to avoid resubmitting tasks in the non-fetchable map stage one by one
   // as more failure events come in
-  val RESUBMIT_TIMEOUT = 50.milliseconds
+  val RESUBMIT_TIMEOUT = 200.milliseconds
 
   // The time, in millis, to wake up between polls of the completion queue in order to potentially
   // resubmit failed stages
@@ -196,7 +196,7 @@ class DAGScheduler(
        */
       def receive = {
         case event: DAGSchedulerEvent =>
-          logDebug("Got event of type " + event.getClass.getName)
+          logTrace("Got event of type " + event.getClass.getName)
 
           /**
            * All events are forwarded to `processEvent()`, so that the event processing logic can
