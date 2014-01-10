@@ -17,9 +17,10 @@
 
 package org.apache.spark.streaming.examples.clickstream
 
+import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.SparkContext._
+import org.apache.spark.streaming.examples.StreamingExamples
 
 /** Analyses a streaming dataset of web page views. This class demonstrates several types of
   * operators available in Spark streaming.
@@ -36,6 +37,7 @@ object PageViewStream {
                          " errorRatePerZipCode, activeUserCount, popularUsersSeen")
       System.exit(1)
     }
+    StreamingExamples.setStreamingLogLevels()
     val metric = args(0)
     val host = args(1)
     val port = args(2).toInt

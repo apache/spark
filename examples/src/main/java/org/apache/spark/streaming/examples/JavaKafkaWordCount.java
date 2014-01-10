@@ -59,6 +59,8 @@ public final class JavaKafkaWordCount {
       System.exit(1);
     }
 
+    StreamingExamples.setStreamingLogLevels();
+
     // Create the context with a 1 second batch size
     JavaStreamingContext jssc = new JavaStreamingContext(args[0], "KafkaWordCount",
             new Duration(2000), System.getenv("SPARK_HOME"),
