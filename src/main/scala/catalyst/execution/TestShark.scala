@@ -263,6 +263,12 @@ object TestShark extends SharkInstance {
       configure()
 
       runSqlHive("USE default")
+
+      // Just loading src makes a lot of tests pass.  This is because some tests do something like
+      // drop an index on src at the beginning.  Since we just pass DDL to hive this bypasses our
+      // Analyzer and thus the test table auto-loading mechanism.
+      // Remove after we handle more DDL operations natively.
+      loadTestTable("src")
     } catch {
       case e: Exception =>
         logger.error(s"FATAL ERROR: Failed to reset TestDB state. $e")
