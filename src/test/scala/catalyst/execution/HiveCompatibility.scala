@@ -15,7 +15,8 @@ class HiveCompatibility extends HiveQueryFileTest {
 
   /** A list of tests deemed out of scope currently and thus completely disregarded */
   override def blackList = Seq(
-    "hook_order", // These tests use hooks that are not on the classpath and thus break all subsequent SQL execution.
+    // These tests use hooks that are not on the classpath and thus break all subsequent execution.
+    "hook_order",
     "hook_context",
     "mapjoin_hook",
     "multi_sahooks",
