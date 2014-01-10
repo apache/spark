@@ -330,7 +330,7 @@ from numpy import array
 # Load and parse the data
 data = sc.textFile("mllib/data/sample_svm_data.txt")
 parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
-model = LogisticRegressionWithSGD.train(sc, parsedData)
+model = LogisticRegressionWithSGD.train(parsedData)
 
 # Build the model
 labelsAndPreds = parsedData.map(lambda point: (int(point.item(0)),
@@ -356,7 +356,7 @@ data = sc.textFile("mllib/data/ridge-data/lpsa.data")
 parsedData = data.map(lambda line: array([float(x) for x in line.replace(',', ' ').split(' ')]))
 
 # Build the model
-model = LinearRegressionWithSGD.train(sc, parsedData)
+model = LinearRegressionWithSGD.train(parsedData)
 
 # Evaluate the model on training data
 valuesAndPreds = parsedData.map(lambda point: (point.item(0),
@@ -382,7 +382,7 @@ data = sc.textFile("kmeans_data.txt")
 parsedData = data.map(lambda line: array([float(x) for x in line.split(' ')]))
 
 # Build the model (cluster the data)
-clusters = KMeans.train(sc, parsedData, 2, maxIterations=10,
+clusters = KMeans.train(parsedData, 2, maxIterations=10,
         runs=30, initialization_mode="random")
 
 # Evaluate clustering by computing Within Set Sum of Squared Errors
@@ -411,7 +411,7 @@ data = sc.textFile("mllib/data/als/test.data")
 ratings = data.map(lambda line: array([float(x) for x in line.split(',')]))
 
 # Build the recommendation model using Alternating Least Squares
-model = ALS.train(sc, ratings, 1, 20)
+model = ALS.train(ratings, 1, 20)
 
 # Evaluate the model on training data
 testdata = ratings.map(lambda p: (int(p[0]), int(p[1])))
@@ -426,5 +426,5 @@ signals), you can use the trainImplicit method to get better results.
 
 {% highlight python %}
 # Build the recommendation model using Alternating Least Squares based on implicit ratings
-model = ALS.trainImplicit(sc, ratings, 1, 20)
+model = ALS.trainImplicit(ratings, 1, 20)
 {% endhighlight %}
