@@ -22,14 +22,16 @@ import java.util.Comparator
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
-import scala.collection.mutable.{ArrayBuffer, PriorityQueue}
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.storage.{DiskBlockManager, DiskBlockObjectWriter}
 
 /**
- * An append-only map that spills sorted content to disk when the memory threshold is exceeded.
+ * An append-only map that spills sorted content to disk when there is insufficient space for it
+ * to grow.
  *
  * This map takes two passes over the data:
  *
@@ -42,7 +44,7 @@ import org.apache.spark.storage.{DiskBlockManager, DiskBlockObjectWriter}
  * writes. This may lead to a performance regression compared to the normal case of using the
  * non-spilling AppendOnlyMap.
  *
- * A few parameters control the memory threshold:
+ * Two parameters control the memory threshold:
  *
  *   `spark.shuffle.memoryFraction` specifies the collective amount of memory used for storing
  *   these maps as a fraction of the executor's total memory. Since each concurrently running
@@ -51,9 +53,6 @@ import org.apache.spark.storage.{DiskBlockManager, DiskBlockObjectWriter}
  *
  *   `spark.shuffle.safetyFraction` specifies an additional margin of safety as a fraction of
  *   this threshold, in case map size estimation is not sufficiently accurate.
- *
- *   `spark.shuffle.updateThresholdInterval` controls how frequently each thread checks on
- *   shared executor state to update its local memory threshold.
  */
 
 private[spark] class ExternalAppendOnlyMap[K, V, C](
@@ -77,12 +76,9 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
     (Runtime.getRuntime.maxMemory * memoryFraction * safetyFraction).toLong
   }
 
-  // Maximum size for this map before a spill is triggered
-  private var spillThreshold = maxMemoryThreshold
-
-  // How often to update spillThreshold
-  private val updateThresholdInterval =
-    sparkConf.getInt("spark.shuffle.updateThresholdInterval", 100)
+  // How many inserts into this map before tracking its shuffle memory usage
+  private val initialInsertThreshold =
+    sparkConf.getLong("spark.shuffle.initialInsertThreshold", 1000)
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
   private val syncWrites = sparkConf.get("spark.shuffle.sync", "false").toBoolean
@@ -91,30 +87,54 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   private var insertCount = 0
   private var spillCount = 0
 
+  /**
+   * Insert the given key and value into the map.
+   *
+   * If the underlying map is about to grow, check if the global pool of shuffle memory has
+   * enough room for this to happen. If so, allocate the memory required to grow the map;
+   * otherwise, spill the in-memory map to disk.
+   *
+   * The shuffle memory usage of the first initialInsertThreshold entries is not tracked.
+   */
   def insert(key: K, value: V) {
     insertCount += 1
     val update: (Boolean, C) => C = (hadVal, oldVal) => {
       if (hadVal) mergeValue(oldVal, value) else createCombiner(value)
     }
+    if (insertCount > initialInsertThreshold && currentMap.atGrowThreshold) {
+      val mapSize = currentMap.estimateSize()
+      var shouldSpill = false
+      val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
+
+      // Atomically check whether there is sufficient memory in the global pool for
+      // this map to grow and, if possible, allocate the required amount
+      shuffleMemoryMap.synchronized {
+        val threadId = Thread.currentThread().getId
+        val previouslyOccupiedMemory = shuffleMemoryMap.get(threadId)
+        val availableMemory = maxMemoryThreshold -
+          (shuffleMemoryMap.values.sum - previouslyOccupiedMemory.getOrElse(0L))
+
+        // Assume map grow factor is 2x
+        shouldSpill = availableMemory < mapSize * 2
+        if (!shouldSpill) {
+          shuffleMemoryMap(threadId) = mapSize * 2
+        }
+      }
+      // Do not synchronize spills
+      if (shouldSpill) {
+        spill(mapSize)
+      }
+    }
     currentMap.changeValue(key, update)
-    if (insertCount % updateThresholdInterval == 1) {
-      updateSpillThreshold()
-    }
-    if (currentMap.estimateSize() > spillThreshold) {
-      spill()
-    }
   }
 
-  // TODO: differentiate ShuffleMapTask's from ResultTask's
-  private def updateSpillThreshold() {
-    val numRunningTasks = math.max(SparkEnv.get.numRunningTasks, 1)
-    spillThreshold = maxMemoryThreshold / numRunningTasks
-  }
-
-  private def spill() {
+  /**
+   * Sort the existing contents of the in-memory map and spill them to a temporary file on disk
+   */
+  private def spill(mapSize: Long) {
     spillCount += 1
-    logWarning("In-memory map exceeded %s MB! Spilling to disk (%d time%s so far)"
-      .format(spillThreshold / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
+    logWarning("* Spilling in-memory map of %d MB to disk (%d time%s so far)"
+      .format(mapSize / (1024 * 1024), spillCount, if (spillCount > 1) "s" else ""))
     val (blockId, file) = diskBlockManager.createTempBlock()
     val writer =
       new DiskBlockObjectWriter(blockId, file, serializer, fileBufferSize, identity, syncWrites)
@@ -131,6 +151,13 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
     }
     currentMap = new SizeTrackingAppendOnlyMap[K, C]
     spilledMaps.append(new DiskMapIterator(file))
+
+    // Reset the amount of shuffle memory used by this map in the global pool
+    val shuffleMemoryMap = SparkEnv.get.shuffleMemoryMap
+    shuffleMemoryMap.synchronized {
+      shuffleMemoryMap(Thread.currentThread().getId) = 0
+    }
+    insertCount = 0
   }
 
   override def iterator: Iterator[(K, C)] = {
@@ -145,11 +172,12 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   private class ExternalIterator extends Iterator[(K, C)] {
 
     // A fixed-size queue that maintains a buffer for each stream we are currently merging
-    val mergeHeap = new PriorityQueue[StreamBuffer]
+    val mergeHeap = new mutable.PriorityQueue[StreamBuffer]
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    val inputStreams = Seq(currentMap.destructiveSortedIterator(comparator)) ++ spilledMaps
+    val sortedMap = currentMap.destructiveSortedIterator(comparator)
+    val inputStreams = Seq(sortedMap) ++ spilledMaps
 
     inputStreams.foreach{ it =>
       val kcPairs = getMorePairs(it)

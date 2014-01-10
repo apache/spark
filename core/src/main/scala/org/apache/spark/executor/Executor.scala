@@ -186,7 +186,6 @@ private[spark] class Executor(
       var taskStart: Long = 0
       def gcTime = ManagementFactory.getGarbageCollectorMXBeans.map(_.getCollectionTime).sum
       val startGCTime = gcTime
-      env.incrementNumRunningTasks()
 
       try {
         SparkEnv.set(env)
@@ -280,7 +279,11 @@ private[spark] class Executor(
           //System.exit(1)
         }
       } finally {
-        env.decrementNumRunningTasks()
+        // TODO: Unregister shuffle memory only for ShuffleMapTask
+        val shuffleMemoryMap = env.shuffleMemoryMap
+        shuffleMemoryMap.synchronized {
+          shuffleMemoryMap.remove(Thread.currentThread().getId)
+        }
         runningTasks.remove(taskId)
       }
     }

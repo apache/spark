@@ -30,14 +30,15 @@ import java.util.{Arrays, Comparator}
  * TODO: Cache the hash values of each key? java.util.HashMap does that.
  */
 private[spark]
-class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] with Serializable {
+class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K,
+  V)] with Serializable {
   require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
 
   private var capacity = nextPowerOf2(initialCapacity)
   private var mask = capacity - 1
   private var curSize = 0
-  private var growThreshold = LOAD_FACTOR * capacity
+  private var growThreshold = (LOAD_FACTOR * capacity).toInt
 
   // Holds keys and values in the same array for memory locality; specifically, the order of
   // elements is key0, value0, key1, value1, key2, value2, etc.
@@ -239,7 +240,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
     data = newData
     capacity = newCapacity
     mask = newMask
-    growThreshold = LOAD_FACTOR * newCapacity
+    growThreshold = (LOAD_FACTOR * newCapacity).toInt
   }
 
   private def nextPowerOf2(n: Int): Int = {
@@ -288,4 +289,9 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
       }
     }
   }
+
+  /**
+   * Return whether the next insert will cause the map to grow
+   */
+  def atGrowThreshold: Boolean = curSize == growThreshold
 }

@@ -17,8 +17,6 @@
 
 package org.apache.spark
 
-import java.util.concurrent.atomic.AtomicInteger
-
 import scala.collection.mutable
 import scala.concurrent.Await
 
@@ -56,12 +54,13 @@ class SparkEnv private[spark] (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    val conf: SparkConf) {
+    val conf: SparkConf) extends Logging {
+
+  // A mapping of thread ID to amount of memory used for shuffle in bytes
+  // All accesses should be manually synchronized
+  val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
-
-  // Number of tasks currently running across all threads
-  private val _numRunningTasks = new AtomicInteger(0)
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation
   // (e.g., HadoopFileRDD uses this to cache JobConfs and InputFormats).
@@ -90,13 +89,6 @@ class SparkEnv private[spark] (
       pythonWorkers.getOrElseUpdate(key, new PythonWorkerFactory(pythonExec, envVars)).create()
     }
   }
-
-  /**
-   * Return the number of tasks currently running across all threads
-   */
-  def numRunningTasks: Int = _numRunningTasks.intValue()
-  def incrementNumRunningTasks(): Int = _numRunningTasks.incrementAndGet()
-  def decrementNumRunningTasks(): Int = _numRunningTasks.decrementAndGet()
 }
 
 object SparkEnv extends Logging {
