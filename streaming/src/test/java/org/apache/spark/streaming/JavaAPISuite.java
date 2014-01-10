@@ -17,14 +17,6 @@
 
 package org.apache.spark.streaming;
 
-import com.google.common.base.Optional;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.collect.Sets;
-import com.google.common.io.Files;
-
-import kafka.serializer.StringDecoder;
-
 import scala.Tuple2;
 
 import org.junit.After;
@@ -36,6 +28,7 @@ import java.util.*;
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.io.Files;
+import com.google.common.collect.Sets;
 
 import org.apache.spark.SparkConf;
 import org.apache.spark.HashPartitioner;
