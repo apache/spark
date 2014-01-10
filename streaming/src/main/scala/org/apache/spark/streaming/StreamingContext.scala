@@ -496,26 +496,17 @@ object StreamingContext extends Logging {
       hadoopConf: Configuration = new Configuration(),
       createOnError: Boolean = false
     ): StreamingContext = {
-
-    try {
-      CheckpointReader.read(checkpointPath,  new SparkConf(), hadoopConf) match {
-        case Some(checkpoint) =>
-          return new StreamingContext(null, checkpoint, null)
-        case None =>
-          logInfo("Creating new StreamingContext")
-          return creatingFunc()
-      }
+    val checkpointOption = try {
+      CheckpointReader.read(checkpointPath,  new SparkConf(), hadoopConf)
     } catch {
       case e: Exception =>
         if (createOnError) {
-          logWarning("Error reading checkpoint", e)
-          logInfo("Creating new StreamingContext")
-          return creatingFunc()
+          None
         } else {
-          logError("Error reading checkpoint", e)
           throw e
         }
     }
+    checkpointOption.map(new StreamingContext(null, _, null)).getOrElse(creatingFunc())
   }
 
   /**

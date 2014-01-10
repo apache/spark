@@ -165,16 +165,28 @@ object CheckpointReader extends Logging {
   def read(checkpointDir: String, conf: SparkConf, hadoopConf: Configuration): Option[Checkpoint] = {
     val checkpointPath = new Path(checkpointDir)
     def fs = checkpointPath.getFileSystem(hadoopConf)
-    val existingFiles = graphFileNames.map(new Path(checkpointPath, _)).filter(fs.exists)
+    
+        // See if the checkpoint directory exists
+    if (!fs.exists(checkpointPath)) {
+      logInfo("Could not load checkpoint as path '" + checkpointPath + "' does not exist")
+      return None
+    }
 
-    // Log the file listing if graph checkpoint file was not found
+    // Try to find the checkpoint data
+    val existingFiles = graphFileNames.map(new Path(checkpointPath, _)).filter(fs.exists)
     if (existingFiles.isEmpty) {
-      logInfo("Could not find graph file in " + checkpointDir + ", which contains the files:\n" +
-        fs.listStatus(checkpointPath).mkString("\n"))
+      logInfo("Could not load checkpoint as checkpoint data was not " +
+        "found in directory " + checkpointDir + "")
+      val statuses = fs.listStatus(checkpointPath)
+      if (statuses!=null) {
+        logInfo("Checkpoint directory " + checkpointDir + " contains the files:\n" +
+          statuses.mkString("\n"))
+      }
       return None
     }
     logInfo("Checkpoint files found: " + existingFiles.mkString(","))
 
+    // Try to read the checkpoint data
     val compressionCodec = CompressionCodec.createCodec(conf)
     existingFiles.foreach(file => {
       logInfo("Attempting to load checkpoint from file '" + file + "'")
