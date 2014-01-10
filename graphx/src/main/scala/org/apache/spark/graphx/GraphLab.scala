@@ -110,24 +110,20 @@ object GraphLab extends Logging {
         activeGraph.aggregateNeighbors(gather, mergeFunc, gatherDirection)
 
       // Apply
-      val applied = activeGraph.outerJoinVertices(gathered)(apply)
+      val applied = activeGraph.outerJoinVertices(gathered)(apply).cache()
 
       // Scatter is basically a gather in the opposite direction so we reverse the edge direction
       val scattered: RDD[(VertexID, Boolean)] =
         applied.aggregateNeighbors(scatter, _ || _, scatterDirection.reverse)
 
       prevActiveGraph = activeGraph
-      activeGraph = activeGraph.outerJoinVertices(scattered)(applyActive).cache()
+      activeGraph = applied.outerJoinVertices(scattered)(applyActive).cache()
 
-      // Calculate the number of active vertices. The call to reduce() materializes the vertices of
-      // `activeGraph`, hiding the vertices of `prevActiveGraph`.
+      // Calculate the number of active vertices.
       numActive = activeGraph.vertices.map{
         case (vid, data) => if (data._1) 1 else 0
         }.reduce(_ + _)
       logInfo("Number active vertices: " + numActive)
-
-      // Unpersist the RDDs hidden by newly-materialized RDDs
-      prevActiveGraph.unpersistVertices(blocking=false)
 
       i += 1
     }
