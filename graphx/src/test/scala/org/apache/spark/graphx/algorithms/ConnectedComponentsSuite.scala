@@ -14,7 +14,7 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
   test("Grid Connected Components") {
     withSpark { sc =>
       val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).cache()
-      val ccGraph = ConnectedComponents.run(gridGraph).cache()
+      val ccGraph = gridGraph.connectedComponents().cache()
       val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
       assert(maxCCid === 0)
     }
@@ -24,7 +24,7 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
   test("Reverse Grid Connected Components") {
     withSpark { sc =>
       val gridGraph = GraphGenerators.gridGraph(sc, 10, 10).reverse.cache()
-      val ccGraph = ConnectedComponents.run(gridGraph).cache()
+      val ccGraph = gridGraph.connectedComponents().cache()
       val maxCCid = ccGraph.vertices.map { case (vid, ccId) => ccId }.sum
       assert(maxCCid === 0)
     }
@@ -37,7 +37,7 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
       val chain2 = (10 until 20).map(x => (x, x+1) )
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
       val twoChains = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
-      val ccGraph = ConnectedComponents.run(twoChains).cache()
+      val ccGraph = twoChains.connectedComponents().cache()
       val vertices = ccGraph.vertices.collect()
       for ( (id, cc) <- vertices ) {
         if(id < 10) { assert(cc === 0) }
@@ -60,7 +60,7 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
       val chain2 = (10 until 20).map(x => (x, x+1) )
       val rawEdges = sc.parallelize(chain1 ++ chain2, 3).map { case (s,d) => (s.toLong, d.toLong) }
       val twoChains = Graph.fromEdgeTuples(rawEdges, true).reverse.cache()
-      val ccGraph = ConnectedComponents.run(twoChains).cache()
+      val ccGraph = twoChains.connectedComponents().cache()
       val vertices = ccGraph.vertices.collect
       for ( (id, cc) <- vertices ) {
         if (id < 10) {

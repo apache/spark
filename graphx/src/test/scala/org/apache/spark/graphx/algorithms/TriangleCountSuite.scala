@@ -15,7 +15,7 @@ class TriangleCountSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val rawEdges = sc.parallelize(Array( 0L->1L, 1L->2L, 2L->0L ), 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
-      val triangleCount = TriangleCount.run(graph)
+      val triangleCount = graph.triangleCount()
       val verts = triangleCount.vertices
       verts.collect.foreach { case (vid, count) => assert(count === 1) }
     }
@@ -27,7 +27,7 @@ class TriangleCountSuite extends FunSuite with LocalSparkContext {
         Array(0L -> -1L, -1L -> -2L, -2L -> 0L)
       val rawEdges = sc.parallelize(triangles, 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
-      val triangleCount = TriangleCount.run(graph)
+      val triangleCount = graph.triangleCount()
       val verts = triangleCount.vertices
       verts.collect().foreach { case (vid, count) =>
         if (vid == 0) {
@@ -47,7 +47,7 @@ class TriangleCountSuite extends FunSuite with LocalSparkContext {
       val revTriangles = triangles.map { case (a,b) => (b,a) }
       val rawEdges = sc.parallelize(triangles ++ revTriangles, 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true).cache()
-      val triangleCount = TriangleCount.run(graph)
+      val triangleCount = graph.triangleCount()
       val verts = triangleCount.vertices
       verts.collect().foreach { case (vid, count) =>
         if (vid == 0) {
@@ -64,7 +64,7 @@ class TriangleCountSuite extends FunSuite with LocalSparkContext {
       val rawEdges = sc.parallelize(Array(0L -> 1L, 1L -> 2L, 2L -> 0L) ++
         Array(0L -> 1L, 1L -> 2L, 2L -> 0L), 2)
       val graph = Graph.fromEdgeTuples(rawEdges, true, uniqueEdges = Some(RandomVertexCut)).cache()
-      val triangleCount = TriangleCount.run(graph)
+      val triangleCount = graph.triangleCount()
       val verts = triangleCount.vertices
       verts.collect.foreach { case (vid, count) => assert(count === 1) }
     }

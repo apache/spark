@@ -1,11 +1,13 @@
 package org.apache.spark.graphx.algorithms
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.graphx._
 
 
 object ConnectedComponents {
   /**
-   * Compute the connected component membership of each vertex and return an RDD with the vertex
+   * Compute the connected component membership of each vertex and return a graph with the vertex
    * value containing the lowest vertex id in the connected component containing that vertex.
    *
    * @tparam VD the vertex attribute type (discarded in the computation)
@@ -16,7 +18,7 @@ object ConnectedComponents {
    * @return a graph with vertex attributes containing the smallest vertex in each
    *         connected component
    */
-  def run[VD: Manifest, ED: Manifest](graph: Graph[VD, ED]): Graph[VertexID, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[VertexID, ED] = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
 
     def sendMessage(edge: EdgeTriplet[VertexID, ED]) = {

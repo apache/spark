@@ -1,12 +1,14 @@
 package org.apache.spark.graphx.algorithms
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.graphx._
 
 object StronglyConnectedComponents {
 
   /**
-   * Compute the strongly connected component (SCC) of each vertex and return an RDD with the vertex
-   * value containing the lowest vertex id in the SCC containing that vertex.
+   * Compute the strongly connected component (SCC) of each vertex and return a graph with the
+   * vertex value containing the lowest vertex id in the SCC containing that vertex.
    *
    * @tparam VD the vertex attribute type (discarded in the computation)
    * @tparam ED the edge attribute type (preserved in the computation)
@@ -15,7 +17,7 @@ object StronglyConnectedComponents {
    *
    * @return a graph with vertex attributes containing the smallest vertex id in each SCC
    */
-  def run[VD: Manifest, ED: Manifest](graph: Graph[VD, ED], numIter: Int): Graph[VertexID, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int): Graph[VertexID, ED] = {
 
     // the graph we update with final SCC ids, and the graph we return at the end
     var sccGraph = graph.mapVertices { case (vid, _) => vid }

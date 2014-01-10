@@ -16,7 +16,7 @@ class StronglyConnectedComponentsSuite extends FunSuite with LocalSparkContext {
       val vertices = sc.parallelize((1L to 5L).map(x => (x, -1)))
       val edges = sc.parallelize(Seq.empty[Edge[Int]])
       val graph = Graph(vertices, edges)
-      val sccGraph = StronglyConnectedComponents.run(graph, 5)
+      val sccGraph = graph.stronglyConnectedComponents(5)
       for ((id, scc) <- sccGraph.vertices.collect) {
         assert(id == scc)
       }
@@ -27,7 +27,7 @@ class StronglyConnectedComponentsSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val rawEdges = sc.parallelize((0L to 6L).map(x => (x, (x + 1) % 7)))
       val graph = Graph.fromEdgeTuples(rawEdges, -1)
-      val sccGraph = StronglyConnectedComponents.run(graph, 20)
+      val sccGraph = graph.stronglyConnectedComponents(20)
       for ((id, scc) <- sccGraph.vertices.collect) {
         assert(0L == scc)
       }
@@ -42,7 +42,7 @@ class StronglyConnectedComponentsSuite extends FunSuite with LocalSparkContext {
         Array(6L -> 0L, 5L -> 7L)
       val rawEdges = sc.parallelize(edges)
       val graph = Graph.fromEdgeTuples(rawEdges, -1)
-      val sccGraph = StronglyConnectedComponents.run(graph, 20)
+      val sccGraph = graph.stronglyConnectedComponents(20)
       for ((id, scc) <- sccGraph.vertices.collect) {
         if (id < 3)
           assert(0L == scc)

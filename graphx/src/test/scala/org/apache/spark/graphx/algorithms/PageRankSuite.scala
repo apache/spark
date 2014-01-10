@@ -2,13 +2,12 @@ package org.apache.spark.graphx.algorithms
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.graphx._
 import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd._
-
+import org.apache.spark.graphx._
+import org.apache.spark.graphx.algorithms._
 import org.apache.spark.graphx.util.GraphGenerators
-
+import org.apache.spark.rdd._
 
 object GridPageRank {
   def apply(nRows: Int, nCols: Int, nIter: Int, resetProb: Double) = {
@@ -58,8 +57,8 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
       val resetProb = 0.15
       val errorTol = 1.0e-5
 
-      val staticRanks1 = PageRank.run(starGraph, numIter = 1, resetProb).vertices.cache()
-      val staticRanks2 = PageRank.run(starGraph, numIter = 2, resetProb).vertices.cache()
+      val staticRanks1 = starGraph.staticPageRank(numIter = 1, resetProb).vertices.cache()
+      val staticRanks2 = starGraph.staticPageRank(numIter = 2, resetProb).vertices.cache()
 
       // Static PageRank should only take 2 iterations to converge
       val notMatching = staticRanks1.innerZipJoin(staticRanks2) { (vid, pr1, pr2) =>
@@ -74,10 +73,8 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
       }
       assert(staticErrors.sum === 0)
 
-      val dynamicRanks = PageRank.runUntillConvergence(starGraph, 0, resetProb).vertices.cache()
-      val standaloneRanks = PageRank.runStandalone(starGraph, 0, resetProb).cache()
+      val dynamicRanks = starGraph.pageRank(0, resetProb).vertices.cache()
       assert(compareRanks(staticRanks2, dynamicRanks) < errorTol)
-      assert(compareRanks(staticRanks2, standaloneRanks) < errorTol)
     }
   } // end of test Star PageRank
 
@@ -93,14 +90,12 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
       val errorTol = 1.0e-5
       val gridGraph = GraphGenerators.gridGraph(sc, rows, cols).cache()
 
-      val staticRanks = PageRank.run(gridGraph, numIter, resetProb).vertices.cache()
-      val dynamicRanks = PageRank.runUntillConvergence(gridGraph, tol, resetProb).vertices.cache()
-      val standaloneRanks = PageRank.runStandalone(gridGraph, tol, resetProb).cache()
+      val staticRanks = gridGraph.staticPageRank(numIter, resetProb).vertices.cache()
+      val dynamicRanks = gridGraph.pageRank(tol, resetProb).vertices.cache()
       val referenceRanks = VertexRDD(sc.parallelize(GridPageRank(rows, cols, numIter, resetProb)))
 
       assert(compareRanks(staticRanks, referenceRanks) < errorTol)
       assert(compareRanks(dynamicRanks, referenceRanks) < errorTol)
-      assert(compareRanks(standaloneRanks, referenceRanks) < errorTol)
     }
   } // end of Grid PageRank
 
@@ -115,12 +110,10 @@ class PageRankSuite extends FunSuite with LocalSparkContext {
       val numIter = 10
       val errorTol = 1.0e-5
 
-      val staticRanks = PageRank.run(chain, numIter, resetProb).vertices.cache()
-      val dynamicRanks = PageRank.runUntillConvergence(chain, tol, resetProb).vertices.cache()
-      val standaloneRanks = PageRank.runStandalone(chain, tol, resetProb).cache()
+      val staticRanks = chain.staticPageRank(numIter, resetProb).vertices.cache()
+      val dynamicRanks = chain.pageRank(tol, resetProb).vertices.cache()
 
       assert(compareRanks(staticRanks, dynamicRanks) < errorTol)
-      assert(compareRanks(dynamicRanks, standaloneRanks) < errorTol)
     }
   }
 }

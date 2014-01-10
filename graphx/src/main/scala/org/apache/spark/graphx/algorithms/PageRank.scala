@@ -1,5 +1,7 @@
 package org.apache.spark.graphx.algorithms
 
+import scala.reflect.ClassTag
+
 import org.apache.spark.Logging
 import org.apache.spark.graphx._
 
@@ -42,7 +44,7 @@ object PageRank extends Logging {
    *         containing the normalized weight.
    *
    */
-  def run[VD: Manifest, ED: Manifest](
+  def run[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], numIter: Int, resetProb: Double = 0.15): Graph[Double, Double] =
   {
 
@@ -109,7 +111,7 @@ object PageRank extends Logging {
    * @return the graph containing with each vertex containing the PageRank and each edge
    *         containing the normalized weight.
    */
-  def runUntillConvergence[VD: Manifest, ED: Manifest](
+  def runUntilConvergence[VD: ClassTag, ED: ClassTag](
       graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15): Graph[Double, Double] =
   {
     // Initialize the pagerankGraph with each edge attribute
@@ -152,54 +154,5 @@ object PageRank extends Logging {
     Pregel(pagerankGraph, initialMessage)(vertexProgram, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
   } // end of deltaPageRank
-
-  def runStandalone[VD: Manifest, ED: Manifest](
-      graph: Graph[VD, ED], tol: Double, resetProb: Double = 0.15): VertexRDD[Double] = {
-
-    // Initialize the ranks
-    var ranks: VertexRDD[Double] = graph.vertices.mapValues((vid, attr) => resetProb).cache()
-
-    // Initialize the delta graph where each vertex stores its delta and each edge knows its weight
-    var deltaGraph: Graph[Double, Double] =
-      graph.outerJoinVertices(graph.outDegrees)((vid, vdata, deg) => deg.getOrElse(0))
-      .mapTriplets(e => 1.0 / e.srcAttr)
-      .mapVertices((vid, degree) => resetProb).cache()
-    var numDeltas: Long = ranks.count()
-
-    var prevDeltas: Option[VertexRDD[Double]] = None
-
-    var i = 0
-    val weight = (1.0 - resetProb)
-    while (numDeltas > 0) {
-      // Compute new deltas. Only deltas that existed in the last round (i.e., were greater than
-      // `tol`) get to send messages; those that were less than `tol` would send messages less than
-      // `tol` as well.
-      val deltas = deltaGraph
-        .mapReduceTriplets[Double](
-          et => Iterator((et.dstId, et.srcAttr * et.attr * weight)),
-          _ + _,
-          prevDeltas.map((_, EdgeDirection.Out)))
-        .filter { case (vid, delta) => delta > tol }
-        .cache()
-      prevDeltas = Some(deltas)
-      numDeltas = deltas.count()
-      logInfo("Standalone PageRank: iter %d has %d deltas".format(i, numDeltas))
-
-      // Update deltaGraph with the deltas
-      deltaGraph = deltaGraph.outerJoinVertices(deltas) { (vid, old, newOpt) =>
-        newOpt.getOrElse(old)
-      }.cache()
-
-      // Update ranks
-      ranks = ranks.leftZipJoin(deltas) { (vid, oldRank, deltaOpt) =>
-        oldRank + deltaOpt.getOrElse(0.0)
-      }
-      ranks.foreach(x => {}) // force the iteration for ease of debugging
-
-      i += 1
-    }
-
-    ranks
-  }
 
 }
