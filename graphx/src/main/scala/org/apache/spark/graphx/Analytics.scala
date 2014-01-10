@@ -83,7 +83,7 @@ object Analytics extends Logging {
          println("GRAPHX: Number of edges " + graph.edges.count)
 
          //val pr = Analytics.pagerank(graph, numIter)
-         val pr = graph.pageRank(tol).vertices
+         val pr = graph.pageRank(tol).vertices.cache()
 
          println("GRAPHX: Total rank: " + pr.map(_._2).reduce(_+_))
 

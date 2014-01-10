@@ -14,9 +14,11 @@ import org.apache.spark.graphx._
  * specified, `updatedVerts` are treated as incremental updates to the previous view. Otherwise, a
  * fresh view is created.
  *
- * The view is always cached (i.e., once it is created, it remains materialized). This avoids
+ * The view is always cached (i.e., once it is evaluated, it remains materialized). This avoids
  * constructing it twice if the user calls graph.triplets followed by graph.mapReduceTriplets, for
- * example.
+ * example. However, it means iterative algorithms must manually call `Graph.unpersist` on previous
+ * iterations' graphs for best GC performance. See the implementation of
+ * [[org.apache.spark.graphx.Pregel]] for an example.
  */
 private[impl]
 class ReplicatedVertexView[VD: ClassTag](
@@ -50,6 +52,16 @@ class ReplicatedVertexView[VD: ClassTag](
   private lazy val srcAttrOnly: RDD[(PartitionID, VertexPartition[VD])] = create(true, false)
   private lazy val dstAttrOnly: RDD[(PartitionID, VertexPartition[VD])] = create(false, true)
   private lazy val noAttrs: RDD[(PartitionID, VertexPartition[VD])] = create(false, false)
+
+  def unpersist(blocking: Boolean = true): ReplicatedVertexView[VD] = {
+    bothAttrs.unpersist(blocking)
+    srcAttrOnly.unpersist(blocking)
+    dstAttrOnly.unpersist(blocking)
+    noAttrs.unpersist(blocking)
+    // Don't unpersist localVertexIDMap because a future ReplicatedVertexView may be using it
+    // without modification
+    this
+  }
 
   def get(includeSrc: Boolean, includeDst: Boolean): RDD[(PartitionID, VertexPartition[VD])] = {
     (includeSrc, includeDst) match {

@@ -98,6 +98,11 @@ class VertexRDD[@specialized VD: ClassTag](
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   override def cache(): VertexRDD[VD] = persist()
 
+  override def unpersist(blocking: Boolean = true): VertexRDD[VD] = {
+    partitionsRDD.unpersist(blocking)
+    this
+  }
+
   /** Return the number of vertices in this set. */
   override def count(): Long = {
     partitionsRDD.map(_.size).reduce(_ + _)

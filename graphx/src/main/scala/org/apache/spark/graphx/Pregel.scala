@@ -93,25 +93,36 @@ object Pregel {
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
 
-    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) )
+    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
     // compute the messages
-    var messages = g.mapReduceTriplets(sendMsg, mergeMsg).cache()
+    var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
     var activeMessages = messages.count()
     // Loop
+    var prevG: Graph[VD, ED] = null
     var i = 0
     while (activeMessages > 0 && i < maxIterations) {
       // Receive the messages. Vertices that didn't get any messages do not appear in newVerts.
       val newVerts = g.vertices.innerJoin(messages)(vprog).cache()
       // Update the graph with the new vertices.
+      prevG = g
       g = g.outerJoinVertices(newVerts) { (vid, old, newOpt) => newOpt.getOrElse(old) }
+      g.vertices.cache()
 
       val oldMessages = messages
       // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't
-      // get to send messages.
+      // get to send messages. We must cache messages so it can be materialized on the next line,
+      // allowing us to uncache the previous iteration.
       messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, EdgeDirection.Out))).cache()
+      // Materializes messages, newVerts, and g.rvv (which materializes g.vertices). Hides
+      // oldMessages (depended on by newVerts), newVerts (depended on by messages), prevG.vertices
+      // (depended on by newVerts and g.vertices), and prevG.rvv (depended on by oldMessages and
+      // g.rvv).
       activeMessages = messages.count()
-      // after counting we can unpersist the old messages
+      // Unpersist hidden RDDs
       oldMessages.unpersist(blocking=false)
+      newVerts.unpersist(blocking=false)
+      prevG.vertices.unpersist(blocking=false)
+      prevG.asInstanceOf[org.apache.spark.graphx.impl.GraphImpl[VD, ED]].replicatedVertexView.unpersist(blocking=false)
       // count the iteration
       i += 1
     }

@@ -44,6 +44,11 @@ class EdgeRDD[@specialized ED: ClassTag](
   /** Persist this RDD with the default storage level (`MEMORY_ONLY`). */
   override def cache(): EdgeRDD[ED] = persist()
 
+  override def unpersist(blocking: Boolean = true): EdgeRDD[ED] = {
+    partitionsRDD.unpersist(blocking)
+    this
+  }
+
   def mapEdgePartitions[ED2: ClassTag](f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2])
     : EdgeRDD[ED2] = {
 //       iter => iter.map { case (pid, ep) => (pid, f(ep)) }
