@@ -47,6 +47,8 @@ public final class JavaFlumeEventCount {
       System.exit(1);
     }
 
+    StreamingExamples.setStreamingLogLevels();
+
     String master = args[0];
     String host = args[1];
     int port = Integer.parseInt(args[2]);

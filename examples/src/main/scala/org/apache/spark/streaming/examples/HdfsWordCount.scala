@@ -20,7 +20,6 @@ package org.apache.spark.streaming.examples
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
 
-
 /**
  * Counts words in new text files created in the given directory
  * Usage: HdfsWordCount <master> <directory>
@@ -37,6 +36,8 @@ object HdfsWordCount {
       System.err.println("Usage: HdfsWordCount <master> <directory>")
       System.exit(1)
     }
+
+    StreamingExamples.setStreamingLogLevels()
 
     // Create the context
     val ssc = new StreamingContext(args(0), "HdfsWordCount", Seconds(2),

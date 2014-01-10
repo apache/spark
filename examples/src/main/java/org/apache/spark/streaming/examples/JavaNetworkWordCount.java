@@ -38,7 +38,7 @@ import java.util.regex.Pattern;
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
- *    `$ ./run spark.streaming.examples.JavaNetworkWordCount local[2] localhost 9999`
+ *    `$ ./run org.apache.spark.streaming.examples.JavaNetworkWordCount local[2] localhost 9999`
  */
 public final class JavaNetworkWordCount {
   private static final Pattern SPACE = Pattern.compile(" ");
@@ -52,6 +52,8 @@ public final class JavaNetworkWordCount {
           "In local mode, <master> should be 'local[n]' with n > 1");
       System.exit(1);
     }
+
+    StreamingExamples.setStreamingLogLevels();
 
     // Create the context with a 1 second batch size
     JavaStreamingContext ssc = new JavaStreamingContext(args[0], "JavaNetworkWordCount",

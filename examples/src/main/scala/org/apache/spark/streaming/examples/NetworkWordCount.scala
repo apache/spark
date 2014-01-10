@@ -40,6 +40,8 @@ object NetworkWordCount {
       System.exit(1)
     }
 
+    StreamingExamples.setStreamingLogLevels()
+
     // Create the context with a 1 second batch size
     val ssc = new StreamingContext(args(0), "NetworkWordCount", Seconds(1),
       System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
