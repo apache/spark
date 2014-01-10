@@ -21,6 +21,8 @@ depends on native Fortran routines. You may need to install the
 if it is not already present on your nodes. MLlib will throw a linking error if it cannot 
 detect these libraries automatically.
 
+To use MLlib in Python, you will also need [NumPy](http://www.numpy.org) version 1.7 or newer.
+
 # Binary Classification
 
 Binary classification is a supervised learning problem in which we want to
@@ -315,6 +317,13 @@ other signals), you can use the trainImplicit method to get better results.
 {% highlight scala %}
 val model = ALS.trainImplicit(ratings, 1, 20, 0.01)
 {% endhighlight %}
+
+# Using MLLib in Java
+
+All of MLlib's methods use Java-friendly types, so you can import and call them there the same
+way you do in Scala. The only caveat is that the methods take Scala RDD objects, while the
+Spark Java API uses a separate `JavaRDD` class. You can convert a Java RDD to a Scala one by
+calling `.rdd()` on your `JavaRDD` object.
 
 # Using MLLib in Python
 Following examples can be tested in the PySpark shell.

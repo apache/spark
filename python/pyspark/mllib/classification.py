@@ -44,13 +44,13 @@ class LogisticRegressionModel(LinearModel):
 class LogisticRegressionWithSGD(object):
     @classmethod
     def train(cls, data, iterations=100, step=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
+              miniBatchFraction=1.0, initialWeights=None):
         """Train a logistic regression model on the given data."""
         sc = data.context
         return _regression_train_wrapper(sc, lambda d, i:
                 sc._jvm.PythonMLLibAPI().trainLogisticRegressionModelWithSGD(d._jrdd,
-                        iterations, step, mini_batch_fraction, i),
-                LogisticRegressionModel, data, initial_weights)
+                        iterations, step, miniBatchFraction, i),
+                LogisticRegressionModel, data, initialWeights)
 
 class SVMModel(LinearModel):
     """A support vector machine.
@@ -67,14 +67,14 @@ class SVMModel(LinearModel):
 
 class SVMWithSGD(object):
     @classmethod
-    def train(cls, data, iterations=100, step=1.0, reg_param=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
+    def train(cls, data, iterations=100, step=1.0, regParam=1.0,
+              miniBatchFraction=1.0, initialWeights=None):
         """Train a support vector machine on the given data."""
         sc = data.context
         return _regression_train_wrapper(sc, lambda d, i:
                 sc._jvm.PythonMLLibAPI().trainSVMModelWithSGD(d._jrdd,
-                        iterations, step, reg_param, mini_batch_fraction, i),
-                SVMModel, data, initial_weights)
+                        iterations, step, regParam, miniBatchFraction, i),
+                SVMModel, data, initialWeights)
 
 class NaiveBayesModel(object):
     """
