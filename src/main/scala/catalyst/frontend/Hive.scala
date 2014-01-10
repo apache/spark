@@ -339,8 +339,8 @@ object HiveQl {
   }
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
-    // Just fake explain on create function...
-    case Token("TOK_EXPLAIN", Token("TOK_CREATEFUNCTION", _) :: Nil) => NoRelation
+    // Just fake explain for any of the native commands.
+    case Token("TOK_EXPLAIN", Token(explainType, _) :: Nil) if nativeCommands contains explainType => NoRelation
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: _ :: Nil = getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
