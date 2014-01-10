@@ -34,8 +34,10 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
 
   // Mapping of the batch time to the checkpointed RDD file of that time
   @transient private var timeToCheckpointFile = new HashMap[Time, String]
-  // Mapping of the batch time to the time of the oldest checkpointed RDD in that batch's checkpoint data
+  // Mapping of the batch time to the time of the oldest checkpointed RDD
+  // in that batch's checkpoint data
   @transient private var timeToOldestCheckpointFileTime = new HashMap[Time, Time]
+
   @transient private var fileSystem : FileSystem = null
   protected[streaming] def currentCheckpointFiles = data.asInstanceOf[HashMap[Time, String]]
 
@@ -55,19 +57,26 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
     if (!checkpointFiles.isEmpty) {
       currentCheckpointFiles.clear()
       currentCheckpointFiles ++= checkpointFiles
+      // Add the current checkpoint files to the map of all checkpoint files
+      // This will be used to delete old checkpoint files
       timeToCheckpointFile ++= currentCheckpointFiles
+      // Remember the time of the oldest checkpoint RDD in current state
       timeToOldestCheckpointFileTime(time) = currentCheckpointFiles.keys.min(Time.ordering)
     }
   }
 
   /**
-   * Cleanup old checkpoint data. This gets called every time the graph
-   * checkpoint is initiated, but after `update` is called. Default
-   * implementation, cleans up old checkpoint files.
+   * Cleanup old checkpoint data. This gets called after a checkpoint of `time` has been
+   * written to the checkpoint directory.
    */
   def cleanup(time: Time) {
+    // Get the time of the oldest checkpointed RDD that was written as part of the
+    // checkpoint of `time`
     timeToOldestCheckpointFileTime.remove(time) match {
       case Some(lastCheckpointFileTime) =>
+        // Find all the checkpointed RDDs (i.e. files) that are older than `lastCheckpointFileTime`
+        // This is because checkpointed RDDs older than this are not going to be needed
+        // even after master fails, as the checkpoint data of `time` does not refer to those files
         val filesToDelete = timeToCheckpointFile.filter(_._1 < lastCheckpointFileTime)
         logDebug("Files to delete:\n" + filesToDelete.mkString(","))
         filesToDelete.foreach {

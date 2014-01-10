@@ -26,9 +26,12 @@ import org.apache.spark.Logging
 
 /**
  * This is a custom implementation of scala.collection.mutable.Map which stores the insertion
- * time stamp along with each key-value pair. Key-value pairs that are older than a particular
- * threshold time can them be removed using the clearOldValues method. This is intended to be a drop-in
- * replacement of scala.collection.mutable.HashMap.
+ * timestamp along with each key-value pair. If specified, the timestamp of each pair can be
+ * updated every it is accessed. Key-value pairs whose timestamp are older than a particular
+ * threshold time can them be removed using the clearOldValues method. This is intended to
+ * be a drop-in replacement of scala.collection.mutable.HashMap.
+ * @param updateTimeStampOnGet When enabled, the timestamp of a pair will be
+ *                             updated when it is accessed
  */
 class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = false)
   extends Map[A, B]() with Logging {

@@ -98,7 +98,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
       (time - rememberDuration) + ": " + oldFiles.keys.mkString(", "))
     logDebug("Cleared files are:\n" +
       oldFiles.map(p => (p._1, p._2.mkString(", "))).mkString("\n"))
-    // Delete file times that weren't accessed in the last round of getting new files
+    // Delete file mod times that weren't accessed in the last round of getting new files
     fileModTimes.clearOldValues(lastNewFileFindingTime - 1)
   }
 
@@ -147,6 +147,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
   }
 
   private def getFileModTime(path: Path) = {
+    // Get file mod time from cache or fetch it from the file system
     fileModTimes.getOrElseUpdate(path.toString, fs.getFileStatus(path).getModificationTime())
   }
 
