@@ -69,30 +69,48 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   def log(request: HttpServletRequest): String = {
     val defaultBytes = 100 * 1024
-    val appId = request.getParameter("appId")
-    val executorId = request.getParameter("executorId")
+
+    val appId = Option(request.getParameter("appId"))
+    val executorId = Option(request.getParameter("executorId"))
+    val driverId = Option(request.getParameter("driverId"))
     val logType = request.getParameter("logType")
     val offset = Option(request.getParameter("offset")).map(_.toLong)
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
-    val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
+
+    val path = (appId, executorId, driverId) match {
+      case (Some(a), Some(e), None) =>
+        s"${workDir.getPath}/$appId/$executorId/$logType"
+      case (None, None, Some(d)) =>
+        s"${workDir.getPath}/$driverId/$logType"
+      case _ =>
+        throw new Exception("Request must specify either application or driver identifiers")
+    }
 
     val (startByte, endByte) = getByteRange(path, offset, byteLength)
     val file = new File(path)
     val logLength = file.length
 
-    val pre = "==== Bytes %s-%s of %s of %s/%s/%s ====\n"
-      .format(startByte, endByte, logLength, appId, executorId, logType)
+    val pre = s"==== Bytes $startByte-$endByte of $logLength of $path ====\n"
     pre + Utils.offsetBytes(path, startByte, endByte)
   }
 
   def logPage(request: HttpServletRequest): Seq[scala.xml.Node] = {
     val defaultBytes = 100 * 1024
-    val appId = request.getParameter("appId")
-    val executorId = request.getParameter("executorId")
+    val appId = Option(request.getParameter("appId"))
+    val executorId = Option(request.getParameter("executorId"))
+    val driverId = Option(request.getParameter("driverId"))
     val logType = request.getParameter("logType")
     val offset = Option(request.getParameter("offset")).map(_.toLong)
     val byteLength = Option(request.getParameter("byteLength")).map(_.toInt).getOrElse(defaultBytes)
-    val path = "%s/%s/%s/%s".format(workDir.getPath, appId, executorId, logType)
+
+    val (path, params) = (appId, executorId, driverId) match {
+      case (Some(a), Some(e), None) =>
+        (s"${workDir.getPath}/$a/$e/$logType", s"appId=$a&executorId=$e")
+      case (None, None, Some(d)) =>
+        (s"${workDir.getPath}/$d/$logType", s"driverId=$d")
+      case _ =>
+        throw new Exception("Request must specify either application or driver identifiers")
+    }
 
     val (startByte, endByte) = getByteRange(path, offset, byteLength)
     val file = new File(path)
@@ -106,9 +124,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
     val backButton =
       if (startByte > 0) {
-        <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s"
-          .format(appId, executorId, logType, math.max(startByte-byteLength, 0),
-          byteLength)}>
+        <a href={"?%s&logType=%s&offset=%s&byteLength=%s"
+          .format(params, logType, math.max(startByte-byteLength, 0), byteLength)}>
           <button type="button" class="btn btn-default">
             Previous {Utils.bytesToString(math.min(byteLength, startByte))}
           </button>
@@ -122,8 +139,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
     val nextButton =
       if (endByte < logLength) {
-        <a href={"?appId=%s&executorId=%s&logType=%s&offset=%s&byteLength=%s".
-          format(appId, executorId, logType, endByte, byteLength)}>
+        <a href={"?%s&logType=%s&offset=%s&byteLength=%s".
+          format(params, logType, endByte, byteLength)}>
           <button type="button" class="btn btn-default">
             Next {Utils.bytesToString(math.min(byteLength, logLength-endByte))}
           </button>

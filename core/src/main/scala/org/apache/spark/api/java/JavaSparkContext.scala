@@ -425,10 +425,68 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def clearCallSite() {
     sc.clearCallSite()
   }
+
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
+  def setLocalProperty(key: String, value: String): Unit = sc.setLocalProperty(key, value)
+
+  /**
+   * Get a local property set in this thread, or null if it is missing. See
+   * [[org.apache.spark.api.java.JavaSparkContext.setLocalProperty]].
+   */
+  def getLocalProperty(key: String): String = sc.getLocalProperty(key)
+
+  /**
+   * Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+   * different value or cleared.
+   *
+   * Often, a unit of execution in an application consists of multiple Spark actions or jobs.
+   * Application programmers can use this method to group all those jobs together and give a
+   * group description. Once set, the Spark web UI will associate such jobs with this group.
+   *
+   * The application can also use [[org.apache.spark.api.java.JavaSparkContext.cancelJobGroup]]
+   * to cancel all running jobs in this group. For example,
+   * {{{
+   * // In the main thread:
+   * sc.setJobGroup("some_job_to_cancel", "some job description");
+   * rdd.map(...).count();
+   *
+   * // In a separate thread:
+   * sc.cancelJobGroup("some_job_to_cancel");
+   * }}}
+   */
+  def setJobGroup(groupId: String, description: String): Unit = sc.setJobGroup(groupId, description)
+
+  /** Clear the current thread's job group ID and its description. */
+  def clearJobGroup(): Unit = sc.clearJobGroup()
+
+  /**
+   * Cancel active jobs for the specified group. See
+   * [[org.apache.spark.api.java.JavaSparkContext.setJobGroup]] for more information.
+   */
+  def cancelJobGroup(groupId: String): Unit = sc.cancelJobGroup(groupId)
+
+  /** Cancel all jobs that have been scheduled or are running. */
+  def cancelAllJobs(): Unit = sc.cancelAllJobs()
 }
 
 object JavaSparkContext {
   implicit def fromSparkContext(sc: SparkContext): JavaSparkContext = new JavaSparkContext(sc)
 
   implicit def toSparkContext(jsc: JavaSparkContext): SparkContext = jsc.sc
+
+  /**
+   * Find the JAR from which a given class was loaded, to make it easy for users to pass
+   * their JARs to SparkContext.
+   */
+  def jarOfClass(cls: Class[_]): Array[String] = SparkContext.jarOfClass(cls).toArray
+
+  /**
+   * Find the JAR that contains the class of a particular object, to make it easy for users
+   * to pass their JARs to SparkContext. In most cases you can call jarOfObject(this) in
+   * your driver program.
+   */
+  def jarOfObject(obj: AnyRef): Array[String] = SparkContext.jarOfObject(obj).toArray
 }

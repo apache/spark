@@ -23,6 +23,8 @@ import com.twitter.algebird._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.SparkContext._
 
+import org.apache.spark.streaming.twitter._
+
 /**
  * Illustrates the use of the Count-Min Sketch, from Twitter's Algebird library, to compute
  * windowed and global Top-K estimates of user IDs occurring in a Twitter stream.
@@ -33,7 +35,7 @@ import org.apache.spark.SparkContext._
  * <p>
  * <p>
  *   <a href="http://highlyscalable.wordpress.com/2012/05/01/probabilistic-structures-web-analytics-data-mining/">
- *   This blog post</a> has a good overview of the Count-Min Sketch (CMS). The CMS is a datastructure
+ *   This blog post</a> has a good overview of the Count-Min Sketch (CMS). The CMS is a data structure
  *   for approximate frequency estimation in data streams (e.g. Top-K elements, frequency of any given element, etc),
  *   that uses space sub-linear in the number of elements in the stream. Once elements are added to the CMS, the
  *   estimated count of an element can be computed, as well as "heavy-hitters" that occur more than a threshold
@@ -60,8 +62,8 @@ object TwitterAlgebirdCMS {
     val (master, filters) = (args.head, args.tail)
 
     val ssc = new StreamingContext(master, "TwitterAlgebirdCMS", Seconds(10),
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
-    val stream = ssc.twitterStream(None, filters, StorageLevel.MEMORY_ONLY_SER)
+      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
+    val stream = TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_ONLY_SER_2)
 
     val users = stream.map(status => status.getUser.getId)
 

@@ -102,12 +102,12 @@ private[spark] class MesosSchedulerBackend(
       .setEnvironment(environment)
     val uri = sc.conf.get("spark.executor.uri", null)
     if (uri == null) {
-      command.setValue(new File(sparkHome, "spark-executor").getCanonicalPath)
+      command.setValue(new File(sparkHome, "/sbin/spark-executor").getCanonicalPath)
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
-      command.setValue("cd %s*; ./spark-executor".format(basename))
+      command.setValue("cd %s*; ./sbin/spark-executor".format(basename))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     val memory = Resource.newBuilder()
@@ -340,5 +340,5 @@ private[spark] class MesosSchedulerBackend(
   }
 
   // TODO: query Mesos for number of cores
-  override def defaultParallelism() = sc.conf.get("spark.default.parallelism", "8").toInt
+  override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
 }
