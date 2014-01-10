@@ -489,15 +489,15 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 }
 
 /**
- * JavaStreamingContext object contains a number of static utility functions.
+ * JavaStreamingContext object contains a number of utility functions.
  */
 object JavaStreamingContext {
 
   /**
    * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
    * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
-   * will be created by called the provided `creatingFunc`.
+   * recreated from the checkpoint data. If the data does not exist, then the provided factory
+   * will be used to create a JavaStreamingContext.
    *
    * @param checkpointPath Checkpoint directory used in an earlier JavaStreamingContext program
    * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
@@ -515,8 +515,8 @@ object JavaStreamingContext {
   /**
    * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
    * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
-   * will be created by called the provided `creatingFunc`.
+   * recreated from the checkpoint data. If the data does not exist, then the provided factory
+   * will be used to create a JavaStreamingContext.
    *
    * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
    * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
@@ -537,8 +537,8 @@ object JavaStreamingContext {
   /**
    * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
    * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
-   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
-   * will be created by called the provided `creatingFunc`.
+   * recreated from the checkpoint data. If the data does not exist, then the provided factory
+   * will be used to create a JavaStreamingContext.
    *
    * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
    * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext

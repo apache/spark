@@ -43,8 +43,9 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val pendingTimes = ssc.scheduler.getPendingTimes()
   val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
   val sparkConf = ssc.conf
-  
-  // do not save these configurations
+
+  // These should be unset when a checkpoint is deserialized,
+  // otherwise the SparkContext won't initialize correctly.
   sparkConf.remove("spark.hostPort").remove("spark.driver.host").remove("spark.driver.port")
 
   def validate() {
@@ -102,8 +103,12 @@ object Checkpoint extends Logging {
  * Convenience class to handle the writing of graph checkpoint to file
  */
 private[streaming]
-class CheckpointWriter(jobGenerator: JobGenerator, conf: SparkConf, checkpointDir: String, hadoopConf: Configuration)
-  extends Logging {
+class CheckpointWriter(
+    jobGenerator: JobGenerator,
+    conf: SparkConf,
+    checkpointDir: String,
+    hadoopConf: Configuration
+  ) extends Logging {
   val MAX_ATTEMPTS = 3
   val executor = Executors.newFixedThreadPool(1)
   val compressionCodec = CompressionCodec.createCodec(conf)

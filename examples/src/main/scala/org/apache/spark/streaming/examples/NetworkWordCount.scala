@@ -21,7 +21,8 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
 
 /**
- * Counts words in UTF8 encoded, '\n' delimited text received from the network every second.
+ * Counts words in text encoded with UTF8 received from the network every second.
+ *
  * Usage: NetworkWordCount <master> <hostname> <port>
  *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
  *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
