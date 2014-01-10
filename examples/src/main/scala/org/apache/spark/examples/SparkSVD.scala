@@ -33,8 +33,8 @@ import org.apache.spark.mllib.linalg.SparseMatrix
  */
 object SparkSVD {
   def main(args: Array[String]) {
-   if (args.length < 3) {
-      System.err.println("Usage: SVD <master> <file>")
+   if (args.length != 2) {
+      System.err.println("Usage: SparkSVD <master> <file>")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "SVD",
