@@ -254,7 +254,7 @@ object HiveQl {
   /** Extractor for matching Hive's AST Tokens. */
   object Token {
     /** @return matches of the form (tokenName, children). */
-    def unapply(t: Any) = t match {
+    def unapply(t: Any): Option[(String, Seq[ASTNode])] = t match {
       case t: ASTNode =>
         Some((t.getText, Option(t.getChildren).map(_.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
       case _ => None
