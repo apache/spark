@@ -235,7 +235,7 @@ object TestShark extends SharkInstance {
       runSqlHive("set datanucleus.cache.collections=true")
       runSqlHive("set datanucleus.cache.collections.lazy=true")
       // Lots of tests fail if we do not change the partition whitelist from the default.
-      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=[\\-A-Za-z0-9:_]*")
+      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
