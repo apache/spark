@@ -362,13 +362,15 @@ object HiveQl {
 
       // Return one query for each insert clause.
       val queries = insertClauses.map { case Token("TOK_INSERT", singleInsert) =>
-        val (Some(destClause) ::
+        val (
+            intoClause ::
+            destClause ::
             Some(selectClause) ::
             whereClause ::
             groupByClause ::
             orderByClause ::
             sortByClause ::
-            limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), singleInsert)
+            limitClause :: Nil) = getClauses(Seq("TOK_INSERT_INTO", "TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), singleInsert)
 
         val relations = nodeToRelation(fromClause)
         val withWhere = whereClause.map { whereNode =>
@@ -420,8 +422,13 @@ object HiveQl {
             .map(StopAfter(_, withSort))
             .getOrElse(withSort)
 
+        // There are two tokens for specifying where to sent the result that seem to be used almost
+        // interchangeably.
+        val resultDestination =
+          (intoClause orElse destClause).getOrElse(sys.error("No destination found."))
+
         nodeToDest(
-          destClause,
+          resultDestination,
           withLimit)
       }
 
@@ -441,11 +448,27 @@ object HiveQl {
       Subquery(alias, nodeToPlan(query))
 
     /* Table, No Alias */
-    case Token("TOK_TABREF",
-           Token("TOK_TABNAME",
-             tableNameParts) :: Nil) =>
-      val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
-      UnresolvedRelation(tableName, None)
+    case Token("TOK_TABREF", clauses) =>
+      // If the last clause is not a token then it's the alias of the table.
+      val (nonAliasClauses, aliasClause) =
+        if(clauses.last.getText.startsWith("TOK"))
+          (clauses, None)
+        else
+          (clauses.dropRight(1), Some(clauses.last))
+
+      val (Some(tableNameParts) ::
+          sampleClause :: Nil) = getClauses(Seq("TOK_TABNAME", "TOK_TABLESPLITSAMPLE"), nonAliasClauses)
+
+      val tableName = tableNameParts.getChildren.map { case Token(part, Nil) => part }.mkString(".")
+      val alias = aliasClause.map { case Token(a, Nil) => a }
+      val relation = UnresolvedRelation(tableName, alias)
+      // Apply sampling if requested.
+      sampleClause.map {
+        case Token("TOK_TABLESPLITSAMPLE",
+               Token("TOK_ROWCOUNT", Nil) ::
+               Token(count, Nil) :: Nil) =>
+          StopAfter(Literal(count.toInt), relation)
+      }.getOrElse(relation)
 
     case Token("TOK_UNIQUEJOIN", joinArgs) =>
       val tableOrdinals =
@@ -492,14 +515,6 @@ object HiveQl {
       // named output expressions where some aggregate expression has been applied (i.e. First).
       ??? /// Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
 
-    /* Table with Alias */
-    case Token("TOK_TABREF",
-           Token("TOK_TABNAME",
-             tableNameParts) ::
-             Token(alias, Nil) :: Nil) =>
-      val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
-      UnresolvedRelation(tableName, Some(alias))
-
     case Token(allJoinTokens(joinToken),
            relation1 ::
            relation2 :: other) =>
@@ -529,13 +544,14 @@ object HiveQl {
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
+  val destinationToken = "TOK_DESTINATION|TOK_INSERT_INTO".r
   protected def nodeToDest(node: Node, query: LogicalPlan): LogicalPlan = node match {
-    case Token("TOK_DESTINATION",
+    case Token(destinationToken(),
            Token("TOK_DIR",
              Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
       query
 
-    case Token("TOK_DESTINATION",
+    case Token(destinationToken(),
            Token("TOK_TAB",
               tableArgs) :: Nil) =>
       val Some(nameClause) :: partitionClause :: Nil =
