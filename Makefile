@@ -1,5 +1,8 @@
 all: a b c d e f g h i j k l m n o p q r s t u v w x y" z
 
+buildWhiteList:
+	sbt -Dshark.hive.alltests "test-only catalyst.execution.HiveCompatibility"
+
 findBroken:
 	sbt -Dshark.hive.alltests -Dshark.hive.failFast "test-only catalyst.execution.HiveCompatibility"
 
