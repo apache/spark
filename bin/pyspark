@@ -51,6 +51,7 @@ export PYSPARK_PYTHON
 export PYTHONPATH=$SPARK_HOME/python/:$PYTHONPATH
 
 # Load the PySpark shell.py script when ./pyspark is used interactively:
+export OLD_PYTHONSTARTUP=$PYTHONSTARTUP
 export PYTHONSTARTUP=$FWDIR/python/pyspark/shell.py
 
 if [ -n "$IPYTHON_OPTS" ]; then
