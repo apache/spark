@@ -13,11 +13,13 @@ import util._
  *
  * The "golden" results from Hive are cached in an retrieved both from the classpath and
  * [[answerCache]] to speed up testing.
+ *
+ * TODO(marmbrus): Document system properties.
  */
 abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
   protected val targetDir = new File("target")
 
-  /** The local directory with cached golden answer will be stored */
+  /** The local directory with cached golden answer will be stored. */
   protected val answerCache = new File(targetDir, "comparison-test-cache")
   if (!answerCache.exists)
     answerCache.mkdir()
@@ -39,6 +41,12 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
    */
   val failFast = System.getProperty("shark.hive.failFast") != null
   private var testFailed = false
+
+  /**
+   * Delete any cache files that result in test failures.  Used when the test harness has been
+   * updated thus requiring new golden answers to be computed for some tests.
+   */
+  val recomputeCache = System.getProperty("shark.hive.recomputeCache") != null
 
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
@@ -66,7 +74,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
     line.replaceAll("\"lastUpdateTime\":\\d+", "<UPDATETIME>")
 
   /**
-   * Removes non-deterministic paths from str` so cached answers will still pass.
+   * Removes non-deterministic paths from `str` so cached answers will still pass.
    */
   protected def cleanPaths(str: String): String = {
     str.replaceAll("file:\\/.*\\/", "<PATH>")
@@ -98,7 +106,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
         }
 
         val hiveCachedResults = hiveCacheFiles.flatMap { cachedAnswerFile =>
-          logger.warn(s"Looking for cached answer file $cachedAnswerFile.")
+          logger.debug(s"Looking for cached answer file $cachedAnswerFile.")
           if (cachedAnswerFile.exists) {
             Some(fileToString(cachedAnswerFile))
           } else if (getClass.getClassLoader.getResourceAsStream(cachedAnswerFile.toString) != null) {
@@ -173,13 +181,18 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
               val hivePrintOut = s"== HIVE - ${hive.size} row(s) ==" +: preparedHive
               val catalystPrintOut = s"== CATALYST - ${catalyst.size} row(s) ==" +: catalyst
 
-              val resultComparision = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
+              val resultComparison = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
+
+              if(recomputeCache) {
+                logger.warn(s"Clearing cache files for failed test $testCaseName")
+                hiveCacheFiles.foreach(_.delete())
+              }
 
               fail(
                 s"""
                   |Results do not match for query:
                   |$sharkQuery\n${sharkQuery.analyzed.output.map(_.name).mkString("\t")}
-                  |$resultComparision
+                  |$resultComparison
                 """.stripMargin)
             }
         }
