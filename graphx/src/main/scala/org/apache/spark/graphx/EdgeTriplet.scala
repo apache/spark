@@ -28,9 +28,6 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
    */
   var dstAttr: VD = _ //nullValue[VD]
 
-  var srcStale: Boolean = false
-  var dstStale: Boolean = false
-
   /**
    * Set the edge properties of this triplet.
    */
