@@ -7,35 +7,33 @@ import scala.collection.JavaConversions._
 import org.apache.spark.rdd.RDD
 
 /**
- * This object implements the GraphLab gather-apply-scatter api.
+ * Implements the GraphLab gather-apply-scatter API.
  */
 object GraphLab extends Logging {
 
   /**
-   * Execute the GraphLab Gather-Apply-Scatter API
+   * Executes the GraphLab Gather-Apply-Scatter API.
    *
-   * @todo finish documenting GraphLab Gather-Apply-Scatter API
-   *
-   * @param graph The graph on which to execute the GraphLab API
-   * @param gatherFunc The gather function is executed on each edge triplet
-   *                   adjacent to a vertex and returns an accumulator which
+   * @param graph the graph on which to execute the GraphLab API
+   * @param gatherFunc executed on each edge triplet
+   *                   adjacent to a vertex. Returns an accumulator which
    *                   is then merged using the merge function.
-   * @param mergeFunc An accumulative associative operation on the result of
+   * @param mergeFunc an accumulative associative operation on the result of
    *                  the gather type.
-   * @param applyFunc Takes a vertex and the final result of the merge operations
+   * @param applyFunc takes a vertex and the final result of the merge operations
    *                  on the adjacent edges and returns a new vertex value.
-   * @param scatterFunc Executed after the apply function the scatter function takes
+   * @param scatterFunc executed after the apply function. Takes
    *                    a triplet and signals whether the neighboring vertex program
    *                    must be recomputed.
-   * @param startVertices predicate to determine which vertices to start the computation on.
-   *                      these will be the active vertices in the first iteration.
-   * @param numIter The maximum number of iterations to run.
-   * @param gatherDirection The direction of edges to consider during the gather phase
-   * @param scatterDirection The direction of edges to consider during the scatter phase
+   * @param startVertices a predicate to determine which vertices to start the computation on.
+   *                      These will be the active vertices in the first iteration.
+   * @param numIter the maximum number of iterations to run
+   * @param gatherDirection the direction of edges to consider during the gather phase
+   * @param scatterDirection the direction of edges to consider during the scatter phase
    *
-   * @tparam VD The graph vertex attribute type
-   * @tparam ED The graph edge attribute type
-   * @tparam A The type accumulated during the gather phase
+   * @tparam VD the graph vertex attribute type
+   * @tparam ED the graph edge attribute type
+   * @tparam A the type accumulated during the gather phase
    * @return the resulting graph after the algorithm converges
    */
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]

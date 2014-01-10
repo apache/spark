@@ -9,7 +9,7 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  * `EdgeRDD[ED]` extends `RDD[Edge[ED]]` by storing the edges in columnar format on each partition
- * for performance. It is constructed using [[org.apache.spark.graphx.impl.EdgePartitionBuilder]].
+ * for performance. It is constructed using [[impl.EdgePartitionBuilder]].
  */
 class EdgeRDD[@specialized ED: ClassTag](
     val partitionsRDD: RDD[(PartitionID, EdgePartition[ED])])
@@ -20,9 +20,9 @@ class EdgeRDD[@specialized ED: ClassTag](
   override protected def getPartitions: Array[Partition] = partitionsRDD.partitions
 
   /**
-   * If partitionsRDD already has a partitioner, use it. Otherwise assume that the PartitionIDs in
-   * partitionsRDD correspond to the actual partitions and create a new partitioner that allows
-   * co-partitioning with partitionsRDD.
+   * If `partitionsRDD` already has a partitioner, use it. Otherwise assume that the
+   * [[PartitionID]]s in `partitionsRDD` correspond to the actual partitions and create a new
+   * partitioner that allows co-partitioning with `partitionsRDD`.
    */
   override val partitioner =
     partitionsRDD.partitioner.orElse(Some(Partitioner.defaultPartitioner(partitionsRDD)))
@@ -33,9 +33,6 @@ class EdgeRDD[@specialized ED: ClassTag](
 
   override def collect(): Array[Edge[ED]] = this.map(_.copy()).collect()
 
-  /**
-   * Caching a VertexRDD causes the index and values to be cached separately.
-   */
   override def persist(newLevel: StorageLevel): EdgeRDD[ED] = {
     partitionsRDD.persist(newLevel)
     this
@@ -76,5 +73,4 @@ class EdgeRDD[@specialized ED: ClassTag](
   def collectVertexIDs(): RDD[VertexID] = {
     partitionsRDD.flatMap { case (_, p) => Array.concat(p.srcIds, p.dstIds) }
   }
-
 }
