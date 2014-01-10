@@ -51,15 +51,15 @@ private[spark] class TaskSchedulerImpl(
     isLocal: Boolean = false)
   extends TaskScheduler with Logging
 {
-  def this(sc: SparkContext) = this(sc, sc.conf.get("spark.task.maxFailures", "4").toInt)
+  def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4))
 
   val conf = sc.conf
 
   // How often to check for speculative tasks
-  val SPECULATION_INTERVAL = conf.get("spark.speculation.interval", "100").toLong
+  val SPECULATION_INTERVAL = conf.getLong("spark.speculation.interval", 100)
 
   // Threshold above which we warn user initial TaskSet may be starved
-  val STARVATION_TIMEOUT = conf.get("spark.starvation.timeout", "15000").toLong
+  val STARVATION_TIMEOUT = conf.getLong("spark.starvation.timeout", 15000)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
@@ -125,7 +125,7 @@ private[spark] class TaskSchedulerImpl(
   override def start() {
     backend.start()
 
-    if (!isLocal && conf.get("spark.speculation", "false").toBoolean) {
+    if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
       import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,

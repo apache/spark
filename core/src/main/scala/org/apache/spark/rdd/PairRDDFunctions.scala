@@ -18,35 +18,34 @@
 package org.apache.spark.rdd
 
 import java.nio.ByteBuffer
-import java.util.Date
 import java.text.SimpleDateFormat
+import java.util.Date
 import java.util.{HashMap => JHashMap}
 
-import scala.collection.{mutable, Map}
+import scala.collection.Map
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.reflect.{ClassTag, classTag}
 
-import org.apache.hadoop.mapred._
-import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.SequenceFile.CompressionType
-import org.apache.hadoop.mapred.FileOutputFormat
-import org.apache.hadoop.mapred.OutputFormat
+import org.apache.hadoop.io.compress.CompressionCodec
+import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
-import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
-import org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
 import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
+// SparkHadoopWriter and SparkHadoopMapReduceUtil are actually source files defined in Spark.
+import org.apache.hadoop.mapred.SparkHadoopWriter
+import org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil
 import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
-import org.apache.spark.Aggregator
-import org.apache.spark.Partitioner
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.util.SerializableHyperLogLog
 
@@ -120,9 +119,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   }
 
   /**
-   * Merge the values for each key using an associative function and a neutral "zero value" which may
-   * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
-   * list concatenation, 0 for addition, or 1 for multiplication.).
+   * Merge the values for each key using an associative function and a neutral "zero value" which
+   * may be added to the result an arbitrary number of times, and must not change the result
+   * (e.g., Nil for list concatenation, 0 for addition, or 1 for multiplication.).
    */
   def foldByKey(zeroValue: V, partitioner: Partitioner)(func: (V, V) => V): RDD[(K, V)] = {
     // Serialize the zero value to a byte array so that we can get a new clone of it on each key
@@ -138,18 +137,18 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   }
 
   /**
-   * Merge the values for each key using an associative function and a neutral "zero value" which may
-   * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
-   * list concatenation, 0 for addition, or 1 for multiplication.).
+   * Merge the values for each key using an associative function and a neutral "zero value" which
+   * may be added to the result an arbitrary number of times, and must not change the result
+   * (e.g., Nil for list concatenation, 0 for addition, or 1 for multiplication.).
    */
   def foldByKey(zeroValue: V, numPartitions: Int)(func: (V, V) => V): RDD[(K, V)] = {
     foldByKey(zeroValue, new HashPartitioner(numPartitions))(func)
   }
 
   /**
-   * Merge the values for each key using an associative function and a neutral "zero value" which may
-   * be added to the result an arbitrary number of times, and must not change the result (e.g., Nil for
-   * list concatenation, 0 for addition, or 1 for multiplication.).
+   * Merge the values for each key using an associative function and a neutral "zero value" which
+   * may be added to the result an arbitrary number of times, and must not change the result
+   * (e.g., Nil for list concatenation, 0 for addition, or 1 for multiplication.).
    */
   def foldByKey(zeroValue: V)(func: (V, V) => V): RDD[(K, V)] = {
     foldByKey(zeroValue, defaultPartitioner(self))(func)
@@ -226,7 +225,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   }
 
   /**
-   * Return approximate number of distinct values for each key in this RDD. 
+   * Return approximate number of distinct values for each key in this RDD.
    * The accuracy of approximation can be controlled through the relative standard deviation
    * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
    * more accurate counts but increase the memory footprint and vise versa. HashPartitions the
@@ -579,7 +578,8 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    */
   def saveAsHadoopFile[F <: OutputFormat[K, V]](
       path: String, codec: Class[_ <: CompressionCodec]) (implicit fm: ClassTag[F]) {
-    saveAsHadoopFile(path, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]], codec)
+    val runtimeClass = fm.runtimeClass
+    saveAsHadoopFile(path, getKeyClass, getValueClass, runtimeClass.asInstanceOf[Class[F]], codec)
   }
 
   /**
@@ -599,7 +599,8 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       keyClass: Class[_],
       valueClass: Class[_],
       outputFormatClass: Class[_ <: NewOutputFormat[_, _]],
-      conf: Configuration = self.context.hadoopConfiguration) {
+      conf: Configuration = self.context.hadoopConfiguration)
+  {
     val job = new NewAPIHadoopJob(conf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
@@ -613,7 +614,8 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       // around by taking a mod. We expect that no task will be attempted 2 billion times.
       val attemptNumber = (context.attemptId % Int.MaxValue).toInt
       /* "reduce task" <split #> <attempt # = spark task #> */
-      val attemptId = newTaskAttemptID(jobtrackerID, stageId, false, context.partitionId, attemptNumber)
+      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
+        attemptNumber)
       val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = outputFormatClass.newInstance
       val committer = format.getOutputCommitter(hadoopContext)
@@ -632,13 +634,12 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
      * however we're only going to use this local OutputCommitter for
      * setupJob/commitJob, so we just use a dummy "map" task.
      */
-    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, true, 0, 0)
+    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
     val count = self.context.runJob(self, writeShard _).sum
     jobCommitter.commitJob(jobTaskContext)
-    jobCommitter.cleanupJob(jobTaskContext)
   }
 
   /**
@@ -668,7 +669,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       codec: Option[Class[_ <: CompressionCodec]] = None) {
     conf.setOutputKeyClass(keyClass)
     conf.setOutputValueClass(valueClass)
-    // conf.setOutputFormat(outputFormatClass) // Doesn't work in Scala 2.9 due to what may be a generics bug
+    // Doesn't work in Scala 2.9 due to what may be a generics bug
+    // TODO: Should we uncomment this for Scala 2.10?
+    // conf.setOutputFormat(outputFormatClass)
     conf.set("mapred.output.format.class", outputFormatClass.getName)
     for (c <- codec) {
       conf.setCompressMapOutput(true)
@@ -702,7 +705,8 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       throw new SparkException("Output value class not set")
     }
 
-    logInfo("Saving as hadoop file of type (" + keyClass.getSimpleName+ ", " + valueClass.getSimpleName+ ")")
+    logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
+      valueClass.getSimpleName+ ")")
 
     val writer = new SparkHadoopWriter(conf)
     writer.preSetup()
@@ -728,7 +732,6 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
 
     self.context.runJob(self, writeToFile _)
     writer.commitJob()
-    writer.cleanup()
   }
 
   /**

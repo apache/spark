@@ -348,14 +348,19 @@ object BlockManagerMasterActor {
 
       if (storageLevel.isValid) {
         // isValid means it is either stored in-memory or on-disk.
-        _blocks.put(blockId, BlockStatus(storageLevel, memSize, diskSize))
+        // But the memSize here indicates the data size in or dropped from memory,
+        // and the diskSize here indicates the data size in or dropped to disk.
+        // They can be both larger than 0, when a block is dropped from memory to disk.
+        // Therefore, a safe way to set BlockStatus is to set its info in accurate modes.
         if (storageLevel.useMemory) {
+          _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0))
           _remainingMem -= memSize
           logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
             blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
             Utils.bytesToString(_remainingMem)))
         }
         if (storageLevel.useDisk) {
+          _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize))
           logInfo("Added %s on disk on %s (size: %s)".format(
             blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
         }

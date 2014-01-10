@@ -110,7 +110,7 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     // or if the property is defined set it to that time
     if (clock.isInstanceOf[ManualClock]) {
       val lastTime = ssc.initialCheckpoint.checkpointTime.milliseconds
-      val jumpTime = ssc.sc.conf.get("spark.streaming.manualClock.jump", "0").toLong
+      val jumpTime = ssc.sc.conf.getLong("spark.streaming.manualClock.jump", 0)
       clock.asInstanceOf[ManualClock].setTime(lastTime + jumpTime)
     }
 

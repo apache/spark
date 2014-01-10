@@ -63,7 +63,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
 
       // Periodically revive offers to allow delay scheduling to work
-      val reviveInterval = conf.get("spark.scheduler.revive.interval", "1000").toLong
+      val reviveInterval = conf.getLong("spark.scheduler.revive.interval", 1000)
       import context.dispatcher
       context.system.scheduler.schedule(0.millis, reviveInterval.millis, self, ReviveOffers)
     }
@@ -209,8 +209,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   }
 
   override def defaultParallelism(): Int = {
-    conf.getOption("spark.default.parallelism").map(_.toInt).getOrElse(
-      math.max(totalCoreCount.get(), 2))
+    conf.getInt("spark.default.parallelism", math.max(totalCoreCount.get(), 2))
   }
 
   // Called by subclasses when notified of a lost worker

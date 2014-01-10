@@ -31,9 +31,9 @@ import scala.reflect.{ClassTag, classTag}
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
-FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
+  FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
 import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat,
-TextInputFormat}
+  TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
@@ -49,7 +49,7 @@ import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{Utils, TimeStampedHashMap, MetadataCleaner, MetadataCleanerType,
-ClosureCleaner}
+  ClosureCleaner}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -116,7 +116,7 @@ class SparkContext(
     throw new SparkException("An application must be set in your configuration")
   }
 
-  if (conf.get("spark.logConf", "false").toBoolean) {
+  if (conf.getBoolean("spark.logConf", false)) {
     logInfo("Spark configuration:\n" + conf.toDebugString)
   }
 
@@ -244,6 +244,10 @@ class SparkContext(
     localProperties.set(new Properties())
   }
 
+  /**
+   * Set a local property that affects jobs submitted from this thread, such as the
+   * Spark fair scheduler pool.
+   */
   def setLocalProperty(key: String, value: String) {
     if (localProperties.get() == null) {
       localProperties.set(new Properties())
@@ -255,6 +259,10 @@ class SparkContext(
     }
   }
 
+  /**
+   * Get a local property set in this thread, or null if it is missing. See
+   * [[org.apache.spark.SparkContext.setLocalProperty]].
+   */
   def getLocalProperty(key: String): String =
     Option(localProperties.get).map(_.getProperty(key)).getOrElse(null)
 
@@ -265,7 +273,7 @@ class SparkContext(
   }
 
   /**
-   * Assigns a group id to all the jobs started by this thread until the group id is set to a
+   * Assigns a group ID to all the jobs started by this thread until the group ID is set to a
    * different value or cleared.
    *
    * Often, a unit of execution in an application consists of multiple Spark actions or jobs.
@@ -288,7 +296,7 @@ class SparkContext(
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, groupId)
   }
 
-  /** Clear the job group id and its description. */
+  /** Clear the current thread's job group ID and its description. */
   def clearJobGroup() {
     setLocalProperty(SparkContext.SPARK_JOB_DESCRIPTION, null)
     setLocalProperty(SparkContext.SPARK_JOB_GROUP_ID, null)
@@ -517,15 +525,15 @@ class SparkContext(
   // Methods for creating shared variables
 
   /**
-   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add" values
-   * to using the `+=` method. Only the driver can access the accumulator's `value`.
+   * Create an [[org.apache.spark.Accumulator]] variable of a given type, which tasks can "add"
+   * values to using the `+=` method. Only the driver can access the accumulator's `value`.
    */
   def accumulator[T](initialValue: T)(implicit param: AccumulatorParam[T]) =
     new Accumulator(initialValue, param)
 
   /**
-   * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values with `+=`.
-   * Only the driver can access the accumuable's `value`.
+   * Create an [[org.apache.spark.Accumulable]] shared variable, to which tasks can add values
+   * with `+=`. Only the driver can access the accumuable's `value`.
    * @tparam T accumulator type
    * @tparam R type that can be added to the accumulator
    */
@@ -538,14 +546,16 @@ class SparkContext(
    * Growable and TraversableOnce are the standard APIs that guarantee += and ++=, implemented by
    * standard mutable collections. So you can use this with mutable Map, Set, etc.
    */
-  def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable, T](initialValue: R) = {
+  def accumulableCollection[R <% Growable[T] with TraversableOnce[T] with Serializable, T]
+      (initialValue: R) = {
     val param = new GrowableAccumulableParam[R,T]
     new Accumulable(initialValue, param)
   }
 
   /**
-   * Broadcast a read-only variable to the cluster, returning a [[org.apache.spark.broadcast.Broadcast]] object for
-   * reading it in distributed functions. The variable will be sent to each cluster only once.
+   * Broadcast a read-only variable to the cluster, returning a
+   * [[org.apache.spark.broadcast.Broadcast]] object for reading it in distributed functions.
+   * The variable will be sent to each cluster only once.
    */
   def broadcast[T](value: T) = env.broadcastManager.newBroadcast[T](value, isLocal)
 
@@ -1010,7 +1020,8 @@ object SparkContext {
 
   implicit def stringToText(s: String) = new Text(s)
 
-  private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T]): ArrayWritable = {
+  private implicit def arrayToArrayWritable[T <% Writable: ClassTag](arr: Traversable[T])
+    : ArrayWritable = {
     def anyToWritable[U <% Writable](u: U): Writable = u
 
     new ArrayWritable(classTag[T].runtimeClass.asInstanceOf[Class[Writable]],
@@ -1033,7 +1044,9 @@ object SparkContext {
 
   implicit def booleanWritableConverter() = simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
-  implicit def bytesWritableConverter() = simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
+  implicit def bytesWritableConverter() = {
+    simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
+  }
 
   implicit def stringWritableConverter() = simpleWritableConverter[String, Text](_.toString)
 
@@ -1049,7 +1062,8 @@ object SparkContext {
     if (uri != null) {
       val uriStr = uri.toString
       if (uriStr.startsWith("jar:file:")) {
-        // URI will be of the form "jar:file:/path/foo.jar!/package/cls.class", so pull out the /path/foo.jar
+        // URI will be of the form "jar:file:/path/foo.jar!/package/cls.class",
+        // so pull out the /path/foo.jar
         List(uriStr.substring("jar:file:".length, uriStr.indexOf('!')))
       } else {
         Nil
@@ -1203,7 +1217,7 @@ object SparkContext {
       case mesosUrl @ MESOS_REGEX(_) =>
         MesosNativeLibrary.load()
         val scheduler = new TaskSchedulerImpl(sc)
-        val coarseGrained = sc.conf.get("spark.mesos.coarse", "false").toBoolean
+        val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
           new CoarseMesosSchedulerBackend(scheduler, sc, url, appName)

@@ -647,6 +647,12 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])(implicit val kClassTag: ClassTag[K
   def countApproxDistinctByKey(relativeSD: Double, numPartitions: Int): JavaRDD[(K, Long)] = {
     rdd.countApproxDistinctByKey(relativeSD, numPartitions)
   }
+
+  /** Assign a name to this RDD */
+  def setName(name: String): JavaPairRDD[K, V] = {
+    rdd.setName(name)
+    this
+  }
 }
 
 object JavaPairRDD {
