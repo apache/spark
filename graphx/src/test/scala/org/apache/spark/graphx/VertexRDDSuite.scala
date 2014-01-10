@@ -33,8 +33,8 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
   test("diff") {
     withSpark { sc =>
       val n = 100
-      val verts = vertices(sc, n)
-      val flipEvens = verts.mapValues(x => if (x % 2 == 0) -x else x)
+      val verts = vertices(sc, n).cache()
+      val flipEvens = verts.mapValues(x => if (x % 2 == 0) -x else x).cache()
       // diff should keep only the changed vertices
       assert(verts.diff(flipEvens).map(_._2).collect().toSet === (2 to n by 2).map(-_).toSet)
       // diff should keep the vertex values from `other`
@@ -45,8 +45,8 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
   test("leftJoin") {
     withSpark { sc =>
       val n = 100
-      val verts = vertices(sc, n)
-      val evens = verts.filter(q => ((q._2 % 2) == 0))
+      val verts = vertices(sc, n).cache()
+      val evens = verts.filter(q => ((q._2 % 2) == 0)).cache()
       // leftJoin with another VertexRDD
       assert(verts.leftJoin(evens) { (id, a, bOpt) => a - bOpt.getOrElse(0) }.collect.toSet ===
         (0 to n by 2).map(x => (x.toLong, 0)).toSet ++ (1 to n by 2).map(x => (x.toLong, x)).toSet)
@@ -60,8 +60,8 @@ class VertexRDDSuite extends FunSuite with LocalSparkContext {
   test("innerJoin") {
     withSpark { sc =>
       val n = 100
-      val verts = vertices(sc, n)
-      val evens = verts.filter(q => ((q._2 % 2) == 0))
+      val verts = vertices(sc, n).cache()
+      val evens = verts.filter(q => ((q._2 % 2) == 0)).cache()
       // innerJoin with another VertexRDD
       assert(verts.innerJoin(evens) { (id, a, b) => a - b }.collect.toSet ===
         (0 to n by 2).map(x => (x.toLong, 0)).toSet)

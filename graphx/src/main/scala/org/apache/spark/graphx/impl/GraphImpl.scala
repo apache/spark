@@ -32,19 +32,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     @transient val replicatedVertexView: ReplicatedVertexView[VD])
   extends Graph[VD, ED] with Serializable {
 
-  def this(
-      vertices: VertexRDD[VD],
-      edges: EdgeRDD[ED],
-      routingTable: RoutingTable) = {
-    this(vertices, edges, routingTable, new ReplicatedVertexView(vertices, edges, routingTable))
-  }
-
-  def this(
-      vertices: VertexRDD[VD],
-      edges: EdgeRDD[ED]) = {
-    this(vertices, edges, new RoutingTable(edges, vertices))
-  }
-
   /** Return a RDD that brings edges together with their source and destination vertices. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
     val vdTag = classTag[VD]
@@ -90,7 +77,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
         val edgePartition = builder.toEdgePartition
         Iterator((pid, edgePartition))
       }, preservesPartitioning = true).cache())
-    new GraphImpl(vertices, newEdges)
+    GraphImpl(vertices, newEdges)
   }
 
   override def statistics: Map[String, Any] = {
@@ -166,7 +153,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   override def mapVertices[VD2: ClassTag](f: (VertexID, VD) => VD2): Graph[VD2, ED] = {
     if (classTag[VD] equals classTag[VD2]) {
       // The map preserves type, so we can use incremental replication
-      val newVerts = vertices.mapVertexPartitions(_.map(f))
+      val newVerts = vertices.mapVertexPartitions(_.map(f)).cache()
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newReplicatedVertexView = new ReplicatedVertexView[VD2](
         changedVerts, edges, routingTable,
@@ -174,7 +161,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       new GraphImpl(newVerts, edges, routingTable, newReplicatedVertexView)
     } else {
       // The map does not preserve type, so we must re-replicate all vertices
-      new GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, routingTable)
+      GraphImpl(vertices.mapVertexPartitions(_.map(f)), edges, routingTable)
     }
   }
 
@@ -336,7 +323,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     } else {
       // updateF does not preserve type, so we must re-replicate all vertices
       val newVerts = vertices.leftJoin(updates)(updateF)
-      new GraphImpl(newVerts, edges, routingTable)
+      GraphImpl(newVerts, edges, routingTable)
     }
   }
 
@@ -382,7 +369,29 @@ object GraphImpl {
 
     val vertexRDD = VertexRDD(vids, vPartitioned, defaultVertexAttr)
 
-    new GraphImpl(vertexRDD, edgeRDD)
+    GraphImpl(vertexRDD, edgeRDD)
+  }
+
+  def apply[VD: ClassTag, ED: ClassTag](
+      vertices: VertexRDD[VD],
+      edges: EdgeRDD[ED]): GraphImpl[VD, ED] = {
+    // Cache RDDs that are referenced multiple times
+    edges.cache()
+
+    GraphImpl(vertices, edges, new RoutingTable(edges, vertices))
+  }
+
+  def apply[VD: ClassTag, ED: ClassTag](
+      vertices: VertexRDD[VD],
+      edges: EdgeRDD[ED],
+      routingTable: RoutingTable): GraphImpl[VD, ED] = {
+    // Cache RDDs that are referenced multiple times. `routingTable` is cached by default, so we
+    // don't cache it explicitly.
+    vertices.cache()
+    edges.cache()
+
+    new GraphImpl(
+      vertices, edges, routingTable, new ReplicatedVertexView(vertices, edges, routingTable))
   }
 
   /**
@@ -413,7 +422,7 @@ object GraphImpl {
     val vids = collectVertexIDsFromEdges(edges, new HashPartitioner(edges.partitions.size))
     // Create the VertexRDD.
     val vertices = VertexRDD(vids.mapValues(x => defaultVertexAttr))
-    new GraphImpl(vertices, edges)
+    GraphImpl(vertices, edges)
   }
 
   /** Collects all vids mentioned in edges and partitions them by partitioner. */

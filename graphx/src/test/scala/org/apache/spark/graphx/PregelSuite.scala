@@ -10,8 +10,8 @@ class PregelSuite extends FunSuite with LocalSparkContext {
   test("1 iteration") {
     withSpark { sc =>
       val n = 5
-      val star =
-        Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: VertexID, x: VertexID)), 3), "v")
+      val starEdges = (1 to n).map(x => (0: VertexID, x: VertexID))
+      val star = Graph.fromEdgeTuples(sc.parallelize(starEdges, 3), "v").cache()
       val result = Pregel(star, 0)(
         (vid, attr, msg) => attr,
         et => Iterator.empty,
@@ -27,7 +27,7 @@ class PregelSuite extends FunSuite with LocalSparkContext {
         sc.parallelize((1 until n).map(x => (x: VertexID, x + 1: VertexID)), 3),
         0).cache()
       assert(chain.vertices.collect.toSet === (1 to n).map(x => (x: VertexID, 0)).toSet)
-      val chainWithSeed = chain.mapVertices { (vid, attr) => if (vid == 1) 1 else 0 }
+      val chainWithSeed = chain.mapVertices { (vid, attr) => if (vid == 1) 1 else 0 }.cache()
       assert(chainWithSeed.vertices.collect.toSet ===
         Set((1: VertexID, 1)) ++ (2 to n).map(x => (x: VertexID, 0)).toSet)
       val result = Pregel(chainWithSeed, 0)(

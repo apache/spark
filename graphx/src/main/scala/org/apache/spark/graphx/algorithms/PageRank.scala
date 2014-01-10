@@ -61,6 +61,7 @@ object PageRank extends Logging {
       .mapTriplets( e => 1.0 / e.srcAttr )
       // Set the vertex attributes to the initial pagerank values
       .mapVertices( (id, attr) => 1.0 )
+      .cache()
 
     // Display statistics about pagerank
     logInfo(pagerankGraph.statistics.toString)

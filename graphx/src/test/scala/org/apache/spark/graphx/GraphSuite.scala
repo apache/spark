@@ -175,7 +175,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val n = 5
       val vertices = sc.parallelize((0 to n).map(x => (x:VertexID, x)))
       val edges = sc.parallelize((1 to n).map(x => Edge(0, x, x)))
-      val graph: Graph[Int, Int] = Graph(vertices, edges)
+      val graph: Graph[Int, Int] = Graph(vertices, edges).cache()
 
       val subgraph = graph.subgraph(
         e => e.dstId != 4L,
@@ -211,7 +211,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("mapReduceTriplets") {
     withSpark { sc =>
       val n = 5
-      val star = starGraph(sc, n).mapVertices { (_, _) => 0 }
+      val star = starGraph(sc, n).mapVertices { (_, _) => 0 }.cache()
       val starDeg = star.joinVertices(star.degrees){ (vid, oldV, deg) => deg }
       val neighborDegreeSums = starDeg.mapReduceTriplets(
         edge => Iterator((edge.srcId, edge.dstAttr), (edge.dstId, edge.srcAttr)),
@@ -235,7 +235,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       // outerJoinVertices followed by mapReduceTriplets(activeSetOpt)
       val ringEdges = sc.parallelize((0 until n).map(x => (x: VertexID, (x+1) % n: VertexID)), 3)
       val ring = Graph.fromEdgeTuples(ringEdges, 0) .mapVertices((vid, attr) => vid).cache()
-      val changed = ring.vertices.filter { case (vid, attr) => attr % 2 == 1 }.mapValues(-_)
+      val changed = ring.vertices.filter { case (vid, attr) => attr % 2 == 1 }.mapValues(-_).cache()
       val changedGraph = ring.outerJoinVertices(changed) { (vid, old, newOpt) => newOpt.getOrElse(old) }
       val numOddNeighbors = changedGraph.mapReduceTriplets(et => {
         // Map function should only run on edges with source in the active set
@@ -252,7 +252,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("outerJoinVertices") {
     withSpark { sc =>
       val n = 5
-      val reverseStar = starGraph(sc, n).reverse
+      val reverseStar = starGraph(sc, n).reverse.cache()
       // outerJoinVertices changing type
       val reverseStarDegrees =
         reverseStar.outerJoinVertices(reverseStar.outDegrees) { (vid, a, bOpt) => bOpt.getOrElse(0) }

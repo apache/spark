@@ -53,8 +53,8 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val chain = (0 until 100).map(x => (x, (x+1)%100) )
       val rawEdges = sc.parallelize(chain, 3).map { case (s,d) => (s.toLong, d.toLong) }
-      val graph = Graph.fromEdgeTuples(rawEdges, 1.0)
-      val nbrs = graph.collectNeighborIds(EdgeDirection.Both)
+      val graph = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
+      val nbrs = graph.collectNeighborIds(EdgeDirection.Both).cache()
       assert(nbrs.count === chain.size)
       assert(graph.numVertices === nbrs.count)
       nbrs.collect.foreach { case (vid, nbrs) => assert(nbrs.size === 2) }
@@ -71,14 +71,14 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
       val n = 5
       val vertices = sc.parallelize((0 to n).map(x => (x:VertexID, x)))
       val edges = sc.parallelize((1 to n).map(x => Edge(0, x, x)))
-      val graph: Graph[Int, Int] = Graph(vertices, edges)
+      val graph: Graph[Int, Int] = Graph(vertices, edges).cache()
       val filteredGraph = graph.filter(
         graph => {
           val degrees: VertexRDD[Int] = graph.outDegrees
           graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
         },
         vpred = (vid: VertexID, deg:Int) => deg > 0
-      )
+      ).cache()
 
       val v = filteredGraph.vertices.collect().toSet
       assert(v === Set((0,0)))

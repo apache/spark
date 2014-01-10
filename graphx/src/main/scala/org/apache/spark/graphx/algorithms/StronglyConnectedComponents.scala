@@ -22,7 +22,7 @@ object StronglyConnectedComponents {
     // the graph we update with final SCC ids, and the graph we return at the end
     var sccGraph = graph.mapVertices { case (vid, _) => vid }
     // graph we are going to work with in our iterations
-    var sccWorkGraph = graph.mapVertices { case (vid, _) => (vid, false) }
+    var sccWorkGraph = graph.mapVertices { case (vid, _) => (vid, false) }.cache()
 
     var numVertices = sccWorkGraph.numVertices
     var iter = 0
@@ -32,10 +32,9 @@ object StronglyConnectedComponents {
         numVertices = sccWorkGraph.numVertices
         sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.outDegrees) {
           (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
-        }
-        sccWorkGraph = sccWorkGraph.outerJoinVertices(sccWorkGraph.inDegrees) {
+        }.outerJoinVertices(sccWorkGraph.inDegrees) {
           (vid, data, degreeOpt) => if (degreeOpt.isDefined) data else (vid, true)
-        }
+        }.cache()
 
         // get all vertices to be removed
         val finalVertices = sccWorkGraph.vertices
@@ -47,7 +46,7 @@ object StronglyConnectedComponents {
           (vid, scc, opt) => opt.getOrElse(scc)
         }
         // only keep vertices that are not final
-        sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2)
+        sccWorkGraph = sccWorkGraph.subgraph(vpred = (vid, data) => !data._2).cache()
       } while (sccWorkGraph.numVertices < numVertices)
 
       sccWorkGraph = sccWorkGraph.mapVertices{ case (vid, (color, isFinal)) => (vid, isFinal) }
