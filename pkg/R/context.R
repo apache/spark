@@ -121,3 +121,19 @@ includePackage <- function(sc, pkg) {
   packages <- c(packages, pkg)
   .sparkREnv[[".packages"]] <- packages
 }
+
+broadcast <- function(sc, object) {
+  objName <- as.character(substitute(object))
+  serializedObj <- serialize(object, connection = NULL, ascii = TRUE)
+  serializedObjArr <- .jcast(.jarray(serializedObj),
+                             new.class="java/lang/Object")
+  jBroadcast <- .jcall(sc, "Lorg/apache/spark/broadcast/Broadcast;",
+                       "broadcast", serializedObjArr)
+
+  # TODO(shivaram): Broadcast id is private to spark right now.
+  # Use a hack to get it out of toString
+  #id <- as.character(.jsimplify(.jcall(jBroadcast, "J", "id")))
+  idStr <- as.character(.jsimplify(.jcall(jBroadcast, "Ljava/lang/String;", "toString")))
+  id <- sub(")", "", strsplit(idStr, split="(", fixed=TRUE)[[1]][2])
+  Broadcast(id, object, jBroadcast, objName)
+}

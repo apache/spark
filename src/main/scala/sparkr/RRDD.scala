@@ -8,6 +8,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkEnv, Partition, Logging, SparkException, TaskContext}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
+import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
 
 /**
@@ -21,7 +22,8 @@ private class PairwiseRRDD[T: ClassTag](
     dataSerialized: Boolean,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
-    rLibDir: String)
+    rLibDir: String,
+    broadcastVars: Array[Broadcast[Object]])
   extends RDD[(Int, Array[Byte])](parent) {
 
   override def getPartitions = parent.partitions
@@ -34,7 +36,7 @@ private class PairwiseRRDD[T: ClassTag](
     RRDD.startStderrThread(proc)
 
     RRDD.startStdinThread(rLibDir, proc, hashFunc, dataSerialized,
-      functionDependencies, packageNames,
+      functionDependencies, packageNames, broadcastVars,
       firstParent[T].iterator(split, context), numPartitions,
       split.index)
 
@@ -90,7 +92,8 @@ class RRDD[T: ClassTag](
     dataSerialized: Boolean,
     functionDependencies: Array[Byte],
     packageNames: Array[Byte],
-    rLibDir: String)
+    rLibDir: String,
+    broadcastVars: Array[Broadcast[Object]])
   extends RDD[Array[Byte]](parent) with Logging {
 
   override def getPartitions = parent.partitions
@@ -105,7 +108,7 @@ class RRDD[T: ClassTag](
 
     // Write -1 in numPartitions to indicate this is a normal RDD
     RRDD.startStdinThread(rLibDir, proc, func, dataSerialized,
-      functionDependencies, packageNames,
+      functionDependencies, packageNames, broadcastVars,
       firstParent[T].iterator(split, context),
       numPartitions = -1, split.index)
 
@@ -196,6 +199,7 @@ object RRDD {
       dataSerialized: Boolean,
       functionDependencies: Array[Byte],
       packageNames: Array[Byte],
+      broadcastVars: Array[Broadcast[Object]],
       iter: Iterator[T],
       numPartitions: Int,
       splitIndex: Int) {
@@ -230,6 +234,19 @@ object RRDD {
 
         dataOut.writeInt(packageNames.length)
         dataOut.write(packageNames, 0, packageNames.length)
+
+        dataOut.writeInt(broadcastVars.length)
+        broadcastVars.foreach { broadcast =>
+          // TODO(shivaram): Read a Long in R to avoid this cast
+          // FIXME: id is private to spark right now, use toString as a hack
+          // dataOut.writeInt(broadcast.id.toInt)
+          val broadcastId = broadcast.toString.split('(')(1).dropRight(1).toInt
+          dataOut.writeInt(broadcastId)
+          // TODO: Pass a byte array from R to avoid this cast ?
+          val broadcastByteArr = broadcast.value.asInstanceOf[Array[Byte]]
+          dataOut.writeInt(broadcastByteArr.length)
+          dataOut.write(broadcastByteArr, 0, broadcastByteArr.length)
+        }
 
         dataOut.writeInt(numPartitions)
 

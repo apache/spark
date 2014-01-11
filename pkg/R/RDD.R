@@ -286,6 +286,11 @@ setMethod("lapplyPartitionsWithIndex",
             packageNamesArr <- .jarray(serialize(.sparkREnv[[".packages"]],
                                                  connection = NULL,
                                                  ascii = TRUE))
+            refs <- lapply(ls(.broadcastNames), function(name) {
+                           get(name, .broadcastNames) })
+            broadcastArr <- .jarray(refs,
+                                    "org/apache/spark/broadcast/Broadcast")
+
 
             depsBin <- getDependencies(computeFunc)
             depsBinArr <- .jarray(depsBin)
@@ -296,6 +301,7 @@ setMethod("lapplyPartitionsWithIndex",
                            depsBinArr,
                            packageNamesArr,
                            as.character(.sparkREnv[["libname"]]),
+                           broadcastArr,
                            X@jrdd$classTag())
             jrdd <- rddRef$asJavaRDD()
             RDD(jrdd, TRUE)
@@ -588,6 +594,11 @@ setMethod("partitionBy",
             packageNamesArr <- .jarray(serialize(.sparkREnv[[".packages"]],
                                                  connection = NULL,
                                                  ascii = TRUE))
+            refs <- lapply(ls(.broadcastNames), function(name) {
+                           get(name, .broadcastNames) })
+            broadcastArr <- .jarray(refs,
+                                    "org/apache/spark/broadcast/Broadcast")
+
 
             # We create a PairwiseRRDD that extends RDD[(Array[Byte],
             # Array[Byte])], where the key is the hashed split, the value is
@@ -600,6 +611,7 @@ setMethod("partitionBy",
                                 depsBinArr,
                                 packageNamesArr,
                                 as.character(.sparkREnv[["libname"]]),
+                                broadcastArr,
                                 rdd@jrdd$classTag())
 
             # Create a corresponding partitioner.

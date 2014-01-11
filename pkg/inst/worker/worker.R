@@ -57,6 +57,16 @@ for (pkg in packageNames) {
   suppressPackageStartupMessages(require(as.character(pkg), character.only=TRUE))
 }
 
+# Read and set broadcast variables
+numBroadcastVars <- readInt(inputCon)
+if (numBroadcastVars > 0) {
+  for (bcast in seq(1:numBroadcastVars)) {
+    bcastId <- readInt(inputCon)
+    value <- unserialize(readRaw(inputCon))
+    setBroadcastValue(bcastId, value)
+  }
+}
+
 # If -1: read as normal RDD; if >= 0, treat as pairwise RDD and treat the int
 # as number of partitions to create.
 numPartitions <- readInt(inputCon)

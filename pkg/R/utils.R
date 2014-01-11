@@ -113,6 +113,13 @@ getDependencies <- function(name) {
   }
   filteredVars <- Filter(function(x) { !isRDD(x, closureEnv) }, varsToSave)
 
+  # TODO: A better way to exclude variables that have been broadcast
+  # would be to actually list all the variables used in every function using
+  # `all.vars` and then walking through functions etc.
+  filteredVars <- Filter(
+                    function(x) { !exists(x, .broadcastNames, inherits=FALSE) },
+                    filteredVars)
+
   #cat("Saving ", filteredVars, "\n", file=stderr())
 
   fileName <- tempfile(pattern="spark-utils", fileext=".deps")
