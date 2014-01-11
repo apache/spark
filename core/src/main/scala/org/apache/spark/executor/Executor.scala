@@ -279,6 +279,11 @@ private[spark] class Executor(
           //System.exit(1)
         }
       } finally {
+        // TODO: Unregister shuffle memory only for ShuffleMapTask
+        val shuffleMemoryMap = env.shuffleMemoryMap
+        shuffleMemoryMap.synchronized {
+          shuffleMemoryMap.remove(Thread.currentThread().getId)
+        }
         runningTasks.remove(taskId)
       }
     }

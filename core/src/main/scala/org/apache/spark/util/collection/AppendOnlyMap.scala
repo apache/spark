@@ -15,7 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.util.collection
+
+import java.util.{Arrays, Comparator}
 
 /**
  * A simple open hash table optimized for the append-only use case, where keys
@@ -28,14 +30,15 @@ package org.apache.spark.util
  * TODO: Cache the hash values of each key? java.util.HashMap does that.
  */
 private[spark]
-class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] with Serializable {
+class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K,
+  V)] with Serializable {
   require(initialCapacity <= (1 << 29), "Can't make capacity bigger than 2^29 elements")
   require(initialCapacity >= 1, "Invalid initial capacity")
 
   private var capacity = nextPowerOf2(initialCapacity)
   private var mask = capacity - 1
   private var curSize = 0
-  private var growThreshold = LOAD_FACTOR * capacity
+  private var growThreshold = (LOAD_FACTOR * capacity).toInt
 
   // Holds keys and values in the same array for memory locality; specifically, the order of
   // elements is key0, value0, key1, value1, key2, value2, etc.
@@ -45,10 +48,15 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
   private var haveNullValue = false
   private var nullValue: V = null.asInstanceOf[V]
 
+  // Triggered by destructiveSortedIterator; the underlying data array may no longer be used
+  private var destroyed = false
+  private val destructionMessage = "Map state is invalid from destructive sorting!"
+
   private val LOAD_FACTOR = 0.7
 
   /** Get the value for a given key */
   def apply(key: K): V = {
+    assert(!destroyed, destructionMessage)
     val k = key.asInstanceOf[AnyRef]
     if (k.eq(null)) {
       return nullValue
@@ -72,6 +80,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
 
   /** Set the value for a key */
   def update(key: K, value: V): Unit = {
+    assert(!destroyed, destructionMessage)
     val k = key.asInstanceOf[AnyRef]
     if (k.eq(null)) {
       if (!haveNullValue) {
@@ -106,6 +115,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
    * for key, if any, or null otherwise. Returns the newly updated value.
    */
   def changeValue(key: K, updateFunc: (Boolean, V) => V): V = {
+    assert(!destroyed, destructionMessage)
     val k = key.asInstanceOf[AnyRef]
     if (k.eq(null)) {
       if (!haveNullValue) {
@@ -139,35 +149,38 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
   }
 
   /** Iterator method from Iterable */
-  override def iterator: Iterator[(K, V)] = new Iterator[(K, V)] {
-    var pos = -1
+  override def iterator: Iterator[(K, V)] = {
+    assert(!destroyed, destructionMessage)
+    new Iterator[(K, V)] {
+      var pos = -1
 
-    /** Get the next value we should return from next(), or null if we're finished iterating */
-    def nextValue(): (K, V) = {
-      if (pos == -1) {    // Treat position -1 as looking at the null value
-        if (haveNullValue) {
-          return (null.asInstanceOf[K], nullValue)
+      /** Get the next value we should return from next(), or null if we're finished iterating */
+      def nextValue(): (K, V) = {
+        if (pos == -1) {    // Treat position -1 as looking at the null value
+          if (haveNullValue) {
+            return (null.asInstanceOf[K], nullValue)
+          }
+          pos += 1
+        }
+        while (pos < capacity) {
+          if (!data(2 * pos).eq(null)) {
+            return (data(2 * pos).asInstanceOf[K], data(2 * pos + 1).asInstanceOf[V])
+          }
+          pos += 1
+        }
+        null
+      }
+
+      override def hasNext: Boolean = nextValue() != null
+
+      override def next(): (K, V) = {
+        val value = nextValue()
+        if (value == null) {
+          throw new NoSuchElementException("End of iterator")
         }
         pos += 1
+        value
       }
-      while (pos < capacity) {
-        if (!data(2 * pos).eq(null)) {
-          return (data(2 * pos).asInstanceOf[K], data(2 * pos + 1).asInstanceOf[V])
-        }
-        pos += 1
-      }
-      null
-    }
-
-    override def hasNext: Boolean = nextValue() != null
-
-    override def next(): (K, V) = {
-      val value = nextValue()
-      if (value == null) {
-        throw new NoSuchElementException("End of iterator")
-      }
-      pos += 1
-      value
     }
   }
 
@@ -190,7 +203,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
   }
 
   /** Double the table's size and re-hash everything */
-  private def growTable() {
+  protected def growTable() {
     val newCapacity = capacity * 2
     if (newCapacity >= (1 << 30)) {
       // We can't make the table this big because we want an array of 2x
@@ -227,11 +240,58 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
     data = newData
     capacity = newCapacity
     mask = newMask
-    growThreshold = LOAD_FACTOR * newCapacity
+    growThreshold = (LOAD_FACTOR * newCapacity).toInt
   }
 
   private def nextPowerOf2(n: Int): Int = {
     val highBit = Integer.highestOneBit(n)
     if (highBit == n) n else highBit << 1
   }
+
+  /**
+   * Return an iterator of the map in sorted order. This provides a way to sort the map without
+   * using additional memory, at the expense of destroying the validity of the map.
+   */
+  def destructiveSortedIterator(cmp: Comparator[(K, V)]): Iterator[(K, V)] = {
+    destroyed = true
+    // Pack KV pairs into the front of the underlying array
+    var keyIndex, newIndex = 0
+    while (keyIndex < capacity) {
+      if (data(2 * keyIndex) != null) {
+        data(newIndex) = (data(2 * keyIndex), data(2 * keyIndex + 1))
+        newIndex += 1
+      }
+      keyIndex += 1
+    }
+    assert(curSize == newIndex + (if (haveNullValue) 1 else 0))
+
+    // Sort by the given ordering
+    val rawOrdering = new Comparator[AnyRef] {
+      def compare(x: AnyRef, y: AnyRef): Int = {
+        cmp.compare(x.asInstanceOf[(K, V)], y.asInstanceOf[(K, V)])
+      }
+    }
+    Arrays.sort(data, 0, newIndex, rawOrdering)
+
+    new Iterator[(K, V)] {
+      var i = 0
+      var nullValueReady = haveNullValue
+      def hasNext: Boolean = (i < newIndex || nullValueReady)
+      def next(): (K, V) = {
+        if (nullValueReady) {
+          nullValueReady = false
+          (null.asInstanceOf[K], nullValue)
+        } else {
+          val item = data(i).asInstanceOf[(K, V)]
+          i += 1
+          item
+        }
+      }
+    }
+  }
+
+  /**
+   * Return whether the next insert will cause the map to grow
+   */
+  def atGrowThreshold: Boolean = curSize == growThreshold
 }
