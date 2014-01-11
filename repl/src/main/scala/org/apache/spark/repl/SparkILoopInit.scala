@@ -20,17 +20,13 @@ trait SparkILoopInit {
 
   /** Print a welcome message */
   def printWelcome() {
-    val prop = System.getenv("SPARK_BANNER_TEXT")
-    val bannerText =
-      if (prop != null) prop else
-        """Welcome to
+    echo("""Welcome to
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
    /___/ .__/\_,_/_/ /_/\_\   version 0.9.0-SNAPSHOT
       /_/
-"""
-    echo(bannerText)
+""")
     import Properties._
     val welcomeMsg = "Using Scala %s (%s, Java %s)".format(
       versionString, javaVmName, javaVersion)
@@ -124,10 +120,6 @@ trait SparkILoopInit {
          @transient val sc = org.apache.spark.repl.Main.interp.createSparkContext();
         """)
       command("import org.apache.spark.SparkContext._")
-      val prop = System.getenv("SPARK_SHELL_INIT_BLOCK")
-      if (prop != null) {
-        command(prop)
-      }
     }
    echo("Spark context available as sc.")
   }
