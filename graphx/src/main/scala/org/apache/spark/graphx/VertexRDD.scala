@@ -101,9 +101,9 @@ class VertexRDD[@specialized VD: ClassTag](
   }
 
   /**
-   * Applies a function to each [[impl.VertexPartition]] of this RDD and returns a new VertexRDD.
+   * Applies a function to each `VertexPartition` of this RDD and returns a new VertexRDD.
    */
-  def mapVertexPartitions[VD2: ClassTag](f: VertexPartition[VD] => VertexPartition[VD2])
+  private[graphx] def mapVertexPartitions[VD2: ClassTag](f: VertexPartition[VD] => VertexPartition[VD2])
     : VertexRDD[VD2] = {
     val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
     new VertexRDD(newPartitionsRDD)

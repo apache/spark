@@ -125,7 +125,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
   /**
    * Transforms each edge attribute in the graph using the map function.  The map function is not
    * passed the vertex value for the vertices adjacent to the edge.  If vertex values are desired,
-   * use [[mapTriplets]].
+   * use `mapTriplets`.
    *
    * @note This graph is not changed and that the new graph has the
    * same structure.  As a consequence the underlying index structures
@@ -148,7 +148,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * time. The map function is given an iterator over edges within a logical partition as well as
    * the partition's ID, and it should return a new iterator over the new values of each edge. The
    * new iterator's elements must correspond one-to-one with the old iterator's elements. If
-   * adjacent vertex values are desired, use [[mapTriplets]].
+   * adjacent vertex values are desired, use `mapTriplets`.
    *
    * @note This does not change the structure of the
    * graph or modify the values of this graph.  As a consequence
@@ -166,7 +166,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
 
   /**
    * Transforms each edge attribute using the map function, passing it the adjacent vertex attributes
-   * as well. If adjacent vertex values are not required, consider using [[mapEdges]] instead.
+   * as well. If adjacent vertex values are not required, consider using `mapEdges` instead.
    *
    * @note This does not change the structure of the
    * graph or modify the values of this graph.  As a consequence
@@ -194,7 +194,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * adjacent vertex attributes as well. The map function is given an iterator over edge triplets
    * within a logical partition and should yield a new iterator over the new values of each edge in
    * the order in which they are provided.  If adjacent vertex values are not required, consider
-   * using [[mapEdges]] instead.
+   * using `mapEdges` instead.
    *
    * @note This does not change the structure of the
    * graph or modify the values of this graph.  As a consequence
