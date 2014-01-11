@@ -17,11 +17,11 @@
 
 package org.apache.spark.streaming.examples
 
+import scala.collection.mutable.SynchronizedQueue
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
-
-import scala.collection.mutable.SynchronizedQueue
 
 object QueueStream {
   
@@ -30,7 +30,9 @@ object QueueStream {
       System.err.println("Usage: QueueStream <master>")
       System.exit(1)
     }
-    
+
+    StreamingExamples.setStreamingLogLevels()
+
     // Create the context
     val ssc = new StreamingContext(args(0), "QueueStream", Seconds(1),
       System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))

@@ -76,6 +76,7 @@ object ZeroMQWordCount {
           "In local mode, <master> should be 'local[n]' with n > 1")
       System.exit(1)
     }
+    StreamingExamples.setStreamingLogLevels()
     val Seq(master, url, topic) = args.toSeq
 
     // Create the context and set the batch size

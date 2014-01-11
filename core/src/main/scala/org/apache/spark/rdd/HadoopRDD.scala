@@ -19,7 +19,10 @@ package org.apache.spark.rdd
 
 import java.io.EOFException
 
-import org.apache.hadoop.mapred.FileInputFormat
+import scala.reflect.ClassTag
+
+import org.apache.hadoop.conf.{Configuration, Configurable}
+import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
@@ -31,7 +34,7 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.NextIterator
-import org.apache.hadoop.conf.{Configuration, Configurable}
+import org.apache.spark.util.Utils.cloneWritables
 
 
 /**
@@ -62,14 +65,15 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minSplits Minimum number of Hadoop Splits (HadoopRDD partitions) to generate.
  */
-class HadoopRDD[K, V](
+class HadoopRDD[K: ClassTag, V: ClassTag](
     sc: SparkContext,
     broadcastedConf: Broadcast[SerializableWritable[Configuration]],
     initLocalJobConfFuncOpt: Option[JobConf => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    minSplits: Int)
+    minSplits: Int,
+    cloneKeyValues: Boolean)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   def this(
@@ -78,7 +82,8 @@ class HadoopRDD[K, V](
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int) = {
+      minSplits: Int,
+      cloneKeyValues: Boolean) = {
     this(
       sc,
       sc.broadcast(new SerializableWritable(conf))
@@ -87,7 +92,8 @@ class HadoopRDD[K, V](
       inputFormatClass,
       keyClass,
       valueClass,
-      minSplits)
+      minSplits,
+      cloneKeyValues)
   }
 
   protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
@@ -158,10 +164,10 @@ class HadoopRDD[K, V](
 
       // Register an on-task-completion callback to close the input stream.
       context.addOnCompleteCallback{ () => closeIfNeeded() }
-
       val key: K = reader.createKey()
+      val keyCloneFunc = cloneWritables[K](getConf)
       val value: V = reader.createValue()
-
+      val valueCloneFunc = cloneWritables[V](getConf)
       override def getNext() = {
         try {
           finished = !reader.next(key, value)
@@ -169,7 +175,12 @@ class HadoopRDD[K, V](
           case eof: EOFException =>
             finished = true
         }
-        (key, value)
+        if (cloneKeyValues) {
+          (keyCloneFunc(key.asInstanceOf[Writable]),
+            valueCloneFunc(value.asInstanceOf[Writable]))
+        } else {
+          (key, value)
+        }
       }
 
       override def close() {

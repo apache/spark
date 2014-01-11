@@ -349,25 +349,27 @@ class SparkContext(
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
    */
-  def hadoopRDD[K, V](
+  def hadoopRDD[K: ClassTag, V: ClassTag](
       conf: JobConf,
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int = defaultMinSplits
+      minSplits: Int = defaultMinSplits,
+      cloneKeyValues: Boolean = true
       ): RDD[(K, V)] = {
     // Add necessary security credentials to the JobConf before broadcasting it.
     SparkHadoopUtil.get.addCredentials(conf)
-    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits)
+    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits, cloneKeyValues)
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
-  def hadoopFile[K, V](
+  def hadoopFile[K: ClassTag, V: ClassTag](
       path: String,
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int = defaultMinSplits
+      minSplits: Int = defaultMinSplits,
+      cloneKeyValues: Boolean = true
       ): RDD[(K, V)] = {
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
@@ -379,7 +381,8 @@ class SparkContext(
       inputFormatClass,
       keyClass,
       valueClass,
-      minSplits)
+      minSplits,
+      cloneKeyValues)
   }
 
   /**
@@ -390,14 +393,15 @@ class SparkContext(
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path, minSplits)
    * }}}
    */
-  def hadoopFile[K, V, F <: InputFormat[K, V]](path: String, minSplits: Int)
-      (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F])
-      : RDD[(K, V)] = {
+  def hadoopFile[K, V, F <: InputFormat[K, V]]
+      (path: String, minSplits: Int, cloneKeyValues: Boolean = true)
+      (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     hadoopFile(path,
-        fm.runtimeClass.asInstanceOf[Class[F]],
-        km.runtimeClass.asInstanceOf[Class[K]],
-        vm.runtimeClass.asInstanceOf[Class[V]],
-        minSplits)
+      fm.runtimeClass.asInstanceOf[Class[F]],
+      km.runtimeClass.asInstanceOf[Class[K]],
+      vm.runtimeClass.asInstanceOf[Class[V]],
+      minSplits,
+      cloneKeyValues = cloneKeyValues)
   }
 
   /**
@@ -408,61 +412,67 @@ class SparkContext(
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path)
    * }}}
    */
-  def hadoopFile[K, V, F <: InputFormat[K, V]](path: String)
+  def hadoopFile[K, V, F <: InputFormat[K, V]](path: String, cloneKeyValues: Boolean = true)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
-    hadoopFile[K, V, F](path, defaultMinSplits)
+    hadoopFile[K, V, F](path, defaultMinSplits, cloneKeyValues)
 
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
-  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](path: String)
+  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
+      (path: String, cloneKeyValues: Boolean = true)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     newAPIHadoopFile(
-        path,
-        fm.runtimeClass.asInstanceOf[Class[F]],
-        km.runtimeClass.asInstanceOf[Class[K]],
-        vm.runtimeClass.asInstanceOf[Class[V]])
+      path,
+      fm.runtimeClass.asInstanceOf[Class[F]],
+      km.runtimeClass.asInstanceOf[Class[K]],
+      vm.runtimeClass.asInstanceOf[Class[V]],
+      cloneKeyValues = cloneKeyValues)
   }
 
   /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    */
-  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
+  def newAPIHadoopFile[K: ClassTag, V: ClassTag, F <: NewInputFormat[K, V]](
       path: String,
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      conf: Configuration = hadoopConfiguration): RDD[(K, V)] = {
+      conf: Configuration = hadoopConfiguration,
+      cloneKeyValues: Boolean = true): RDD[(K, V)] = {
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
-    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf)
+    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf, cloneKeyValues)
   }
 
   /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    */
-  def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
+  def newAPIHadoopRDD[K: ClassTag, V: ClassTag, F <: NewInputFormat[K, V]](
       conf: Configuration = hadoopConfiguration,
       fClass: Class[F],
       kClass: Class[K],
-      vClass: Class[V]): RDD[(K, V)] = {
-    new NewHadoopRDD(this, fClass, kClass, vClass, conf)
+      vClass: Class[V],
+      cloneKeyValues: Boolean = true): RDD[(K, V)] = {
+    new NewHadoopRDD(this, fClass, kClass, vClass, conf, cloneKeyValues)
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types. */
-  def sequenceFile[K, V](path: String,
+  def sequenceFile[K: ClassTag, V: ClassTag](path: String,
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int
+      minSplits: Int,
+      cloneKeyValues: Boolean = true
       ): RDD[(K, V)] = {
     val inputFormatClass = classOf[SequenceFileInputFormat[K, V]]
-    hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits)
+    hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits, cloneKeyValues)
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types. */
-  def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]): RDD[(K, V)] =
-    sequenceFile(path, keyClass, valueClass, defaultMinSplits)
+  def sequenceFile[K: ClassTag, V: ClassTag](path: String, keyClass: Class[K], valueClass: Class[V],
+      cloneKeyValues: Boolean = true): RDD[(K, V)] =
+    sequenceFile(path, keyClass, valueClass, defaultMinSplits, cloneKeyValues)
 
   /**
    * Version of sequenceFile() for types implicitly convertible to Writables through a
@@ -480,8 +490,8 @@ class SparkContext(
    * for the appropriate type. In addition, we pass the converter a ClassTag of its type to
    * allow it to figure out the Writable class to use in the subclass case.
    */
-   def sequenceFile[K, V](path: String, minSplits: Int = defaultMinSplits)
-      (implicit km: ClassTag[K], vm: ClassTag[V],
+   def sequenceFile[K, V](path: String, minSplits: Int = defaultMinSplits,
+       cloneKeyValues: Boolean = true) (implicit km: ClassTag[K], vm: ClassTag[V],
           kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
       : RDD[(K, V)] = {
     val kc = kcf()
@@ -489,7 +499,7 @@ class SparkContext(
     val format = classOf[SequenceFileInputFormat[Writable, Writable]]
     val writables = hadoopFile(path, format,
         kc.writableClass(km).asInstanceOf[Class[Writable]],
-        vc.writableClass(vm).asInstanceOf[Class[Writable]], minSplits)
+        vc.writableClass(vm).asInstanceOf[Class[Writable]], minSplits, cloneKeyValues)
     writables.map{case (k,v) => (kc.convert(k), vc.convert(v))}
   }
 
@@ -677,10 +687,10 @@ class SparkContext(
         key = uri.getScheme match {
           // A JAR file which exists only on the driver node
           case null | "file" =>
-            if (SparkHadoopUtil.get.isYarnMode()) {
-              // In order for this to work on yarn the user must specify the --addjars option to
-              // the client to upload the file into the distributed cache to make it show up in the
-              // current working directory.
+            if (SparkHadoopUtil.get.isYarnMode() && master == "yarn-standalone") {
+              // In order for this to work in yarn standalone mode the user must specify the 
+              // --addjars option to the client to upload the file into the distributed cache 
+              // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
               try {
                 env.httpFileServer.addJar(new File(fileName))
@@ -1086,7 +1096,7 @@ object SparkContext {
    * parameters that are passed as the default value of null, instead of throwing an exception
    * like SparkConf would.
    */
-  private def updatedConf(
+  private[spark] def updatedConf(
       conf: SparkConf,
       master: String,
       appName: String,

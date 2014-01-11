@@ -15,11 +15,12 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.util.collection
 
 import scala.collection.mutable.HashSet
 
 import org.scalatest.FunSuite
+import java.util.Comparator
 
 class AppendOnlyMapSuite extends FunSuite {
   test("initialization") {
@@ -150,5 +151,48 @@ class AppendOnlyMapSuite extends FunSuite {
     for (i <- 1 to 100) {
       assert(map("" + i) === "" + i)
     }
+  }
+
+  test("destructive sort") {
+    val map = new AppendOnlyMap[String, String]()
+    for (i <- 1 to 100) {
+      map("" + i) = "" + i
+    }
+    map.update(null, "happy new year!")
+
+    try {
+      map.apply("1")
+      map.update("1", "2013")
+      map.changeValue("1", (hadValue, oldValue) => "2014")
+      map.iterator
+    } catch {
+      case e: IllegalStateException => fail()
+    }
+
+    val it = map.destructiveSortedIterator(new Comparator[(String, String)] {
+      def compare(kv1: (String, String), kv2: (String, String)): Int = {
+        val x = if (kv1 != null && kv1._1 != null) kv1._1.toInt else Int.MinValue
+        val y = if (kv2 != null && kv2._1 != null) kv2._1.toInt else Int.MinValue
+        x.compareTo(y)
+      }
+    })
+
+    // Should be sorted by key
+    assert(it.hasNext)
+    var previous = it.next()
+    assert(previous == (null, "happy new year!"))
+    previous = it.next()
+    assert(previous == ("1", "2014"))
+    while (it.hasNext) {
+      val kv = it.next()
+      assert(kv._1.toInt > previous._1.toInt)
+      previous = kv
+    }
+
+    // All subsequent calls to apply, update, changeValue and iterator should throw exception
+    intercept[AssertionError] { map.apply("1") }
+    intercept[AssertionError] { map.update("1", "2013") }
+    intercept[AssertionError] { map.changeValue("1", (hadValue, oldValue) => "2014") }
+    intercept[AssertionError] { map.iterator }
   }
 }

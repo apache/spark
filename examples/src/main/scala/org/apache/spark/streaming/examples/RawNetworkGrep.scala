@@ -17,11 +17,10 @@
 
 package org.apache.spark.streaming.examples
 
-import org.apache.spark.util.IntParam
 import org.apache.spark.storage.StorageLevel
-
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.util.RawTextHelper
+import org.apache.spark.util.IntParam
 
 /**
  * Receives text from multiple rawNetworkStreams and counts how many '\n' delimited
@@ -44,6 +43,8 @@ object RawNetworkGrep {
       System.err.println("Usage: RawNetworkGrep <master> <numStreams> <host> <port> <batchMillis>")
       System.exit(1)
     }
+
+    StreamingExamples.setStreamingLogLevels()
 
     val Array(master, IntParam(numStreams), host, IntParam(port), IntParam(batchMillis)) = args
 

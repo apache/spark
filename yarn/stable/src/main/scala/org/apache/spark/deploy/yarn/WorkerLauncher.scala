@@ -78,6 +78,10 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
 
   def run() {
 
+    // Setup the directories so things go to yarn approved directories rather
+    // then user specified and /tmp.
+    System.setProperty("spark.local.dir", getLocalDirs())
+
     amClient = AMRMClient.createAMRMClient()
     amClient.init(yarnConf)
     amClient.start()
@@ -94,10 +98,12 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     // ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapse.
 
     val timeoutInterval = yarnConf.getInt(YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS, 120000)
-    // must be <= timeoutInterval/ 2.
-    // On other hand, also ensure that we are reasonably responsive without causing too many requests to RM.
-    // so atleast 1 minute or timeoutInterval / 10 - whichever is higher.
-    val interval = math.min(timeoutInterval / 2, math.max(timeoutInterval / 10, 60000L))
+    // we want to be reasonably responsive without causing too many requests to RM.
+    val schedulerInterval =
+      System.getProperty("spark.yarn.scheduler.heartbeat.interval-ms", "5000").toLong
+    // must be <= timeoutInterval / 2.
+    val interval = math.min(timeoutInterval / 2, schedulerInterval)
+
     reporterThread = launchReporterThread(interval)
 
     // Wait for the reporter thread to Finish.
@@ -109,6 +115,20 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     logInfo("Exited")
     System.exit(0)
   }
+
+  /** Get the Yarn approved local directories. */
+  private def getLocalDirs(): String = {
+    // Hadoop 0.23 and 2.x have different Environment variable names for the
+    // local dirs, so lets check both. We assume one of the 2 is set.
+    // LOCAL_DIRS => 2.X, YARN_LOCAL_DIRS => 0.23.X
+    val localDirs = Option(System.getenv("YARN_LOCAL_DIRS"))
+      .orElse(Option(System.getenv("LOCAL_DIRS")))
+ 
+    localDirs match {
+      case None => throw new Exception("Yarn Local dirs can't be empty")
+      case Some(l) => l
+    }
+  } 
 
   private def getApplicationAttemptId(): ApplicationAttemptId = {
     val envs = System.getenv()

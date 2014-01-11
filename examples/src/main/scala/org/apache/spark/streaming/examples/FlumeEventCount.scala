@@ -17,10 +17,10 @@
 
 package org.apache.spark.streaming.examples
 
-import org.apache.spark.util.IntParam
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.flume._
+import org.apache.spark.util.IntParam
 
 /**
  *  Produces a count of events received from Flume.
@@ -43,6 +43,8 @@ object FlumeEventCount {
         "Usage: FlumeEventCount <master> <host> <port>")
       System.exit(1)
     }
+
+    StreamingExamples.setStreamingLogLevels()
 
     val Array(master, host, IntParam(port)) = args
 

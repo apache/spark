@@ -181,4 +181,8 @@ class DiskBlockObjectWriter(
 
   // Only valid if called after close()
   override def timeWriting() = _timeWriting
+
+  def bytesWritten: Long = {
+    lastValidPosition - initialPosition
+  }
 }

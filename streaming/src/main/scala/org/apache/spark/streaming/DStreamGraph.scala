@@ -104,36 +104,44 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   def getOutputStreams() = this.synchronized { outputStreams.toArray }
 
   def generateJobs(time: Time): Seq[Job] = {
-    this.synchronized {
-      logInfo("Generating jobs for time " + time)
-      val jobs = outputStreams.flatMap(outputStream => outputStream.generateJob(time))
-      logInfo("Generated " + jobs.length + " jobs for time " + time)
-      jobs
+    logDebug("Generating jobs for time " + time)
+    val jobs = this.synchronized {
+      outputStreams.flatMap(outputStream => outputStream.generateJob(time))
     }
+    logDebug("Generated " + jobs.length + " jobs for time " + time)
+    jobs
   }
 
-  def clearOldMetadata(time: Time) {
+  def clearMetadata(time: Time) {
+    logDebug("Clearing metadata for time " + time)
     this.synchronized {
-      logInfo("Clearing old metadata for time " + time)
-      outputStreams.foreach(_.clearOldMetadata(time))
-      logInfo("Cleared old metadata for time " + time)
+      outputStreams.foreach(_.clearMetadata(time))
     }
+    logDebug("Cleared old metadata for time " + time)
   }
 
   def updateCheckpointData(time: Time) {
+    logInfo("Updating checkpoint data for time " + time)
     this.synchronized {
-      logInfo("Updating checkpoint data for time " + time)
       outputStreams.foreach(_.updateCheckpointData(time))
-      logInfo("Updated checkpoint data for time " + time)
     }
+    logInfo("Updated checkpoint data for time " + time)
+  }
+
+  def clearCheckpointData(time: Time) {
+    logInfo("Clearing checkpoint data for time " + time)
+    this.synchronized {
+      outputStreams.foreach(_.clearCheckpointData(time))
+    }
+    logInfo("Cleared checkpoint data for time " + time)
   }
 
   def restoreCheckpointData() {
+    logInfo("Restoring checkpoint data")
     this.synchronized {
-      logInfo("Restoring checkpoint data")
       outputStreams.foreach(_.restoreCheckpointData())
-      logInfo("Restored checkpoint data")
     }
+    logInfo("Restored checkpoint data")
   }
 
   def validate() {
@@ -146,8 +154,8 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
+    logDebug("DStreamGraph.writeObject used")
     this.synchronized {
-      logDebug("DStreamGraph.writeObject used")
       checkpointInProgress = true
       oos.defaultWriteObject()
       checkpointInProgress = false
@@ -156,8 +164,8 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream) {
+    logDebug("DStreamGraph.readObject used")
     this.synchronized {
-      logDebug("DStreamGraph.readObject used")
       checkpointInProgress = true
       ois.defaultReadObject()
       checkpointInProgress = false
