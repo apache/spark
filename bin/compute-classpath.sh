@@ -30,7 +30,6 @@ if [ -e "$FWDIR/conf/spark-env.sh" ] ; then
   . $FWDIR/conf/spark-env.sh
 fi
 
-
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
 
