@@ -4,6 +4,16 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
 
+/**
+ * Provides graph algorithms directly on [[org.apache.spark.graphx.Graph]] via an implicit
+ * conversion.
+ * @example
+ * {{{
+ * import org.apache.spark.graph.algorithms._
+ * val graph: Graph[_, _] = loadGraph()
+ * graph.connectedComponents()
+ * }}}
+ */
 class Algorithms[VD: ClassTag, ED: ClassTag](self: Graph[VD, ED]) {
   /**
    * Run a dynamic version of PageRank returning a graph with vertex attributes containing the
