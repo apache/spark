@@ -41,7 +41,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       option.name == remainingParts.head
     }
 
-    options match {
+    options.distinct match {
       case a :: Nil => Some(a) // One match, use it.
       case Nil => None         // No matches.
       case ambiguousReferences =>
