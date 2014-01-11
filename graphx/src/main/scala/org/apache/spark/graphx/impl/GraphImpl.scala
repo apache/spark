@@ -173,9 +173,6 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
   override def mapTriplets[ED2: ClassTag](
       f: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]): Graph[VD, ED2] = {
-    // Use an explicit manifest in PrimitiveKeyOpenHashMap init so we don't pull in the implicit
-    // manifest from GraphImpl (which would require serializing GraphImpl).
-    val vdTag = classTag[VD]
     val newEdgePartitions =
       edges.partitionsRDD.zipPartitions(replicatedVertexView.get(true, true), true) {
         (ePartIter, vTableReplicatedIter) =>

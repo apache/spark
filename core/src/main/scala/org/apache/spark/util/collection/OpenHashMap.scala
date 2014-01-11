@@ -28,20 +28,18 @@ import scala.reflect.ClassTag
  */
 private[spark]
 class OpenHashMap[K >: Null : ClassTag, @specialized(Long, Int, Double) V: ClassTag](
-  val keySet: OpenHashSet[K], var _values: Array[V])
+    initialCapacity: Int)
   extends Iterable[(K, V)]
   with Serializable {
 
-  /**
-   * Allocate an OpenHashMap with a fixed initial capacity
-   */
-  def this(initialCapacity: Int = 64) =
-    this(new OpenHashSet[K](initialCapacity), new Array[V](initialCapacity))
+  def this() = this(64)
 
-  /**
-   * Allocate an OpenHashMap with a fixed initial capacity
-   */
-  def this(keySet: OpenHashSet[K]) = this(keySet, new Array[V](keySet.capacity))
+  protected var _keySet = new OpenHashSet[K](initialCapacity)
+
+  // Init in constructor (instead of in declaration) to work around a Scala compiler specialization
+  // bug that would generate two arrays (one for Object and one for specialized T).
+  private var _values: Array[V] = _
+  _values = new Array[V](_keySet.capacity)
 
   @transient private var _oldValues: Array[V] = null
 
@@ -49,14 +47,14 @@ class OpenHashMap[K >: Null : ClassTag, @specialized(Long, Int, Double) V: Class
   private var haveNullValue = false
   private var nullValue: V = null.asInstanceOf[V]
 
-  override def size: Int = if (haveNullValue) keySet.size + 1 else keySet.size
+  override def size: Int = if (haveNullValue) _keySet.size + 1 else _keySet.size
 
   /** Get the value for a given key */
   def apply(k: K): V = {
     if (k == null) {
       nullValue
     } else {
-      val pos = keySet.getPos(k)
+      val pos = _keySet.getPos(k)
       if (pos < 0) {
         null.asInstanceOf[V]
       } else {
@@ -71,26 +69,9 @@ class OpenHashMap[K >: Null : ClassTag, @specialized(Long, Int, Double) V: Class
       haveNullValue = true
       nullValue = v
     } else {
-      val pos = keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
+      val pos = _keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
       _values(pos) = v
-      keySet.rehashIfNeeded(k, grow, move)
-      _oldValues = null
-    }
-  }
-
-  /** Set the value for a key */
-  def setMerge(k: K, v: V, mergeF: (V,V) => V) {
-    if (k == null) {
-      if(haveNullValue) {
-        nullValue = mergeF(nullValue, v)
-      } else {
-        haveNullValue = true
-        nullValue = v
-      }
-    } else {
-      val pos = keySet.addWithoutResize(k) & OpenHashSet.POSITION_MASK
-      _values(pos) = mergeF(_values(pos), v)
-      keySet.rehashIfNeeded(k, grow, move)
+      _keySet.rehashIfNeeded(k, grow, move)
       _oldValues = null
     }
   }
@@ -111,11 +92,11 @@ class OpenHashMap[K >: Null : ClassTag, @specialized(Long, Int, Double) V: Class
       }
       nullValue
     } else {
-      val pos = keySet.addWithoutResize(k)
+      val pos = _keySet.addWithoutResize(k)
       if ((pos & OpenHashSet.NONEXISTENCE_MASK) != 0) {
         val newValue = defaultValue
         _values(pos & OpenHashSet.POSITION_MASK) = newValue
-        keySet.rehashIfNeeded(k, grow, move)
+        _keySet.rehashIfNeeded(k, grow, move)
         newValue
       } else {
         _values(pos) = mergeValue(_values(pos))
@@ -137,9 +118,9 @@ class OpenHashMap[K >: Null : ClassTag, @specialized(Long, Int, Double) V: Class
         }
         pos += 1
       }
-      pos = keySet.nextPos(pos)
+      pos = _keySet.nextPos(pos)
       if (pos >= 0) {
-        val ret = (keySet.getValue(pos), _values(pos))
+        val ret = (_keySet.getValue(pos), _values(pos))
         pos += 1
         ret
       } else {

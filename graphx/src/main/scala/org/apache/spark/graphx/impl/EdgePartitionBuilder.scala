@@ -4,7 +4,8 @@ import scala.reflect.ClassTag
 import scala.util.Sorting
 
 import org.apache.spark.graphx._
-import org.apache.spark.util.collection.{PrimitiveKeyOpenHashMap, PrimitiveVector}
+import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
+import org.apache.spark.util.collection.PrimitiveVector
 
 class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag](size: Int = 64) {
   var edges = new PrimitiveVector[Edge[ED]](size)

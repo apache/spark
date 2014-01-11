@@ -3,7 +3,7 @@ package org.apache.spark.graphx.impl
 import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
-import org.apache.spark.util.collection.PrimitiveKeyOpenHashMap
+import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
 
 /**
  * A collection of edges stored in 3 large columnar arrays (src, dst, attribute). The arrays are
