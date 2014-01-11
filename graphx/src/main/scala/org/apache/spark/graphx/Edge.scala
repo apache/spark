@@ -45,6 +45,6 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
 object Edge {
   def lexicographicOrdering[ED] = new Ordering[Edge[ED]] {
     override def compare(a: Edge[ED], b: Edge[ED]): Int =
-      Ordering[(VertexID, VertexID)].compare((a.srcId, a.dstId), (b.srcId, b.dstId))
+      (if (a.srcId != b.srcId) a.srcId - b.srcId else a.dstId - b.dstId).toInt
   }
 }
