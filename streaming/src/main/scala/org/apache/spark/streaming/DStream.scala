@@ -487,15 +487,15 @@ abstract class DStream[T: ClassTag] (
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreach(foreachFunc: RDD[T] => Unit) {
-    this.foreach((r: RDD[T], t: Time) => foreachFunc(r))
+  def foreachRDD(foreachFunc: RDD[T] => Unit) {
+    this.foreachRDD((r: RDD[T], t: Time) => foreachFunc(r))
   }
 
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreach(foreachFunc: (RDD[T], Time) => Unit) {
+  def foreachRDD(foreachFunc: (RDD[T], Time) => Unit) {
     ssc.registerOutputStream(new ForEachDStream(this, context.sparkContext.clean(foreachFunc)))
   }
 
@@ -719,7 +719,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsObjectFile(file)
     }
-    this.foreach(saveFunc)
+    this.foreachRDD(saveFunc)
   }
 
   /**
@@ -732,7 +732,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsTextFile(file)
     }
-    this.foreach(saveFunc)
+    this.foreachRDD(saveFunc)
   }
 
   def register() {
