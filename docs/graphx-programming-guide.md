@@ -95,8 +95,10 @@ If you are not using the Spark shell you will also need a Spark context.
 # The Property Graph
 <a name="property_graph"></a>
 
-The [property graph](api/graphx/index.html#org.apache.spark.graphx.Graph) is a directed graph with
-user defined objects attached to each vertex and edge.  Like RDDs, property graphs are immutable,
+The [property graph](api/graphx/index.html#org.apache.spark.graphx.Graph) is a directed multigraph
+graph with user defined objects attached to each vertex and edge.  As a multigraph it is possible
+for multiple edges to have the same source and destination vertex.  This can be useful when there
+are multiple relationships between the same vertices.  Like RDDs, property graphs are immutable,
 distributed, and fault-tolerant. Vertices are keyed by their vertex identifier (`VertexId`) which is
 a unique 64-bit long. Similarly, edges have corresponding source and destination vertex identifiers.
 Unlike other systems, GraphX does not impose any ordering or constraints on the vertex identifiers.
@@ -106,7 +108,7 @@ of the objects associated with each vertex and edge respectively.  In some cases
 to have vertices of different types.  However, this can be accomplished through inheritance.
 
 > GraphX optimizes the representation of `VD` and `ED` when they are plain old data-types (e.g.,
-> int, double, etc...) reducing the memory overhead of the graph representation.
+> int, double, etc...) reducing the in memory footprint.
 
 Logically the property graph corresponds to a pair of typed collections (RDDs) encoding the
 properties for each vertex and edge:
@@ -224,7 +226,22 @@ val facts: RDD[String] =
 
 Just as RDDs have basic operations like `map`, `filter`, and `reduceByKey`, property graphs also
 have a collection of basic operators that take user defined function and produce new graphs with
-transformed properties and structure.
+transformed properties and structure.  The core operators that have optimized implementations are
+defined in [`Graph.scala`](api/graphx/index.html#org.apache.spark.graphx.Graph) and convenient
+operators that are expressed as a compositions of the core operators are defined in
+['GraphOps.scala'](api/graphx/index.html#org.apache.spark.graphx.GraphOps).  However, thanks to
+Scala implicits the operators in `GraphOps.scala` are automatically available as members of
+`Graph.scala`.  For example, we can compute the in-degree of each vertex (defined in
+'GraphOps.scala') by the following:
+
+{% highlight scala %}
+val graph: Graph[(String, String), String]
+// Use the implicit GraphOps.inDegrees operator
+val indDegrees: VertexRDD[Int] = graph.inDegrees
+{% endhighlight %}
+
+The reason for differentiating between core graph operations and GraphOps is to be able to support
+various graph representations in the future.
 
 ## Property Operators
 
@@ -232,9 +249,9 @@ In direct analogy to the RDD `map` operator, the property
 graph contains the following:
 
 {% highlight scala %}
-  def mapVertices[VD2](map: (VertexID, VD) => VD2): Graph[VD2, ED]
-  def mapEdges[ED2](map: Edge[ED] => ED2): Graph[VD, ED2]
-  def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
+def mapVertices[VD2](map: (VertexID, VD) => VD2): Graph[VD2, ED]
+def mapEdges[ED2](map: Edge[ED] => ED2): Graph[VD, ED2]
+def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 {% endhighlight %}
 
 Each of these operators yields a new graph with the vertex or edge properties modified by the user
@@ -271,34 +288,71 @@ Currently GraphX supports only a simple set of commonly used structural operator
 add more in the future.  The following is a list of the basic structural operators.
 
 {% highlight scala %}
-  def reverse: Graph[VD, ED]
+def reverse: Graph[VD, ED]
 
-  def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
-    vpred: (VertexID, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
+def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
+  vpred: (VertexID, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
 
-  def mask[VD2, ED2](other: Graph[VD2, ED2]): Graph[VD, ED]
+def mask[VD2, ED2](other: Graph[VD2, ED2]): Graph[VD, ED]
 
-  def groupEdges(merge: (ED, ED) => ED): Graph[VD,ED]
+def groupEdges(merge: (ED, ED) => ED): Graph[VD,ED]
 {% endhighlight %}
 
-The `rerverse` operator returns a new graph with all the edge directions reversed.  This can be
-useful when for example trying to compute the inverse PageRank.
+The `reverse` operator returns a new graph with all the edge directions reversed.  This can be
+useful when, for example, trying to compute the inverse PageRank.  Because the reverse operation
+does not modify vertex or edge properties or change the number of edges, it can be implemented
+efficiently without data-movement or duplication.
 
 The `subgraph` operator takes vertex and edge predicates and returns the graph containing only the
 vertices that satisfy the vertex predicate (evaluate to true) and edges that satisfy the edge
 predicate *and connect vertices that satisfy the vertex predicate*.  The `subgraph` operator can be
 used in number of situations to restrict the graph to the vertices and edges of interest or
-eliminate broken links.
+eliminate broken links.  For example in the following code we remove broken links:
 
-The `mask` operators returns the subgraph containing vertices and edges that are found in the input
-graph.  Finish this description ...
+{% highlight scala %}
+val users: RDD[(VertexId, (String, String))]
+val edges: RDD[Edge[String]]
+// Define a default user in case there are relationship with missing user
+val defaultUser = ("John Doe", "Missing")
+// Build the initial Graph
+val graph = Graph(users, relationships, defaultUser)
+// Remove missing vertices as well as the edges to connected to them
+val validGraph = graph.subgraph((id, attr) => attr._2 != "Missing")
+{% endhighlight %}
 
-The `groupEdges` operator merges ...
+The `mask` operators returns the subgraph containing only the vertices and edges that are found in
+the input graph.  This can be used in conjunction with the `subgraph` operator to restrict a graph
+based on the properties in another related graph.  For example, we might run connected components
+using the graph with missing vertices and then restrict the answer to the valid subgraph.
 
+{% highlight scala %}
+// Run Connected Components
+val ccGraph = graph.connectedComponents()
+// Remove missing vertices as well as the edges to connected to them
+val validGraph = graph.subgraph((id, attr) => attr._2 != "Missing")
+// Restrict the answer to the valid subgraph
+val validCCGraph = ccGraph.mask(validGraph)
+{% endhighlight %}
 
+The `groupEdges` operator merges parallel edges: duplicate edges between pairs of vertices.  In many
+numerical applications parallel edges can be *added* (their weights combined) into a single edge
+thereby reducing the graph size in memory as well as the cost of computation.
 
 ## Join Operators
 <a name="join_operators"></a>
+
+The ability to move between graph and collection views of data is a key part of GraphX.  In many
+cases it is necessary to bring data from external collections into the graph.  For example, we might
+have extra user properties that we want to merge with an existing graph or we might want to pull
+vertex properties from one graph into another.  These tasks can be accomplished using the *join*
+operators.  Below we list the key join operators:
+
+{% highlight scala %}
+def joinVertices[U](table: RDD[(VertexID, U)])(mapFunc: (VertexID, VD, U) => VD)
+  : Graph[VD, ED]
+def outerJoinVertices[U, VD2](table: RDD[(VertexID, U)])(mapFunc: (VertexID, VD, Option[U]) => VD2)
+  : Graph[VD2, ED]
+{% endhighlight %}
 
 ## Map Reduce Triplets (mapReduceTriplets)
 <a name="mrTriplets"></a>
