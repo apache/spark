@@ -16,8 +16,8 @@ import org.apache.spark.storage.StorageLevel
  * operations return new graphs.
  *
  * @note [[GraphOps]] contains additional convenience operations.
- * [[algorithms.Algorithms]] contains graph algorithms; to access these,
- * import `org.apache.spark.graphx.algorithms._`.
+ * [[lib.Algorithms]] contains graph algorithms; to access these,
+ * import `org.apache.spark.graphx.lib._`.
  *
  * @tparam VD the vertex attribute type
  * @tparam ED the edge attribute type
