@@ -1,16 +1,10 @@
-package org.apache.spark.graphx
+package org.apache.spark.graphx.algorithms
 
 import org.apache.spark._
-import org.apache.spark.graphx.algorithms._
-
+import org.apache.spark.graphx._
 
 /**
- * The Analytics object contains a collection of basic graph analytics
- * algorithms that operate largely on the graph structure.
- *
- * In addition the Analytics object contains a driver `main` which can
- * be used to apply the various functions to graphs in standard
- * formats.
+ * Driver program for running graph algorithms.
  */
 object Analytics extends Logging {
 
