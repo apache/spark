@@ -3,7 +3,7 @@ layout: global
 title: Bagel Programming Guide
 ---
 
-**Bagel has been superseded by [GraphX](graphx-programming-guide.html) for graph processing. New users should use GraphX instead.**
+**Bagel will soon be superseded by [GraphX](graphx-programming-guide.html); we recommend that new users try GraphX instead.**
 
 Bagel is a Spark implementation of Google's [Pregel](http://portal.acm.org/citation.cfm?id=1807184) graph processing framework. Bagel currently supports basic graph computation, combiners, and aggregators.
 

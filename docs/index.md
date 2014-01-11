@@ -77,7 +77,7 @@ For this version of Spark (0.8.1) Hadoop 2.2.x (or newer) users will have to bui
   * [Python Programming Guide](python-programming-guide.html): using Spark from Python
 * [Spark Streaming](streaming-programming-guide.html): using the alpha release of Spark Streaming
 * [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library
-* [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model *(superseded by GraphX)*
+* [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
 * [GraphX (Graphs on Spark)](graphx-programming-guide.html): Spark's new API for graphs
 
 **API Docs:**
@@ -86,7 +86,7 @@ For this version of Spark (0.8.1) Hadoop 2.2.x (or newer) users will have to bui
 * [Spark for Python (Epydoc)](api/pyspark/index.html)
 * [Spark Streaming for Java/Scala (Scaladoc)](api/streaming/index.html)
 * [MLlib (Machine Learning) for Java/Scala (Scaladoc)](api/mllib/index.html)
-* [Bagel (Pregel on Spark) for Scala (Scaladoc)](api/bagel/index.html) *(superseded by GraphX)*
+* [Bagel (Pregel on Spark) for Scala (Scaladoc)](api/bagel/index.html)
 * [GraphX (Graphs on Spark) for Scala (Scaladoc)](api/graphx/index.html)
 
 
