@@ -1086,7 +1086,7 @@ object SparkContext {
    * parameters that are passed as the default value of null, instead of throwing an exception
    * like SparkConf would.
    */
-  private def updatedConf(
+  private[spark] def updatedConf(
       conf: SparkConf,
       master: String,
       appName: String,
