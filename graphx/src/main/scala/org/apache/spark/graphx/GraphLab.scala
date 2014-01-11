@@ -35,6 +35,12 @@ object GraphLab extends Logging {
    * @tparam ED the graph edge attribute type
    * @tparam A the type accumulated during the gather phase
    * @return the resulting graph after the algorithm converges
+   *
+   * @note Unlike [[Pregel]], this implementation of [[GraphLab]] does not unpersist RDDs from
+   * previous iterations. As a result, long-running iterative GraphLab programs will eventually fill
+   * the Spark cache. Though Spark will evict RDDs from old iterations eventually, garbage
+   * collection will take longer than necessary since it must examine the entire cache. This will be
+   * fixed in a future update.
    */
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
     (graph: Graph[VD, ED], numIter: Int,
