@@ -367,12 +367,13 @@ object HiveQl {
         val (
             intoClause ::
             destClause ::
-            Some(selectClause) ::
+            selectClause ::
+            selectDistinctClause ::
             whereClause ::
             groupByClause ::
             orderByClause ::
             sortByClause ::
-            limitClause :: Nil) = getClauses(Seq("TOK_INSERT_INTO", "TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), singleInsert)
+            limitClause :: Nil) = getClauses(Seq("TOK_INSERT_INTO", "TOK_DESTINATION", "TOK_SELECT", "TOK_SELECTDI", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), singleInsert)
 
         val relations = nodeToRelation(fromClause)
         val withWhere = whereClause.map { whereNode =>
@@ -380,10 +381,12 @@ object HiveQl {
           Filter(nodeToExpr(whereExpr), relations)
         }.getOrElse(relations)
 
+        val select =
+          (selectClause orElse selectDistinctClause).getOrElse(sys.error("No select clause."))
 
         // Script transformations are expressed as a select clause with a single expression of type
         // TOK_TRANSFORM
-        val transformation = selectClause.getChildren.head match {
+        val transformation = select.getChildren.head match {
           case Token("TOK_SELEXPR",
                  Token("TOK_TRANSFORM",
                    Token("TOK_EXPLIST", inputExprs) ::
@@ -404,7 +407,7 @@ object HiveQl {
         // a script transformation.
         val withProject = transformation.getOrElse {
           // Not a transformation so must be either project or aggregation.
-          val selectExpressions = nameExpressions(selectClause.getChildren.flatMap(selExprNodeToExpr))
+          val selectExpressions = nameExpressions(select.getChildren.flatMap(selExprNodeToExpr))
 
           groupByClause match {
             case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
@@ -412,13 +415,19 @@ object HiveQl {
           }
         }
 
+        val withDistinct =
+          if(selectDistinctClause.isDefined)
+            Distinct(withProject)
+          else
+            withProject
+
         require(!(orderByClause.isDefined && sortByClause.isDefined), "Can't have both a sort by and order by.")
         // Right now we treat sorting and ordering as identical.
         val withSort =
           (orderByClause orElse sortByClause)
             .map(_.getChildren.map(nodeToSortOrder))
-            .map(Sort(_, withProject))
-            .getOrElse(withProject)
+            .map(Sort(_, withDistinct))
+            .getOrElse(withDistinct)
         val withLimit =
           limitClause.map(l => nodeToExpr(l.getChildren.head))
             .map(StopAfter(_, withSort))
