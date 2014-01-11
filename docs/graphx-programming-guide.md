@@ -232,11 +232,9 @@ In direct analogy to the RDD `map` operator, the property
 graph contains the following:
 
 {% highlight scala %}
-class Graph[VD, ED] {
   def mapVertices[VD2](map: (VertexID, VD) => VD2): Graph[VD2, ED]
   def mapEdges[ED2](map: Edge[ED] => ED2): Graph[VD, ED2]
   def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
-}
 {% endhighlight %}
 
 Each of these operators yields a new graph with the vertex or edge properties modified by the user
@@ -268,6 +266,36 @@ val outputGraph: Graph[Double, Double] =
 
 ## Structural Operators
 <a name="structural_operators"></a>
+
+Currently GraphX supports only a simple set of commonly used structural operators and we expect to
+add more in the future.  The following is a list of the basic structural operators.
+
+{% highlight scala %}
+  def reverse: Graph[VD, ED]
+
+  def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
+    vpred: (VertexID, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
+
+  def mask[VD2, ED2](other: Graph[VD2, ED2]): Graph[VD, ED]
+
+  def groupEdges(merge: (ED, ED) => ED): Graph[VD,ED]
+{% endhighlight %}
+
+The `rerverse` operator returns a new graph with all the edge directions reversed.  This can be
+useful when for example trying to compute the inverse PageRank.
+
+The `subgraph` operator takes vertex and edge predicates and returns the graph containing only the
+vertices that satisfy the vertex predicate (evaluate to true) and edges that satisfy the edge
+predicate *and connect vertices that satisfy the vertex predicate*.  The `subgraph` operator can be
+used in number of situations to restrict the graph to the vertices and edges of interest or
+eliminate broken links.
+
+The `mask` operators returns the subgraph containing vertices and edges that are found in the input
+graph.  Finish this description ...
+
+The `groupEdges` operator merges ...
+
+
 
 ## Join Operators
 <a name="join_operators"></a>
