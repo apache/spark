@@ -459,7 +459,7 @@ object HiveQl {
            query :: Token(alias, Nil) :: Nil) =>
       Subquery(alias, nodeToPlan(query))
 
-    /* Table, No Alias */
+    /* All relations, possibly with aliases or sampling clauses. */
     case Token("TOK_TABREF", clauses) =>
       // If the last clause is not a token then it's the alias of the table.
       val (nonAliasClauses, aliasClause) =
@@ -469,17 +469,23 @@ object HiveQl {
           (clauses.dropRight(1), Some(clauses.last))
 
       val (Some(tableNameParts) ::
-          sampleClause :: Nil) = getClauses(Seq("TOK_TABNAME", "TOK_TABLESPLITSAMPLE"), nonAliasClauses)
+          splitSampleClause ::
+          bucketSampleClause :: Nil) = getClauses(Seq("TOK_TABNAME", "TOK_TABLESPLITSAMPLE", "TOK_TABLEBUCKETSAMPLE"), nonAliasClauses)
 
-      val tableName = tableNameParts.getChildren.map { case Token(part, Nil) => part }.mkString(".")
-      val alias = aliasClause.map { case Token(a, Nil) => a }
+      val tableName = tableNameParts.getChildren.map { case Token(part, Nil) => cleanIdentifier(part) }.mkString(".")
+      val alias = aliasClause.map { case Token(a, Nil) => cleanIdentifier(a) }
       val relation = UnresolvedRelation(tableName, alias)
+
       // Apply sampling if requested.
-      sampleClause.map {
+      (bucketSampleClause orElse splitSampleClause).map {
         case Token("TOK_TABLESPLITSAMPLE",
                Token("TOK_ROWCOUNT", Nil) ::
                Token(count, Nil) :: Nil) =>
           StopAfter(Literal(count.toInt), relation)
+        case Token("TOK_TABLEBUCKETSAMPLE",
+               Token(numerator, Nil) ::
+               Token(denominator, Nil) :: Nil) =>
+          Sample(numerator.toDouble / denominator.toDouble, relation)
       }.getOrElse(relation)
 
     case Token("TOK_UNIQUEJOIN", joinArgs) =>
