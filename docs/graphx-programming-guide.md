@@ -16,16 +16,14 @@ title: GraphX Programming Guide
 
 # Overview
 
-GraphX is the new (alpha) Spark API for graphs and graph-parallel
-computation. At a high-level, GraphX extends the Spark
-[RDD](api/core/index.html#org.apache.spark.rdd.RDD) by introducing the
-[Resilient Distributed property Graph (RDG)](#property_graph): a directed graph
-with properties attached to each vertex and edge.  To support graph computation,
-GraphX exposes a set of functions (e.g., [mapReduceTriplets](#mrTriplets)) as
-well as an optimized variant of the [Pregel](http://giraph.apache.org) API. In
-addition, GraphX includes a growing collection of graph
-[algorithms](#graph_algorithms) and [builders](#graph_builders) to simplify
-graph analytics tasks.
+GraphX is the new (alpha) Spark API for graphs and graph-parallel computation. At a high-level,
+GraphX extends the Spark [RDD](api/core/index.html#org.apache.spark.rdd.RDD) by introducing the
+[Resilient Distributed property Graph (RDG)](#property_graph): a directed multigraph with properties
+attached to each vertex and edge.  To support graph computation, GraphX exposes a set of functions
+(e.g., [subgraph](#structural_operators), [joinVertices](#join_operators), and
+[mapReduceTriplets](#mrTriplets)) as well as an optimized variant of the
+[Pregel](#pregel) API. In addition, GraphX includes a growing collection of graph
+[algorithms](#graph_algorithms) and [builders](#graph_builders) to simplify graph analytics tasks.
 
 ## Background on Graph-Parallel Computation
 
@@ -60,12 +58,10 @@ movement and duplication and a complicated programming model.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-The goal of the GraphX project is to unify graph-parallel and data-parallel
-computation in one system with a single composable API. The GraphX API
-enables users to view data both as a graph and as
-collection (i.e., RDDs) without data movement or duplication. By
-incorporating recent advances in graph-parallel systems, GraphX is able to optimize
-the execution of graph operations.
+The goal of the GraphX project is to unify graph-parallel and data-parallel computation in one
+system with a single composable API. The GraphX API enables users to view data both as a graph and
+as collections (i.e., RDDs) without data movement or duplication. By incorporating recent advances
+in graph-parallel systems, GraphX is able to optimize the execution of graph operations.
 
 ## GraphX Replaces the Spark Bagel API
 
@@ -95,12 +91,16 @@ If you are not using the Spark shell you will also need a Spark context.
 <a name="property_graph"></a>
 
 The [property graph](api/graphx/index.html#org.apache.spark.graphx.Graph) is a directed multigraph
-graph with user defined objects attached to each vertex and edge.  As a multigraph it is possible
-for multiple edges to have the same source and destination vertex.  This can be useful when there
-are multiple relationships between the same vertices.  Like RDDs, property graphs are immutable,
-distributed, and fault-tolerant. Vertices are keyed by their vertex identifier (`VertexId`) which is
-a unique 64-bit long. Similarly, edges have corresponding source and destination vertex identifiers.
-Unlike other systems, GraphX does not impose any ordering or constraints on the vertex identifiers.
+graph with user defined objects attached to each vertex and edge.  A directed multigraph is a
+directed graph with potentially multiple parallel edges sharing the same source and destination
+vertex.  The ability to support parallel edges simplifies modeling scenarios where there can be
+multiple relationships (e.g., co-worker and friend) between the same vertices.  Note, however there
+can only be one instance of each vertex.
+
+Like RDDs, property graphs are immutable, distributed, and fault-tolerant. Vertices are keyed by
+their vertex identifier (`VertexId`) which is a unique 64-bit long. Similarly, edges have
+corresponding source and destination vertex identifiers. GraphX does not impose any ordering or
+constraints on the vertex identifiers.
 
 The property graph is parameterized over the vertex `VD` and edge `ED` types.  These are the types
 of the objects associated with each vertex and edge respectively.  In some cases it can be desirable
@@ -119,9 +119,12 @@ class Graph[VD: ClassTag, ED: ClassTag] {
   // ...
 }
 {% endhighlight %}
+
 > Note that the vertices and edges of the graph are actually of type `VertexRDD[VD]` and
-> `EdgeRDD[ED]` respectively. These types extend and are optimized versions of `RDD[(VertexId, VD)]`
-> and `RDD[Edge[ED]]`.
+> `EdgeRDD[ED]` respectively. These classes extend and are optimized versions of `RDD[(VertexId,
+> VD)]` and `RDD[Edge[ED]]` with additional functionality built around the internal index and column
+> oriented representations.  We discuss the `VertexRDD` and `EdgeRDD` API in greater detail in the
+> section on [vertex and edge RDDs](#vertex_and_edge_rdds)
 
 For example, we might construct a property graph consisting of various collaborators on the GraphX
 project. The vertex property contains the username and occupation and the edge property contains
@@ -259,7 +262,7 @@ defined `map` function.
 > Note that in all cases the graph structure is unaffected.  This is a key feature of these
 > operators which allows the resulting graph to reuse the structural indicies and the unaffected
 > properties of the original graph.
-> While `graph.mapVertices(mapUDF)` is logically equivalent to the following, the following
+> While the following is logically equivalent to `graph.mapVertices(mapUDF)`, it
 > does not preserve the structural indicies and would not benefit from the substantial system
 > optimizations in GraphX.
 > {% highlight scala %}
@@ -340,32 +343,74 @@ thereby reducing the graph size in memory as well as the cost of computation.
 ## Join Operators
 <a name="join_operators"></a>
 
-The ability to move between graph and collection views of data is a key part of GraphX.  In many
-cases it is necessary to bring data from external collections into the graph.  For example, we might
-have extra user properties that we want to merge with an existing graph or we might want to pull
-vertex properties from one graph into another.  These tasks can be accomplished using the *join*
-operators.  Below we list the key join operators:
+The ability to move between graph and collection views is a key part of GraphX.  In many cases it is
+necessary to join data from external collections (RDDs) with graphs.  For example, we might have
+extra user properties that we want to merge with an existing graph or we might want to pull vertex
+properties from one graph into another.  These tasks can be accomplished using the *join* operators.
+Below we list the key join operators:
 
 {% highlight scala %}
-def joinVertices[U](table: RDD[(VertexID, U)])(mapFunc: (VertexID, VD, U) => VD)
+def joinVertices[U](table: RDD[(VertexID, U)])(map: (VertexID, VD, U) => VD)
   : Graph[VD, ED]
-def outerJoinVertices[U, VD2](table: RDD[(VertexID, U)])(mapFunc: (VertexID, VD, Option[U]) => VD2)
+def outerJoinVertices[U, VD2](table: RDD[(VertexID, U)])(map: (VertexID, VD, Option[U]) => VD2)
   : Graph[VD2, ED]
 {% endhighlight %}
+
+The `joinVertices` operators, defined in
+[`GraphOps.scala`](api/graphx/index.html#org.apache.spark.graphx.GraphOps), joins the vertices with
+the input RDD and returns a new graph with the vertex properties obtained by applying the user
+defined `map` function to the result of the joined vertices.  Vertices without a matching value in
+the RDD retain their original value.
+
+> Note that if the RDD contains more than one value for a given vertex only one will be used.   It
+> is therefore recommended that the input RDD be first made unique using the following which will
+> also *pre-index* the resulting values to substantially accelerate the subsequent join.
+> {% highlight scala %}
+val nonUniqueCosts: RDD[(VertexId, Double)]
+val uniqueCosts: VertexRDD[Double] =
+  graph.vertices.aggregateUsingIndex(nonUnique, (a,b) => a + b)
+val joinedGraph = graph.joinVertices(uniqueCosts)(
+  (id, oldCost, extraCost) => oldCost + extraCost)
+{% endhighlight %}
+
+The more general `outerJoinVertices` behaves similarly to `joinVertices` except that the user
+defined `map` function is applied to all vertices and can change the vertex property type.  Because
+not all vertices may have a matching value in the input RDD the `map` function takes an `Option`
+type.  For example, we can setup a graph for PageRank by initializing vertex properties with their
+`outDegree`.
+
+{% highlight scala %}
+val outDegrees: VertexRDD[Int] = graph.outDegrees
+val degreeGraph = graph.outerJoinVertices(outDegrees) { (id, oldAttr, outDegOpt) =>
+  outDegOpt match {
+    case Some(outDeg) => outDeg
+    case None => 0 // No outDegree means zero outDegree
+  }
+}
+{% endhighlight %}
+
+> You may have noticed the multiple parameter lists (e.g., `f(a)(b)`) curried function pattern used
+> in the above examples.  While we could have equally written `f(a)(b)` as `f(a,b)` this would mean
+> that type inference on `b` would not depend on `a`.  As a consequence, the user would need to
+> provide type annotation for the user defined function:
+> {% highlight scala %}
+val joinedGraph = graph.joinVertices(uniqueCosts,
+  (id: VertexId, oldCost: Double, extraCost: Double) => oldCost + extraCost)
+{% endhighlight %}
+
 
 ## Map Reduce Triplets (mapReduceTriplets)
 <a name="mrTriplets"></a>
 
-
-
+# Pregel API
+<a name="pregel"></a>
 
 # Graph Builders
 <a name="graph_builders"></a>
 
+# Vertex and Edge RDDs
+<a name="vertex_and_edge_rdds"></a>
 
-{% highlight scala %}
-val userGraph: Graph[(String, String), String]
-{% endhighlight %}
 
 
 # Optimized Representation
