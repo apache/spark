@@ -543,6 +543,7 @@ object HiveQl {
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter
       }
+      assert(other.size <= 1, "Unhandled join clauses.")
       Join(nodeToRelation(relation1),
         nodeToRelation(relation2),
         joinType,
