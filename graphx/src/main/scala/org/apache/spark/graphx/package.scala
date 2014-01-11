@@ -8,8 +8,8 @@ package object graphx {
   // TODO: Consider using Char.
   type PartitionID = Int
 
-  type VertexSet = OpenHashSet[VertexID]
+  private[graphx] type VertexSet = OpenHashSet[VertexID]
 
-  /** * Returns the default null-like value for a data type T. */
-  def nullValue[T] = null.asInstanceOf[T]
+  /** Returns the default null-like value for a data type T. */
+  private[graphx] def nullValue[T] = null.asInstanceOf[T]
 }
