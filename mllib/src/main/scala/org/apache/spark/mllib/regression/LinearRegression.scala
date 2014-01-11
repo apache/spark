@@ -162,6 +162,8 @@ object LinearRegressionWithSGD {
     val sc = new SparkContext(args(0), "LinearRegression")
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = LinearRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
+    println("Weights: " + model.weights.mkString("[", ", ", "]"))
+    println("Intercept: " + model.intercept)
 
     sc.stop()
   }
