@@ -1,16 +1,11 @@
 ## Things to do for SparkR, roughly in order of importance
 
 ## Unit tests still TODO
-
-1. textFile + collect -- use README.md, or some test file (check if minSplits
-works correctly)
-2. utils.R - Check if dependencies are serialized correctly
-3. convertJListToRList
+1. utils.R - Check if dependencies are serialized correctly
 
 ## Functions to support
 1. Similar to `stats.py` in Python, add support for mean, median, stdev etc.
-2. Broadcast variables.
-3. Consider if we need to extend `addPackage` so that any given R file can be sourced in the worker before functions are run.
+2. Extend `addPackage` so that any given R file can be sourced in the worker before functions are run.
 
 ## Performance improvements
 1. Write hash functions in C and use .Call to call into them
