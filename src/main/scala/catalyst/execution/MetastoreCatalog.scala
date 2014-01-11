@@ -82,6 +82,7 @@ object HiveMetatoreTypes {
   def toDataType(metastoreType: String): DataType =
     metastoreType match {
       case "string" => StringType
+      case "float" => FloatType
       case "int" => IntegerType
       case "double" => DoubleType
       case "bigint" => LongType
