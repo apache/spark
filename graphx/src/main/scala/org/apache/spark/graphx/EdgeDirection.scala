@@ -1,6 +1,5 @@
 package org.apache.spark.graphx
 
-
 /**
  * The direction of a directed edge relative to a vertex.
  */
@@ -18,18 +17,12 @@ sealed abstract class EdgeDirection {
 
 
 object EdgeDirection {
-  /**
-   * Edges arriving at a vertex.
-   */
+  /** Edges arriving at a vertex. */
   case object In extends EdgeDirection
 
-  /**
-   * Edges originating from a vertex
-   */
+  /** Edges originating from a vertex. */
   case object Out extends EdgeDirection
 
-  /**
-   * All edges adjacent to a vertex
-   */
+  /** All edges adjacent to a vertex. */
   case object Both extends EdgeDirection
 }

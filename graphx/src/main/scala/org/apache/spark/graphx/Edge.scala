@@ -8,18 +8,13 @@ package org.apache.spark.graphx
  * @tparam ED type of the edge attribute
  */
 case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] (
-  /**
-   * The vertex id of the source vertex
-   */
-  var srcId: VertexID = 0,
-  /**
-   * The vertex id of the target vertex.
-   */
-  var dstId: VertexID = 0,
-  /**
-   * The attribute associated with the edge.
-   */
-  var attr: ED = nullValue[ED]) extends Serializable {
+    /** The vertex id of the source vertex */
+    var srcId: VertexID = 0,
+    /** The vertex id of the target vertex. */
+    var dstId: VertexID = 0,
+    /** The attribute associated with the edge. */
+    var attr: ED = nullValue[ED])
+  extends Serializable {
 
   /**
    * Given one vertex in the edge return the other vertex.
