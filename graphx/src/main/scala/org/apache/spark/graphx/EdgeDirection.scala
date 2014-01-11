@@ -3,7 +3,7 @@ package org.apache.spark.graphx
 /**
  * The direction of a directed edge relative to a vertex.
  */
-sealed abstract class EdgeDirection {
+class EdgeDirection private (private val name: String) extends Serializable {
   /**
    * Reverse the direction of an edge.  An in becomes out,
    * out becomes in and both remains both.
@@ -13,16 +13,25 @@ sealed abstract class EdgeDirection {
     case EdgeDirection.Out  => EdgeDirection.In
     case EdgeDirection.Both => EdgeDirection.Both
   }
+
+  override def toString: String = "EdgeDirection." + name
+
+  override def equals(o: Any) = o match {
+    case other: EdgeDirection => other.name == name
+    case _ => false
+  }
+
+  override def hashCode = name.hashCode
 }
 
 
 object EdgeDirection {
   /** Edges arriving at a vertex. */
-  case object In extends EdgeDirection
+  final val In = new EdgeDirection("In")
 
   /** Edges originating from a vertex. */
-  case object Out extends EdgeDirection
+  final val Out = new EdgeDirection("Out")
 
   /** All edges adjacent to a vertex. */
-  case object Both extends EdgeDirection
+  final val Both = new EdgeDirection("Both")
 }

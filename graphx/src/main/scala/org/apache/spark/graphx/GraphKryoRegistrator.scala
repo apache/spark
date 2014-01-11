@@ -23,6 +23,7 @@ class GraphKryoRegistrator extends KryoRegistrator {
     kryo.register(classOf[VertexAttributeBlock[Object]])
     kryo.register(classOf[PartitionStrategy])
     kryo.register(classOf[BoundedPriorityQueue[Object]])
+    kryo.register(classOf[EdgeDirection])
 
     // This avoids a large number of hash table lookups.
     kryo.setReferences(false)

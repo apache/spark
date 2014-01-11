@@ -283,7 +283,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
           }
         case Some(EdgeDirection.In) =>
           edgePartition.iterator.filter(e => vPart.isActive(e.dstId))
-        case None =>
+        case _ => // None
           edgePartition.iterator
       }
 
