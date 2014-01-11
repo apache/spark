@@ -56,6 +56,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
       val hasShuffleRead = shuffleReadBytes > 0
       val shuffleWriteBytes = listener.stageIdToShuffleWrite.getOrElse(stageId, 0L)
       val hasShuffleWrite = shuffleWriteBytes > 0
+      val bytesSpilled = listener.stageIdToBytesSpilled.getOrElse(stageId, 0L)
+      val hasBytesSpilled = bytesSpilled > 0
 
       var activeTime = 0L
       listener.stageIdToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
@@ -81,6 +83,12 @@ private[spark] class StagePage(parent: JobProgressUI) {
                 {Utils.bytesToString(shuffleWriteBytes)}
               </li>
             }
+            {if (hasBytesSpilled)
+            <li>
+              <strong>Bytes spilled: </strong>
+              {Utils.bytesToString(bytesSpilled)}
+            </li>
+            }
           </ul>
         </div>
 
@@ -89,9 +97,10 @@ private[spark] class StagePage(parent: JobProgressUI) {
         Seq("Duration", "GC Time", "Result Ser Time") ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
+        {if (hasBytesSpilled) Seq("Bytes Spilled") else Nil} ++
         Seq("Errors")
 
-      val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite), tasks)
+      val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
 
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && (t._2.isDefined))
@@ -153,13 +162,20 @@ private[spark] class StagePage(parent: JobProgressUI) {
           }
           val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
+          val bytesSpilledSizes = validTasks.map {
+            case(info, metrics, exception) =>
+              metrics.get.bytesSpilled.toDouble
+          }
+          val bytesSpilledQuantiles = "Bytes Spilled" +: getQuantileCols(bytesSpilledSizes)
+
           val listings: Seq[Seq[String]] = Seq(
             serializationQuantiles,
             serviceQuantiles,
             gettingResultQuantiles,
             schedulerDelayQuantiles,
             if (hasShuffleRead) shuffleReadQuantiles else Nil,
-            if (hasShuffleWrite) shuffleWriteQuantiles else Nil)
+            if (hasShuffleWrite) shuffleWriteQuantiles else Nil,
+            if (hasBytesSpilled) bytesSpilledQuantiles else Nil)
 
           val quantileHeaders = Seq("Metric", "Min", "25th percentile",
             "Median", "75th percentile", "Max")
@@ -178,8 +194,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
     }
   }
 
-
-  def taskRow(shuffleRead: Boolean, shuffleWrite: Boolean)
+  def taskRow(shuffleRead: Boolean, shuffleWrite: Boolean, bytesSpilled: Boolean)
              (taskData: (TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])): Seq[Node] = {
     def fmtStackTrace(trace: Seq[StackTraceElement]): Seq[Node] =
       trace.map(e => <span style="display:block;">{e.toString}</span>)
@@ -204,6 +219,10 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
     val writeTimeReadable = maybeWriteTime.map{ t => t / (1000 * 1000)}.map{ ms =>
       if (ms == 0) "" else parent.formatDuration(ms)}.getOrElse("")
+
+    val maybeBytesSpilled = metrics.map{m => m.bytesSpilled}
+    val bytesSpilledSortable = maybeBytesSpilled.map(_.toString).getOrElse("")
+    val bytesSpilledReadable = maybeBytesSpilled.map{Utils.bytesToString(_)}.getOrElse("")
 
     <tr>
       <td>{info.index}</td>
@@ -233,6 +252,11 @@ private[spark] class StagePage(parent: JobProgressUI) {
          <td sorttable_customkey={shuffleWriteSortable}>
            {shuffleWriteReadable}
          </td>
+      }}
+      {if (bytesSpilled) {
+        <td sorttable_customkey={bytesSpilledSortable}>
+          {bytesSpilledReadable}
+        </td>
       }}
       <td>{exception.map(e =>
         <span>

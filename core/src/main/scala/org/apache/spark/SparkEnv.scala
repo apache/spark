@@ -60,6 +60,9 @@ class SparkEnv private[spark] (
   // All accesses should be manually synchronized
   val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
+  // A mapping of task ID to number of bytes spilled by that task. This is mainly for book-keeping.
+  val bytesSpilledMap = mutable.HashMap[Long, Long]()
+
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
   // A general, soft-reference map for metadata needed during HadoopRDD split computation

@@ -229,6 +229,7 @@ private[spark] class Executor(
           m.executorRunTime = (taskFinish - taskStart).toInt
           m.jvmGCTime = gcTime - startGCTime
           m.resultSerializationTime = (afterSerialization - beforeSerialization).toInt
+          m.bytesSpilled = env.bytesSpilledMap.get(taskId).getOrElse(0)
         }
 
         val accumUpdates = Accumulators.values
@@ -279,11 +280,12 @@ private[spark] class Executor(
           //System.exit(1)
         }
       } finally {
-        // TODO: Unregister shuffle memory only for ShuffleMapTask
+        // TODO: Unregister shuffle memory only for ResultTask
         val shuffleMemoryMap = env.shuffleMemoryMap
         shuffleMemoryMap.synchronized {
           shuffleMemoryMap.remove(Thread.currentThread().getId)
         }
+        env.bytesSpilledMap.remove(taskId)
         runningTasks.remove(taskId)
       }
     }

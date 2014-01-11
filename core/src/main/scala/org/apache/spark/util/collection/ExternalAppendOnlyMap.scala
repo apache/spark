@@ -77,13 +77,16 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   }
 
   // Number of pairs in the in-memory map
-  private var numPairsInMemory = 0
+  private var numPairsInMemory = 0L
 
   // Number of in-memory pairs inserted before tracking the map's shuffle memory usage
   private val trackMemoryThreshold = 1000
 
   // How many times we have spilled so far
   private var spillCount = 0
+
+  // Number of bytes spilled in total
+  private var bytesSpilled = 0L
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
   private val syncWrites = sparkConf.getBoolean("spark.shuffle.sync", false)
@@ -161,6 +164,14 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
       shuffleMemoryMap(Thread.currentThread().getId) = 0
     }
     numPairsInMemory = 0
+    bytesSpilled += mapSize
+  }
+
+  /**
+   * Register the total number of bytes spilled by this task
+   */
+  def registerBytesSpilled(taskId: Long) {
+    SparkEnv.get.bytesSpilledMap(taskId) = bytesSpilled
   }
 
   /**
