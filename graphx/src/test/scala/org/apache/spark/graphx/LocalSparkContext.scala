@@ -3,20 +3,20 @@ package org.apache.spark.graphx
 import org.scalatest.Suite
 import org.scalatest.BeforeAndAfterEach
 
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
-
 
 /**
  * Provides a method to run tests against a {@link SparkContext} variable that is correctly stopped
  * after each test.
 */
 trait LocalSparkContext {
-  System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-  System.setProperty("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
-
   /** Runs `f` on a new SparkContext and ensures that it is stopped afterwards. */
   def withSpark[T](f: SparkContext => T) = {
-    val sc = new SparkContext("local", "test")
+    val conf = new SparkConf()
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator", "org.apache.spark.graphx.GraphKryoRegistrator")
+    val sc = new SparkContext("local", "test", conf)
     try {
       f(sc)
     } finally {
