@@ -66,17 +66,7 @@ computation in one system with a single composable API. The GraphX API
 enables users to view data both as a graph and as
 collection (i.e., RDDs) without data movement or duplication. By
 incorporating recent advances in graph-parallel systems, GraphX is able to optimize
-the execution of graph operations. In preliminary experiments we find that the GraphX
-system is able to achieve performance comparable to state-of-the-art
-graph-parallel systems while easily expressing the entire analytics pipelines.
-
-<p style="text-align: center;">
-  <img src="img/graphx_performance_comparison.png"
-       title="GraphX Performance Comparison"
-       alt="GraphX Performance Comparison"
-       width="50%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
+the execution of graph operations.
 
 ## GraphX Replaces the Spark Bagel API
 
@@ -279,9 +269,13 @@ val outputGraph: Graph[Double, Double] =
 ## Structural Operators
 <a name="structural_operators"></a>
 
+## Join Operators
+<a name="join_operators"></a>
 
 ## Map Reduce Triplets (mapReduceTriplets)
 <a name="mrTriplets"></a>
+
+
 
 
 # Graph Builders
@@ -295,7 +289,8 @@ val userGraph: Graph[(String, String), String]
 
 # Optimized Representation
 
-The Property Graph is internally represented as a collection of RDDs
+This section should give some intuition about how GraphX works and how that affects the user (e.g.,
+things to worry about.)
 
 <p style="text-align: center;">
   <img src="img/edge_cut_vs_vertex_cut.png"
@@ -319,6 +314,19 @@ The Property Graph is internally represented as a collection of RDDs
 # Graph Algorithms
 <a name="graph_algorithms"></a>
 
+This section should describe the various algorithms and how they are used.
+
+## PageRank
+
+## Connected Components
+
+## Shortest Path
+
+## Triangle Counting
+
+## K-Core
+
+## LDA
 
 <p style="text-align: center;">
   <img src="img/tables_and_graphs.png"
