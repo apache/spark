@@ -1,0 +1,26 @@
+\docType{class}
+\name{Broadcast-class}
+\alias{Broadcast}
+\alias{Broadcast-class}
+\title{S4 class that represents a Broadcast variable}
+\usage{
+Broadcast(id, value, jBroadcastRef, objName)
+}
+\arguments{
+  \item{id}{Id of the backing Spark broadcast variable}
+
+  \item{value}{Value of the broadcast variable}
+
+  \item{jBroadcastRef}{reference to the backing Java
+  broadcast object}
+
+  \item{objName}{name of broadcasted object}
+}
+\description{
+Broadcast variables can be created using the broadcast
+function from a \code{SparkContext}.
+}
+\seealso{
+broadcast
+}
+

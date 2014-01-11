@@ -122,6 +122,30 @@ includePackage <- function(sc, pkg) {
   .sparkREnv[[".packages"]] <- packages
 }
 
+#' @title Broadcast a variable to all workers 
+#' 
+#' @description
+#' Broadcast a read-only variable to the cluster, returning a \code{Broadcast}
+#' object for reading it in distributed functions.
+#'
+#' @param sc Spark Context to use 
+#' @param object Object to be broadcast
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:2, 2L)
+#'
+#' # Large Matrix object that we want to broadcast
+#' randomMat <- matrix(nrow=100, ncol=10, data=rnorm(1000))
+#' randomMatBr <- broadcast(sc, randomMat)
+#' 
+#' # Use the broadcast variable inside the function
+#' useBroadcast <- function(x) {
+#'   sum(value(randomMatBr) * x)
+#' }
+#' sumRDD <- lapply(rdd, useBroadcast)
+#'}
 broadcast <- function(sc, object) {
   objName <- as.character(substitute(object))
   serializedObj <- serialize(object, connection = NULL, ascii = TRUE)
