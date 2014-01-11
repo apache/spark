@@ -198,7 +198,6 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     _data(pos)
   }
 
-
   /**
    * Return the next position with an element stored, starting from the given position inclusively.
    */

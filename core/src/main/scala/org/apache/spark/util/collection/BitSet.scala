@@ -33,7 +33,6 @@ class BitSet(numBits: Int) extends Serializable {
    */
   def capacity: Int = numWords * 64
 
-
   /**
    * Set all the bits up to a given index
    */
@@ -47,7 +46,6 @@ class BitSet(numBits: Int) extends Serializable {
       words(wordIndex) |= mask
     }
   }
-
 
   /**
    * Compute the bit-wise AND of the two sets returning the
@@ -65,7 +63,6 @@ class BitSet(numBits: Int) extends Serializable {
     }
     newBS
   }
-
 
   /**
    * Compute the bit-wise OR of the two sets returning the
@@ -91,7 +88,6 @@ class BitSet(numBits: Int) extends Serializable {
     }
     newBS
   }
-
 
   /**
    * Sets the bit at the specified index to true.
@@ -119,7 +115,6 @@ class BitSet(numBits: Int) extends Serializable {
     (words(index >> 6) & bitmask) != 0  // div by 64 and mask
   }
 
-
   /**
    * Get an iterator over the set bits.
    */
@@ -144,7 +139,6 @@ class BitSet(numBits: Int) extends Serializable {
     }
     sum
   }
-
 
   /**
    * Returns the index of the first bit that is set to true that occurs on or after the
@@ -184,7 +178,6 @@ class BitSet(numBits: Int) extends Serializable {
 
     -1
   }
-
 
   /** Return the number of longs it would take to hold numBits. */
   private def bit2words(numBits: Int) = ((numBits - 1) >> 6) + 1
