@@ -345,9 +345,20 @@ class SparkContext(
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf given its InputFormat and any
-   * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
-   * etc).
+   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf given its InputFormat and other
+   * necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable),
+   * using the older MapReduce API (`org.apache.hadoop.mapred`).
+   *
+   * @param conf JobConf for setting up the dataset
+   * @param inputFormatClass Class of the [[InputFormat]]
+   * @param keyClass Class of the keys
+   * @param valueClass Class of the values
+   * @param minSplits Minimum number of Hadoop Splits to generate.
+   * @param cloneKeyValues If true, explicitly clone the records produced by Hadoop RecordReader.
+   *                       Most RecordReader implementations reuse wrapper objects across multiple
+   *                       records, and can cause problems in RDD collect or aggregation operations.
+   *                       By default the records are cloned in Spark. However, application
+   *                       programmers can explicitly disable the cloning for better performance.
    */
   def hadoopRDD[K: ClassTag, V: ClassTag](
       conf: JobConf,

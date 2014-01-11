@@ -45,14 +45,14 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
 
   val inputSplit = new SerializableWritable[InputSplit](s)
 
-  override def hashCode(): Int = (41 * (41 + rddId) + idx).toInt
+  override def hashCode(): Int = 41 * (41 + rddId) + idx
 
   override val index: Int = idx
 }
 
 /**
  * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
- * sources in HBase, or S3).
+ * sources in HBase, or S3), using the older MapReduce API (`org.apache.hadoop.mapred`).
  *
  * @param sc The SparkContext to associate the RDD with.
  * @param broadcastedConf A general Hadoop Configuration, or a subclass of it. If the enclosed
@@ -64,6 +64,11 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minSplits Minimum number of Hadoop Splits (HadoopRDD partitions) to generate.
+ * @param cloneKeyValues If true, explicitly clone the records produced by Hadoop RecordReader.
+ *                       Most RecordReader implementations reuse wrapper objects across multiple
+ *                       records, and can cause problems in RDD collect or aggregation operations.
+ *                       By default the records are cloned in Spark. However, application
+ *                       programmers can explicitly disable the cloning for better performance.
  */
 class HadoopRDD[K: ClassTag, V: ClassTag](
     sc: SparkContext,
@@ -165,9 +170,9 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
       // Register an on-task-completion callback to close the input stream.
       context.addOnCompleteCallback{ () => closeIfNeeded() }
       val key: K = reader.createKey()
-      val keyCloneFunc = cloneWritables[K](getConf)
+      val keyCloneFunc = cloneWritables[K](jobConf)
       val value: V = reader.createValue()
-      val valueCloneFunc = cloneWritables[V](getConf)
+      val valueCloneFunc = cloneWritables[V](jobConf)
       override def getNext() = {
         try {
           finished = !reader.next(key, value)
@@ -176,8 +181,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
             finished = true
         }
         if (cloneKeyValues) {
-          (keyCloneFunc(key.asInstanceOf[Writable]),
-            valueCloneFunc(value.asInstanceOf[Writable]))
+          (keyCloneFunc(key.asInstanceOf[Writable]), valueCloneFunc(value.asInstanceOf[Writable]))
         } else {
           (key, value)
         }
