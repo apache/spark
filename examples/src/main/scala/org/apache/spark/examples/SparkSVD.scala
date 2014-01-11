@@ -29,12 +29,12 @@ import org.apache.spark.mllib.linalg.SparseMatrix
  * Where i is the column, j the row, and value is the matrix entry
  * 
  * For example input file, see:
- * mllib/data/als/test.data
+ * mllib/data/als/test.data  (example is 4 x 4)
  */
 object SparkSVD {
   def main(args: Array[String]) {
-   if (args.length != 2) {
-      System.err.println("Usage: SparkSVD <master> <file>")
+   if (args.length != 4) {
+      System.err.println("Usage: SparkSVD <master> <file> m n")
       System.exit(1)
     }
     val sc = new SparkContext(args(0), "SVD",
@@ -45,8 +45,8 @@ object SparkSVD {
       val parts = line.split(',')
       MatrixEntry(parts(0).toInt, parts(1).toInt, parts(2).toDouble)
     }
-    val m = 4
-    val n = 4
+    val m = args(2).toInt
+    val n = args(3).toInt
 
     // recover largest singular vector
     val decomposed = SVD.sparseSVD(SparseMatrix(data, m, n), 1)
