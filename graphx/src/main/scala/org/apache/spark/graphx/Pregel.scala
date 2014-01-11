@@ -65,6 +65,10 @@ object Pregel {
    *
    * @param maxIterations the maximum number of iterations to run for
    *
+   * @param activeDirection the direction of edges incident to a vertex that received a message in
+   * the previous round on which to run `sendMsg`. For example, if this is `EdgeDirection.Out`, only
+   * out-edges of vertices that received a message in the previous round will run.
+   *
    * @param vprog the user-defined vertex program which runs on each
    * vertex and receives the inbound message and computes a new vertex
    * value.  On the first iteration the vertex program is invoked on
@@ -85,7 +89,8 @@ object Pregel {
    *
    */
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
-    (graph: Graph[VD, ED], initialMsg: A, maxIterations: Int = Int.MaxValue)(
+    (graph: Graph[VD, ED], initialMsg: A, maxIterations: Int = Int.MaxValue,
+      activeDirection: EdgeDirection = EdgeDirection.Out)(
       vprog: (VertexID, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
       mergeMsg: (A, A) => A)
@@ -110,7 +115,7 @@ object Pregel {
       // Send new messages. Vertices that didn't get any messages don't appear in newVerts, so don't
       // get to send messages. We must cache messages so it can be materialized on the next line,
       // allowing us to uncache the previous iteration.
-      messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, EdgeDirection.Out))).cache()
+      messages = g.mapReduceTriplets(sendMsg, mergeMsg, Some((newVerts, activeDirection))).cache()
       // The call to count() materializes `messages`, `newVerts`, and the vertices of `g`. This
       // hides oldMessages (depended on by newVerts), newVerts (depended on by messages), and the
       // vertices of prevG (depended on by newVerts, oldMessages, and the vertices of g).

@@ -18,13 +18,12 @@ title: GraphX Programming Guide
 
 GraphX is the new (alpha) Spark API for graphs and graph-parallel
 computation. At a high-level, GraphX extends the Spark
-[RDD](api/core/index.html#org.apache.spark.rdd.RDD) by
-introducing the [Resilient Distributed property Graph (RDG)](#property_graph):
-a directed graph with properties attached to each vertex and edge.
-To support graph computation, GraphX exposes a set of functions
-(e.g., [mapReduceTriplets](#mrTriplets)) as well as optimized variants of the
-[Pregel](http://giraph.apache.org) and [GraphLab](http://graphlab.org)
-APIs. In addition, GraphX includes a growing collection of graph
+[RDD](api/core/index.html#org.apache.spark.rdd.RDD) by introducing the
+[Resilient Distributed property Graph (RDG)](#property_graph): a directed graph
+with properties attached to each vertex and edge.  To support graph computation,
+GraphX exposes a set of functions (e.g., [mapReduceTriplets](#mrTriplets)) as
+well as an optimized variant of the [Pregel](http://giraph.apache.org) API. In
+addition, GraphX includes a growing collection of graph
 [algorithms](#graph_algorithms) and [builders](#graph_builders) to simplify
 graph analytics tasks.
 

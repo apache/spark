@@ -53,34 +53,38 @@ object StronglyConnectedComponents {
 
       // collect min of all my neighbor's scc values, update if it's smaller than mine
       // then notify any neighbors with scc values larger than mine
-      sccWorkGraph = GraphLab[(VertexID, Boolean), ED, VertexID](sccWorkGraph, Integer.MAX_VALUE)(
-        (vid, e) => e.otherVertexAttr(vid)._1,
-        (vid1, vid2) => math.min(vid1, vid2),
-        (vid, scc, optScc) =>
-          (math.min(scc._1, optScc.getOrElse(scc._1)), scc._2),
-        (vid, e) => e.vertexAttr(vid)._1 < e.otherVertexAttr(vid)._1
-      )
+      sccWorkGraph = Pregel[(VertexID, Boolean), ED, VertexID](sccWorkGraph, Long.MaxValue)(
+        (vid, myScc, neighborScc) => (math.min(myScc._1, neighborScc), myScc._2),
+        e => {
+          if (e.srcId < e.dstId) {
+            Iterator((e.dstId, e.srcAttr._1))
+          } else {
+            Iterator()
+          }
+        },
+        (vid1, vid2) => math.min(vid1, vid2))
 
       // start at root of SCCs. Traverse values in reverse, notify all my neighbors
       // do not propagate if colors do not match!
-      sccWorkGraph = GraphLab[(VertexID, Boolean), ED, Boolean](
-        sccWorkGraph,
-        Integer.MAX_VALUE,
-        EdgeDirection.Out,
-        EdgeDirection.In
-      )(
+      sccWorkGraph = Pregel[(VertexID, Boolean), ED, Boolean](
+        sccWorkGraph, false, activeDirection = EdgeDirection.In)(
         // vertex is final if it is the root of a color
         // or it has the same color as a neighbor that is final
-        (vid, e) => (vid == e.vertexAttr(vid)._1) || (e.vertexAttr(vid)._1 == e.otherVertexAttr(vid)._1),
-        (final1, final2) => final1 || final2,
-        (vid, scc, optFinal) =>
-          (scc._1, scc._2 || optFinal.getOrElse(false)),
-       // activate neighbor if they are not final, you are, and you have the same color
-        (vid, e) => e.vertexAttr(vid)._2 &&
-            !e.otherVertexAttr(vid)._2 && (e.vertexAttr(vid)._1 == e.otherVertexAttr(vid)._1),
-        // start at root of colors
-        (vid, data) => vid == data._1
-      )
+        (vid, myScc, existsSameColorFinalNeighbor) => {
+          val isColorRoot = vid == myScc._1
+          (myScc._1, myScc._2 || isColorRoot || existsSameColorFinalNeighbor)
+        },
+        // activate neighbor if they are not final, you are, and you have the same color
+        e => {
+          val sameColor = e.dstAttr._1 == e.srcAttr._1
+          val onlyDstIsFinal = e.dstAttr._2 && !e.srcAttr._2
+          if (sameColor && onlyDstIsFinal) {
+            Iterator((e.srcId, e.dstAttr._2))
+          } else {
+            Iterator()
+          }
+        },
+        (final1, final2) => final1 || final2)
     }
     sccGraph
   }
