@@ -105,6 +105,7 @@ object HiveQl {
 
     // TODO(marmbrus): Figure out how view are expanded by hive, as we might need to handle this.
     "TOK_ALTERVIEW_ADDPARTS",
+    "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
