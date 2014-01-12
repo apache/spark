@@ -345,9 +345,20 @@ class SparkContext(
   }
 
   /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf given its InputFormat and any
-   * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
-   * etc).
+   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf given its InputFormat and other
+   * necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable),
+   * using the older MapReduce API (`org.apache.hadoop.mapred`).
+   *
+   * @param conf JobConf for setting up the dataset
+   * @param inputFormatClass Class of the [[InputFormat]]
+   * @param keyClass Class of the keys
+   * @param valueClass Class of the values
+   * @param minSplits Minimum number of Hadoop Splits to generate.
+   * @param cloneRecords If true, Spark will clone the records produced by Hadoop RecordReader.
+   *                     Most RecordReader implementations reuse wrapper objects across multiple
+   *                     records, and can cause problems in RDD collect or aggregation operations.
+   *                     By default the records are cloned in Spark. However, application
+   *                     programmers can explicitly disable the cloning for better performance.
    */
   def hadoopRDD[K: ClassTag, V: ClassTag](
       conf: JobConf,
@@ -355,11 +366,11 @@ class SparkContext(
       keyClass: Class[K],
       valueClass: Class[V],
       minSplits: Int = defaultMinSplits,
-      cloneKeyValues: Boolean = true
+      cloneRecords: Boolean = true
       ): RDD[(K, V)] = {
     // Add necessary security credentials to the JobConf before broadcasting it.
     SparkHadoopUtil.get.addCredentials(conf)
-    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits, cloneKeyValues)
+    new HadoopRDD(this, conf, inputFormatClass, keyClass, valueClass, minSplits, cloneRecords)
   }
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
@@ -369,7 +380,7 @@ class SparkContext(
       keyClass: Class[K],
       valueClass: Class[V],
       minSplits: Int = defaultMinSplits,
-      cloneKeyValues: Boolean = true
+      cloneRecords: Boolean = true
       ): RDD[(K, V)] = {
     // A Hadoop configuration can be about 10 KB, which is pretty big, so broadcast it.
     val confBroadcast = broadcast(new SerializableWritable(hadoopConfiguration))
@@ -382,7 +393,7 @@ class SparkContext(
       keyClass,
       valueClass,
       minSplits,
-      cloneKeyValues)
+      cloneRecords)
   }
 
   /**
@@ -394,14 +405,14 @@ class SparkContext(
    * }}}
    */
   def hadoopFile[K, V, F <: InputFormat[K, V]]
-      (path: String, minSplits: Int, cloneKeyValues: Boolean = true)
+      (path: String, minSplits: Int, cloneRecords: Boolean = true)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     hadoopFile(path,
       fm.runtimeClass.asInstanceOf[Class[F]],
       km.runtimeClass.asInstanceOf[Class[K]],
       vm.runtimeClass.asInstanceOf[Class[V]],
       minSplits,
-      cloneKeyValues = cloneKeyValues)
+      cloneRecords)
   }
 
   /**
@@ -412,20 +423,20 @@ class SparkContext(
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path)
    * }}}
    */
-  def hadoopFile[K, V, F <: InputFormat[K, V]](path: String, cloneKeyValues: Boolean = true)
+  def hadoopFile[K, V, F <: InputFormat[K, V]](path: String, cloneRecords: Boolean = true)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] =
-    hadoopFile[K, V, F](path, defaultMinSplits, cloneKeyValues)
+    hadoopFile[K, V, F](path, defaultMinSplits, cloneRecords)
 
   /** Get an RDD for a Hadoop file with an arbitrary new API InputFormat. */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]]
-      (path: String, cloneKeyValues: Boolean = true)
+      (path: String, cloneRecords: Boolean = true)
       (implicit km: ClassTag[K], vm: ClassTag[V], fm: ClassTag[F]): RDD[(K, V)] = {
     newAPIHadoopFile(
       path,
       fm.runtimeClass.asInstanceOf[Class[F]],
       km.runtimeClass.asInstanceOf[Class[K]],
       vm.runtimeClass.asInstanceOf[Class[V]],
-      cloneKeyValues = cloneKeyValues)
+      cloneRecords = cloneRecords)
   }
 
   /**
@@ -438,11 +449,11 @@ class SparkContext(
       kClass: Class[K],
       vClass: Class[V],
       conf: Configuration = hadoopConfiguration,
-      cloneKeyValues: Boolean = true): RDD[(K, V)] = {
+      cloneRecords: Boolean = true): RDD[(K, V)] = {
     val job = new NewHadoopJob(conf)
     NewFileInputFormat.addInputPath(job, new Path(path))
     val updatedConf = job.getConfiguration
-    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf, cloneKeyValues)
+    new NewHadoopRDD(this, fClass, kClass, vClass, updatedConf, cloneRecords)
   }
 
   /**
@@ -454,8 +465,8 @@ class SparkContext(
       fClass: Class[F],
       kClass: Class[K],
       vClass: Class[V],
-      cloneKeyValues: Boolean = true): RDD[(K, V)] = {
-    new NewHadoopRDD(this, fClass, kClass, vClass, conf, cloneKeyValues)
+      cloneRecords: Boolean = true): RDD[(K, V)] = {
+    new NewHadoopRDD(this, fClass, kClass, vClass, conf, cloneRecords)
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types. */
@@ -463,16 +474,16 @@ class SparkContext(
       keyClass: Class[K],
       valueClass: Class[V],
       minSplits: Int,
-      cloneKeyValues: Boolean = true
+      cloneRecords: Boolean = true
       ): RDD[(K, V)] = {
     val inputFormatClass = classOf[SequenceFileInputFormat[K, V]]
-    hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits, cloneKeyValues)
+    hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits, cloneRecords)
   }
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types. */
   def sequenceFile[K: ClassTag, V: ClassTag](path: String, keyClass: Class[K], valueClass: Class[V],
-      cloneKeyValues: Boolean = true): RDD[(K, V)] =
-    sequenceFile(path, keyClass, valueClass, defaultMinSplits, cloneKeyValues)
+      cloneRecords: Boolean = true): RDD[(K, V)] =
+    sequenceFile(path, keyClass, valueClass, defaultMinSplits, cloneRecords)
 
   /**
    * Version of sequenceFile() for types implicitly convertible to Writables through a
@@ -490,17 +501,18 @@ class SparkContext(
    * for the appropriate type. In addition, we pass the converter a ClassTag of its type to
    * allow it to figure out the Writable class to use in the subclass case.
    */
-   def sequenceFile[K, V](path: String, minSplits: Int = defaultMinSplits,
-       cloneKeyValues: Boolean = true) (implicit km: ClassTag[K], vm: ClassTag[V],
-          kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
+   def sequenceFile[K, V]
+       (path: String, minSplits: Int = defaultMinSplits, cloneRecords: Boolean = true)
+       (implicit km: ClassTag[K], vm: ClassTag[V],
+        kcf: () => WritableConverter[K], vcf: () => WritableConverter[V])
       : RDD[(K, V)] = {
     val kc = kcf()
     val vc = vcf()
     val format = classOf[SequenceFileInputFormat[Writable, Writable]]
     val writables = hadoopFile(path, format,
         kc.writableClass(km).asInstanceOf[Class[Writable]],
-        vc.writableClass(vm).asInstanceOf[Class[Writable]], minSplits, cloneKeyValues)
-    writables.map{case (k,v) => (kc.convert(k), vc.convert(v))}
+        vc.writableClass(vm).asInstanceOf[Class[Writable]], minSplits, cloneRecords)
+    writables.map { case (k, v) => (kc.convert(k), vc.convert(v)) }
   }
 
   /**
