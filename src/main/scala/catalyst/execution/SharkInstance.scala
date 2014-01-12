@@ -36,7 +36,7 @@ abstract class SharkInstance extends Logging {
   def metastorePath: String
 
   /** The SharkContext */
-  lazy val sc = createContext()
+  lazy val sc: SharkContext = createContext()
 
   protected def createContext(): SharkContext = {
     SharkEnv.initWithSharkContext("catalyst.execution", master)
@@ -45,8 +45,8 @@ abstract class SharkInstance extends Logging {
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
     // TODO: refactor this so we can work with other databases.
-    runSqlHive("set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=" + metastorePath +
-      ";create=true")
+    runSqlHive(
+      s"set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$metastorePath;create=true")
     runSqlHive("set hive.metastore.warehouse.dir=" + warehousePath)
   }
 

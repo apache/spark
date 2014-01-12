@@ -4,7 +4,7 @@ package execution
 /**
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
-class HiveResolutionSuite extends HiveComaparisionTest {
+class HiveResolutionSuite extends HiveComparisonTest {
   import TestShark._
 
   createQueryTest("table.attr",

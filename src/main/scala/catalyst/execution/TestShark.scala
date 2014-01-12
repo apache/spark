@@ -85,7 +85,7 @@ object TestShark extends SharkInstance {
    * hive test cases assume the system is set up.
    */
   private def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase startsWith "LOAD")
+    if (cmd.toUpperCase contains "LOAD DATA")
       cmd.replaceAll("\\.\\.", hiveDevHome.getCanonicalPath)
     else
       cmd
@@ -234,6 +234,8 @@ object TestShark extends SharkInstance {
       // For some reason, RESET does not reset the following variables...
       runSqlHive("set datanucleus.cache.collections=true")
       runSqlHive("set datanucleus.cache.collections.lazy=true")
+      // Lots of tests fail if we do not change the partition whitelist from the default.
+      runSqlHive("set hive.metastore.partition.name.whitelist.pattern=.*")
 
       loadedTables.clear()
       catalog.client.getAllTables("default").foreach { t =>
@@ -261,6 +263,12 @@ object TestShark extends SharkInstance {
       configure()
 
       runSqlHive("USE default")
+
+      // Just loading src makes a lot of tests pass.  This is because some tests do something like
+      // drop an index on src at the beginning.  Since we just pass DDL to hive this bypasses our
+      // Analyzer and thus the test table auto-loading mechanism.
+      // Remove after we handle more DDL operations natively.
+      loadTestTable("src")
     } catch {
       case e: Exception =>
         logger.error(s"FATAL ERROR: Failed to reset TestDB state. $e")

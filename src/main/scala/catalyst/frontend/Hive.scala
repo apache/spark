@@ -82,6 +82,7 @@ object HiveQl {
     "TOK_ALTERINDEX_REBUILD",
     "TOK_ALTERTABLE_ADDCOLS",
     "TOK_ALTERTABLE_ADDPARTS",
+    "TOK_ALTERTABLE_ALTERPARTS",
     "TOK_ALTERTABLE_ARCHIVE",
     "TOK_ALTERTABLE_CLUSTER_SORT",
     "TOK_ALTERTABLE_DROPPARTS",
@@ -90,6 +91,7 @@ object HiveQl {
     "TOK_ALTERTABLE_RENAME",
     "TOK_ALTERTABLE_RENAMECOL",
     "TOK_ALTERTABLE_REPLACECOLS",
+    "TOK_ALTERTABLE_SKEWED",
     "TOK_ALTERTABLE_TOUCH",
     "TOK_ALTERTABLE_UNARCHIVE",
     "TOK_ANALYZE",
@@ -103,6 +105,7 @@ object HiveQl {
 
     // TODO(marmbrus): Figure out how view are expanded by hive, as we might need to handle this.
     "TOK_ALTERVIEW_ADDPARTS",
+    "TOK_ALTERVIEW_AS",
     "TOK_ALTERVIEW_DROPPARTS",
     "TOK_ALTERVIEW_PROPERTIES",
     "TOK_ALTERVIEW_RENAME",
@@ -254,7 +257,7 @@ object HiveQl {
   /** Extractor for matching Hive's AST Tokens. */
   object Token {
     /** @return matches of the form (tokenName, children). */
-    def unapply(t: Any) = t match {
+    def unapply(t: Any): Option[(String, Seq[ASTNode])] = t match {
       case t: ASTNode =>
         Some((t.getText, Option(t.getChildren).map(_.toList).getOrElse(Nil).asInstanceOf[Seq[ASTNode]]))
       case _ => None
@@ -339,8 +342,8 @@ object HiveQl {
   }
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
-    // Just fake explain on create function...
-    case Token("TOK_EXPLAIN", Token("TOK_CREATEFUNCTION", _) :: Nil) => NoRelation
+    // Just fake explain for any of the native commands.
+    case Token("TOK_EXPLAIN", Token(explainType, _) :: Nil) if nativeCommands contains explainType => NoRelation
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: _ :: Nil = getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
@@ -362,13 +365,16 @@ object HiveQl {
 
       // Return one query for each insert clause.
       val queries = insertClauses.map { case Token("TOK_INSERT", singleInsert) =>
-        val (Some(destClause) ::
-            Some(selectClause) ::
+        val (
+            intoClause ::
+            destClause ::
+            selectClause ::
+            selectDistinctClause ::
             whereClause ::
             groupByClause ::
             orderByClause ::
             sortByClause ::
-            limitClause :: Nil) = getClauses(Seq("TOK_DESTINATION", "TOK_SELECT", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), singleInsert)
+            limitClause :: Nil) = getClauses(Seq("TOK_INSERT_INTO", "TOK_DESTINATION", "TOK_SELECT", "TOK_SELECTDI", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), singleInsert)
 
         val relations = nodeToRelation(fromClause)
         val withWhere = whereClause.map { whereNode =>
@@ -376,10 +382,12 @@ object HiveQl {
           Filter(nodeToExpr(whereExpr), relations)
         }.getOrElse(relations)
 
+        val select =
+          (selectClause orElse selectDistinctClause).getOrElse(sys.error("No select clause."))
 
         // Script transformations are expressed as a select clause with a single expression of type
         // TOK_TRANSFORM
-        val transformation = selectClause.getChildren.head match {
+        val transformation = select.getChildren.head match {
           case Token("TOK_SELEXPR",
                  Token("TOK_TRANSFORM",
                    Token("TOK_EXPLIST", inputExprs) ::
@@ -400,7 +408,7 @@ object HiveQl {
         // a script transformation.
         val withProject = transformation.getOrElse {
           // Not a transformation so must be either project or aggregation.
-          val selectExpressions = nameExpressions(selectClause.getChildren.flatMap(selExprNodeToExpr))
+          val selectExpressions = nameExpressions(select.getChildren.flatMap(selExprNodeToExpr))
 
           groupByClause match {
             case Some(groupBy) => Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
@@ -408,20 +416,31 @@ object HiveQl {
           }
         }
 
+        val withDistinct =
+          if(selectDistinctClause.isDefined)
+            Distinct(withProject)
+          else
+            withProject
+
         require(!(orderByClause.isDefined && sortByClause.isDefined), "Can't have both a sort by and order by.")
         // Right now we treat sorting and ordering as identical.
         val withSort =
           (orderByClause orElse sortByClause)
             .map(_.getChildren.map(nodeToSortOrder))
-            .map(Sort(_, withProject))
-            .getOrElse(withProject)
+            .map(Sort(_, withDistinct))
+            .getOrElse(withDistinct)
         val withLimit =
           limitClause.map(l => nodeToExpr(l.getChildren.head))
             .map(StopAfter(_, withSort))
             .getOrElse(withSort)
 
+        // There are two tokens for specifying where to sent the result that seem to be used almost
+        // interchangeably.
+        val resultDestination =
+          (intoClause orElse destClause).getOrElse(sys.error("No destination found."))
+
         nodeToDest(
-          destClause,
+          resultDestination,
           withLimit)
       }
 
@@ -440,12 +459,34 @@ object HiveQl {
            query :: Token(alias, Nil) :: Nil) =>
       Subquery(alias, nodeToPlan(query))
 
-    /* Table, No Alias */
-    case Token("TOK_TABREF",
-           Token("TOK_TABNAME",
-             tableNameParts) :: Nil) =>
-      val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
-      UnresolvedRelation(tableName, None)
+    /* All relations, possibly with aliases or sampling clauses. */
+    case Token("TOK_TABREF", clauses) =>
+      // If the last clause is not a token then it's the alias of the table.
+      val (nonAliasClauses, aliasClause) =
+        if(clauses.last.getText.startsWith("TOK"))
+          (clauses, None)
+        else
+          (clauses.dropRight(1), Some(clauses.last))
+
+      val (Some(tableNameParts) ::
+          splitSampleClause ::
+          bucketSampleClause :: Nil) = getClauses(Seq("TOK_TABNAME", "TOK_TABLESPLITSAMPLE", "TOK_TABLEBUCKETSAMPLE"), nonAliasClauses)
+
+      val tableName = tableNameParts.getChildren.map { case Token(part, Nil) => cleanIdentifier(part) }.mkString(".")
+      val alias = aliasClause.map { case Token(a, Nil) => cleanIdentifier(a) }
+      val relation = UnresolvedRelation(tableName, alias)
+
+      // Apply sampling if requested.
+      (bucketSampleClause orElse splitSampleClause).map {
+        case Token("TOK_TABLESPLITSAMPLE",
+               Token("TOK_ROWCOUNT", Nil) ::
+               Token(count, Nil) :: Nil) =>
+          StopAfter(Literal(count.toInt), relation)
+        case Token("TOK_TABLEBUCKETSAMPLE",
+               Token(numerator, Nil) ::
+               Token(denominator, Nil) :: Nil) =>
+          Sample(numerator.toDouble / denominator.toDouble, relation)
+      }.getOrElse(relation)
 
     case Token("TOK_UNIQUEJOIN", joinArgs) =>
       val tableOrdinals =
@@ -492,14 +533,6 @@ object HiveQl {
       // named output expressions where some aggregate expression has been applied (i.e. First).
       ??? /// Aggregate(groups, Star(None, First(_)) :: Nil, joinedResult)
 
-    /* Table with Alias */
-    case Token("TOK_TABREF",
-           Token("TOK_TABNAME",
-             tableNameParts) ::
-             Token(alias, Nil) :: Nil) =>
-      val tableName = tableNameParts.map { case Token(part, Nil) => part }.mkString(".")
-      UnresolvedRelation(tableName, Some(alias))
-
     case Token(allJoinTokens(joinToken),
            relation1 ::
            relation2 :: other) =>
@@ -510,6 +543,7 @@ object HiveQl {
         case "TOK_LEFTOUTERJOIN" => LeftOuter
         case "TOK_FULLOUTERJOIN" => FullOuter
       }
+      assert(other.size <= 1, "Unhandled join clauses.")
       Join(nodeToRelation(relation1),
         nodeToRelation(relation2),
         joinType,
@@ -529,13 +563,14 @@ object HiveQl {
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
   }
 
+  val destinationToken = "TOK_DESTINATION|TOK_INSERT_INTO".r
   protected def nodeToDest(node: Node, query: LogicalPlan): LogicalPlan = node match {
-    case Token("TOK_DESTINATION",
+    case Token(destinationToken(),
            Token("TOK_DIR",
              Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
       query
 
-    case Token("TOK_DESTINATION",
+    case Token(destinationToken(),
            Token("TOK_TAB",
               tableArgs) :: Nil) =>
       val Some(nameClause) :: partitionClause :: Nil =
@@ -655,6 +690,8 @@ object HiveQl {
     /* UDFs - Must be last otherwise will preempt built in functions */
     case Token("TOK_FUNCTION", Token(name, Nil) :: args) =>
       UnresolvedFunction(name, args.map(nodeToExpr))
+    case Token("TOK_FUNCTIONSTAR", Token(name, Nil) :: args) =>
+      UnresolvedFunction(name, Star(None) :: Nil)
 
     /* Literals */
     case Token("TOK_NULL", Nil) => Literal(null, IntegerType) // TODO: What type is null?

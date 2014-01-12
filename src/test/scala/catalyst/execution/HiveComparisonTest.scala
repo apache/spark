@@ -11,21 +11,42 @@ import util._
  * Allows the creations of tests that execute the same query against both hive
  * and catalyst, comparing the results.
  *
- * The "golden" results from Hive are cached in [[answerCache]] to speed up testing.
+ * The "golden" results from Hive are cached in an retrieved both from the classpath and
+ * [[answerCache]] to speed up testing.
+ *
+ * TODO(marmbrus): Document system properties.
  */
-// TODO: correct the mispelled name.
-abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
+abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with GivenWhenThen with Logging {
   protected val targetDir = new File("target")
+
+  /** The local directory with cached golden answer will be stored. */
   protected val answerCache = new File(targetDir, "comparison-test-cache")
   if (!answerCache.exists)
     answerCache.mkdir()
 
+  /** The [[ClassLoader]] that contains test dependencies.  Used to look for golden answers. */
+  protected val testClassLoader = this.getClass.getClassLoader
+
+  /** A file where all the test cases that pass are written. Can be used to update the whiteList. */
   val passedFile = new File(targetDir, s"$suiteName.passed")
-  val passedList = new PrintWriter(passedFile)
+  protected val passedList = new PrintWriter(passedFile)
 
   override def afterAll() {
     passedList.close()
   }
+
+  /**
+   * When `-Dshark.hive.failFast` is set the first test to fail will cause all subsequent tests to
+   * also fail.
+   */
+  val failFast = System.getProperty("shark.hive.failFast") != null
+  private var testFailed = false
+
+  /**
+   * Delete any cache files that result in test failures.  Used when the test harness has been
+   * updated thus requiring new golden answers to be computed for some tests.
+   */
+  val recomputeCache = System.getProperty("shark.hive.recomputeCache") != null
 
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
@@ -36,7 +57,8 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
 
   protected def prepareAnswer(sharkQuery: TestShark.type#SharkSqlQuery, answer: Seq[String]): Seq[String] = {
     val orderedAnswer = sharkQuery.parsed match {
-      case _: Command => answer.filterNot(nonDeterministicLine) // Clean out nondeterministic time schema info.
+      // Clean out non-deterministic time schema info.
+      case _: Command => answer.filterNot(nonDeterministicLine)
       case _ =>
         val isOrdered = sharkQuery.executedPlan.collect { case s: Sort => s}.nonEmpty
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
@@ -52,7 +74,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
     line.replaceAll("\"lastUpdateTime\":\\d+", "<UPDATETIME>")
 
   /**
-   * Removes non-deterministic paths from [[str]] so cached answers will still pass.
+   * Removes non-deterministic paths from `str` so cached answers will still pass.
    */
   protected def cleanPaths(str: String): String = {
     str.replaceAll("file:\\/.*\\/", "<PATH>")
@@ -61,6 +83,8 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
   val installHooksCommand = "(?i)SET.*hooks".r
   def createQueryTest(testCaseName: String, sql: String) = {
     test(testCaseName) {
+      if(failFast && testFailed) sys.error("Failing fast due to previous failure")
+      testFailed = true
       logger.error(
        s"""
           |=============================
@@ -86,7 +110,7 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
           if (cachedAnswerFile.exists) {
             Some(fileToString(cachedAnswerFile))
           } else if (getClass.getClassLoader.getResourceAsStream(cachedAnswerFile.toString) != null) {
-            Some(resourceToString(cachedAnswerFile.toString))
+            Some(resourceToString(cachedAnswerFile.toString, classLoader = testClassLoader))
           } else {
             logger.debug(s"File $cachedAnswerFile not found")
             None
@@ -123,6 +147,8 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
             computedResults
           }
 
+        testFailed = false
+
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
           info(queryString)
@@ -155,13 +181,18 @@ abstract class HiveComaparisionTest extends FunSuite with BeforeAndAfterAll with
               val hivePrintOut = s"== HIVE - ${hive.size} row(s) ==" +: preparedHive
               val catalystPrintOut = s"== CATALYST - ${catalyst.size} row(s) ==" +: catalyst
 
-              val resultComparision = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
+              val resultComparison = sideBySide(hivePrintOut, catalystPrintOut).mkString("\n")
+
+              if(recomputeCache) {
+                logger.warn(s"Clearing cache files for failed test $testCaseName")
+                hiveCacheFiles.foreach(_.delete())
+              }
 
               fail(
                 s"""
                   |Results do not match for query:
                   |$sharkQuery\n${sharkQuery.analyzed.output.map(_.name).mkString("\t")}
-                  |$resultComparision
+                  |$resultComparison
                 """.stripMargin)
             }
         }

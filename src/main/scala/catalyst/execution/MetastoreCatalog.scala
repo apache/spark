@@ -5,6 +5,7 @@ import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table, StorageDescriptor, SerDeInfo}
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
 import org.apache.hadoop.hive.ql.plan.TableDesc
+import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.AbstractDeserializer
 import org.apache.hadoop.mapred.InputFormat
 
@@ -21,7 +22,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
 
   def lookupRelation(name: String, alias: Option[String]): BaseRelation = {
     val (databaseName, tableName) = name.split("\\.") match {
-      case Array(tableOnly) => ("default", tableOnly)
+      case Array(tableOnly) => (SessionState.get.getCurrentDatabase(), tableOnly)
       case Array(db, table) => (db, table)
     }
     val table = client.getTable(databaseName, tableName)
@@ -46,7 +47,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case InsertIntoCreatedTable(name, child) =>
         val (databaseName, tableName) = name.split("\\.") match {
-          case Array(tableOnly) => ("default", tableOnly)
+          case Array(tableOnly) => (SessionState.get.getCurrentDatabase(), tableOnly)
           case Array(db, table) => (db, table)
         }
 
@@ -81,6 +82,7 @@ object HiveMetatoreTypes {
   def toDataType(metastoreType: String): DataType =
     metastoreType match {
       case "string" => StringType
+      case "float" => FloatType
       case "int" => IntegerType
       case "double" => DoubleType
       case "bigint" => LongType

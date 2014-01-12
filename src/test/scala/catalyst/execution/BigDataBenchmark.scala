@@ -7,7 +7,7 @@ import java.io.File
  * A set of test cases based on the big-data-benchmark.
  * https://amplab.cs.berkeley.edu/benchmark/
  */
-class BigDataBenchmarkTests extends HiveComaparisionTest {
+class BigDataBenchmarkTests extends HiveComparisonTest {
   import TestShark._
 
   val testDataDirectory = new File("target/big-data-benchmark-testdata")

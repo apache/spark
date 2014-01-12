@@ -68,6 +68,16 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   def references = Set.empty
 }
 
+case class Sample(percentage: Double, child: LogicalPlan) extends UnaryNode {
+  def output = child.output
+  def references = Set.empty
+}
+
+case class Distinct(child: LogicalPlan) extends UnaryNode {
+  def output = child.output
+  def references = child.outputSet
+}
+
 case object NoRelation extends LeafNode {
   def output = Nil
 }
