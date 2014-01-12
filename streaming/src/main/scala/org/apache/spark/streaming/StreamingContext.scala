@@ -39,6 +39,7 @@ import org.apache.spark.util.MetadataCleaner
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.streaming.receivers._
 import org.apache.spark.streaming.scheduler._
+import org.apache.hadoop.conf.Configuration
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -88,10 +89,12 @@ class StreamingContext private (
 
   /**
    * Re-create a StreamingContext from a checkpoint file.
-   * @param path Path either to the directory that was specified as the checkpoint directory, or
-   *             to the checkpoint file 'graph' or 'graph.bk'.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   * @param hadoopConf Optional, configuration object if necessary for reading from
+   *                   HDFS compatible filesystems
    */
-  def this(path: String) = this(null, CheckpointReader.read(new SparkConf(), path), null)
+  def this(path: String, hadoopConf: Configuration = new Configuration) =
+    this(null, CheckpointReader.read(path, new SparkConf(), hadoopConf).get, null)
 
   if (sc_ == null && cp_ == null) {
     throw new Exception("Spark Streaming cannot be initialized with " +
@@ -171,8 +174,9 @@ class StreamingContext private (
 
   /**
    * Set the context to periodically checkpoint the DStream operations for master
-   * fault-tolerance. The graph will be checkpointed every batch interval.
-   * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored
+   * fault-tolerance.
+   * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored.
+   *                  Note that this must be a fault-tolerant file system like HDFS for
    */
   def checkpoint(directory: String) {
     if (directory != null) {
@@ -461,26 +465,64 @@ class StreamingContext private (
   }
 }
 
+/**
+ * StreamingContext object contains a number of utility functions related to the
+ * StreamingContext class.
+ */
 
-object StreamingContext {
+object StreamingContext extends Logging {
 
   implicit def toPairDStreamFunctions[K: ClassTag, V: ClassTag](stream: DStream[(K,V)]) = {
     new PairDStreamFunctions[K, V](stream)
   }
 
   /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the StreamingContext
+   * will be created by called the provided `creatingFunc`.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param creatingFunc   Function to create a new StreamingContext
+   * @param hadoopConf     Optional Hadoop configuration if necessary for reading from the
+   *                       file system
+   * @param createOnError  Optional, whether to create a new StreamingContext if there is an
+   *                       error in reading checkpoint data. By default, an exception will be
+   *                       thrown on error.
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      creatingFunc: () => StreamingContext,
+      hadoopConf: Configuration = new Configuration(),
+      createOnError: Boolean = false
+    ): StreamingContext = {
+    val checkpointOption = try {
+      CheckpointReader.read(checkpointPath,  new SparkConf(), hadoopConf)
+    } catch {
+      case e: Exception =>
+        if (createOnError) {
+          None
+        } else {
+          throw e
+        }
+    }
+    checkpointOption.map(new StreamingContext(null, _, null)).getOrElse(creatingFunc())
+  }
+
+  /**
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
-   * their JARs to SparkContext.
+   * their JARs to StreamingContext.
    */
   def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls)
+
 
   protected[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second batch intervals.
-    val sc = new SparkContext(conf)
-    if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
-      MetadataCleaner.setDelaySeconds(sc.conf, 3600)
+    if (MetadataCleaner.getDelaySeconds(conf) < 0) {
+      MetadataCleaner.setDelaySeconds(conf, 3600)
     }
+    val sc = new SparkContext(conf)
     sc
   }
 
@@ -489,14 +531,17 @@ object StreamingContext {
       appName: String,
       sparkHome: String,
       jars: Seq[String],
-      environment: Map[String, String]): SparkContext =
-  {
-    val sc = new SparkContext(master, appName, sparkHome, jars, environment)
+      environment: Map[String, String]
+    ): SparkContext = {
+
+    val conf = SparkContext.updatedConf(
+      new SparkConf(), master, appName, sparkHome, jars, environment)
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second batch intervals.
-    if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
-      MetadataCleaner.setDelaySeconds(sc.conf, 3600)
+    if (MetadataCleaner.getDelaySeconds(conf) < 0) {
+      MetadataCleaner.setDelaySeconds(conf, 3600)
     }
+    val sc = new SparkContext(master, appName, sparkHome, jars, environment)
     sc
   }
 

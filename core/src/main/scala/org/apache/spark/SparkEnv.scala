@@ -54,7 +54,11 @@ class SparkEnv private[spark] (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    val conf: SparkConf) {
+    val conf: SparkConf) extends Logging {
+
+  // A mapping of thread ID to amount of memory used for shuffle in bytes
+  // All accesses should be manually synchronized
+  val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 

@@ -10,11 +10,7 @@ In addition to running on the Mesos or YARN cluster managers, Spark also provide
 
 # Installing Spark Standalone to a Cluster
 
-The easiest way to deploy Spark is by running the `./make-distribution.sh` script to create a binary distribution.
-This distribution can be deployed to any machine with the Java runtime installed; there is no need to install Scala.
-
-The recommended procedure is to deploy and start the master on one node first, get the master spark URL,
-then modify `conf/spark-env.sh` in the `dist/` directory before deploying to all the other nodes.
+To install Spark Standlone mode, you simply place a compiled version of Spark on each node on the cluster. You can obtain pre-built versions of Spark with each release or [build it yourself](index.html#building).
 
 # Starting a Cluster Manually
 
@@ -149,6 +145,38 @@ Note that if you are running spark-shell from one of the spark cluster machines,
 automatically set MASTER from the `SPARK_MASTER_IP` and `SPARK_MASTER_PORT` variables in `conf/spark-env.sh`.
 
 You can also pass an option `-c <numCores>` to control the number of cores that spark-shell uses on the cluster.
+
+# Launching Applications Inside the Cluster
+
+You may also run your application entirely inside of the cluster by submitting your application driver using the submission client. The syntax for submitting applications is as follows:
+
+
+    ./spark-class org.apache.spark.deploy.Client launch 
+       [client-options] \
+       <cluster-url> <application-jar-url> <main-class> \
+       [application-options]
+
+    cluster-url: The URL of the master node.
+    application-jar-url: Path to a bundled jar including your application and all dependencies. Currently, the URL must be globally visible inside of your cluster, for instance, an `hdfs://` path or a `file://` path that is present on all nodes. 
+    main-class: The entry point for your application.
+
+    Client Options:
+      --memory <count> (amount of memory, in MB, allocated for your driver program)
+      --cores <count> (number of cores allocated for your driver program)
+      --supervise (whether to automatically restart your driver on application or node failure)
+      --verbose (prints increased logging output)
+
+Keep in mind that your driver program will be executed on a remote worker machine. You can control the execution environment in the following ways:
+
+ * _Environment variables_: These will be captured from the environment in which you launch the client and applied when launching the driver program.
+ * _Java options_: You can add java options by setting `SPARK_JAVA_OPTS` in the environment in which you launch the submission client.
+ * _Dependencies_: You'll still need to call `sc.addJar` inside of your program to make your bundled application jar visible on all worker nodes.
+
+Once you submit a driver program, it will appear in the cluster management UI at port 8080 and
+be assigned an identifier. If you'd like to prematurely terminate the program, you can do so using
+the same client:
+
+    ./spark-class org.apache.spark.deploy.client.DriverClient kill <driverId>
 
 # Resource Scheduling
 

@@ -258,6 +258,17 @@
         </exclusions>
       </dependency>
       <dependency>
+        <groupId>${akka.group}</groupId>
+        <artifactId>akka-testkit_${scala.binary.version}</artifactId>
+        <version>${akka.version}</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.jboss.netty</groupId>
+            <artifactId>netty</artifactId>
+          </exclusion>
+        </exclusions>
+      </dependency>
+      <dependency>
         <groupId>it.unimi.dsi</groupId>
         <artifactId>fastutil</artifactId>
         <version>6.4.4</version>
@@ -344,6 +355,12 @@
         <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>1.9.1</version>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+          <groupId>org.mockito</groupId>
+          <artifactId>mockito-all</artifactId>
+          <scope>test</scope>
+          <version>1.8.5</version>
       </dependency>
       <dependency>
         <groupId>commons-io</groupId>

@@ -36,6 +36,8 @@ object TwitterPopularTags {
       System.exit(1)
     }
 
+    StreamingExamples.setStreamingLogLevels()
+
     val (master, filters) = (args.head, args.tail)
 
     val ssc = new StreamingContext(master, "TwitterPopularTags", Seconds(2),

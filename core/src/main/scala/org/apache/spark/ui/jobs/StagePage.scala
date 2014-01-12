@@ -171,7 +171,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
-        <h4>Aggregated Metrics by Executors</h4> ++ executorTable.toNodeSeq() ++
+        <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq() ++
         <h4>Tasks</h4> ++ taskTable
 
       headerSparkPage(content, parent.sc, "Details for Stage %d".format(stageId), Stages)

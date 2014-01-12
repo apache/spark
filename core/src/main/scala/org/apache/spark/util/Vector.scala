@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.util.Random
+
 class Vector(val elements: Array[Double]) extends Serializable {
   def length = elements.length
 
@@ -123,6 +125,12 @@ object Vector {
   def zeros(length: Int) = new Vector(new Array[Double](length))
 
   def ones(length: Int) = Vector(length, _ => 1)
+
+  /**
+   * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers 
+   * between 0.0 and 1.0. Optional [[scala.util.Random]] number generator can be provided.
+   */
+  def random(length: Int, random: Random = new XORShiftRandom()) = Vector(length, _ => random.nextDouble())
 
   class Multiplier(num: Double) {
     def * (vec: Vector) = vec * num

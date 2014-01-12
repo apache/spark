@@ -329,13 +329,12 @@ abstract class DStream[T: ClassTag] (
    * implementation clears the old generated RDDs. Subclasses of DStream may override
    * this to clear their own metadata along with the generated RDDs.
    */
-  protected[streaming] def clearOldMetadata(time: Time) {
-    var numForgotten = 0
+  protected[streaming] def clearMetadata(time: Time) {
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
     generatedRDDs --= oldRDDs.keys
-    logInfo("Cleared " + oldRDDs.size + " RDDs that were older than " +
+    logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
       (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
-    dependencies.foreach(_.clearOldMetadata(time))
+    dependencies.foreach(_.clearMetadata(time))
   }
 
   /* Adds metadata to the Stream while it is running.
@@ -356,10 +355,16 @@ abstract class DStream[T: ClassTag] (
    */
   protected[streaming] def updateCheckpointData(currentTime: Time) {
     logInfo("Updating checkpoint data for time " + currentTime)
-    checkpointData.update()
+    checkpointData.update(currentTime)
     dependencies.foreach(_.updateCheckpointData(currentTime))
-    checkpointData.cleanup()
     logDebug("Updated checkpoint data for time " + currentTime + ": " + checkpointData)
+  }
+
+  protected[streaming] def clearCheckpointData(time: Time) {
+    logInfo("Clearing checkpoint data")
+    checkpointData.cleanup(time)
+    dependencies.foreach(_.clearCheckpointData(time))
+    logInfo("Cleared checkpoint data")
   }
 
   /**
