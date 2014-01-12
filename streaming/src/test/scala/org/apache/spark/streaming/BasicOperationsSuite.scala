@@ -375,7 +375,7 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("slice") {
-    val conf2 = conf.clone()
+    val conf2 = new SparkConf()
       .setMaster("local[2]")
       .setAppName("BasicOperationsSuite")
       .set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
