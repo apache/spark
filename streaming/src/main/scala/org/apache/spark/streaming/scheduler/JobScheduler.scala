@@ -63,7 +63,7 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   }
 
   def stop() = synchronized {
-    if (eventActor != null) {
+    if (networkInputTracker != null) {
       jobGenerator.stop()
       networkInputTracker.stop()
       executor.shutdown()
