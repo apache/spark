@@ -21,6 +21,8 @@ import plans.logical.LogicalPlan
 import frontend.hive._
 import util._
 
+object TestShark extends TestSharkInstance
+
 /**
  * A locally running test instance of spark.  The lifecycle for a given query is managed by the
  * inner class [[SharkQuery]].  A [[SharkQuery]] can either be instantiated directly or using the
@@ -49,7 +51,7 @@ import util._
  * metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * testcases that rely on TestShark must be serialized.
  */
-object TestShark extends SharkInstance {
+class TestSharkInstance extends SharkInstance {
   self =>
 
   lazy val master = "local"

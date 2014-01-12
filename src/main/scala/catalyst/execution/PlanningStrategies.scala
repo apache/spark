@@ -24,9 +24,9 @@ trait PlanningStrategies {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       // Push attributes into table scan when possible.
       case p @ logical.Project(projectList, m: MetastoreRelation) if isSimpleProject(projectList) =>
-        execution.HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m, None) :: Nil
+        execution.HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m, None)(sc) :: Nil
       case m: MetastoreRelation =>
-        execution.HiveTableScan(m.output, m, None) :: Nil
+        execution.HiveTableScan(m.output, m, None)(sc) :: Nil
       case _ => Nil
     }
 
@@ -60,7 +60,7 @@ trait PlanningStrategies {
         }
 
         val scan = execution.HiveTableScan(
-          relation.output, relation, pruningPredicates.reduceLeftOption(And))
+          relation.output, relation, pruningPredicates.reduceLeftOption(And))(sc)
 
         otherPredicates
           .reduceLeftOption(And)

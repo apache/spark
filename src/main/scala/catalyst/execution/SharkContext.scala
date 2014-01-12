@@ -15,7 +15,6 @@ import org.apache.hadoop.hive.ql.session.SessionState
 
 import org.apache.spark.{SparkContext, SparkEnv}
 
-
 class SharkContext(
     master: String,
     jobName: String,
@@ -26,8 +25,12 @@ class SharkContext(
 
   @transient val sparkEnv = SparkEnv.get
 
-  SharkContext.init()
-  import SharkContext._
+
+  @transient val hiveconf = new HiveConf(classOf[SessionState])
+
+  @transient val sessionState = new SessionState(hiveconf)
+  sessionState.out = new PrintStream(System.out, true, "UTF-8")
+  sessionState.err = new PrintStream(System.out, true, "UTF-8")
 
   /**
    * Execute the command using Hive and return the results as a sequence. Each element
@@ -62,21 +65,6 @@ class SharkContext(
       Seq(proc.run(cmd_1).getResponseCode.toString)
     }
   }
-}
-
-
-object SharkContext {
-  // Since we can never properly shut down Hive, we put the Hive related initializations
-  // here in a global singleton.
-
-  @transient val hiveconf = new HiveConf(classOf[SessionState])
-
-  @transient val sessionState = new SessionState(hiveconf)
-  sessionState.out = new PrintStream(System.out, true, "UTF-8")
-  sessionState.err = new PrintStream(System.out, true, "UTF-8")
-
-  // A dummy init to make sure the object is properly initialized.
-  def init() {}
 }
 
 

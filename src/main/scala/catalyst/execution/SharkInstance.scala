@@ -53,7 +53,7 @@ abstract class SharkInstance extends Logging {
   configure() // Must be called before initializing the catalog below.
 
   /* A catalyst metadata catalog that points to the Shark/Hive Metastore. */
-  val catalog = new HiveMetastoreCatalog(SharkContext.hiveconf)
+  val catalog = new HiveMetastoreCatalog(sc.hiveconf)
 
   /* An analyzer that uses the Shark/Hive metastore. */
   val analyze = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)

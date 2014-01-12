@@ -34,7 +34,8 @@ import scala.collection.JavaConversions._
 case class HiveTableScan(
     attributes: Seq[Attribute],
     relation: MetastoreRelation,
-    partitionPruningPred: Option[Expression])
+    partitionPruningPred: Option[Expression])(
+    @transient val sc: SharkContext)
   extends LeafNode {
 
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
@@ -51,7 +52,7 @@ case class HiveTableScan(
   }
 
   @transient
-  val hadoopReader = new HadoopTableReader(relation.tableDesc, SharkContext.hiveconf)
+  val hadoopReader = new HadoopTableReader(relation.tableDesc, sc.hiveconf)
 
   /**
    * The hive object inspector for this table, which can be used to extract values from the
