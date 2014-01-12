@@ -432,7 +432,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
-   * will be thrown here.
+   * will be thrown in this thread.
    */
   def waitForStop() {
     waiter.waitForStopOrError()
@@ -440,7 +440,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
-   * will be thrown here.
+   * will be thrown in this thread.
    * @param timeout time to wait
    */
   def waitForStop(timeout: Long) {
@@ -449,6 +449,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Stop the execution of the streams.
+   * @param stopSparkContext Stop the associated SparkContext or not
    */
   def stop(stopSparkContext: Boolean = true) = synchronized {
     scheduler.stop()
