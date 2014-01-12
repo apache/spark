@@ -20,7 +20,7 @@ package org.apache.spark.streaming.util
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream.ForEachDStream
+import org.apache.spark.streaming.dstream.{DStream, ForEachDStream}
 import StreamingContext._
 
 import scala.util.Random

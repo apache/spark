@@ -17,9 +17,8 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Duration, DStream, Time}
+import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
-import collection.mutable.ArrayBuffer
 import org.apache.spark.rdd.UnionRDD
 
 import scala.collection.mutable.ArrayBuffer

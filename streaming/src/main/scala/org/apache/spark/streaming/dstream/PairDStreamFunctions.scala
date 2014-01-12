@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming
+package org.apache.spark.streaming.dstream
 
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.dstream._
@@ -33,6 +33,7 @@ import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.mapred.OutputFormat
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.streaming.{Time, Duration}
 
 class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
 extends Serializable {

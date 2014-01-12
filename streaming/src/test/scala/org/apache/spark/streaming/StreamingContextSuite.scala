@@ -23,6 +23,7 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkException, SparkConf, SparkContext}
 import org.apache.spark.util.{Utils, MetadataCleaner}
+import org.apache.spark.streaming.dstream.DStream
 
 class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
 

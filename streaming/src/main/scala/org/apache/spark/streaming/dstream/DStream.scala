@@ -15,20 +15,21 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming
-
-import StreamingContext._
-import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.MetadataCleaner
+package org.apache.spark.streaming.dstream
 
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
+
+import org.apache.spark.Logging
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.util.MetadataCleaner
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.streaming.Duration
 
 
 /**
@@ -41,7 +42,7 @@ import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
  * by a parent DStream.
  *
  * This class contains the basic operations available on all DStreams, such as `map`, `filter` and
- * `window`. In addition, [[org.apache.spark.streaming.PairDStreamFunctions]] contains operations available
+ * `window`. In addition, [[org.apache.spark.streaming.dstream.PairDStreamFunctions]] contains operations available
  * only on DStreams of key-value pairs, such as `groupByKeyAndWindow` and `join`. These operations
  * are automatically available on any DStream of the right type (e.g., DStream[(Int, Int)] through
  * implicit conversions when `spark.streaming.StreamingContext._` is imported.

@@ -18,6 +18,7 @@
 package org.apache.spark.streaming
 
 import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.dstream.DStream
 
 class WindowOperationsSuite extends TestSuiteBase {
 

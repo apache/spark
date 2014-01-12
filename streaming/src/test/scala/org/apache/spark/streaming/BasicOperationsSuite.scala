@@ -24,6 +24,7 @@ import org.apache.spark.SparkContext._
 
 import util.ManualClock
 import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.streaming.dstream.DStream
 
 class BasicOperationsSuite extends TestSuiteBase {
   test("map") {
