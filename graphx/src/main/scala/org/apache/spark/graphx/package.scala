@@ -3,6 +3,10 @@ package org.apache.spark
 import org.apache.spark.util.collection.OpenHashSet
 
 package object graphx {
+  /**
+   * A 64-bit vertex identifier that uniquely identifies a vertex within a graph. It does not need
+   * to follow any ordering or any constraints other than uniqueness.
+   */
   type VertexID = Long
 
   // TODO: Consider using Char.

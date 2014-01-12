@@ -68,15 +68,14 @@ in graph-parallel systems, GraphX is able to optimize the execution of graph ope
 Prior to the release of GraphX, graph computation in Spark was expressed using Bagel, an
 implementation of Pregel.  GraphX improves upon Bagel by exposing a richer property graph API, a
 more streamlined version of the Pregel abstraction, and system optimizations to improve performance
-and reduce memory overhead.  While we plan to eventually deprecate the Bagel, we will continue to
-support the [Bagel API](api/bagel/index.html#org.apache.spark.bagel.package) and [Bagel programming
-guide](bagel-programming-guide.html). However, we encourage Bagel users to explore the new GraphX
-API and comment on issues that may complicate the transition from Bagel.
+and reduce memory overhead.  While we plan to eventually deprecate Bagel, we will continue to
+support the [Bagel API](api/bagel/index.html#org.apache.spark.bagel.package) and
+[Bagel programming guide](bagel-programming-guide.html). However, we encourage Bagel users to
+explore the new GraphX API and comment on issues that may complicate the transition from Bagel.
 
 # Getting Started
 
-To get started you first need to import Spark and GraphX into your project.  This can be done by
-importing the following:
+To get started you first need to import Spark and GraphX into your project, as follows:
 
 {% highlight scala %}
 import org.apache.spark._
@@ -89,11 +88,11 @@ If you are not using the Spark shell you will also need a Spark context.
 <a name="property_graph"></a>
 
 The [property graph](api/graphx/index.html#org.apache.spark.graphx.Graph) is a directed multigraph
-graph with user defined objects attached to each vertex and edge.  A directed multigraph is a
-directed graph with potentially multiple parallel edges sharing the same source and destination
-vertex.  The ability to support parallel edges simplifies modeling scenarios where there can be
-multiple relationships (e.g., co-worker and friend) between the same vertices.  Each vertex is keyed
-by a *unique* 64-bit long identifier (`VertexId`).  Similarly, edges have corresponding source and
+with user defined objects attached to each vertex and edge.  A directed multigraph is a directed
+graph with potentially multiple parallel edges sharing the same source and destination vertex.  The
+ability to support parallel edges simplifies modeling scenarios where there can be multiple
+relationships (e.g., co-worker and friend) between the same vertices.  Each vertex is keyed by a
+*unique* 64-bit long identifier (`VertexId`).  Similarly, edges have corresponding source and
 destination vertex identifiers. GraphX does not impose any ordering or constraints on the vertex
 identifiers.  The property graph is parameterized over the vertex `VD` and edge `ED` types.  These
 are the types of the objects associated with each vertex and edge respectively.
@@ -102,8 +101,8 @@ are the types of the objects associated with each vertex and edge respectively.
 > int, double, etc...) reducing the in memory footprint.
 
 In some cases we may wish to have vertices with different property types in the same graph. This can
-be accomplished through inheritance.  For example to model users and products as a bipartie graph we
-might do the following:
+be accomplished through inheritance.  For example to model users and products as a bipartite graph
+we might do the following:
 
 {% highlight scala %}
 case class VertexProperty
@@ -159,8 +158,8 @@ val userGraph: Graph[(String, String), String]
 There are numerous ways to construct a property graph from raw files, RDDs, and even synthetic
 generators and these are discussed in more detail in the section on
 [graph builders](#graph_builders).  Probably the most general method is to use the
-[graph singleton](api/graphx/index.html#org.apache.spark.graphx.Graph$).
-For example the following code constructs a graph from a collection of RDDs:
+[Graph object](api/graphx/index.html#org.apache.spark.graphx.Graph$).  For example the following
+code constructs a graph from a collection of RDDs:
 
 {% highlight scala %}
 // Assume the SparkContext has already been constructed
@@ -179,10 +178,11 @@ val defaultUser = ("John Doe", "Missing")
 val graph = Graph(users, relationships, defaultUser)
 {% endhighlight %}
 
-In the above example we make use of the [`Edge`](api/graphx/index.html#org.apache.spark.graphx.Edge)
-case class. Edges have a `srcId` and a `dstId` corresponding to the source and destination vertex
-identifiers. In addition, the `Edge` class contains the `attr` member which contains the edge
-property.
+In the above example we make use of the [`Edge`][Edge] case class. Edges have a `srcId` and a
+`dstId` corresponding to the source and destination vertex identifiers. In addition, the `Edge`
+class contains the `attr` member which contains the edge property.
+
+[Edge]: api/graphx/index.html#org.apache.spark.graphx.Edge
 
 We can deconstruct a graph into the respective vertex and edge views by using the `graph.vertices`
 and `graph.edges` members respectively.
@@ -196,18 +196,19 @@ graph.edges.filter(e => e.srcId > e.dstId).count
 {% endhighlight %}
 
 > Note that `graph.vertices` returns an `VertexRDD[(String, String)]` which extends
-> `RDD[(VertexId, (String, String))]` and so we use the scala `case` expression to deconstruct
-> the tuple.  Alternatively, `graph.edges` returns an `EdgeRDD` containing `Edge[String]` objects.
+> `RDD[(VertexId, (String, String))]` and so we use the scala `case` expression to deconstruct the
+> tuple.  On the other hand, `graph.edges` returns an `EdgeRDD` containing `Edge[String]` objects.
 > We could have also used the case class type constructor as in the following:
 > {% highlight scala %}
 graph.edges.filter { case Edge(src, dst, prop) => src < dst }.count
 {% endhighlight %}
 
 In addition to the vertex and edge views of the property graph, GraphX also exposes a triplet view.
-The triplet view logically joins the vertex and edge properties yielding an `RDD[EdgeTriplet[VD,
-ED]]` containing instances of the
-[`EdgeTriplet`](api/graphx/index.html#org.apache.spark.graphx.EdgeTriplet) class. This *join* can be
-expressed in the following SQL expression:
+The triplet view logically joins the vertex and edge properties yielding an
+`RDD[EdgeTriplet[VD, ED]]` containing instances of the [`EdgeTriplet`][EdgeTriplet] class. This
+*join* can be expressed in the following SQL expression:
+
+[EdgeTriplet]: api/graphx/index.html#org.apache.spark.graphx.EdgeTriplet
 
 {% highlight sql %}
 SELECT src.id, dst.id, src.attr, e.attr, dst.attr
@@ -225,8 +226,7 @@ or graphically as:
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-The [`EdgeTriplet`](api/graphx/index.html#org.apache.spark.graphx.EdgeTriplet) class extends the
-[`Edge`](api/graphx/index.html#org.apache.spark.graphx.Edge) class by adding the `srcAttr` and
+The [`EdgeTriplet`][EdgeTriplet] class extends the [`Edge`][Edge] class by adding the `srcAttr` and
 `dstAttr` members which contain the source and destination properties respectively. We can use the
 triplet view of a graph to render a collection of strings describing relationships between users.
 
@@ -240,14 +240,15 @@ val facts: RDD[String] =
 # Graph Operators
 
 Just as RDDs have basic operations like `map`, `filter`, and `reduceByKey`, property graphs also
-have a collection of basic operators that take user defined function and produce new graphs with
+have a collection of basic operators that take user defined functions and produce new graphs with
 transformed properties and structure.  The core operators that have optimized implementations are
-defined in [`Graph.scala`](api/graphx/index.html#org.apache.spark.graphx.Graph) and convenient
-operators that are expressed as a compositions of the core operators are defined in
-['GraphOps.scala'](api/graphx/index.html#org.apache.spark.graphx.GraphOps).  However, thanks to
-Scala implicits the operators in `GraphOps.scala` are automatically available as members of
-`Graph.scala`.  For example, we can compute the in-degree of each vertex (defined in
-'GraphOps.scala') by the following:
+defined in [`Graph`][Graph] and convenient operators that are expressed as a compositions of the
+core operators are defined in [`GraphOps`][GraphOps].  However, thanks to Scala implicits the
+operators in `GraphOps` are automatically available as members of `Graph`.  For example, we can
+compute the in-degree of each vertex (defined in `GraphOps`) by the following:
+
+[Graph]: api/graphx/index.html#org.apache.spark.graphx.Graph
+[GraphOps]: api/graphx/index.html#org.apache.spark.graphx.GraphOps
 
 {% highlight scala %}
 val graph: Graph[(String, String), String]
@@ -272,20 +273,24 @@ def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 Each of these operators yields a new graph with the vertex or edge properties modified by the user
 defined `map` function.
 
-> Note that in all cases the graph structure is unaffected.  This is a key feature of these
-> operators which allows the resulting graph to reuse the structural indicies and the unaffected
-> properties of the original graph.
-> While the following is logically equivalent to `graph.mapVertices(mapUDF)`, it
-> does not preserve the structural indicies and would not benefit from the substantial system
-> optimizations in GraphX.
+> Note that in all cases the graph structure is unaffected. This is a key feature of these operators
+> which allows the resulting graph to reuse the structural indices of the original graph. The
+> following snippets are logically equivalent, but the first one does not preserve the structural
+> indices and would not benefit from the GraphX system optimizations:
 > {% highlight scala %}
 val newVertices = graph.vertices.map { case (id, attr) => (id, mapUdf(id, attr)) }
 val newGraph = Graph(newVertices, graph.edges)
 {% endhighlight %}
+> Instead, use [`mapVertices`][Graph.mapVertices] to preserve the indices:
+> {% highlight scala %}
+val newGraph = graph.mapVertices((id, attr) => mapUdf(id, attr))
+{% endhighlight %}
+
+[Graph.mapVertices]: api/graphx/index.html#org.apache.spark.graphx.Graph@mapVertices[VD2]((VertexID,VD)⇒VD2)(ClassTag[VD2]):Graph[VD2,ED]
 
 These operators are often used to initialize the graph for a particular computation or project away
 unnecessary properties.  For example, given a graph with the out-degrees as the vertex properties
-(we describe how to construct such a graph later) we initialize for PageRank:
+(we describe how to construct such a graph later), we initialize it for PageRank:
 
 {% highlight scala %}
 // Given a graph where the vertex property is the out-degree
@@ -293,7 +298,7 @@ val inputGraph: Graph[Int, String]
 // Construct a graph where each edge contains the weight
 // and each vertex is the initial PageRank
 val outputGraph: Graph[Double, Double] =
-  inputGraph.mapTriplets(et => 1.0/et.srcAttr).mapVertices(v => 1.0)
+  inputGraph.mapTriplets(et => 1.0 / et.srcAttr).mapVertices(v => 1.0)
 {% endhighlight %}
 
 ## Structural Operators
@@ -310,16 +315,20 @@ def mask[VD2, ED2](other: Graph[VD2, ED2]): Graph[VD, ED]
 def groupEdges(merge: (ED, ED) => ED): Graph[VD,ED]
 {% endhighlight %}
 
-The `reverse` operator returns a new graph with all the edge directions reversed.  This can be
-useful when, for example, trying to compute the inverse PageRank.  Because the reverse operation
-does not modify vertex or edge properties or change the number of edges, it can be implemented
-efficiently without data-movement or duplication.
+The [`reverse`][Graph.reverse] operator returns a new graph with all the edge directions reversed.
+This can be useful when, for example, trying to compute the inverse PageRank.  Because the reverse
+operation does not modify vertex or edge properties or change the number of edges, it can be
+implemented efficiently without data-movement or duplication.
 
-The `subgraph` operator takes vertex and edge predicates and returns the graph containing only the
-vertices that satisfy the vertex predicate (evaluate to true) and edges that satisfy the edge
-predicate *and connect vertices that satisfy the vertex predicate*.  The `subgraph` operator can be
-used in number of situations to restrict the graph to the vertices and edges of interest or
-eliminate broken links. For example in the following code we remove broken links:
+[Graph.reverse]: api/graphx/index.html#org.apache.spark.graphx.Graph@reverse:Graph[VD,ED]
+
+The [`subgraph`][Graph.subgraph] operator takes vertex and edge predicates and returns the graph
+containing only the vertices that satisfy the vertex predicate (evaluate to true) and edges that
+satisfy the edge predicate *and connect vertices that satisfy the vertex predicate*.  The `subgraph`
+operator can be used in number of situations to restrict the graph to the vertices and edges of
+interest or eliminate broken links. For example in the following code we remove broken links:
+
+[Graph.subgraph]: api/graphx/index.html#org.apache.spark.graphx.Graph@subgraph((EdgeTriplet[VD,ED])⇒Boolean,(VertexID,VD)⇒Boolean):Graph[VD,ED]
 
 {% highlight scala %}
 val users: RDD[(VertexId, (String, String))]
@@ -335,11 +344,13 @@ val validGraph = graph.subgraph((id, attr) => attr._2 != "Missing")
 > Note in the above example only the vertex predicate is provided.  The `subgraph` operator defaults
 > to `true` if the vertex or edge predicates are not provided.
 
-The `mask` operator also constructs a subgraph by returning a graph that contains the vertices and
-edges that are also found in the input graph.  This can be used in conjunction with the `subgraph`
-operator to restrict a graph based on the properties in another related graph.  For example, we
-might run connected components using the graph with missing vertices and then restrict the answer to
-the valid subgraph.
+The [`mask`][Graph.mask] operator also constructs a subgraph by returning a graph that contains the
+vertices and edges that are also found in the input graph.  This can be used in conjunction with the
+`subgraph` operator to restrict a graph based on the properties in another related graph.  For
+example, we might run connected components using the graph with missing vertices and then restrict
+the answer to the valid subgraph.
+
+[Graph.mask]: api/graphx/index.html#org.apache.spark.graphx.Graph@mask[VD2,ED2](Graph[VD2,ED2])(ClassTag[VD2],ClassTag[ED2]):Graph[VD,ED]
 
 {% highlight scala %}
 // Run Connected Components
@@ -350,9 +361,11 @@ val validGraph = graph.subgraph((id, attr) => attr._2 != "Missing")
 val validCCGraph = ccGraph.mask(validGraph)
 {% endhighlight %}
 
-The `groupEdges` operator merges parallel edges (i.e., duplicate edges between pairs of vertices) in
-the multigraph.  In many numerical applications, parallel edges can be *added* (their weights
-combined) into a single edge thereby reducing the size of the graph.
+The [`groupEdges`][Graph.groupEdges] operator merges parallel edges (i.e., duplicate edges between
+pairs of vertices) in the multigraph.  In many numerical applications, parallel edges can be *added*
+(their weights combined) into a single edge thereby reducing the size of the graph.
+
+[Graph.groupEdges]: api/graphx/index.html#org.apache.spark.graphx.Graph@groupEdges((ED,ED)⇒ED):Graph[VD,ED]
 
 ## Join Operators
 <a name="join_operators"></a>
@@ -369,11 +382,12 @@ def outerJoinVertices[U, VD2](table: RDD[(VertexID, U)])(map: (VertexID, VD, Opt
   : Graph[VD2, ED]
 {% endhighlight %}
 
-The `joinVertices` operator, defined in
-[`GraphOps.scala`](api/graphx/index.html#org.apache.spark.graphx.GraphOps), joins the vertices with
-the input RDD and returns a new graph with the vertex properties obtained by applying the user
-defined `map` function to the result of the joined vertices.  Vertices without a matching value in
-the RDD retain their original value.
+The [`joinVertices`][GraphOps.joinVertices] operator joins the vertices with the input RDD and
+returns a new graph with the vertex properties obtained by applying the user defined `map` function
+to the result of the joined vertices.  Vertices without a matching value in the RDD retain their
+original value.
+
+[GraphOps.joinVertices]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@joinVertices[U](RDD[(VertexID,U)])((VertexID,VD,U)⇒VD)(ClassTag[U]):Graph[VD,ED]
 
 > Note that if the RDD contains more than one value for a given vertex only one will be used.   It
 > is therefore recommended that the input RDD be first made unique using the following which will
@@ -386,11 +400,14 @@ val joinedGraph = graph.joinVertices(uniqueCosts)(
   (id, oldCost, extraCost) => oldCost + extraCost)
 {% endhighlight %}
 
-The more general `outerJoinVertices` behaves similarly to `joinVertices` except that the user
-defined `map` function is applied to all vertices and can change the vertex property type.  Because
-not all vertices may have a matching value in the input RDD the `map` function takes an `Option`
-type.  For example, we can setup a graph for PageRank by initializing vertex properties with their
-`outDegree`.
+The more general [`outerJoinVertices`][Graph.outerJoinVertices] behaves similarly to `joinVertices`
+except that the user defined `map` function is applied to all vertices and can change the vertex
+property type.  Because not all vertices may have a matching value in the input RDD the `map`
+function takes an `Option` type.  For example, we can setup a graph for PageRank by initializing
+vertex properties with their `outDegree`.
+
+[Graph.outerJoinVertices]: api/graphx/index.html#org.apache.spark.graphx.Graph@outerJoinVertices[U,VD2](RDD[(VertexID,U)])((VertexID,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2]):Graph[VD2,ED]
+
 
 {% highlight scala %}
 val outDegrees: VertexRDD[Int] = graph.outDegrees
