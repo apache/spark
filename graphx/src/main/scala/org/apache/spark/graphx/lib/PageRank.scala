@@ -106,7 +106,7 @@ object PageRank extends Logging {
    * @tparam ED the original edge attribute (not used)
    *
    * @param graph the graph on which to compute PageRank
-   * @param tol the tolerance allowed at convergence (smaller => more * accurate).
+   * @param tol the tolerance allowed at convergence (smaller => more accurate).
    * @param resetProb the random reset probability (alpha)
    *
    * @return the graph containing with each vertex containing the PageRank and each edge

@@ -470,9 +470,39 @@ things to worry about.)
 # Graph Algorithms
 <a name="graph_algorithms"></a>
 
-This section should describe the various algorithms and how they are used.
+GraphX includes a set of graph algorithms in to simplify analytics. The algorithms are contained in the `org.apache.spark.graphx.lib` package and can be accessed directly as methods on `Graph` via an implicit conversion to [`Algorithms`][Algorithms]. This section describes the algorithms and how they are used.
+
+[Algorithms]: api/graphx/index.html#org.apache.spark.graphx.lib.Algorithms
 
 ## PageRank
+
+PageRank measures the importance of each vertex in a graph, assuming an edge from *u* to *v* represents an endorsement of *v*'s importance by *u*. For example, if a Twitter user is followed by many others, the user will be ranked highly.
+
+Spark includes an example social network dataset that we can run PageRank on. A set of users is given in `graphx/data/users.txt`, and a set of relationships between users is given in `graphx/data/followers.txt`. We can compute the PageRank of each user as follows:
+
+{% highlight scala %}
+// Load the implicit conversion to Algorithms
+import org.apache.spark.graphx.lib._
+// Load the datasets into a graph
+val users = sc.textFile("graphx/data/users.txt").map { line =>
+  val fields = line.split("\\s+")
+  (fields(0).toLong, fields(1))
+}
+val followers = sc.textFile("graphx/data/followers.txt").map { line =>
+  val fields = line.split("\\s+")
+  Edge(fields(0).toLong, fields(1).toLong, 1)
+}
+val graph = Graph(users, followers)
+// Run PageRank
+val ranks = graph.pageRank(0.0001).vertices
+// Join the ranks with the usernames
+val ranksByUsername = users.leftOuterJoin(ranks).map {
+  case (id, (username, rankOpt)) => (username, rankOpt.getOrElse(0.0))
+}
+// Print the result
+println(ranksByUsername.collect().mkString("\n"))
+{% endhighlight %}
+
 
 ## Connected Components
 
