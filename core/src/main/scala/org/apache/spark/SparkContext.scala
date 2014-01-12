@@ -756,8 +756,11 @@ class SparkContext(
 
   private[spark] def getCallSite(): String = {
     val callSite = getLocalProperty("externalCallSite")
-    if (callSite == null) return Utils.formatSparkCallSite
-    callSite
+    if (callSite == null) {
+      Utils.formatSparkCallSite
+    } else {
+      callSite
+    }
   }
 
   /**
@@ -907,7 +910,7 @@ class SparkContext(
    */
   private[spark] def clean[F <: AnyRef](f: F): F = {
     ClosureCleaner.clean(f)
-    return f
+    f
   }
 
   /**
@@ -919,7 +922,7 @@ class SparkContext(
       val path = new Path(dir, UUID.randomUUID().toString)
       val fs = path.getFileSystem(hadoopConfiguration)
       fs.mkdirs(path)
-      fs.getFileStatus(path).getPath().toString
+      fs.getFileStatus(path).getPath.toString
     }
   }
 

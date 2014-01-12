@@ -47,7 +47,7 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
         dependencies: List[Dependency[_]]
       ): MyRDD = {
       val maxPartition = numPartitions - 1
-      return new MyRDD(sc, dependencies) {
+      new MyRDD(sc, dependencies) {
         override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
           throw new RuntimeException("should not be reached")
         override def getPartitions = (0 to maxPartition).map(i => new Partition {

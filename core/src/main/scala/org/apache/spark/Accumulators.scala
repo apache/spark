@@ -218,7 +218,7 @@ private object Accumulators {
 
   def newId: Long = synchronized {
     lastId += 1
-    return lastId
+    lastId
   }
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {

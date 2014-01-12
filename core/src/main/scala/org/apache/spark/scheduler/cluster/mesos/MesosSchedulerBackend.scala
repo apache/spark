@@ -141,13 +141,13 @@ private[spark] class MesosSchedulerBackend(
       // Serialize the map as an array of (String, String) pairs
       execArgs = Utils.serialize(props.toArray)
     }
-    return execArgs
+    execArgs
   }
 
   private def setClassLoader(): ClassLoader = {
     val oldClassLoader = Thread.currentThread.getContextClassLoader
     Thread.currentThread.setContextClassLoader(classLoader)
-    return oldClassLoader
+    oldClassLoader
   }
 
   private def restoreClassLoader(oldClassLoader: ClassLoader) {
@@ -255,7 +255,7 @@ private[spark] class MesosSchedulerBackend(
       .setType(Value.Type.SCALAR)
       .setScalar(Value.Scalar.newBuilder().setValue(1).build())
       .build()
-    return MesosTaskInfo.newBuilder()
+    MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
       .setExecutor(createExecutorInfo(slaveId))

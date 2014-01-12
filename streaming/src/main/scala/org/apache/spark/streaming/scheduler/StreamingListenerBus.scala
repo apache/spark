@@ -76,6 +76,6 @@ private[spark] class StreamingListenerBus() extends Logging {
        * add overhead in the general case. */
       Thread.sleep(10)
     }
-    return true
+    true
   }
 }

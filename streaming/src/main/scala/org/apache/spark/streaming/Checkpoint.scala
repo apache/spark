@@ -203,6 +203,6 @@ class ObjectInputStreamWithLoader(inputStream_ : InputStream, loader: ClassLoade
     } catch {
       case e: Exception =>
     }
-    return super.resolveClass(desc)
+    super.resolveClass(desc)
   }
 }

@@ -47,17 +47,17 @@ private[spark] class HttpFileServer extends Logging {
   
   def addFile(file: File) : String = {
     addFileToDir(file, fileDir)
-    return serverUri + "/files/" + file.getName
+    serverUri + "/files/" + file.getName
   }
   
   def addJar(file: File) : String = {
     addFileToDir(file, jarDir)
-    return serverUri + "/jars/" + file.getName
+    serverUri + "/jars/" + file.getName
   }
   
   def addFileToDir(file: File, dir: File) : String = {
     Files.copy(file, new File(dir, file.getName))
-    return dir + "/" + file.getName
+    dir + "/" + file.getName
   }
   
 }

@@ -42,7 +42,7 @@ class ClientDistributedCacheManagerSuite extends FunSuite with MockitoSugar {
   class MockClientDistributedCacheManager extends ClientDistributedCacheManager {
     override def getVisibility(conf: Configuration, uri: URI, statCache: Map[URI, FileStatus]): 
         LocalResourceVisibility = {
-      return LocalResourceVisibility.PRIVATE
+      LocalResourceVisibility.PRIVATE
     }
   }
   

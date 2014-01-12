@@ -158,7 +158,7 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     val appContext = Records.newRecord(classOf[ApplicationSubmissionContext])
     appContext.setApplicationId(appId)
     appContext.setApplicationName(args.appName)
-    return appContext
+    appContext
   }
 
   /** See if two file systems are the same or not. */
@@ -191,9 +191,10 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     }
     //check for ports
     if (srcUri.getPort() != dstUri.getPort()) {
-      return false
+      false
+    } else {
+      true
     }
-    return true
   }
 
   /** Copy the file into HDFS if needed. */
@@ -299,7 +300,7 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     }
 
     UserGroupInformation.getCurrentUser().addCredentials(credentials)
-    return localResources
+    localResources
   }
 
   def setupLaunchEnv(

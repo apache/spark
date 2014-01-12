@@ -95,7 +95,7 @@ private[spark] class PythonRDD[T: ClassTag](
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
-    return new Iterator[Array[Byte]] {
+    new Iterator[Array[Byte]] {
       def next(): Array[Byte] = {
         val obj = _nextObj
         if (hasNext) {

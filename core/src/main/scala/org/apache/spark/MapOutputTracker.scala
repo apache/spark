@@ -139,7 +139,7 @@ private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
           return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, fetchedStatuses)
         }
       }
-      else{
+      else {
         throw new FetchFailedException(null, shuffleId, -1, reduceId,
           new Exception("Missing all output locations for shuffle " + shuffleId))
       }
@@ -185,7 +185,7 @@ private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
 private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   extends MapOutputTracker(conf) {
 
-  // Cache a serialized version of the output statuses for each shuffle to send them out faster
+  // Cache a serialized version of the output statuses for each shuffle to send them out faster                          return
   private var cacheEpoch = epoch
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]
 

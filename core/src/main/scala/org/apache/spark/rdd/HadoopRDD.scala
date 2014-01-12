@@ -99,11 +99,11 @@ class HadoopRDD[K, V](
     val conf: Configuration = broadcastedConf.value.value
     if (conf.isInstanceOf[JobConf]) {
       // A user-broadcasted JobConf was provided to the HadoopRDD, so always use it.
-      return conf.asInstanceOf[JobConf]
+      conf.asInstanceOf[JobConf]
     } else if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
       // getJobConf() has been called previously, so there is already a local cache of the JobConf
       // needed by this RDD.
-      return HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
+      HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
     } else {
       // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in the
       // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
@@ -111,7 +111,7 @@ class HadoopRDD[K, V](
       val newJobConf = new JobConf(broadcastedConf.value.value)
       initLocalJobConfFuncOpt.map(f => f(newJobConf))
       HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
-      return newJobConf
+      newJobConf
     }
   }
 
@@ -127,7 +127,7 @@ class HadoopRDD[K, V](
       newInputFormat.asInstanceOf[Configurable].setConf(conf)
     }
     HadoopRDD.putCachedMetadata(inputFormatCacheKey, newInputFormat)
-    return newInputFormat
+    newInputFormat
   }
 
   override def getPartitions: Array[Partition] = {

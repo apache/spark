@@ -296,9 +296,9 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
     val prefPartActual = prefPart.get
 
     if (minPowerOfTwo.size + slack <= prefPartActual.size)  // more imbalance than the slack allows
-      return minPowerOfTwo  // prefer balance over locality
+      minPowerOfTwo  // prefer balance over locality
     else {
-      return prefPartActual // prefer locality over balance
+      prefPartActual // prefer locality over balance
     }
   }
 

@@ -41,7 +41,7 @@ trait Logging {
       }
       log_ = LoggerFactory.getLogger(className)
     }
-    return log_
+    log_
   }
 
   // Log methods that take only a String

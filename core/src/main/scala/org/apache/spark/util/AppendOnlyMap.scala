@@ -67,7 +67,7 @@ class AppendOnlyMap[K, V](initialCapacity: Int = 64) extends Iterable[(K, V)] wi
         i += 1
       }
     }
-    return null.asInstanceOf[V]
+    null.asInstanceOf[V]
   }
 
   /** Set the value for a key */
