@@ -140,7 +140,8 @@ class SparkContext(
   // Create a classLoader for use by the driver so that jars added via addJar are available to the driver
   // Do this before all other initialization so that any thread pools created for this SparkContext
   // uses the class loader
-  private[spark] val classLoader = new ExecutorURLClassLoader(Array.empty[URL], this.getClass.getClassLoader)
+  private[spark] val classLoader = new ExecutorURLClassLoader(Array.empty[URL],
+                                     this.getClass.getClassLoader)
   Thread.currentThread.setContextClassLoader(classLoader)
 
   // Create the Spark execution environment (cache, map output tracker, etc)
