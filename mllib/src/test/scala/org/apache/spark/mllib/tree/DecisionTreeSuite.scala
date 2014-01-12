@@ -30,6 +30,7 @@ import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.impurity.{Entropy, Gini}
 import org.apache.spark.mllib.tree.model.Filter
 import org.apache.spark.mllib.tree.configuration.Strategy
+import org.apache.spark.mllib.tree.configuration.Algo._
 
 class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
 
@@ -48,7 +49,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy("regression",Gini,3,100,"sort")
+    val strategy = new Strategy(Regression,Gini,3,100)
     val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
     assert(splits.length==2)
     assert(bins.length==2)
@@ -61,7 +62,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy("regression",Gini,3,100,"sort")
+    val strategy = new Strategy(Regression,Gini,3,100)
     val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
     assert(splits.length==2)
     assert(splits(0).length==99)
@@ -87,7 +88,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy("regression",Gini,3,100,"sort")
+    val strategy = new Strategy(Regression,Gini,3,100)
     val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
     assert(splits.length==2)
     assert(splits(0).length==99)
@@ -113,7 +114,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy("regression",Entropy,3,100,"sort")
+    val strategy = new Strategy(Regression,Entropy,3,100)
     val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
     assert(splits.length==2)
     assert(splits(0).length==99)
@@ -138,7 +139,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel1()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
-    val strategy = new Strategy("regression",Entropy,3,100,"sort")
+    val strategy = new Strategy(Regression,Entropy,3,100)
     val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
     assert(splits.length==2)
     assert(splits(0).length==99)

@@ -26,6 +26,7 @@ import org.apache.spark.mllib.tree.model.Split
 import scala.util.control.Breaks._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
+import org.apache.spark.mllib.tree.configuration.FeatureType._
 
 
 class DecisionTree(val strategy : Strategy) extends Serializable with Logging {
@@ -353,21 +354,13 @@ object DecisionTree extends Serializable with Logging {
     def extractLeftRightNodeAggregates(binData: Array[Double]): (Array[Array[Double]], Array[Array[Double]]) = {
       val leftNodeAgg = Array.ofDim[Double](numFeatures, 2 * (numSplits - 1))
       val rightNodeAgg = Array.ofDim[Double](numFeatures, 2 * (numSplits - 1))
-      //logDebug("binData.length = " + binData.length)
-      //logDebug("binData.sum = " + binData.sum)
       for (featureIndex <- 0 until numFeatures) {
-        //logDebug("featureIndex = " + featureIndex)
         val shift = 2*featureIndex*numSplits
         leftNodeAgg(featureIndex)(0) = binData(shift + 0)
-        //logDebug("binData(shift + 0) = " + binData(shift + 0))
         leftNodeAgg(featureIndex)(1) = binData(shift + 1)
-        //logDebug("binData(shift + 1) = " + binData(shift + 1))
         rightNodeAgg(featureIndex)(2 * (numSplits - 2)) = binData(shift + (2 * (numSplits - 1)))
-        //logDebug(binData(shift + (2 * (numSplits - 1))))
         rightNodeAgg(featureIndex)(2 * (numSplits - 2) + 1) = binData(shift + (2 * (numSplits - 1)) + 1)
-        //logDebug(binData(shift + (2 * (numSplits - 1)) + 1))
         for (splitIndex <- 1 until numSplits - 1) {
-          //logDebug("splitIndex = " + splitIndex)
           leftNodeAgg(featureIndex)(2 * splitIndex)
             = binData(shift + 2*splitIndex) + leftNodeAgg(featureIndex)(2 * splitIndex - 2)
           leftNodeAgg(featureIndex)(2 * splitIndex + 1)
@@ -479,33 +472,43 @@ object DecisionTree extends Serializable with Logging {
 
         //Find all splits
         for (featureIndex <- 0 until numFeatures){
-          val featureSamples  = sampledInput.map(lp => lp.features(featureIndex)).sorted
+          val isFeatureContinous = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
+          if (isFeatureContinous) {
+            val featureSamples  = sampledInput.map(lp => lp.features(featureIndex)).sorted
 
-          val stride : Double = numSamples.toDouble/numBins
-          logDebug("stride = " + stride)
-          for (index <- 0 until numBins-1) {
-            val sampleIndex = (index+1)*stride.toInt
-            val split = new Split(featureIndex,featureSamples(sampleIndex),"continuous")
-            splits(featureIndex)(index) = split
+            val stride : Double = numSamples.toDouble/numBins
+            logDebug("stride = " + stride)
+            for (index <- 0 until numBins-1) {
+              val sampleIndex = (index+1)*stride.toInt
+              val split = new Split(featureIndex,featureSamples(sampleIndex),Continuous)
+              splits(featureIndex)(index) = split
+            }
+          } else {
+            val maxFeatureValue = strategy.categoricalFeaturesInfo(featureIndex)
+            for (index <- 0 until maxFeatureValue){
+              //TODO: Sort by centriod
+              val split = new Split(featureIndex,index,Categorical)
+              splits(featureIndex)(index) = split
+            }
           }
         }
 
         //Find all bins
         for (featureIndex <- 0 until numFeatures){
           bins(featureIndex)(0)
-            = new Bin(new DummyLowSplit("continuous"),splits(featureIndex)(0),"continuous")
+            = new Bin(new DummyLowSplit(Continuous),splits(featureIndex)(0),Continuous)
           for (index <- 1 until numBins - 1){
-            val bin = new Bin(splits(featureIndex)(index-1),splits(featureIndex)(index),"continuous")
+            val bin = new Bin(splits(featureIndex)(index-1),splits(featureIndex)(index),Continuous)
             bins(featureIndex)(index) = bin
           }
           bins(featureIndex)(numBins-1)
-            = new Bin(splits(featureIndex)(numBins-3),new DummyHighSplit("continuous"),"continuous")
+            = new Bin(splits(featureIndex)(numBins-3),new DummyHighSplit(Continuous),Continuous)
         }
 
         (splits,bins)
       }
       case MinMax => {
-        (Array.ofDim[Split](numFeatures,numBins),Array.ofDim[Bin](numFeatures,numBins+2))
+        throw new UnsupportedOperationException("minmax not supported yet.")
       }
       case ApproxHist => {
         throw new UnsupportedOperationException("approximate histogram not supported yet.")

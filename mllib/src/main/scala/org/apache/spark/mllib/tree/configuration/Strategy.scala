@@ -25,7 +25,8 @@ class Strategy  (
                 val impurity : Impurity,
                 val maxDepth : Int,
                 val maxBins : Int,
-                val quantileCalculationStrategy : QuantileStrategy = Sort) extends Serializable {
+                val quantileCalculationStrategy : QuantileStrategy = Sort,
+                val categoricalFeaturesInfo : Map[Int,Int] = Map[Int,Int]()) extends Serializable {
 
   var numBins : Int  = Int.MinValue
 

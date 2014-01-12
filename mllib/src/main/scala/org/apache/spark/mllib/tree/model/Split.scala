@@ -16,11 +16,13 @@
  */
 package org.apache.spark.mllib.tree.model
 
-case class Split(feature: Int, threshold : Double, kind : String){
-  override def toString = "Feature = " + feature + ", threshold = " + threshold + ", kind =  " + kind
+import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
+
+case class Split(feature: Int, threshold : Double, featureType : FeatureType){
+  override def toString = "Feature = " + feature + ", threshold = " + threshold + ", featureType =  " + featureType
 }
 
-class DummyLowSplit(kind : String) extends Split(Int.MinValue, Double.MinValue, kind)
+class DummyLowSplit(kind : FeatureType) extends Split(Int.MinValue, Double.MinValue, kind)
 
-class DummyHighSplit(kind : String) extends Split(Int.MaxValue, Double.MaxValue, kind)
+class DummyHighSplit(kind : FeatureType) extends Split(Int.MaxValue, Double.MaxValue, kind)
 
