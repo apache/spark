@@ -22,7 +22,7 @@ import scala.util.Random
 import scala.util.Sorting
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext}
+import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext, SparkConf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoRegistrator
@@ -578,12 +578,13 @@ object ALS {
     val implicitPrefs = if (args.length >= 7) args(6).toBoolean else false
     val alpha = if (args.length >= 8) args(7).toDouble else 1
     val blocks = if (args.length == 9) args(8).toInt else -1
-    val sc = new SparkContext(master, "ALS")
-    sc.conf.set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    sc.conf.set("spark.kryo.registrator",  classOf[ALSRegistrator].getName)
-    sc.conf.set("spark.kryo.referenceTracking", "false")
-    sc.conf.set("spark.kryoserializer.buffer.mb", "8")
-    sc.conf.set("spark.locality.wait", "10000")
+    val conf = new SparkConf()
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator",  classOf[ALSRegistrator].getName)
+      .set("spark.kryo.referenceTracking", "false")
+      .set("spark.kryoserializer.buffer.mb", "8")
+      .set("spark.locality.wait", "10000")
+    val sc = new SparkContext(master, "ALS", conf)
 
     val ratings = sc.textFile(ratingsFile).map { line =>
       val fields = line.split(',')

@@ -99,8 +99,6 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       }, preservesPartitioning = true)
     } else {
       // Don't apply map-side combiner.
-      // A sanity check to make sure mergeCombiners is not defined.
-      assert(mergeCombiners == null)
       val values = new ShuffledRDD[K, V, (K, V)](self, partitioner).setSerializer(serializerClass)
       values.mapPartitionsWithContext((context, iter) => {
         new InterruptibleIterator(context, aggregator.combineValuesByKey(iter))
@@ -267,8 +265,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     // into a hash table, leading to more objects in the old gen.
     def createCombiner(v: V) = ArrayBuffer(v)
     def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
+    def mergeCombiners(c1: ArrayBuffer[V], c2: ArrayBuffer[V]) = c1 ++ c2
     val bufs = combineByKey[ArrayBuffer[V]](
-      createCombiner _, mergeValue _, null, partitioner, mapSideCombine=false)
+      createCombiner _, mergeValue _, mergeCombiners _, partitioner, mapSideCombine=false)
     bufs.asInstanceOf[RDD[(K, Seq[V])]]
   }
 
@@ -339,7 +338,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * existing partitioner/parallelism level.
    */
   def combineByKey[C](createCombiner: V => C, mergeValue: (C, V) => C, mergeCombiners: (C, C) => C)
-      : RDD[(K, C)] = {
+    : RDD[(K, C)] = {
     combineByKey(createCombiner, mergeValue, mergeCombiners, defaultPartitioner(self))
   }
 
