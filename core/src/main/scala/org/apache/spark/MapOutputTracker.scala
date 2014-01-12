@@ -185,7 +185,7 @@ private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
 private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   extends MapOutputTracker(conf) {
 
-  // Cache a serialized version of the output statuses for each shuffle to send them out faster                          return
+  // Cache a serialized version of the output statuses for each shuffle to send them out faster
   private var cacheEpoch = epoch
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]
 
