@@ -48,11 +48,11 @@ class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputS
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param conf The Hadoop configuration.
- * @param cloneKeyValues If true, explicitly clone the records produced by Hadoop RecordReader.
- *                       Most RecordReader implementations reuse wrapper objects across multiple
- *                       records, and can cause problems in RDD collect or aggregation operations.
- *                       By default the records are cloned in Spark. However, application
- *                       programmers can explicitly disable the cloning for better performance.
+ * @param cloneRecords If true, Spark will clone the records produced by Hadoop RecordReader.
+ *                     Most RecordReader implementations reuse wrapper objects across multiple
+ *                     records, and can cause problems in RDD collect or aggregation operations.
+ *                     By default the records are cloned in Spark. However, application
+ *                     programmers can explicitly disable the cloning for better performance.
  */
 class NewHadoopRDD[K: ClassTag, V: ClassTag](
     sc : SparkContext,
@@ -60,7 +60,7 @@ class NewHadoopRDD[K: ClassTag, V: ClassTag](
     keyClass: Class[K],
     valueClass: Class[V],
     @transient conf: Configuration,
-    cloneKeyValues: Boolean)
+    cloneRecords: Boolean)
   extends RDD[(K, V)](sc, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
@@ -127,7 +127,7 @@ class NewHadoopRDD[K: ClassTag, V: ClassTag](
         havePair = false
         val key = reader.getCurrentKey
         val value = reader.getCurrentValue
-        if (cloneKeyValues) {
+        if (cloneRecords) {
           (keyCloneFunc(key.asInstanceOf[Writable]), valueCloneFunc(value.asInstanceOf[Writable]))
         } else {
           (key, value)

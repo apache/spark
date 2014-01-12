@@ -64,11 +64,11 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minSplits Minimum number of Hadoop Splits (HadoopRDD partitions) to generate.
- * @param cloneKeyValues If true, explicitly clone the records produced by Hadoop RecordReader.
- *                       Most RecordReader implementations reuse wrapper objects across multiple
- *                       records, and can cause problems in RDD collect or aggregation operations.
- *                       By default the records are cloned in Spark. However, application
- *                       programmers can explicitly disable the cloning for better performance.
+ * @param cloneRecords If true, Spark will clone the records produced by Hadoop RecordReader.
+ *                     Most RecordReader implementations reuse wrapper objects across multiple
+ *                     records, and can cause problems in RDD collect or aggregation operations.
+ *                     By default the records are cloned in Spark. However, application
+ *                     programmers can explicitly disable the cloning for better performance.
  */
 class HadoopRDD[K: ClassTag, V: ClassTag](
     sc: SparkContext,
@@ -78,7 +78,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
     keyClass: Class[K],
     valueClass: Class[V],
     minSplits: Int,
-    cloneKeyValues: Boolean)
+    cloneRecords: Boolean)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   def this(
@@ -88,7 +88,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
       keyClass: Class[K],
       valueClass: Class[V],
       minSplits: Int,
-      cloneKeyValues: Boolean) = {
+      cloneRecords: Boolean) = {
     this(
       sc,
       sc.broadcast(new SerializableWritable(conf))
@@ -98,7 +98,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
       keyClass,
       valueClass,
       minSplits,
-      cloneKeyValues)
+      cloneRecords)
   }
 
   protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
@@ -180,7 +180,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
           case eof: EOFException =>
             finished = true
         }
-        if (cloneKeyValues) {
+        if (cloneRecords) {
           (keyCloneFunc(key.asInstanceOf[Writable]), valueCloneFunc(value.asInstanceOf[Writable]))
         } else {
           (key, value)
