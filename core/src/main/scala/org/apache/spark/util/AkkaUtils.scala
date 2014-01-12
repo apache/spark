@@ -39,7 +39,7 @@ private[spark] object AkkaUtils {
    */
   def createActorSystem(name: String, host: String, port: Int,
                         indestructible: Boolean = false,
-                        classLoader: ClassLoader = this.getClass.getClassLoader)
+                        classLoader: ClassLoader = Thread.currentThread.getContextClassLoader)
     : (ActorSystem, Int) = {
 
     val akkaThreads   = System.getProperty("spark.akka.threads", "4").toInt
