@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import dstream.InputDStream
+import org.apache.spark.streaming.dstream.{NetworkInputDStream, InputDStream}
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
 import collection.mutable.ArrayBuffer
 import org.apache.spark.Logging
@@ -102,6 +102,12 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   def getInputStreams() = this.synchronized { inputStreams.toArray }
 
   def getOutputStreams() = this.synchronized { outputStreams.toArray }
+
+  def getNetworkInputStreams() = this.synchronized {
+    inputStreams.filter(_.isInstanceOf[NetworkInputDStream[_]])
+      .map(_.asInstanceOf[NetworkInputDStream[_]])
+      .toArray
+  }
 
   def generateJobs(time: Time): Seq[Job] = {
     logDebug("Generating jobs for time " + time)

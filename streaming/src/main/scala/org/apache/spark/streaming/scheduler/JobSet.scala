@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.scheduler
 
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.{ArrayBuffer, HashSet}
 import org.apache.spark.streaming.Time
 
 /** Class representing a set of Jobs
@@ -27,25 +27,25 @@ private[streaming]
 case class JobSet(time: Time, jobs: Seq[Job]) {
 
   private val incompleteJobs = new HashSet[Job]()
-  var submissionTime = System.currentTimeMillis() // when this jobset was submitted
-  var processingStartTime = -1L // when the first job of this jobset started processing
-  var processingEndTime = -1L // when the last job of this jobset finished processing
+  private val submissionTime = System.currentTimeMillis() // when this jobset was submitted
+  private var processingStartTime = -1L // when the first job of this jobset started processing
+  private var processingEndTime = -1L // when the last job of this jobset finished processing
 
   jobs.zipWithIndex.foreach { case (job, i) => job.setId(i) }
   incompleteJobs ++= jobs
 
-  def beforeJobStart(job: Job) {
+  def handleJobStart(job: Job) {
     if (processingStartTime < 0) processingStartTime = System.currentTimeMillis()
   }
 
-  def afterJobStop(job: Job) {
+  def handleJobCompletion(job: Job) {
     incompleteJobs -= job
     if (hasCompleted) processingEndTime = System.currentTimeMillis()
   }
 
-  def hasStarted() = (processingStartTime > 0)
+  def hasStarted = processingStartTime > 0
 
-  def hasCompleted() = incompleteJobs.isEmpty
+  def hasCompleted = incompleteJobs.isEmpty
 
   // Time taken to process all the jobs from the time they started processing
   // (i.e. not including the time they wait in the streaming scheduler queue)
@@ -57,7 +57,7 @@ case class JobSet(time: Time, jobs: Seq[Job]) {
     processingEndTime - time.milliseconds
   }
 
-  def toBatchInfo(): BatchInfo = {
+  def toBatchInfo: BatchInfo = {
     new BatchInfo(
       time,
       submissionTime,

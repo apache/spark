@@ -42,11 +42,9 @@ private[streaming] case class DeregisterReceiver(streamId: Int, msg: String) ext
  * This class manages the execution of the receivers of NetworkInputDStreams.
  */
 private[streaming]
-class NetworkInputTracker(
-    @transient ssc: StreamingContext,
-    @transient networkInputStreams: Array[NetworkInputDStream[_]])
-  extends Logging {
+class NetworkInputTracker(ssc: StreamingContext) extends Logging {
 
+  val networkInputStreams = ssc.graph.getNetworkInputStreams()
   val networkInputStreamMap = Map(networkInputStreams.map(x => (x.id, x)): _*)
   val receiverExecutor = new ReceiverExecutor()
   val receiverInfo = new HashMap[Int, ActorRef]
@@ -57,15 +55,19 @@ class NetworkInputTracker(
 
   /** Start the actor and receiver execution thread. */
   def start() {
-    ssc.env.actorSystem.actorOf(Props(new NetworkInputTrackerActor), "NetworkInputTracker")
-    receiverExecutor.start()
+    if (!networkInputStreams.isEmpty) {
+      ssc.env.actorSystem.actorOf(Props(new NetworkInputTrackerActor), "NetworkInputTracker")
+      receiverExecutor.start()
+    }
   }
 
   /** Stop the receiver execution thread. */
   def stop() {
-    // TODO: stop the actor as well
-    receiverExecutor.interrupt()
-    receiverExecutor.stopReceivers()
+    if (!networkInputStreams.isEmpty) {
+      receiverExecutor.interrupt()
+      receiverExecutor.stopReceivers()
+      logInfo("NetworkInputTracker stopped")
+    }
   }
 
   /** Return all the blocks received from a receiver. */
