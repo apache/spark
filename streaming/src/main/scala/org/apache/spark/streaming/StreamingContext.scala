@@ -46,7 +46,7 @@ import org.apache.hadoop.conf.Configuration
  * information (such as, cluster URL and job name) to internally create a SparkContext, it provides
  * methods used to create DStream from various input sources.
  */
-class StreamingContext private (
+class StreamingContext private[streaming] (
     sc_ : SparkContext,
     cp_ : Checkpoint,
     batchDur_ : Duration
@@ -101,20 +101,9 @@ class StreamingContext private (
       "both SparkContext and checkpoint as null")
   }
 
-  private val conf_ = Option(sc_).map(_.conf).getOrElse(cp_.sparkConf)
+  private[streaming] val isCheckpointPresent = (cp_ != null)
 
-  if(cp_ != null && cp_.delaySeconds >= 0 && MetadataCleaner.getDelaySeconds(conf_) < 0) {
-    MetadataCleaner.setDelaySeconds(conf_, cp_.delaySeconds)
-  }
-
-  if (MetadataCleaner.getDelaySeconds(conf_) < 0) {
-    throw new SparkException("Spark Streaming cannot be used without setting spark.cleaner.ttl; "
-      + "set this property before creating a SparkContext (use SPARK_JAVA_OPTS for the shell)")
-  }
-
-  protected[streaming] val isCheckpointPresent = (cp_ != null)
-
-  protected[streaming] val sc: SparkContext = {
+  private[streaming] val sc: SparkContext = {
     if (isCheckpointPresent) {
       new SparkContext(cp_.sparkConf)
     } else {
@@ -122,11 +111,16 @@ class StreamingContext private (
     }
   }
 
-  protected[streaming] val conf = sc.conf
+  if (MetadataCleaner.getDelaySeconds(sc.conf) < 0) {
+    throw new SparkException("Spark Streaming cannot be used without setting spark.cleaner.ttl; "
+      + "set this property before creating a SparkContext (use SPARK_JAVA_OPTS for the shell)")
+  }
 
-  protected[streaming] val env = SparkEnv.get
+  private[streaming] val conf = sc.conf
 
-  protected[streaming] val graph: DStreamGraph = {
+  private[streaming] val env = SparkEnv.get
+
+  private[streaming] val graph: DStreamGraph = {
     if (isCheckpointPresent) {
       cp_.graph.setContext(this)
       cp_.graph.restoreCheckpointData()
@@ -139,10 +133,9 @@ class StreamingContext private (
     }
   }
 
-  protected[streaming] val nextNetworkInputStreamId = new AtomicInteger(0)
-  protected[streaming] var networkInputTracker: NetworkInputTracker = null
+  private val nextNetworkInputStreamId = new AtomicInteger(0)
 
-  protected[streaming] var checkpointDir: String = {
+  private[streaming] var checkpointDir: String = {
     if (isCheckpointPresent) {
       sc.setCheckpointDir(cp_.checkpointDir)
       cp_.checkpointDir
@@ -151,11 +144,13 @@ class StreamingContext private (
     }
   }
 
-  protected[streaming] val checkpointDuration: Duration = {
+  private[streaming] val checkpointDuration: Duration = {
     if (isCheckpointPresent) cp_.checkpointDuration else graph.batchDuration
   }
-  protected[streaming] val scheduler = new JobScheduler(this)
 
+  private[streaming] val scheduler = new JobScheduler(this)
+
+  private[streaming] val waiter = new ContextWaiter
   /**
    * Return the associated Spark context
    */
@@ -191,11 +186,11 @@ class StreamingContext private (
     }
   }
 
-  protected[streaming] def initialCheckpoint: Checkpoint = {
+  private[streaming] def initialCheckpoint: Checkpoint = {
     if (isCheckpointPresent) cp_ else null
   }
 
-  protected[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
+  private[streaming] def getNewNetworkStreamId() = nextNetworkInputStreamId.getAndIncrement()
 
   /**
    * Create an input stream with any arbitrary user implemented network receiver.
@@ -416,7 +411,7 @@ class StreamingContext private (
     scheduler.listenerBus.addListener(streamingListener)
   }
 
-  protected def validate() {
+  private def validate() {
     assert(graph != null, "Graph is null")
     graph.validate()
 
@@ -430,38 +425,37 @@ class StreamingContext private (
   /**
    * Start the execution of the streams.
    */
-  def start() {
+  def start() = synchronized {
     validate()
-
-    // Get the network input streams
-    val networkInputStreams = graph.getInputStreams().filter(s => s match {
-        case n: NetworkInputDStream[_] => true
-        case _ => false
-      }).map(_.asInstanceOf[NetworkInputDStream[_]]).toArray
-
-    // Start the network input tracker (must start before receivers)
-    if (networkInputStreams.length > 0) {
-      networkInputTracker = new NetworkInputTracker(this, networkInputStreams)
-      networkInputTracker.start()
-    }
-    Thread.sleep(1000)
-
-    // Start the scheduler
     scheduler.start()
   }
 
   /**
-   * Stop the execution of the streams.
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
    */
-  def stop() {
-    try {
-      if (scheduler != null) scheduler.stop()
-      if (networkInputTracker != null) networkInputTracker.stop()
-      sc.stop()
-      logInfo("StreamingContext stopped successfully")
-    } catch {
-      case e: Exception => logWarning("Error while stopping", e)
-    }
+  def awaitTermination() {
+    waiter.waitForStopOrError()
+  }
+
+  /**
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   * @param timeout time to wait in milliseconds
+   */
+  def awaitTermination(timeout: Long) {
+    waiter.waitForStopOrError(timeout)
+  }
+
+  /**
+   * Stop the execution of the streams.
+   * @param stopSparkContext Stop the associated SparkContext or not
+   */
+  def stop(stopSparkContext: Boolean = true) = synchronized {
+    scheduler.stop()
+    logInfo("StreamingContext stopped successfully")
+    waiter.notifyStop()
+    if (stopSparkContext) sc.stop()
   }
 }
 
@@ -471,6 +465,8 @@ class StreamingContext private (
  */
 
 object StreamingContext extends Logging {
+
+  private[streaming] val DEFAULT_CLEANER_TTL = 3600
 
   implicit def toPairDStreamFunctions[K: ClassTag, V: ClassTag](stream: DStream[(K,V)]) = {
     new PairDStreamFunctions[K, V](stream)
@@ -515,37 +511,29 @@ object StreamingContext extends Logging {
    */
   def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls)
 
-
-  protected[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
+  private[streaming] def createNewSparkContext(conf: SparkConf): SparkContext = {
     // Set the default cleaner delay to an hour if not already set.
     // This should be sufficient for even 1 second batch intervals.
     if (MetadataCleaner.getDelaySeconds(conf) < 0) {
-      MetadataCleaner.setDelaySeconds(conf, 3600)
+      MetadataCleaner.setDelaySeconds(conf, DEFAULT_CLEANER_TTL)
     }
     val sc = new SparkContext(conf)
     sc
   }
 
-  protected[streaming] def createNewSparkContext(
+  private[streaming] def createNewSparkContext(
       master: String,
       appName: String,
       sparkHome: String,
       jars: Seq[String],
       environment: Map[String, String]
     ): SparkContext = {
-
     val conf = SparkContext.updatedConf(
       new SparkConf(), master, appName, sparkHome, jars, environment)
-    // Set the default cleaner delay to an hour if not already set.
-    // This should be sufficient for even 1 second batch intervals.
-    if (MetadataCleaner.getDelaySeconds(conf) < 0) {
-      MetadataCleaner.setDelaySeconds(conf, 3600)
-    }
-    val sc = new SparkContext(master, appName, sparkHome, jars, environment)
-    sc
+    createNewSparkContext(conf)
   }
 
-  protected[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
+  private[streaming] def rddToFileName[T](prefix: String, suffix: String, time: Time): String = {
     if (prefix == null) {
       time.milliseconds.toString
     } else if (suffix == null || suffix.length ==0) {
