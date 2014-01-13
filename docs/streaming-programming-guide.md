@@ -167,7 +167,7 @@ Spark Streaming features windowed computations, which allow you to apply transfo
 </tr>
 </table>
 
-A complete list of DStream operations is available in the API documentation of [DStream](api/streaming/index.html#org.apache.spark.streaming.DStream) and [PairDStreamFunctions](api/streaming/index.html#org.apache.spark.streaming.PairDStreamFunctions).
+A complete list of DStream operations is available in the API documentation of [DStream](api/streaming/index.html#org.apache.spark.streaming.dstream.DStream) and [PairDStreamFunctions](api/streaming/index.html#org.apache.spark.streaming.dstream.PairDStreamFunctions).
 
 ## Output Operations
 When an output operator is called, it triggers the computation of a stream. Currently the following output operators are defined:

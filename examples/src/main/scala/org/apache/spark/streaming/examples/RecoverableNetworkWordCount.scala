@@ -82,7 +82,7 @@ object RecoverableNetworkWordCount {
     val lines = ssc.socketTextStream(ip, port)
     val words = lines.flatMap(_.split(" "))
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
-    wordCounts.foreach((rdd: RDD[(String, Int)], time: Time) => {
+    wordCounts.foreachRDD((rdd: RDD[(String, Int)], time: Time) => {
       val counts = "Counts at time " + time + " " + rdd.collect().mkString("[", ", ", "]")
       println(counts)
       println("Appending to " + outputFile.getAbsolutePath)

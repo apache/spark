@@ -17,11 +17,11 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.dstream.{NetworkInputDStream, InputDStream}
+import scala.collection.mutable.ArrayBuffer
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
-import collection.mutable.ArrayBuffer
 import org.apache.spark.Logging
 import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.streaming.dstream.{DStream, NetworkInputDStream, InputDStream}
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {
 
@@ -78,7 +78,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   def remember(duration: Duration) {
     this.synchronized {
       if (rememberDuration != null) {
-        throw new Exception("Batch duration already set as " + batchDuration +
+        throw new Exception("Remember duration already set as " + batchDuration +
           ". cannot set it again.")
       }
       rememberDuration = duration
