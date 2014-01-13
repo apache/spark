@@ -80,6 +80,8 @@ To get started you first need to import Spark and GraphX into your project, as f
 {% highlight scala %}
 import org.apache.spark._
 import org.apache.spark.graphx._
+// To make some of the examples work we will also need RDD
+import org.apache.spark.rdd.RDD
 {% endhighlight %}
 
 If you are not using the Spark shell you will also need a Spark context.
@@ -105,13 +107,11 @@ be accomplished through inheritance.  For example to model users and products as
 we might do the following:
 
 {% highlight scala %}
-case class VertexProperty
-case class UserProperty extends VertexProperty
-  (val name: String)
-case class ProductProperty extends VertexProperty
-  (val name: String, val price: Double)
+class VertexProperty()
+case class UserProperty(val name: String) extends VertexProperty
+case class ProductProperty(val name: String, val price: Double) extends VertexProperty
 // The graph might then have the type:
-val graph: Graph[VertexProperty, String]
+var graph: Graph[VertexProperty, String] = null
 {% endhighlight %}
 
 Like RDDs, property graphs are immutable, distributed, and fault-tolerant.  Changes to the values or
@@ -165,13 +165,13 @@ code constructs a graph from a collection of RDDs:
 // Assume the SparkContext has already been constructed
 val sc: SparkContext
 // Create an RDD for the vertices
-val users: RDD[(VertexId, (String, String))] =
-  sc.parallelize(Array((3, ("rxin", "student")), (7, ("jgonzal", "postdoc")),
-                       (5, ("franklin", "prof")), (2, ("istoica", "prof"))))
+val users: RDD[(VertexID, (String, String))] =
+  sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
+                       (5L, ("franklin", "prof")), (2L, ("istoica", "prof"))))
 // Create an RDD for edges
 val relationships: RDD[Edge[String]] =
-  sc.parallelize(Array(Edge(3, 7, "collab"), Edge(5, 3, "advisor"),
-                       Edge(2, 5, "colleague"), Edge(5, 7, "pi"))
+  sc.parallelize(Array(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
+                       Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi")))
 // Define a default user in case there are relationship with missing user
 val defaultUser = ("John Doe", "Missing")
 // Build the initial Graph
@@ -200,7 +200,7 @@ graph.edges.filter(e => e.srcId > e.dstId).count
 > tuple.  On the other hand, `graph.edges` returns an `EdgeRDD` containing `Edge[String]` objects.
 > We could have also used the case class type constructor as in the following:
 > {% highlight scala %}
-graph.edges.filter { case Edge(src, dst, prop) => src < dst }.count
+graph.edges.filter { case Edge(src, dst, prop) => src > dst }.count
 {% endhighlight %}
 
 In addition to the vertex and edge views of the property graph, GraphX also exposes a triplet view.
@@ -234,7 +234,9 @@ triplet view of a graph to render a collection of strings describing relationshi
 val graph: Graph[(String, String), String] // Constructed from above
 // Use the triplets view to create an RDD of facts.
 val facts: RDD[String] =
-  graph.triplets.map(et => et.srcAttr._1 + " is the " + et.attr + " of " et.dstAttr)
+  graph.triplets.map(triplet =>
+    triplet.srcAttr._1 + " is the " + triplet.attr + " of " + triplet.dstAttr._1)
+facts.collect.foreach(println(_))
 {% endhighlight %}
 
 # Graph Operators
@@ -294,11 +296,12 @@ unnecessary properties.  For example, given a graph with the out-degrees as the 
 
 {% highlight scala %}
 // Given a graph where the vertex property is the out-degree
-val inputGraph: Graph[Int, String]
+val inputGraph: Graph[Int, String] =
+  graph.outerJoinVertices(graph.outDegrees)((vid, _, degOpt) => degOpt.getOrElse(0))
 // Construct a graph where each edge contains the weight
 // and each vertex is the initial PageRank
 val outputGraph: Graph[Double, Double] =
-  inputGraph.mapTriplets(et => 1.0 / et.srcAttr).mapVertices(v => 1.0)
+  inputGraph.mapTriplets(triplet => 1.0 / triplet.srcAttr).mapVertices((id, _) => 1.0)
 {% endhighlight %}
 
 ## Structural Operators
@@ -338,7 +341,7 @@ val defaultUser = ("John Doe", "Missing")
 // Build the initial Graph
 val graph = Graph(users, relationships, defaultUser)
 // Remove missing vertices as well as the edges to connected to them
-val validGraph = graph.subgraph((id, attr) => attr._2 != "Missing")
+val validGraph = graph.subgraph(vpred = (id, attr) => attr._2 != "Missing")
 {% endhighlight %}
 
 > Note in the above example only the vertex predicate is provided.  The `subgraph` operator defaults
@@ -356,7 +359,7 @@ the answer to the valid subgraph.
 // Run Connected Components
 val ccGraph = graph.connectedComponents() // No longer contains missing field
 // Remove missing vertices as well as the edges to connected to them
-val validGraph = graph.subgraph((id, attr) => attr._2 != "Missing")
+val validGraph = graph.subgraph(vpred = (id, attr) => attr._2 != "Missing")
 // Restrict the answer to the valid subgraph
 val validCCGraph = ccGraph.mask(validGraph)
 {% endhighlight %}
