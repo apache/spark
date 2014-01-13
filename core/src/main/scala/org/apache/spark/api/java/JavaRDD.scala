@@ -133,6 +133,11 @@ JavaRDDLike[T, JavaRDD[T]] {
     rdd.setName(name)
     this
   }
+
+  /** Reset generator*/
+  def setGenerator(_generator: String) = {
+    rdd.generator = _generator
+  }
 }
 
 object JavaRDD {
