@@ -8,9 +8,13 @@ version := "0.1-SNAPSHOT"
 
 scalaVersion := "2.10.3"
 
+scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
+
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
-libraryDependencies += "edu.berkeley.cs.amplab" %% "shark" % "0.9.0-SNAPSHOT"
+libraryDependencies += "org.apache.spark" %% "spark-core" % "0.9.0-incubating-SNAPSHOT"
+
+libraryDependencies += "catalyst" % "hive-golden" % "3" % "test" from "http://repository-databricks.forge.cloudbees.com/snapshot/catalystGolden3.jar"
 
 // Hive 0.10.0 relies on a weird version of jdo that is not published anywhere... Remove when we upgrade to 0.11.0
 libraryDependencies += "javax.jdo" % "jdo2-api" % "2.3-ec" from "http://www.datanucleus.org/downloads/maven2/javax/jdo/jdo2-api/2.3-ec/jdo2-api-2.3-ec.jar"
@@ -19,9 +23,9 @@ libraryDependencies ++= Seq(
  "org.apache.hadoop" % "hadoop-client" % "1.0.4",
  "org.scalatest" %% "scalatest" % "1.9.1" % "test",
  //"net.hydromatic" % "optiq-core" % "0.4.16-SNAPSHOT",
- "org.apache.hive" % "hive-metastore" % "0.10.0",
- "org.apache.hive" % "hive-exec" % "0.10.0",
- "org.apache.hive" % "hive-builtins" % "0.10.0",
+ "org.apache.hive" % "hive-metastore" % "0.12.0",
+ "org.apache.hive" % "hive-exec" % "0.12.0",
+ "org.apache.hive" % "hive-serde" % "0.12.0",
   "com.typesafe" %% "scalalogging-slf4j" % "1.0.1")
 
 // Multiple queries rely on the TestShark singleton.  See comments there for more details.
@@ -45,13 +49,13 @@ import catalyst.plans.logical._
 import catalyst.rules._
 import catalyst.types._
 import catalyst.util._
-import catalyst.shark2.TestShark._"""
+import catalyst.execution.TestShark._"""
 
 site.settings
 
 ghpages.settings
 
-git.remoteRepo := "git@github.com:marmbrus/catalyst.git"
+git.remoteRepo := "git@github.com:databricks/catalyst.git"
 
 site.settings
 
