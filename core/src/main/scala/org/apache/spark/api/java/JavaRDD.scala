@@ -145,7 +145,7 @@ JavaRDDLike[T, JavaRDD[T]] {
    * Return a new RDD by applying a function to each partition of this RDD.
    */
   def mapPartitions[U](
-      f: JFMap[JIterator[T], U], preservesPartitioning: Boolean = false): JavaRDD[U] = {
+      f: JFMap[JIterator[T], U], preservesPartitioning: Boolean): JavaRDD[U] = {
     rdd.mapPartitions[U]((x => f(asJavaIterator(x)).iterator), preservesPartitioning)
   }
 
