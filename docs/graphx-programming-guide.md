@@ -443,10 +443,10 @@ PageRank Value, shortest path to the source, and smallest reachable vertex id).
 ### Map Reduce Triplets (mapReduceTriplets)
 <a name="mrTriplets"></a>
 
-[Graph.mapReduceTriplets]: api/graphx/index.html#mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexID,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]
+[Graph.mapReduceTriplets]: api/graphx/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexID,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]
 
-These core (heavily optimized) aggregation primitive in GraphX is the
-(`mapReduceTriplets`)[Graph.mapReduceTriplets] operator:
+The core (heavily optimized) aggregation primitive in GraphX is the
+[`mapReduceTriplets`][Graph.mapReduceTriplets] operator:
 
 {% highlight scala %}
 def mapReduceTriplets[A](
@@ -455,7 +455,7 @@ def mapReduceTriplets[A](
   : VertexRDD[A]
 {% endhighlight %}
 
-The (`mapReduceTriplets`)[Graph.mapReduceTriplets] operator takes a user defined map function which
+The [`mapReduceTriplets`][Graph.mapReduceTriplets] operator takes a user defined map function which
 is applied to each triplet and can yield *messages* destined to either (none or both) vertices in
 the triplet.  We currently only support messages destined to the source or destination vertex of the
 triplet to enable optimized preaggregation.  The user defined `reduce` function combines the
