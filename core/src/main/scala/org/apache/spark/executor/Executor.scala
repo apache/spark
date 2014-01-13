@@ -229,7 +229,6 @@ private[spark] class Executor(
           m.executorRunTime = (taskFinish - taskStart).toInt
           m.jvmGCTime = gcTime - startGCTime
           m.resultSerializationTime = (afterSerialization - beforeSerialization).toInt
-          m.bytesSpilled = env.bytesSpilledMap.get(taskId).getOrElse(0)
         }
 
         val accumUpdates = Accumulators.values
@@ -285,7 +284,6 @@ private[spark] class Executor(
         shuffleMemoryMap.synchronized {
           shuffleMemoryMap.remove(Thread.currentThread().getId)
         }
-        env.bytesSpilledMap.remove(taskId)
         runningTasks.remove(taskId)
       }
     }

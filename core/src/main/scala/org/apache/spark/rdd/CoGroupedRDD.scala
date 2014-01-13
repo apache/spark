@@ -151,7 +151,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
           map.insert(kv._1, new CoGroupValue(kv._2, depNum))
         }
       }
-      map.registerBytesSpilled(context.attemptId)
+      context.taskMetrics.bytesSpilled = map.bytesSpilled
       new InterruptibleIterator(context, map.iterator)
     }
   }

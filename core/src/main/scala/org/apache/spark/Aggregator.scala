@@ -47,13 +47,12 @@ case class Aggregator[K, V, C] (
       }
       combiners.iterator
     } else {
-      val combiners =
-        new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+      val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
       while (iter.hasNext) {
         val (k, v) = iter.next()
         combiners.insert(k, v)
       }
-      combiners.registerBytesSpilled(context.attemptId)
+      context.taskMetrics.bytesSpilled = combiners.bytesSpilled
       combiners.iterator
     }
   }
@@ -76,7 +75,7 @@ case class Aggregator[K, V, C] (
         val (k, c) = iter.next()
         combiners.insert(k, c)
       }
-      combiners.registerBytesSpilled(context.attemptId)
+      context.taskMetrics.bytesSpilled = combiners.bytesSpilled
       combiners.iterator
     }
   }
