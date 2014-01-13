@@ -325,8 +325,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    *
    * @see [[org.apache.spark.graphx.lib.ConnectedComponents]]
    */
-  def connectedComponents(): Graph[VertexID, ED] = {
-    ConnectedComponents.run(graph)
+  def connectedComponents(undirected: Boolean = true): Graph[VertexID, ED] = {
+    ConnectedComponents.run(graph, undirected)
   }
 
   /**
