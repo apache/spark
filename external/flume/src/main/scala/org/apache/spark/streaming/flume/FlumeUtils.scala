@@ -43,6 +43,7 @@ object FlumeUtils {
 
   /**
    * Creates a input stream from a Flume source.
+   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param hostname Hostname of the slave machine to which the flume data will be sent
    * @param port     Port of the slave machine to which the flume data will be sent
    */

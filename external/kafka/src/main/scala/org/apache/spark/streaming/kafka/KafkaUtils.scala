@@ -78,6 +78,7 @@ object KafkaUtils {
 
   /**
    * Create an input stream that pulls messages form a Kafka Broker.
+   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param jssc      JavaStreamingContext object
    * @param zkQuorum  Zookeeper quorum (hostname:port,hostname:port,..)
    * @param groupId   The group id for this consumer
@@ -128,7 +129,7 @@ object KafkaUtils {
    *                    see http://kafka.apache.org/08/configuration.html
    * @param topics  Map of (topic_name -> numPartitions) to consume. Each partition is consumed
    *                in its own thread
-   * @param storageLevel RDD storage level. Defaults to MEMORY_AND_DISK_2.
+   * @param storageLevel RDD storage level.
    */
   def createStream[K, V, U <: Decoder[_], T <: Decoder[_]](
       jssc: JavaStreamingContext,

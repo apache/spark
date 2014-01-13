@@ -44,6 +44,7 @@ object MQTTUtils {
 
   /**
    * Create an input stream that receives messages pushed by a MQTT publisher.
+   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param jssc      JavaStreamingContext object
    * @param brokerUrl Url of remote MQTT publisher
    * @param topic     Topic name to subscribe to
