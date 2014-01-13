@@ -19,9 +19,8 @@ object TriangleCount {
    *
    *
    * @param graph a graph with `sourceId` less than `destId`. The graph must have been partitioned
-   * using Graph.partitionBy.
-   *
-   * @return
+   * using [[org.apache.spark.graphx.Graph#partitionBy]], and its edges must be in canonical
+   * orientation (srcId < dstId).
    */
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD,ED]): Graph[Int, ED] = {
     // Remove redundant edges

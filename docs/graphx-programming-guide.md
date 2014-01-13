@@ -676,7 +676,9 @@ GraphX includes a set of graph algorithms in to simplify analytics. The algorith
 
 PageRank measures the importance of each vertex in a graph, assuming an edge from *u* to *v* represents an endorsement of *v*'s importance by *u*. For example, if a Twitter user is followed by many others, the user will be ranked highly.
 
-Spark includes an example social network dataset that we can run PageRank on. A set of users is given in `graphx/data/users.txt`, and a set of relationships between users is given in `graphx/data/followers.txt`. We can compute the PageRank of each user as follows:
+GraphX comes with static and dynamic implementations of PageRank as methods on the [`PageRank` object][PageRank]. Static PageRank runs for a fixed number of iterations, while dynamic PageRank runs until the ranks converge (i.e., stop changing by more than a specified tolerance). GraphX also includes an example social network dataset that we can run PageRank on. A set of users is given in `graphx/data/users.txt`, and a set of relationships between users is given in `graphx/data/followers.txt`. We compute the PageRank of each user as follows:
+
+[PageRank]: api/graphx/index.html#org.apache.spark.graphx.lib.PageRank$
 
 {% highlight scala %}
 // Load the implicit conversion to Algorithms
@@ -703,7 +705,9 @@ println(ranksByUsername.collect().mkString("\n"))
 
 ## Connected Components
 
-The connected components algorithm labels each connected component of the graph with the ID of its lowest-numbered vertex. For example, in a social network, connected components can approximate clusters. We can compute the connected components of the example social network dataset from the [PageRank section](#pagerank) as follows:
+The connected components algorithm labels each connected component of the graph with the ID of its lowest-numbered vertex. For example, in a social network, connected components can approximate clusters. GraphX contains an implementation of the algorithm in the [`ConnectedComponents` object][ConnectedComponents], and we compute the connected components of the example social network dataset from the [PageRank section](#pagerank) as follows:
+
+[ConnectedComponents]: api/graphx/index.html#org.apache.spark.graphx.lib.ConnectedComponents$
 
 {% highlight scala %}
 // Load the implicit conversion and graph as in the PageRank example
@@ -721,9 +725,28 @@ val ccByUsername = graph.vertices.innerJoin(cc) { (id, username, cc) =>
 println(ccByUsername.collect().mkString("\n"))
 {% endhighlight %}
 
-## Shortest Path
-
 ## Triangle Counting
+
+A vertex is part of a triangle when it has two adjacent vertices with an edge between them. GraphX implements a triangle counting algorithm in the [`TriangleCount` object][TriangleCount] that determines the number of triangles passing through each vertex, providing a measure of clustering. We compute the triangle count of the social network dataset from the [PageRank section](#pagerank). *Note that `TriangleCount` requires the edges to be in canonical orientation (`srcId < dstId`) and the graph to be partitioned using [`Graph#partitionBy`][Graph.partitionBy].*
+
+[TriangleCount]: api/graphx/index.html#org.apache.spark.graphx.lib.TriangleCount$
+[Graph.partitionBy]: api/graphx/index.html#org.apache.spark.graphx.Graph@partitionBy(PartitionStrategy):Graph[VD,ED]
+
+{% highlight scala %}
+// Load the implicit conversion and graph as in the PageRank example
+import org.apache.spark.graphx.lib._
+val users = ...
+// Load the edges in canonical order and partition the graph for triangle count
+val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt", true).partitionBy(RandomVertexCut)
+// Find the triangle count for each vertex
+val triCounts = graph.triangleCount().vertices
+// Join the triangle counts with the usernames
+val triCountByUsername = graph.vertices.innerJoin(triCounts) { (id, username, tc) =>
+  (username, tc)
+}
+// Print the result
+println(triCountByUsername.collect().mkString("\n"))
+{% endhighlight %}
 
 ## K-Core
 
