@@ -49,7 +49,7 @@ class EdgeRDD[@specialized ED: ClassTag](
     this
   }
 
-  def mapEdgePartitions[ED2: ClassTag](f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2])
+  private[graphx] def mapEdgePartitions[ED2: ClassTag](f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2])
     : EdgeRDD[ED2] = {
     new EdgeRDD[ED2](partitionsRDD.mapPartitions({ iter =>
       val (pid, ep) = iter.next()
@@ -57,6 +57,15 @@ class EdgeRDD[@specialized ED: ClassTag](
     }, preservesPartitioning = true))
   }
 
+  /**
+   * Inner joins this EdgeRDD with another EdgeRDD, assuming both are partitioned using the same
+   * [[PartitionStrategy]].
+   *
+   * @param other the EdgeRDD to join with
+   * @param f the join function applied to corresponding values of `this` and `other`
+   * @return a new EdgeRDD containing only edges that appear in both `this` and `other`, with values
+   * supplied by `f`
+   */
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgeRDD[ED2])
       (f: (VertexID, VertexID, ED, ED2) => ED3): EdgeRDD[ED3] = {
@@ -70,7 +79,7 @@ class EdgeRDD[@specialized ED: ClassTag](
     })
   }
 
-  def collectVertexIDs(): RDD[VertexID] = {
+  private[graphx] def collectVertexIDs(): RDD[VertexID] = {
     partitionsRDD.flatMap { case (_, p) => Array.concat(p.srcIds, p.dstIds) }
   }
 }
