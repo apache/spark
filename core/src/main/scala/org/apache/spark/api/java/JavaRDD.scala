@@ -21,7 +21,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.api.java.function.{Function => JFunction, FlatMapFunction => JFMap}
+import org.apache.spark.api.java.function.{Function => JFunction, FlatMapFunction => JFMap, VoidFunction}
 import org.apache.spark.storage.StorageLevel
 import java.util.{Iterator => JIterator}
 import scala.collection.JavaConversions._
@@ -147,6 +147,13 @@ JavaRDDLike[T, JavaRDD[T]] {
   def mapPartitions[U: ClassTag](
       f: JFMap[JIterator[T], U], preservesPartitioning: Boolean = false): JavaRDD[U] = {
     rdd.mapPartitions[U]((x => f(asJavaIterator(x)).iterator), preservesPartitioning)
+  }
+
+  /**
+   * Applies a function f to each partition of this RDD.
+   */
+  def foreachPartition(f: VoidFunction[JIterator[T]]) {
+    rdd.foreachPartition((x => f(asJavaIterator(x))))
   }
 
 }
