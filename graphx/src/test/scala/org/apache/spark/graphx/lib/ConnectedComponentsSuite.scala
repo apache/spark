@@ -80,4 +80,34 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
     }
   } // end of reverse chain connected components
 
+  test("Connected Components on a Toy Connected Graph") {
+    withSpark { sc =>
+      // Create an RDD for the vertices
+      val users: RDD[(VertexID, (String, String))] =
+        sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
+                       (5L, ("franklin", "prof")), (2L, ("istoica", "prof")),
+                       (4L, ("peter", "student"))))
+      // Create an RDD for edges
+      val relationships: RDD[Edge[String]] =
+        sc.parallelize(Array(Edge(3L, 7L, "collab"),    Edge(5L, 3L, "advisor"),
+                       Edge(2L, 5L, "colleague"), Edge(5L, 7L, "pi"),
+                       Edge(4L, 0L, "student"),   Edge(5L, 0L, "colleague")))
+      // Edges are:
+      //   2 ---> 5 ---> 3
+      //          | \
+      //          V   \|
+      //   4 ---> 0    7
+      //
+      // Define a default user in case there are relationship with missing user
+      val defaultUser = ("John Doe", "Missing")
+      // Build the initial Graph
+      val graph = Graph(users, relationships, defaultUser)
+      val ccGraph = graph.connectedComponents(undirected = true)
+      val vertices = ccGraph.vertices.collect
+      for ( (id, cc) <- vertices ) {
+        assert(cc == 0)
+      }
+    }
+  } // end of toy connected components
+
 }
