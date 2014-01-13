@@ -64,7 +64,7 @@ class ShuffleBlockManager(blockManager: BlockManager) {
   // Turning off shuffle file consolidation causes all shuffle Blocks to get their own file.
   // TODO: Remove this once the shuffle file consolidation feature is stable.
   val consolidateShuffleFiles =
-    conf.getBoolean("spark.shuffle.consolidateFiles", true)
+    conf.getBoolean("spark.shuffle.consolidateFiles", false)
 
   private val bufferSize = conf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
 
