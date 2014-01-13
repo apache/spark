@@ -674,24 +674,22 @@ GraphX includes a set of graph algorithms in to simplify analytics. The algorith
 
 PageRank measures the importance of each vertex in a graph, assuming an edge from *u* to *v* represents an endorsement of *v*'s importance by *u*. For example, if a Twitter user is followed by many others, the user will be ranked highly.
 
-GraphX comes with static and dynamic implementations of PageRank as methods on the [`PageRank` object][PageRank]. Static PageRank runs for a fixed number of iterations, while dynamic PageRank runs until the ranks converge (i.e., stop changing by more than a specified tolerance). GraphX also includes an example social network dataset that we can run PageRank on. A set of users is given in `graphx/data/users.txt`, and a set of relationships between users is given in `graphx/data/followers.txt`. We compute the PageRank of each user as follows:
+GraphX comes with static and dynamic implementations of PageRank as methods on the [`PageRank` object][PageRank]. Static PageRank runs for a fixed number of iterations, while dynamic PageRank runs until the ranks converge (i.e., stop changing by more than a specified tolerance). [`GraphOps`][GraphOps] allows calling these algorithms directly as methods on `Graph`.
+
+GraphX also includes an example social network dataset that we can run PageRank on. A set of users is given in `graphx/data/users.txt`, and a set of relationships between users is given in `graphx/data/followers.txt`. We compute the PageRank of each user as follows:
 
 [PageRank]: api/graphx/index.html#org.apache.spark.graphx.lib.PageRank$
 
 {% highlight scala %}
-// Load the datasets into a graph
+// Load the edges as a graph
+val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt")
+// Run PageRank
+val ranks = graph.pageRank(0.0001).vertices
+// Join the ranks with the usernames
 val users = sc.textFile("graphx/data/users.txt").map { line =>
   val fields = line.split("\\s+")
   (fields(0).toLong, fields(1))
 }
-val followers = sc.textFile("graphx/data/followers.txt").map { line =>
-  val fields = line.split("\\s+")
-  Edge(fields(0).toLong, fields(1).toLong, 1)
-}
-val graph = Graph(users, followers)
-// Run PageRank
-val ranks = graph.pageRank(0.0001).vertices
-// Join the ranks with the usernames
 val ranksByUsername = users.leftOuterJoin(ranks).map {
   case (id, (username, rankOpt)) => (username, rankOpt.getOrElse(0.0))
 }
@@ -707,13 +705,15 @@ The connected components algorithm labels each connected component of the graph 
 
 {% highlight scala %}
 // Load the graph as in the PageRank example
-val users = ...
-val followers = ...
-val graph = Graph(users, followers)
+val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt")
 // Find the connected components
 val cc = graph.connectedComponents().vertices
 // Join the connected components with the usernames
-val ccByUsername = graph.vertices.innerJoin(cc) { (id, username, cc) =>
+val users = sc.textFile("graphx/data/users.txt").map { line =>
+  val fields = line.split("\\s+")
+  (fields(0).toLong, fields(1))
+}
+val ccByUsername = users.join(cc).map { case (id, (username, cc)) =>
   (username, cc)
 }
 // Print the result
@@ -728,14 +728,16 @@ A vertex is part of a triangle when it has two adjacent vertices with an edge be
 [Graph.partitionBy]: api/graphx/index.html#org.apache.spark.graphx.Graph@partitionBy(PartitionStrategy):Graph[VD,ED]
 
 {% highlight scala %}
-// Load the graph as in the PageRank example
-val users = ...
 // Load the edges in canonical order and partition the graph for triangle count
 val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt", true).partitionBy(RandomVertexCut)
 // Find the triangle count for each vertex
 val triCounts = graph.triangleCount().vertices
 // Join the triangle counts with the usernames
-val triCountByUsername = graph.vertices.innerJoin(triCounts) { (id, username, tc) =>
+val users = sc.textFile("graphx/data/users.txt").map { line =>
+  val fields = line.split("\\s+")
+  (fields(0).toLong, fields(1))
+}
+val triCountByUsername = users.join(triCounts).map { case (id, (username, tc)) =>
   (username, tc)
 }
 // Print the result
