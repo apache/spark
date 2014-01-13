@@ -294,7 +294,7 @@ setMethod("lapplyPartitionsWithIndex",
 
             depsBin <- getDependencies(computeFunc)
             depsBinArr <- .jarray(depsBin)
-            rddRef <- new(J("sparkr.RRDD"),
+            rddRef <- new(J("edu.berkeley.cs.amplab.sparkr.RRDD"),
                            X@jrdd$rdd(),
                            serializedFuncArr,
                            X@serialized,
@@ -603,7 +603,7 @@ setMethod("partitionBy",
             # We create a PairwiseRRDD that extends RDD[(Array[Byte],
             # Array[Byte])], where the key is the hashed split, the value is
             # the content (key-val pairs).
-            pairwiseRRDD <- new(J("sparkr.PairwiseRRDD"),
+            pairwiseRRDD <- new(J("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD"),
                                 rdd@jrdd$rdd(),
                                 as.integer(numPartitions),
                                 serializedHashFuncBytes,

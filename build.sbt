@@ -6,11 +6,11 @@ import AssemblyKeys._
 
 assemblySettings
 
-name := "SparkR"
+name := "sparkr"
 
 version := "0.1"
 
-organization := "sparkr"
+organization := "edu.berkeley.cs.amplab"
 
 scalaVersion := "2.10.3"
 

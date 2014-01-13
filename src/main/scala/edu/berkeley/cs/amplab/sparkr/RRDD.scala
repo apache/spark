@@ -1,4 +1,4 @@
-package sparkr
+package edu.berkeley.cs.amplab.sparkr
 
 import java.io._
 

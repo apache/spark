@@ -1,6 +1,6 @@
 .sparkREnv <- new.env()
 
-assemblyJarName <- "SparkR-assembly-0.1.jar"
+assemblyJarName <- "sparkr-assembly-0.1.jar"
 
 sparkR.onLoad <- function(libname, pkgname) {
   assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep="")
