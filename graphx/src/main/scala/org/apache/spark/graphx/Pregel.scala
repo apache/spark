@@ -25,8 +25,8 @@ import scala.reflect.ClassTag
  *
  * def vertexProgram(id: VertexID, attr: Double, msgSum: Double): Double =
  *   resetProb + (1.0 - resetProb) * msgSum
- * def sendMessage(id: VertexID, edge: EdgeTriplet[Double, Double]): Option[Double] =
- *   Some(edge.srcAttr * edge.attr)
+ * def sendMessage(id: VertexID, edge: EdgeTriplet[Double, Double]): Iterator[(VertexId, Double)] =
+ *   Iterator((edge.dstId, edge.srcAttr * edge.attr))
  * def messageCombiner(a: Double, b: Double): Double = a + b
  * val initialMessage = 0.0
  * // Execute Pregel for a fixed number of iterations.
