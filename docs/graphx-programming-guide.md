@@ -667,9 +667,7 @@ things to worry about.)
 # Graph Algorithms
 <a name="graph_algorithms"></a>
 
-GraphX includes a set of graph algorithms in to simplify analytics. The algorithms are contained in the `org.apache.spark.graphx.lib` package and can be accessed directly as methods on `Graph` via an implicit conversion to [`Algorithms`][Algorithms]. This section describes the algorithms and how they are used.
-
-[Algorithms]: api/graphx/index.html#org.apache.spark.graphx.lib.Algorithms
+GraphX includes a set of graph algorithms in to simplify analytics. The algorithms are contained in the `org.apache.spark.graphx.lib` package and can be accessed directly as methods on `Graph` via [`GraphOps`][GraphOps]. This section describes the algorithms and how they are used.
 
 ## PageRank
 <a name="pagerank"></a>
@@ -681,8 +679,6 @@ GraphX comes with static and dynamic implementations of PageRank as methods on t
 [PageRank]: api/graphx/index.html#org.apache.spark.graphx.lib.PageRank$
 
 {% highlight scala %}
-// Load the implicit conversion to Algorithms
-import org.apache.spark.graphx.lib._
 // Load the datasets into a graph
 val users = sc.textFile("graphx/data/users.txt").map { line =>
   val fields = line.split("\\s+")
@@ -710,8 +706,7 @@ The connected components algorithm labels each connected component of the graph 
 [ConnectedComponents]: api/graphx/index.html#org.apache.spark.graphx.lib.ConnectedComponents$
 
 {% highlight scala %}
-// Load the implicit conversion and graph as in the PageRank example
-import org.apache.spark.graphx.lib._
+// Load the graph as in the PageRank example
 val users = ...
 val followers = ...
 val graph = Graph(users, followers)
@@ -733,8 +728,7 @@ A vertex is part of a triangle when it has two adjacent vertices with an edge be
 [Graph.partitionBy]: api/graphx/index.html#org.apache.spark.graphx.Graph@partitionBy(PartitionStrategy):Graph[VD,ED]
 
 {% highlight scala %}
-// Load the implicit conversion and graph as in the PageRank example
-import org.apache.spark.graphx.lib._
+// Load the graph as in the PageRank example
 val users = ...
 // Load the edges in canonical order and partition the graph for triangle count
 val graph = GraphLoader.edgeListFile(sc, "graphx/data/followers.txt", true).partitionBy(RandomVertexCut)

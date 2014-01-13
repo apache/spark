@@ -2,9 +2,10 @@ package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkException
+import org.apache.spark.graphx.lib._
+import org.apache.spark.rdd.RDD
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -298,4 +299,52 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
     Pregel(graph, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
   }
 
+  /**
+   * Run a dynamic version of PageRank returning a graph with vertex attributes containing the
+   * PageRank and edge attributes containing the normalized edge weight.
+   *
+   * @see [[org.apache.spark.graphx.lib.PageRank]], method `runUntilConvergence`.
+   */
+  def pageRank(tol: Double, resetProb: Double = 0.15): Graph[Double, Double] = {
+    PageRank.runUntilConvergence(graph, tol, resetProb)
+  }
+
+  /**
+   * Run PageRank for a fixed number of iterations returning a graph with vertex attributes
+   * containing the PageRank and edge attributes the normalized edge weight.
+   *
+   * @see [[org.apache.spark.graphx.lib.PageRank]], method `run`.
+   */
+  def staticPageRank(numIter: Int, resetProb: Double = 0.15): Graph[Double, Double] = {
+    PageRank.run(graph, numIter, resetProb)
+  }
+
+  /**
+   * Compute the connected component membership of each vertex and return a graph with the vertex
+   * value containing the lowest vertex id in the connected component containing that vertex.
+   *
+   * @see [[org.apache.spark.graphx.lib.ConnectedComponents]]
+   */
+  def connectedComponents(): Graph[VertexID, ED] = {
+    ConnectedComponents.run(graph)
+  }
+
+  /**
+   * Compute the number of triangles passing through each vertex.
+   *
+   * @see [[org.apache.spark.graphx.lib.TriangleCount]]
+   */
+  def triangleCount(): Graph[Int, ED] = {
+    TriangleCount.run(graph)
+  }
+
+  /**
+   * Compute the strongly connected component (SCC) of each vertex and return a graph with the
+   * vertex value containing the lowest vertex id in the SCC containing that vertex.
+   *
+   * @see [[org.apache.spark.graphx.lib.StronglyConnectedComponents]]
+   */
+  def stronglyConnectedComponents(numIter: Int): Graph[VertexID, ED] = {
+    StronglyConnectedComponents.run(graph, numIter)
+  }
 } // end of GraphOps

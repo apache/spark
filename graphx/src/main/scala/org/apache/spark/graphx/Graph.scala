@@ -15,9 +15,7 @@ import org.apache.spark.storage.StorageLevel
  * RDDs, the graph is a functional data-structure in which mutating
  * operations return new graphs.
  *
- * @note [[GraphOps]] contains additional convenience operations.
- * [[lib.Algorithms]] contains graph algorithms; to access these,
- * import `org.apache.spark.graphx.lib._`.
+ * @note [[GraphOps]] contains additional convenience operations and graph algorithms.
  *
  * @tparam VD the vertex attribute type
  * @tparam ED the edge attribute type
