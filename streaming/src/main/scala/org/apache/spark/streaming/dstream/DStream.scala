@@ -355,17 +355,17 @@ abstract class DStream[T: ClassTag] (
    * this method to save custom checkpoint data.
    */
   private[streaming] def updateCheckpointData(currentTime: Time) {
-    logInfo("Updating checkpoint data for time " + currentTime)
+    logDebug("Updating checkpoint data for time " + currentTime)
     checkpointData.update(currentTime)
     dependencies.foreach(_.updateCheckpointData(currentTime))
     logDebug("Updated checkpoint data for time " + currentTime + ": " + checkpointData)
   }
 
   private[streaming] def clearCheckpointData(time: Time) {
-    logInfo("Clearing checkpoint data")
+    logDebug("Clearing checkpoint data")
     checkpointData.cleanup(time)
     dependencies.foreach(_.clearCheckpointData(time))
-    logInfo("Cleared checkpoint data")
+    logDebug("Cleared checkpoint data")
   }
 
   /**

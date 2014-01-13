@@ -273,10 +273,11 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       val startTime = System.currentTimeMillis()
       while (output.size < numExpectedOutput && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
-        Thread.sleep(10)
+        ssc.awaitTermination(50)
       }
       val timeTaken = System.currentTimeMillis() - startTime
-
+      logInfo("Output generated in " + timeTaken + " milliseconds")
+      output.foreach(x => logInfo("[" + x.mkString(",") + "]"))
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
 

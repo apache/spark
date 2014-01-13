@@ -487,14 +487,14 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    */
-  def waitForStop() = ssc.waitForStop()
+  def awaitTermination() = ssc.awaitTermination()
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
-   * @param timeout time to wait
+   * @param timeout time to wait in milliseconds
    */
-  def waitForStop(timeout: Long) = ssc.waitForStop(timeout)
+  def awaitTermination(timeout: Long) = ssc.awaitTermination(timeout)
 
   /**
    * Stop the execution of the streams. Will stop the associated JavaSparkContext as well.

@@ -41,20 +41,26 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
   private val executor = Executors.newFixedThreadPool(numConcurrentJobs)
   private val jobGenerator = new JobGenerator(this)
-  private val eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
-    def receive = {
-      case event: JobSchedulerEvent => processEvent(event)
-    }
-  }))
-  val clock = jobGenerator.clock // used by testsuites
+  val clock = jobGenerator.clock
   val listenerBus = new StreamingListenerBus()
 
+  // These two are created only when scheduler starts.
+  // eventActor not being null means the scheduler has been started and not stopped
   var networkInputTracker: NetworkInputTracker = null
+  private var eventActor: ActorRef = null
+
 
   def start() = synchronized {
-    if (networkInputTracker != null) {
-      throw new SparkException("StreamingContext already started")
+    if (eventActor != null) {
+      throw new SparkException("JobScheduler already started")
     }
+
+    eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
+      def receive = {
+        case event: JobSchedulerEvent => processEvent(event)
+      }
+    }), "JobScheduler")
+    listenerBus.start()
     networkInputTracker = new NetworkInputTracker(ssc)
     networkInputTracker.start()
     Thread.sleep(1000)
@@ -63,13 +69,15 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
   }
 
   def stop() = synchronized {
-    if (networkInputTracker != null) {
+    if (eventActor != null) {
       jobGenerator.stop()
       networkInputTracker.stop()
       executor.shutdown()
       if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
         executor.shutdownNow()
       }
+      listenerBus.stop()
+      ssc.env.actorSystem.stop(eventActor)
       logInfo("JobScheduler stopped")
     }
   }
@@ -104,7 +112,6 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
       case e: Throwable =>
         reportError("Error in job scheduler", e)
     }
-
   }
 
   private def handleJobStart(job: Job) {

@@ -17,9 +17,8 @@
 
 package org.apache.spark.streaming.scheduler
 
-import akka.actor.{Props, Actor}
-import org.apache.spark.SparkEnv
-import org.apache.spark.Logging
+import akka.actor.{ActorRef, ActorSystem, Props, Actor}
+import org.apache.spark.{SparkException, SparkEnv, Logging}
 import org.apache.spark.streaming.{Checkpoint, Time, CheckpointWriter}
 import org.apache.spark.streaming.util.{ManualClock, RecurringTimer, Clock}
 import scala.util.{Failure, Success, Try}
@@ -40,13 +39,6 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
 
   private val ssc = jobScheduler.ssc
   private val graph = ssc.graph
-  private val eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
-    def receive = {
-      case event: JobGeneratorEvent =>
-        logDebug("Got event of type " + event.getClass.getName)
-        processEvent(event)
-    }
-  }))
   val clock = {
     val clockClass = ssc.sc.conf.get(
       "spark.streaming.clock", "org.apache.spark.streaming.util.SystemClock")
@@ -60,7 +52,23 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     null
   }
 
+  // eventActor is created when generator starts.
+  // This not being null means the scheduler has been started and not stopped
+  private var eventActor: ActorRef = null
+
+  /** Start generation of jobs */
   def start() = synchronized {
+    if (eventActor != null) {
+      throw new SparkException("JobGenerator already started")
+    }
+
+    eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
+      def receive = {
+        case event: JobGeneratorEvent =>
+          logDebug("Got event of type " + event.getClass.getName)
+          processEvent(event)
+      }
+    }), "JobGenerator")
     if (ssc.isCheckpointPresent) {
       restart()
     } else {
@@ -68,11 +76,15 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     }
   }
 
-  def stop() {
-    timer.stop()
-    if (checkpointWriter != null) checkpointWriter.stop()
-    ssc.graph.stop()
-    logInfo("JobGenerator stopped")
+  /** Stop generation of jobs */
+  def stop() = synchronized {
+    if (eventActor != null) {
+      timer.stop()
+      ssc.env.actorSystem.stop(eventActor)
+      if (checkpointWriter != null) checkpointWriter.stop()
+      ssc.graph.stop()
+      logInfo("JobGenerator stopped")
+    }
   }
 
   /**
@@ -172,4 +184,3 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
     }
   }
 }
-

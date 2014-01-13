@@ -434,16 +434,16 @@ class StreamingContext private[streaming] (
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
    */
-  def waitForStop() {
+  def awaitTermination() {
     waiter.waitForStopOrError()
   }
 
   /**
    * Wait for the execution to stop. Any exceptions that occurs during the execution
    * will be thrown in this thread.
-   * @param timeout time to wait
+   * @param timeout time to wait in milliseconds
    */
-  def waitForStop(timeout: Long) {
+  def awaitTermination(timeout: Long) {
     waiter.waitForStopOrError(timeout)
   }
 
