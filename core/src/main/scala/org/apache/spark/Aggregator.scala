@@ -32,7 +32,7 @@ case class Aggregator[K, V, C] (
     mergeCombiners: (C, C) => C) {
 
   private val sparkConf = SparkEnv.get.conf
-  private val externalSorting = sparkConf.getBoolean("spark.shuffle.external", true)
+  private val externalSorting = sparkConf.getBoolean("spark.shuffle.spill", true)
 
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
     if (!externalSorting) {

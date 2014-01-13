@@ -116,7 +116,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.3</td>
   <td>
     Fraction of Java heap to use for aggregation and cogroups during shuffles, if
-    <code>spark.shuffle.external</code> is true. At any given time, the collective size of
+    <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
     all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
     begin to spill to disk. If spills are often, consider increasing this value at the expense of
     <code>spark.storage.memoryFraction</code>.
@@ -155,7 +155,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.shuffle.external.compress</td>
+  <td>spark.shuffle.spill.compress</td>
   <td>false</td>
   <td>
     Whether to compress data spilled during shuffles.
@@ -395,7 +395,7 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.shuffle.external</td>
+  <td>spark.shuffle.spill</td>
   <td>true</td>
   <td>
     If set to "true", limits the amount of memory used during reduces by spilling data out to disk. This spilling

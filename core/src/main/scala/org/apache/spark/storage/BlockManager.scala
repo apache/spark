@@ -81,7 +81,7 @@ private[spark] class BlockManager(
   // Whether to compress RDD partitions that are stored serialized
   val compressRdds = conf.getBoolean("spark.rdd.compress", false)
   // Whether to compress shuffle output temporarily spilled to disk
-  val compressExternalShuffle = conf.getBoolean("spark.shuffle.external.compress", false)
+  val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", false)
 
   val heartBeatFrequency = BlockManager.getHeartBeatFrequency(conf)
 
@@ -792,7 +792,7 @@ private[spark] class BlockManager(
     case ShuffleBlockId(_, _, _) => compressShuffle
     case BroadcastBlockId(_) => compressBroadcast
     case RDDBlockId(_, _) => compressRdds
-    case TempBlockId(_) => compressExternalShuffle
+    case TempBlockId(_) => compressShuffleSpill
     case _ => false
   }
 

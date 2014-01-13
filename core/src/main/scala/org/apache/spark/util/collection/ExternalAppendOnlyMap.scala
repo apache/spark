@@ -87,9 +87,9 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   // batches, with each batch using its own serialization stream. This cuts down on the size
   // of reference-tracking maps constructed when deserializing a stream.
   //
-  // NOTE: Setting this too low can cause excess copying when serializing, since some serailizers
+  // NOTE: Setting this too low can cause excess copying when serializing, since some serializers
   // grow internal data structures by growing + copying every time the number of objects doubles.
-  private val serializerBatchSize = sparkConf.getLong("spark.shuffle.external.batchSize", 10000)
+  private val serializerBatchSize = sparkConf.getLong("spark.shuffle.spill.batchSize", 10000)
 
   // How many times we have spilled so far
   private var spillCount = 0
