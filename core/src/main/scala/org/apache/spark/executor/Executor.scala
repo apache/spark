@@ -57,7 +57,7 @@ private[spark] class Executor(
   Utils.setCustomHostname(slaveHostname)
 
   // Set spark.* properties from executor arg
-  val conf = new SparkConf(false)
+  val conf = new SparkConf(true)
   conf.setAll(properties)
 
   // If we are in yarn mode, systems can have different disk layouts so we must set it

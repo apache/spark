@@ -133,7 +133,8 @@ class DAGScheduler(
 
   private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
 
-  private[spark] val listenerBus = new SparkListenerBus()
+  // An async scheduler event bus. The bus should be stopped when DAGSCheduler is stopped.
+  private[spark] val listenerBus = new SparkListenerBus
 
   // Contains the locations that each RDD's partitions are cached on
   private val cacheLocs = new HashMap[Int, Array[Seq[TaskLocation]]]
@@ -1121,5 +1122,6 @@ class DAGScheduler(
     }
     metadataCleaner.cancel()
     taskSched.stop()
+    listenerBus.stop()
   }
 }
