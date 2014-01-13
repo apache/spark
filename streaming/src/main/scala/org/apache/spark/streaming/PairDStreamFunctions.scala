@@ -582,7 +582,7 @@ extends Serializable {
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)
     }
-    self.foreach(saveFunc)
+    self.foreachRDD(saveFunc)
   }
 
   /**
@@ -612,7 +612,7 @@ extends Serializable {
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsNewAPIHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)
     }
-    self.foreach(saveFunc)
+    self.foreachRDD(saveFunc)
   }
 
   private def getKeyClass() = implicitly[ClassTag[K]].runtimeClass

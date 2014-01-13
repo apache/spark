@@ -383,7 +383,7 @@ class BasicOperationsSuite extends TestSuiteBase {
     val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
     val stream = new TestInputStream[Int](ssc, input, 2)
     ssc.registerInputStream(stream)
-    stream.foreach(_ => {})  // Dummy output stream
+    stream.foreachRDD(_ => {})  // Dummy output stream
     ssc.start()
     Thread.sleep(2000)
     def getInputFromSlice(fromMillis: Long, toMillis: Long) = {
