@@ -475,6 +475,7 @@ GraphX includes a set of graph algorithms in to simplify analytics. The algorith
 [Algorithms]: api/graphx/index.html#org.apache.spark.graphx.lib.Algorithms
 
 ## PageRank
+<a name="pagerank"></a>
 
 PageRank measures the importance of each vertex in a graph, assuming an edge from *u* to *v* represents an endorsement of *v*'s importance by *u*. For example, if a Twitter user is followed by many others, the user will be ranked highly.
 
@@ -503,8 +504,25 @@ val ranksByUsername = users.leftOuterJoin(ranks).map {
 println(ranksByUsername.collect().mkString("\n"))
 {% endhighlight %}
 
-
 ## Connected Components
+
+The connected components algorithm labels each connected component of the graph with the ID of its lowest-numbered vertex. For example, in a social network, connected components can approximate clusters. We can compute the connected components of the example social network dataset from the [PageRank section](#pagerank) as follows:
+
+{% highlight scala %}
+// Load the implicit conversion and graph as in the PageRank example
+import org.apache.spark.graphx.lib._
+val users = ...
+val followers = ...
+val graph = Graph(users, followers)
+// Find the connected components
+val cc = graph.connectedComponents().vertices
+// Join the connected components with the usernames
+val ccByUsername = graph.vertices.innerJoin(cc) { (id, username, cc) =>
+  (username, cc)
+}
+// Print the result
+println(ccByUsername.collect().mkString("\n"))
+{% endhighlight %}
 
 ## Shortest Path
 
