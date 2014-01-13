@@ -26,7 +26,7 @@ import java.util.{Map => JMap}
 import kafka.serializer.{Decoder, StringDecoder}
 
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{StreamingContext}
+import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaStreamingContext, JavaPairDStream}
 import org.apache.spark.streaming.dstream.DStream
 

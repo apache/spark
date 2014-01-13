@@ -18,7 +18,7 @@
 package org.apache.spark.streaming.mqtt
 
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{StreamingContext}
+import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaStreamingContext, JavaDStream}
 import scala.reflect.ClassTag
 import org.apache.spark.streaming.dstream.DStream

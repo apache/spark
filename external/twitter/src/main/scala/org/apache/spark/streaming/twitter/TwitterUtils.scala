@@ -20,7 +20,7 @@ package org.apache.spark.streaming.twitter
 import twitter4j.Status
 import twitter4j.auth.Authorization
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{StreamingContext}
+import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaDStream, JavaStreamingContext}
 import org.apache.spark.streaming.dstream.DStream
 
