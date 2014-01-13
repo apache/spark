@@ -149,6 +149,21 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Return a new RDD by applying a function to each partition of this RDD.
+   */
+  def mapPartitions[U](
+      f: FlatMapFunction[java.util.Iterator[T], U], preservesPartitioning: Boolean): JavaRDD[U] = {
+    rdd.mapPartitions[U]((x => f(asJavaIterator(x)).iterator), preservesPartitioning)
+  }
+
+  /**
+   * Applies a function f to each partition of this RDD.
+   */
+  def foreachPartition(f: VoidFunction[java.util.Iterator[T]]) {
+    rdd.foreachPartition((x => f(asJavaIterator(x))))
+  }
+
+  /**
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
   def glom(): JavaRDD[JList[T]] =

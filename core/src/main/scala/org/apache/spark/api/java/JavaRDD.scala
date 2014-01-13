@@ -138,24 +138,8 @@ JavaRDDLike[T, JavaRDD[T]] {
 
   /** Reset generator*/
   def setGenerator(_generator: String) = {
-    rdd.generator = _generator
+    rdd.setGenerator(_generator)
   }
-
-  /**
-   * Return a new RDD by applying a function to each partition of this RDD.
-   */
-  def mapPartitions[U](
-      f: JFMap[JIterator[T], U], preservesPartitioning: Boolean): JavaRDD[U] = {
-    rdd.mapPartitions[U]((x => f(asJavaIterator(x)).iterator), preservesPartitioning)
-  }
-
-  /**
-   * Applies a function f to each partition of this RDD.
-   */
-  def foreachPartition(f: VoidFunction[JIterator[T]]) {
-    rdd.foreachPartition((x => f(asJavaIterator(x))))
-  }
-
 }
 
 object JavaRDD {
