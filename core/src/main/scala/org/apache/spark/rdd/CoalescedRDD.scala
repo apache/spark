@@ -295,9 +295,9 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
 
     val prefPartActual = prefPart.get
 
-    if (minPowerOfTwo.size + slack <= prefPartActual.size)  // more imbalance than the slack allows
+    if (minPowerOfTwo.size + slack <= prefPartActual.size) { // more imbalance than the slack allows
       minPowerOfTwo  // prefer balance over locality
-    else {
+    } else {
       prefPartActual // prefer locality over balance
     }
   }
@@ -331,7 +331,7 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
    */
   def run(): Array[PartitionGroup] = {
     setupGroups(math.min(prev.partitions.length, maxPartitions))   // setup the groups (bins)
-    throwBalls()             // assign partitions (balls) to each group (bins)
+    throwBalls() // assign partitions (balls) to each group (bins)
     getPartitions
   }
 }

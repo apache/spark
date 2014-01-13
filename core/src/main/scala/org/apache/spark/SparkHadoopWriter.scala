@@ -189,7 +189,7 @@ object SparkHadoopWriter {
     if (path == null) {
       throw new IllegalArgumentException("Output path is null")
     }
-    var outputPath = new Path(path)
+    val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(conf)
     if (outputPath == null || fs == null) {
       throw new IllegalArgumentException("Incorrectly formatted output path")

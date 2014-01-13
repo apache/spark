@@ -45,7 +45,7 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
           Some(new BlockMessageArray(responseMessages).toBufferMessage)
         } catch {
           case e: Exception => logError("Exception handling buffer message", e)
-          return None
+          None
         }
       }
       case otherMessage: Any => {
@@ -111,7 +111,7 @@ private[spark] object BlockManagerWorker extends Logging {
     val blockMessageArray = new BlockMessageArray(blockMessage)
     val resultMessage = connectionManager.sendMessageReliablySync(
         toConnManagerId, blockMessageArray.toBufferMessage)
-    return (resultMessage != None)
+    resultMessage != None
   }
 
   def syncGetBlock(msg: GetBlock, toConnManagerId: ConnectionManagerId): ByteBuffer = {
@@ -130,7 +130,7 @@ private[spark] object BlockManagerWorker extends Logging {
             return blockMessage.getData
           })
       }
-      case None => logDebug("No response message received"); return null
+      case None => logDebug("No response message received")
     }
     null
   }
