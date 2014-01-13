@@ -46,7 +46,7 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
 
   // These should be unset when a checkpoint is deserialized,
   // otherwise the SparkContext won't initialize correctly.
-  sparkConf.remove("spark.hostPort").remove("spark.driver.host").remove("spark.driver.port")
+  sparkConf.remove("spark.driver.host").remove("spark.driver.port")
 
   def validate() {
     assert(master != null, "Checkpoint.master is null")

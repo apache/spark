@@ -358,7 +358,6 @@ class CheckpointSuite extends TestSuiteBase {
     )
     ssc = new StreamingContext(checkpointDir)
     System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
     ssc.start()
     val outputNew = advanceTimeWithRealDelay[V](ssc, nextNumBatches)
     // the first element will be re-processed data of the last batch before restart
