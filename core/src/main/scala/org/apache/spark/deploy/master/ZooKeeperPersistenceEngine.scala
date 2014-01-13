@@ -17,19 +17,19 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.zookeeper._
 
 import akka.serialization.Serialization
 
-class ZooKeeperPersistenceEngine(serialization: Serialization)
+class ZooKeeperPersistenceEngine(serialization: Serialization, conf: SparkConf)
   extends PersistenceEngine
   with SparkZooKeeperWatcher
   with Logging
 {
-  val WORKING_DIR = System.getProperty("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
+  val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
 
-  val zk = new SparkZooKeeperSession(this)
+  val zk = new SparkZooKeeperSession(this, conf)
 
   zk.connect()
 
@@ -49,6 +49,14 @@ class ZooKeeperPersistenceEngine(serialization: Serialization)
     zk.delete(WORKING_DIR + "/app_" + app.id)
   }
 
+  override def addDriver(driver: DriverInfo) {
+    serializeIntoFile(WORKING_DIR + "/driver_" + driver.id, driver)
+  }
+
+  override def removeDriver(driver: DriverInfo) {
+    zk.delete(WORKING_DIR + "/driver_" + driver.id)
+  }
+
   override def addWorker(worker: WorkerInfo) {
     serializeIntoFile(WORKING_DIR + "/worker_" + worker.id, worker)
   }
@@ -61,13 +69,15 @@ class ZooKeeperPersistenceEngine(serialization: Serialization)
     zk.close()
   }
 
-  override def readPersistedData(): (Seq[ApplicationInfo], Seq[WorkerInfo]) = {
+  override def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
     val sortedFiles = zk.getChildren(WORKING_DIR).toList.sorted
     val appFiles = sortedFiles.filter(_.startsWith("app_"))
     val apps = appFiles.map(deserializeFromFile[ApplicationInfo])
+    val driverFiles = sortedFiles.filter(_.startsWith("driver_"))
+    val drivers = driverFiles.map(deserializeFromFile[DriverInfo])
     val workerFiles = sortedFiles.filter(_.startsWith("worker_"))
     val workers = workerFiles.map(deserializeFromFile[WorkerInfo])
-    (apps, workers)
+    (apps, drivers, workers)
   }
 
   private def serializeIntoFile(path: String, value: AnyRef) {

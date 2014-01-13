@@ -125,6 +125,14 @@ JavaRDDLike[T, JavaRDD[T]] {
    */
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
+
+  override def toString = rdd.toString
+
+  /** Assign a name to this RDD */
+  def setName(name: String): JavaRDD[T] = {
+    rdd.setName(name)
+    this
+  }
 }
 
 object JavaRDD {

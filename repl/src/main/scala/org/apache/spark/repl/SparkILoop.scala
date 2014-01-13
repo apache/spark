@@ -35,6 +35,7 @@ import java.lang.{Class => jClass}
 import scala.reflect.api.{Mirror, TypeCreator, Universe => ApiUniverse}
 
 import org.apache.spark.Logging
+import org.apache.spark.SparkConf
 import org.apache.spark.SparkContext
 
 /** The Scala interactive shell.  It provides a read-eval-print loop
@@ -834,7 +835,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   // runs :load `file` on any files passed via -i
   def loadFiles(settings: Settings) = settings match {
-    case settings: GenericRunnerSettings =>
+    case settings: SparkRunnerSettings =>
       for (filename <- settings.loadfiles.value) {
         val cmd = ":load " + filename
         command(cmd)
@@ -901,7 +902,6 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     addThunk(printWelcome())
     addThunk(initializeSpark())
 
-    loadFiles(settings)
     // it is broken on startup; go ahead and exit
     if (intp.reporter.hasErrors)
       return false
@@ -921,6 +921,8 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     }
     // printWelcome()
 
+    loadFiles(settings)
+
     try loop()
     catch AbstractOrMissingHandler()
     finally closeInterpreter()
@@ -929,10 +931,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   }
 
   def createSparkContext(): SparkContext = {
-    val uri = System.getenv("SPARK_EXECUTOR_URI")
-    if (uri != null) {
-      System.setProperty("spark.executor.uri", uri)
-    }
+    val execUri = System.getenv("SPARK_EXECUTOR_URI")
     val master = this.master match {
       case Some(m) => m
       case None => {
@@ -941,14 +940,25 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       }
     }
     val jars = SparkILoop.getAddedJars.map(new java.io.File(_).getAbsolutePath)
-    sparkContext = new SparkContext(master, "Spark shell", System.getenv("SPARK_HOME"), jars)
+    val conf = new SparkConf()
+      .setMaster(master)
+      .setAppName("Spark shell")
+      .setJars(jars)
+      .set("spark.repl.class.uri", intp.classServer.uri)
+    if (execUri != null) {
+      conf.set("spark.executor.uri", execUri)
+    }
+    if (System.getenv("SPARK_HOME") != null) {
+      conf.setSparkHome(System.getenv("SPARK_HOME"))
+    }
+    sparkContext = new SparkContext(conf)
     echo("Created spark context..")
     sparkContext
   }
 
   /** process command-line arguments and do as they request */
   def process(args: Array[String]): Boolean = {
-    val command = new CommandLine(args.toList, echo)
+    val command = new SparkCommandLine(args.toList, msg => echo(msg))
     def neededHelp(): String =
       (if (command.settings.help.value) command.usageMsg + "\n" else "") +
       (if (command.settings.Xhelp.value) command.xusageMsg + "\n" else "")

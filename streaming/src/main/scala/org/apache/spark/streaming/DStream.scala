@@ -17,24 +17,20 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.dstream._
-import StreamingContext._
-import org.apache.spark.util.MetadataCleaner
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
-//import Time._
+import scala.deprecated
+import scala.collection.mutable.HashMap
+import scala.reflect.ClassTag
+
+import StreamingContext._
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-
-import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.reflect.ClassTag
-
-import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
-
-import org.apache.hadoop.fs.{FileSystem, Path}
-import org.apache.hadoop.conf.Configuration
+import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.util.MetadataCleaner
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -58,10 +54,8 @@ import org.apache.hadoop.conf.Configuration
  */
 
 abstract class DStream[T: ClassTag] (
-    @transient protected[streaming] var ssc: StreamingContext
+    @transient private[streaming] var ssc: StreamingContext
   ) extends Serializable with Logging {
-
-  initLogging()
 
   // =======================================================================
   // Methods that should be implemented by subclasses of DStream
@@ -80,31 +74,31 @@ abstract class DStream[T: ClassTag] (
   // Methods and fields available on all DStreams
   // =======================================================================
 
-  // RDDs generated, marked as protected[streaming] so that testsuites can access it
+  // RDDs generated, marked as private[streaming] so that testsuites can access it
   @transient
-  protected[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
+  private[streaming] var generatedRDDs = new HashMap[Time, RDD[T]] ()
 
   // Time zero for the DStream
-  protected[streaming] var zeroTime: Time = null
+  private[streaming] var zeroTime: Time = null
 
   // Duration for which the DStream will remember each RDD created
-  protected[streaming] var rememberDuration: Duration = null
+  private[streaming] var rememberDuration: Duration = null
 
   // Storage level of the RDDs in the stream
-  protected[streaming] var storageLevel: StorageLevel = StorageLevel.NONE
+  private[streaming] var storageLevel: StorageLevel = StorageLevel.NONE
 
   // Checkpoint details
-  protected[streaming] val mustCheckpoint = false
-  protected[streaming] var checkpointDuration: Duration = null
-  protected[streaming] val checkpointData = new DStreamCheckpointData(this)
+  private[streaming] val mustCheckpoint = false
+  private[streaming] var checkpointDuration: Duration = null
+  private[streaming] val checkpointData = new DStreamCheckpointData(this)
 
   // Reference to whole DStream graph
-  protected[streaming] var graph: DStreamGraph = null
+  private[streaming] var graph: DStreamGraph = null
 
-  protected[streaming] def isInitialized = (zeroTime != null)
+  private[streaming] def isInitialized = (zeroTime != null)
 
   // Duration for which the DStream requires its parent DStream to remember each RDD created
-  protected[streaming] def parentRememberDuration = rememberDuration
+  private[streaming] def parentRememberDuration = rememberDuration
 
   /** Return the StreamingContext associated with this DStream */
   def context = ssc
@@ -144,7 +138,7 @@ abstract class DStream[T: ClassTag] (
    * the validity of future times is calculated. This method also recursively initializes
    * its parent DStreams.
    */
-  protected[streaming] def initialize(time: Time) {
+  private[streaming] def initialize(time: Time) {
     if (zeroTime != null && zeroTime != time) {
       throw new Exception("ZeroTime is already initialized to " + zeroTime
         + ", cannot initialize it again to " + time)
@@ -170,7 +164,7 @@ abstract class DStream[T: ClassTag] (
     dependencies.foreach(_.initialize(zeroTime))
   }
 
-  protected[streaming] def validate() {
+  private[streaming] def validate() {
     assert(rememberDuration != null, "Remember duration is set to null")
 
     assert(
@@ -213,7 +207,7 @@ abstract class DStream[T: ClassTag] (
         checkpointDuration + "). Please set it to higher than " + checkpointDuration + "."
     )
 
-    val metadataCleanerDelay = MetadataCleaner.getDelaySeconds
+    val metadataCleanerDelay = MetadataCleaner.getDelaySeconds(ssc.conf)
     logInfo("metadataCleanupDelay = " + metadataCleanerDelay)
     assert(
       metadataCleanerDelay < 0 || rememberDuration.milliseconds < metadataCleanerDelay * 1000,
@@ -234,7 +228,7 @@ abstract class DStream[T: ClassTag] (
     logInfo("Initialized and validated " + this)
   }
 
-  protected[streaming] def setContext(s: StreamingContext) {
+  private[streaming] def setContext(s: StreamingContext) {
     if (ssc != null && ssc != s) {
       throw new Exception("Context is already set in " + this + ", cannot set it again")
     }
@@ -243,7 +237,7 @@ abstract class DStream[T: ClassTag] (
     dependencies.foreach(_.setContext(ssc))
   }
 
-  protected[streaming] def setGraph(g: DStreamGraph) {
+  private[streaming] def setGraph(g: DStreamGraph) {
     if (graph != null && graph != g) {
       throw new Exception("Graph is already set in " + this + ", cannot set it again")
     }
@@ -251,7 +245,7 @@ abstract class DStream[T: ClassTag] (
     dependencies.foreach(_.setGraph(graph))
   }
 
-  protected[streaming] def remember(duration: Duration) {
+  private[streaming] def remember(duration: Duration) {
     if (duration != null && duration > rememberDuration) {
       rememberDuration = duration
       logInfo("Duration for remembering RDDs set to " + rememberDuration + " for " + this)
@@ -260,14 +254,14 @@ abstract class DStream[T: ClassTag] (
   }
 
   /** Checks whether the 'time' is valid wrt slideDuration for generating RDD */
-  protected def isTimeValid(time: Time): Boolean = {
+  private[streaming] def isTimeValid(time: Time): Boolean = {
     if (!isInitialized) {
       throw new Exception (this + " has not been initialized")
     } else if (time <= zeroTime || ! (time - zeroTime).isMultipleOf(slideDuration)) {
       logInfo("Time " + time + " is invalid as zeroTime is " + zeroTime + " and slideDuration is " + slideDuration + " and difference is " + (time - zeroTime))
       false
     } else {
-      logInfo("Time " + time + " is valid")
+      logDebug("Time " + time + " is valid")
       true
     }
   }
@@ -276,7 +270,7 @@ abstract class DStream[T: ClassTag] (
    * Retrieve a precomputed RDD of this DStream, or computes the RDD. This is an internal
    * method that should not be called directly.
    */
-  protected[streaming] def getOrCompute(time: Time): Option[RDD[T]] = {
+  private[streaming] def getOrCompute(time: Time): Option[RDD[T]] = {
     // If this DStream was not initialized (i.e., zeroTime not set), then do it
     // If RDD was already generated, then retrieve it from HashMap
     generatedRDDs.get(time) match {
@@ -317,7 +311,7 @@ abstract class DStream[T: ClassTag] (
    * that materializes the corresponding RDD. Subclasses of DStream may override this
    * to generate their own jobs.
    */
-  protected[streaming] def generateJob(time: Time): Option[Job] = {
+  private[streaming] def generateJob(time: Time): Option[Job] = {
     getOrCompute(time) match {
       case Some(rdd) => {
         val jobFunc = () => {
@@ -336,19 +330,18 @@ abstract class DStream[T: ClassTag] (
    * implementation clears the old generated RDDs. Subclasses of DStream may override
    * this to clear their own metadata along with the generated RDDs.
    */
-  protected[streaming] def clearOldMetadata(time: Time) {
-    var numForgotten = 0
+  private[streaming] def clearMetadata(time: Time) {
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
     generatedRDDs --= oldRDDs.keys
-    logInfo("Cleared " + oldRDDs.size + " RDDs that were older than " +
+    logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
       (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
-    dependencies.foreach(_.clearOldMetadata(time))
+    dependencies.foreach(_.clearMetadata(time))
   }
 
   /* Adds metadata to the Stream while it is running.
-   * This methd should be overwritten by sublcasses of InputDStream.
+   * This method should be overwritten by sublcasses of InputDStream.
    */
-  protected[streaming] def addMetadata(metadata: Any) {
+  private[streaming] def addMetadata(metadata: Any) {
     if (metadata != null) {
       logInfo("Dropping Metadata: " + metadata.toString)
     }
@@ -361,12 +354,18 @@ abstract class DStream[T: ClassTag] (
    * checkpointData. Subclasses of DStream (especially those of InputDStream) may override
    * this method to save custom checkpoint data.
    */
-  protected[streaming] def updateCheckpointData(currentTime: Time) {
-    logInfo("Updating checkpoint data for time " + currentTime)
-    checkpointData.update()
+  private[streaming] def updateCheckpointData(currentTime: Time) {
+    logDebug("Updating checkpoint data for time " + currentTime)
+    checkpointData.update(currentTime)
     dependencies.foreach(_.updateCheckpointData(currentTime))
-    checkpointData.cleanup()
     logDebug("Updated checkpoint data for time " + currentTime + ": " + checkpointData)
+  }
+
+  private[streaming] def clearCheckpointData(time: Time) {
+    logDebug("Clearing checkpoint data")
+    checkpointData.cleanup(time)
+    dependencies.foreach(_.clearCheckpointData(time))
+    logDebug("Cleared checkpoint data")
   }
 
   /**
@@ -375,7 +374,7 @@ abstract class DStream[T: ClassTag] (
    * from the checkpoint file names stored in checkpointData. Subclasses of DStream that
    * override the updateCheckpointData() method would also need to override this method.
    */
-  protected[streaming] def restoreCheckpointData() {
+  private[streaming] def restoreCheckpointData() {
     // Create RDDs from the checkpoint data
     logInfo("Restoring checkpoint data")
     checkpointData.restore()
@@ -489,15 +488,29 @@ abstract class DStream[T: ClassTag] (
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreach(foreachFunc: RDD[T] => Unit) {
-    this.foreach((r: RDD[T], t: Time) => foreachFunc(r))
+  @deprecated("use foreachRDD", "0.9.0")
+  def foreach(foreachFunc: RDD[T] => Unit) = this.foreachRDD(foreachFunc)
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   */
+  @deprecated("use foreachRDD", "0.9.0")
+  def foreach(foreachFunc: (RDD[T], Time) => Unit) = this.foreachRDD(foreachFunc)
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   */
+  def foreachRDD(foreachFunc: RDD[T] => Unit) {
+    this.foreachRDD((r: RDD[T], t: Time) => foreachFunc(r))
   }
 
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreach(foreachFunc: (RDD[T], Time) => Unit) {
+  def foreachRDD(foreachFunc: (RDD[T], Time) => Unit) {
     ssc.registerOutputStream(new ForEachDStream(this, context.sparkContext.clean(foreachFunc)))
   }
 
@@ -686,7 +699,7 @@ abstract class DStream[T: ClassTag] (
   /**
    * Return all the RDDs defined by the Interval object (both end times included)
    */
-  protected[streaming] def slice(interval: Interval): Seq[RDD[T]] = {
+  def slice(interval: Interval): Seq[RDD[T]] = {
     slice(interval.beginTime, interval.endTime)
   }
 
@@ -721,7 +734,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsObjectFile(file)
     }
-    this.foreach(saveFunc)
+    this.foreachRDD(saveFunc)
   }
 
   /**
@@ -734,7 +747,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsTextFile(file)
     }
-    this.foreach(saveFunc)
+    this.foreachRDD(saveFunc)
   }
 
   def register() {

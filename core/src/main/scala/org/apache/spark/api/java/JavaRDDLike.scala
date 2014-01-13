@@ -245,6 +245,22 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Return an array that contains all of the elements in this RDD.
+   */
+  def toArray(): JList[T] = collect()
+
+  /**
+   * Return an array that contains all of the elements in a specific partition of this RDD.
+   */
+  def collectPartitions(partitionIds: Array[Int]): Array[JList[T]] = {
+    // This is useful for implementing `take` from other language frontends
+    // like Python where the data is serialized.
+    import scala.collection.JavaConversions._
+    val res = context.runJob(rdd, (it: Iterator[T]) => it.toArray, partitionIds, true)
+    res.map(x => new java.util.ArrayList(x.toSeq)).toArray
+  }
+
+  /**
    * Reduces the elements of this RDD using the specified commutative and associative binary operator.
    */
   def reduce(f: JFunction2[T, T, T]): T = rdd.reduce(f)
@@ -433,4 +449,16 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[T]]
     takeOrdered(num, comp)
   }
+
+  /**
+   * Return approximate number of distinct elements in the RDD.
+   *
+   * The accuracy of approximation can be controlled through the relative standard deviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. The default value of
+   * relativeSD is 0.05.
+   */
+  def countApproxDistinct(relativeSD: Double = 0.05): Long = rdd.countApproxDistinct(relativeSD)
+
+  def name(): String = rdd.name
 }

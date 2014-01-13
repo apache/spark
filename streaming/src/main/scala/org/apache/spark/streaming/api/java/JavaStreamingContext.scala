@@ -17,28 +17,25 @@
 
 package org.apache.spark.streaming.api.java
 
-import java.lang.{Integer => JInt}
-import java.io.InputStream
-import java.util.{Map => JMap, List => JList}
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
+import java.io.InputStream
+import java.lang.{Integer => JInt}
+import java.util.{List => JList, Map => JMap}
+
+import akka.actor.{Props, SupervisorStrategy}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat}
-import twitter4j.Status
-import akka.actor.Props
-import akka.actor.SupervisorStrategy
-import akka.zeromq.Subscribe
-import akka.util.ByteString
 
-import twitter4j.auth.Authorization
-
+import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.api.java.{JavaPairRDD, JavaRDD, JavaSparkContext}
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
-import org.apache.spark.api.java.{JavaPairRDD, JavaSparkContext, JavaRDD}
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.scheduler.StreamingListener
+import org.apache.hadoop.conf.Configuration
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -123,89 +120,28 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     this(new StreamingContext(sparkContext.sc, batchDuration))
 
   /**
-   * Re-creates a StreamingContext from a checkpoint file.
-   * @param path Path either to the directory that was specified as the checkpoint directory, or
-   *             to the checkpoint file 'graph' or 'graph.bk'.
+   * Creates a StreamingContext using an existing SparkContext.
+   * @param conf A Spark application configuration
+   * @param batchDuration The time interval at which streaming data will be divided into batches
    */
-  def this(path: String) = this (new StreamingContext(path))
+  def this(conf: SparkConf, batchDuration: Duration) =
+    this(new StreamingContext(conf, batchDuration))
+
+  /**
+   * Re-creates a StreamingContext from a checkpoint file.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   */
+  def this(path: String) = this(new StreamingContext(path))
+
+  /**
+   * Re-creates a StreamingContext from a checkpoint file.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   *
+   */
+  def this(path: String, hadoopConf: Configuration) = this(new StreamingContext(path, hadoopConf))
 
   /** The underlying SparkContext */
   val sc: JavaSparkContext = new JavaSparkContext(ssc.sc)
-
-  /**
-   * Create an input stream that pulls messages form a Kafka Broker.
-   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
-   * @param groupId The group id for this consumer.
-   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   * in its own thread.
-   */
-  def kafkaStream(
-    zkQuorum: String,
-    groupId: String,
-    topics: JMap[String, JInt])
-  : JavaPairDStream[String, String] = {
-    implicit val cmt: ClassTag[String] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
-    ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
-      StorageLevel.MEMORY_ONLY_SER_2)
-
-  }
-
-  /**
-   * Create an input stream that pulls messages form a Kafka Broker.
-   * @param zkQuorum Zookeper quorum (hostname:port,hostname:port,..).
-   * @param groupId The group id for this consumer.
-   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   *               in its own thread.
-   * @param storageLevel RDD storage level. Defaults to memory-only
-   *
-   */
-  def kafkaStream(
-    zkQuorum: String,
-    groupId: String,
-    topics: JMap[String, JInt],
-    storageLevel: StorageLevel)
-  : JavaPairDStream[String, String] = {
-    implicit val cmt: ClassTag[String] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[String]]
-    ssc.kafkaStream(zkQuorum, groupId, Map(topics.mapValues(_.intValue()).toSeq: _*),
-      storageLevel)
-  }
-
-  /**
-   * Create an input stream that pulls messages form a Kafka Broker.
-   * @param keyTypeClass Key type of RDD
-   * @param valueTypeClass value type of RDD
-   * @param keyDecoderClass Type of kafka key decoder
-   * @param valueDecoderClass Type of kafka value decoder
-   * @param kafkaParams Map of kafka configuration paramaters.
-   *                    See: http://kafka.apache.org/configuration.html
-   * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
-   * in its own thread.
-   * @param storageLevel RDD storage level. Defaults to memory-only
-   */
-  def kafkaStream[K, V, U <: kafka.serializer.Decoder[_], T <: kafka.serializer.Decoder[_]](
-    keyTypeClass: Class[K],
-    valueTypeClass: Class[V],
-    keyDecoderClass: Class[U],
-    valueDecoderClass: Class[T],
-    kafkaParams: JMap[String, String],
-    topics: JMap[String, JInt],
-    storageLevel: StorageLevel)
-  : JavaPairDStream[K, V] = {
-    implicit val keyCmt: ClassTag[K] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K]]
-    implicit val valueCmt: ClassTag[V] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V]]
-
-    implicit val keyCmd: Manifest[U] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[U]]
-    implicit val valueCmd: Manifest[T] = implicitly[Manifest[AnyRef]].asInstanceOf[Manifest[T]]
-
-    ssc.kafkaStream[K, V, U, T](
-      kafkaParams.toMap,
-      Map(topics.mapValues(_.intValue()).toSeq: _*),
-      storageLevel)
-  }
 
   /**
    * Create a input stream from network source hostname:port. Data is received using
@@ -255,9 +191,11 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   }
 
   /**
-   * Creates a input stream that monitors a Hadoop-compatible filesystem
+   * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them as text files (using key as LongWritable, value
-   * as Text and input format as TextInputFormat). File names starting with . are ignored.
+   * as Text and input format as TextInputFormat). Files must be written to the
+   * monitored directory by "moving" them from another location within the same
+   * file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    */
   def textFileStream(directory: String): JavaDStream[String] = {
@@ -299,9 +237,10 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   }
 
   /**
-   * Creates a input stream that monitors a Hadoop-compatible filesystem
+   * Create a input stream that monitors a Hadoop-compatible filesystem
    * for new files and reads them using the given key-value types and input format.
-   * File names starting with . are ignored.
+   * Files must be written to the monitored directory by "moving" them from another
+   * location within the same file system. File names starting with . are ignored.
    * @param directory HDFS directory to monitor for new file
    * @tparam K Key type for reading HDFS file
    * @tparam V Value type for reading HDFS file
@@ -315,98 +254,6 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     implicit val cmf: ClassTag[F] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[F]]
     ssc.fileStream[K, V, F](directory)
-  }
-
-  /**
-   * Creates a input stream from a Flume source.
-   * @param hostname Hostname of the slave machine to which the flume data will be sent
-   * @param port     Port of the slave machine to which the flume data will be sent
-   * @param storageLevel  Storage level to use for storing the received objects
-   */
-  def flumeStream(hostname: String, port: Int, storageLevel: StorageLevel):
-    JavaDStream[SparkFlumeEvent] = {
-    ssc.flumeStream(hostname, port, storageLevel)
-  }
-
-
-  /**
-   * Creates a input stream from a Flume source.
-   * @param hostname Hostname of the slave machine to which the flume data will be sent
-   * @param port     Port of the slave machine to which the flume data will be sent
-   */
-  def flumeStream(hostname: String, port: Int): JavaDStream[SparkFlumeEvent] = {
-    ssc.flumeStream(hostname, port)
-  }
-
-  /**
-   * Create a input stream that returns tweets received from Twitter.
-   * @param twitterAuth Twitter4J Authorization object
-   * @param filters Set of filter strings to get only those tweets that match them
-   * @param storageLevel Storage level to use for storing the received objects
-   */
-  def twitterStream(
-      twitterAuth: Authorization,
-      filters: Array[String],
-      storageLevel: StorageLevel
-    ): JavaDStream[Status] = {
-    ssc.twitterStream(Some(twitterAuth), filters, storageLevel)
-  }
-
-  /**
-   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
-   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
-   * .consumerSecret, .accessToken and .accessTokenSecret to be set.
-   * @param filters Set of filter strings to get only those tweets that match them
-   * @param storageLevel Storage level to use for storing the received objects
-   */
-  def twitterStream(
-      filters: Array[String],
-      storageLevel: StorageLevel
-    ): JavaDStream[Status] = {
-    ssc.twitterStream(None, filters, storageLevel)
-  }
-
-  /**
-   * Create a input stream that returns tweets received from Twitter.
-   * @param twitterAuth Twitter4J Authorization
-   * @param filters Set of filter strings to get only those tweets that match them
-   */
-  def twitterStream(
-      twitterAuth: Authorization,
-      filters: Array[String]
-    ): JavaDStream[Status] = {
-    ssc.twitterStream(Some(twitterAuth), filters)
-  }
-
-  /**
-   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
-   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
-   * .consumerSecret, .accessToken and .accessTokenSecret to be set.
-   * @param filters Set of filter strings to get only those tweets that match them
-   */
-  def twitterStream(
-      filters: Array[String]
-    ): JavaDStream[Status] = {
-    ssc.twitterStream(None, filters)
-  }
-
-  /**
-   * Create a input stream that returns tweets received from Twitter.
-   * @param twitterAuth Twitter4J Authorization
-   */
-  def twitterStream(
-      twitterAuth: Authorization
-    ): JavaDStream[Status] = {
-    ssc.twitterStream(Some(twitterAuth))
-  }
-
-  /**
-   * Create a input stream that returns tweets received from Twitter using Twitter4J's default
-   * OAuth authentication; this requires the system properties twitter4j.oauth.consumerKey,
-   * .consumerSecret, .accessToken and .accessTokenSecret to be set.
-   */
-  def twitterStream(): JavaDStream[Status] = {
-    ssc.twitterStream()
   }
 
   /**
@@ -469,70 +316,6 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     ssc.actorStream[T](props, name)
-  }
-
-  /**
-   * Create an input stream that receives messages pushed by a zeromq publisher.
-   * @param publisherUrl Url of remote zeromq publisher
-   * @param subscribe topic to subscribe to
-   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
-   *                       of byte thus it needs the converter(which might be deserializer of bytes)
-   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
-   *                       and sub sequence refer to its payload.
-   * @param storageLevel  Storage level to use for storing the received objects
-   */
-  def zeroMQStream[T](
-      publisherUrl:String,
-      subscribe: Subscribe,
-      bytesToObjects: Seq[ByteString] ⇒ Iterator[T],
-      storageLevel: StorageLevel,
-      supervisorStrategy: SupervisorStrategy
-    ): JavaDStream[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    ssc.zeroMQStream[T](publisherUrl, subscribe, bytesToObjects, storageLevel, supervisorStrategy)
-  }
-
-  /**
-   * Create an input stream that receives messages pushed by a zeromq publisher.
-   * @param publisherUrl Url of remote zeromq publisher
-   * @param subscribe topic to subscribe to
-   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
-   *                       of byte thus it needs the converter(which might be deserializer of bytes)
-   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
-   *                       and sub sequence refer to its payload.
-   * @param storageLevel RDD storage level. Defaults to memory-only.
-   */
-  def zeroMQStream[T](
-      publisherUrl:String,
-      subscribe: Subscribe,
-      bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]],
-      storageLevel: StorageLevel
-    ): JavaDStream[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    def fn(x: Seq[ByteString]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
-    ssc.zeroMQStream[T](publisherUrl, subscribe, fn, storageLevel)
-  }
-
-  /**
-   * Create an input stream that receives messages pushed by a zeromq publisher.
-   * @param publisherUrl Url of remote zeromq publisher
-   * @param subscribe topic to subscribe to
-   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
-   *                       of byte thus it needs the converter(which might be deserializer of bytes)
-   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
-   *                       and sub sequence refer to its payload.
-   */
-  def zeroMQStream[T](
-      publisherUrl:String,
-      subscribe: Subscribe,
-      bytesToObjects: JFunction[Array[Array[Byte]], java.lang.Iterable[T]]
-    ): JavaDStream[T] = {
-    implicit val cm: ClassTag[T] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
-    def fn(x: Seq[ByteString]) = bytesToObjects.apply(x.map(_.toArray).toArray).toIterator
-    ssc.zeroMQStream[T](publisherUrl, subscribe, fn)
   }
 
   /**
@@ -687,14 +470,124 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     ssc.remember(duration)
   }
 
+  /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for
+    * receiving system events related to streaming.
+    */
+  def addStreamingListener(streamingListener: StreamingListener) {
+    ssc.addStreamingListener(streamingListener)
+  }
+
   /**
-   * Starts the execution of the streams.
+   * Start the execution of the streams.
    */
   def start() = ssc.start()
 
   /**
-   * Sstops the execution of the streams.
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   */
+  def awaitTermination() = ssc.awaitTermination()
+
+  /**
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   * @param timeout time to wait in milliseconds
+   */
+  def awaitTermination(timeout: Long) = ssc.awaitTermination(timeout)
+
+  /**
+   * Stop the execution of the streams. Will stop the associated JavaSparkContext as well.
    */
   def stop() = ssc.stop()
 
+  /**
+   * Stop the execution of the streams.
+   * @param stopSparkContext Stop the associated SparkContext or not
+   */
+  def stop(stopSparkContext: Boolean) = ssc.stop(stopSparkContext)
+}
+
+/**
+ * JavaStreamingContext object contains a number of utility functions.
+ */
+object JavaStreamingContext {
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the provided factory
+   * will be used to create a JavaStreamingContext.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier JavaStreamingContext program
+   * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      factory: JavaStreamingContextFactory
+    ): JavaStreamingContext = {
+    val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
+      factory.create.ssc
+    })
+    new JavaStreamingContext(ssc)
+  }
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the provided factory
+   * will be used to create a JavaStreamingContext.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
+   * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
+   *                       file system
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      hadoopConf: Configuration,
+      factory: JavaStreamingContextFactory
+    ): JavaStreamingContext = {
+    val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
+      factory.create.ssc
+    }, hadoopConf)
+    new JavaStreamingContext(ssc)
+  }
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the provided factory
+   * will be used to create a JavaStreamingContext.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
+   * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
+   *                       file system
+   * @param createOnError  Whether to create a new JavaStreamingContext if there is an
+   *                       error in reading checkpoint data.
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      hadoopConf: Configuration,
+      factory: JavaStreamingContextFactory,
+      createOnError: Boolean
+    ): JavaStreamingContext = {
+    val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
+      factory.create.ssc
+    }, hadoopConf, createOnError)
+    new JavaStreamingContext(ssc)
+  }
+
+  /**
+   * Find the JAR from which a given class was loaded, to make it easy for users to pass
+   * their JARs to StreamingContext.
+   */
+  def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls).toArray
+}
+
+/**
+ * Factory interface for creating a new JavaStreamingContext
+ */
+trait JavaStreamingContextFactory {
+  def create(): JavaStreamingContext
 }

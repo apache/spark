@@ -31,11 +31,11 @@ import java.util.Set;
 /**
  * Transitive closure on a graph, implemented in Java.
  */
-public class JavaTC {
+public final class JavaTC {
 
-  static int numEdges = 200;
-  static int numVertices = 100;
-  static Random rand = new Random(42);
+  private static final int numEdges = 200;
+  private static final int numVertices = 100;
+  private static final Random rand = new Random(42);
 
   static List<Tuple2<Integer, Integer>> generateGraph() {
     Set<Tuple2<Integer, Integer>> edges = new HashSet<Tuple2<Integer, Integer>>(numEdges);
@@ -43,15 +43,18 @@ public class JavaTC {
       int from = rand.nextInt(numVertices);
       int to = rand.nextInt(numVertices);
       Tuple2<Integer, Integer> e = new Tuple2<Integer, Integer>(from, to);
-      if (from != to) edges.add(e);
+      if (from != to) {
+        edges.add(e);
+      }
     }
     return new ArrayList<Tuple2<Integer, Integer>>(edges);
   }
 
   static class ProjectFn extends PairFunction<Tuple2<Integer, Tuple2<Integer, Integer>>,
       Integer, Integer> {
-    static ProjectFn INSTANCE = new ProjectFn();
+    static final ProjectFn INSTANCE = new ProjectFn();
 
+    @Override
     public Tuple2<Integer, Integer> call(Tuple2<Integer, Tuple2<Integer, Integer>> triple) {
       return new Tuple2<Integer, Integer>(triple._2()._2(), triple._2()._1());
     }
@@ -64,7 +67,7 @@ public class JavaTC {
     }
 
     JavaSparkContext sc = new JavaSparkContext(args[0], "JavaTC",
-        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaTC.class));
     Integer slices = (args.length > 1) ? Integer.parseInt(args[1]): 2;
     JavaPairRDD<Integer, Integer> tc = sc.parallelizePairs(generateGraph(), slices).cache();
 
@@ -76,6 +79,7 @@ public class JavaTC {
     // Because join() joins on keys, the edges are stored in reversed order.
     JavaPairRDD<Integer, Integer> edges = tc.map(
       new PairFunction<Tuple2<Integer, Integer>, Integer, Integer>() {
+        @Override
         public Tuple2<Integer, Integer> call(Tuple2<Integer, Integer> e) {
           return new Tuple2<Integer, Integer>(e._2(), e._1());
         }

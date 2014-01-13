@@ -44,7 +44,7 @@ private[spark] class PythonRDD[T: ClassTag](
     accumulator: Accumulator[JList[Array[Byte]]])
   extends RDD[Array[Byte]](parent) {
 
-  val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+  val bufferSize = conf.getInt("spark.buffer.size", 65536)
 
   override def getPartitions = parent.partitions
 
@@ -98,7 +98,7 @@ private[spark] class PythonRDD[T: ClassTag](
 
     // Return an iterator that read lines from the process's stdout
     val stream = new DataInputStream(new BufferedInputStream(worker.getInputStream, bufferSize))
-    return new Iterator[Array[Byte]] {
+    val stdoutIterator = new Iterator[Array[Byte]] {
       def next(): Array[Byte] = {
         val obj = _nextObj
         if (hasNext) {
@@ -159,6 +159,7 @@ private[spark] class PythonRDD[T: ClassTag](
 
       def hasNext = _nextObj.length != 0
     }
+    stdoutIterator
   }
 
   val asJavaRDD : JavaRDD[Array[Byte]] = JavaRDD.fromRDD(this)
@@ -379,10 +380,6 @@ private[spark] object PythonRDD extends Logging {
     file.close()
   }
 
-  def takePartition[T](rdd: RDD[T], partition: Int): Iterator[T] = {
-    implicit val cm : ClassTag[T] = rdd.elementClassTag
-    rdd.context.runJob(rdd, ((x: Iterator[T]) => x.toArray), Seq(partition), true).head.iterator
-  }
 }
 
 private class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
@@ -398,7 +395,7 @@ private class PythonAccumulatorParam(@transient serverHost: String, serverPort: 
 
   Utils.checkHost(serverHost, "Expected hostname")
 
-  val bufferSize = System.getProperty("spark.buffer.size", "65536").toInt
+  val bufferSize = SparkEnv.get.conf.getInt("spark.buffer.size", 65536)
 
   override def zero(value: JList[Array[Byte]]): JList[Array[Byte]] = new JArrayList
 

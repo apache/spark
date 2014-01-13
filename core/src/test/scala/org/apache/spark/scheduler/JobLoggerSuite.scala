@@ -42,12 +42,9 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
       def buildJobDepTest(jobID: Int, stage: Stage) = buildJobDep(jobID, stage) 
     }
     type MyRDD = RDD[(Int, Int)]
-    def makeRdd(
-        numPartitions: Int,
-        dependencies: List[Dependency[_]]
-      ): MyRDD = {
+    def makeRdd(numPartitions: Int, dependencies: List[Dependency[_]]): MyRDD = {
       val maxPartition = numPartitions - 1
-      return new MyRDD(sc, dependencies) {
+      new MyRDD(sc, dependencies) {
         override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
           throw new RuntimeException("should not be reached")
         override def getPartitions = (0 to maxPartition).map(i => new Partition {
@@ -95,7 +92,7 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
 
     assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
-    val user = System.getProperty("user.name", SparkContext.SPARK_UNKNOWN_USER)
+    val user = System.getProperty("user.name",  SparkContext.SPARK_UNKNOWN_USER)
     
     joblogger.getLogDir should be ("/tmp/spark-%s".format(user))
     joblogger.getJobIDtoPrintWriter.size should be (1)
@@ -117,7 +114,7 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
       override def onTaskEnd(taskEnd: SparkListenerTaskEnd)  = onTaskEndCount += 1
       override def onJobEnd(jobEnd: SparkListenerJobEnd) = onJobEndCount += 1
       override def onJobStart(jobStart: SparkListenerJobStart) = onJobStartCount += 1
-      override def onStageCompleted(stageCompleted: StageCompleted) = onStageCompletedCount += 1
+      override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = onStageCompletedCount += 1
       override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = onStageSubmittedCount += 1
     }
     sc.addSparkListener(joblogger)

@@ -43,7 +43,7 @@ object LocalALS {
   def generateR(): DoubleMatrix2D = {
     val mh = factory2D.random(M, F)
     val uh = factory2D.random(U, F)
-    return algebra.mult(mh, algebra.transpose(uh))
+    algebra.mult(mh, algebra.transpose(uh))
   }
 
   def rmse(targetR: DoubleMatrix2D, ms: Array[DoubleMatrix1D],
@@ -56,7 +56,7 @@ object LocalALS {
     //println("R: " + r)
     blas.daxpy(-1, targetR, r)
     val sumSqs = r.aggregate(Functions.plus, Functions.square)
-    return sqrt(sumSqs / (M * U))
+    sqrt(sumSqs / (M * U))
   }
 
   def updateMovie(i: Int, m: DoubleMatrix1D, us: Array[DoubleMatrix1D],
@@ -80,7 +80,7 @@ object LocalALS {
     val ch = new CholeskyDecomposition(XtX)
     val Xty2D = factory2D.make(Xty.toArray, F)
     val solved2D = ch.solve(Xty2D)
-    return solved2D.viewColumn(0)
+    solved2D.viewColumn(0)
   }
 
   def updateUser(j: Int, u: DoubleMatrix1D, ms: Array[DoubleMatrix1D],
@@ -104,7 +104,7 @@ object LocalALS {
     val ch = new CholeskyDecomposition(XtX)
     val Xty2D = factory2D.make(Xty.toArray, F)
     val solved2D = ch.solve(Xty2D)
-    return solved2D.viewColumn(0)
+    solved2D.viewColumn(0)
   }
 
   def main(args: Array[String]) {

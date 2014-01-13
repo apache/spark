@@ -73,8 +73,8 @@ class TestCheckpoint(PySparkTestCase):
         time.sleep(1)  # 1 second
         self.assertTrue(flatMappedRDD.isCheckpointed())
         self.assertEqual(flatMappedRDD.collect(), result)
-        self.assertEqual(self.checkpointDir.name,
-                         os.path.dirname(flatMappedRDD.getCheckpointFile()))
+        self.assertEqual("file:" + self.checkpointDir.name,
+                         os.path.dirname(os.path.dirname(flatMappedRDD.getCheckpointFile())))
 
     def test_checkpoint_and_restore(self):
         parCollection = self.sc.parallelize([1, 2, 3, 4])
