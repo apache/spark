@@ -17,19 +17,20 @@
 
 package org.apache.spark.streaming
 
-import StreamingContext._
-import org.apache.spark.streaming.dstream._
-import org.apache.spark.streaming.scheduler.Job
-import org.apache.spark.Logging
-import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.MetadataCleaner
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
+import scala.deprecated
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
-import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
+import StreamingContext._
 
+import org.apache.spark.Logging
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.dstream._
+import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.util.MetadataCleaner
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -482,6 +483,20 @@ abstract class DStream[T: ClassTag] (
    */
   def countByValue(numPartitions: Int = ssc.sc.defaultParallelism): DStream[(T, Long)] =
     this.map(x => (x, 1L)).reduceByKey((x: Long, y: Long) => x + y, numPartitions)
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   */
+  @deprecated("use foreachRDD", "0.9.0")
+  def foreach(foreachFunc: RDD[T] => Unit) = this.foreachRDD(foreachFunc)
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   */
+  @deprecated("use foreachRDD", "0.9.0")
+  def foreach(foreachFunc: (RDD[T], Time) => Unit) = this.foreachRDD(foreachFunc)
 
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
