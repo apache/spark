@@ -1,47 +1,26 @@
 package catalyst
 package optimizer
 
-import org.scalatest.FunSuite
-
 import types.IntegerType
 import util._
 import plans.logical.{LogicalPlan, LocalRelation}
+import rules._
 import expressions._
 import dsl._
 
-/* Implicit conversions for creating query plans */
+class ConstantFoldingSuite extends OptimizerTest {
 
-class OptimizerSuite extends FunSuite {
+  object Optimize extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Subqueries", Once,
+        EliminateSubqueries) ::
+      Batch("ConstantFolding", Once,
+        ConstantFolding,
+        BooleanSimplification) :: Nil
+  }
 
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
 
-  // Helper functions for comparing plans.
-
-  /**
-   * Since attribute references are given globally unique ids during analysis,
-   * we must normalize them to check if two different queries are identical.
-   */
-  protected def normalizeExprIds(plan: LogicalPlan) = {
-    val minId = plan.flatMap(_.expressions.flatMap(_.references).map(_.exprId.id)).min
-    plan transformAllExpressions {
-      case a: AttributeReference =>
-        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(a.exprId.id - minId))
-    }
-  }
-
-  /** Fails the test if the two plans do not match */
-  protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
-    val normalized1 = normalizeExprIds(plan1)
-    val normalized2 = normalizeExprIds(plan2)
-    if (normalized1 != normalized2)
-      fail(
-        s"""
-          |== FAIL: Plans do not match ===
-          |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
-        """.stripMargin)
-  }
-
-  // This test already passes.
   test("eliminate subqueries") {
     val originalQuery =
       testRelation
@@ -57,9 +36,9 @@ class OptimizerSuite extends FunSuite {
     comparePlans(optimized, correctAnswer)
   }
 
-  /*
-  * Unit tests for constant folding in expressions.
-  * */
+    /*
+      * Unit tests for constant folding in expressions.
+      * */
   test("Constant folding test: expressions only have literals") {
     val originalQuery =
       testRelation
@@ -69,8 +48,8 @@ class OptimizerSuite extends FunSuite {
           Literal(2) * (Literal(3) + Literal(4)) as Symbol("2*(3+4)"))
         .where(
           Literal(1) === Literal(1) &&
-          Literal(2) > Literal(3) ||
-          Literal(3) > Literal(2) )
+            Literal(2) > Literal(3) ||
+            Literal(3) > Literal(2) )
         .groupBy(
           Literal(2) * Literal(3) - Literal(6) / (Literal(4) - Literal(2))
         )(Literal(9) / Literal(3) as Symbol("9/3"))
@@ -120,13 +99,13 @@ class OptimizerSuite extends FunSuite {
       testRelation
         .where(
           (('a > 1 && Literal(1) === Literal(1)) ||
-          ('a < 10 && Literal(1) === Literal(2)) ||
-          (Literal(1) === Literal(1) && 'b > 1) ||
-          (Literal(1) === Literal(2) && 'b < 10)) &&
-          (('a > 1 || Literal(1) === Literal(1)) &&
-          ('a < 10 || Literal(1) === Literal(2)) &&
-          (Literal(1) === Literal(1) || 'b > 1) &&
-          (Literal(1) === Literal(2) || 'b < 10)))
+            ('a < 10 && Literal(1) === Literal(2)) ||
+            (Literal(1) === Literal(1) && 'b > 1) ||
+            (Literal(1) === Literal(2) && 'b < 10)) &&
+            (('a > 1 || Literal(1) === Literal(1)) &&
+              ('a < 10 || Literal(1) === Literal(2)) &&
+              (Literal(1) === Literal(1) || 'b > 1) &&
+              (Literal(1) === Literal(2) || 'b < 10)))
 
     val optimized = Optimize(originalQuery.analyze)
 

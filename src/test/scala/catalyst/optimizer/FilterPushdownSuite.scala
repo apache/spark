@@ -1,46 +1,27 @@
 package catalyst
-
-import org.scalatest.FunSuite
+package optimizer
 
 import expressions._
-import optimizer.Optimize
 import plans.logical._
+import rules._
 import util._
 
-/* Implicit conversions for creating query plans */
 import dsl._
 
-class OptimizerSuite extends FunSuite {
-  // Test relations.  Feel free to create more.
+class FilterPushdownSuite extends OptimizerTest {
+
+  object Optimize extends RuleExecutor[LogicalPlan] {
+    val batches =
+      Batch("Subqueries", Once,
+        EliminateSubqueries) ::
+      Batch("Filter Pushdown", Once,
+        EliminateSubqueries,
+        CombineFilters,
+        PredicatePushDownThoughProject,
+        PushPredicateThroughInnerJoin) :: Nil
+  }
+
   val testRelation = LocalRelation('a.int, 'b.int, 'c.int)
-
-  // Helper functions for comparing plans.
-
-  /**
-   * Since attribute references are given globally unique ids during analysis we must normalize them to check if two
-   * different queries are identical.
-   */
-  protected def normalizeExprIds(plan: LogicalPlan) = {
-    val minId = plan.flatMap(_.expressions.flatMap(_.references).map(_.exprId.id)).min
-    plan transformAllExpressions {
-      case a: AttributeReference =>
-        AttributeReference(a.name, a.dataType, a.nullable)(exprId = ExprId(a.exprId.id - minId))
-    }
-  }
-
-  /** Fails the test if the two plans do not match */
-  protected def comparePlans(plan1: LogicalPlan, plan2: LogicalPlan) {
-    val normalized1 = normalizeExprIds(plan1)
-    val normalized2 = normalizeExprIds(plan2)
-    println(normalized1.treeString)
-    println(normalized2.treeString)
-    if(normalized1 != normalized2)
-      fail(
-        s"""
-          |== FAIL: Plans do not match ===
-          |${sideBySide(normalized1.treeString, normalized2.treeString).mkString("\n")}
-        """.stripMargin)
-  }
 
   // This test already passes.
   test("eliminate subqueries") {
@@ -169,8 +150,7 @@ class OptimizerSuite extends FunSuite {
     val y = testRelation.subquery('y)
 
     val originalQuery = {
-      x.join(y)
-        .where("x.b".attr === "y.b".attr)
+      x.join(y, condition = Some("x.b".attr === "y.b".attr))
     }
     val optimized = Optimize(originalQuery.analyze)
 
@@ -190,8 +170,7 @@ class OptimizerSuite extends FunSuite {
     val left = testRelation.where('a === 1).subquery('x)
     val right = testRelation.where('a === 1).subquery('y)
     val correctAnswer =
-      left.join(right)
-        .where("x.b".attr === "y.b".attr)
+      left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
     comparePlans(optimized, optimizer.EliminateSubqueries(correctAnswer))
@@ -210,8 +189,7 @@ class OptimizerSuite extends FunSuite {
     val left = testRelation.where('a === 1).subquery('x)
     val right = testRelation.subquery('y)
     val correctAnswer =
-      left.join(right)
-        .where("x.b".attr === "y.b".attr)
+      left.join(right, condition = Some("x.b".attr === "y.b".attr))
         .analyze
 
     comparePlans(optimized, optimizer.EliminateSubqueries(correctAnswer))
@@ -232,13 +210,9 @@ class OptimizerSuite extends FunSuite {
     val left = testRelation.where('a === 1).subquery('x)
     val right = testRelation.subquery('y)
     val correctAnswer =
-      lleft
-        .join(
-          left
-            .join(right)
-            .where("x.b".attr === "y.b".attr)
-        )
-        .where("z.a".attr === "x.b".attr)
+      lleft.join(
+        left.join(right, condition = Some("x.b".attr === "y.b".attr)),
+          condition = Some("z.a".attr === "x.b".attr))
         .analyze
 
     comparePlans(optimized, optimizer.EliminateSubqueries(correctAnswer))
