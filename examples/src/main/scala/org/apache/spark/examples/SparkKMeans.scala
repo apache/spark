@@ -30,7 +30,7 @@ object SparkKMeans {
   val rand = new Random(42)
     
   def parseVector(line: String): Vector = {
-      return new Vector(line.split(' ').map(_.toDouble))
+    new Vector(line.split(' ').map(_.toDouble))
   }
   
   def closestPoint(p: Vector, centers: Array[Vector]): Int = {
@@ -46,7 +46,7 @@ object SparkKMeans {
       }
     }
   
-    return bestIndex
+    bestIndex
   }
 
   def main(args: Array[String]) {
@@ -61,15 +61,15 @@ object SparkKMeans {
     val K = args(2).toInt
     val convergeDist = args(3).toDouble
   
-    var kPoints = data.takeSample(false, K, 42).toArray
+    val kPoints = data.takeSample(withReplacement = false, K, 42).toArray
     var tempDist = 1.0
 
     while(tempDist > convergeDist) {
-      var closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
+      val closest = data.map (p => (closestPoint(p, kPoints), (p, 1)))
       
-      var pointStats = closest.reduceByKey{case ((x1, y1), (x2, y2)) => (x1 + x2, y1 + y2)}
+      val pointStats = closest.reduceByKey{case ((x1, y1), (x2, y2)) => (x1 + x2, y1 + y2)}
       
-      var newPoints = pointStats.map {pair => (pair._1, pair._2._1 / pair._2._2)}.collectAsMap()
+      val newPoints = pointStats.map {pair => (pair._1, pair._2._1 / pair._2._2)}.collectAsMap()
       
       tempDist = 0.0
       for (i <- 0 until K) {

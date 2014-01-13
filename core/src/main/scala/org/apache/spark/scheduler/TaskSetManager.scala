@@ -228,7 +228,7 @@ private[spark] class TaskSetManager(
         return Some(index)
       }
     }
-    return None
+    None
   }
 
   /** Check whether a task is currently running an attempt on a given host */
@@ -291,7 +291,7 @@ private[spark] class TaskSetManager(
       }
     }
 
-    return None
+    None
   }
 
   /**
@@ -332,7 +332,7 @@ private[spark] class TaskSetManager(
     }
 
     // Finally, if all else has failed, find a speculative task
-    return findSpeculativeTask(execId, host, locality)
+    findSpeculativeTask(execId, host, locality)
   }
 
   /**
@@ -387,7 +387,7 @@ private[spark] class TaskSetManager(
         case _ =>
       }
     }
-    return None
+    None
   }
 
   /**
@@ -584,7 +584,7 @@ private[spark] class TaskSetManager(
   }
 
   override def getSchedulableByName(name: String): Schedulable = {
-    return null
+    null
   }
 
   override def addSchedulable(schedulable: Schedulable) {}
@@ -594,7 +594,7 @@ private[spark] class TaskSetManager(
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
     var sortedTaskSetQueue = ArrayBuffer[TaskSetManager](this)
     sortedTaskSetQueue += this
-    return sortedTaskSetQueue
+    sortedTaskSetQueue
   }
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
@@ -669,7 +669,7 @@ private[spark] class TaskSetManager(
         }
       }
     }
-    return foundTasks
+    foundTasks
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {

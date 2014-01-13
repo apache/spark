@@ -103,7 +103,7 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
       retval ++= SplitInfo.toSplitInfo(inputFormatClazz, path, split)
     }
 
-    return retval.toSet
+    retval.toSet
   }
 
   // This method does not expect failures, since validate has already passed ...
@@ -121,18 +121,18 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
         elem => retval ++= SplitInfo.toSplitInfo(inputFormatClazz, path, elem)
     )
 
-    return retval.toSet
+    retval.toSet
    }
 
   private def findPreferredLocations(): Set[SplitInfo] = {
     logDebug("mapreduceInputFormat : " + mapreduceInputFormat + ", mapredInputFormat : " + mapredInputFormat +
       ", inputFormatClazz : " + inputFormatClazz)
     if (mapreduceInputFormat) {
-      return prefLocsFromMapreduceInputFormat()
+      prefLocsFromMapreduceInputFormat()
     }
     else {
       assert(mapredInputFormat)
-      return prefLocsFromMapredInputFormat()
+      prefLocsFromMapredInputFormat()
     }
   }
 }

@@ -764,7 +764,7 @@ abstract class RDD[T: ClassTag](
         val entry = iter.next()
         m1.put(entry.getKey, m1.getLong(entry.getKey) + entry.getLongValue)
       }
-      return m1
+      m1
     }
     val myResult = mapPartitions(countPartition).reduce(mergeMaps)
     myResult.asInstanceOf[java.util.Map[T, Long]]   // Will be wrapped as a Scala mutable Map
@@ -842,7 +842,7 @@ abstract class RDD[T: ClassTag](
       partsScanned += numPartsToTry
     }
 
-    return buf.toArray
+    buf.toArray
   }
 
   /**

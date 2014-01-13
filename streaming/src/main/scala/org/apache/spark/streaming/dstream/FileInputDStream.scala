@@ -239,7 +239,7 @@ class FileInputDStream[K: ClassTag, V: ClassTag, F <: NewInputFormat[K,V] : Clas
           reset()
           return false
       }
-      return true
+      true
     }
   }
 }

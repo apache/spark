@@ -53,9 +53,9 @@ object Partitioner {
       return r.partitioner.get
     }
     if (rdd.context.conf.contains("spark.default.parallelism")) {
-      return new HashPartitioner(rdd.context.defaultParallelism)
+      new HashPartitioner(rdd.context.defaultParallelism)
     } else {
-      return new HashPartitioner(bySize.head.partitions.size)
+      new HashPartitioner(bySize.head.partitions.size)
     }
   }
 }

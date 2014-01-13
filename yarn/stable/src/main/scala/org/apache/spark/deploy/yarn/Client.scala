@@ -208,7 +208,8 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     if (srcUri.getPort() != dstUri.getPort()) {
       return false
     }
-    return true
+
+    true
   }
 
   /** Copy the file into HDFS if needed. */
