@@ -146,7 +146,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
     ssc = new StreamingContext(sc, batchDuration)
   }
 
-  test("waitForStop") {
+  test("awaitTermination") {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
     inputStream.map(x => x).register
@@ -158,13 +158,13 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
 
     // test whether waitForStop() exits after give amount of time
     failAfter(1000 millis) {
-      ssc.waitForStop(500)
+      ssc.awaitTermination(500)
     }
 
     // test whether waitForStop() does not exit if not time is given
     val exception = intercept[Exception] {
       failAfter(1000 millis) {
-        ssc.waitForStop()
+        ssc.awaitTermination()
         throw new Exception("Did not wait for stop")
       }
     }
@@ -178,11 +178,11 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
           ssc.stop()
         }
       }.start()
-      ssc.waitForStop()
+      ssc.awaitTermination()
     }
   }
 
-  test("waitForStop with error in task") {
+  test("awaitTermination with error in task") {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
     inputStream.map(x => { throw new TestException("error in map task"); x})
@@ -190,19 +190,19 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
 
     val exception = intercept[Exception] {
       ssc.start()
-      ssc.waitForStop(5000)
+      ssc.awaitTermination(5000)
     }
     assert(exception.getMessage.contains("map task"), "Expected exception not thrown")
   }
 
-  test("waitForStop with error in job generation") {
+  test("awaitTermination with error in job generation") {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
 
     inputStream.transform(rdd => { throw new TestException("error in transform"); rdd }).register
     val exception = intercept[TestException] {
       ssc.start()
-      ssc.waitForStop(5000)
+      ssc.awaitTermination(5000)
     }
     assert(exception.getMessage.contains("transform"), "Expected exception not thrown")
   }
