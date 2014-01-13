@@ -56,8 +56,9 @@ private[spark] class StagePage(parent: JobProgressUI) {
       val hasShuffleRead = shuffleReadBytes > 0
       val shuffleWriteBytes = listener.stageIdToShuffleWrite.getOrElse(stageId, 0L)
       val hasShuffleWrite = shuffleWriteBytes > 0
-      val bytesSpilled = listener.stageIdToBytesSpilled.getOrElse(stageId, 0L)
-      val hasBytesSpilled = bytesSpilled > 0
+      val memoryBytesSpilled = listener.stageIdToMemoryBytesSpilled.getOrElse(stageId, 0L)
+      val diskBytesSpilled = listener.stageIdToDiskBytesSpilled.getOrElse(stageId, 0L)
+      val hasBytesSpilled = (memoryBytesSpilled > 0 && diskBytesSpilled > 0)
 
       var activeTime = 0L
       listener.stageIdToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
@@ -85,8 +86,12 @@ private[spark] class StagePage(parent: JobProgressUI) {
             }
             {if (hasBytesSpilled)
             <li>
-              <strong>Bytes spilled: </strong>
-              {Utils.bytesToString(bytesSpilled)}
+              <strong>Bytes spilled (memory): </strong>
+              {Utils.bytesToString(memoryBytesSpilled)}
+            </li>
+            <li>
+              <strong>Bytes spilled (disk): </strong>
+              {Utils.bytesToString(diskBytesSpilled)}
             </li>
             }
           </ul>
@@ -97,7 +102,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         Seq("Duration", "GC Time", "Result Ser Time") ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
-        {if (hasBytesSpilled) Seq("Bytes Spilled") else Nil} ++
+        {if (hasBytesSpilled) Seq("Bytes Spilled (Memory)", "Bytes Spilled (Disk)") else Nil} ++
         Seq("Errors")
 
       val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
@@ -162,11 +167,19 @@ private[spark] class StagePage(parent: JobProgressUI) {
           }
           val shuffleWriteQuantiles = "Shuffle Write" +: getQuantileCols(shuffleWriteSizes)
 
-          val bytesSpilledSizes = validTasks.map {
+          val memoryBytesSpilledSizes = validTasks.map {
             case(info, metrics, exception) =>
-              metrics.get.bytesSpilled.toDouble
+              metrics.get.memoryBytesSpilled.toDouble
           }
-          val bytesSpilledQuantiles = "Bytes Spilled" +: getQuantileCols(bytesSpilledSizes)
+          val memoryBytesSpilledQuantiles = "Bytes spilled (memory)" +:
+            getQuantileCols(memoryBytesSpilledSizes)
+
+          val diskBytesSpilledSizes = validTasks.map {
+            case(info, metrics, exception) =>
+              metrics.get.diskBytesSpilled.toDouble
+          }
+          val diskBytesSpilledQuantiles = "Bytes spilled (disk)" +:
+            getQuantileCols(diskBytesSpilledSizes)
 
           val listings: Seq[Seq[String]] = Seq(
             serializationQuantiles,
@@ -175,7 +188,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
             schedulerDelayQuantiles,
             if (hasShuffleRead) shuffleReadQuantiles else Nil,
             if (hasShuffleWrite) shuffleWriteQuantiles else Nil,
-            if (hasBytesSpilled) bytesSpilledQuantiles else Nil)
+            if (hasBytesSpilled) memoryBytesSpilledQuantiles else Nil,
+            if (hasBytesSpilled) diskBytesSpilledQuantiles else Nil)
 
           val quantileHeaders = Seq("Metric", "Min", "25th percentile",
             "Median", "75th percentile", "Max")
@@ -220,9 +234,13 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val writeTimeReadable = maybeWriteTime.map{ t => t / (1000 * 1000)}.map{ ms =>
       if (ms == 0) "" else parent.formatDuration(ms)}.getOrElse("")
 
-    val maybeBytesSpilled = metrics.map{m => m.bytesSpilled}
-    val bytesSpilledSortable = maybeBytesSpilled.map(_.toString).getOrElse("")
-    val bytesSpilledReadable = maybeBytesSpilled.map{Utils.bytesToString(_)}.getOrElse("")
+    val maybeMemoryBytesSpilled = metrics.map{m => m.memoryBytesSpilled}
+    val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.map(_.toString).getOrElse("")
+    val memoryBytesSpilledReadable = maybeMemoryBytesSpilled.map{Utils.bytesToString(_)}.getOrElse("")
+
+    val maybeDiskBytesSpilled = metrics.map{m => m.diskBytesSpilled}
+    val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
+    val diskBytesSpilledReadable = maybeDiskBytesSpilled.map{Utils.bytesToString(_)}.getOrElse("")
 
     <tr>
       <td>{info.index}</td>
@@ -254,8 +272,11 @@ private[spark] class StagePage(parent: JobProgressUI) {
          </td>
       }}
       {if (bytesSpilled) {
-        <td sorttable_customkey={bytesSpilledSortable}>
-          {bytesSpilledReadable}
+        <td sorttable_customkey={memoryBytesSpilledSortable}>
+          {memoryBytesSpilledReadable}
+        </td>
+        <td sorttable_customkey={diskBytesSpilledSortable}>
+          {diskBytesSpilledReadable}
         </td>
       }}
       <td>{exception.map(e =>

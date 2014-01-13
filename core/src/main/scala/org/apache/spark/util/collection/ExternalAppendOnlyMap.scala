@@ -86,7 +86,8 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   private var spillCount = 0
 
   // Number of bytes spilled in total
-  private var _bytesSpilled = 0L
+  private var _memoryBytesSpilled = 0L
+  private var _diskBytesSpilled = 0L
 
   private val fileBufferSize = sparkConf.getInt("spark.shuffle.file.buffer.kb", 100) * 1024
   private val syncWrites = sparkConf.getBoolean("spark.shuffle.sync", false)
@@ -153,6 +154,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
       writer.commit()
     } finally {
       // Partial failures cannot be tolerated; do not revert partial writes
+      _diskBytesSpilled += writer.bytesWritten
       writer.close()
     }
     currentMap = new SizeTrackingAppendOnlyMap[K, C]
@@ -164,13 +166,11 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
       shuffleMemoryMap(Thread.currentThread().getId) = 0
     }
     numPairsInMemory = 0
-    _bytesSpilled += mapSize
+    _memoryBytesSpilled += mapSize
   }
 
-  /**
-   * Register the total number of bytes spilled by this task
-   */
-  def bytesSpilled: Long = _bytesSpilled
+  def memoryBytesSpilled: Long = _memoryBytesSpilled
+  def diskBytesSpilled: Long = _diskBytesSpilled
 
   /**
    * Return an iterator that merges the in-memory map with the spilled maps.

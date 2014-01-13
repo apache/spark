@@ -48,7 +48,8 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
         <th>Succeeded Tasks</th>
         <th>Shuffle Read</th>
         <th>Shuffle Write</th>
-        <th>Bytes Spilled</th>
+        <th>Bytes Spilled (Memory)</th>
+        <th>Bytes Spilled (Disk)</th>
       </thead>
       <tbody>
         {createExecutorTable()}
@@ -81,7 +82,8 @@ private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) 
               <td>{v.succeededTasks}</td>
               <td>{Utils.bytesToString(v.shuffleRead)}</td>
               <td>{Utils.bytesToString(v.shuffleWrite)}</td>
-              <td>{Utils.bytesToString(v.bytesSpilled)}</td>
+              <td>{Utils.bytesToString(v.memoryBytesSpilled)}</td>
+              <td>{Utils.bytesToString(v.diskBytesSpilled)}</td>
             </tr>
           }
         }
