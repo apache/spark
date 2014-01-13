@@ -107,7 +107,7 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, CoGroupCombiner)] = {
 
-    val externalSorting = sparkConf.getBoolean("spark.shuffle.externalSorting", false)
+    val externalSorting = sparkConf.getBoolean("spark.shuffle.externalSorting", true)
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
 
