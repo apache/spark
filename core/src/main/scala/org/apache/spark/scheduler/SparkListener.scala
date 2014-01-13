@@ -43,6 +43,9 @@ case class SparkListenerJobStart(job: ActiveJob, stageIds: Array[Int], propertie
 case class SparkListenerJobEnd(job: ActiveJob, jobResult: JobResult)
      extends SparkListenerEvents
 
+/** An event used in the listener to shutdown the listener daemon thread. */
+private[scheduler] case object SparkListenerShutdown extends SparkListenerEvents
+
 trait SparkListener {
   /**
    * Called when a stage is completed, with information on the completed stage
