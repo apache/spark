@@ -45,6 +45,10 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
       ssc.stop()
       ssc = null
     }
+    if (sc != null) {
+      sc.stop()
+      sc = null
+    }
   }
 
   test("from no conf constructor") {
@@ -124,6 +128,8 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
 
   test("stop multiple times") {
     ssc = new StreamingContext(master, appName, batchDuration)
+    addInputStream(ssc).register
+    ssc.start()
     ssc.stop()
     ssc.stop()
     ssc = null
@@ -131,9 +137,13 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
 
   test("stop only streaming context") {
     ssc = new StreamingContext(master, appName, batchDuration)
+    sc = ssc.sparkContext
+    addInputStream(ssc).register
+    ssc.start()
     ssc.stop(false)
     ssc = null
     assert(sc.makeRDD(1 to 100).collect().size === 100)
+    ssc = new StreamingContext(sc, batchDuration)
   }
 
   test("waitForStop") {
