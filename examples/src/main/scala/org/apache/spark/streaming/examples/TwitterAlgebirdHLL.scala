@@ -67,7 +67,7 @@ object TwitterAlgebirdHLL {
 
     val exactUsers = users.map(id => Set(id)).reduce(_ ++ _)
 
-    approxUsers.foreach(rdd => {
+    approxUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partial = rdd.first()
         globalHll += partial
@@ -76,7 +76,7 @@ object TwitterAlgebirdHLL {
       }
     })
 
-    exactUsers.foreach(rdd => {
+    exactUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partial = rdd.first()
         userSet ++= partial

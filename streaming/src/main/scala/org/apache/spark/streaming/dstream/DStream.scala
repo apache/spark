@@ -17,10 +17,12 @@
 
 package org.apache.spark.streaming.dstream
 
+
+import scala.deprecated
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
 
-import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
+import java.io.{IOException, ObjectInputStream, ObjectOutputStream}
 
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
@@ -30,7 +32,6 @@ import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.scheduler.Job
 import org.apache.spark.streaming.Duration
-
 
 /**
  * A Discretized Stream (DStream), the basic abstraction in Spark Streaming, is a continuous
@@ -488,15 +489,29 @@ abstract class DStream[T: ClassTag] (
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreach(foreachFunc: RDD[T] => Unit) {
-    this.foreach((r: RDD[T], t: Time) => foreachFunc(r))
+  @deprecated("use foreachRDD", "0.9.0")
+  def foreach(foreachFunc: RDD[T] => Unit) = this.foreachRDD(foreachFunc)
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   */
+  @deprecated("use foreachRDD", "0.9.0")
+  def foreach(foreachFunc: (RDD[T], Time) => Unit) = this.foreachRDD(foreachFunc)
+
+  /**
+   * Apply a function to each RDD in this DStream. This is an output operator, so
+   * 'this' DStream will be registered as an output stream and therefore materialized.
+   */
+  def foreachRDD(foreachFunc: RDD[T] => Unit) {
+    this.foreachRDD((r: RDD[T], t: Time) => foreachFunc(r))
   }
 
   /**
    * Apply a function to each RDD in this DStream. This is an output operator, so
    * 'this' DStream will be registered as an output stream and therefore materialized.
    */
-  def foreach(foreachFunc: (RDD[T], Time) => Unit) {
+  def foreachRDD(foreachFunc: (RDD[T], Time) => Unit) {
     ssc.registerOutputStream(new ForEachDStream(this, context.sparkContext.clean(foreachFunc)))
   }
 
@@ -720,7 +735,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsObjectFile(file)
     }
-    this.foreach(saveFunc)
+    this.foreachRDD(saveFunc)
   }
 
   /**
@@ -733,7 +748,7 @@ abstract class DStream[T: ClassTag] (
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsTextFile(file)
     }
-    this.foreach(saveFunc)
+    this.foreachRDD(saveFunc)
   }
 
   def register() {

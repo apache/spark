@@ -81,7 +81,7 @@ object TwitterAlgebirdCMS {
     val exactTopUsers = users.map(id => (id, 1))
       .reduceByKey((a, b) => a + b)
 
-    approxTopUsers.foreach(rdd => {
+    approxTopUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partial = rdd.first()
         val partialTopK = partial.heavyHitters.map(id =>
@@ -96,7 +96,7 @@ object TwitterAlgebirdCMS {
       }
     })
 
-    exactTopUsers.foreach(rdd => {
+    exactTopUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partialMap = rdd.collect().toMap
         val partialTopK = rdd.map(

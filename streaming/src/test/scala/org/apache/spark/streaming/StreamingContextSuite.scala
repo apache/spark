@@ -187,7 +187,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
     inputStream.map(x => { throw new TestException("error in map task"); x})
-               .foreach(_.count)
+               .foreachRDD(_.count)
 
     val exception = intercept[Exception] {
       ssc.start()
