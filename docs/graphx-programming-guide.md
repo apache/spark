@@ -638,6 +638,19 @@ val sssp = initialGraph.pregel(Double.PositiveInfinity)(
 # Graph Builders
 <a name="graph_builders"></a>
 
+[`GraphLoader.edgeListFile`][GraphLoader.edgeListFile]
+
+[`Graph.apply`][Graph.apply]
+
+[`Graph.fromEdgeTuples`][Graph.fromEdgeTuples]
+
+[`Graph.fromEdges`][Graph.fromEdges]
+
+[GraphLoader.edgeListFile]: api/graphx/index.html#org.apache.spark.graphx.GraphLoader$@edgeListFile(SparkContext,String,Boolean,Int):Graph[Int,Int]
+[Graph.apply]: api/graphx/index.html#org.apache.spark.graphx.Graph$@apply[VD,ED](RDD[(VertexID,VD)],RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
+[Graph.fromEdgeTuples]: api/graphx/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexID,VertexID)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]
+[Graph.fromEdges]: api/graphx/index.html#org.apache.spark.graphx.Graph$@fromEdges[VD,ED](RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
+
 # Vertex and Edge RDDs
 <a name="vertex_and_edge_rdds"></a>
 
