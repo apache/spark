@@ -94,7 +94,7 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
             }
         }
       case None =>
-        logInfo("Nothing to delete")
+        logDebug("Nothing to delete")
     }
   }
 
