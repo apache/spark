@@ -36,11 +36,11 @@ class PythonMLLibAPI extends Serializable {
     }
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    val magic = bb.getLong
+    val magic = bb.getLong()
     if (magic != 1) {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
-    val length = bb.getLong
+    val length = bb.getLong()
     if (packetLength != 16 + 8 * length) {
       throw new IllegalArgumentException("Length " + length + " is wrong.")
     }
@@ -69,12 +69,12 @@ class PythonMLLibAPI extends Serializable {
     }
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    val magic = bb.getLong
+    val magic = bb.getLong()
     if (magic != 2) {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
-    val rows = bb.getLong
-    val cols = bb.getLong
+    val rows = bb.getLong()
+    val cols = bb.getLong()
     if (packetLength != 24 + 8 * rows * cols) {
       throw new IllegalArgumentException("Size " + rows + "x" + cols + " is wrong.")
     }
@@ -198,8 +198,8 @@ class PythonMLLibAPI extends Serializable {
   private def unpackRating(ratingBytes: Array[Byte]): Rating = {
     val bb = ByteBuffer.wrap(ratingBytes)
     bb.order(ByteOrder.nativeOrder())
-    val user = bb.getInt
-    val product = bb.getInt
+    val user = bb.getInt()
+    val product = bb.getInt()
     val rating = bb.getDouble
     new Rating(user, product, rating)
   }
@@ -208,8 +208,8 @@ class PythonMLLibAPI extends Serializable {
   private[spark] def unpackTuple(tupleBytes: Array[Byte]): (Int, Int) = {
     val bb = ByteBuffer.wrap(tupleBytes)
     bb.order(ByteOrder.nativeOrder())
-    val v1 = bb.getInt
-    val v2 = bb.getInt
+    val v1 = bb.getInt()
+    val v2 = bb.getInt()
     (v1, v2)
   }
 

@@ -38,6 +38,5 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable
    */
   def computeCost(data: RDD[Array[Double]]): Double = {
     data.map(p => KMeans.pointCost(clusterCenters, p)).sum()
-
   }
 }
