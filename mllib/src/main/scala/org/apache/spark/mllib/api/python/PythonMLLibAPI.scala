@@ -217,7 +217,7 @@ class PythonMLLibAPI extends Serializable {
     bb.order(ByteOrder.nativeOrder())
     val user = bb.getInt()
     val product = bb.getInt()
-    val rating = bb.getDouble
+    val rating = bb.getDouble()
     new Rating(user, product, rating)
   }
 
