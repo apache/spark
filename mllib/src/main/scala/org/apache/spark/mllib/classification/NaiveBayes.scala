@@ -21,17 +21,18 @@ import scala.collection.mutable
 
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.rdd.RDD
+import org.apache.spark.mllib.util.MLUtils
 
 /**
  * Model for Naive Bayes Classifiers.
  *
  * @param pi Log of class priors, whose dimension is C.
- * @param theta Log of class conditional probabilities, whose dimension is CXD.
+ * @param theta Log of class conditional probabilities, whose dimension is CxD.
  */
-class NaiveBayesModel(pi: Array[Double], theta: Array[Array[Double]])
+class NaiveBayesModel(val pi: Array[Double], val theta: Array[Array[Double]])
   extends ClassificationModel with Serializable {
 
   // Create a column vector that can be used for predictions
@@ -50,10 +51,21 @@ class NaiveBayesModel(pi: Array[Double], theta: Array[Array[Double]])
 /**
  * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
  *
- * @param lambda The smooth parameter
+ * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
+ * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
+ * document classification.  By making every vector a 0-1 vector, it can also be used as
+ * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
  */
-class NaiveBayes private (val lambda: Double = 1.0)
-  extends Serializable with Logging {
+class NaiveBayes private (var lambda: Double)
+  extends Serializable with Logging
+{
+  def this() = this(1.0)
+
+  /** Set the smoothing parameter. Default: 1.0. */
+  def setLambda(lambda: Double): NaiveBayes = {
+    this.lambda = lambda
+    this
+  }
 
   /**
    * Run the algorithm with the configured parameters on an input RDD of LabeledPoint entries.
@@ -106,14 +118,49 @@ object NaiveBayes {
    *
    * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
    * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
-   * document classification.  By making every vector a 0-1 vector. it can also be used as
+   * document classification.  By making every vector a 0-1 vector, it can also be used as
+   * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
+   *
+   * This version of the method uses a default smoothing parameter of 1.0.
+   *
+   * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
+   *              vector or a count vector.
+   */
+  def train(input: RDD[LabeledPoint]): NaiveBayesModel = {
+    new NaiveBayes().run(input)
+  }
+
+  /**
+   * Trains a Naive Bayes model given an RDD of `(label, features)` pairs.
+   *
+   * This is the Multinomial NB ([[http://tinyurl.com/lsdw6p]]) which can handle all kinds of
+   * discrete data.  For example, by converting documents into TF-IDF vectors, it can be used for
+   * document classification.  By making every vector a 0-1 vector, it can also be used as
    * Bernoulli NB ([[http://tinyurl.com/p7c96j6]]).
    *
    * @param input RDD of `(label, array of features)` pairs.  Every vector should be a frequency
    *              vector or a count vector.
-   * @param lambda The smooth parameter
+   * @param lambda The smoothing parameter
    */
-  def train(input: RDD[LabeledPoint], lambda: Double = 1.0): NaiveBayesModel = {
+  def train(input: RDD[LabeledPoint], lambda: Double): NaiveBayesModel = {
     new NaiveBayes(lambda).run(input)
+  }
+
+  def main(args: Array[String]) {
+    if (args.length != 2 && args.length != 3) {
+      println("Usage: NaiveBayes <master> <input_dir> [<lambda>]")
+      System.exit(1)
+    }
+    val sc = new SparkContext(args(0), "NaiveBayes")
+    val data = MLUtils.loadLabeledData(sc, args(1))
+    val model = if (args.length == 2) {
+      NaiveBayes.train(data)
+    } else {
+      NaiveBayes.train(data, args(2).toDouble)
+    }
+    println("Pi: " + model.pi.mkString("[", ", ", "]"))
+    println("Theta:\n" + model.theta.map(_.mkString("[", ", ", "]")).mkString("[", "\n ", "]"))
+
+    sc.stop()
   }
 }

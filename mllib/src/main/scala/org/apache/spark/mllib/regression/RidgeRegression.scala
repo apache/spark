@@ -122,7 +122,7 @@ object RidgeRegressionWithSGD {
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param regParam Regularization parameter.
    * @param miniBatchFraction Fraction of data to be used per iteration.
-   * @param initialWeights Initial set of weights to be used. Array should be equal in size to 
+   * @param initialWeights Initial set of weights to be used. Array should be equal in size to
    *        the number of features in the data.
    */
   def train(
@@ -208,6 +208,8 @@ object RidgeRegressionWithSGD {
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = RidgeRegressionWithSGD.train(data, args(4).toInt, args(2).toDouble,
         args(3).toDouble)
+    println("Weights: " + model.weights.mkString("[", ", ", "]"))
+    println("Intercept: " + model.intercept)
 
     sc.stop()
   }
