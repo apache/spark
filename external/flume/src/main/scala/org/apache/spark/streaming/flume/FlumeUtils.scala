@@ -37,7 +37,6 @@ object FlumeUtils {
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[SparkFlumeEvent] = {
     val inputStream = new FlumeInputDStream[SparkFlumeEvent](ssc, hostname, port, storageLevel)
-    ssc.registerInputStream(inputStream)
     inputStream
   }
 

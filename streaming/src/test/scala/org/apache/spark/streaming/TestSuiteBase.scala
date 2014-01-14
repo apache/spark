@@ -181,8 +181,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     val operatedStream = operation(inputStream)
     val outputStream = new TestOutputStreamWithPartitions(operatedStream,
       new ArrayBuffer[Seq[Seq[V]]] with SynchronizedBuffer[Seq[Seq[V]]])
-    ssc.registerInputStream(inputStream)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc
   }
 
@@ -207,9 +206,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
     val operatedStream = operation(inputStream1, inputStream2)
     val outputStream = new TestOutputStreamWithPartitions(operatedStream,
       new ArrayBuffer[Seq[Seq[W]]] with SynchronizedBuffer[Seq[Seq[W]]])
-    ssc.registerInputStream(inputStream1)
-    ssc.registerInputStream(inputStream2)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc
   }
 

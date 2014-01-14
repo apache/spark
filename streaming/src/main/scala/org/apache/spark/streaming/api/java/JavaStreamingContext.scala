@@ -320,13 +320,6 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   }
 
   /**
-   * Registers an output stream that will be computed every interval
-   */
-  def registerOutputStream(outputStream: JavaDStreamLike[_, _, _]) {
-    ssc.registerOutputStream(outputStream.dstream)
-  }
-
-  /**
    * Creates a input stream from an queue of RDDs. In each batch,
    * it will process either one or all of the RDDs returned by the queue.
    *

@@ -37,9 +37,7 @@ object MQTTUtils {
       topic: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[String] = {
-    val inputStream = new MQTTInputDStream[String](ssc, brokerUrl, topic, storageLevel)
-    ssc.registerInputStream(inputStream)
-    inputStream
+    new MQTTInputDStream[String](ssc, brokerUrl, topic, storageLevel)
   }
 
   /**

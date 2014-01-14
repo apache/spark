@@ -199,10 +199,7 @@ class StreamingContext private[streaming] (
    */
   def networkStream[T: ClassTag](
     receiver: NetworkReceiver[T]): DStream[T] = {
-    val inputStream = new PluggableInputDStream[T](this,
-      receiver)
-    graph.addInputStream(inputStream)
-    inputStream
+    new PluggableInputDStream[T](this, receiver)
   }
 
   /**
@@ -259,9 +256,7 @@ class StreamingContext private[streaming] (
       converter: (InputStream) => Iterator[T],
       storageLevel: StorageLevel
     ): DStream[T] = {
-    val inputStream = new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
-    registerInputStream(inputStream)
-    inputStream
+    new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
   }
 
   /**
@@ -280,9 +275,7 @@ class StreamingContext private[streaming] (
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[T] = {
-    val inputStream = new RawInputDStream[T](this, hostname, port, storageLevel)
-    registerInputStream(inputStream)
-    inputStream
+    new RawInputDStream[T](this, hostname, port, storageLevel)
   }
 
   /**
@@ -300,9 +293,7 @@ class StreamingContext private[streaming] (
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String): DStream[(K, V)] = {
-    val inputStream = new FileInputDStream[K, V, F](this, directory)
-    registerInputStream(inputStream)
-    inputStream
+    new FileInputDStream[K, V, F](this, directory)
   }
 
   /**
@@ -322,9 +313,7 @@ class StreamingContext private[streaming] (
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): DStream[(K, V)] = {
-    val inputStream = new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
-    registerInputStream(inputStream)
-    inputStream
+    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
   }
 
   /**
@@ -367,9 +356,7 @@ class StreamingContext private[streaming] (
       oneAtATime: Boolean,
       defaultRDD: RDD[T]
     ): DStream[T] = {
-    val inputStream = new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
-    registerInputStream(inputStream)
-    inputStream
+    new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
   }
 
   /**
@@ -388,21 +375,6 @@ class StreamingContext private[streaming] (
       transformFunc: (Seq[RDD[_]], Time) => RDD[T]
     ): DStream[T] = {
     new TransformedDStream[T](dstreams, sparkContext.clean(transformFunc))
-  }
-
-  /**
-   * Register an input stream that will be started (InputDStream.start() called) to get the
-   * input data.
-   */
-  def registerInputStream(inputStream: InputDStream[_]) {
-    graph.addInputStream(inputStream)
-  }
-
-  /**
-   * Register an output stream that will be computed every interval
-   */
-  def registerOutputStream(outputStream: DStream[_]) {
-    graph.addOutputStream(outputStream)
   }
 
   /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for

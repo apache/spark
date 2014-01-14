@@ -43,7 +43,6 @@ trait JavaTestBase extends TestSuiteBase {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val dstream = new TestInputStream[T](ssc.ssc, seqData, numPartitions)
-    ssc.ssc.registerInputStream(dstream)
     new JavaDStream[T](dstream)
   }
 
@@ -57,7 +56,7 @@ trait JavaTestBase extends TestSuiteBase {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     val ostream = new TestOutputStreamWithPartitions(dstream.dstream)
-    dstream.dstream.ssc.registerOutputStream(ostream)
+    ostream.register()
   }
 
   /**

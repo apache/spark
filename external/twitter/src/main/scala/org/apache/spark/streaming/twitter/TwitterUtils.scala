@@ -41,9 +41,7 @@ object TwitterUtils {
       filters: Seq[String] = Nil,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[Status] = {
-    val inputStream = new TwitterInputDStream(ssc, twitterAuth, filters, storageLevel)
-    ssc.registerInputStream(inputStream)
-    inputStream
+    new TwitterInputDStream(ssc, twitterAuth, filters, storageLevel)
   }
 
   /**
