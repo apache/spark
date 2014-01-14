@@ -86,11 +86,11 @@ private[spark] class StagePage(parent: JobProgressUI) {
             }
             {if (hasBytesSpilled)
             <li>
-              <strong>Bytes spilled (memory): </strong>
+              <strong>Shuffle spill (memory): </strong>
               {Utils.bytesToString(memoryBytesSpilled)}
             </li>
             <li>
-              <strong>Bytes spilled (disk): </strong>
+              <strong>Shuffle spill (disk): </strong>
               {Utils.bytesToString(diskBytesSpilled)}
             </li>
             }
@@ -102,7 +102,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         Seq("Duration", "GC Time", "Result Ser Time") ++
         {if (hasShuffleRead) Seq("Shuffle Read")  else Nil} ++
         {if (hasShuffleWrite) Seq("Write Time", "Shuffle Write") else Nil} ++
-        {if (hasBytesSpilled) Seq("Bytes Spilled (Memory)", "Bytes Spilled (Disk)") else Nil} ++
+        {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
         Seq("Errors")
 
       val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
@@ -171,14 +171,14 @@ private[spark] class StagePage(parent: JobProgressUI) {
             case(info, metrics, exception) =>
               metrics.get.memoryBytesSpilled.toDouble
           }
-          val memoryBytesSpilledQuantiles = "Bytes spilled (memory)" +:
+          val memoryBytesSpilledQuantiles = "Shuffle spill (memory)" +:
             getQuantileCols(memoryBytesSpilledSizes)
 
           val diskBytesSpilledSizes = validTasks.map {
             case(info, metrics, exception) =>
               metrics.get.diskBytesSpilled.toDouble
           }
-          val diskBytesSpilledQuantiles = "Bytes spilled (disk)" +:
+          val diskBytesSpilledQuantiles = "Shuffle spill (disk)" +:
             getQuantileCols(diskBytesSpilledSizes)
 
           val listings: Seq[Seq[String]] = Seq(
