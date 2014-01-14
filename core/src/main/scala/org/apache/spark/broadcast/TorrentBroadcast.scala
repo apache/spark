@@ -236,8 +236,10 @@ private[spark] case class TorrentInfo(
   @transient var hasBlocks = 0
 }
 
-private[spark] class TorrentBroadcastFactory
-  extends BroadcastFactory {
+/**
+ * A [[BroadcastFactory]] that creates a torrent-based implementation of broadcast.
+ */
+class TorrentBroadcastFactory extends BroadcastFactory {
 
   def initialize(isDriver: Boolean, conf: SparkConf) { TorrentBroadcast.initialize(isDriver, conf) }
 

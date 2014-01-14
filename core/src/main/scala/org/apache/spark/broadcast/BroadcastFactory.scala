@@ -25,7 +25,7 @@ import org.apache.spark.SparkConf
  * BroadcastFactory implementation to instantiate a particular broadcast for the
  * entire Spark job.
  */
-private[spark] trait BroadcastFactory {
+trait BroadcastFactory {
   def initialize(isDriver: Boolean, conf: SparkConf): Unit
   def newBroadcast[T](value: T, isLocal: Boolean, id: Long): Broadcast[T]
   def stop(): Unit

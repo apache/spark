@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.streaming.util
 
 import scala.annotation.tailrec
 
