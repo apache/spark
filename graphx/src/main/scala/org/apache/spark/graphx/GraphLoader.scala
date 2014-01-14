@@ -53,7 +53,7 @@ object GraphLoader extends Logging {
           }
           val srcId = lineArray(0).toLong
           val dstId = lineArray(1).toLong
-          if (canonicalOrientation && dstId > srcId) {
+          if (canonicalOrientation && srcId > dstId) {
             builder.add(dstId, srcId, 1)
           } else {
             builder.add(srcId, dstId, 1)
