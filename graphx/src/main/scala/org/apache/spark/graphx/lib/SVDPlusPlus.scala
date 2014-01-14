@@ -5,19 +5,21 @@ import org.apache.commons.math.linear._
 import org.apache.spark.rdd._
 import org.apache.spark.graphx._
 
-/** Configuration parameters for SVDPlusPlus. */
-class SVDPlusPlusConf(
-  var rank: Int,
-  var maxIters: Int,
-  var minVal: Double,
-  var maxVal: Double,
-  var gamma1: Double,
-  var gamma2: Double,
-  var gamma6: Double,
-  var gamma7: Double) extends Serializable
-
 /** Implementation of SVD++ algorithm. */
 object SVDPlusPlus {
+
+  /** Configuration parameters for SVDPlusPlus. */
+  class Conf(
+      var rank: Int,
+      var maxIters: Int,
+      var minVal: Double,
+      var maxVal: Double,
+      var gamma1: Double,
+      var gamma2: Double,
+      var gamma6: Double,
+      var gamma7: Double)
+    extends Serializable
+
   /**
    * Implement SVD++ based on "Factorization Meets the Neighborhood:
    * a Multifaceted Collaborative Filtering Model",
@@ -32,7 +34,7 @@ object SVDPlusPlus {
    *
    * @return a graph with vertex attributes containing the trained model
    */
-  def run(edges: RDD[Edge[Double]], conf: SVDPlusPlusConf)
+  def run(edges: RDD[Edge[Double]], conf: Conf)
     : (Graph[(RealVector, RealVector, Double, Double), Double], Double) =
   {
     // Generate default vertex attribute
@@ -64,7 +66,7 @@ object SVDPlusPlus {
         (vd._1, vd._2, msg.get._2 / msg.get._1, 1.0 / scala.math.sqrt(msg.get._1))
     }
 
-    def mapTrainF(conf: SVDPlusPlusConf, u: Double)
+    def mapTrainF(conf: Conf, u: Double)
         (et: EdgeTriplet[(RealVector, RealVector, Double, Double), Double])
       : Iterator[(VertexID, (RealVector, RealVector, Double))] = {
       val (usr, itm) = (et.srcAttr, et.dstAttr)
@@ -112,7 +114,7 @@ object SVDPlusPlus {
     }
 
     // calculate error on training set
-    def mapTestF(conf: SVDPlusPlusConf, u: Double)
+    def mapTestF(conf: Conf, u: Double)
         (et: EdgeTriplet[(RealVector, RealVector, Double, Double), Double])
       : Iterator[(VertexID, Double)] =
     {
