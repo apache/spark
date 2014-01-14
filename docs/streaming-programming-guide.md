@@ -21,6 +21,8 @@ Add the following SBT or Maven dependency to your project to use Spark Streaming
     artifactId = spark-streaming_{{site.SCALA_VERSION}}
     version = {{site.SPARK_VERSION}}
 
+For ingesting data from sources like Kafka and Flume, add the corresponding artifact `spark-streaming-xyz_{{site.SCALA_VERSION}}` to the dependencies. For example, `spark-streaming-kafka_{{site.SCALA_VERSION}}` for Kafka, `spark-streaming-flume_{{site.SCALA_VERSION}}`, etc.  Please refer to the [Apache repository](http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.apache.spark%22%20AND%20v%3A%22{{site.SPARK_VERSION}}%22) for the full list of supported sources / artifacts.
+
 # Initializing Spark Streaming
 The first thing a Spark Streaming program must do is create a `StreamingContext` object, which tells Spark how to access a cluster. A `StreamingContext` can be created by using
 
@@ -28,26 +30,28 @@ The first thing a Spark Streaming program must do is create a `StreamingContext`
 new StreamingContext(master, appName, batchDuration, [sparkHome], [jars])
 {% endhighlight %}
 
-The `master` parameter is a standard [Spark cluster URL](scala-programming-guide.html#master-urls) and can be "local" for local testing. The `appName` is a name of your program, which will be shown on your cluster's web UI. The `batchDuration` is the size of the batches (as explained earlier). This must be set carefully such that the cluster can keep up with the processing of the data streams. Start with something conservative like 5 seconds. See the [Performance Tuning](#setting-the-right-batch-size) section for a detailed discussion. Finally, `sparkHome` and `jars` are necessary when running on a cluster to specify the location of your code, as described in the [Spark programming guide](scala-programming-guide.html#deploying-code-on-a-cluster).
+The `master` parameter is a standard [Spark cluster URL](scala-programming-guide.html#master-urls) and can be "local" for local testing. The `appName` is a name of your program, which will be shown on your cluster's web UI. The `batchDuration` is the size of the batches (as explained earlier). This must be set carefully such that the cluster can keep up with the processing of the data streams. Start with something conservative like 5 seconds. See the [Performance Tuning](#setting-the-right-batch-size) section for a detailed discussion. Finally, `sparkHome` and `jars` are optional parameters, which need to be set when running on a cluster to specify the location of your code, as described in the [Spark programming guide](scala-programming-guide.html#deploying-code-on-a-cluster).
 
-This constructor creates a SparkContext for your job as well, which can be accessed with `streamingContext.sparkContext`.
+{% highlight scala %}
+new SparkConf(conf, batchDuration)
+{% endhighlight %}
 
+where `conf` is a [SparkConf](api/core/index.html#org.apache.spark.SparkConf)
+object used for more advanced configuration. In both cases, a [SparkContext](api/core/index.html#org.apache.spark.SparkContext) is created as well which can be accessed with `streamingContext.sparkContext`.
 
-# Attaching Input Sources - InputDStreams
-The StreamingContext is used to creating InputDStreams from input sources:
+# Attaching Input Sources
+The StreamingContext is used to creating input streams from data sources:
 
 {% highlight scala %}
 // Assuming ssc is the StreamingContext
-ssc.textFileStream(directory)      // Creates a stream by monitoring and processing new files in a HDFS directory
-ssc.socketStream(hostname, port)   // Creates a stream that uses a TCP socket to read data from hostname:port
+ssc.textFileStream(directory)    // Creates a stream that monitors and processes new files in a HDFS directory
+ssc.socketStream(hostname, port) // Creates a stream that uses a TCP socket to read data from hostname:port
 {% endhighlight %}
 
-We also provide a input streams for Kafka, Flume, Akka actor, etc. For a complete list of input streams, take a look at the [StreamingContext API documentation](api/streaming/index.html#org.apache.spark.streaming.StreamingContext).
-
-
+The core Spark Streaming API provides input streams for files, sockets, Akka actors. Additional functionality for Kafka, Flume, ZeroMQ, Twitter, etc. can be imported by adding the right dependencies as explained in the [linking](#linking-with-spark-streaming) section.
 
 # DStream Operations
-Data received from the input streams can be processed using _DStream operations_. There are two kinds of operations - _transformations_ and _output operations_. Similar to RDD transformations, DStream transformations operate on one or more DStreams to create new DStreams with transformed data. After applying a sequence of transformations to the input streams, you'll need to call the output operations, which writies data out to an external source. 
+Data received from the input streams can be processed using _DStream operations_. There are two kinds of operations - _transformations_ and _output operations_. Similar to RDD transformations, DStream transformations operate on one or more DStreams to create new DStreams with transformed data. After applying a sequence of transformations to the input streams, output operations need to called, which writes data out to an external data sink like a file system or a database.
 
 ## Transformations
 
@@ -234,7 +238,7 @@ wordCounts.print()
 ssc.start()
 {% endhighlight %}
 
-The `socketTextStream` returns a DStream of lines received from a TCP socket-based source. The `lines` DStream is _transformed_ into a DStream using the `flatMap` operation, where each line is split into words. This `words` DStream is then mapped to a DStream of `(word, 1)` pairs, which is finally reduced to get the word counts. `wordCounts.print()` will print 10 of the counts generated every second.
+The `socketTextStream` returns a DStream of text data received from a TCP server socket. The `lines` DStream is _transformed_ into a DStream using the `flatMap` operation, where each line is split into words. This `words` DStream is then mapped to a DStream of `(word, 1)` pairs, which is finally reduced to get the word counts. `wordCounts.print()` will print 10 of the counts generated every second.
 
 To run this example on your local machine, you need to first run a Netcat server by using
 
@@ -270,14 +274,12 @@ hello world
 {% highlight bash %}
 # TERMINAL 2: RUNNING NetworkWordCount
 ...
-2012-12-31 18:47:10,446 INFO SparkContext: Job finished: run at ThreadPoolExecutor.java:886, took 0.038817 s
 -------------------------------------------
 Time: 1357008430000 ms
 -------------------------------------------
 (hello,1)
 (world,1)
 
-2012-12-31 18:47:10,447 INFO JobManager: Total delay: 0.44700 s for job 8 (execution: 0.44000 s)
 ...
 {% endhighlight %}
 </td>
@@ -384,7 +386,7 @@ A system that is required to operate 24/7 needs to be able tolerate the failure 
 1. The configuration of each DStream (checkpoint interval, etc.)
 1. The RDD checkpoint files of each DStream
 
-All this is periodically saved in the file `<checkpoint directory>/graph`. To recover, a new Streaming Context can be created with this directory by using
+All this is periodically saved in the checkpoint directory. To recover, a new `StreamingContext` can be created with this directory by using
 
 {% highlight scala %}
 val ssc = new StreamingContext(checkpointDirectory)
@@ -395,7 +397,7 @@ On calling `ssc.start()` on this new context, the following steps are taken by t
 1. Schedule the transformations and output operations for all the time steps between the time when the driver failed and when it last checkpointed. This is also done for those time steps that were previously scheduled but not processed due to the failure. This will make the system recompute all the intermediate data from the checkpointed RDD files, etc.
 1. Restart the network receivers, if any, and continue receiving new data.
 
-In the current _alpha_ release, there are two different failure behaviors based on which input sources are used.
+There are two different failure behaviors based on which input sources are used.
 
 1. _Using HDFS files as input source_ - Since the data is reliably stored on HDFS, all data can re-computed and therefore no data will be lost due to any failure.
 1. _Using any input source that receives data through a network_ - The received input data is replicated in memory to multiple nodes. Since, all the data in the Spark worker's memory is lost when the Spark driver fails, the past input data will not be accessible and driver recovers. Hence, if stateful and window-based operations are used (like `updateStateByKey`, `window`, `countByValueAndWindow`, etc.), then the intermediate state will not be recovered completely.

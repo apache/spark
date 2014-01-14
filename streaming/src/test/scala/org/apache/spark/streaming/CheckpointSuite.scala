@@ -237,7 +237,7 @@ class CheckpointSuite extends TestSuiteBase {
     val reducedStream = mappedStream.reduceByWindow(_ + _, Seconds(30), Seconds(1))
     val outputBuffer = new ArrayBuffer[Seq[Int]]
     var outputStream = new TestOutputStream(reducedStream, outputBuffer)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc.start()
 
     // Create files and advance manual clock to process them

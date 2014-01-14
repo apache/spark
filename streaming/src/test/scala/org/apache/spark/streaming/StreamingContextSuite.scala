@@ -211,7 +211,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => (1 to i))
     val inputStream = new TestInputStream(s, input, 1)
-    s.registerInputStream(inputStream)
     inputStream
   }
 }
