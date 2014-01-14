@@ -14,13 +14,11 @@ object ConnectedComponents {
    * @tparam ED the edge attribute type (preserved in the computation)
    *
    * @param graph the graph for which to compute the connected components
-   * @param undirected compute reachability ignoring edge direction.
    *
    * @return a graph with vertex attributes containing the smallest vertex in each
    *         connected component
    */
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]):
-    Graph[VertexID, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[VertexID, ED] = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
     def sendMessage(edge: EdgeTriplet[VertexID, ED]) = {
       if (edge.srcAttr < edge.dstAttr) {

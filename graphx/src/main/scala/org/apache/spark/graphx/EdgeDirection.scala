@@ -26,6 +26,9 @@ class EdgeDirection private (private val name: String) extends Serializable {
 }
 
 
+/**
+ * A set of [[EdgeDirection]]s.
+ */
 object EdgeDirection {
   /** Edges arriving at a vertex. */
   final val In = new EdgeDirection("In")

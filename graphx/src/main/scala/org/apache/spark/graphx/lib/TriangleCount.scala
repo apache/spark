@@ -9,11 +9,11 @@ import org.apache.spark.graphx._
  *
  * The algorithm is relatively straightforward and can be computed in three steps:
  *
- * 1) Compute the set of neighbors for each vertex
- * 2) For each edge compute the intersection of the sets and send the
- *    count to both vertices.
- * 3) Compute the sum at each vertex and divide by two since each
- *    triangle is counted twice.
+ * <ul>
+ * <li>Compute the set of neighbors for each vertex
+ * <li>For each edge compute the intersection of the sets and send the count to both vertices.
+ * <li> Compute the sum at each vertex and divide by two since each triangle is counted twice.
+ * </ul>
  *
  * Note that the input graph should have its edges in canonical direction
  * (i.e. the `sourceId` less than `destId`). Also the graph must have been partitioned
