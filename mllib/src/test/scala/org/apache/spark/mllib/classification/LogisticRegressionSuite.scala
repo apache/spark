@@ -81,7 +81,7 @@ class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll with Shoul
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
-        prediction != expected.label
+      prediction != expected.label
     }
     // At least 83% of the predictions should be on.
     ((input.length - numOffPredictions).toDouble / input.length) should be > 0.83

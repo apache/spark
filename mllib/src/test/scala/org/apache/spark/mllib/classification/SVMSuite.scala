@@ -72,7 +72,7 @@ class SVMSuite extends FunSuite with BeforeAndAfterAll {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
-        prediction != expected.label
+      prediction != expected.label
     }
     // At least 80% of the predictions should be on.
     assert(numOffPredictions < input.length / 5)
