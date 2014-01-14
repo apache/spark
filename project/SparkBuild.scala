@@ -48,18 +48,20 @@ object SparkBuild extends Build {
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
-    .dependsOn(core, bagel, mllib)
+    .dependsOn(core, graphx, bagel, mllib)
 
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
   lazy val bagel = Project("bagel", file("bagel"), settings = bagelSettings) dependsOn(core)
+
+  lazy val graphx = Project("graphx", file("graphx"), settings = graphxSettings) dependsOn(core)
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
 
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
-    .dependsOn(core, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*)
+    .dependsOn(core, graphx, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*)
 
   lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
 
@@ -109,10 +111,10 @@ object SparkBuild extends Build {
   lazy val allExternalRefs = Seq[ProjectReference](externalTwitter, externalKafka, externalFlume, externalZeromq, externalMqtt)
 
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
-    .dependsOn(core, mllib, bagel, streaming, externalTwitter) dependsOn(allExternal: _*)
+    .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter) dependsOn(allExternal: _*)
 
   // Everything except assembly, tools and examples belong to packageProjects
-  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib) ++ maybeYarnRef
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx) ++ maybeYarnRef
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++ Seq[ProjectReference](examples, tools, assemblyProj)
 
@@ -313,6 +315,10 @@ object SparkBuild extends Build {
   def toolsSettings = sharedSettings ++ Seq(
     name := "spark-tools"
   ) ++ assemblySettings ++ extraAssemblySettings
+
+  def graphxSettings = sharedSettings ++ Seq(
+    name := "spark-graphx"
+  )
 
   def bagelSettings = sharedSettings ++ Seq(
     name := "spark-bagel"
