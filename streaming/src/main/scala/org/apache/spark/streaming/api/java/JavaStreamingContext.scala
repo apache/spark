@@ -132,7 +132,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * Re-creates a StreamingContext from a checkpoint file.
    * @param path Path to the directory that was specified as the checkpoint directory
    */
-  def this(path: String) = this(new StreamingContext(path))
+  def this(path: String) = this(new StreamingContext(path, new Configuration))
 
   /**
    * Re-creates a StreamingContext from a checkpoint file.
