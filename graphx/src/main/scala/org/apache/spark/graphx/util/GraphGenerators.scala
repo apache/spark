@@ -44,14 +44,7 @@ object GraphGenerators {
 
   def generateRandomEdges(src: Int, numEdges: Int, maxVertexID: Int): Array[Edge[Int]] = {
     val rand = new Random()
-    var dsts: Set[Int] = Set()
-    while (dsts.size < numEdges) {
-      val nextDst = rand.nextInt(maxVertexID)
-      if (nextDst != src) {
-        dsts += nextDst
-      }
-    }
-    dsts.map(dst => Edge[Int](src, dst, 1)).toArray
+    Array.fill(maxVertexID) { Edge[Int](src, rand.nextInt(maxVertexID), 1) }
   }
 
   /**
