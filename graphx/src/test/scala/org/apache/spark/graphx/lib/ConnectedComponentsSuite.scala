@@ -102,7 +102,7 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
       val defaultUser = ("John Doe", "Missing")
       // Build the initial Graph
       val graph = Graph(users, relationships, defaultUser)
-      val ccGraph = graph.connectedComponents(undirected = true)
+      val ccGraph = graph.connectedComponents()
       val vertices = ccGraph.vertices.collect
       for ( (id, cc) <- vertices ) {
         assert(cc == 0)

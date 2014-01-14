@@ -38,7 +38,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    * The degree of each vertex in the graph.
    * @note Vertices with no edges are not returned in the resulting RDD.
    */
-  lazy val degrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Both)
+  lazy val degrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Either)
 
   /**
    * Computes the neighboring vertex degrees.
@@ -50,7 +50,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
       graph.mapReduceTriplets(et => Iterator((et.dstId,1)), _ + _)
     } else if (edgeDirection == EdgeDirection.Out) {
       graph.mapReduceTriplets(et => Iterator((et.srcId,1)), _ + _)
-    } else { // EdgeDirection.both
+    } else { // EdgeDirection.Either
       graph.mapReduceTriplets(et => Iterator((et.srcId,1), (et.dstId,1)), _ + _)
     }
   }
@@ -65,7 +65,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    */
   def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexID]] = {
     val nbrs =
-      if (edgeDirection == EdgeDirection.Both) {
+      if (edgeDirection == EdgeDirection.Either) {
         graph.mapReduceTriplets[Array[VertexID]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _
@@ -79,7 +79,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
           mapFunc = et => Iterator((et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _)
       } else {
-        throw new SparkException("It doesn't make sense to collect neighbor ids without a direction.")
+        throw new SparkException("It doesn't make sense to collect neighbor ids without a " +
+          "direction. (EdgeDirection.Both is not supported; use EdgeDirection.Either instead.)")
       }
     graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
       nbrsOpt.getOrElse(Array.empty[VertexID])
@@ -100,11 +101,19 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    */
   def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexID, VD)]] = {
     val nbrs = graph.mapReduceTriplets[Array[(VertexID,VD)]](
-      edge => Iterator(
-        (edge.srcId, Array((edge.dstId, edge.dstAttr))),
-        (edge.dstId, Array((edge.srcId, edge.srcAttr)))),
-      (a, b) => a ++ b,
-      edgeDirection)
+      edge => {
+        val msgToSrc = (edge.srcId, Array((edge.dstId, edge.dstAttr)))
+        val msgToDst = (edge.dstId, Array((edge.srcId, edge.srcAttr)))
+        edgeDirection match {
+          case EdgeDirection.Either => Iterator(msgToSrc, msgToDst)
+          case EdgeDirection.In => Iterator(msgToDst)
+          case EdgeDirection.Out => Iterator(msgToSrc)
+          case EdgeDirection.Both =>
+            throw new SparkException("collectNeighbors does not support EdgeDirection.Both. Use" +
+              "EdgeDirection.Either instead.")
+        }
+      },
+      (a, b) => a ++ b)
 
     graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
       nbrsOpt.getOrElse(Array.empty[(VertexID, VD)])
@@ -237,7 +246,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
   def pregel[A: ClassTag](
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
-      activeDirection: EdgeDirection = EdgeDirection.Out)(
+      activeDirection: EdgeDirection = EdgeDirection.Either)(
       vprog: (VertexID, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
       mergeMsg: (A, A) => A)
@@ -271,8 +280,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    *
    * @see [[org.apache.spark.graphx.lib.ConnectedComponents]]
    */
-  def connectedComponents(undirected: Boolean = true): Graph[VertexID, ED] = {
-    ConnectedComponents.run(graph, undirected)
+  def connectedComponents(): Graph[VertexID, ED] = {
+    ConnectedComponents.run(graph)
   }
 
   /**

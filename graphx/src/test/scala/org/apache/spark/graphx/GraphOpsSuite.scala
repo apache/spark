@@ -28,7 +28,7 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
       val chain = (0 until 100).map(x => (x, (x+1)%100) )
       val rawEdges = sc.parallelize(chain, 3).map { case (s,d) => (s.toLong, d.toLong) }
       val graph = Graph.fromEdgeTuples(rawEdges, 1.0).cache()
-      val nbrs = graph.collectNeighborIds(EdgeDirection.Both).cache()
+      val nbrs = graph.collectNeighborIds(EdgeDirection.Either).cache()
       assert(nbrs.count === chain.size)
       assert(graph.numVertices === nbrs.count)
       nbrs.collect.foreach { case (vid, nbrs) => assert(nbrs.size === 2) }
