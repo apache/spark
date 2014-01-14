@@ -543,7 +543,6 @@ val maxOutDegree: (VertexID, Int) = graph.outDegrees.reduce(max)
 val maxDegrees: (VertexID, Int)   = graph.degrees.reduce(max)
 {% endhighlight %}
 
-
 ### Collecting Neighbors
 
 In some cases it may be easier to express computation by collecting neighboring vertices and their
@@ -562,8 +561,8 @@ def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[ Array[(VertexID, 
 # Pregel API
 <a name="pregel"></a>
 
-Graphs are inherently recursive data-structures as properties of a vertices depend on properties of
-their neighbors which intern depend on properties of the neighbors of their neighbors.  As a
+Graphs are inherently recursive data-structures as properties of vertices depend on properties of
+their neighbors which intern depend on properties of *their* neighbors.  As a
 consequence many important graph algorithms iteratively recompute the properties of each vertex
 until a fixed-point condition is reached.  A range of graph-parallel abstractions have been proposed
 to express these iterative algorithms.  GraphX exposes a Pregel operator which is a fusion of
