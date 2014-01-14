@@ -18,7 +18,7 @@ title: GraphX Programming Guide
 
 GraphX is the new (alpha) Spark API for graphs and graph-parallel computation. At a high-level,
 GraphX extends the Spark [RDD](api/core/index.html#org.apache.spark.rdd.RDD) by introducing the
-[Resilient Distributed property Graph (RDG)](#property_graph): a directed multigraph with properties
+[Resilient Distributed Property Graph](#property_graph): a directed multigraph with properties
 attached to each vertex and edge.  To support graph computation, GraphX exposes a set of fundamental
 operators (e.g., [subgraph](#structural_operators), [joinVertices](#join_operators), and
 [mapReduceTriplets](#mrTriplets)) as well as an optimized variant of the [Pregel](#pregel) API. In
@@ -29,7 +29,7 @@ addition, GraphX includes a growing collection of graph [algorithms](#graph_algo
 
 From social networks to language modeling, the growing scale and importance of
 graph data has driven the development of numerous new *graph-parallel* systems
-(e.g., [Giraph](http://http://giraph.apache.org) and
+(e.g., [Giraph](http://giraph.apache.org) and
 [GraphLab](http://graphlab.org)).  By restricting the types of computation that can be
 expressed and introducing new techniques to partition and distribute graphs,
 these systems can efficiently execute sophisticated graph algorithms orders of
@@ -43,12 +43,25 @@ magnitude faster than more general *data-parallel* systems.
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
-However, the same restrictions that enable these substantial performance gains
-also make it difficult to express many of the important stages in a typical graph-analytics pipeline:
-constructing the graph, modifying its structure, or expressing computation that
-spans multiple graphs.  As a consequence, existing graph analytics pipelines
-compose graph-parallel and data-parallel systems, leading to extensive data
-movement and duplication and a complicated programming model.
+However, the same restrictions that enable these substantial performance gains also make it
+difficult to express many of the important stages in a typical graph-analytics pipeline:
+constructing the graph, modifying its structure, or expressing computation that spans multiple
+graphs.  Furthermore, how we look at data depends on our objectives and the same raw data may have
+many different table and graph views.
+
+<p style="text-align: center;">
+  <img src="img/tables_and_graphs.png"
+       title="Tables and Graphs"
+       alt="Tables and Graphs"
+       width="50%" />
+  <!-- Images are downsized intentionally to improve quality on retina displays -->
+</p>
+
+As a consequence, it is often necessary to be able to move between table and graph views of the same
+physical data and to leverage the properties of each view to easily and efficiently express
+computation.  However, existing graph analytics pipelines must compose graph-parallel and data-
+parallel systems, leading to extensive data movement and duplication and a complicated programming
+model.
 
 <p style="text-align: center;">
   <img src="img/graph_analytics_pipeline.png"
@@ -95,17 +108,20 @@ with user defined objects attached to each vertex and edge.  A directed multigra
 graph with potentially multiple parallel edges sharing the same source and destination vertex.  The
 ability to support parallel edges simplifies modeling scenarios where there can be multiple
 relationships (e.g., co-worker and friend) between the same vertices.  Each vertex is keyed by a
-*unique* 64-bit long identifier (`VertexId`).  Similarly, edges have corresponding source and
-destination vertex identifiers. GraphX does not impose any ordering or constraints on the vertex
-identifiers.  The property graph is parameterized over the vertex `VD` and edge `ED` types.  These
+*unique* 64-bit long identifier (`VertexId`).  GraphX does not impose any ordering constraints on
+the vertex identifiers.  Similarly, edges have corresponding source and destination vertex
+identifiers.
+
+The property graph is parameterized over the vertex (`VD`) and edge (`ED`) types.  These
 are the types of the objects associated with each vertex and edge respectively.
 
-> GraphX optimizes the representation of `VD` and `ED` when they are plain old data-types (e.g.,
-> int, double, etc...) reducing the in memory footprint.
+> GraphX optimizes the representation of vertex and edge types when they are plain old data-types
+> (e.g., int, double, etc...) reducing the in memory footprint by storing them in specialized
+> arrays.
 
-In some cases we may wish to have vertices with different property types in the same graph. This can
-be accomplished through inheritance.  For example to model users and products as a bipartite graph
-we might do the following:
+In some cases it may be desirable to have vertices with different property types in the same graph.
+This can be accomplished through inheritance.  For example to model users and products as a
+bipartite graph we might do the following:
 
 {% highlight scala %}
 class VertexProperty()
@@ -116,9 +132,11 @@ var graph: Graph[VertexProperty, String] = null
 {% endhighlight %}
 
 Like RDDs, property graphs are immutable, distributed, and fault-tolerant.  Changes to the values or
-structure of the graph are accomplished by producing a new graph with the desired changes. The graph
-is partitioned across the workers using a range of vertex-partitioning heuristics.  As with RDDs,
-each partition of the graph can be recreated on a different machine in the event of a failure.
+structure of the graph are accomplished by producing a new graph with the desired changes.  Note
+that substantial parts of the original graph (i.e., unaffected structure, attributes, and indicies)
+are reused in the new graph reducing the cost of this inherently functional data-structure.  The
+graph is partitioned across the workers using a range of vertex-partitioning heuristics.  As with
+RDDs, each partition of the graph can be recreated on a different machine in the event of a failure.
 
 Logically the property graph corresponds to a pair of typed collections (RDDs) encoding the
 properties for each vertex and edge.  As a consequence, the graph class contains members to access
@@ -953,13 +971,6 @@ val triCountByUsername = users.join(triCounts).map { case (id, (username, tc)) =
 println(triCountByUsername.collect().mkString("\n"))
 {% endhighlight %}
 
-<p style="text-align: center;">
-  <img src="img/tables_and_graphs.png"
-       title="Tables and Graphs"
-       alt="Tables and Graphs"
-       width="50%" />
-  <!-- Images are downsized intentionally to improve quality on retina displays -->
-</p>
 
 # Examples
 
