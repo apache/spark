@@ -6,7 +6,7 @@ import scala.collection.JavaConversions._
 import scala.io.Source
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkEnv, Partition, Logging, SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, Partition, SparkException, TaskContext}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -94,7 +94,7 @@ class RRDD[T: ClassTag](
     packageNames: Array[Byte],
     rLibDir: String,
     broadcastVars: Array[Broadcast[Object]])
-  extends RDD[Array[Byte]](parent) with Logging {
+  extends RDD[Array[Byte]](parent) {
 
   override def getPartitions = parent.partitions
 
