@@ -727,6 +727,14 @@
   </build>
 
   <profiles>
+     <profile>
+      <!-- Without this the release build incorrectly includes the 
+          test-jar dependency and it breaks. -->
+      <id>release</id>
+      <properties>
+        <maven.test.skip>true</maven.test.skip>
+      </properties>
+    </profile>
     <profile>
       <id>yarn-alpha</id>
       <properties>
