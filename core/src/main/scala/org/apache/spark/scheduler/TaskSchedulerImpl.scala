@@ -352,9 +352,8 @@ private[spark] class TaskSchedulerImpl(
       taskResultGetter.stop()
     }
 
-    // sleeping for an arbitrary 5 seconds : to ensure that messages are sent out.
-    // TODO: Do something better !
-    Thread.sleep(5000L)
+    // sleeping for an arbitrary 1 seconds to ensure that messages are sent out.
+    Thread.sleep(1000L)
   }
 
   override def defaultParallelism() = backend.defaultParallelism()
