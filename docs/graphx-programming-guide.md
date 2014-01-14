@@ -848,10 +848,6 @@ val triCountByUsername = users.join(triCounts).map { case (id, (username, tc)) =
 println(triCountByUsername.collect().mkString("\n"))
 {% endhighlight %}
 
-## K-Core
-
-## LDA
-
 <p style="text-align: center;">
   <img src="img/tables_and_graphs.png"
        title="Tables and Graphs"
