@@ -254,7 +254,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Run a dynamic version of PageRank returning a graph with vertex attributes containing the
    * PageRank and edge attributes containing the normalized edge weight.
    *
-   * @see [[org.apache.spark.graphx.lib.PageRank]], method `runUntilConvergence`.
+   * @see [[org.apache.spark.graphx.lib.PageRank$#runUntilConvergence]]
    */
   def pageRank(tol: Double, resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.runUntilConvergence(graph, tol, resetProb)
@@ -264,7 +264,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Run PageRank for a fixed number of iterations returning a graph with vertex attributes
    * containing the PageRank and edge attributes the normalized edge weight.
    *
-   * @see [[org.apache.spark.graphx.lib.PageRank]], method `run`.
+   * @see [[org.apache.spark.graphx.lib.PageRank$#run]]
    */
   def staticPageRank(numIter: Int, resetProb: Double = 0.15): Graph[Double, Double] = {
     PageRank.run(graph, numIter, resetProb)
@@ -274,7 +274,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Compute the connected component membership of each vertex and return a graph with the vertex
    * value containing the lowest vertex id in the connected component containing that vertex.
    *
-   * @see [[org.apache.spark.graphx.lib.ConnectedComponents]]
+   * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
    */
   def connectedComponents(): Graph[VertexID, ED] = {
     ConnectedComponents.run(graph)
@@ -283,7 +283,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   /**
    * Compute the number of triangles passing through each vertex.
    *
-   * @see [[org.apache.spark.graphx.lib.TriangleCount]]
+   * @see [[org.apache.spark.graphx.lib.TriangleCount$#run]]
    */
   def triangleCount(): Graph[Int, ED] = {
     TriangleCount.run(graph)
@@ -293,7 +293,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * Compute the strongly connected component (SCC) of each vertex and return a graph with the
    * vertex value containing the lowest vertex id in the SCC containing that vertex.
    *
-   * @see [[org.apache.spark.graphx.lib.StronglyConnectedComponents]]
+   * @see [[org.apache.spark.graphx.lib.StronglyConnectedComponents$#run]]
    */
   def stronglyConnectedComponents(numIter: Int): Graph[VertexID, ED] = {
     StronglyConnectedComponents.run(graph, numIter)

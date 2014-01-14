@@ -9,7 +9,7 @@ import org.apache.spark.storage.StorageLevel
 
 /**
  * `EdgeRDD[ED]` extends `RDD[Edge[ED]]` by storing the edges in columnar format on each partition
- * for performance. It is constructed using [[impl.EdgePartitionBuilder]].
+ * for performance.
  */
 class EdgeRDD[@specialized ED: ClassTag](
     val partitionsRDD: RDD[(PartitionID, EdgePartition[ED])])
