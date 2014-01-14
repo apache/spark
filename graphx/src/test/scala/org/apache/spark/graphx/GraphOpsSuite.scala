@@ -8,32 +8,6 @@ import org.scalatest.FunSuite
 
 class GraphOpsSuite extends FunSuite with LocalSparkContext {
 
-  test("aggregateNeighbors") {
-    withSpark { sc =>
-      val n = 3
-      val star =
-        Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: VertexID, x: VertexID))), 1)
-
-      val indegrees = star.aggregateNeighbors(
-        (vid, edge) => Some(1),
-        (a: Int, b: Int) => a + b,
-        EdgeDirection.In)
-      assert(indegrees.collect().toSet === (1 to n).map(x => (x, 1)).toSet)
-
-      val outdegrees = star.aggregateNeighbors(
-        (vid, edge) => Some(1),
-        (a: Int, b: Int) => a + b,
-        EdgeDirection.Out)
-      assert(outdegrees.collect().toSet === Set((0, n)))
-
-      val noVertexValues = star.aggregateNeighbors[Int](
-        (vid: VertexID, edge: EdgeTriplet[Int, Int]) => None,
-        (a: Int, b: Int) => throw new Exception("reduceFunc called unexpectedly"),
-        EdgeDirection.In)
-      assert(noVertexValues.collect().toSet === Set.empty[(VertexID, Int)])
-    }
-  }
-
   test("joinVertices") {
     withSpark { sc =>
       val vertices =

@@ -56,60 +56,6 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
   }
 
   /**
-   * Computes a statistic for the neighborhood of each vertex.
-   *
-   * @param mapFunc the function applied to each edge adjacent to each vertex. The mapFunc can
-   * optionally return `None`, in which case it does not contribute to the final sum.
-   * @param reduceFunc the function used to merge the results of each map operation
-   * @param direction the direction of edges to consider (e.g., In, Out, Both).
-   * @tparam A the aggregation type
-   *
-   * @return an RDD containing tuples of vertex identifiers and
-   * their resulting value. Vertices with no neighbors will not appear in the RDD.
-   *
-   * @example We can use this function to compute the average follower
-   * age for each user:
-   *
-   * {{{
-   * val graph: Graph[Int,Int] = GraphLoader.edgeListFile(sc, "webgraph")
-   * val averageFollowerAge: RDD[(Int, Int)] =
-   *   graph.aggregateNeighbors[(Int,Double)](
-   *     (vid, edge) => Some((edge.otherVertex(vid).data, 1)),
-   *     (a, b) => (a._1 + b._1, a._2 + b._2),
-   *     -1,
-   *     EdgeDirection.In)
-   *     .mapValues{ case (sum,followers) => sum.toDouble / followers}
-   * }}}
-   */
-  def aggregateNeighbors[A: ClassTag](
-      mapFunc: (VertexID, EdgeTriplet[VD, ED]) => Option[A],
-      reduceFunc: (A, A) => A,
-      dir: EdgeDirection)
-    : VertexRDD[A] = {
-    // Define a new map function over edge triplets
-    val mf = (et: EdgeTriplet[VD,ED]) => {
-      // Compute the message to the dst vertex
-      val dst =
-        if (dir == EdgeDirection.In || dir == EdgeDirection.Both) {
-          mapFunc(et.dstId, et)
-        } else { Option.empty[A] }
-      // Compute the message to the source vertex
-      val src =
-        if (dir == EdgeDirection.Out || dir == EdgeDirection.Both) {
-          mapFunc(et.srcId, et)
-        } else { Option.empty[A] }
-      // construct the return array
-      (src, dst) match {
-        case (None, None) => Iterator.empty
-        case (Some(srcA),None) => Iterator((et.srcId, srcA))
-        case (None, Some(dstA)) => Iterator((et.dstId, dstA))
-        case (Some(srcA), Some(dstA)) => Iterator((et.srcId, srcA), (et.dstId, dstA))
-      }
-    }
-    graph.mapReduceTriplets(mf, reduceFunc)
-  } // end of aggregateNeighbors
-
-  /**
    * Collect the neighbor vertex ids for each vertex.
    *
    * @param edgeDirection the direction along which to collect
@@ -152,11 +98,11 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    *
    * @return the vertex set of neighboring vertex attributes for each vertex
    */
-  def collectNeighbors(edgeDirection: EdgeDirection) :
-    VertexRDD[ Array[(VertexID, VD)] ] = {
-    val nbrs = graph.aggregateNeighbors[Array[(VertexID,VD)]](
-      (vid, edge) =>
-        Some(Array( (edge.otherVertexId(vid), edge.otherVertexAttr(vid)) )),
+  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexID, VD)]] = {
+    val nbrs = graph.mapReduceTriplets[Array[(VertexID,VD)]](
+      edge => Iterator(
+        (edge.srcId, Array((edge.dstId, edge.dstAttr))),
+        (edge.dstId, Array((edge.srcId, edge.srcAttr)))),
       (a, b) => a ++ b,
       edgeDirection)
 

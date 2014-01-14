@@ -519,23 +519,6 @@ val avgAgeOlderFollowers: VertexRDD[Double] =
 > are constant sized (e.g., floats and addition instead of lists and concatenation).  More
 > precisely, the result of `mapReduceTriplets` should be sub-linear in the degree of each vertex.
 
-Because it is often necessary to aggregate information about neighboring vertices we also provide an
-alternative interface defined in [`GraphOps`][GraphOps]:
-
-{% highlight scala %}
-def aggregateNeighbors[A](
-    map: (VertexID, EdgeTriplet[VD, ED]) => Option[A],
-    reduce: (A, A) => A,
-    edgeDir: EdgeDirection)
-  : VertexRDD[A]
-{% endhighlight %}
-
-The `aggregateNeighbors` operator is implemented directly on top of `mapReduceTriplets` but allows
-the user to define the logic in a more vertex centric manner.  Here the `map` function is provided
-the vertex to which the message is sent as well as one of the edges and returns the optional message
-value.  The `edgeDir` determines whether the `map` function is run on `In`, `Out`, or `All` edges
-adjacent to each vertex.
-
 ### Computing Degree Information
 
 A common aggregation task is computing the degree of each vertex: the number of edges adjacent to
