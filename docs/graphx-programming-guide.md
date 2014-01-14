@@ -811,10 +811,34 @@ setB.count
 val setC: VertexRDD[Double] = setA.innerJoin(setB)((id, a, b) => a + b)
 {% endhighlight %}
 
+## EdgeRDDs
+
+The `EdgeRDD[ED]`, which extends `RDD[Edge[ED]]` is considerably simpler than the `VertexRDD`.
+GraphX organizes the edges in blocks partitioned using one of the various partitioning strategies
+defined in [`PartitionStrategy`][PartitionStrategy].  Within each partition, edge attributes and
+adjacency structure, are stored separately enabling maximum reuse when changing attribute values.
+
+[PartitionStrategy]: api/graphx/index.html#org.apache.spark.graphx.PartitionStrategy
+
+The three additional functions exposed by the `EdgeRDD` are:
+{% highlight scala %}
+// Transform the edge attributes while preserving the structure
+def mapValues[ED2](f: Edge[ED] => ED2): EdgeRDD[ED2]
+// Revere the edges reusing both attributes and structure
+def reverse: EdgeRDD[ED]
+// Join two `EdgeRDD`s partitioned using the same partitioning strategy.
+def innerJoin[ED2, ED3](other: EdgeRDD[ED2])(f: (VertexID, VertexID, ED, ED2) => ED3): EdgeRDD[ED3]
+{% endhighlight %}
+
+In most applications we have found that operations on the `EdgeRDD` are accomplished through the
+graph or rely on operations defined in the base `RDD` class.
+
 # Optimized Representation
 
-This section should give some intuition about how GraphX works and how that affects the user (e.g.,
-things to worry about.)
+While a detailed description of the optimizations used in the GraphX representation of distributed
+graphs is beyond the scope of this guide, some high-level understanding may aid in the design of
+scalable algorithms as well as optimal use of the API.  GraphX adopts a vertex-cut approach to
+distributed graph partitioning:
 
 <p style="text-align: center;">
   <img src="img/edge_cut_vs_vertex_cut.png"
@@ -824,6 +848,15 @@ things to worry about.)
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
 
+Rather than splitting graphs along edges, GraphX partitions the graph along vertices which can
+reduce both the communication and storage overhead.  Logically, this corresponds to assigning edges
+to machines and allowing vertices to span multiple machines.  The exact method of assigning edges
+depends on the [`PartitionStrategy`][PartitionStrategy] and there are several tradeoffs to the
+various heuristics.  Users can choose between different strategies by repartitioning the graph with
+the [`Graph.partitionBy`][Graph.partitionBy] operator.
+
+[Graph.partitionBy]: api/graphx/index.html#org.apache.spark.graphx.Graph$@partitionBy(partitionStrategy:org.apache.spark.graphx.PartitionStrategy):org.apache.spark.graphx.Graph[VD,ED]
+
 <p style="text-align: center;">
   <img src="img/vertex_routing_edge_tables.png"
        title="RDD Graph Representation"
@@ -831,6 +864,11 @@ things to worry about.)
        width="50%" />
   <!-- Images are downsized intentionally to improve quality on retina displays -->
 </p>
+
+Once the edges have be partitioned the key challenge to efficient graph-parallel computation is
+efficiently joining vertex attributes with the edges.  Because real-world graphs typically have more
+edges than vertices, we move vertex attributes to the edges.
+
 
 
 
