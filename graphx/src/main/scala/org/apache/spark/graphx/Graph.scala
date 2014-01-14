@@ -269,9 +269,12 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * of the map phase
    *
    * @param activeSetOpt optionally, a set of "active" vertices and a direction of edges to consider
-   * when running `mapFunc`. For example, if the direction is Out, `mapFunc` will only be run on
-   * edges originating from vertices in the active set. The active set must have the same index as
-   * the graph's vertices.
+   * when running `mapFunc`. If the direction is `In`, `mapFunc` will only be run on edges with
+   * destination in the active set.  If the direction is `Out`, `mapFunc` will only be run on edges
+   * originating from vertices in the active set. If the direction is `Either`, `mapFunc` will be
+   * run on edges with *either* vertex in the active set. If the direction is `Both`, `mapFunc` will
+   * be run on edges with *both* vertices in the active set. The active set must have the same index
+   * as the graph's vertices.
    *
    * @example We can use this function to compute the in-degree of each
    * vertex

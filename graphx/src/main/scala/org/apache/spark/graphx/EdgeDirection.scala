@@ -6,11 +6,12 @@ package org.apache.spark.graphx
 class EdgeDirection private (private val name: String) extends Serializable {
   /**
    * Reverse the direction of an edge.  An in becomes out,
-   * out becomes in and both remains both.
+   * out becomes in and both and either remain the same.
    */
   def reverse: EdgeDirection = this match {
     case EdgeDirection.In   => EdgeDirection.Out
     case EdgeDirection.Out  => EdgeDirection.In
+    case EdgeDirection.Either => EdgeDirection.Either
     case EdgeDirection.Both => EdgeDirection.Both
   }
 
@@ -32,6 +33,9 @@ object EdgeDirection {
   /** Edges originating from a vertex. */
   final val Out = new EdgeDirection("Out")
 
-  /** All edges adjacent to a vertex. */
+  /** Edges originating from *or* arriving at a vertex of interest. */
+  final val Either = new EdgeDirection("Either")
+
+  /** Edges originating from *and* arriving at a vertex of interest. */
   final val Both = new EdgeDirection("Both")
 }

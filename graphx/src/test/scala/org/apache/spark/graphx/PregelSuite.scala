@@ -32,7 +32,7 @@ class PregelSuite extends FunSuite with LocalSparkContext {
         Set((1: VertexID, 1)) ++ (2 to n).map(x => (x: VertexID, 0)).toSet)
       val result = Pregel(chainWithSeed, 0)(
         (vid, attr, msg) => math.max(msg, attr),
-        et => Iterator((et.dstId, et.srcAttr)),
+        et => if (et.dstAttr != et.srcAttr) Iterator((et.dstId, et.srcAttr)) else Iterator.empty,
         (a: Int, b: Int) => math.max(a, b))
       assert(result.vertices.collect.toSet ===
         chain.vertices.mapValues { (vid, attr) => attr + 1 }.collect.toSet)

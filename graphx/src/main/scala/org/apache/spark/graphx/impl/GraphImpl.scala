@@ -32,6 +32,9 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     @transient val replicatedVertexView: ReplicatedVertexView[VD])
   extends Graph[VD, ED] with Serializable {
 
+  /** Default construct is provided to support serialization */
+  protected def this() = this(null, null, null, null)
+
   /** Return a RDD that brings edges together with their source and destination vertices. */
   @transient override val triplets: RDD[EdgeTriplet[VD, ED]] = {
     val vdTag = classTag[VD]
@@ -275,6 +278,10 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
           } else {
             edgePartition.iterator.filter(e => vPart.isActive(e.srcId) && vPart.isActive(e.dstId))
           }
+        case Some(EdgeDirection.Either) =>
+          // TODO: Because we only have a clustered index on the source vertex ID, we can't filter
+          // the index here. Instead we have to scan all edges and then do the filter.
+          edgePartition.iterator.filter(e => vPart.isActive(e.srcId) || vPart.isActive(e.dstId))
         case Some(EdgeDirection.Out) =>
           if (activeFraction < 0.8) {
             edgePartition.indexIterator(srcVertexID => vPart.isActive(srcVertexID))

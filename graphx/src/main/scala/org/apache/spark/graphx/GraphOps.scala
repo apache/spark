@@ -38,7 +38,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    * The degree of each vertex in the graph.
    * @note Vertices with no edges are not returned in the resulting RDD.
    */
-  lazy val degrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Both)
+  lazy val degrees: VertexRDD[Int] = degreesRDD(EdgeDirection.Either)
 
   /**
    * Computes the neighboring vertex degrees.
@@ -50,64 +50,10 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
       graph.mapReduceTriplets(et => Iterator((et.dstId,1)), _ + _)
     } else if (edgeDirection == EdgeDirection.Out) {
       graph.mapReduceTriplets(et => Iterator((et.srcId,1)), _ + _)
-    } else { // EdgeDirection.both
+    } else { // EdgeDirection.Either
       graph.mapReduceTriplets(et => Iterator((et.srcId,1), (et.dstId,1)), _ + _)
     }
   }
-
-  /**
-   * Computes a statistic for the neighborhood of each vertex.
-   *
-   * @param mapFunc the function applied to each edge adjacent to each vertex. The mapFunc can
-   * optionally return `None`, in which case it does not contribute to the final sum.
-   * @param reduceFunc the function used to merge the results of each map operation
-   * @param direction the direction of edges to consider (e.g., In, Out, Both).
-   * @tparam A the aggregation type
-   *
-   * @return an RDD containing tuples of vertex identifiers and
-   * their resulting value. Vertices with no neighbors will not appear in the RDD.
-   *
-   * @example We can use this function to compute the average follower
-   * age for each user:
-   *
-   * {{{
-   * val graph: Graph[Int,Int] = GraphLoader.edgeListFile(sc, "webgraph")
-   * val averageFollowerAge: RDD[(Int, Int)] =
-   *   graph.aggregateNeighbors[(Int,Double)](
-   *     (vid, edge) => Some((edge.otherVertex(vid).data, 1)),
-   *     (a, b) => (a._1 + b._1, a._2 + b._2),
-   *     -1,
-   *     EdgeDirection.In)
-   *     .mapValues{ case (sum,followers) => sum.toDouble / followers}
-   * }}}
-   */
-  def aggregateNeighbors[A: ClassTag](
-      mapFunc: (VertexID, EdgeTriplet[VD, ED]) => Option[A],
-      reduceFunc: (A, A) => A,
-      dir: EdgeDirection)
-    : VertexRDD[A] = {
-    // Define a new map function over edge triplets
-    val mf = (et: EdgeTriplet[VD,ED]) => {
-      // Compute the message to the dst vertex
-      val dst =
-        if (dir == EdgeDirection.In || dir == EdgeDirection.Both) {
-          mapFunc(et.dstId, et)
-        } else { Option.empty[A] }
-      // Compute the message to the source vertex
-      val src =
-        if (dir == EdgeDirection.Out || dir == EdgeDirection.Both) {
-          mapFunc(et.srcId, et)
-        } else { Option.empty[A] }
-      // construct the return array
-      (src, dst) match {
-        case (None, None) => Iterator.empty
-        case (Some(srcA),None) => Iterator((et.srcId, srcA))
-        case (None, Some(dstA)) => Iterator((et.dstId, dstA))
-        case (Some(srcA), Some(dstA)) => Iterator((et.srcId, srcA), (et.dstId, dstA))
-      }
-    }
-    graph.mapReduceTriplets(mf, reduceFunc)
-  } // end of aggregateNeighbors
 
   /**
    * Collect the neighbor vertex ids for each vertex.
@@ -119,7 +65,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    */
   def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexID]] = {
     val nbrs =
-      if (edgeDirection == EdgeDirection.Both) {
+      if (edgeDirection == EdgeDirection.Either) {
         graph.mapReduceTriplets[Array[VertexID]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _
@@ -133,7 +79,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
           mapFunc = et => Iterator((et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _)
       } else {
-        throw new SparkException("It doesn't make sense to collect neighbor ids without a direction.")
+        throw new SparkException("It doesn't make sense to collect neighbor ids without a " +
+          "direction. (EdgeDirection.Both is not supported; use EdgeDirection.Either instead.)")
       }
     graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
       nbrsOpt.getOrElse(Array.empty[VertexID])
@@ -152,13 +99,21 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    *
    * @return the vertex set of neighboring vertex attributes for each vertex
    */
-  def collectNeighbors(edgeDirection: EdgeDirection) :
-    VertexRDD[ Array[(VertexID, VD)] ] = {
-    val nbrs = graph.aggregateNeighbors[Array[(VertexID,VD)]](
-      (vid, edge) =>
-        Some(Array( (edge.otherVertexId(vid), edge.otherVertexAttr(vid)) )),
-      (a, b) => a ++ b,
-      edgeDirection)
+  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexID, VD)]] = {
+    val nbrs = graph.mapReduceTriplets[Array[(VertexID,VD)]](
+      edge => {
+        val msgToSrc = (edge.srcId, Array((edge.dstId, edge.dstAttr)))
+        val msgToDst = (edge.dstId, Array((edge.srcId, edge.srcAttr)))
+        edgeDirection match {
+          case EdgeDirection.Either => Iterator(msgToSrc, msgToDst)
+          case EdgeDirection.In => Iterator(msgToDst)
+          case EdgeDirection.Out => Iterator(msgToSrc)
+          case EdgeDirection.Both =>
+            throw new SparkException("collectNeighbors does not support EdgeDirection.Both. Use" +
+              "EdgeDirection.Either instead.")
+        }
+      },
+      (a, b) => a ++ b)
 
     graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
       nbrsOpt.getOrElse(Array.empty[(VertexID, VD)])
@@ -291,7 +246,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
   def pregel[A: ClassTag](
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
-      activeDirection: EdgeDirection = EdgeDirection.Out)(
+      activeDirection: EdgeDirection = EdgeDirection.Either)(
       vprog: (VertexID, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
       mergeMsg: (A, A) => A)
@@ -325,8 +280,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    *
    * @see [[org.apache.spark.graphx.lib.ConnectedComponents]]
    */
-  def connectedComponents(undirected: Boolean = true): Graph[VertexID, ED] = {
-    ConnectedComponents.run(graph, undirected)
+  def connectedComponents(): Graph[VertexID, ED] = {
+    ConnectedComponents.run(graph)
   }
 
   /**

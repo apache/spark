@@ -77,7 +77,7 @@ object PageRank extends Logging {
     val initialMessage = 0.0
 
     // Execute pregel for a fixed number of iterations.
-    Pregel(pagerankGraph, initialMessage, numIter)(
+    Pregel(pagerankGraph, initialMessage, numIter, activeDirection = EdgeDirection.Out)(
       vertexProgram, sendMessage, messageCombiner)
   }
 
@@ -153,7 +153,8 @@ object PageRank extends Logging {
     val initialMessage = resetProb / (1.0 - resetProb)
 
     // Execute a dynamic version of Pregel.
-    Pregel(pagerankGraph, initialMessage)(vertexProgram, sendMessage, messageCombiner)
+    Pregel(pagerankGraph, initialMessage, activeDirection = EdgeDirection.Out)(
+      vertexProgram, sendMessage, messageCombiner)
       .mapVertices((vid, attr) => attr._1)
   } // end of deltaPageRank
 

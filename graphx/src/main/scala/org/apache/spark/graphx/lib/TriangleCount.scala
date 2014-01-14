@@ -27,7 +27,7 @@ object TriangleCount {
 
     // Construct set representations of the neighborhoods
     val nbrSets: VertexRDD[VertexSet] =
-      g.collectNeighborIds(EdgeDirection.Both).mapValues { (vid, nbrs) =>
+      g.collectNeighborIds(EdgeDirection.Either).mapValues { (vid, nbrs) =>
         val set = new VertexSet(4)
         var i = 0
         while (i < nbrs.size) {
