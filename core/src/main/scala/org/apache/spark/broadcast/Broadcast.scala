@@ -17,6 +17,7 @@
 
 package org.apache.spark.broadcast
 
+import java.io.Serializable
 import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark._

@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import java.io.ObjectInputStream
+import java.io.{ObjectInputStream, Serializable}
 
 import scala.collection.mutable.Map
 import scala.collection.generic.Growable
