@@ -64,7 +64,7 @@ class FakeTaskSetManager(
   }
 
   override def getSchedulableByName(name: String): Schedulable = {
-    return null
+    null
   }
 
   override def executorLost(executorId: String, host: String): Unit = {
@@ -79,13 +79,14 @@ class FakeTaskSetManager(
   {
     if (tasksSuccessful + runningTasks < numTasks) {
       increaseRunningTasks(1)
-      return Some(new TaskDescription(0, execId, "task 0:0", 0, null))
+      Some(new TaskDescription(0, execId, "task 0:0", 0, null))
+    } else {
+      None
     }
-    return None
   }
 
   override def checkSpeculatableTasks(): Boolean = {
-    return true
+    true
   }
 
   def taskFinished() {

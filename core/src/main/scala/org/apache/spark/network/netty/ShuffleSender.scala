@@ -64,7 +64,7 @@ private[spark] object ShuffleSender {
         val subDirId = (hash / localDirs.length) % subDirsPerLocalDir
         val subDir = new File(localDirs(dirId), "%02x".format(subDirId))
         val file = new File(subDir, blockId.name)
-        return new FileSegment(file, 0, file.length())
+        new FileSegment(file, 0, file.length())
       }
     }
     val sender = new ShuffleSender(port, pResovler)

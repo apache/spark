@@ -17,6 +17,8 @@
 
 package org.apache.spark.util
 
+import scala.util.Random
+
 class Vector(val elements: Array[Double]) extends Serializable {
   def length = elements.length
 
@@ -25,7 +27,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
   def + (other: Vector): Vector = {
     if (length != other.length)
       throw new IllegalArgumentException("Vectors of different length")
-    return Vector(length, i => this(i) + other(i))
+    Vector(length, i => this(i) + other(i))
   }
 
   def add(other: Vector) = this + other
@@ -33,7 +35,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
   def - (other: Vector): Vector = {
     if (length != other.length)
       throw new IllegalArgumentException("Vectors of different length")
-    return Vector(length, i => this(i) - other(i))
+    Vector(length, i => this(i) - other(i))
   }
 
   def subtract(other: Vector) = this - other
@@ -47,7 +49,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
       ans += this(i) * other(i)
       i += 1
     }
-    return ans
+    ans
   }
 
   /**
@@ -67,7 +69,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
       ans += (this(i) + plus(i)) * other(i)
       i += 1
     }
-    return ans
+    ans
   }
 
   def += (other: Vector): Vector = {
@@ -102,7 +104,7 @@ class Vector(val elements: Array[Double]) extends Serializable {
       ans += (this(i) - other(i)) * (this(i) - other(i))
       i += 1
     }
-    return ans
+    ans
   }
 
   def dist(other: Vector): Double = math.sqrt(squaredDist(other))
@@ -117,12 +119,18 @@ object Vector {
 
   def apply(length: Int, initializer: Int => Double): Vector = {
     val elements: Array[Double] = Array.tabulate(length)(initializer)
-    return new Vector(elements)
+    new Vector(elements)
   }
 
   def zeros(length: Int) = new Vector(new Array[Double](length))
 
   def ones(length: Int) = Vector(length, _ => 1)
+
+  /**
+   * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers 
+   * between 0.0 and 1.0. Optional [[scala.util.Random]] number generator can be provided.
+   */
+  def random(length: Int, random: Random = new XORShiftRandom()) = Vector(length, _ => random.nextDouble())
 
   class Multiplier(num: Double) {
     def * (vec: Vector) = vec * num

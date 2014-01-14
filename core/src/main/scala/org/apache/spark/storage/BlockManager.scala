@@ -58,8 +58,8 @@ private[spark] class BlockManager(
 
   // If we use Netty for shuffle, start a new Netty-based shuffle sender service.
   private val nettyPort: Int = {
-    val useNetty = conf.get("spark.shuffle.use.netty", "false").toBoolean
-    val nettyPortConfig = conf.get("spark.shuffle.sender.port", "0").toInt
+    val useNetty = conf.getBoolean("spark.shuffle.use.netty", false)
+    val nettyPortConfig = conf.getInt("spark.shuffle.sender.port", 0)
     if (useNetty) diskBlockManager.startShuffleBlockSender(nettyPortConfig) else 0
   }
 
@@ -72,18 +72,16 @@ private[spark] class BlockManager(
   // Max megabytes of data to keep in flight per reducer (to avoid over-allocating memory
   // for receiving shuffle outputs)
   val maxBytesInFlight =
-    conf.get("spark.reducer.maxMbInFlight", "48").toLong * 1024 * 1024
+    conf.getLong("spark.reducer.maxMbInFlight", 48) * 1024 * 1024
 
   // Whether to compress broadcast variables that are stored
-  val compressBroadcast = conf.get("spark.broadcast.compress", "true").toBoolean
+  val compressBroadcast = conf.getBoolean("spark.broadcast.compress", true)
   // Whether to compress shuffle output that are stored
-  val compressShuffle = conf.get("spark.shuffle.compress", "true").toBoolean
+  val compressShuffle = conf.getBoolean("spark.shuffle.compress", true)
   // Whether to compress RDD partitions that are stored serialized
-  val compressRdds = conf.get("spark.rdd.compress", "false").toBoolean
+  val compressRdds = conf.getBoolean("spark.rdd.compress", false)
 
   val heartBeatFrequency = BlockManager.getHeartBeatFrequency(conf)
-
-  val hostPort = Utils.localHostPort(conf)
 
   val slaveActor = actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
     name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
@@ -159,7 +157,7 @@ private[spark] class BlockManager(
 
   /**
    * Reregister with the master and report all blocks to it. This will be called by the heart beat
-   * thread if our heartbeat to the block amnager indicates that we were not registered.
+   * thread if our heartbeat to the block manager indicates that we were not registered.
    *
    * Note that this method must be called without any BlockInfo locks held.
    */
@@ -412,7 +410,7 @@ private[spark] class BlockManager(
       logDebug("The value of block " + blockId + " is null")
     }
     logDebug("Block " + blockId + " not found")
-    return None
+    None
   }
 
   /**
@@ -443,7 +441,7 @@ private[spark] class BlockManager(
       : BlockFetcherIterator = {
 
     val iter =
-      if (conf.get("spark.shuffle.use.netty", "false").toBoolean) {
+      if (conf.getBoolean("spark.shuffle.use.netty", false)) {
         new BlockFetcherIterator.NettyBlockFetcherIterator(this, blocksByAddress, serializer)
       } else {
         new BlockFetcherIterator.BasicBlockFetcherIterator(this, blocksByAddress, serializer)
@@ -469,7 +467,7 @@ private[spark] class BlockManager(
   def getDiskWriter(blockId: BlockId, file: File, serializer: Serializer, bufferSize: Int)
     : BlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
-    val syncWrites = conf.get("spark.shuffle.sync", "false").toBoolean
+    val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream, syncWrites)
   }
 
@@ -864,15 +862,15 @@ private[spark] object BlockManager extends Logging {
   val ID_GENERATOR = new IdGenerator
 
   def getMaxMemory(conf: SparkConf): Long = {
-    val memoryFraction = conf.get("spark.storage.memoryFraction", "0.66").toDouble
+    val memoryFraction = conf.getDouble("spark.storage.memoryFraction", 0.6)
     (Runtime.getRuntime.maxMemory * memoryFraction).toLong
   }
 
   def getHeartBeatFrequency(conf: SparkConf): Long =
-    conf.get("spark.storage.blockManagerTimeoutIntervalMs", "60000").toLong / 4
+    conf.getLong("spark.storage.blockManagerTimeoutIntervalMs", 60000) / 4
 
   def getDisableHeartBeatsForTesting(conf: SparkConf): Boolean =
-    conf.get("spark.test.disableBlockManagerHeartBeat", "false").toBoolean
+    conf.getBoolean("spark.test.disableBlockManagerHeartBeat", false)
 
   /**
    * Attempt to clean up a ByteBuffer if it is memory-mapped. This uses an *unsafe* Sun API that

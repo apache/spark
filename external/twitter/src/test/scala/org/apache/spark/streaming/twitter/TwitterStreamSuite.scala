@@ -23,7 +23,7 @@ import twitter4j.auth.{NullAuthorization, Authorization}
 
 class TwitterStreamSuite extends TestSuiteBase {
 
-  test("kafka input stream") {
+  test("twitter input stream") {
     val ssc = new StreamingContext(master, framework, batchDuration)
     val filters = Seq("filter1", "filter2")
     val authorization: Authorization = NullAuthorization.getInstance()

@@ -17,36 +17,68 @@
 
 package org.apache.spark.streaming.scheduler
 
-import org.apache.spark.Logging
-import org.apache.spark.SparkEnv
+import scala.util.{Failure, Success, Try}
+import scala.collection.JavaConversions._
 import java.util.concurrent.{TimeUnit, ConcurrentHashMap, Executors}
-import scala.collection.mutable.HashSet
+import akka.actor.{ActorRef, Actor, Props}
+import org.apache.spark.{SparkException, Logging, SparkEnv}
 import org.apache.spark.streaming._
+
+
+private[scheduler] sealed trait JobSchedulerEvent
+private[scheduler] case class JobStarted(job: Job) extends JobSchedulerEvent
+private[scheduler] case class JobCompleted(job: Job) extends JobSchedulerEvent
+private[scheduler] case class ErrorReported(msg: String, e: Throwable) extends JobSchedulerEvent
 
 /**
  * This class schedules jobs to be run on Spark. It uses the JobGenerator to generate
- * the jobs and runs them using a thread pool. Number of threads
+ * the jobs and runs them using a thread pool.
  */
 private[streaming]
 class JobScheduler(val ssc: StreamingContext) extends Logging {
 
-  val jobSets = new ConcurrentHashMap[Time, JobSet]
-  val numConcurrentJobs = ssc.conf.get("spark.streaming.concurrentJobs", "1").toInt
-  val executor = Executors.newFixedThreadPool(numConcurrentJobs)
-  val generator = new JobGenerator(this)
+  private val jobSets = new ConcurrentHashMap[Time, JobSet]
+  private val numConcurrentJobs = ssc.conf.getInt("spark.streaming.concurrentJobs", 1)
+  private val executor = Executors.newFixedThreadPool(numConcurrentJobs)
+  private val jobGenerator = new JobGenerator(this)
+  val clock = jobGenerator.clock
   val listenerBus = new StreamingListenerBus()
 
-  def clock = generator.clock
+  // These two are created only when scheduler starts.
+  // eventActor not being null means the scheduler has been started and not stopped
+  var networkInputTracker: NetworkInputTracker = null
+  private var eventActor: ActorRef = null
 
-  def start() {
-    generator.start()
+
+  def start() = synchronized {
+    if (eventActor != null) {
+      throw new SparkException("JobScheduler already started")
+    }
+
+    eventActor = ssc.env.actorSystem.actorOf(Props(new Actor {
+      def receive = {
+        case event: JobSchedulerEvent => processEvent(event)
+      }
+    }), "JobScheduler")
+    listenerBus.start()
+    networkInputTracker = new NetworkInputTracker(ssc)
+    networkInputTracker.start()
+    Thread.sleep(1000)
+    jobGenerator.start()
+    logInfo("JobScheduler started")
   }
 
-  def stop() {
-    generator.stop()
-    executor.shutdown()
-    if (!executor.awaitTermination(5, TimeUnit.SECONDS)) {
-      executor.shutdownNow()
+  def stop() = synchronized {
+    if (eventActor != null) {
+      jobGenerator.stop()
+      networkInputTracker.stop()
+      executor.shutdown()
+      if (!executor.awaitTermination(2, TimeUnit.SECONDS)) {
+        executor.shutdownNow()
+      }
+      listenerBus.stop()
+      ssc.env.actorSystem.stop(eventActor)
+      logInfo("JobScheduler stopped")
     }
   }
 
@@ -61,46 +93,67 @@ class JobScheduler(val ssc: StreamingContext) extends Logging {
     }
   }
 
-  def getPendingTimes(): Array[Time] = {
-    jobSets.keySet.toArray(new Array[Time](0))
+  def getPendingTimes(): Seq[Time] = {
+    jobSets.keySet.toSeq
   }
 
-  private def beforeJobStart(job: Job) {
+  def reportError(msg: String, e: Throwable) {
+    eventActor ! ErrorReported(msg, e)
+  }
+
+  private def processEvent(event: JobSchedulerEvent) {
+    try {
+      event match {
+        case JobStarted(job) => handleJobStart(job)
+        case JobCompleted(job) => handleJobCompletion(job)
+        case ErrorReported(m, e) => handleError(m, e)
+      }
+    } catch {
+      case e: Throwable =>
+        reportError("Error in job scheduler", e)
+    }
+  }
+
+  private def handleJobStart(job: Job) {
     val jobSet = jobSets.get(job.time)
     if (!jobSet.hasStarted) {
-      listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo()))
+      listenerBus.post(StreamingListenerBatchStarted(jobSet.toBatchInfo))
     }
-    jobSet.beforeJobStart(job)
+    jobSet.handleJobStart(job)
     logInfo("Starting job " + job.id + " from job set of time " + jobSet.time)
-    SparkEnv.set(generator.ssc.env)
+    SparkEnv.set(ssc.env)
   }
 
-  private def afterJobEnd(job: Job) {
-    val jobSet = jobSets.get(job.time)
-    jobSet.afterJobStop(job)
-    logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
-    if (jobSet.hasCompleted) {
-      jobSets.remove(jobSet.time)
-      generator.onBatchCompletion(jobSet.time)
-      logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
-        jobSet.totalDelay / 1000.0, jobSet.time.toString,
-        jobSet.processingDelay / 1000.0
-      ))
-      listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo()))
+  private def handleJobCompletion(job: Job) {
+    job.result match {
+      case Success(_) =>
+        val jobSet = jobSets.get(job.time)
+        jobSet.handleJobCompletion(job)
+        logInfo("Finished job " + job.id + " from job set of time " + jobSet.time)
+        if (jobSet.hasCompleted) {
+          jobSets.remove(jobSet.time)
+          jobGenerator.onBatchCompletion(jobSet.time)
+          logInfo("Total delay: %.3f s for time %s (execution: %.3f s)".format(
+            jobSet.totalDelay / 1000.0, jobSet.time.toString,
+            jobSet.processingDelay / 1000.0
+          ))
+          listenerBus.post(StreamingListenerBatchCompleted(jobSet.toBatchInfo))
+        }
+      case Failure(e) =>
+        reportError("Error running job " + job, e)
     }
   }
 
-  private[streaming]
-  class JobHandler(job: Job) extends Runnable {
+  private def handleError(msg: String, e: Throwable) {
+    logError(msg, e)
+    ssc.waiter.notifyError(e)
+  }
+
+  private class JobHandler(job: Job) extends Runnable {
     def run() {
-      beforeJobStart(job)
-      try {
-        job.run()
-      } catch {
-        case e: Exception =>
-          logError("Running " + job + " failed", e)
-      }
-      afterJobEnd(job)
+      eventActor ! JobStarted(job)
+      job.run()
+      eventActor ! JobCompleted(job)
     }
   }
 }

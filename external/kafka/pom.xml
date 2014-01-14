@@ -45,9 +45,9 @@
       <scope>test</scope>
     </dependency>
     <dependency>
-      <groupId>com.sksamuel.kafka</groupId>
+      <groupId>org.apache.kafka</groupId>
       <artifactId>kafka_${scala.binary.version}</artifactId>
-      <version>0.8.0-beta1</version>
+      <version>0.8.0</version>
       <exclusions>
         <exclusion>
           <groupId>com.sun.jmx</groupId>

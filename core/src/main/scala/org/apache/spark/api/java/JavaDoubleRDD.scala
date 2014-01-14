@@ -207,13 +207,13 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
    *  e.g. for the array
    *  [1,10,20,50] the buckets are [1,10) [10,20) [20,50]
    *  e.g 1<=x<10 , 10<=x<20, 20<=x<50
-   *  And on the input of 1 and 50 we would have a histogram of 1,0,0 
-   * 
+   *  And on the input of 1 and 50 we would have a histogram of 1,0,0
+   *
    * Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can be switched
    * from an O(log n) inseration to O(1) per element. (where n = # buckets) if you set evenBuckets
    * to true.
    * buckets must be sorted and not contain any duplicates.
-   * buckets array must be at least two elements 
+   * buckets array must be at least two elements
    * All NaN entries are treated the same. If you have a NaN bucket it must be
    * the maximum value of the last position and all NaN entries will be counted
    * in that bucket.
@@ -224,6 +224,12 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[Double, Jav
 
   def histogram(buckets: Array[Double], evenBuckets: Boolean): Array[Long] = {
     srdd.histogram(buckets.map(_.toDouble), evenBuckets)
+  }
+
+  /** Assign a name to this RDD */
+  def setName(name: String): JavaDoubleRDD = {
+    srdd.setName(name)
+    this
   }
 }
 

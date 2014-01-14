@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.io.File
 import java.text.SimpleDateFormat
-import java.util.{Date, Random}
+import java.util.{Date, Random, UUID}
 
 import org.apache.spark.Logging
 import org.apache.spark.executor.ExecutorExitCode
@@ -38,7 +38,7 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   extends PathResolver with Logging {
 
   private val MAX_DIR_CREATION_ATTEMPTS: Int = 10
-  private val subDirsPerLocalDir = shuffleManager.conf.get("spark.diskStore.subDirectories", "64").toInt
+  private val subDirsPerLocalDir = shuffleManager.conf.getInt("spark.diskStore.subDirectories", 64)
 
   // Create one local directory for each path mentioned in spark.local.dir; then, inside this
   // directory, create multiple subdirectories that we will hash files into, in order to avoid
@@ -89,6 +89,15 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
   }
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
+
+  /** Produces a unique block id and File suitable for intermediate results. */
+  def createTempBlock(): (TempBlockId, File) = {
+    var blockId = new TempBlockId(UUID.randomUUID())
+    while (getFile(blockId).exists()) {
+      blockId = new TempBlockId(UUID.randomUUID())
+    }
+    (blockId, getFile(blockId))
+  }
 
   private def createLocalDirs(): Array[File] = {
     logDebug("Creating local directories at root dirs '" + rootDirs + "'")

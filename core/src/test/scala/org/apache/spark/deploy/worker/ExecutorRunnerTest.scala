@@ -31,8 +31,8 @@ class ExecutorRunnerTest extends FunSuite {
       sparkHome, "appUiUrl")
     val appId = "12345-worker321-9876"
     val er = new ExecutorRunner(appId, 1, appDesc, 8, 500, null, "blah", "worker321", f(sparkHome),
-      f("ooga"), ExecutorState.RUNNING)
+      f("ooga"), "blah", ExecutorState.RUNNING)
 
-    assert(er.buildCommandSeq().last === appId)
+    assert(er.getCommandSeq.last === appId)
   }
 }

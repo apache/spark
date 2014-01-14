@@ -66,7 +66,7 @@ class SystemClock() extends Clock {
         }
       Thread.sleep(sleepTime)
     }
-    return -1
+    -1
   }
 }
 
@@ -96,6 +96,6 @@ class ManualClock() extends Clock {
         this.wait(100)
       }      
     }
-    return currentTime()
+    currentTime()
   }
 }

@@ -41,6 +41,8 @@ public final class JavaQueueStream {
       System.exit(1);
     }
 
+    StreamingExamples.setStreamingLogLevels();
+
     // Create the context
     JavaStreamingContext ssc = new JavaStreamingContext(args[0], "QueueStream", new Duration(1000),
             System.getenv("SPARK_HOME"), JavaStreamingContext.jarOfClass(JavaQueueStream.class));

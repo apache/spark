@@ -17,7 +17,7 @@
 
 package org.apache.spark
 
-import org.apache.spark.util.AppendOnlyMap
+import org.apache.spark.util.collection.{AppendOnlyMap, ExternalAppendOnlyMap}
 
 /**
  * A set of functions used to aggregate data.
@@ -31,30 +31,51 @@ case class Aggregator[K, V, C] (
     mergeValue: (C, V) => C,
     mergeCombiners: (C, C) => C) {
 
+  private val sparkConf = SparkEnv.get.conf
+  private val externalSorting = sparkConf.getBoolean("spark.shuffle.externalSorting", true)
+
   def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
-    val combiners = new AppendOnlyMap[K, C]
-    var kv: Product2[K, V] = null
-    val update = (hadValue: Boolean, oldValue: C) => {
-      if (hadValue) mergeValue(oldValue, kv._2) else createCombiner(kv._2)
+    if (!externalSorting) {
+      val combiners = new AppendOnlyMap[K,C]
+      var kv: Product2[K, V] = null
+      val update = (hadValue: Boolean, oldValue: C) => {
+        if (hadValue) mergeValue(oldValue, kv._2) else createCombiner(kv._2)
+      }
+      while (iter.hasNext) {
+        kv = iter.next()
+        combiners.changeValue(kv._1, update)
+      }
+      combiners.iterator
+    } else {
+      val combiners =
+        new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+      while (iter.hasNext) {
+        val (k, v) = iter.next()
+        combiners.insert(k, v)
+      }
+      combiners.iterator
     }
-    while (iter.hasNext) {
-      kv = iter.next()
-      combiners.changeValue(kv._1, update)
-    }
-    combiners.iterator
   }
 
   def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] = {
-    val combiners = new AppendOnlyMap[K, C]
-    var kc: (K, C) = null
-    val update = (hadValue: Boolean, oldValue: C) => {
-      if (hadValue) mergeCombiners(oldValue, kc._2) else kc._2
+    if (!externalSorting) {
+      val combiners = new AppendOnlyMap[K,C]
+      var kc: Product2[K, C] = null
+      val update = (hadValue: Boolean, oldValue: C) => {
+        if (hadValue) mergeCombiners(oldValue, kc._2) else kc._2
+      }
+      while (iter.hasNext) {
+        kc = iter.next()
+        combiners.changeValue(kc._1, update)
+      }
+      combiners.iterator
+    } else {
+      val combiners = new ExternalAppendOnlyMap[K, C, C](identity, mergeCombiners, mergeCombiners)
+      while (iter.hasNext) {
+        val (k, c) = iter.next()
+        combiners.insert(k, c)
+      }
+      combiners.iterator
     }
-    while (iter.hasNext) {
-      kc = iter.next()
-      combiners.changeValue(kc._1, update)
-    }
-    combiners.iterator
   }
 }
-

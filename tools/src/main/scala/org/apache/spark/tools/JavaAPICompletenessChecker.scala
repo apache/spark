@@ -24,8 +24,9 @@ import scala.collection.mutable.ArrayBuffer
 import org.apache.spark._
 import org.apache.spark.api.java._
 import org.apache.spark.rdd.{RDD, DoubleRDDFunctions, PairRDDFunctions, OrderedRDDFunctions}
-import org.apache.spark.streaming.{PairDStreamFunctions, DStream, StreamingContext}
+import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaPairDStream, JavaDStream, JavaStreamingContext}
+import org.apache.spark.streaming.dstream.{DStream, PairDStreamFunctions}
 
 
 private[spark] abstract class SparkType(val name: String)
@@ -147,7 +148,7 @@ object JavaAPICompletenessChecker {
               } else {
                 ParameterizedType(classOf[JavaRDD[_]].getName, parameters.map(applySubs))
               }
-            case "org.apache.spark.streaming.DStream" =>
+            case "org.apache.spark.streaming.dstream.DStream" =>
               if (parameters(0).name == classOf[Tuple2[_, _]].getName) {
                 val tupleParams =
                   parameters(0).asInstanceOf[ParameterizedType].parameters.map(applySubs)
@@ -248,30 +249,29 @@ object JavaAPICompletenessChecker {
       "org.apache.spark.SparkContext.getSparkHome",
       "org.apache.spark.SparkContext.executorMemoryRequested",
       "org.apache.spark.SparkContext.getExecutorStorageStatus",
-      "org.apache.spark.streaming.DStream.generatedRDDs",
-      "org.apache.spark.streaming.DStream.zeroTime",
-      "org.apache.spark.streaming.DStream.rememberDuration",
-      "org.apache.spark.streaming.DStream.storageLevel",
-      "org.apache.spark.streaming.DStream.mustCheckpoint",
-      "org.apache.spark.streaming.DStream.checkpointDuration",
-      "org.apache.spark.streaming.DStream.checkpointData",
-      "org.apache.spark.streaming.DStream.graph",
-      "org.apache.spark.streaming.DStream.isInitialized",
-      "org.apache.spark.streaming.DStream.parentRememberDuration",
-      "org.apache.spark.streaming.DStream.initialize",
-      "org.apache.spark.streaming.DStream.validate",
-      "org.apache.spark.streaming.DStream.setContext",
-      "org.apache.spark.streaming.DStream.setGraph",
-      "org.apache.spark.streaming.DStream.remember",
-      "org.apache.spark.streaming.DStream.getOrCompute",
-      "org.apache.spark.streaming.DStream.generateJob",
-      "org.apache.spark.streaming.DStream.clearOldMetadata",
-      "org.apache.spark.streaming.DStream.addMetadata",
-      "org.apache.spark.streaming.DStream.updateCheckpointData",
-      "org.apache.spark.streaming.DStream.restoreCheckpointData",
-      "org.apache.spark.streaming.DStream.isTimeValid",
+      "org.apache.spark.streaming.dstream.DStream.generatedRDDs",
+      "org.apache.spark.streaming.dstream.DStream.zeroTime",
+      "org.apache.spark.streaming.dstream.DStream.rememberDuration",
+      "org.apache.spark.streaming.dstream.DStream.storageLevel",
+      "org.apache.spark.streaming.dstream.DStream.mustCheckpoint",
+      "org.apache.spark.streaming.dstream.DStream.checkpointDuration",
+      "org.apache.spark.streaming.dstream.DStream.checkpointData",
+      "org.apache.spark.streaming.dstream.DStream.graph",
+      "org.apache.spark.streaming.dstream.DStream.isInitialized",
+      "org.apache.spark.streaming.dstream.DStream.parentRememberDuration",
+      "org.apache.spark.streaming.dstream.DStream.initialize",
+      "org.apache.spark.streaming.dstream.DStream.validate",
+      "org.apache.spark.streaming.dstream.DStream.setContext",
+      "org.apache.spark.streaming.dstream.DStream.setGraph",
+      "org.apache.spark.streaming.dstream.DStream.remember",
+      "org.apache.spark.streaming.dstream.DStream.getOrCompute",
+      "org.apache.spark.streaming.dstream.DStream.generateJob",
+      "org.apache.spark.streaming.dstream.DStream.clearOldMetadata",
+      "org.apache.spark.streaming.dstream.DStream.addMetadata",
+      "org.apache.spark.streaming.dstream.DStream.updateCheckpointData",
+      "org.apache.spark.streaming.dstream.DStream.restoreCheckpointData",
+      "org.apache.spark.streaming.dstream.DStream.isTimeValid",
       "org.apache.spark.streaming.StreamingContext.nextNetworkInputStreamId",
-      "org.apache.spark.streaming.StreamingContext.networkInputTracker",
       "org.apache.spark.streaming.StreamingContext.checkpointDir",
       "org.apache.spark.streaming.StreamingContext.checkpointDuration",
       "org.apache.spark.streaming.StreamingContext.receiverJobThread",

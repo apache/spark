@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Time, Duration, StreamingContext, DStream}
+import org.apache.spark.streaming.{Time, Duration, StreamingContext}
 
 import scala.reflect.ClassTag
 
@@ -43,7 +43,7 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
    * This ensures that InputDStream.compute() is called strictly on increasing
    * times.
    */
-  override protected def isTimeValid(time: Time): Boolean = {
+  override private[streaming] def isTimeValid(time: Time): Boolean = {
     if (!super.isTimeValid(time)) {
       false // Time not valid
     } else {

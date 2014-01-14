@@ -180,7 +180,7 @@ extends Logging {
     initialized = false
   }
 
-  lazy val BLOCK_SIZE = conf.get("spark.broadcast.blockSize", "4096").toInt * 1024
+  lazy val BLOCK_SIZE = conf.getInt("spark.broadcast.blockSize", 4096) * 1024
 
   def blockifyObject[T](obj: T): TorrentInfo = {
     val byteArray = Utils.serialize[T](obj)
@@ -203,16 +203,16 @@ extends Logging {
     }
     bais.close()
 
-    var tInfo = TorrentInfo(retVal, blockNum, byteArray.length)
+    val tInfo = TorrentInfo(retVal, blockNum, byteArray.length)
     tInfo.hasBlocks = blockNum
 
-    return tInfo
+    tInfo
   }
 
   def unBlockifyObject[T](arrayOfBlocks: Array[TorrentBlock],
                             totalBytes: Int,
                             totalBlocks: Int): T = {
-    var retByteArray = new Array[Byte](totalBytes)
+    val retByteArray = new Array[Byte](totalBytes)
     for (i <- 0 until totalBlocks) {
       System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
         i * BLOCK_SIZE, arrayOfBlocks(i).byteArray.length)

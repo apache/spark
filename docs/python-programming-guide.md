@@ -99,8 +99,9 @@ $ MASTER=local[4] ./bin/pyspark
 
 ## IPython
 
-It is also possible to launch PySpark in [IPython](http://ipython.org), the enhanced Python interpreter.
-To do this, set the `IPYTHON` variable to `1` when running `bin/pyspark`:
+It is also possible to launch PySpark in [IPython](http://ipython.org), the 
+enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To 
+use IPython, set the `IPYTHON` variable to `1` when running `bin/pyspark`:
 
 {% highlight bash %}
 $ IPYTHON=1 ./bin/pyspark

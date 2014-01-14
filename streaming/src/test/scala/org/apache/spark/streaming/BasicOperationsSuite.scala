@@ -24,6 +24,7 @@ import org.apache.spark.SparkContext._
 
 import util.ManualClock
 import org.apache.spark.{SparkContext, SparkConf}
+import org.apache.spark.streaming.dstream.DStream
 
 class BasicOperationsSuite extends TestSuiteBase {
   test("map") {
@@ -375,15 +376,11 @@ class BasicOperationsSuite extends TestSuiteBase {
   }
 
   test("slice") {
-    val conf2 = new SparkConf()
-      .setMaster("local[2]")
-      .setAppName("BasicOperationsSuite")
-      .set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
-    val ssc = new StreamingContext(new SparkContext(conf2), Seconds(1))
+    val ssc = new StreamingContext(conf, Seconds(1))
     val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
     val stream = new TestInputStream[Int](ssc, input, 2)
     ssc.registerInputStream(stream)
-    stream.foreach(_ => {})  // Dummy output stream
+    stream.foreachRDD(_ => {})  // Dummy output stream
     ssc.start()
     Thread.sleep(2000)
     def getInputFromSlice(fromMillis: Long, toMillis: Long) = {

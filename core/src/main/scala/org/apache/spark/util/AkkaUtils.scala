@@ -44,13 +44,13 @@ private[spark] object AkkaUtils {
   def createActorSystem(name: String, host: String, port: Int, indestructible: Boolean = false,
     conf: SparkConf): (ActorSystem, Int) = {
 
-    val akkaThreads   = conf.get("spark.akka.threads", "4").toInt
-    val akkaBatchSize = conf.get("spark.akka.batchSize", "15").toInt
+    val akkaThreads   = conf.getInt("spark.akka.threads", 4)
+    val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
 
-    val akkaTimeout = conf.get("spark.akka.timeout", "100").toInt
+    val akkaTimeout = conf.getInt("spark.akka.timeout", 100)
 
-    val akkaFrameSize = conf.get("spark.akka.frameSize", "10").toInt
-    val akkaLogLifecycleEvents = conf.get("spark.akka.logLifecycleEvents", "false").toBoolean
+    val akkaFrameSize = conf.getInt("spark.akka.frameSize", 10)
+    val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
     val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
     if (!akkaLogLifecycleEvents) {
       // As a workaround for Akka issue #3787, we coerce the "EndpointWriter" log to be silent.
@@ -58,12 +58,12 @@ private[spark] object AkkaUtils {
       Option(Logger.getLogger("akka.remote.EndpointWriter")).map(l => l.setLevel(Level.FATAL))
     }
 
-    val logAkkaConfig = if (conf.get("spark.akka.logAkkaConfig", "false").toBoolean) "on" else "off"
+    val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", false)) "on" else "off"
 
-    val akkaHeartBeatPauses = conf.get("spark.akka.heartbeat.pauses", "600").toInt
+    val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 600)
     val akkaFailureDetector =
-      conf.get("spark.akka.failure-detector.threshold", "300.0").toDouble
-    val akkaHeartBeatInterval = conf.get("spark.akka.heartbeat.interval", "1000").toInt
+      conf.getDouble("spark.akka.failure-detector.threshold", 300.0)
+    val akkaHeartBeatInterval = conf.getInt("spark.akka.heartbeat.interval", 1000)
 
     val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]).withFallback(
       ConfigFactory.parseString(
@@ -103,7 +103,7 @@ private[spark] object AkkaUtils {
 
   /** Returns the default Spark timeout to use for Akka ask operations. */
   def askTimeout(conf: SparkConf): FiniteDuration = {
-    Duration.create(conf.get("spark.akka.askTimeout", "30").toLong, "seconds")
+    Duration.create(conf.getLong("spark.akka.askTimeout", 30), "seconds")
   }
 
   /** Returns the default Spark timeout to use for Akka remote actor lookup. */

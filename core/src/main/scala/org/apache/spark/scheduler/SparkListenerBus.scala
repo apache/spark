@@ -24,15 +24,17 @@ import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 import org.apache.spark.Logging
 
 /** Asynchronously passes SparkListenerEvents to registered SparkListeners. */
-private[spark] class SparkListenerBus() extends Logging {
-  private val sparkListeners = new ArrayBuffer[SparkListener]() with SynchronizedBuffer[SparkListener]
+private[spark] class SparkListenerBus extends Logging {
+  private val sparkListeners = new ArrayBuffer[SparkListener] with SynchronizedBuffer[SparkListener]
 
   /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
-  private val EVENT_QUEUE_CAPACITY = 10000 
+  private val EVENT_QUEUE_CAPACITY = 10000
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvents](EVENT_QUEUE_CAPACITY)
   private var queueFullErrorMessageLogged = false
 
+  // Create a new daemon thread to listen for events. This thread is stopped when it receives
+  // a SparkListenerShutdown event, using the stop method.
   new Thread("SparkListenerBus") {
     setDaemon(true)
     override def run() {
@@ -53,6 +55,9 @@ private[spark] class SparkListenerBus() extends Logging {
             sparkListeners.foreach(_.onTaskGettingResult(taskGettingResult))
           case taskEnd: SparkListenerTaskEnd =>
             sparkListeners.foreach(_.onTaskEnd(taskEnd))
+          case SparkListenerShutdown =>
+            // Get out of the while loop and shutdown the daemon thread
+            return
           case _ =>
         }
       }
@@ -80,7 +85,7 @@ private[spark] class SparkListenerBus() extends Logging {
    */
   def waitUntilEmpty(timeoutMillis: Int): Boolean = {
     val finishTime = System.currentTimeMillis + timeoutMillis
-    while (!eventQueue.isEmpty()) {
+    while (!eventQueue.isEmpty) {
       if (System.currentTimeMillis > finishTime) {
         return false
       }
@@ -88,6 +93,8 @@ private[spark] class SparkListenerBus() extends Logging {
        * add overhead in the general case. */
       Thread.sleep(10)
     }
-    return true
+    true
   }
+
+  def stop(): Unit = post(SparkListenerShutdown)
 }

@@ -35,6 +35,8 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamingListener
+import org.apache.hadoop.conf.Configuration
+import org.apache.spark.streaming.dstream.DStream
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -128,10 +130,16 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Re-creates a StreamingContext from a checkpoint file.
-   * @param path Path either to the directory that was specified as the checkpoint directory, or
-   *             to the checkpoint file 'graph' or 'graph.bk'.
+   * @param path Path to the directory that was specified as the checkpoint directory
    */
-  def this(path: String) = this (new StreamingContext(path))
+  def this(path: String) = this(new StreamingContext(path))
+
+  /**
+   * Re-creates a StreamingContext from a checkpoint file.
+   * @param path Path to the directory that was specified as the checkpoint directory
+   *
+   */
+  def this(path: String, hadoopConf: Configuration) = this(new StreamingContext(path, hadoopConf))
 
   /** The underlying SparkContext */
   val sc: JavaSparkContext = new JavaSparkContext(ssc.sc)
@@ -143,7 +151,6 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    * @param storageLevel  Storage level to use for storing the received objects
-   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
   def socketTextStream(hostname: String, port: Int, storageLevel: StorageLevel)
   : JavaDStream[String] = {
@@ -153,7 +160,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   /**
    * Create a input stream from network source hostname:port. Data is received using
    * a TCP socket and the receive bytes is interpreted as UTF8 encoded \n delimited
-   * lines.
+   * lines. Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    */
@@ -294,6 +301,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create an input stream with any arbitrary user implemented actor receiver.
+   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
    *
@@ -471,20 +479,116 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   }
 
   /**
-   * Starts the execution of the streams.
+   * Start the execution of the streams.
    */
   def start() = ssc.start()
 
   /**
-   * Sstops the execution of the streams.
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   */
+  def awaitTermination() = ssc.awaitTermination()
+
+  /**
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   * @param timeout time to wait in milliseconds
+   */
+  def awaitTermination(timeout: Long) = ssc.awaitTermination(timeout)
+
+  /**
+   * Stop the execution of the streams. Will stop the associated JavaSparkContext as well.
    */
   def stop() = ssc.stop()
+
+  /**
+   * Stop the execution of the streams.
+   * @param stopSparkContext Stop the associated SparkContext or not
+   */
+  def stop(stopSparkContext: Boolean) = ssc.stop(stopSparkContext)
 }
 
+/**
+ * JavaStreamingContext object contains a number of utility functions.
+ */
 object JavaStreamingContext {
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the provided factory
+   * will be used to create a JavaStreamingContext.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier JavaStreamingContext program
+   * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      factory: JavaStreamingContextFactory
+    ): JavaStreamingContext = {
+    val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
+      factory.create.ssc
+    })
+    new JavaStreamingContext(ssc)
+  }
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the provided factory
+   * will be used to create a JavaStreamingContext.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
+   * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
+   *                       file system
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      hadoopConf: Configuration,
+      factory: JavaStreamingContextFactory
+    ): JavaStreamingContext = {
+    val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
+      factory.create.ssc
+    }, hadoopConf)
+    new JavaStreamingContext(ssc)
+  }
+
+  /**
+   * Either recreate a StreamingContext from checkpoint data or create a new StreamingContext.
+   * If checkpoint data exists in the provided `checkpointPath`, then StreamingContext will be
+   * recreated from the checkpoint data. If the data does not exist, then the provided factory
+   * will be used to create a JavaStreamingContext.
+   *
+   * @param checkpointPath Checkpoint directory used in an earlier StreamingContext program
+   * @param factory        JavaStreamingContextFactory object to create a new JavaStreamingContext
+   * @param hadoopConf     Hadoop configuration if necessary for reading from any HDFS compatible
+   *                       file system
+   * @param createOnError  Whether to create a new JavaStreamingContext if there is an
+   *                       error in reading checkpoint data.
+   */
+  def getOrCreate(
+      checkpointPath: String,
+      hadoopConf: Configuration,
+      factory: JavaStreamingContextFactory,
+      createOnError: Boolean
+    ): JavaStreamingContext = {
+    val ssc = StreamingContext.getOrCreate(checkpointPath, () => {
+      factory.create.ssc
+    }, hadoopConf, createOnError)
+    new JavaStreamingContext(ssc)
+  }
+
   /**
    * Find the JAR from which a given class was loaded, to make it easy for users to pass
-   * their JARs to SparkContext.
+   * their JARs to StreamingContext.
    */
   def jarOfClass(cls: Class[_]) = SparkContext.jarOfClass(cls).toArray
+}
+
+/**
+ * Factory interface for creating a new JavaStreamingContext
+ */
+trait JavaStreamingContextFactory {
+  def create(): JavaStreamingContext
 }

@@ -33,16 +33,17 @@ import org.apache.spark.deploy.master.Master
 import org.apache.spark.util.AkkaUtils
 
 /**
- * The main class used to talk to a Spark deploy cluster. Takes a master URL, an app description,
- * and a listener for cluster events, and calls back the listener when various events occur.
+ * Interface allowing applications to speak with a Spark deploy cluster. Takes a master URL,
+ * an app description, and a listener for cluster events, and calls back the listener when various
+ * events occur.
  *
  * @param masterUrls Each url should look like spark://host:port.
  */
-private[spark] class Client(
+private[spark] class AppClient(
     actorSystem: ActorSystem,
     masterUrls: Array[String],
     appDescription: ApplicationDescription,
-    listener: ClientListener,
+    listener: AppClientListener,
     conf: SparkConf)
   extends Logging {
 
@@ -155,7 +156,7 @@ private[spark] class Client(
       case AssociationErrorEvent(cause, _, address, _) if isPossibleMaster(address) =>
         logWarning(s"Could not connect to $address: $cause")
 
-      case StopClient =>
+      case StopAppClient =>
         markDead()
         sender ! true
         context.stop(self)
@@ -188,7 +189,7 @@ private[spark] class Client(
     if (actor != null) {
       try {
         val timeout = AkkaUtils.askTimeout(conf)
-        val future = actor.ask(StopClient)(timeout)
+        val future = actor.ask(StopAppClient)(timeout)
         Await.result(future, timeout)
       } catch {
         case e: TimeoutException =>

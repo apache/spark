@@ -35,7 +35,6 @@ class ReplSuite extends FunSuite {
     }
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
     return out.toString
   }
 
@@ -75,7 +74,6 @@ class ReplSuite extends FunSuite {
 
     interp.sparkContext.stop()
     System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
   }
 
   test("simple foreach with accumulator") {

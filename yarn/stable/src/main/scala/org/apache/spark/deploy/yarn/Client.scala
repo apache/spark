@@ -99,6 +99,7 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     appContext.setApplicationName(args.appName)
     appContext.setQueue(args.amQueue)
     appContext.setAMContainerSpec(amContainer)
+    appContext.setApplicationType("SPARK")
 
     // Memory for the ApplicationMaster.
     val memoryResource = Records.newRecord(classOf[Resource]).asInstanceOf[Resource]
@@ -207,7 +208,8 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     if (srcUri.getPort() != dstUri.getPort()) {
       return false
     }
-    return true
+
+    true
   }
 
   /** Copy the file into HDFS if needed. */

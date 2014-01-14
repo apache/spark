@@ -19,8 +19,7 @@ package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.streaming.dstream.{NetworkInputDStream, NetworkReceiver}
 import org.apache.spark.streaming.dstream.{StopReceiver, ReportBlock, ReportError}
-import org.apache.spark.Logging
-import org.apache.spark.SparkEnv
+import org.apache.spark.{SparkException, Logging, SparkEnv}
 import org.apache.spark.SparkContext._
 
 import scala.collection.mutable.HashMap
@@ -32,6 +31,7 @@ import akka.pattern.ask
 import akka.dispatch._
 import org.apache.spark.storage.BlockId
 import org.apache.spark.streaming.{Time, StreamingContext}
+import org.apache.spark.util.AkkaUtils
 
 private[streaming] sealed trait NetworkInputTrackerMessage
 private[streaming] case class RegisterReceiver(streamId: Int, receiverActor: ActorRef) extends NetworkInputTrackerMessage
@@ -39,33 +39,47 @@ private[streaming] case class AddBlocks(streamId: Int, blockIds: Seq[BlockId], m
 private[streaming] case class DeregisterReceiver(streamId: Int, msg: String) extends NetworkInputTrackerMessage
 
 /**
- * This class manages the execution of the receivers of NetworkInputDStreams.
+ * This class manages the execution of the receivers of NetworkInputDStreams. Instance of
+ * this class must be created after all input streams have been added and StreamingContext.start()
+ * has been called because it needs the final set of input streams at the time of instantiation.
  */
 private[streaming]
-class NetworkInputTracker(
-    @transient ssc: StreamingContext,
-    @transient networkInputStreams: Array[NetworkInputDStream[_]])
-  extends Logging {
+class NetworkInputTracker(ssc: StreamingContext) extends Logging {
 
+  val networkInputStreams = ssc.graph.getNetworkInputStreams()
   val networkInputStreamMap = Map(networkInputStreams.map(x => (x.id, x)): _*)
   val receiverExecutor = new ReceiverExecutor()
   val receiverInfo = new HashMap[Int, ActorRef]
   val receivedBlockIds = new HashMap[Int, Queue[BlockId]]
-  val timeout = 5000.milliseconds
+  val timeout = AkkaUtils.askTimeout(ssc.conf)
 
+
+  // actor is created when generator starts.
+  // This not being null means the tracker has been started and not stopped
+  var actor: ActorRef = null
   var currentTime: Time = null
 
   /** Start the actor and receiver execution thread. */
   def start() {
-    ssc.env.actorSystem.actorOf(Props(new NetworkInputTrackerActor), "NetworkInputTracker")
-    receiverExecutor.start()
+    if (actor != null) {
+      throw new SparkException("NetworkInputTracker already started")
+    }
+
+    if (!networkInputStreams.isEmpty) {
+      actor = ssc.env.actorSystem.actorOf(Props(new NetworkInputTrackerActor), "NetworkInputTracker")
+      receiverExecutor.start()
+      logInfo("NetworkInputTracker started")
+    }
   }
 
   /** Stop the receiver execution thread. */
   def stop() {
-    // TODO: stop the actor as well
-    receiverExecutor.interrupt()
-    receiverExecutor.stopReceivers()
+    if (!networkInputStreams.isEmpty && actor != null) {
+      receiverExecutor.interrupt()
+      receiverExecutor.stopReceivers()
+      ssc.env.actorSystem.stop(actor)
+      logInfo("NetworkInputTracker stopped")
+    }
   }
 
   /** Return all the blocks received from a receiver. */

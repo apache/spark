@@ -17,9 +17,10 @@
 
 package org.apache.spark.streaming.examples.clickstream
 
+import org.apache.spark.SparkContext._
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.SparkContext._
+import org.apache.spark.streaming.examples.StreamingExamples
 
 /** Analyses a streaming dataset of web page views. This class demonstrates several types of
   * operators available in Spark streaming.
@@ -36,6 +37,7 @@ object PageViewStream {
                          " errorRatePerZipCode, activeUserCount, popularUsersSeen")
       System.exit(1)
     }
+    StreamingExamples.setStreamingLogLevels()
     val metric = args(0)
     val host = args(1)
     val port = args(2).toInt
@@ -89,7 +91,7 @@ object PageViewStream {
       case "popularUsersSeen" =>
         // Look for users in our existing dataset and print it out if we have a match
         pageViews.map(view => (view.userID, 1))
-          .foreach((rdd, time) => rdd.join(userList)
+          .foreachRDD((rdd, time) => rdd.join(userList)
             .map(_._2._2)
             .take(10)
             .foreach(u => println("Saw user %s at time %s".format(u, time))))

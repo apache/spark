@@ -26,37 +26,61 @@ import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
-import scala.reflect.ClassTag
+import scala.reflect.{classTag, ClassTag}
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
+import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
+import org.apache.hadoop.io._
 
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.deploy.SparkHadoopUtil
 import java.nio.ByteBuffer
-import org.apache.spark.{SparkConf, SparkContext, SparkException, Logging}
+import org.apache.spark.{SparkConf, SparkException, Logging}
 
 
 /**
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
+
+  /**
+   *  We try to clone for most common types of writables and we call WritableUtils.clone otherwise
+   *  intention is to optimize, for example for NullWritable there is no need and for Long, int and
+   *  String creating a new object with value set would be faster.
+   */
+  def cloneWritables[T: ClassTag](conf: Configuration): Writable => T = {
+    val cloneFunc = classTag[T] match {
+      case ClassTag(_: Text) => 
+        (w: Writable) => new Text(w.asInstanceOf[Text].getBytes).asInstanceOf[T]
+      case ClassTag(_: LongWritable) => 
+        (w: Writable) => new LongWritable(w.asInstanceOf[LongWritable].get).asInstanceOf[T]
+      case ClassTag(_: IntWritable) => 
+        (w: Writable) => new IntWritable(w.asInstanceOf[IntWritable].get).asInstanceOf[T]
+      case ClassTag(_: NullWritable) => 
+        (w: Writable) => w.asInstanceOf[T] // TODO: should we clone this ?
+      case _ => 
+        (w: Writable) => WritableUtils.clone(w, conf).asInstanceOf[T] // slower way of cloning.
+    }
+    cloneFunc
+  }
+
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
     val bos = new ByteArrayOutputStream()
     val oos = new ObjectOutputStream(bos)
     oos.writeObject(o)
     oos.close()
-    return bos.toByteArray
+    bos.toByteArray
   }
 
   /** Deserialize an object using Java serialization */
   def deserialize[T](bytes: Array[Byte]): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis)
-    return ois.readObject.asInstanceOf[T]
+    ois.readObject.asInstanceOf[T]
   }
 
   /** Deserialize an object using Java serialization and the given ClassLoader */
@@ -66,7 +90,7 @@ private[spark] object Utils extends Logging {
       override def resolveClass(desc: ObjectStreamClass) =
         Class.forName(desc.getName, false, loader)
     }
-    return ois.readObject.asInstanceOf[T]
+    ois.readObject.asInstanceOf[T]
   }
 
   /** Deserialize a Long value (used for {@link org.apache.spark.api.python.PythonPartitioner}) */
@@ -144,7 +168,7 @@ private[spark] object Utils extends Logging {
         i += 1
       }
     }
-    return buf
+    buf
   }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
@@ -396,29 +420,12 @@ private[spark] object Utils extends Logging {
     InetAddress.getByName(address).getHostName
   }
 
-  def localHostPort(conf: SparkConf): String = {
-    val retval = conf.get("spark.hostPort", null)
-    if (retval == null) {
-      logErrorWithStack("spark.hostPort not set but invoking localHostPort")
-      return localHostName()
-    }
-    retval
-  }
-
   def checkHost(host: String, message: String = "") {
     assert(host.indexOf(':') == -1, message)
   }
 
   def checkHostPort(hostPort: String, message: String = "") {
     assert(hostPort.indexOf(':') != -1, message)
-  }
-
-  def logErrorWithStack(msg: String) {
-    try {
-      throw new Exception
-    } catch {
-      case ex: Exception => logError(msg, ex)
-    }
   }
 
   // Typically, this will be of order of number of nodes in cluster
@@ -428,7 +435,7 @@ private[spark] object Utils extends Logging {
   def parseHostPort(hostPort: String): (String,  Int) = {
     {
       // Check cache first.
-      var cached = hostPortParseResults.get(hostPort)
+      val cached = hostPortParseResults.get(hostPort)
       if (cached != null) return cached
     }
 
@@ -731,7 +738,7 @@ private[spark] object Utils extends Logging {
     } catch {
       case ise: IllegalStateException => return true
     }
-    return false
+    false
   }
 
   def isSpace(c: Char): Boolean = {
@@ -748,7 +755,7 @@ private[spark] object Utils extends Logging {
     var inWord = false
     var inSingleQuote = false
     var inDoubleQuote = false
-    var curWord = new StringBuilder
+    val curWord = new StringBuilder
     def endWord() {
       buf += curWord.toString
       curWord.clear()
@@ -794,7 +801,7 @@ private[spark] object Utils extends Logging {
     if (inWord || inDoubleQuote || inSingleQuote) {
       endWord()
     }
-    return buf
+    buf
   }
 
  /* Calculates 'x' modulo 'mod', takes to consideration sign of x,
@@ -822,8 +829,7 @@ private[spark] object Utils extends Logging {
 
   /** Returns a copy of the system properties that is thread-safe to iterator over. */
   def getSystemProperties(): Map[String, String] = {
-    return System.getProperties().clone()
-      .asInstanceOf[java.util.Properties].toMap[String, String]
+    System.getProperties.clone().asInstanceOf[java.util.Properties].toMap[String, String]
   }
 
   /**

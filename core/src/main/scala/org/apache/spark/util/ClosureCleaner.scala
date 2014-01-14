@@ -61,7 +61,7 @@ private[spark] object ClosureCleaner extends Logging {
         return f.getType :: Nil // Stop at the first $outer that is not a closure
       }
     }
-    return Nil
+    Nil
   }
   
   // Get a list of the outer objects for a given closure object.
@@ -74,7 +74,7 @@ private[spark] object ClosureCleaner extends Logging {
         return f.get(obj) :: Nil // Stop at the first $outer that is not a closure
       }
     }
-    return Nil
+    Nil
   }
   
   private def getInnerClasses(obj: AnyRef): List[Class[_]] = {
@@ -174,7 +174,7 @@ private[spark] object ClosureCleaner extends Logging {
         field.setAccessible(true)
         field.set(obj, outer)
       }
-      return obj
+      obj
     }
   }
 }
@@ -182,7 +182,7 @@ private[spark] object ClosureCleaner extends Logging {
 private[spark] class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends ClassVisitor(ASM4) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    return new MethodVisitor(ASM4) {
+    new MethodVisitor(ASM4) {
       override def visitFieldInsn(op: Int, owner: String, name: String, desc: String) {
         if (op == GETFIELD) {
           for (cl <- output.keys if cl.getName == owner.replace('/', '.')) {
@@ -215,7 +215,7 @@ private[spark] class InnerClosureFinder(output: Set[Class[_]]) extends ClassVisi
   
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
-    return new MethodVisitor(ASM4) {
+    new MethodVisitor(ASM4) {
       override def visitMethodInsn(op: Int, owner: String, name: String,
           desc: String) {
         val argTypes = Type.getArgumentTypes(desc)

@@ -96,7 +96,7 @@ class PipedRDD[T: ClassTag](
 
     // Return an iterator that read lines from the process's stdout
     val lines = Source.fromInputStream(proc.getInputStream).getLines
-    return new Iterator[String] {
+    new Iterator[String] {
       def next() = lines.next()
       def hasNext = {
         if (lines.hasNext) {

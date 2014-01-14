@@ -75,12 +75,12 @@ private[spark] class Pool(
       return schedulableNameToSchedulable(schedulableName)
     }
     for (schedulable <- schedulableQueue) {
-      var sched = schedulable.getSchedulableByName(schedulableName)
+      val sched = schedulable.getSchedulableByName(schedulableName)
       if (sched != null) {
         return sched
       }
     }
-    return null
+    null
   }
 
   override def executorLost(executorId: String, host: String) {
@@ -92,7 +92,7 @@ private[spark] class Pool(
     for (schedulable <- schedulableQueue) {
       shouldRevive |= schedulable.checkSpeculatableTasks()
     }
-    return shouldRevive
+    shouldRevive
   }
 
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
@@ -101,7 +101,7 @@ private[spark] class Pool(
     for (schedulable <- sortedSchedulableQueue) {
       sortedTaskSetQueue ++= schedulable.getSortedTaskSetQueue()
     }
-    return sortedTaskSetQueue
+    sortedTaskSetQueue
   }
 
   def increaseRunningTasks(taskNum: Int) {

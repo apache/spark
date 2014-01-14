@@ -96,7 +96,7 @@ private[spark] class Stage(
   def newAttemptId(): Int = {
     val id = nextAttemptId
     nextAttemptId += 1
-    return id
+    id
   }
 
   val name = callSite.getOrElse(rdd.origin)

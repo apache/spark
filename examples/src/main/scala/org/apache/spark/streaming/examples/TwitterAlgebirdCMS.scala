@@ -17,12 +17,12 @@
 
 package org.apache.spark.streaming.examples
 
-import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.storage.StorageLevel
 import com.twitter.algebird._
-import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.SparkContext._
 
+import org.apache.spark.SparkContext._
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.streaming.twitter._
 
 /**
@@ -50,6 +50,8 @@ object TwitterAlgebirdCMS {
         " [filter1] [filter2] ... [filter n]")
       System.exit(1)
     }
+
+    StreamingExamples.setStreamingLogLevels()
 
     // CMS parameters
     val DELTA = 1E-3
@@ -79,7 +81,7 @@ object TwitterAlgebirdCMS {
     val exactTopUsers = users.map(id => (id, 1))
       .reduceByKey((a, b) => a + b)
 
-    approxTopUsers.foreach(rdd => {
+    approxTopUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partial = rdd.first()
         val partialTopK = partial.heavyHitters.map(id =>
@@ -94,7 +96,7 @@ object TwitterAlgebirdCMS {
       }
     })
 
-    exactTopUsers.foreach(rdd => {
+    exactTopUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partialMap = rdd.collect().toMap
         val partialTopK = rdd.map(

@@ -26,8 +26,10 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.streaming.dstream.FileInputDStream
+import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
 import org.apache.spark.streaming.util.ManualClock
+import org.apache.spark.util.Utils
+import org.apache.spark.SparkConf
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -84,9 +86,9 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.start()
     advanceTimeWithRealDelay(ssc, firstNumBatches)
     logInfo("Checkpoint data of state stream = \n" + stateStream.checkpointData)
-    assert(!stateStream.checkpointData.checkpointFiles.isEmpty,
+    assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
       "No checkpointed RDDs in state stream before first failure")
-    stateStream.checkpointData.checkpointFiles.foreach {
+    stateStream.checkpointData.currentCheckpointFiles.foreach {
       case (time, file) => {
         assert(fs.exists(new Path(file)), "Checkpoint file '" + file +"' for time " + time +
             " for state stream before first failure does not exist")
@@ -95,7 +97,7 @@ class CheckpointSuite extends TestSuiteBase {
 
     // Run till a further time such that previous checkpoint files in the stream would be deleted
     // and check whether the earlier checkpoint files are deleted
-    val checkpointFiles = stateStream.checkpointData.checkpointFiles.map(x => new File(x._2))
+    val checkpointFiles = stateStream.checkpointData.currentCheckpointFiles.map(x => new File(x._2))
     advanceTimeWithRealDelay(ssc, secondNumBatches)
     checkpointFiles.foreach(file =>
       assert(!file.exists, "Checkpoint file '" + file + "' was not deleted"))
@@ -114,9 +116,9 @@ class CheckpointSuite extends TestSuiteBase {
     // is present in the checkpoint data or not
     ssc.start()
     advanceTimeWithRealDelay(ssc, 1)
-    assert(!stateStream.checkpointData.checkpointFiles.isEmpty,
+    assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
       "No checkpointed RDDs in state stream before second failure")
-    stateStream.checkpointData.checkpointFiles.foreach {
+    stateStream.checkpointData.currentCheckpointFiles.foreach {
       case (time, file) => {
         assert(fs.exists(new Path(file)), "Checkpoint file '" + file +"' for time " + time +
           " for state stream before seconds failure does not exist")
@@ -140,6 +142,26 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.stop()
     System.clearProperty("spark.streaming.manualClock.jump")
     ssc = null
+  }
+
+  // This tests whether spark conf persists through checkpoints, and certain
+  // configs gets scrubbed
+  test("persistence of conf through checkpoints") {
+    val key = "spark.mykey"
+    val value = "myvalue"
+    System.setProperty(key, value)
+    ssc = new StreamingContext(master, framework, batchDuration)
+    val cp = new Checkpoint(ssc, Time(1000))
+    assert(!cp.sparkConf.contains("spark.driver.host"))
+    assert(!cp.sparkConf.contains("spark.driver.port"))
+    assert(!cp.sparkConf.contains("spark.hostPort"))
+    assert(cp.sparkConf.get(key) === value)
+    ssc.stop()
+    val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
+    assert(!newCp.sparkConf.contains("spark.driver.host"))
+    assert(!newCp.sparkConf.contains("spark.driver.port"))
+    assert(!newCp.sparkConf.contains("spark.hostPort"))
+    assert(newCp.sparkConf.get(key) === value)
   }
 
 
@@ -336,7 +358,6 @@ class CheckpointSuite extends TestSuiteBase {
     )
     ssc = new StreamingContext(checkpointDir)
     System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
     ssc.start()
     val outputNew = advanceTimeWithRealDelay[V](ssc, nextNumBatches)
     // the first element will be re-processed data of the last batch before restart

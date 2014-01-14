@@ -195,7 +195,7 @@ class WorkerRunnable(
     }
 
     logInfo("Prepared Local resources " + localResources)
-    return localResources
+    localResources
   }
 
   def prepareEnvironment: HashMap[String, String] = {
@@ -207,7 +207,7 @@ class WorkerRunnable(
     Apps.setEnvFromInputString(env, System.getenv("SPARK_YARN_USER_ENV"))
 
     System.getenv().filterKeys(_.startsWith("SPARK")).foreach { case (k,v) => env(k) = v }
-    return env
+    env
   }
 
   def connectToCM: ContainerManager = {
@@ -226,8 +226,7 @@ class WorkerRunnable(
     val proxy = user
         .doAs(new PrivilegedExceptionAction[ContainerManager] {
           def run: ContainerManager = {
-            return rpc.getProxy(classOf[ContainerManager],
-                cmAddress, conf).asInstanceOf[ContainerManager]
+            rpc.getProxy(classOf[ContainerManager], cmAddress, conf).asInstanceOf[ContainerManager]
           }
         })
     proxy

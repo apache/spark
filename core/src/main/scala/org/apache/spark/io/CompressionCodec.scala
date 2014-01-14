@@ -71,7 +71,7 @@ class LZFCompressionCodec(conf: SparkConf) extends CompressionCodec {
 class SnappyCompressionCodec(conf: SparkConf) extends CompressionCodec {
 
   override def compressedOutputStream(s: OutputStream): OutputStream = {
-    val blockSize = conf.get("spark.io.compression.snappy.block.size", "32768").toInt
+    val blockSize = conf.getInt("spark.io.compression.snappy.block.size", 32768)
     new SnappyOutputStream(s, blockSize)
   }
 

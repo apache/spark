@@ -54,7 +54,11 @@ class SparkEnv private[spark] (
     val httpFileServer: HttpFileServer,
     val sparkFilesDir: String,
     val metricsSystem: MetricsSystem,
-    val conf: SparkConf) {
+    val conf: SparkConf) extends Logging {
+
+  // A mapping of thread ID to amount of memory used for shuffle in bytes
+  // All accesses should be manually synchronized
+  val shuffleMemoryMap = mutable.HashMap[Long, Long]()
 
   private val pythonWorkers = mutable.HashMap[(String, Map[String, String]), PythonWorkerFactory]()
 
@@ -128,16 +132,6 @@ object SparkEnv extends Logging {
       conf.set("spark.driver.port",  boundPort.toString)
     }
 
-    // set only if unset until now.
-    if (!conf.contains("spark.hostPort")) {
-      if (!isDriver){
-        // unexpected
-        Utils.logErrorWithStack("Unexpected NOT to have spark.hostPort set")
-      }
-      Utils.checkHost(hostname)
-      conf.set("spark.hostPort",  hostname + ":" + boundPort)
-    }
-
     val classLoader = Thread.currentThread.getContextClassLoader
 
     // Create an instance of the class named by the given Java system property, or by
@@ -162,7 +156,7 @@ object SparkEnv extends Logging {
         actorSystem.actorOf(Props(newActor), name = name)
       } else {
         val driverHost: String = conf.get("spark.driver.host", "localhost")
-        val driverPort: Int = conf.get("spark.driver.port", "7077").toInt
+        val driverPort: Int = conf.getInt("spark.driver.port", 7077)
         Utils.checkHost(driverHost, "Expected hostname")
         val url = s"akka.tcp://spark@$driverHost:$driverPort/user/$name"
         val timeout = AkkaUtils.lookupTimeout(conf)

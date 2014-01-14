@@ -19,8 +19,6 @@ package org.apache.spark.deploy.master
 
 import java.io._
 
-import scala.Serializable
-
 import akka.serialization.Serialization
 import org.apache.spark.Logging
 
@@ -47,6 +45,15 @@ private[spark] class FileSystemPersistenceEngine(
     new File(dir + File.separator + "app_" + app.id).delete()
   }
 
+  override def addDriver(driver: DriverInfo) {
+    val driverFile = new File(dir + File.separator + "driver_" + driver.id)
+    serializeIntoFile(driverFile, driver)
+  }
+
+  override def removeDriver(driver: DriverInfo) {
+    new File(dir + File.separator + "driver_" + driver.id).delete()
+  }
+
   override def addWorker(worker: WorkerInfo) {
     val workerFile = new File(dir + File.separator + "worker_" + worker.id)
     serializeIntoFile(workerFile, worker)
@@ -56,13 +63,15 @@ private[spark] class FileSystemPersistenceEngine(
     new File(dir + File.separator + "worker_" + worker.id).delete()
   }
 
-  override def readPersistedData(): (Seq[ApplicationInfo], Seq[WorkerInfo]) = {
+  override def readPersistedData(): (Seq[ApplicationInfo], Seq[DriverInfo], Seq[WorkerInfo]) = {
     val sortedFiles = new File(dir).listFiles().sortBy(_.getName)
     val appFiles = sortedFiles.filter(_.getName.startsWith("app_"))
     val apps = appFiles.map(deserializeFromFile[ApplicationInfo])
+    val driverFiles = sortedFiles.filter(_.getName.startsWith("driver_"))
+    val drivers = driverFiles.map(deserializeFromFile[DriverInfo])
     val workerFiles = sortedFiles.filter(_.getName.startsWith("worker_"))
     val workers = workerFiles.map(deserializeFromFile[WorkerInfo])
-    (apps, workers)
+    (apps, drivers, workers)
   }
 
   private def serializeIntoFile(file: File, value: AnyRef) {

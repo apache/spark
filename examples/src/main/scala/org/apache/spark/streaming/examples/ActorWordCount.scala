@@ -18,17 +18,13 @@
 package org.apache.spark.streaming.examples
 
 import scala.collection.mutable.LinkedList
-import scala.util.Random
 import scala.reflect.ClassTag
+import scala.util.Random
 
-import akka.actor.Actor
-import akka.actor.ActorRef
-import akka.actor.Props
-import akka.actor.actorRef2Scala
+import akka.actor.{Actor, ActorRef, Props, actorRef2Scala}
 
 import org.apache.spark.SparkConf
-import org.apache.spark.streaming.Seconds
-import org.apache.spark.streaming.StreamingContext
+import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
 import org.apache.spark.streaming.receivers.Receiver
 import org.apache.spark.util.AkkaUtils
@@ -146,6 +142,8 @@ object ActorWordCount {
         "In local mode, <master> should be 'local[n]' with n > 1")
       System.exit(1)
     }
+
+    StreamingExamples.setStreamingLogLevels()
 
     val Seq(master, host, port) = args.toSeq
 

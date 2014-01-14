@@ -327,7 +327,7 @@ object BlockFetcherIterator {
         fetchRequestsSync.put(request)
       }
 
-      copiers = startCopiers(conf.get("spark.shuffle.copier.threads", "6").toInt)
+      copiers = startCopiers(conf.getInt("spark.shuffle.copier.threads", 6))
       logInfo("Started " + fetchRequestsSync.size + " remote gets in " +
         Utils.getUsedTimeMs(startTime))
 

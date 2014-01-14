@@ -74,7 +74,7 @@ class StorageLevel private(
     if (deserialized_) {
       ret |= 1
     }
-    return ret
+    ret
   }
 
   override def writeExternal(out: ObjectOutput) {
