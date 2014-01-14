@@ -54,8 +54,6 @@ import org.apache.spark.streaming.Duration
  *  - A list of other DStreams that the DStream depends on
  *  - A time interval at which the DStream generates an RDD
  *  - A function that is used to generate an RDD after each time interval
- *
- * There are two types of DStream operations - __transformations__
  */
 
 abstract class DStream[T: ClassTag] (
