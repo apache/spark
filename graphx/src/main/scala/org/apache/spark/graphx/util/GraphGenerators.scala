@@ -15,6 +15,7 @@ import org.apache.spark.graphx.Graph
 import org.apache.spark.graphx.Edge
 import org.apache.spark.graphx.impl.GraphImpl
 
+/** A collection of graph generating functions. */
 object GraphGenerators {
 
   val RMATa = 0.45
@@ -24,6 +25,9 @@ object GraphGenerators {
 
   // Right now it just generates a bunch of edges where
   // the edge data is the weight (default 1)
+  /**
+   * Generate a graph whose vertex out degree is log normal.
+   */
   def logNormalGraph(sc: SparkContext, numVertices: Int): Graph[Int, Int] = {
     // based on Pregel settings
     val mu = 4
@@ -32,12 +36,11 @@ object GraphGenerators {
     val vertices: RDD[(VertexID, Int)] = sc.parallelize(0 until numVertices).map{
       src => (src, sampleLogNormal(mu, sigma, numVertices))
     }
-    val edges = vertices.flatMap{
-      v => generateRandomEdges(v._1.toInt, v._2, numVertices)
+    val edges = vertices.flatMap { v =>
+      generateRandomEdges(v._1.toInt, v._2, numVertices)
     }
     Graph(vertices, edges, 0)
   }
-
 
   def generateRandomEdges(src: Int, numEdges: Int, maxVertexID: Int): Array[Edge[Int]] = {
     val rand = new Random()
@@ -48,9 +51,8 @@ object GraphGenerators {
         dsts += nextDst
       }
     }
-    dsts.map {dst => Edge[Int](src, dst, 1) }.toArray
+    dsts.map(dst => Edge[Int](src, dst, 1)).toArray
   }
-
 
   /**
    * Randomly samples from a log normal distribution whose corresponding normal distribution has the
@@ -60,9 +62,9 @@ object GraphGenerators {
    *
    * @param mu the mean of the normal distribution
    * @param sigma the standard deviation of the normal distribution
-   * @param macVal exclusive upper bound on the value of the sample
+   * @param maxVal exclusive upper bound on the value of the sample
    */
-  def sampleLogNormal(mu: Double, sigma: Double, maxVal: Int): Int = {
+  private def sampleLogNormal(mu: Double, sigma: Double, maxVal: Int): Int = {
     val rand = new Random()
     val m = math.exp(mu+(sigma*sigma)/2.0)
     val s = math.sqrt((math.exp(sigma*sigma) - 1) * math.exp(2*mu + sigma*sigma))
@@ -76,27 +78,29 @@ object GraphGenerators {
     math.round(X.toFloat)
   }
 
-
-
+  /**
+   * A random graph generator using the R-MAT model, proposed in
+   * "R-MAT: A Recursive Model for Graph Mining" by Chakrabarti et al.
+   *
+   * See [[http://www.cs.cmu.edu/~christos/PUBLICATIONS/siam04.pdf]].
+   */
   def rmatGraph(sc: SparkContext, requestedNumVertices: Int, numEdges: Int): Graph[Int, Int] = {
     // let N = requestedNumVertices
     // the number of vertices is 2^n where n=ceil(log2[N])
     // This ensures that the 4 quadrants are the same size at all recursion levels
-    val numVertices = math.round(math.pow(2.0, math.ceil(math.log(requestedNumVertices)/math.log(2.0)))).toInt
+    val numVertices = math.round(
+      math.pow(2.0, math.ceil(math.log(requestedNumVertices) / math.log(2.0)))).toInt
     var edges: Set[Edge[Int]] = Set()
     while (edges.size < numEdges) {
       if (edges.size % 100 == 0) {
         println(edges.size + " edges")
       }
       edges += addEdge(numVertices)
-
     }
-    val graph = outDegreeFromEdges(sc.parallelize(edges.toList))
-    graph
-
+    outDegreeFromEdges(sc.parallelize(edges.toList))
   }
 
-  def outDegreeFromEdges[ED: ClassTag](edges: RDD[Edge[ED]]): Graph[Int, ED] = {
+  private def outDegreeFromEdges[ED: ClassTag](edges: RDD[Edge[ED]]): Graph[Int, ED] = {
     val vertices = edges.flatMap { edge => List((edge.srcId, 1)) }
       .reduceByKey(_ + _)
       .map{ case (vid, degree) => (vid, degree) }
@@ -107,14 +111,13 @@ object GraphGenerators {
    * @param numVertices Specifies the total number of vertices in the graph (used to get
    * the dimensions of the adjacency matrix
    */
-  def addEdge(numVertices: Int): Edge[Int] = {
+  private def addEdge(numVertices: Int): Edge[Int] = {
     //val (src, dst) = chooseCell(numVertices/2.0, numVertices/2.0, numVertices/2.0)
     val v = math.round(numVertices.toFloat/2.0).toInt
 
     val (src, dst) = chooseCell(v, v, v)
     Edge[Int](src, dst, 1)
   }
-
 
   /**
    * This method recursively subdivides the the adjacency matrix into quadrants
@@ -149,10 +152,10 @@ object GraphGenerators {
    * }}}
    */
   @tailrec
-  def chooseCell(x: Int, y: Int, t: Int): (Int, Int) = {
-    if (t <= 1)
-      (x,y)
-    else {
+  private def chooseCell(x: Int, y: Int, t: Int): (Int, Int) = {
+    if (t <= 1) {
+      (x, y)
+    } else {
       val newT = math.round(t.toFloat/2.0).toInt
       pickQuadrant(RMATa, RMATb, RMATc, RMATd) match {
         case 0 => chooseCell(x, y, newT)
@@ -164,21 +167,20 @@ object GraphGenerators {
   }
 
   // TODO(crankshaw) turn result into an enum (or case class for pattern matching}
-  def pickQuadrant(a: Double, b: Double, c: Double, d: Double): Int = {
-    if (a+b+c+d != 1.0) {
-      throw new IllegalArgumentException("R-MAT probability parameters sum to " + (a+b+c+d) + ", should sum to 1.0")
+  private def pickQuadrant(a: Double, b: Double, c: Double, d: Double): Int = {
+    if (a + b + c + d != 1.0) {
+      throw new IllegalArgumentException(
+        "R-MAT probability parameters sum to " + (a+b+c+d) + ", should sum to 1.0")
     }
     val rand = new Random()
     val result = rand.nextDouble()
     result match {
       case x if x < a => 0 // 0 corresponds to quadrant a
-      case x if (x >= a && x < a+b) => 1 // 1 corresponds to b
-      case x if (x >= a+b && x < a+b+c) => 2 // 2 corresponds to c
+      case x if (x >= a && x < a + b) => 1 // 1 corresponds to b
+      case x if (x >= a + b && x < a + b + c) => 2 // 2 corresponds to c
       case _ => 3 // 3 corresponds to d
     }
   }
-
-
 
   /**
    * Create `rows` by `cols` grid graph with each vertex connected to its
@@ -219,7 +221,5 @@ object GraphGenerators {
     val edges: RDD[(VertexID, VertexID)] = sc.parallelize(1 until nverts).map(vid => (vid, 0))
     Graph.fromEdgeTuples(edges, 1)
   } // end of starGraph
-
-
 
 } // end of Graph Generators
