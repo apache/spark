@@ -15,6 +15,7 @@ import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
  * @param index a clustered index on source vertex id
  * @tparam ED the edge attribute type.
  */
+private[graphx]
 class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag](
     val srcIds: Array[VertexID],
     val dstIds: Array[VertexID],

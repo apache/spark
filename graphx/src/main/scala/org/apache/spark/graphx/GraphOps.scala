@@ -209,11 +209,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) {
    * This function iterates until there are no remaining messages, or
    * for `maxIterations` iterations.
    *
-   * @tparam VD the vertex data type
-   * @tparam ED the edge data type
    * @tparam A the Pregel message type
-   *
-   * @param graph the input graph.
    *
    * @param initialMsg the message each vertex will receive at the on
    * the first iteration

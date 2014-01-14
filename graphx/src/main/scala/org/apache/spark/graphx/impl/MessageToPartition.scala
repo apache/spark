@@ -7,6 +7,7 @@ import org.apache.spark.graphx.{PartitionID, VertexID}
 import org.apache.spark.rdd.{ShuffledRDD, RDD}
 
 
+private[graphx]
 class VertexBroadcastMsg[@specialized(Int, Long, Double, Boolean) T](
     @transient var partition: PartitionID,
     var vid: VertexID,
@@ -26,6 +27,7 @@ class VertexBroadcastMsg[@specialized(Int, Long, Double, Boolean) T](
  * @param partition index of the target partition.
  * @param data value to send
  */
+private[graphx]
 class MessageToPartition[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/) T](
     @transient var partition: PartitionID,
     var data: T)
@@ -39,6 +41,7 @@ class MessageToPartition[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef
 }
 
 
+private[graphx]
 class VertexBroadcastMsgRDDFunctions[T: ClassTag](self: RDD[VertexBroadcastMsg[T]]) {
   def partitionBy(partitioner: Partitioner): RDD[VertexBroadcastMsg[T]] = {
     val rdd = new ShuffledRDD[PartitionID, (VertexID, T), VertexBroadcastMsg[T]](self, partitioner)
@@ -56,6 +59,7 @@ class VertexBroadcastMsgRDDFunctions[T: ClassTag](self: RDD[VertexBroadcastMsg[T
 }
 
 
+private[graphx]
 class MsgRDDFunctions[T: ClassTag](self: RDD[MessageToPartition[T]]) {
 
   /**
@@ -68,6 +72,7 @@ class MsgRDDFunctions[T: ClassTag](self: RDD[MessageToPartition[T]]) {
 }
 
 
+private[graphx]
 object MsgRDDFunctions {
   implicit def rdd2PartitionRDDFunctions[T: ClassTag](rdd: RDD[MessageToPartition[T]]) = {
     new MsgRDDFunctions(rdd)

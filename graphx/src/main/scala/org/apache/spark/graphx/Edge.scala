@@ -1,18 +1,18 @@
 package org.apache.spark.graphx
 
-
 /**
  * A single directed edge consisting of a source id, target id,
  * and the data associated with the edge.
  *
  * @tparam ED type of the edge attribute
+ *
+ * @param srcId The vertex id of the source vertex
+ * @param dstId The vertex id of the target vertex
+ * @param attr The attribute associated with the edge
  */
 case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] (
-    /** The vertex id of the source vertex */
     var srcId: VertexID = 0,
-    /** The vertex id of the target vertex. */
     var dstId: VertexID = 0,
-    /** The attribute associated with the edge. */
     var attr: ED = null.asInstanceOf[ED])
   extends Serializable {
 

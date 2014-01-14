@@ -7,6 +7,7 @@ import org.apache.spark.graphx._
 import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
 import org.apache.spark.util.collection.PrimitiveVector
 
+private[graphx]
 class EdgePartitionBuilder[@specialized(Long, Int, Double) ED: ClassTag](size: Int = 64) {
   var edges = new PrimitiveVector[Edge[ED]](size)
 

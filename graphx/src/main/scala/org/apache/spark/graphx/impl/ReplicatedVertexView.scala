@@ -138,7 +138,7 @@ class ReplicatedVertexView[VD: ClassTag](
   }
 }
 
-object ReplicatedVertexView {
+private object ReplicatedVertexView {
   protected def buildBuffer[VD: ClassTag](
       pid2vidIter: Iterator[Array[Array[VertexID]]],
       vertexPartIter: Iterator[VertexPartition[VD]]) = {
@@ -187,6 +187,7 @@ object ReplicatedVertexView {
   }
 }
 
+private[graphx]
 class VertexAttributeBlock[VD: ClassTag](val vids: Array[VertexID], val attrs: Array[VD])
   extends Serializable {
   def iterator: Iterator[(VertexID, VD)] =

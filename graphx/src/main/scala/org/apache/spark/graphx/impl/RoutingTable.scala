@@ -12,6 +12,7 @@ import org.apache.spark.util.collection.PrimitiveVector
  * may be used multiple times in ReplicatedVertexView -- once to ship the vertex attributes and
  * (possibly) once to ship the active-set information.
  */
+private[impl]
 class RoutingTable(edges: EdgeRDD[_], vertices: VertexRDD[_]) {
 
   val bothAttrs: RDD[Array[Array[VertexID]]] = createPid2Vid(true, true)

@@ -15,7 +15,7 @@ import org.apache.spark.util.ClosureCleaner
 
 
 /**
- * A Graph RDD that supports computation on graphs.
+ * A graph that supports computation on graphs.
  *
  * Graphs are represented using two classes of data: vertex-partitioned and
  * edge-partitioned. `vertices` contains vertex attributes, which are vertex-partitioned. `edges`
