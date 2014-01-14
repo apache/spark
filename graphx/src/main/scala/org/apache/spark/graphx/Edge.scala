@@ -37,8 +37,8 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
     if (vid == srcId) EdgeDirection.Out else { assert(vid == dstId); EdgeDirection.In }
 }
 
-private[graphx] object Edge {
-  def lexicographicOrdering[ED] = new Ordering[Edge[ED]] {
+object Edge {
+  private[graphx] def lexicographicOrdering[ED] = new Ordering[Edge[ED]] {
     override def compare(a: Edge[ED], b: Edge[ED]): Int =
       (if (a.srcId != b.srcId) a.srcId - b.srcId else a.dstId - b.dstId).toInt
   }
