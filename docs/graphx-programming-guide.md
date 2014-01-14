@@ -125,8 +125,10 @@ properties for each vertex and edge.  As a consequence, the graph class contains
 the vertices and edges of the graph:
 
 {% highlight scala %}
-val vertices: VertexRDD[VD]
-val edges: EdgeRDD[ED]
+class Graph[VD, ED] {
+  val vertices: VertexRDD[VD]
+  val edges: EdgeRDD[ED]
+}
 {% endhighlight %}
 
 The classes `VertexRDD[VD]` and `EdgeRDD[ED]` extend and are optimized versions of `RDD[(VertexId,
