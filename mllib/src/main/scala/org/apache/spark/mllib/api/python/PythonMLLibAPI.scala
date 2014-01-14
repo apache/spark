@@ -24,7 +24,6 @@ import org.apache.spark.mllib.recommendation._
 import org.apache.spark.rdd.RDD
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.DoubleBuffer
 
 /**
  * The Java stubs necessary for the Python mllib bindings.
@@ -37,11 +36,11 @@ class PythonMLLibAPI extends Serializable {
     }
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    val magic = bb.getLong()
+    val magic = bb.getLong
     if (magic != 1) {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
-    val length = bb.getLong()
+    val length = bb.getLong
     if (packetLength != 16 + 8 * length) {
       throw new IllegalArgumentException("Length " + length + " is wrong.")
     }
@@ -70,18 +69,17 @@ class PythonMLLibAPI extends Serializable {
     }
     val bb = ByteBuffer.wrap(bytes)
     bb.order(ByteOrder.nativeOrder())
-    val magic = bb.getLong()
+    val magic = bb.getLong
     if (magic != 2) {
       throw new IllegalArgumentException("Magic " + magic + " is wrong.")
     }
-    val rows = bb.getLong()
-    val cols = bb.getLong()
+    val rows = bb.getLong
+    val cols = bb.getLong
     if (packetLength != 24 + 8 * rows * cols) {
       throw new IllegalArgumentException("Size " + rows + "x" + cols + " is wrong.")
     }
     val db = bb.asDoubleBuffer()
     val ans = new Array[Array[Double]](rows.toInt)
-    var i = 0
     for (i <- 0 until rows.toInt) {
       ans(i) = new Array[Double](cols.toInt)
       db.get(ans(i))
@@ -200,9 +198,9 @@ class PythonMLLibAPI extends Serializable {
   private def unpackRating(ratingBytes: Array[Byte]): Rating = {
     val bb = ByteBuffer.wrap(ratingBytes)
     bb.order(ByteOrder.nativeOrder())
-    val user = bb.getInt()
-    val product = bb.getInt()
-    val rating = bb.getDouble()
+    val user = bb.getInt
+    val product = bb.getInt
+    val rating = bb.getDouble
     new Rating(user, product, rating)
   }
 
@@ -210,8 +208,8 @@ class PythonMLLibAPI extends Serializable {
   private[spark] def unpackTuple(tupleBytes: Array[Byte]): (Int, Int) = {
     val bb = ByteBuffer.wrap(tupleBytes)
     bb.order(ByteOrder.nativeOrder())
-    val v1 = bb.getInt()
-    val v2 = bb.getInt()
+    val v1 = bb.getInt
+    val v2 = bb.getInt
     (v1, v2)
   }
 
@@ -219,7 +217,7 @@ class PythonMLLibAPI extends Serializable {
     * Serialize a Rating object into an array of bytes.
     * It can be deserialized using RatingDeserializer().
     *
-    * @param rate
+    * @param rate the Rating object to serialize
     * @return
     */
   private[spark] def serializeRating(rate: Rating): Array[Byte] = {
