@@ -136,6 +136,13 @@ object SparkBuild extends Build {
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
+    // Remove certain packages from Scaladoc
+    scalacOptions in (Compile,doc) := Seq("-skip-packages", Seq(
+      "akka",
+      "org.apache.spark.network",
+      "org.apache.spark.deploy",
+      "org.apache.spark.util.collection"
+      ).mkString(":")),
 
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),

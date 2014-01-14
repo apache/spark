@@ -122,7 +122,7 @@ trait Logging {
   }
 }
 
-object Logging {
+private object Logging {
   @volatile private var initialized = false
   val initLock = new Object()
 }

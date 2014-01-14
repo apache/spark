@@ -22,6 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark._
 
+private[spark]
 abstract class Broadcast[T](private[spark] val id: Long) extends Serializable {
   def value: T
 

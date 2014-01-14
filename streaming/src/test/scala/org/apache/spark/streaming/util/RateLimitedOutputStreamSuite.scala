@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.streaming.util
 
 import org.scalatest.FunSuite
 import java.io.ByteArrayOutputStream
