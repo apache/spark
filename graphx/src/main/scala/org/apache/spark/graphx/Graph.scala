@@ -20,7 +20,7 @@ import org.apache.spark.storage.StorageLevel
  * @tparam VD the vertex attribute type
  * @tparam ED the edge attribute type
  */
-abstract class Graph[VD: ClassTag, ED: ClassTag] {
+abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializable {
 
   /**
    * An RDD containing the vertices and their associated attributes.

@@ -32,7 +32,7 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
     @transient val replicatedVertexView: ReplicatedVertexView[VD])
   extends Graph[VD, ED] with Serializable {
 
-  /** Default construct is provided to support serialization */
+  /** Default constructor is provided to support serialization */
   protected def this() = this(null, null, null, null)
 
   /** Return a RDD that brings edges together with their source and destination vertices. */
