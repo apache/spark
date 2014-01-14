@@ -343,6 +343,10 @@ abstract class DStream[T: ClassTag] (
   private[streaming] def clearMetadata(time: Time) {
     val oldRDDs = generatedRDDs.filter(_._1 <= (time - rememberDuration))
     generatedRDDs --= oldRDDs.keys
+    if (ssc.conf.getBoolean("spark.streaming.unpersist", false)) {
+      logDebug("Unpersisting old RDDs: " + oldRDDs.keys.mkString(", "))
+      oldRDDs.values.foreach(_.unpersist(false))
+    }
     logDebug("Cleared " + oldRDDs.size + " RDDs that were older than " +
       (time - rememberDuration) + ": " + oldRDDs.keys.mkString(", "))
     dependencies.foreach(_.clearMetadata(time))
@@ -763,9 +767,11 @@ abstract class DStream[T: ClassTag] (
   }
 
   /**
-   * Register this DStream as an output DStream.
+   * Register this streaming as an output stream. This would ensure that RDDs of this
+   * DStream will be generated.
    */
-  private[streaming] def register() {
+  private[streaming] def register(): DStream[T] = {
     ssc.graph.addOutputStream(this)
+    this
   }
 }

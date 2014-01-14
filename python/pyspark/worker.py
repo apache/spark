@@ -76,6 +76,10 @@ def main(infile, outfile):
         iterator = deserializer.load_stream(infile)
         serializer.dump_stream(func(split_index, iterator), outfile)
     except Exception as e:
+        # Write the error to stderr in addition to trying to passi t back to
+        # Java, in case it happened while serializing a record
+        print >> sys.stderr, "PySpark worker failed with exception:"
+        print >> sys.stderr, traceback.format_exc()
         write_int(SpecialLengths.PYTHON_EXCEPTION_THROWN, outfile)
         write_with_length(traceback.format_exc(), outfile)
         sys.exit(-1)

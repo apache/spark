@@ -18,13 +18,13 @@
 package org.apache.spark.util
 
 import java.util.{TimerTask, Timer}
-import org.apache.spark.{SparkConf, SparkContext, Logging}
+import org.apache.spark.{SparkConf, Logging}
 
 
 /**
  * Runs a timer task to periodically clean up metadata (e.g. old files or hashtable entries)
  */
-class MetadataCleaner(
+private[spark] class MetadataCleaner(
     cleanerType: MetadataCleanerType.MetadataCleanerType,
     cleanupFunc: (Long) => Unit,
     conf: SparkConf)
@@ -60,7 +60,7 @@ class MetadataCleaner(
   }
 }
 
-object MetadataCleanerType extends Enumeration {
+private[spark] object MetadataCleanerType extends Enumeration {
 
   val MAP_OUTPUT_TRACKER, SPARK_CONTEXT, HTTP_BROADCAST, DAG_SCHEDULER, RESULT_TASK,
     SHUFFLE_MAP_TASK, BLOCK_MANAGER, SHUFFLE_BLOCK_MANAGER, BROADCAST_VARS = Value
@@ -72,7 +72,7 @@ object MetadataCleanerType extends Enumeration {
 
 // TODO: This mutates a Conf to set properties right now, which is kind of ugly when used in the
 // initialization of StreamingContext. It's okay for users trying to configure stuff themselves.
-object MetadataCleaner {
+private[spark] object MetadataCleaner {
   def getDelaySeconds(conf: SparkConf) = {
     conf.getInt("spark.cleaner.ttl", -1)
   }
