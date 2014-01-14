@@ -32,11 +32,13 @@ sparkR.init <- function(
     return(get(".sparkRjsc", envir=.sparkREnv))
   }
 
+  sparkHomeNormalized <- normalizePath(sparkHome)
+
   # TODO: support other constructors
   assign(
     ".sparkRjsc",
      .jnew("org/apache/spark/api/java/JavaSparkContext", master, appName,
-           as.character(sparkHome),
+           as.character(sparkHomeNormalized),
            as.character(.sparkREnv[["assemblyJarPath"]])),
      envir=.sparkREnv
   )
