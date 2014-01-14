@@ -91,11 +91,6 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
   def partitionBy(partitionStrategy: PartitionStrategy): Graph[VD, ED]
 
   /**
-   * Computes statistics describing the graph representation.
-   */
-  def statistics: Map[String, Any]
-
-  /**
    * Transforms each vertex attribute in the graph using the map function.
    *
    * @note The new graph has the same structure.  As a consequence the underlying index structures
@@ -254,7 +249,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
   def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED]
 
   /**
-   * Computes statistics about the neighboring edges and vertices of each vertex.  The user supplied
+   * Aggregates values from the neighboring edges and vertices of each vertex.  The user supplied
    * `mapFunc` function is invoked on each edge of the graph, generating 0 or more "messages" to be
    * "sent" to either vertex in the edge.  The `reduceFunc` is then used to combine the output of
    * the map phase destined to each vertex.

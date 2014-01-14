@@ -73,9 +73,6 @@ object PageRank extends Logging {
       .mapVertices( (id, attr) => 1.0 )
       .cache()
 
-    // Display statistics about pagerank
-    logInfo(pagerankGraph.statistics.toString)
-
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
     def vertexProgram(id: VertexID, attr: Double, msgSum: Double): Double =
@@ -120,9 +117,6 @@ object PageRank extends Logging {
       // Set the vertex attributes to (initalPR, delta = 0)
       .mapVertices( (id, attr) => (0.0, 0.0) )
       .cache()
-
-    // Display statistics about pagerank
-    logInfo(pagerankGraph.statistics.toString)
 
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
