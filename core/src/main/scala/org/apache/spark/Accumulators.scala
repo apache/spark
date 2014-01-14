@@ -24,7 +24,7 @@ import scala.collection.generic.Growable
 import org.apache.spark.serializer.JavaSerializer
 
 /**
- * A datatype that can be accumulated, i.e. has an commutative and associative "add" operation,
+ * A datatype that can be accumulated, ie has an commutative and associative "add" operation,
  * but where the result type, `R`, may be different from the element type being added, `T`.
  *
  * You must define how to add data, and how to merge two of these together.  For some datatypes,
@@ -185,7 +185,7 @@ class GrowableAccumulableParam[R <% Growable[T] with TraversableOnce[T] with Ser
 }
 
 /**
- * A simpler value of [[org.apache.spark.Accumulable]] where the result type being accumulated is the same
+ * A simpler value of [[Accumulable]] where the result type being accumulated is the same
  * as the types of elements being merged.
  *
  * @param initialValue initial value of accumulator
@@ -218,7 +218,7 @@ private object Accumulators {
 
   def newId: Long = synchronized {
     lastId += 1
-    return lastId
+    lastId
   }
 
   def register(a: Accumulable[_, _], original: Boolean): Unit = synchronized {

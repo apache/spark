@@ -80,10 +80,10 @@ private[spark] class BlockManager(
   val compressShuffle = conf.getBoolean("spark.shuffle.compress", true)
   // Whether to compress RDD partitions that are stored serialized
   val compressRdds = conf.getBoolean("spark.rdd.compress", false)
+  // Whether to compress shuffle output temporarily spilled to disk
+  val compressShuffleSpill = conf.getBoolean("spark.shuffle.spill.compress", false)
 
   val heartBeatFrequency = BlockManager.getHeartBeatFrequency(conf)
-
-  val hostPort = Utils.localHostPort(conf)
 
   val slaveActor = actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
     name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
@@ -412,7 +412,7 @@ private[spark] class BlockManager(
       logDebug("The value of block " + blockId + " is null")
     }
     logDebug("Block " + blockId + " not found")
-    return None
+    None
   }
 
   /**
@@ -792,6 +792,7 @@ private[spark] class BlockManager(
     case ShuffleBlockId(_, _, _) => compressShuffle
     case BroadcastBlockId(_) => compressBroadcast
     case RDDBlockId(_, _) => compressRdds
+    case TempBlockId(_) => compressShuffleSpill
     case _ => false
   }
 

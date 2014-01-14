@@ -549,6 +549,11 @@ abstract class RDD[T: ClassTag](
    * of elements in each partition.
    */
   def zipPartitions[B: ClassTag, V: ClassTag]
+      (rdd2: RDD[B], preservesPartitioning: Boolean)
+      (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] =
+    new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2, preservesPartitioning)
+
+  def zipPartitions[B: ClassTag, V: ClassTag]
       (rdd2: RDD[B])
       (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] =
     new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2, false)
@@ -764,7 +769,7 @@ abstract class RDD[T: ClassTag](
         val entry = iter.next()
         m1.put(entry.getKey, m1.getLong(entry.getKey) + entry.getLongValue)
       }
-      return m1
+      m1
     }
     val myResult = mapPartitions(countPartition).reduce(mergeMaps)
     myResult.asInstanceOf[java.util.Map[T, Long]]   // Will be wrapped as a Scala mutable Map
@@ -842,7 +847,7 @@ abstract class RDD[T: ClassTag](
       partsScanned += numPartsToTry
     }
 
-    return buf.toArray
+    buf.toArray
   }
 
   /**

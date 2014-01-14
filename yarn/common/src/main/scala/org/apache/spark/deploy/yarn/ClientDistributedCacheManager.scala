@@ -143,7 +143,7 @@ class ClientDistributedCacheManager() extends Logging {
     if (isPublic(conf, uri, statCache)) {
       return LocalResourceVisibility.PUBLIC 
     } 
-    return LocalResourceVisibility.PRIVATE
+    LocalResourceVisibility.PRIVATE
   }
 
   /**
@@ -161,7 +161,7 @@ class ClientDistributedCacheManager() extends Logging {
     if (!checkPermissionOfOther(fs, current, FsAction.READ, statCache)) {
       return false
     }
-    return ancestorsHaveExecutePermissions(fs, current.getParent(), statCache)
+    ancestorsHaveExecutePermissions(fs, current.getParent(), statCache)
   }
 
   /**
@@ -183,7 +183,7 @@ class ClientDistributedCacheManager() extends Logging {
       }
       current = current.getParent()
     }
-    return true
+    true
   }
 
   /**
@@ -203,7 +203,7 @@ class ClientDistributedCacheManager() extends Logging {
     if (otherAction.implies(action)) {
       return true
     }
-    return false
+    false
   }
 
   /**
@@ -223,6 +223,6 @@ class ClientDistributedCacheManager() extends Logging {
         statCache.put(uri, newStat)
         newStat
     }
-    return stat
+    stat
   }
 }

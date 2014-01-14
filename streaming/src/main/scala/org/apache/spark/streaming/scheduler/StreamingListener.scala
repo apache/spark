@@ -24,9 +24,10 @@ import org.apache.spark.util.Distribution
 sealed trait StreamingListenerEvent
 
 case class StreamingListenerBatchCompleted(batchInfo: BatchInfo) extends StreamingListenerEvent
-
 case class StreamingListenerBatchStarted(batchInfo: BatchInfo) extends StreamingListenerEvent
 
+/** An event used in the listener to shutdown the listener daemon thread. */
+private[scheduler] case object StreamingListenerShutdown extends StreamingListenerEvent
 
 /**
  * A listener interface for receiving information about an ongoing streaming

@@ -26,8 +26,10 @@ import com.google.common.io.Files
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.streaming.dstream.FileInputDStream
+import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
 import org.apache.spark.streaming.util.ManualClock
+import org.apache.spark.util.Utils
+import org.apache.spark.SparkConf
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -140,6 +142,26 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.stop()
     System.clearProperty("spark.streaming.manualClock.jump")
     ssc = null
+  }
+
+  // This tests whether spark conf persists through checkpoints, and certain
+  // configs gets scrubbed
+  test("persistence of conf through checkpoints") {
+    val key = "spark.mykey"
+    val value = "myvalue"
+    System.setProperty(key, value)
+    ssc = new StreamingContext(master, framework, batchDuration)
+    val cp = new Checkpoint(ssc, Time(1000))
+    assert(!cp.sparkConf.contains("spark.driver.host"))
+    assert(!cp.sparkConf.contains("spark.driver.port"))
+    assert(!cp.sparkConf.contains("spark.hostPort"))
+    assert(cp.sparkConf.get(key) === value)
+    ssc.stop()
+    val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
+    assert(!newCp.sparkConf.contains("spark.driver.host"))
+    assert(!newCp.sparkConf.contains("spark.driver.port"))
+    assert(!newCp.sparkConf.contains("spark.hostPort"))
+    assert(newCp.sparkConf.get(key) === value)
   }
 
 
@@ -336,7 +358,6 @@ class CheckpointSuite extends TestSuiteBase {
     )
     ssc = new StreamingContext(checkpointDir)
     System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
     ssc.start()
     val outputNew = advanceTimeWithRealDelay[V](ssc, nextNumBatches)
     // the first element will be re-processed data of the last batch before restart

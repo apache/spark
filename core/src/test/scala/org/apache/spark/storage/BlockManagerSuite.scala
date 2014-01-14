@@ -53,7 +53,6 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("test", "localhost", 0, conf = conf)
     this.actorSystem = actorSystem
     conf.set("spark.driver.port", boundPort.toString)
-    conf.set("spark.hostPort", "localhost:" + boundPort)
 
     master = new BlockManagerMaster(
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf))), conf)
@@ -65,13 +64,10 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     conf.set("spark.storage.disableBlockManagerHeartBeat", "true")
     val initialize = PrivateMethod[Unit]('initialize)
     SizeEstimator invokePrivate initialize()
-    // Set some value ...
-    conf.set("spark.hostPort", Utils.localHostName() + ":" + 1111)
   }
 
   after {
     System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
 
     if (store != null) {
       store.stop()

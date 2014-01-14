@@ -108,7 +108,7 @@ private[spark] object SizeEstimator extends Logging {
       val bean = ManagementFactory.newPlatformMXBeanProxy(server,
         hotSpotMBeanName, hotSpotMBeanClass)
       // TODO: We could use reflection on the VMOption returned ?
-      return getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
+      getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
     } catch {
       case e: Exception => {
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
@@ -141,7 +141,7 @@ private[spark] object SizeEstimator extends Logging {
     def dequeue(): AnyRef = {
       val elem = stack.last
       stack.trimEnd(1)
-      return elem
+      elem
     }
   }
 
@@ -162,7 +162,7 @@ private[spark] object SizeEstimator extends Logging {
     while (!state.isFinished) {
       visitSingleObject(state.dequeue(), state)
     }
-    return state.size
+    state.size
   }
 
   private def visitSingleObject(obj: AnyRef, state: SearchState) {
@@ -276,11 +276,11 @@ private[spark] object SizeEstimator extends Logging {
     // Create and cache a new ClassInfo
     val newInfo = new ClassInfo(shellSize, pointerFields)
     classInfos.put(cls, newInfo)
-    return newInfo
+    newInfo
   }
 
   private def alignSize(size: Long): Long = {
     val rem = size % ALIGN_SIZE
-    return if (rem == 0) size else (size + ALIGN_SIZE - rem)
+    if (rem == 0) size else (size + ALIGN_SIZE - rem)
   }
 }

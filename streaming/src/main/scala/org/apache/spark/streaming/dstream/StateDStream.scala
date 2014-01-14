@@ -21,7 +21,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.Partitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Duration, Time, DStream}
+import org.apache.spark.streaming.{Duration, Time}
 
 import scala.reflect.ClassTag
 
@@ -65,7 +65,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
             val cogroupedRDD = parentRDD.cogroup(prevStateRDD, partitioner)
             val stateRDD = cogroupedRDD.mapPartitions(finalFunc, preservePartitioning)
             //logDebug("Generating state RDD for time " + validTime)
-            return Some(stateRDD)
+            Some(stateRDD)
           }
           case None => {    // If parent RDD does not exist
 
@@ -76,7 +76,7 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
               updateFuncLocal(i)
             }
             val stateRDD = prevStateRDD.mapPartitions(finalFunc, preservePartitioning)
-            return Some(stateRDD)
+            Some(stateRDD)
           }
         }
       }
@@ -98,11 +98,11 @@ class StateDStream[K: ClassTag, V: ClassTag, S: ClassTag](
             val groupedRDD = parentRDD.groupByKey(partitioner)
             val sessionRDD = groupedRDD.mapPartitions(finalFunc, preservePartitioning)
             //logDebug("Generating state RDD for time " + validTime + " (first)")
-            return Some(sessionRDD)
+            Some(sessionRDD)
           }
           case None => { // If parent RDD does not exist, then nothing to do!
             //logDebug("Not generating state RDD (no previous state, no parent)")
-            return None
+            None
           }
         }
       }

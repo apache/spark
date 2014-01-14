@@ -90,7 +90,7 @@ object RawTextHelper {
         }
       }
     }
-    return taken.toIterator  
+    taken.toIterator
   }
  
   /**

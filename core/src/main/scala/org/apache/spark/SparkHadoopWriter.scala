@@ -134,28 +134,28 @@ class SparkHadoopWriter(@transient jobConf: JobConf)
       format = conf.value.getOutputFormat()
         .asInstanceOf[OutputFormat[AnyRef,AnyRef]]
     }
-    return format 
+    format
   }
 
   private def getOutputCommitter(): OutputCommitter = {
     if (committer == null) {
       committer = conf.value.getOutputCommitter
     }
-    return committer
+    committer
   }
 
   private def getJobContext(): JobContext = {
     if (jobContext == null) { 
       jobContext = newJobContext(conf.value, jID.value)
     }
-    return jobContext
+    jobContext
   }
 
   private def getTaskContext(): TaskAttemptContext = {
     if (taskContext == null) {
       taskContext =  newTaskAttemptContext(conf.value, taID.value)
     }
-    return taskContext
+    taskContext
   }
 
   private def setIDs(jobid: Int, splitid: Int, attemptid: Int) {
@@ -182,19 +182,18 @@ object SparkHadoopWriter {
   def createJobID(time: Date, id: Int): JobID = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
-    return new JobID(jobtrackerID, id)
+    new JobID(jobtrackerID, id)
   }
   
   def createPathFromString(path: String, conf: JobConf): Path = {
     if (path == null) {
       throw new IllegalArgumentException("Output path is null")
     }
-    var outputPath = new Path(path)
+    val outputPath = new Path(path)
     val fs = outputPath.getFileSystem(conf)
     if (outputPath == null || fs == null) {
       throw new IllegalArgumentException("Incorrectly formatted output path")
     }
-    outputPath = outputPath.makeQualified(fs)
-    return outputPath
+    outputPath.makeQualified(fs)
   }
 }

@@ -18,6 +18,7 @@
 package org.apache.spark.streaming.scheduler
 
 import org.apache.spark.streaming.Time
+import scala.util.Try
 
 /**
  * Class representing a Spark computation. It may contain multiple Spark jobs.
@@ -25,12 +26,10 @@ import org.apache.spark.streaming.Time
 private[streaming]
 class Job(val time: Time, func: () => _) {
   var id: String = _
+  var result: Try[_] = null
 
-  def run(): Long = {
-    val startTime = System.currentTimeMillis 
-    func() 
-    val stopTime = System.currentTimeMillis
-    (stopTime - startTime)
+  def run() {
+    result = Try(func())
   }
 
   def setId(number: Int) {

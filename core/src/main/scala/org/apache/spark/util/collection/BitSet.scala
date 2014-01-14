@@ -22,10 +22,72 @@ package org.apache.spark.util.collection
  * A simple, fixed-size bit set implementation. This implementation is fast because it avoids
  * safety/bound checking.
  */
-class BitSet(numBits: Int) {
+class BitSet(numBits: Int) extends Serializable {
 
-  private[this] val words = new Array[Long](bit2words(numBits))
-  private[this] val numWords = words.length
+  private val words = new Array[Long](bit2words(numBits))
+  private val numWords = words.length
+
+  /**
+   * Compute the capacity (number of bits) that can be represented
+   * by this bitset.
+   */
+  def capacity: Int = numWords * 64
+
+  /**
+   * Set all the bits up to a given index
+   */
+  def setUntil(bitIndex: Int) {
+    val wordIndex = bitIndex >> 6 // divide by 64
+    var i = 0
+    while(i < wordIndex) { words(i) = -1; i += 1 }
+    if(wordIndex < words.size) {
+      // Set the remaining bits (note that the mask could still be zero)
+      val mask = ~(-1L << (bitIndex & 0x3f))
+      words(wordIndex) |= mask
+    }
+  }
+
+  /**
+   * Compute the bit-wise AND of the two sets returning the
+   * result.
+   */
+  def &(other: BitSet): BitSet = {
+    val newBS = new BitSet(math.max(capacity, other.capacity))
+    val smaller = math.min(numWords, other.numWords)
+    assert(newBS.numWords >= numWords)
+    assert(newBS.numWords >= other.numWords)
+    var ind = 0
+    while( ind < smaller ) {
+      newBS.words(ind) = words(ind) & other.words(ind)
+      ind += 1
+    }
+    newBS
+  }
+
+  /**
+   * Compute the bit-wise OR of the two sets returning the
+   * result.
+   */
+  def |(other: BitSet): BitSet = {
+    val newBS = new BitSet(math.max(capacity, other.capacity))
+    assert(newBS.numWords >= numWords)
+    assert(newBS.numWords >= other.numWords)
+    val smaller = math.min(numWords, other.numWords)
+    var ind = 0
+    while( ind < smaller ) {
+      newBS.words(ind) = words(ind) | other.words(ind)
+      ind += 1
+    }
+    while( ind < numWords ) {
+      newBS.words(ind) = words(ind)
+      ind += 1
+    }
+    while( ind < other.numWords ) {
+      newBS.words(ind) = other.words(ind)
+      ind += 1
+    }
+    newBS
+  }
 
   /**
    * Sets the bit at the specified index to true.
@@ -34,6 +96,11 @@ class BitSet(numBits: Int) {
   def set(index: Int) {
     val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
     words(index >> 6) |= bitmask        // div by 64 and mask
+  }
+
+  def unset(index: Int) {
+    val bitmask = 1L << (index & 0x3f)  // mod 64 and shift
+    words(index >> 6) &= ~bitmask        // div by 64 and mask
   }
 
   /**
@@ -47,6 +114,20 @@ class BitSet(numBits: Int) {
     val bitmask = 1L << (index & 0x3f)   // mod 64 and shift
     (words(index >> 6) & bitmask) != 0  // div by 64 and mask
   }
+
+  /**
+   * Get an iterator over the set bits.
+   */
+  def iterator = new Iterator[Int] {
+    var ind = nextSetBit(0)
+    override def hasNext: Boolean = ind >= 0
+    override def next() = {
+      val tmp = ind
+      ind  = nextSetBit(ind+1)
+      tmp
+    }
+  }
+
 
   /** Return the number of bits set to true in this BitSet. */
   def cardinality(): Int = {

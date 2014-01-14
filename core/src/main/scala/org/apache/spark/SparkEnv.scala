@@ -132,16 +132,6 @@ object SparkEnv extends Logging {
       conf.set("spark.driver.port",  boundPort.toString)
     }
 
-    // set only if unset until now.
-    if (!conf.contains("spark.hostPort")) {
-      if (!isDriver){
-        // unexpected
-        Utils.logErrorWithStack("Unexpected NOT to have spark.hostPort set")
-      }
-      Utils.checkHost(hostname)
-      conf.set("spark.hostPort",  hostname + ":" + boundPort)
-    }
-
     val classLoader = Thread.currentThread.getContextClassLoader
 
     // Create an instance of the class named by the given Java system property, or by

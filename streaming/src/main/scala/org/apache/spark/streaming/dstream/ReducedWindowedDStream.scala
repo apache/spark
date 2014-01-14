@@ -26,7 +26,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.storage.StorageLevel
 
 import scala.collection.mutable.ArrayBuffer
-import org.apache.spark.streaming.{Duration, Interval, Time, DStream}
+import org.apache.spark.streaming.{Duration, Interval, Time}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag

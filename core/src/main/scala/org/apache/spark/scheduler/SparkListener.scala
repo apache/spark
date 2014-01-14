@@ -19,7 +19,7 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 import org.apache.spark.util.{Utils, Distribution}
-import org.apache.spark.{Logging, SparkContext, TaskEndReason}
+import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
 
 sealed trait SparkListenerEvents
@@ -27,7 +27,7 @@ sealed trait SparkListenerEvents
 case class SparkListenerStageSubmitted(stage: StageInfo, properties: Properties)
      extends SparkListenerEvents
 
-case class SparkListenerStageCompleted(val stage: StageInfo) extends SparkListenerEvents
+case class SparkListenerStageCompleted(stage: StageInfo) extends SparkListenerEvents
 
 case class SparkListenerTaskStart(task: Task[_], taskInfo: TaskInfo) extends SparkListenerEvents
 
@@ -43,6 +43,12 @@ case class SparkListenerJobStart(job: ActiveJob, stageIds: Array[Int], propertie
 case class SparkListenerJobEnd(job: ActiveJob, jobResult: JobResult)
      extends SparkListenerEvents
 
+/** An event used in the listener to shutdown the listener daemon thread. */
+private[scheduler] case object SparkListenerShutdown extends SparkListenerEvents
+
+/**
+ * Interface for listening to events from the Spark scheduler.
+ */
 trait SparkListener {
   /**
    * Called when a stage is completed, with information on the completed stage
@@ -112,7 +118,7 @@ class StatsReportListener extends SparkListener with Logging {
 
 }
 
-object StatsReportListener extends Logging {
+private[spark] object StatsReportListener extends Logging {
 
   //for profiling, the extremes are more interesting
   val percentiles = Array[Int](0,5,10,25,50,75,90,95,100)
@@ -199,9 +205,9 @@ object StatsReportListener extends Logging {
   }
 }
 
+private case class RuntimePercentage(executorPct: Double, fetchPct: Option[Double], other: Double)
 
-case class RuntimePercentage(executorPct: Double, fetchPct: Option[Double], other: Double)
-object RuntimePercentage {
+private object RuntimePercentage {
   def apply(totalTime: Long, metrics: TaskMetrics): RuntimePercentage = {
     val denom = totalTime.toDouble
     val fetchTime = metrics.shuffleReadMetrics.map{_.fetchWaitTime}

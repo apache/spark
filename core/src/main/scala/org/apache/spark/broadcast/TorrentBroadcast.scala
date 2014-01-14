@@ -203,16 +203,16 @@ extends Logging {
     }
     bais.close()
 
-    var tInfo = TorrentInfo(retVal, blockNum, byteArray.length)
+    val tInfo = TorrentInfo(retVal, blockNum, byteArray.length)
     tInfo.hasBlocks = blockNum
 
-    return tInfo
+    tInfo
   }
 
   def unBlockifyObject[T](arrayOfBlocks: Array[TorrentBlock],
                             totalBytes: Int,
                             totalBlocks: Int): T = {
-    var retByteArray = new Array[Byte](totalBytes)
+    val retByteArray = new Array[Byte](totalBytes)
     for (i <- 0 until totalBlocks) {
       System.arraycopy(arrayOfBlocks(i).byteArray, 0, retByteArray,
         i * BLOCK_SIZE, arrayOfBlocks(i).byteArray.length)
@@ -236,8 +236,10 @@ private[spark] case class TorrentInfo(
   @transient var hasBlocks = 0
 }
 
-private[spark] class TorrentBroadcastFactory
-  extends BroadcastFactory {
+/**
+ * A [[BroadcastFactory]] that creates a torrent-based implementation of broadcast.
+ */
+class TorrentBroadcastFactory extends BroadcastFactory {
 
   def initialize(isDriver: Boolean, conf: SparkConf) { TorrentBroadcast.initialize(isDriver, conf) }
 

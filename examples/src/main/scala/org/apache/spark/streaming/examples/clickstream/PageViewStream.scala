@@ -91,7 +91,7 @@ object PageViewStream {
       case "popularUsersSeen" =>
         // Look for users in our existing dataset and print it out if we have a match
         pageViews.map(view => (view.userID, 1))
-          .foreach((rdd, time) => rdd.join(userList)
+          .foreachRDD((rdd, time) => rdd.join(userList)
             .map(_._2._2)
             .take(10)
             .foreach(u => println("Saw user %s at time %s".format(u, time))))

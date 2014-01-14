@@ -10,8 +10,9 @@ import org.apache.spark.util.Utils
 /**
  ** Utilities for running commands with the spark classpath.
  */
+private[spark]
 object CommandUtils extends Logging {
-  private[spark] def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
+  def buildCommandSeq(command: Command, memory: Int, sparkHome: String): Seq[String] = {
     val runner = getEnv("JAVA_HOME", command).map(_ + "/bin/java").getOrElse("java")
 
     // SPARK-698: do not call the run.cmd script, as process.destroy()

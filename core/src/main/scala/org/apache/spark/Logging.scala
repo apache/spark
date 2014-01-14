@@ -41,7 +41,7 @@ trait Logging {
       }
       log_ = LoggerFactory.getLogger(className)
     }
-    return log_
+    log_
   }
 
   // Log methods that take only a String
@@ -122,7 +122,7 @@ trait Logging {
   }
 }
 
-object Logging {
+private object Logging {
   @volatile private var initialized = false
   val initLock = new Object()
 }

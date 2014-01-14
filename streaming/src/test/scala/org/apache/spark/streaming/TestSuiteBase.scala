@@ -17,7 +17,7 @@
 
 package org.apache.spark.streaming
 
-import org.apache.spark.streaming.dstream.{InputDStream, ForEachDStream}
+import org.apache.spark.streaming.dstream.{DStream, InputDStream, ForEachDStream}
 import org.apache.spark.streaming.util.ManualClock
 
 import scala.collection.mutable.ArrayBuffer
@@ -137,7 +137,7 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   val conf = new SparkConf()
     .setMaster(master)
     .setAppName(framework)
-    .set("spark.cleaner.ttl", "3600")
+    .set("spark.cleaner.ttl", StreamingContext.DEFAULT_CLEANER_TTL.toString)
 
   // Default before function for any streaming test suite. Override this
   // if you want to add your stuff to "before" (i.e., don't call before { } )
@@ -156,7 +156,6 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
   def afterFunction() {
     // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
     System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
   }
 
   before(beforeFunction)
@@ -273,10 +272,11 @@ trait TestSuiteBase extends FunSuite with BeforeAndAfter with Logging {
       val startTime = System.currentTimeMillis()
       while (output.size < numExpectedOutput && System.currentTimeMillis() - startTime < maxWaitTimeMillis) {
         logInfo("output.size = " + output.size + ", numExpectedOutput = " + numExpectedOutput)
-        Thread.sleep(10)
+        ssc.awaitTermination(50)
       }
       val timeTaken = System.currentTimeMillis() - startTime
-
+      logInfo("Output generated in " + timeTaken + " milliseconds")
+      output.foreach(x => logInfo("[" + x.mkString(",") + "]"))
       assert(timeTaken < maxWaitTimeMillis, "Operation timed out after " + timeTaken + " ms")
       assert(output.size === numExpectedOutput, "Unexpected number of outputs generated")
 

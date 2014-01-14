@@ -73,14 +73,14 @@ private[spark] object Utils extends Logging {
     val oos = new ObjectOutputStream(bos)
     oos.writeObject(o)
     oos.close()
-    return bos.toByteArray
+    bos.toByteArray
   }
 
   /** Deserialize an object using Java serialization */
   def deserialize[T](bytes: Array[Byte]): T = {
     val bis = new ByteArrayInputStream(bytes)
     val ois = new ObjectInputStream(bis)
-    return ois.readObject.asInstanceOf[T]
+    ois.readObject.asInstanceOf[T]
   }
 
   /** Deserialize an object using Java serialization and the given ClassLoader */
@@ -90,7 +90,7 @@ private[spark] object Utils extends Logging {
       override def resolveClass(desc: ObjectStreamClass) =
         Class.forName(desc.getName, false, loader)
     }
-    return ois.readObject.asInstanceOf[T]
+    ois.readObject.asInstanceOf[T]
   }
 
   /** Deserialize a Long value (used for {@link org.apache.spark.api.python.PythonPartitioner}) */
@@ -168,7 +168,7 @@ private[spark] object Utils extends Logging {
         i += 1
       }
     }
-    return buf
+    buf
   }
 
   private val shutdownDeletePaths = new scala.collection.mutable.HashSet[String]()
@@ -420,29 +420,12 @@ private[spark] object Utils extends Logging {
     InetAddress.getByName(address).getHostName
   }
 
-  def localHostPort(conf: SparkConf): String = {
-    val retval = conf.get("spark.hostPort", null)
-    if (retval == null) {
-      logErrorWithStack("spark.hostPort not set but invoking localHostPort")
-      return localHostName()
-    }
-    retval
-  }
-
   def checkHost(host: String, message: String = "") {
     assert(host.indexOf(':') == -1, message)
   }
 
   def checkHostPort(hostPort: String, message: String = "") {
     assert(hostPort.indexOf(':') != -1, message)
-  }
-
-  def logErrorWithStack(msg: String) {
-    try {
-      throw new Exception
-    } catch {
-      case ex: Exception => logError(msg, ex)
-    }
   }
 
   // Typically, this will be of order of number of nodes in cluster
@@ -452,7 +435,7 @@ private[spark] object Utils extends Logging {
   def parseHostPort(hostPort: String): (String,  Int) = {
     {
       // Check cache first.
-      var cached = hostPortParseResults.get(hostPort)
+      val cached = hostPortParseResults.get(hostPort)
       if (cached != null) return cached
     }
 
@@ -755,7 +738,7 @@ private[spark] object Utils extends Logging {
     } catch {
       case ise: IllegalStateException => return true
     }
-    return false
+    false
   }
 
   def isSpace(c: Char): Boolean = {
@@ -772,7 +755,7 @@ private[spark] object Utils extends Logging {
     var inWord = false
     var inSingleQuote = false
     var inDoubleQuote = false
-    var curWord = new StringBuilder
+    val curWord = new StringBuilder
     def endWord() {
       buf += curWord.toString
       curWord.clear()
@@ -818,7 +801,7 @@ private[spark] object Utils extends Logging {
     if (inWord || inDoubleQuote || inSingleQuote) {
       endWord()
     }
-    return buf
+    buf
   }
 
  /* Calculates 'x' modulo 'mod', takes to consideration sign of x,
@@ -846,8 +829,7 @@ private[spark] object Utils extends Logging {
 
   /** Returns a copy of the system properties that is thread-safe to iterator over. */
   def getSystemProperties(): Map[String, String] = {
-    return System.getProperties().clone()
-      .asInstanceOf[java.util.Properties].toMap[String, String]
+    System.getProperties.clone().asInstanceOf[java.util.Properties].toMap[String, String]
   }
 
   /**

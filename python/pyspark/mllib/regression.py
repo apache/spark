@@ -47,54 +47,57 @@ class LinearRegressionModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit.
 
     >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
-    >>> lrm = LinearRegressionWithSGD.train(sc, sc.parallelize(data), initial_weights=array([1.0]))
+    >>> lrm = LinearRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
     """
 
 class LinearRegressionWithSGD(object):
     @classmethod
-    def train(cls, sc, data, iterations=100, step=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
+    def train(cls, data, iterations=100, step=1.0,
+              miniBatchFraction=1.0, initialWeights=None):
         """Train a linear regression model on the given data."""
+        sc = data.context
         return _regression_train_wrapper(sc, lambda d, i:
                 sc._jvm.PythonMLLibAPI().trainLinearRegressionModelWithSGD(
-                        d._jrdd, iterations, step, mini_batch_fraction, i),
-                LinearRegressionModel, data, initial_weights)
+                        d._jrdd, iterations, step, miniBatchFraction, i),
+                LinearRegressionModel, data, initialWeights)
 
 class LassoModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with an
     l_1 penalty term.
 
     >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
-    >>> lrm = LassoWithSGD.train(sc, sc.parallelize(data), initial_weights=array([1.0]))
+    >>> lrm = LassoWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
     """
-    
+
 class LassoWithSGD(object):
     @classmethod
-    def train(cls, sc, data, iterations=100, step=1.0, reg_param=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
+    def train(cls, data, iterations=100, step=1.0, regParam=1.0,
+              miniBatchFraction=1.0, initialWeights=None):
         """Train a Lasso regression model on the given data."""
+        sc = data.context
         return _regression_train_wrapper(sc, lambda d, i:
                 sc._jvm.PythonMLLibAPI().trainLassoModelWithSGD(d._jrdd,
-                        iterations, step, reg_param, mini_batch_fraction, i),
-                LassoModel, data, initial_weights)
+                        iterations, step, regParam, miniBatchFraction, i),
+                LassoModel, data, initialWeights)
 
 class RidgeRegressionModel(LinearRegressionModelBase):
     """A linear regression model derived from a least-squares fit with an
     l_2 penalty term.
 
     >>> data = array([0.0, 0.0, 1.0, 1.0, 3.0, 2.0, 2.0, 3.0]).reshape(4,2)
-    >>> lrm = RidgeRegressionWithSGD.train(sc, sc.parallelize(data), initial_weights=array([1.0]))
+    >>> lrm = RidgeRegressionWithSGD.train(sc.parallelize(data), initialWeights=array([1.0]))
     """
 
 class RidgeRegressionWithSGD(object):
     @classmethod
-    def train(cls, sc, data, iterations=100, step=1.0, reg_param=1.0,
-              mini_batch_fraction=1.0, initial_weights=None):
+    def train(cls, data, iterations=100, step=1.0, regParam=1.0,
+              miniBatchFraction=1.0, initialWeights=None):
         """Train a ridge regression model on the given data."""
+        sc = data.context
         return _regression_train_wrapper(sc, lambda d, i:
                 sc._jvm.PythonMLLibAPI().trainRidgeModelWithSGD(d._jrdd,
-                        iterations, step, reg_param, mini_batch_fraction, i),
-                RidgeRegressionModel, data, initial_weights)
+                        iterations, step, regParam, miniBatchFraction, i),
+                RidgeRegressionModel, data, initialWeights)
 
 def _test():
     import doctest

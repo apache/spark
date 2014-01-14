@@ -20,17 +20,7 @@ package org.apache.spark.streaming.util
 private[streaming]
 class RecurringTimer(val clock: Clock, val period: Long, val callback: (Long) => Unit) {
   
-  private val minPollTime = 25L
-  
-  private val pollTime = {
-    if (period / 10.0 > minPollTime) {
-      (period / 10.0).toLong
-    } else {
-      minPollTime
-    }  
-  }
-  
-  private val thread = new Thread() {
+  private val thread = new Thread("RecurringTimer") {
     override def run() { loop }    
   }
   
@@ -66,7 +56,6 @@ class RecurringTimer(val clock: Clock, val period: Long, val callback: (Long) =>
         callback(nextTime)
         nextTime += period
       }
-      
     } catch {
       case e: InterruptedException =>
     }

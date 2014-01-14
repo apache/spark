@@ -32,15 +32,16 @@ import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.{AkkaUtils, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 
 private[spark] sealed trait MapOutputTrackerMessage
-private[spark] case class GetMapOutputStatuses(shuffleId: Int, requester: String)
+private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
 private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster)
   extends Actor with Logging {
   def receive = {
-    case GetMapOutputStatuses(shuffleId: Int, requester: String) =>
-      logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + requester)
+    case GetMapOutputStatuses(shuffleId: Int) =>
+      val hostPort = sender.path.address.hostPort
+      logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
       sender ! tracker.getSerializedMapOutputStatuses(shuffleId)
 
     case StopMapOutputTracker =>
@@ -119,11 +120,10 @@ private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
       if (fetchedStatuses == null) {
         // We won the race to fetch the output locs; do so
         logInfo("Doing the fetch; tracker actor = " + trackerActor)
-        val hostPort = Utils.localHostPort(conf)
         // This try-finally prevents hangs due to timeouts:
         try {
           val fetchedBytes =
-            askTracker(GetMapOutputStatuses(shuffleId, hostPort)).asInstanceOf[Array[Byte]]
+            askTracker(GetMapOutputStatuses(shuffleId)).asInstanceOf[Array[Byte]]
           fetchedStatuses = MapOutputTracker.deserializeMapStatuses(fetchedBytes)
           logInfo("Got the output locations")
           mapStatuses.put(shuffleId, fetchedStatuses)
@@ -139,7 +139,7 @@ private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
           return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, fetchedStatuses)
         }
       }
-      else{
+      else {
         throw new FetchFailedException(null, shuffleId, -1, reduceId,
           new Exception("Missing all output locations for shuffle " + shuffleId))
       }

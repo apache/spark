@@ -140,7 +140,7 @@ private[spark] class CoarseMesosSchedulerBackend(
           .format(basename, driverUrl, offer.getSlaveId.getValue, offer.getHostname, numCores))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
-    return command.build()
+    command.build()
   }
 
   override def offerRescinded(d: SchedulerDriver, o: OfferID) {}

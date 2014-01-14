@@ -42,15 +42,15 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
           val blockMessages = BlockMessageArray.fromBufferMessage(bufferMessage)
           logDebug("Parsed as a block message array")
           val responseMessages = blockMessages.map(processBlockMessage).filter(_ != None).map(_.get)
-          return Some(new BlockMessageArray(responseMessages).toBufferMessage)
+          Some(new BlockMessageArray(responseMessages).toBufferMessage)
         } catch {
           case e: Exception => logError("Exception handling buffer message", e)
-          return None
+          None
         }
       }
       case otherMessage: Any => {
         logError("Unknown type message received: " + otherMessage)
-        return None
+        None
       }
     }
   }
@@ -61,7 +61,7 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
         val pB = PutBlock(blockMessage.getId, blockMessage.getData, blockMessage.getLevel)
         logDebug("Received [" + pB + "]")
         putBlock(pB.id, pB.data, pB.level)
-        return None
+        None
       }
       case BlockMessage.TYPE_GET_BLOCK => {
         val gB = new GetBlock(blockMessage.getId)
@@ -70,9 +70,9 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
         if (buffer == null) {
           return None
         }
-        return Some(BlockMessage.fromGotBlock(GotBlock(gB.id, buffer)))
+        Some(BlockMessage.fromGotBlock(GotBlock(gB.id, buffer)))
       }
-      case _ => return None
+      case _ => None
     }
   }
 
@@ -93,7 +93,7 @@ private[spark] class BlockManagerWorker(val blockManager: BlockManager) extends 
     }
     logDebug("GetBlock " + id + " used " + Utils.getUsedTimeMs(startTimeMs)
         + " and got buffer " + buffer)
-    return buffer
+    buffer
   }
 }
 
@@ -111,7 +111,7 @@ private[spark] object BlockManagerWorker extends Logging {
     val blockMessageArray = new BlockMessageArray(blockMessage)
     val resultMessage = connectionManager.sendMessageReliablySync(
         toConnManagerId, blockMessageArray.toBufferMessage)
-    return (resultMessage != None)
+    resultMessage != None
   }
 
   def syncGetBlock(msg: GetBlock, toConnManagerId: ConnectionManagerId): ByteBuffer = {
@@ -130,8 +130,8 @@ private[spark] object BlockManagerWorker extends Logging {
             return blockMessage.getData
           })
       }
-      case None => logDebug("No response message received"); return null
+      case None => logDebug("No response message received")
     }
-    return null
+    null
   }
 }

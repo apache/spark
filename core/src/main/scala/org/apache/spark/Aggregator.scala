@@ -32,9 +32,10 @@ case class Aggregator[K, V, C] (
     mergeCombiners: (C, C) => C) {
 
   private val sparkConf = SparkEnv.get.conf
-  private val externalSorting = sparkConf.getBoolean("spark.shuffle.externalSorting", true)
+  private val externalSorting = sparkConf.getBoolean("spark.shuffle.spill", true)
 
-  def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]]) : Iterator[(K, C)] = {
+  def combineValuesByKey(iter: Iterator[_ <: Product2[K, V]],
+                         context: TaskContext) : Iterator[(K, C)] = {
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kv: Product2[K, V] = null
@@ -47,17 +48,18 @@ case class Aggregator[K, V, C] (
       }
       combiners.iterator
     } else {
-      val combiners =
-        new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
+      val combiners = new ExternalAppendOnlyMap[K, V, C](createCombiner, mergeValue, mergeCombiners)
       while (iter.hasNext) {
         val (k, v) = iter.next()
         combiners.insert(k, v)
       }
+      context.taskMetrics.memoryBytesSpilled = combiners.memoryBytesSpilled
+      context.taskMetrics.diskBytesSpilled = combiners.diskBytesSpilled
       combiners.iterator
     }
   }
 
-  def combineCombinersByKey(iter: Iterator[(K, C)]) : Iterator[(K, C)] = {
+  def combineCombinersByKey(iter: Iterator[(K, C)], context: TaskContext) : Iterator[(K, C)] = {
     if (!externalSorting) {
       val combiners = new AppendOnlyMap[K,C]
       var kc: Product2[K, C] = null
@@ -75,6 +77,8 @@ case class Aggregator[K, V, C] (
         val (k, c) = iter.next()
         combiners.insert(k, c)
       }
+      context.taskMetrics.memoryBytesSpilled = combiners.memoryBytesSpilled
+      context.taskMetrics.diskBytesSpilled = combiners.diskBytesSpilled
       combiners.iterator
     }
   }

@@ -36,6 +36,7 @@ import org.apache.spark.storage.StorageLevel
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.scheduler.StreamingListener
 import org.apache.hadoop.conf.Configuration
+import org.apache.spark.streaming.dstream.DStream
 
 /**
  * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
@@ -131,7 +132,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * Re-creates a StreamingContext from a checkpoint file.
    * @param path Path to the directory that was specified as the checkpoint directory
    */
-  def this(path: String) = this(new StreamingContext(path))
+  def this(path: String) = this(new StreamingContext(path, new Configuration))
 
   /**
    * Re-creates a StreamingContext from a checkpoint file.
@@ -150,7 +151,6 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    * @param storageLevel  Storage level to use for storing the received objects
-   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    */
   def socketTextStream(hostname: String, port: Int, storageLevel: StorageLevel)
   : JavaDStream[String] = {
@@ -160,7 +160,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   /**
    * Create a input stream from network source hostname:port. Data is received using
    * a TCP socket and the receive bytes is interpreted as UTF8 encoded \n delimited
-   * lines.
+   * lines. Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    */
@@ -301,6 +301,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
 
   /**
    * Create an input stream with any arbitrary user implemented actor receiver.
+   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param props Props object defining creation of the actor
    * @param name Name of the actor
    *
@@ -483,9 +484,28 @@ class JavaStreamingContext(val ssc: StreamingContext) {
   def start() = ssc.start()
 
   /**
-   * Stop the execution of the streams.
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   */
+  def awaitTermination() = ssc.awaitTermination()
+
+  /**
+   * Wait for the execution to stop. Any exceptions that occurs during the execution
+   * will be thrown in this thread.
+   * @param timeout time to wait in milliseconds
+   */
+  def awaitTermination(timeout: Long) = ssc.awaitTermination(timeout)
+
+  /**
+   * Stop the execution of the streams. Will stop the associated JavaSparkContext as well.
    */
   def stop() = ssc.stop()
+
+  /**
+   * Stop the execution of the streams.
+   * @param stopSparkContext Stop the associated SparkContext or not
+   */
+  def stop(stopSparkContext: Boolean) = ssc.stop(stopSparkContext)
 }
 
 /**

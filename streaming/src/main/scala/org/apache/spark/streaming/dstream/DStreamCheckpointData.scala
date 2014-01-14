@@ -15,17 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.streaming
+package org.apache.spark.streaming.dstream
 
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
-
+import java.io.{ObjectInputStream, IOException}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.FileSystem
-
 import org.apache.spark.Logging
-
-import java.io.{ObjectInputStream, IOException}
+import org.apache.spark.streaming.Time
 
 private[streaming]
 class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
@@ -96,7 +94,7 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
             }
         }
       case None =>
-        logInfo("Nothing to delete")
+        logDebug("Nothing to delete")
     }
   }
 

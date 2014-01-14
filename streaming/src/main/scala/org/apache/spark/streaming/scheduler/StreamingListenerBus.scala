@@ -31,7 +31,7 @@ private[spark] class StreamingListenerBus() extends Logging {
   private val eventQueue = new LinkedBlockingQueue[StreamingListenerEvent](EVENT_QUEUE_CAPACITY)
   private var queueFullErrorMessageLogged = false
 
-  new Thread("StreamingListenerBus") {
+  val listenerThread = new Thread("StreamingListenerBus") {
     setDaemon(true)
     override def run() {
       while (true) {
@@ -41,11 +41,18 @@ private[spark] class StreamingListenerBus() extends Logging {
             listeners.foreach(_.onBatchStarted(batchStarted))
           case batchCompleted: StreamingListenerBatchCompleted =>
             listeners.foreach(_.onBatchCompleted(batchCompleted))
+          case StreamingListenerShutdown =>
+            // Get out of the while loop and shutdown the daemon thread
+            return
           case _ =>
         }
       }
     }
-  }.start()
+  }
+
+  def start() {
+    listenerThread.start()
+  }
 
   def addListener(listener: StreamingListener) {
     listeners += listener
@@ -54,9 +61,9 @@ private[spark] class StreamingListenerBus() extends Logging {
   def post(event: StreamingListenerEvent) {
     val eventAdded = eventQueue.offer(event)
     if (!eventAdded && !queueFullErrorMessageLogged) {
-      logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
-        "This likely means one of the SparkListeners is too slow and cannot keep up with the " +
-        "rate at which tasks are being started by the scheduler.")
+      logError("Dropping StreamingListenerEvent because no remaining room in event queue. " +
+        "This likely means one of the StreamingListeners is too slow and cannot keep up with the " +
+        "rate at which events are being started by the scheduler.")
       queueFullErrorMessageLogged = true
     }
   }
@@ -68,7 +75,7 @@ private[spark] class StreamingListenerBus() extends Logging {
    */
   def waitUntilEmpty(timeoutMillis: Int): Boolean = {
     val finishTime = System.currentTimeMillis + timeoutMillis
-    while (!eventQueue.isEmpty()) {
+    while (!eventQueue.isEmpty) {
       if (System.currentTimeMillis > finishTime) {
         return false
       }
@@ -76,6 +83,8 @@ private[spark] class StreamingListenerBus() extends Logging {
        * add overhead in the general case. */
       Thread.sleep(10)
     }
-    return true
+    true
   }
+
+  def stop(): Unit = post(StreamingListenerShutdown)
 }

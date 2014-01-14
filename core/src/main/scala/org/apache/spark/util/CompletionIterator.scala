@@ -18,14 +18,15 @@
 package org.apache.spark.util
 
 /**
- * Wrapper around an iterator which calls a completion method after it successfully iterates through all the elements
+ * Wrapper around an iterator which calls a completion method after it successfully iterates
+ * through all the elements.
  */
-abstract class CompletionIterator[+A, +I <: Iterator[A]](sub: I) extends Iterator[A]{
-  def next = sub.next
+private[spark] abstract class CompletionIterator[+A, +I <: Iterator[A]](sub: I) extends Iterator[A]{
+  def next() = sub.next()
   def hasNext = {
     val r = sub.hasNext
     if (!r) {
-      completion
+      completion()
     }
     r
   }
@@ -33,7 +34,7 @@ abstract class CompletionIterator[+A, +I <: Iterator[A]](sub: I) extends Iterato
   def completion()
 }
 
-object CompletionIterator {
+private[spark] object CompletionIterator {
   def apply[A, I <: Iterator[A]](sub: I, completionFunction: => Unit) : CompletionIterator[A,I] = {
     new CompletionIterator[A,I](sub) {
       def completion() = completionFunction

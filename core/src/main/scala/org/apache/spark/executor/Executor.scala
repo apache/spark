@@ -57,7 +57,7 @@ private[spark] class Executor(
   Utils.setCustomHostname(slaveHostname)
 
   // Set spark.* properties from executor arg
-  val conf = new SparkConf(false)
+  val conf = new SparkConf(true)
   conf.setAll(properties)
 
   // If we are in yarn mode, systems can have different disk layouts so we must set it
@@ -279,7 +279,7 @@ private[spark] class Executor(
           //System.exit(1)
         }
       } finally {
-        // TODO: Unregister shuffle memory only for ShuffleMapTask
+        // TODO: Unregister shuffle memory only for ResultTask
         val shuffleMemoryMap = env.shuffleMemoryMap
         shuffleMemoryMap.synchronized {
           shuffleMemoryMap.remove(Thread.currentThread().getId)

@@ -116,7 +116,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>0.3</td>
   <td>
     Fraction of Java heap to use for aggregation and cogroups during shuffles, if
-    <code>spark.shuffle.externalSorting</code> is enabled. At any given time, the collective size of
+    <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
     all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
     begin to spill to disk. If spills are often, consider increasing this value at the expense of
     <code>spark.storage.memoryFraction</code>.
@@ -152,6 +152,13 @@ Apart from these, the following properties are also available, and may be useful
   <td>true</td>
   <td>
     Whether to compress map output files. Generally a good idea.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.spill.compress</td>
+  <td>false</td>
+  <td>
+    Whether to compress data spilled during shuffles.
   </td>
 </tr>
 <tr>
@@ -382,13 +389,13 @@ Apart from these, the following properties are also available, and may be useful
 
 <tr>
   <td>spark.shuffle.consolidateFiles</td>
-  <td>true</td>
+  <td>false</td>
   <td>
     If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
   </td>
 </tr>
 <tr>
-  <td>spark.shuffle.externalSorting</td>
+  <td>spark.shuffle.spill</td>
   <td>true</td>
   <td>
     If set to "true", limits the amount of memory used during reduces by spilling data out to disk. This spilling

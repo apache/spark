@@ -122,7 +122,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
         locations: Seq[Seq[String]] = Nil
       ): MyRDD = {
     val maxPartition = numPartitions - 1
-    return new MyRDD(sc, dependencies) {
+    val newRDD = new MyRDD(sc, dependencies) {
       override def compute(split: Partition, context: TaskContext): Iterator[(Int, Int)] =
         throw new RuntimeException("should not be reached")
       override def getPartitions = (0 to maxPartition).map(i => new Partition {
@@ -135,6 +135,7 @@ class DAGSchedulerSuite extends FunSuite with BeforeAndAfter with LocalSparkCont
           Nil
       override def toString: String = "DAGSchedulerSuiteRDD " + id
     }
+    newRDD
   }
 
   /**

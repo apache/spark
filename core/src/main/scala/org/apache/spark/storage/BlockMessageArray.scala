@@ -96,7 +96,7 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockM
     println()
     println()
     */
-    return Message.createBufferMessage(buffers)
+    Message.createBufferMessage(buffers)
   }
 }
 
