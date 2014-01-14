@@ -1,12 +1,7 @@
 package org.apache.spark.graphx
 
-import java.util.{Arrays => JArrays}
-import scala.reflect.ClassTag
-
-import org.apache.spark.graphx.impl.EdgePartitionBuilder
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.graphx.impl.{EdgePartition, GraphImpl}
-import org.apache.spark.util.collection.PrimitiveVector
+import org.apache.spark.graphx.impl.{EdgePartitionBuilder, GraphImpl}
 
 /**
  * Provides utilities for loading [[Graph]]s from files.
@@ -31,19 +26,20 @@ object GraphLoader extends Logging {
    * 1    8
    * }}}
    *
-   * @param sc
+   * @param sc SparkContext
    * @param path the path to the file (e.g., /home/data/file or hdfs://file)
    * @param canonicalOrientation whether to orient edges in the positive
    *        direction
    * @param minEdgePartitions the number of partitions for the
    *        the edge RDD
-   * @tparam ED
    */
   def edgeListFile(
       sc: SparkContext,
       path: String,
       canonicalOrientation: Boolean = false,
-      minEdgePartitions: Int = 1): Graph[Int, Int] = {
+      minEdgePartitions: Int = 1)
+    : Graph[Int, Int] =
+  {
     val startTime = System.currentTimeMillis
 
     // Parse the edge data table directly into edge partitions

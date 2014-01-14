@@ -89,14 +89,16 @@ object Pregel {
    *
    */
   def apply[VD: ClassTag, ED: ClassTag, A: ClassTag]
-    (graph: Graph[VD, ED], initialMsg: A, maxIterations: Int = Int.MaxValue,
-      activeDirection: EdgeDirection = EdgeDirection.Out)(
-      vprog: (VertexID, VD, A) => VD,
+     (graph: Graph[VD, ED],
+      initialMsg: A,
+      maxIterations: Int = Int.MaxValue,
+      activeDirection: EdgeDirection = EdgeDirection.Out)
+     (vprog: (VertexID, VD, A) => VD,
       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
       mergeMsg: (A, A) => A)
-    : Graph[VD, ED] = {
-
-    var g = graph.mapVertices( (vid, vdata) => vprog(vid, vdata, initialMsg) ).cache()
+    : Graph[VD, ED] =
+  {
+    var g = graph.mapVertices((vid, vdata) => vprog(vid, vdata, initialMsg)).cache()
     // compute the messages
     var messages = g.mapReduceTriplets(sendMsg, mergeMsg)
     var activeMessages = messages.count()

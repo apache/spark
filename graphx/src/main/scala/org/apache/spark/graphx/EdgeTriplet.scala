@@ -1,7 +1,5 @@
 package org.apache.spark.graphx
 
-import org.apache.spark.graphx.impl.VertexPartition
-
 /**
  * An edge triplet represents an edge along with the vertex attributes of its neighboring vertices.
  *
@@ -47,5 +45,5 @@ class EdgeTriplet[VD, ED] extends Edge[ED] {
   def vertexAttr(vid: VertexID): VD =
     if (srcId == vid) srcAttr else { assert(dstId == vid); dstAttr }
 
-  override def toString() = ((srcId, srcAttr), (dstId, dstAttr), attr).toString()
+  override def toString = ((srcId, srcAttr), (dstId, dstAttr), attr).toString()
 }

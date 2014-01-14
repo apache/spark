@@ -5,6 +5,7 @@ package org.apache.spark.graphx
  * vertex IDs.
  */
 sealed trait PartitionStrategy extends Serializable {
+  /** Returns the partition number for a given edge. */
   def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID
 }
 

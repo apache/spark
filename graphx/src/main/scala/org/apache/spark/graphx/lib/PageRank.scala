@@ -5,7 +5,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.Logging
 import org.apache.spark.graphx._
 
-
+/** PageRank algorithm implementation. */
 object PageRank extends Logging {
 
   /**

@@ -100,10 +100,9 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    */
   def groupEdges(merge: (ED, ED) => ED): EdgePartition[ED] = {
     val builder = new EdgePartitionBuilder[ED]
-    var firstIter: Boolean = true
-    var currSrcId: VertexID = nullValue[VertexID]
-    var currDstId: VertexID = nullValue[VertexID]
-    var currAttr: ED = nullValue[ED]
+    var currSrcId: VertexID = null.asInstanceOf[VertexID]
+    var currDstId: VertexID = null.asInstanceOf[VertexID]
+    var currAttr: ED = null.asInstanceOf[ED]
     var i = 0
     while (i < size) {
       if (i > 0 && currSrcId == srcIds(i) && currDstId == dstIds(i)) {

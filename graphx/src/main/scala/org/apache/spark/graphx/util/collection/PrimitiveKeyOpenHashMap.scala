@@ -28,7 +28,7 @@ import scala.reflect._
  *
  * Under the hood, it uses our OpenHashSet implementation.
  */
-private[spark]
+private[graphx]
 class PrimitiveKeyOpenHashMap[@specialized(Long, Int) K: ClassTag,
                               @specialized(Long, Int, Double) V: ClassTag](
     val keySet: OpenHashSet[K], var _values: Array[V])

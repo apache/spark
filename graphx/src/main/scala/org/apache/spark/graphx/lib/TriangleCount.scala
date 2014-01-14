@@ -4,27 +4,26 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
 
-
+/**
+ * Compute the number of triangles passing through each vertex.
+ *
+ * The algorithm is relatively straightforward and can be computed in three steps:
+ *
+ * 1) Compute the set of neighbors for each vertex
+ * 2) For each edge compute the intersection of the sets and send the
+ *    count to both vertices.
+ * 3) Compute the sum at each vertex and divide by two since each
+ *    triangle is counted twice.
+ *
+ * Note that the input graph should have its edges in canonical direction
+ * (i.e. the `sourceId` less than `destId`). Also the graph must have been partitioned
+ * using [[org.apache.spark.graphx.Graph#partitionBy]].
+ */
 object TriangleCount {
-  /**
-   * Compute the number of triangles passing through each vertex.
-   *
-   * The algorithm is relatively straightforward and can be computed in three steps:
-   *
-   * 1) Compute the set of neighbors for each vertex
-   * 2) For each edge compute the intersection of the sets and send the
-   *    count to both vertices.
-   * 3) Compute the sum at each vertex and divide by two since each
-   *    triangle is counted twice.
-   *
-   *
-   * @param graph a graph with `sourceId` less than `destId`. The graph must have been partitioned
-   * using [[org.apache.spark.graphx.Graph#partitionBy]], and its edges must be in canonical
-   * orientation (srcId < dstId).
-   */
+
   def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD,ED]): Graph[Int, ED] = {
     // Remove redundant edges
-    val g = graph.groupEdges((a, b) => a).cache
+    val g = graph.groupEdges((a, b) => a).cache()
 
     // Construct set representations of the neighborhoods
     val nbrSets: VertexRDD[VertexSet] =
@@ -56,8 +55,10 @@ object TriangleCount {
       val iter = smallSet.iterator
       var counter: Int = 0
       while (iter.hasNext) {
-        val vid = iter.next
-        if (vid != et.srcId && vid != et.dstId && largeSet.contains(vid)) { counter += 1 }
+        val vid = iter.next()
+        if (vid != et.srcId && vid != et.dstId && largeSet.contains(vid)) {
+          counter += 1
+        }
       }
       Iterator((et.srcId, counter), (et.dstId, counter))
     }
@@ -71,7 +72,5 @@ object TriangleCount {
         assert((dblCount & 1) == 0)
         dblCount / 2
     }
-
   } // end of TriangleCount
-
 }

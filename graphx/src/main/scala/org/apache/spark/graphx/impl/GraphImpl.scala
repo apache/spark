@@ -249,8 +249,8 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
 
     // For each vertex, replicate its attribute only to partitions where it is
     // in the relevant position in an edge.
-    val mapUsesSrcAttr = accessesVertexAttr[VD, ED](mapFunc, "srcAttr")
-    val mapUsesDstAttr = accessesVertexAttr[VD, ED](mapFunc, "dstAttr")
+    val mapUsesSrcAttr = accessesVertexAttr(mapFunc, "srcAttr")
+    val mapUsesDstAttr = accessesVertexAttr(mapFunc, "dstAttr")
     val vs = activeSetOpt match {
       case Some((activeSet, _)) =>
         replicatedVertexView.get(mapUsesSrcAttr, mapUsesDstAttr, activeSet)
@@ -308,10 +308,12 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
   } // end of mapReduceTriplets
 
   override def outerJoinVertices[U: ClassTag, VD2: ClassTag]
-      (updates: RDD[(VertexID, U)])(updateF: (VertexID, VD, Option[U]) => VD2): Graph[VD2, ED] = {
+      (other: RDD[(VertexID, U)])
+      (updateF: (VertexID, VD, Option[U]) => VD2): Graph[VD2, ED] =
+  {
     if (classTag[VD] equals classTag[VD2]) {
       // updateF preserves type, so we can use incremental replication
-      val newVerts = vertices.leftJoin(updates)(updateF)
+      val newVerts = vertices.leftJoin(other)(updateF)
       val changedVerts = vertices.asInstanceOf[VertexRDD[VD2]].diff(newVerts)
       val newReplicatedVertexView = new ReplicatedVertexView[VD2](
         changedVerts, edges, routingTable,
@@ -319,12 +321,13 @@ class GraphImpl[VD: ClassTag, ED: ClassTag] protected (
       new GraphImpl(newVerts, edges, routingTable, newReplicatedVertexView)
     } else {
       // updateF does not preserve type, so we must re-replicate all vertices
-      val newVerts = vertices.leftJoin(updates)(updateF)
+      val newVerts = vertices.leftJoin(other)(updateF)
       GraphImpl(newVerts, edges, routingTable)
     }
   }
 
-  private def accessesVertexAttr[VD, ED](closure: AnyRef, attrName: String): Boolean = {
+  /** Test whether the closure accesses the the attribute with name `attrName`. */
+  private def accessesVertexAttr(closure: AnyRef, attrName: String): Boolean = {
     try {
       BytecodeUtils.invokedMethod(closure, classOf[EdgeTriplet[VD, ED]], attrName)
     } catch {

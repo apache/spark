@@ -37,14 +37,12 @@ object Analytics extends Logging {
       case "pagerank" =>
         var tol: Float = 0.001F
         var outFname = ""
-        var numVPart = 4
         var numEPart = 4
         var partitionStrategy: Option[PartitionStrategy] = None
 
         options.foreach{
           case ("tol", v) => tol = v.toFloat
           case ("output", v) => outFname = v
-          case ("numVPart", v) => numVPart = v.toInt
           case ("numEPart", v) => numEPart = v.toInt
           case ("partStrategy", v) => partitionStrategy = Some(pickPartitioner(v))
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
@@ -90,16 +88,12 @@ object Analytics extends Logging {
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
 
-        if(!isDynamic && numIter == Int.MaxValue) {
+        if (!isDynamic && numIter == Int.MaxValue) {
           println("Set number of iterations!")
           sys.exit(1)
         }
         println("======================================")
         println("|      Connected Components          |")
-        println("--------------------------------------")
-        println(" Using parameters:")
-        println(" \tDynamic:  " + isDynamic)
-        println(" \tNumIter:  " + numIter)
         println("======================================")
 
         val sc = new SparkContext(host, "ConnectedComponents(" + fname + ")", conf)
@@ -112,20 +106,18 @@ object Analytics extends Logging {
         sc.stop()
 
       case "triangles" =>
-        var numVPart = 4
         var numEPart = 4
         // TriangleCount requires the graph to be partitioned
         var partitionStrategy: PartitionStrategy = RandomVertexCut
 
         options.foreach{
           case ("numEPart", v) => numEPart = v.toInt
-          case ("numVPart", v) => numVPart = v.toInt
           case ("partStrategy", v) => partitionStrategy = pickPartitioner(v)
           case (opt, _) => throw new IllegalArgumentException("Invalid option: " + opt)
         }
         println("======================================")
         println("|      Triangle Count                |")
-        println("--------------------------------------")
+        println("======================================")
         val sc = new SparkContext(host, "TriangleCount(" + fname + ")", conf)
         val graph = GraphLoader.edgeListFile(sc, fname, canonicalOrientation = true,
           minEdgePartitions = numEPart).partitionBy(partitionStrategy).cache()

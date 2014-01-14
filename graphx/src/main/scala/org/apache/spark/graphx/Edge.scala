@@ -13,7 +13,7 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
     /** The vertex id of the target vertex. */
     var dstId: VertexID = 0,
     /** The attribute associated with the edge. */
-    var attr: ED = nullValue[ED])
+    var attr: ED = null.asInstanceOf[ED])
   extends Serializable {
 
   /**

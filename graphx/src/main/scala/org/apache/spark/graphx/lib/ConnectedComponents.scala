@@ -4,7 +4,7 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.graphx._
 
-
+/** Connected components algorithm. */
 object ConnectedComponents {
   /**
    * Compute the connected component membership of each vertex and return a graph with the vertex

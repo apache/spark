@@ -45,7 +45,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
 
   /**
    * An RDD containing the edge triplets, which are edges along with the vertex data associated with
-   * the adjacent vertices.
+   * the adjacent vertices. The caller should use [[edges]] if the vertex data are not needed, i.e.
+   * if only the edge data and adjacent vertex ids are needed.
    *
    * @return an RDD containing edge triplets
    *
@@ -54,13 +55,9 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * different color.
    * {{{
    * type Color = Int
-   * val graph: Graph[Color, Int] = Graph.textFile("hdfs://file.tsv")
+   * val graph: Graph[Color, Int] = GraphLoader.edgeListFile("hdfs://file.tsv")
    * val numInvalid = graph.triplets.map(e => if (e.src.data == e.dst.data) 1 else 0).sum
    * }}}
-   *
-   * @see `edges` if only the edge data and adjacent vertex ids are
-   * required.
-   *
    */
   val triplets: RDD[EdgeTriplet[VD, ED]]
 
@@ -68,9 +65,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * Caches the vertices and edges associated with this graph at the specified storage level.
    *
    * @param newLevel the level at which to cache the graph.
-
-   * @return A reference to this graph for convenience.
    *
+   * @return A reference to this graph for convenience.
    */
   def persist(newLevel: StorageLevel = StorageLevel.MEMORY_ONLY): Graph[VD, ED]
 
@@ -159,8 +155,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * @tparam ED2 the new edge data type
    *
    */
-  def mapEdges[ED2: ClassTag](
-      map: (PartitionID, Iterator[Edge[ED]]) => Iterator[ED2]): Graph[VD, ED2]
+  def mapEdges[ED2: ClassTag](map: (PartitionID, Iterator[Edge[ED]]) => Iterator[ED2])
+    : Graph[VD, ED2]
 
   /**
    * Transforms each edge attribute using the map function, passing it the adjacent vertex attributes
@@ -203,9 +199,8 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * @tparam ED2 the new edge data type
    *
    */
-  def mapTriplets[ED2: ClassTag](
-      map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2]):
-    Graph[VD, ED2]
+  def mapTriplets[ED2: ClassTag](map: (PartitionID, Iterator[EdgeTriplet[VD, ED]]) => Iterator[ED2])
+    : Graph[VD, ED2]
 
   /**
    * Reverses all edges in the graph.  If this graph contains an edge from a to b then the returned
@@ -233,8 +228,10 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * @return the subgraph containing only the vertices and edges that
    * satisfy the predicates
    */
-  def subgraph(epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
-    vpred: (VertexID, VD) => Boolean = ((v,d) => true) ): Graph[VD, ED]
+  def subgraph(
+      epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
+      vpred: (VertexID, VD) => Boolean = ((v, d) => true))
+    : Graph[VD, ED]
 
   /**
    * Restricts the graph to only the vertices and edges that are also in `other`, but keeps the
@@ -249,14 +246,12 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * Merges multiple edges between two vertices into a single edge. For correct results, the graph
    * must have been partitioned using [[partitionBy]].
    *
-   * @tparam ED2 the type of the resulting edge data after grouping.
-   *
-   * @param f the user-supplied commutative associative function to merge edge attributes for
-   * duplicate edges.
+   * @param merge the user-supplied commutative associative function to merge edge attributes
+   *              for duplicate edges.
    *
    * @return The resulting graph with a single edge for each (source, dest) vertex pair.
    */
-  def groupEdges(merge: (ED, ED) => ED): Graph[VD,ED]
+  def groupEdges(merge: (ED, ED) => ED): Graph[VD, ED]
 
   /**
    * Computes statistics about the neighboring edges and vertices of each vertex.  The user supplied
@@ -270,7 +265,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    * more messages to neighboring vertices
    *
    * @param reduceFunc the user defined reduce function which should
-   * be commutative and assosciative and is used to combine the output
+   * be commutative and associative and is used to combine the output
    * of the map phase
    *
    * @param activeSetOpt optionally, a set of "active" vertices and a direction of edges to consider
@@ -301,21 +296,20 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
 
   /**
    * Joins the vertices with entries in the `table` RDD and merges the results using `mapFunc`.  The
-   * input table should contain at most one entry for each vertex.  If no entry in `table` is
+   * input table should contain at most one entry for each vertex.  If no entry in `other` is
    * provided for a particular vertex in the graph, the map function receives `None`.
    *
    * @tparam U the type of entry in the table of updates
    * @tparam VD2 the new vertex value type
    *
-   * @param table the table to join with the vertices in the graph.
-   * The table should contain at most one entry for each vertex.
-   *
-   * @param mapFunc the function used to compute the new vertex
-   * values.  The map function is invoked for all vertices, even those
-   * that do not have a corresponding entry in the table.
+   * @param other the table to join with the vertices in the graph.
+   *              The table should contain at most one entry for each vertex.
+   * @param mapFunc the function used to compute the new vertex values.
+   *                The map function is invoked for all vertices, even those
+   *                that do not have a corresponding entry in the table.
    *
    * @example This function is used to update the vertices with new values based on external data.
-   * For example we could add the out-degree to each vertex record:
+   *          For example we could add the out-degree to each vertex record:
    *
    * {{{
    * val rawGraph: Graph[_, _] = Graph.textFile("webgraph")
@@ -324,18 +318,18 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] {
    *   (vid, data, optDeg) => optDeg.getOrElse(0)
    * }
    * }}}
-   *
    */
-  def outerJoinVertices[U: ClassTag, VD2: ClassTag](table: RDD[(VertexID, U)])
+  def outerJoinVertices[U: ClassTag, VD2: ClassTag](other: RDD[(VertexID, U)])
       (mapFunc: (VertexID, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
 
+  /**
+   * The associated [[GraphOps]] object.
+   */
   // Save a copy of the GraphOps object so there is always one unique GraphOps object
   // for a given Graph object, and thus the lazy vals in GraphOps would work as intended.
   val ops = new GraphOps(this)
 } // end of Graph
-
-
 
 
 /**
@@ -357,7 +351,8 @@ object Graph {
   def fromEdgeTuples[VD: ClassTag](
       rawEdges: RDD[(VertexID, VertexID)],
       defaultValue: VD,
-      uniqueEdges: Option[PartitionStrategy] = None): Graph[VD, Int] = {
+      uniqueEdges: Option[PartitionStrategy] = None): Graph[VD, Int] =
+  {
     val edges = rawEdges.map(p => Edge(p._1, p._2, 1))
     val graph = GraphImpl(edges, defaultValue)
     uniqueEdges match {
@@ -391,10 +386,8 @@ object Graph {
    * @tparam ED the edge attribute type
    * @param vertices the "set" of vertices and their attributes
    * @param edges the collection of edges in the graph
-   * @param defaultVertexAttr the default vertex attribute to use for
-   * vertices that are mentioned in edges but not in vertices
-   * @param partitionStrategy the partition strategy to use when
-   * partitioning the edges
+   * @param defaultVertexAttr the default vertex attribute to use for vertices that are
+   *                          mentioned in edges but not in vertices
    */
   def apply[VD: ClassTag, ED: ClassTag](
       vertices: RDD[(VertexID, VD)],
@@ -406,9 +399,9 @@ object Graph {
   /**
    * Implicitly extracts the [[GraphOps]] member from a graph.
    *
-   * To improve modularity the Graph type only contains a small set of basic operations.  All the
-   * convenience operations are defined in the [[GraphOps]] class which may be shared across multiple
-   * graph implementations.
+   * To improve modularity the Graph type only contains a small set of basic operations.
+   * All the convenience operations are defined in the [[GraphOps]] class which may be
+   * shared across multiple graph implementations.
    */
   implicit def graphToGraphOps[VD: ClassTag, ED: ClassTag](g: Graph[VD, ED]) = g.ops
 } // end of Graph object
