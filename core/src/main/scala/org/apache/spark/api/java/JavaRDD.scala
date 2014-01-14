@@ -21,10 +21,8 @@ import scala.reflect.ClassTag
 
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
-import org.apache.spark.api.java.function.{Function => JFunction, FlatMapFunction => JFMap, VoidFunction}
+import org.apache.spark.api.java.function.{Function => JFunction}
 import org.apache.spark.storage.StorageLevel
-import java.util.{Iterator => JIterator}
-import scala.collection.JavaConversions._
 
 class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T]) extends
 JavaRDDLike[T, JavaRDD[T]] {
@@ -134,11 +132,6 @@ JavaRDDLike[T, JavaRDD[T]] {
   def setName(name: String): JavaRDD[T] = {
     rdd.setName(name)
     this
-  }
-
-  /** Reset generator*/
-  def setGenerator(_generator: String) = {
-    rdd.setGenerator(_generator)
   }
 }
 
