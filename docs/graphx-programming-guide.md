@@ -673,13 +673,57 @@ println(sssp.vertices.collect.mkString("\n"))
 # Graph Builders
 <a name="graph_builders"></a>
 
-[`GraphLoader.edgeListFile`][GraphLoader.edgeListFile]
+GraphX provides several ways of building a graph from a collection of vertices and edges in an RDD or on disk. None of the graph builders repartitions the graph's edges by default; instead, edges are left in their default partitions (such as their original blocks in HDFS). [`Graph.groupEdges`][Graph.groupEdges] requires the graph to be repartitioned because it assumes identical edges will be colocated on the same partition, so you must call [`Graph.partitionBy`][Graph.partitionBy] before calling `groupEdges`.
 
-[`Graph.apply`][Graph.apply]
+{% highlight scala %}
+object GraphLoader {
+  def edgeListFile(
+      sc: SparkContext,
+      path: String,
+      canonicalOrientation: Boolean = false,
+      minEdgePartitions: Int = 1)
+    : Graph[Int, Int]
+}
+{% endhighlight %}
 
-[`Graph.fromEdgeTuples`][Graph.fromEdgeTuples]
+[`GraphLoader.edgeListFile`][GraphLoader.edgeListFile] provides a way to load a graph from a list of edges on disk. It parses an adjacency list of (source vertex ID, destination vertex ID) pairs of the following form, skipping comment lines that begin with `#`:
 
-[`Graph.fromEdges`][Graph.fromEdges]
+~~~
+# This is a comment
+2 1
+4 1
+1 2
+~~~
+
+It creates a `Graph` from the specified edges, automatically creating any vertices mentioned by edges. All vertex and edge attributes default to 1. The `canonicalOrientation` argument allows reorienting edges in the positive direction (`srcId < dstId`), which is required by the [connected components][ConnectedComponents] algorithm. The `minEdgePartitions` argument specifies the minimum number of edge partitions to generate; there may be more edge partitions than specified if, for example, the HDFS file has more blocks.
+
+{% highlight scala %}
+object Graph {
+  def apply[VD, ED](
+      vertices: RDD[(VertexID, VD)],
+      edges: RDD[Edge[ED]],
+      defaultVertexAttr: VD = null)
+    : Graph[VD, ED]
+
+  def fromEdges[VD, ED](
+      edges: RDD[Edge[ED]],
+      defaultValue: VD): Graph[VD, ED]
+
+  def fromEdgeTuples[VD](
+      rawEdges: RDD[(VertexID, VertexID)],
+      defaultValue: VD,
+      uniqueEdges: Option[PartitionStrategy] = None): Graph[VD, Int]
+
+}
+{% endhighlight %}
+
+[`Graph.apply`][Graph.apply] allows creating a graph from RDDs of vertices and edges. Duplicate vertices are picked arbitrarily and vertices found in the edge RDD but not the vertex RDD are assigned the default attribute.
+
+[`Graph.fromEdges`][Graph.fromEdges] allows creating a graph from only an RDD of edges, automatically creating any vertices mentioned by edges and assigning them the default value.
+
+[`Graph.fromEdgeTuples`][Graph.fromEdgeTuples] allows creating a graph from only an RDD of edge tuples, assigning the edges the value 1, and automatically creating any vertices mentioned by edges and assigning them the default value. It also supports deduplicating the edges; to deduplicate, pass `Some` of a [`PartitionStrategy`][PartitionStrategy] as the `uniqueEdges` parameter (for example, `uniqueEdges = Some(PartitionStrategy.RandomVertexCut)`). A partition strategy is necessary to colocate identical edges on the same partition so they can be deduplicated.
+
+[PartitionStrategy]: api/graphx/index.html#org.apache.spark.graphx.PartitionStrategy$
 
 [GraphLoader.edgeListFile]: api/graphx/index.html#org.apache.spark.graphx.GraphLoader$@edgeListFile(SparkContext,String,Boolean,Int):Graph[Int,Int]
 [Graph.apply]: api/graphx/index.html#org.apache.spark.graphx.Graph$@apply[VD,ED](RDD[(VertexID,VD)],RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
@@ -826,7 +870,7 @@ println(ccByUsername.collect().mkString("\n"))
 
 ## Triangle Counting
 
-A vertex is part of a triangle when it has two adjacent vertices with an edge between them. GraphX implements a triangle counting algorithm in the [`TriangleCount` object][TriangleCount] that determines the number of triangles passing through each vertex, providing a measure of clustering. We compute the triangle count of the social network dataset from the [PageRank section](#pagerank). *Note that `TriangleCount` requires the edges to be in canonical orientation (`srcId < dstId`) and the graph to be partitioned using [`Graph#partitionBy`][Graph.partitionBy].*
+A vertex is part of a triangle when it has two adjacent vertices with an edge between them. GraphX implements a triangle counting algorithm in the [`TriangleCount` object][TriangleCount] that determines the number of triangles passing through each vertex, providing a measure of clustering. We compute the triangle count of the social network dataset from the [PageRank section](#pagerank). *Note that `TriangleCount` requires the edges to be in canonical orientation (`srcId < dstId`) and the graph to be partitioned using [`Graph.partitionBy`][Graph.partitionBy].*
 
 [TriangleCount]: api/graphx/index.html#org.apache.spark.graphx.lib.TriangleCount$
 [Graph.partitionBy]: api/graphx/index.html#org.apache.spark.graphx.Graph@partitionBy(PartitionStrategy):Graph[VD,ED]
