@@ -181,6 +181,8 @@ object SVMWithSGD {
     val sc = new SparkContext(args(0), "SVM")
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = SVMWithSGD.train(data, args(4).toInt, args(2).toDouble, args(3).toDouble)
+    println("Weights: " + model.weights.mkString("[", ", ", "]"))
+    println("Intercept: " + model.intercept)
 
     sc.stop()
   }

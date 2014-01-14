@@ -84,6 +84,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
 
   protected var _bitset = new BitSet(_capacity)
 
+  def getBitSet = _bitset
+
   // Init of the array in constructor (instead of in declaration) to work around a Scala compiler
   // specialization bug that would generate two arrays (one for Object and one for specialized T).
   protected var _data: Array[T] = _
@@ -161,7 +163,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
   def getPos(k: T): Int = {
     var pos = hashcode(hasher.hash(k)) & _mask
     var i = 1
-    while (true) {
+    val maxProbe = _data.size
+    while (i < maxProbe) {
       if (!_bitset.get(pos)) {
         return INVALID_POS
       } else if (k == _data(pos)) {
@@ -178,6 +181,22 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
 
   /** Return the value at the specified position. */
   def getValue(pos: Int): T = _data(pos)
+
+  def iterator = new Iterator[T] {
+    var pos = nextPos(0)
+    override def hasNext: Boolean = pos != INVALID_POS
+    override def next(): T = {
+      val tmp = getValue(pos)
+      pos = nextPos(pos+1)
+      tmp
+    }
+  }
+
+  /** Return the value at the specified position. */
+  def getValueSafe(pos: Int): T = {
+    assert(_bitset.get(pos))
+    _data(pos)
+  }
 
   /**
    * Return the next position with an element stored, starting from the given position inclusively.
@@ -259,7 +278,7 @@ object OpenHashSet {
    * A set of specialized hash function implementation to avoid boxing hash code computation
    * in the specialized implementation of OpenHashSet.
    */
-  sealed class Hasher[@specialized(Long, Int) T] {
+  sealed class Hasher[@specialized(Long, Int) T] extends Serializable {
     def hash(o: T): Int = o.hashCode()
   }
 

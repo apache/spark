@@ -24,4 +24,6 @@ private[spark] class ExecutorSummary {
   var succeededTasks : Int = 0
   var shuffleRead : Long = 0
   var shuffleWrite : Long = 0
+  var memoryBytesSpilled : Long = 0
+  var diskBytesSpilled : Long = 0
 }

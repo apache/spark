@@ -16,7 +16,7 @@
 #
 
 from numpy import ndarray, copyto, float64, int64, int32, ones, array_equal, array, dot, shape
-from pyspark import SparkContext
+from pyspark import SparkContext, RDD
 
 from pyspark.serializers import Serializer
 import struct
