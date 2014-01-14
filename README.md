@@ -16,19 +16,28 @@ you can run the following command in R:
 
     install.packages("rJava")
 
-To run SparkR, first build the scala package using
+To develop SparkR, you can build the scala package and the R package using
 
-    sbt/sbt assembly
+    ./install-dev.sh
 
-Following that compile the R package by running
+If you wish to try out the package directly from github, you can use `install_git` from `devtools`
 
-    make
+    library(devtools)
+    install_git("https://github.com/amplab/SparkR-pkg.git",
+                branch="install-github", subdir="pkg")
 
 ## Running sparkR
-Once you have built SparkR, you can start using it by launching the SparkR
+If you have cloned and built SparkR, you can start using it by launching the SparkR
 shell with
 
     ./sparkR
+
+If you have installed it directly from github, you can include the SparkR
+package and then initialize a SparkContext. For example to run with a local
+Spark master you can launch R and then run
+
+    library(SparkR)
+    sc <- sparkR.init(master="local")
 
 SparkR also comes with several sample programs in the `examples` directory.
 To run one of them, use `./sparkR <filename> <args>`. For example:
