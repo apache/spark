@@ -156,7 +156,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.shuffle.spill.compress</td>
-  <td>false</td>
+  <td>true</td>
   <td>
     Whether to compress data spilled during shuffles.
   </td>
