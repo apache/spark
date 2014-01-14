@@ -101,7 +101,6 @@ class RRDD[T: ClassTag](
   override def compute(split: Partition, context: TaskContext): Iterator[Array[Byte]] = {
 
     val pb = RRDD.rWorkerProcessBuilder(rLibDir)
-
     val proc = pb.start()
 
     RRDD.startStderrThread(proc)
@@ -238,10 +237,7 @@ object RRDD {
         dataOut.writeInt(broadcastVars.length)
         broadcastVars.foreach { broadcast =>
           // TODO(shivaram): Read a Long in R to avoid this cast
-          // FIXME: id is private to spark right now, use toString as a hack
-          // dataOut.writeInt(broadcast.id.toInt)
-          val broadcastId = broadcast.toString.split('(')(1).dropRight(1).toInt
-          dataOut.writeInt(broadcastId)
+          dataOut.writeInt(broadcast.id.toInt)
           // TODO: Pass a byte array from R to avoid this cast ?
           val broadcastByteArr = broadcast.value.asInstanceOf[Array[Byte]]
           dataOut.writeInt(broadcastByteArr.length)

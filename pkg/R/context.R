@@ -154,10 +154,6 @@ broadcast <- function(sc, object) {
   jBroadcast <- .jcall(sc, "Lorg/apache/spark/broadcast/Broadcast;",
                        "broadcast", serializedObjArr)
 
-  # TODO(shivaram): Broadcast id is private to spark right now.
-  # Use a hack to get it out of toString
-  #id <- as.character(.jsimplify(.jcall(jBroadcast, "J", "id")))
-  idStr <- as.character(.jsimplify(.jcall(jBroadcast, "Ljava/lang/String;", "toString")))
-  id <- sub(")", "", strsplit(idStr, split="(", fixed=TRUE)[[1]][2])
+  id <- as.character(.jsimplify(.jcall(jBroadcast, "J", "id")))
   Broadcast(id, object, jBroadcast, objName)
 }
