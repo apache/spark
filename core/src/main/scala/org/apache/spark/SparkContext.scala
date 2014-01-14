@@ -341,7 +341,7 @@ class SparkContext(
    */
   def textFile(path: String, minSplits: Int = defaultMinSplits): RDD[String] = {
     hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
-      minSplits, false).map(pair => pair._2.toString)
+      minSplits, cloneRecords = false).map(pair => pair._2.toString)
   }
 
   /**
