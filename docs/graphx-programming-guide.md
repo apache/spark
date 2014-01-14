@@ -484,10 +484,28 @@ messages destined to each vertex.  The `mapReduceTriplets` operator returns a `V
 containing the aggregate message (of type `A`) destined to each vertex.  Vertices that do not
 receive a message are not included in the returned `VertexRDD`.
 
-> Note that `mapReduceTriplets` takes an additional optional `activeSet` (see API docs) which
-> restricts the map phase to edges adjacent to the vertices in the provided `VertexRDD`. Restricting
-> computation to triplets adjacent to a subset of the vertices is often necessary in incremental
-> iterative computation and is a key part of the GraphX implementation of Pregel.
+<blockquote>
+<p>
+Note that <code>mapReduceTriplets</code> takes an additional optional <code>activeSet</code>
+(see API docs) which restricts the map phase to edges adjacent to the vertices in the provided
+<code>VertexRDD</code>:
+</p>
+{% highlight scala %}
+  activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None
+{% endhighlight %}
+<p>
+The EdgeDirection specifies which edges adjacent to the vertex set are included in the map phase. If
+the direction is <code>In</code>, <code>mapFunc</code> will only be run only on edges with
+destination in the active set. If the direction is <code>Out</code>, <code>mapFunc</code> will only
+be run only on edges originating from vertices in the active set.  If the direction is
+<code>Either</code>, <code>mapFunc</code> will be run only on edges with <i>either</i> vertex in the
+active set.  If the direction is <code>Both</code>, <code>mapFunc</code> will be run only on edges
+with both vertices in the active set.  The active set must be derived from the set of vertices in
+the graph. Restricting computation to triplets adjacent to a subset of the vertices is often
+necessary in incremental iterative computation and is a key part of the GraphX implementation of
+Pregel.
+</p>
+</blockquote>
 
 In the following example we use the `mapReduceTriplets` operator to compute the average age of the
 more senior followers of each user.
@@ -565,15 +583,18 @@ Graphs are inherently recursive data-structures as properties of vertices depend
 their neighbors which intern depend on properties of *their* neighbors.  As a
 consequence many important graph algorithms iteratively recompute the properties of each vertex
 until a fixed-point condition is reached.  A range of graph-parallel abstractions have been proposed
-to express these iterative algorithms.  GraphX exposes a Pregel operator which is a fusion of
+to express these iterative algorithms.  GraphX exposes a Pregel-like operator which is a fusion of
 the widely used Pregel and GraphLab abstractions.
 
-At a high-level the GraphX variant of the Pregel abstraction is a bulk-synchronous parallel
-messaging abstraction constrained to the topology of the graph.  The Pregel operator executes in a
-series of super-steps in which vertices receive the sum of their inbound messages from the previous
-super-step, compute a new property value, and then send messages to neighboring vertices in the next
-super-step.  Vertices that do not receive a message are skipped within a super-step.  The Pregel
-operators terminates iteration and returns the final graph when there are no messages remaining.
+At a high-level the Pregel operator in GraphX is a bulk-synchronous parallel messaging abstraction
+*constrained to the topology of the graph*.  The Pregel operator executes in a series of super-steps
+in which vertices receive the *sum* of their inbound messages from the previous super- step, compute
+a new value for the vertex property, and then send messages to neighboring vertices in the next
+super-step.  Unlike Pregel and instead more like GraphLab messages are computed in parallel as a
+function of the edge triplet and the message computation has access to both the source and
+destination vertex attributes.  Vertices that do not receive a message are skipped within a super-
+step.  The Pregel operators terminates iteration and returns the final graph when there are no
+messages remaining.
 
 > Note, unlike more standard Pregel implementations, vertices in GraphX can only send messages to
 > neighboring vertices and the message construction is done in parallel using a user defined
@@ -588,7 +609,7 @@ def pregel[A]
      maxIter: Int = Int.MaxValue,
      activeDir: EdgeDirection = EdgeDirection.Out)
     (vprog: (VertexID, VD, A) => VD,
-     sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
+     sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID, A)],
      mergeMsg: (A, A) => A)
   : Graph[VD, ED] = {
   // Receive the initial message at each vertex
