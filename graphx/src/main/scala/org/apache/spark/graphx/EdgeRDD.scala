@@ -58,6 +58,23 @@ class EdgeRDD[@specialized ED: ClassTag](
   }
 
   /**
+   * Map the values in an edge partitioning preserving the structure but changing the values.
+   *
+   * @tparam ED2 the new edge value type
+   * @param f the function from an edge to a new edge value
+   * @return a new EdgeRDD containing the new edge values
+   */
+  def mapValues[ED2: ClassTag](f: Edge[ED] => ED2): EdgeRDD[ED2] =
+    mapEdgePartitions((pid, part) => part.map(f))
+
+  /**
+   * Reverse all the edges in this RDD.
+   *
+   * @return a new EdgeRDD containing all the edges reversed
+   */
+  def reverse: EdgeRDD[ED] = mapEdgePartitions((pid, part) => part.reverse)
+
+  /**
    * Inner joins this EdgeRDD with another EdgeRDD, assuming both are partitioned using the same
    * [[PartitionStrategy]].
    *
