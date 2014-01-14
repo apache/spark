@@ -2,11 +2,8 @@ package org.apache.spark.graphx.lib
 
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
-import org.apache.spark.graphx.util.GraphGenerators
-import org.apache.spark.rdd._
+import org.apache.spark.graphx.PartitionStrategy.RandomVertexCut
 
 
 class TriangleCountSuite extends FunSuite with LocalSparkContext {

@@ -4,6 +4,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
 import org.apache.spark.graphx.Graph._
+import org.apache.spark.graphx.PartitionStrategy._
 import org.apache.spark.rdd._
 
 class GraphSuite extends FunSuite with LocalSparkContext {

@@ -2,6 +2,7 @@ package org.apache.spark.graphx.lib
 
 import org.apache.spark._
 import org.apache.spark.graphx._
+import org.apache.spark.graphx.PartitionStrategy._
 
 /**
  * Driver program for running graph algorithms.
@@ -20,6 +21,7 @@ object Analytics extends Logging {
     }
 
     def pickPartitioner(v: String): PartitionStrategy = {
+      // TODO: Use reflection rather than listing all the partitioning strategies here.
       v match {
         case "RandomVertexCut" => RandomVertexCut
         case "EdgePartition1D" => EdgePartition1D
