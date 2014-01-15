@@ -163,8 +163,10 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
     logDebug("DStreamGraph.writeObject used")
     this.synchronized {
       checkpointInProgress = true
+      logDebug("Enabled checkpoint mode")
       oos.defaultWriteObject()
       checkpointInProgress = false
+      logDebug("Disabled checkpoint mode")
     }
   }
 
