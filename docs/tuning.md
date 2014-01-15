@@ -119,8 +119,7 @@ pointer-based data structures and wrapper objects. There are several ways to do 
 2. Avoid nested structures with a lot of small objects and pointers when possible.
 3. Consider using numeric IDs or enumeration objects instead of strings for keys.
 4. If you have less than 32 GB of RAM, set the JVM flag `-XX:+UseCompressedOops` to make pointers be
-   four bytes instead of eight. Also, on Java 7 or later, try `-XX:+UseCompressedStrings` to store
-   ASCII strings as just 8 bits per character. You can add these options in
+   four bytes instead of eight. You can add these options in
    [`spark-env.sh`](configuration.html#environment-variables-in-spark-envsh).
 
 ## Serialized RDD Storage
