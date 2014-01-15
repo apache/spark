@@ -715,19 +715,9 @@ object HiveQl {
           // Literal tinyint.
           v = Literal(ast.getText().substring(0, ast.getText().length() - 1).toByte, ByteType)
         } else if (ast.getText().endsWith("BD")) {
-          throw new NotImplementedError("Hive Decimal not implemented yet")
-          /* TODO: Implement!
           // Literal decimal
           val strVal = ast.getText().substring(0, ast.getText().length() - 2);
-          HiveDecimal hd = HiveDecimal.create(strVal);
-          int prec = 1;
-          int scale = 0;
-          if (hd != null) {
-            prec = hd.precision();
-            scale = hd.scale();
-          }
-          DecimalTypeInfo typeInfo = TypeInfoFactory.getDecimalTypeInfo(prec, scale);
-          return new ExprNodeConstantDesc(typeInfo, strVal);   */
+          BigDecimal(strVal)
         } else {
           v = Literal(ast.getText().toDouble, DoubleType)
           v = Literal(ast.getText().toLong, LongType)
