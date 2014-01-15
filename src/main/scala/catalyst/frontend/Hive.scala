@@ -695,7 +695,7 @@ object HiveQl {
       UnresolvedFunction(name, Star(None) :: Nil)
 
     /* Literals */
-    case Token("TOK_NULL", Nil) => Literal(null, IntegerType) // TODO: What type is null?
+    case Token("TOK_NULL", Nil) => Literal(null, NullType)
     case Token(TRUE(), Nil) => Literal(true, BooleanType)
     case Token(FALSE(), Nil) => Literal(false, BooleanType)
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
