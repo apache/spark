@@ -52,9 +52,9 @@ object ConvertNaNs extends Rule[LogicalPlan] {
  * String conversions are handled by the PromoteStrings rule.
  */
 object PromoteNumericTypes extends Rule[LogicalPlan] {
-  val integralPrecedence = Seq(ByteType, ShortType, IntegerType, LongType)
-  val toDouble = integralPrecedence ++ Seq(FloatType, DoubleType)
-  val toFloat = Seq(ByteType, ShortType, IntegerType) :+ FloatType
+  val integralPrecedence = Seq(NullType, ByteType, ShortType, IntegerType, LongType)
+  val toDouble = integralPrecedence ++ Seq(NullType, FloatType, DoubleType)
+  val toFloat = Seq(NullType, ByteType, ShortType, IntegerType) :+ FloatType
   val allPromotions = integralPrecedence :: toDouble :: toFloat :: Nil
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
