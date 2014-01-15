@@ -178,7 +178,7 @@ case class HiveGenericUdf(
     case l: Short => l: java.lang.Short
     case l: Byte => l: java.lang.Byte
     case s: Seq[_] => seqAsJavaList(s.map(wrap))
-    case null => null // NullWritable.get()
+    case null => null
   }
 
   def evaluate(evaluatedChildren: Seq[Any]): Any = {
