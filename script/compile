@@ -1,5 +1,12 @@
+#!/bin/bash
+set -x
 # Compile spark jars into dist folder
-../make-distribution.sh --tgz --hadoop 2.0.0-mr1-cdh4.4.0
+export LOCAL_SBT_DIR=1
+./make-distribution.sh --tgz --hadoop 2.0.0-mr1-cdh4.4.0
+if [ "$?" != "0" ]; then
+  echo "Failed to make spark distro using sbt."
+  exit 1
+fi
 # Remove everything not in dist
 find * -maxdepth 0 -name 'dist' -prune -o -exec rm -rf '{}' ';'
 # Copy everything out of dist
