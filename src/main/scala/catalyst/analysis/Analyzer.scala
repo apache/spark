@@ -91,7 +91,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case q: LogicalPlan =>
         q transformExpressions {
-          case UnresolvedFunction(name, children) if children.map(_.resolved).reduceLeft(_&&_) =>
+          case u @ UnresolvedFunction(name, children) if u.childrenResolved =>
             registry.lookupFunction(name, children)
         }
     }
