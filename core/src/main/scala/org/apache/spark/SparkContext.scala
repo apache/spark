@@ -956,6 +956,8 @@ class SparkContext(
     }
   }
 
+  def getCheckpointDir = checkpointDir.getOrElse(null)
+
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
   def defaultParallelism: Int = taskScheduler.defaultParallelism
 
@@ -1125,7 +1127,7 @@ object SparkContext {
     if (sparkHome != null) {
       res.setSparkHome(sparkHome)
     }
-    if (!jars.isEmpty) {
+    if (null != jars && !jars.isEmpty) {
       res.setJars(jars)
     }
     res.setExecutorEnv(environment.toSeq)
