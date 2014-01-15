@@ -27,6 +27,8 @@ package object execution {
       case LongType => longTypeInfo
       case ShortType => shortTypeInfo
       case StringType => stringTypeInfo
+      case DecimalType => decimalTypeInfo
+      case NullType => voidTypeInfo
     }
   }
 }
