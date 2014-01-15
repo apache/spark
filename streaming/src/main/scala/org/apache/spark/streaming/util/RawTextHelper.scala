@@ -22,6 +22,7 @@ import org.apache.spark.SparkContext._
 import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 import scala.collection.JavaConversions.mapAsScalaMap
 
+private[streaming]
 object RawTextHelper {
 
   /** 
