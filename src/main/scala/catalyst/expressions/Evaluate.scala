@@ -222,6 +222,7 @@ object Evaluate extends Logging {
       case Cast(e, LongType) => n1(e, _.toLong(_))
       case Cast(e, ShortType) => n1(e, _.toInt(_).toShort)
       case Cast(e, ByteType) => n1(e, _.toInt(_).toByte)
+      case Cast(e, DecimalType) => n1(e, (n,v) => BigDecimal(n.toDouble(v)))
 
       /* Boolean Logic */
       case Not(c) =>
