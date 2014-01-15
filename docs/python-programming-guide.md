@@ -52,7 +52,7 @@ In addition, PySpark fully supports interactive use---simply run `./bin/pyspark`
 
 # Installing and Configuring PySpark
 
-PySpark requires Python 2.7 or higher.
+PySpark requires Python 2.6 or higher.
 PySpark applications are executed using a standard CPython interpreter in order to support Python modules that use C extensions.
 We have not tested PySpark with Python 3 or with alternative Python interpreters, such as [PyPy](http://pypy.org/) or [Jython](http://www.jython.org/).
 
@@ -152,7 +152,7 @@ Many of the methods also contain [doctests](http://docs.python.org/2/library/doc
 # Libraries
 
 [MLlib](mllib-guide.html) is also available in PySpark. To use it, you'll need
-[NumPy](http://www.numpy.org) version 1.7 or newer. The [MLlib guide](mllib-guide.html) contains
+[NumPy](http://www.numpy.org) version 1.7 or newer, and Python 2.7. The [MLlib guide](mllib-guide.html) contains
 some example applications.
 
 # Where to Go from Here
