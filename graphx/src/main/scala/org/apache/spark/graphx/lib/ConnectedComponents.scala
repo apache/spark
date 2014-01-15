@@ -35,9 +35,9 @@ object ConnectedComponents {
    * @return a graph with vertex attributes containing the smallest vertex in each
    *         connected component
    */
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[VertexID, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]): Graph[VertexId, ED] = {
     val ccGraph = graph.mapVertices { case (vid, _) => vid }
-    def sendMessage(edge: EdgeTriplet[VertexID, ED]) = {
+    def sendMessage(edge: EdgeTriplet[VertexId, ED]) = {
       if (edge.srcAttr < edge.dstAttr) {
         Iterator((edge.dstId, edge.srcAttr))
       } else if (edge.srcAttr > edge.dstAttr) {

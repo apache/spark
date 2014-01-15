@@ -28,12 +28,12 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
   test("joinVertices") {
     withSpark { sc =>
       val vertices =
-        sc.parallelize(Seq[(VertexID, String)]((1, "one"), (2, "two"), (3, "three")), 2)
+        sc.parallelize(Seq[(VertexId, String)]((1, "one"), (2, "two"), (3, "three")), 2)
       val edges = sc.parallelize((Seq(Edge(1, 2, "onetwo"))))
       val g: Graph[String, String] = Graph(vertices, edges)
 
-      val tbl = sc.parallelize(Seq[(VertexID, Int)]((1, 10), (2, 20)))
-      val g1 = g.joinVertices(tbl) { (vid: VertexID, attr: String, u: Int) => attr + u }
+      val tbl = sc.parallelize(Seq[(VertexId, Int)]((1, 10), (2, 20)))
+      val g1 = g.joinVertices(tbl) { (vid: VertexId, attr: String, u: Int) => attr + u }
 
       val v = g1.vertices.collect().toSet
       assert(v === Set((1, "one10"), (2, "two20"), (3, "three")))
@@ -60,7 +60,7 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
   test ("filter") {
     withSpark { sc =>
       val n = 5
-      val vertices = sc.parallelize((0 to n).map(x => (x:VertexID, x)))
+      val vertices = sc.parallelize((0 to n).map(x => (x:VertexId, x)))
       val edges = sc.parallelize((1 to n).map(x => Edge(0, x, x)))
       val graph: Graph[Int, Int] = Graph(vertices, edges).cache()
       val filteredGraph = graph.filter(
@@ -68,7 +68,7 @@ class GraphOpsSuite extends FunSuite with LocalSparkContext {
           val degrees: VertexRDD[Int] = graph.outDegrees
           graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
         },
-        vpred = (vid: VertexID, deg:Int) => deg > 0
+        vpred = (vid: VertexId, deg:Int) => deg > 0
       ).cache()
 
       val v = filteredGraph.vertices.collect().toSet

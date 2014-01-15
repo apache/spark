@@ -26,18 +26,18 @@ import org.apache.spark.util.collection.BitSet
 
 private[graphx] object VertexPartition {
 
-  def apply[VD: ClassTag](iter: Iterator[(VertexID, VD)]): VertexPartition[VD] = {
-    val map = new PrimitiveKeyOpenHashMap[VertexID, VD]
+  def apply[VD: ClassTag](iter: Iterator[(VertexId, VD)]): VertexPartition[VD] = {
+    val map = new PrimitiveKeyOpenHashMap[VertexId, VD]
     iter.foreach { case (k, v) =>
       map(k) = v
     }
     new VertexPartition(map.keySet, map._values, map.keySet.getBitSet)
   }
 
-  def apply[VD: ClassTag](iter: Iterator[(VertexID, VD)], mergeFunc: (VD, VD) => VD)
+  def apply[VD: ClassTag](iter: Iterator[(VertexId, VD)], mergeFunc: (VD, VD) => VD)
     : VertexPartition[VD] =
   {
-    val map = new PrimitiveKeyOpenHashMap[VertexID, VD]
+    val map = new PrimitiveKeyOpenHashMap[VertexId, VD]
     iter.foreach { case (k, v) =>
       map.setMerge(k, v, mergeFunc)
     }
@@ -60,15 +60,15 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
   def size: Int = mask.cardinality()
 
   /** Return the vertex attribute for the given vertex ID. */
-  def apply(vid: VertexID): VD = values(index.getPos(vid))
+  def apply(vid: VertexId): VD = values(index.getPos(vid))
 
-  def isDefined(vid: VertexID): Boolean = {
+  def isDefined(vid: VertexId): Boolean = {
     val pos = index.getPos(vid)
     pos >= 0 && mask.get(pos)
   }
 
   /** Look up vid in activeSet, throwing an exception if it is None. */
-  def isActive(vid: VertexID): Boolean = {
+  def isActive(vid: VertexId): Boolean = {
     activeSet.get.contains(vid)
   }
 
@@ -88,7 +88,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
    * each of the entries in the original VertexRDD.  The resulting
    * VertexPartition retains the same index.
    */
-  def map[VD2: ClassTag](f: (VertexID, VD) => VD2): VertexPartition[VD2] = {
+  def map[VD2: ClassTag](f: (VertexId, VD) => VD2): VertexPartition[VD2] = {
     // Construct a view of the map transformation
     val newValues = new Array[VD2](capacity)
     var i = mask.nextSetBit(0)
@@ -108,7 +108,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
    *       RDD can be easily joined with the original vertex-set. Furthermore, the filter only
    *       modifies the bitmap index and so no new values are allocated.
    */
-  def filter(pred: (VertexID, VD) => Boolean): VertexPartition[VD] = {
+  def filter(pred: (VertexId, VD) => Boolean): VertexPartition[VD] = {
     // Allocate the array to store the results into
     val newMask = new BitSet(capacity)
     // Iterate over the active bits in the old mask and evaluate the predicate
@@ -146,7 +146,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
   /** Left outer join another VertexPartition. */
   def leftJoin[VD2: ClassTag, VD3: ClassTag]
       (other: VertexPartition[VD2])
-      (f: (VertexID, VD, Option[VD2]) => VD3): VertexPartition[VD3] = {
+      (f: (VertexId, VD, Option[VD2]) => VD3): VertexPartition[VD3] = {
     if (index != other.index) {
       logWarning("Joining two VertexPartitions with different indexes is slow.")
       leftJoin(createUsingIndex(other.iterator))(f)
@@ -165,14 +165,14 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
 
   /** Left outer join another iterator of messages. */
   def leftJoin[VD2: ClassTag, VD3: ClassTag]
-      (other: Iterator[(VertexID, VD2)])
-      (f: (VertexID, VD, Option[VD2]) => VD3): VertexPartition[VD3] = {
+      (other: Iterator[(VertexId, VD2)])
+      (f: (VertexId, VD, Option[VD2]) => VD3): VertexPartition[VD3] = {
     leftJoin(createUsingIndex(other))(f)
   }
 
   /** Inner join another VertexPartition. */
   def innerJoin[U: ClassTag, VD2: ClassTag](other: VertexPartition[U])
-      (f: (VertexID, VD, U) => VD2): VertexPartition[VD2] = {
+      (f: (VertexId, VD, U) => VD2): VertexPartition[VD2] = {
     if (index != other.index) {
       logWarning("Joining two VertexPartitions with different indexes is slow.")
       innerJoin(createUsingIndex(other.iterator))(f)
@@ -192,15 +192,15 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
    * Inner join an iterator of messages.
    */
   def innerJoin[U: ClassTag, VD2: ClassTag]
-      (iter: Iterator[Product2[VertexID, U]])
-      (f: (VertexID, VD, U) => VD2): VertexPartition[VD2] = {
+      (iter: Iterator[Product2[VertexId, U]])
+      (f: (VertexId, VD, U) => VD2): VertexPartition[VD2] = {
     innerJoin(createUsingIndex(iter))(f)
   }
 
   /**
    * Similar effect as aggregateUsingIndex((a, b) => a)
    */
-  def createUsingIndex[VD2: ClassTag](iter: Iterator[Product2[VertexID, VD2]])
+  def createUsingIndex[VD2: ClassTag](iter: Iterator[Product2[VertexId, VD2]])
     : VertexPartition[VD2] = {
     val newMask = new BitSet(capacity)
     val newValues = new Array[VD2](capacity)
@@ -218,7 +218,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
    * Similar to innerJoin, but vertices from the left side that don't appear in iter will remain in
    * the partition, hidden by the bitmask.
    */
-  def innerJoinKeepLeft(iter: Iterator[Product2[VertexID, VD]]): VertexPartition[VD] = {
+  def innerJoinKeepLeft(iter: Iterator[Product2[VertexId, VD]]): VertexPartition[VD] = {
     val newMask = new BitSet(capacity)
     val newValues = new Array[VD](capacity)
     System.arraycopy(values, 0, newValues, 0, newValues.length)
@@ -233,7 +233,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
   }
 
   def aggregateUsingIndex[VD2: ClassTag](
-      iter: Iterator[Product2[VertexID, VD2]],
+      iter: Iterator[Product2[VertexId, VD2]],
       reduceFunc: (VD2, VD2) => VD2): VertexPartition[VD2] = {
     val newMask = new BitSet(capacity)
     val newValues = new Array[VD2](capacity)
@@ -253,7 +253,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
     new VertexPartition[VD2](index, newValues, newMask)
   }
 
-  def replaceActives(iter: Iterator[VertexID]): VertexPartition[VD] = {
+  def replaceActives(iter: Iterator[VertexId]): VertexPartition[VD] = {
     val newActiveSet = new VertexSet
     iter.foreach(newActiveSet.add(_))
     new VertexPartition(index, values, mask, Some(newActiveSet))
@@ -263,7 +263,7 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
    * Construct a new VertexPartition whose index contains only the vertices in the mask.
    */
   def reindex(): VertexPartition[VD] = {
-    val hashMap = new PrimitiveKeyOpenHashMap[VertexID, VD]
+    val hashMap = new PrimitiveKeyOpenHashMap[VertexId, VD]
     val arbitraryMerge = (a: VD, b: VD) => a
     for ((k, v) <- this.iterator) {
       hashMap.setMerge(k, v, arbitraryMerge)
@@ -271,8 +271,8 @@ class VertexPartition[@specialized(Long, Int, Double) VD: ClassTag](
     new VertexPartition(hashMap.keySet, hashMap._values, hashMap.keySet.getBitSet)
   }
 
-  def iterator: Iterator[(VertexID, VD)] =
+  def iterator: Iterator[(VertexId, VD)] =
     mask.iterator.map(ind => (index.getValue(ind), values(ind)))
 
-  def vidIterator: Iterator[VertexID] = mask.iterator.map(ind => index.getValue(ind))
+  def vidIterator: Iterator[VertexId] = mask.iterator.map(ind => index.getValue(ind))
 }

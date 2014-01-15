@@ -186,7 +186,7 @@ code constructs a graph from a collection of RDDs:
 // Assume the SparkContext has already been constructed
 val sc: SparkContext
 // Create an RDD for the vertices
-val users: RDD[(VertexID, (String, String))] =
+val users: RDD[(VertexId, (String, String))] =
   sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof"))))
 // Create an RDD for edges
@@ -360,7 +360,7 @@ graph contains the following:
 
 {% highlight scala %}
 class Graph[VD, ED] {
-  def mapVertices[VD2](map: (VertexID, VD) => VD2): Graph[VD2, ED]
+  def mapVertices[VD2](map: (VertexId, VD) => VD2): Graph[VD2, ED]
   def mapEdges[ED2](map: Edge[ED] => ED2): Graph[VD, ED2]
   def mapTriplets[ED2](map: EdgeTriplet[VD, ED] => ED2): Graph[VD, ED2]
 }
@@ -382,7 +382,7 @@ val newGraph = Graph(newVertices, graph.edges)
 val newGraph = graph.mapVertices((id, attr) => mapUdf(id, attr))
 {% endhighlight %}
 
-[Graph.mapVertices]: api/graphx/index.html#org.apache.spark.graphx.Graph@mapVertices[VD2]((VertexID,VD)⇒VD2)(ClassTag[VD2]):Graph[VD2,ED]
+[Graph.mapVertices]: api/graphx/index.html#org.apache.spark.graphx.Graph@mapVertices[VD2]((VertexId,VD)⇒VD2)(ClassTag[VD2]):Graph[VD2,ED]
 
 These operators are often used to initialize the graph for a particular computation or project away
 unnecessary properties.  For example, given a graph with the out-degrees as the vertex properties
@@ -408,7 +408,7 @@ add more in the future.  The following is a list of the basic structural operato
 class Graph[VD, ED] {
   def reverse: Graph[VD, ED]
   def subgraph(epred: EdgeTriplet[VD,ED] => Boolean,
-               vpred: (VertexID, VD) => Boolean): Graph[VD, ED]
+               vpred: (VertexId, VD) => Boolean): Graph[VD, ED]
   def mask[VD2, ED2](other: Graph[VD2, ED2]): Graph[VD, ED]
   def groupEdges(merge: (ED, ED) => ED): Graph[VD,ED]
 }
@@ -427,11 +427,11 @@ satisfy the edge predicate *and connect vertices that satisfy the vertex predica
 operator can be used in number of situations to restrict the graph to the vertices and edges of
 interest or eliminate broken links. For example in the following code we remove broken links:
 
-[Graph.subgraph]: api/graphx/index.html#org.apache.spark.graphx.Graph@subgraph((EdgeTriplet[VD,ED])⇒Boolean,(VertexID,VD)⇒Boolean):Graph[VD,ED]
+[Graph.subgraph]: api/graphx/index.html#org.apache.spark.graphx.Graph@subgraph((EdgeTriplet[VD,ED])⇒Boolean,(VertexId,VD)⇒Boolean):Graph[VD,ED]
 
 {% highlight scala %}
 // Create an RDD for the vertices
-val users: RDD[(VertexID, (String, String))] =
+val users: RDD[(VertexId, (String, String))] =
   sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof")),
                        (4L, ("peter", "student"))))
@@ -494,9 +494,9 @@ using the *join* operators. Below we list the key join operators:
 
 {% highlight scala %}
 class Graph[VD, ED] {
-  def joinVertices[U](table: RDD[(VertexID, U)])(map: (VertexID, VD, U) => VD)
+  def joinVertices[U](table: RDD[(VertexId, U)])(map: (VertexId, VD, U) => VD)
     : Graph[VD, ED]
-  def outerJoinVertices[U, VD2](table: RDD[(VertexID, U)])(map: (VertexID, VD, Option[U]) => VD2)
+  def outerJoinVertices[U, VD2](table: RDD[(VertexId, U)])(map: (VertexId, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
 }
 {% endhighlight %}
@@ -506,7 +506,7 @@ returns a new graph with the vertex properties obtained by applying the user def
 to the result of the joined vertices.  Vertices without a matching value in the RDD retain their
 original value.
 
-[GraphOps.joinVertices]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@joinVertices[U](RDD[(VertexID,U)])((VertexID,VD,U)⇒VD)(ClassTag[U]):Graph[VD,ED]
+[GraphOps.joinVertices]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@joinVertices[U](RDD[(VertexId,U)])((VertexId,VD,U)⇒VD)(ClassTag[U]):Graph[VD,ED]
 
 > Note that if the RDD contains more than one value for a given vertex only one will be used.   It
 > is therefore recommended that the input RDD be first made unique using the following which will
@@ -525,7 +525,7 @@ property type.  Because not all vertices may have a matching value in the input 
 function takes an `Option` type.  For example, we can setup a graph for PageRank by initializing
 vertex properties with their `outDegree`.
 
-[Graph.outerJoinVertices]: api/graphx/index.html#org.apache.spark.graphx.Graph@outerJoinVertices[U,VD2](RDD[(VertexID,U)])((VertexID,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2]):Graph[VD2,ED]
+[Graph.outerJoinVertices]: api/graphx/index.html#org.apache.spark.graphx.Graph@outerJoinVertices[U,VD2](RDD[(VertexId,U)])((VertexId,VD,Option[U])⇒VD2)(ClassTag[U],ClassTag[VD2]):Graph[VD2,ED]
 
 
 {% highlight scala %}
@@ -559,7 +559,7 @@ PageRank Value, shortest path to the source, and smallest reachable vertex id).
 ### Map Reduce Triplets (mapReduceTriplets)
 <a name="mrTriplets"></a>
 
-[Graph.mapReduceTriplets]: api/graphx/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexID,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]
+[Graph.mapReduceTriplets]: api/graphx/index.html#org.apache.spark.graphx.Graph@mapReduceTriplets[A](mapFunc:org.apache.spark.graphx.EdgeTriplet[VD,ED]=&gt;Iterator[(org.apache.spark.graphx.VertexId,A)],reduceFunc:(A,A)=&gt;A,activeSetOpt:Option[(org.apache.spark.graphx.VertexRDD[_],org.apache.spark.graphx.EdgeDirection)])(implicitevidence$10:scala.reflect.ClassTag[A]):org.apache.spark.graphx.VertexRDD[A]
 
 The core (heavily optimized) aggregation primitive in GraphX is the
 [`mapReduceTriplets`][Graph.mapReduceTriplets] operator:
@@ -567,7 +567,7 @@ The core (heavily optimized) aggregation primitive in GraphX is the
 {% highlight scala %}
 class Graph[VD, ED] {
   def mapReduceTriplets[A](
-      map: EdgeTriplet[VD, ED] => Iterator[(VertexID, A)],
+      map: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduce: (A, A) => A)
     : VertexRDD[A]
 }
@@ -649,13 +649,13 @@ compute the max in, out, and total degrees:
 
 {% highlight scala %}
 // Define a reduce operation to compute the highest degree vertex
-def max(a: (VertexID, Int), b: (VertexID, Int)): (VertexID, Int) = {
+def max(a: (VertexId, Int), b: (VertexId, Int)): (VertexId, Int) = {
   if (a._2 > b._2) a else b
 }
 // Compute the max degrees
-val maxInDegree: (VertexID, Int)  = graph.inDegrees.reduce(max)
-val maxOutDegree: (VertexID, Int) = graph.outDegrees.reduce(max)
-val maxDegrees: (VertexID, Int)   = graph.degrees.reduce(max)
+val maxInDegree: (VertexId, Int)  = graph.inDegrees.reduce(max)
+val maxOutDegree: (VertexId, Int) = graph.outDegrees.reduce(max)
+val maxDegrees: (VertexId, Int)   = graph.degrees.reduce(max)
 {% endhighlight %}
 
 ### Collecting Neighbors
@@ -665,14 +665,14 @@ attributes at each vertex. This can be easily accomplished using the
 [`collectNeighborIds`][GraphOps.collectNeighborIds] and the
 [`collectNeighbors`][GraphOps.collectNeighbors] operators.
 
-[GraphOps.collectNeighborIds]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@collectNeighborIds(EdgeDirection):VertexRDD[Array[VertexID]]
-[GraphOps.collectNeighbors]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@collectNeighbors(EdgeDirection):VertexRDD[Array[(VertexID,VD)]]
+[GraphOps.collectNeighborIds]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@collectNeighborIds(EdgeDirection):VertexRDD[Array[VertexId]]
+[GraphOps.collectNeighbors]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@collectNeighbors(EdgeDirection):VertexRDD[Array[(VertexId,VD)]]
 
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
-  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexID]]
-  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[ Array[(VertexID, VD)] ]
+  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexId]]
+  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[ Array[(VertexId, VD)] ]
 }
 {% endhighlight %}
 
@@ -716,7 +716,7 @@ messages remaining.
 The following is the type signature of the [Pregel operator][GraphOps.pregel] as well as a *sketch*
 of its implementation (note calls to graph.cache have been removed):
 
-[GraphOps.pregel]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@pregel[A](A,Int,EdgeDirection)((VertexID,VD,A)⇒VD,(EdgeTriplet[VD,ED])⇒Iterator[(VertexID,A)],(A,A)⇒A)(ClassTag[A]):Graph[VD,ED]
+[GraphOps.pregel]: api/graphx/index.html#org.apache.spark.graphx.GraphOps@pregel[A](A,Int,EdgeDirection)((VertexId,VD,A)⇒VD,(EdgeTriplet[VD,ED])⇒Iterator[(VertexId,A)],(A,A)⇒A)(ClassTag[A]):Graph[VD,ED]
 
 {% highlight scala %}
 class GraphOps[VD, ED] {
@@ -724,8 +724,8 @@ class GraphOps[VD, ED] {
       (initialMsg: A,
        maxIter: Int = Int.MaxValue,
        activeDir: EdgeDirection = EdgeDirection.Out)
-      (vprog: (VertexID, VD, A) => VD,
-       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID, A)],
+      (vprog: (VertexId, VD, A) => VD,
+       sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
        mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
     // Receive the initial message at each vertex
@@ -770,7 +770,7 @@ import org.apache.spark.graphx.util.GraphGenerators
 // A graph with edge attributes containing distances
 val graph: Graph[Int, Double] =
   GraphGenerators.logNormalGraph(sc, numVertices = 100).mapEdges(e => e.attr.toDouble)
-val sourceId: VertexID = 42 // The ultimate source
+val sourceId: VertexId = 42 // The ultimate source
 // Initialize the graph such that all vertices except the root have distance infinity.
 val initialGraph = graph.mapVertices((id, _) => if (id == sourceId) 0.0 else Double.PositiveInfinity)
 val sssp = initialGraph.pregel(Double.PositiveInfinity)(
@@ -817,7 +817,7 @@ It creates a `Graph` from the specified edges, automatically creating any vertic
 {% highlight scala %}
 object Graph {
   def apply[VD, ED](
-      vertices: RDD[(VertexID, VD)],
+      vertices: RDD[(VertexId, VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD = null)
     : Graph[VD, ED]
@@ -827,7 +827,7 @@ object Graph {
       defaultValue: VD): Graph[VD, ED]
 
   def fromEdgeTuples[VD](
-      rawEdges: RDD[(VertexID, VertexID)],
+      rawEdges: RDD[(VertexId, VertexId)],
       defaultValue: VD,
       uniqueEdges: Option[PartitionStrategy] = None): Graph[VD, Int]
 
@@ -843,8 +843,8 @@ object Graph {
 [PartitionStrategy]: api/graphx/index.html#org.apache.spark.graphx.PartitionStrategy$
 
 [GraphLoader.edgeListFile]: api/graphx/index.html#org.apache.spark.graphx.GraphLoader$@edgeListFile(SparkContext,String,Boolean,Int):Graph[Int,Int]
-[Graph.apply]: api/graphx/index.html#org.apache.spark.graphx.Graph$@apply[VD,ED](RDD[(VertexID,VD)],RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
-[Graph.fromEdgeTuples]: api/graphx/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexID,VertexID)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]
+[Graph.apply]: api/graphx/index.html#org.apache.spark.graphx.Graph$@apply[VD,ED](RDD[(VertexId,VD)],RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
+[Graph.fromEdgeTuples]: api/graphx/index.html#org.apache.spark.graphx.Graph$@fromEdgeTuples[VD](RDD[(VertexId,VertexId)],VD,Option[PartitionStrategy])(ClassTag[VD]):Graph[VD,Int]
 [Graph.fromEdges]: api/graphx/index.html#org.apache.spark.graphx.Graph$@fromEdges[VD,ED](RDD[Edge[ED]],VD)(ClassTag[VD],ClassTag[ED]):Graph[VD,ED]
 
 # Vertex and Edge RDDs
@@ -868,17 +868,17 @@ additional functionality:
 {% highlight scala %}
 class VertexRDD[VD] extends RDD[(VertexID, VD)] {
   // Filter the vertex set but preserves the internal index
-  def filter(pred: Tuple2[VertexID, VD] => Boolean): VertexRDD[VD]
+  def filter(pred: Tuple2[VertexId, VD] => Boolean): VertexRDD[VD]
   // Transform the values without changing the ids (preserves the internal index)
   def mapValues[VD2](map: VD => VD2): VertexRDD[VD2]
-  def mapValues[VD2](map: (VertexID, VD) => VD2): VertexRDD[VD2]
+  def mapValues[VD2](map: (VertexId, VD) => VD2): VertexRDD[VD2]
   // Remove vertices from this set that appear in the other set
   def diff(other: VertexRDD[VD]): VertexRDD[VD]
   // Join operators that take advantage of the internal indexing to accelerate joins (substantially)
-  def leftJoin[VD2, VD3](other: RDD[(VertexID, VD2)])(f: (VertexID, VD, Option[VD2]) => VD3): VertexRDD[VD3]
-  def innerJoin[U, VD2](other: RDD[(VertexID, U)])(f: (VertexID, VD, U) => VD2): VertexRDD[VD2]
+  def leftJoin[VD2, VD3](other: RDD[(VertexId, VD2)])(f: (VertexId, VD, Option[VD2]) => VD3): VertexRDD[VD3]
+  def innerJoin[U, VD2](other: RDD[(VertexId, U)])(f: (VertexId, VD, U) => VD2): VertexRDD[VD2]
   // Use the index on this RDD to accelerate a `reduceByKey` operation on the input RDD.
-  def aggregateUsingIndex[VD2](other: RDD[(VertexID, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2]
+  def aggregateUsingIndex[VD2](other: RDD[(VertexId, VD2)], reduceFunc: (VD2, VD2) => VD2): VertexRDD[VD2]
 }
 {% endhighlight %}
 
@@ -896,7 +896,7 @@ both aggregate and then subsequently index the `RDD[(VertexID, A)]`.  For exampl
 
 {% highlight scala %}
 val setA: VertexRDD[Int] = VertexRDD(sc.parallelize(0L until 100L).map(id => (id, 1)))
-val rddB: RDD[(VertexID, Double)] = sc.parallelize(0L until 100L).flatMap(id => List((id, 1.0), (id, 2.0)))
+val rddB: RDD[(VertexId, Double)] = sc.parallelize(0L until 100L).flatMap(id => List((id, 1.0), (id, 2.0)))
 // There should be 200 entries in rddB
 rddB.count
 val setB: VertexRDD[Double] = setA.aggregateUsingIndex(rddB, _ + _)
@@ -922,7 +922,7 @@ def mapValues[ED2](f: Edge[ED] => ED2): EdgeRDD[ED2]
 // Revere the edges reusing both attributes and structure
 def reverse: EdgeRDD[ED]
 // Join two `EdgeRDD`s partitioned using the same partitioning strategy.
-def innerJoin[ED2, ED3](other: EdgeRDD[ED2])(f: (VertexID, VertexID, ED, ED2) => ED3): EdgeRDD[ED3]
+def innerJoin[ED2, ED3](other: EdgeRDD[ED2])(f: (VertexId, VertexId, ED, ED2) => ED3): EdgeRDD[ED3]
 {% endhighlight %}
 
 In most applications we have found that operations on the `EdgeRDD` are accomplished through the
