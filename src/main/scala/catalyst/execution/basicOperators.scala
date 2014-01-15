@@ -117,6 +117,7 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
   def output = child.output
 }
 
+// TODO: Rename: SchemaRDD
 case class LocalRelation(output: Seq[Attribute], data: Seq[IndexedSeq[Any]])
                         (@transient sc: SharkContext) extends LeafNode {
   def execute() = sc.makeRDD(data.map(buildRow), 1)
