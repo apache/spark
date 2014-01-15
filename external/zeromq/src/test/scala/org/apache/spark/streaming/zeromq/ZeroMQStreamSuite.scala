@@ -40,5 +40,6 @@ class ZeroMQStreamSuite extends TestSuiteBase {
       StorageLevel.MEMORY_AND_DISK_SER_2, SupervisorStrategy.defaultStrategy)
 
     // TODO: Actually test data receiving
+    ssc.stop()
   }
 }
