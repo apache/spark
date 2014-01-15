@@ -100,7 +100,7 @@ class ConnectedComponentsSuite extends FunSuite with LocalSparkContext {
   test("Connected Components on a Toy Connected Graph") {
     withSpark { sc =>
       // Create an RDD for the vertices
-      val users: RDD[(VertexID, (String, String))] =
+      val users: RDD[(VertexId, (String, String))] =
         sc.parallelize(Array((3L, ("rxin", "student")), (7L, ("jgonzal", "postdoc")),
                        (5L, ("franklin", "prof")), (2L, ("istoica", "prof")),
                        (4L, ("peter", "student"))))

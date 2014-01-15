@@ -79,7 +79,7 @@ class EdgePartitionSuite extends FunSuite {
   test("innerJoin") {
     def makeEdgePartition[A: ClassTag](xs: Iterable[(Int, Int, A)]): EdgePartition[A] = {
       val builder = new EdgePartitionBuilder[A]
-      for ((src, dst, attr) <- xs) { builder.add(src: VertexID, dst: VertexID, attr) }
+      for ((src, dst, attr) <- xs) { builder.add(src: VertexId, dst: VertexId, attr) }
       builder.toEdgePartition
     }
     val aList = List((0, 1, 0), (1, 0, 0), (1, 2, 0), (5, 4, 0), (5, 5, 0))
