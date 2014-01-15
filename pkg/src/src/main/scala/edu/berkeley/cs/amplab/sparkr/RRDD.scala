@@ -171,7 +171,13 @@ object RRDD {
     val rCommand = "Rscript"
     val rOptions = "--vanilla"
     val rExecScript = rLibDir + "/SparkR/worker/worker.R"
-    new ProcessBuilder(List(rCommand, rOptions, rExecScript))
+    val pb = new ProcessBuilder(List(rCommand, rOptions, rExecScript))
+    // Unset the R_TESTS environment variable for workers.
+    // This is set by R CMD check as startup.Rs
+    // (http://svn.r-project.org/R/trunk/src/library/tools/R/testing.R)
+    // and confuses worker script which tries to load a non-existent file
+    pb.environment().put("R_TESTS", "");
+    pb
   }
 
   /**
