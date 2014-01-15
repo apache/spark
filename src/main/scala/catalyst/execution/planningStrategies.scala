@@ -136,6 +136,9 @@ trait PlanningStrategies {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Sort(sortExprs, child) =>
         execution.Sort(sortExprs, planLater(child)) :: Nil
+      // TODO: It is correct, but overkill to do a global sorting here.
+      case logical.SortPartitions(sortExprs, child) =>
+        execution.Sort(sortExprs, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
