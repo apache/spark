@@ -92,7 +92,7 @@ object PageRank extends Logging {
 
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
-    def vertexProgram(id: VertexID, attr: Double, msgSum: Double): Double =
+    def vertexProgram(id: VertexId, attr: Double, msgSum: Double): Double =
       resetProb + (1.0 - resetProb) * msgSum
     def sendMessage(edge: EdgeTriplet[Double, Double]) =
       Iterator((edge.dstId, edge.srcAttr * edge.attr))
@@ -137,7 +137,7 @@ object PageRank extends Logging {
 
     // Define the three functions needed to implement PageRank in the GraphX
     // version of Pregel
-    def vertexProgram(id: VertexID, attr: (Double, Double), msgSum: Double): (Double, Double) = {
+    def vertexProgram(id: VertexId, attr: (Double, Double), msgSum: Double): (Double, Double) = {
       val (oldPR, lastDelta) = attr
       val newPR = oldPR + (1.0 - resetProb) * msgSum
       (newPR, newPR - oldPR)

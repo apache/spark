@@ -27,7 +27,7 @@ import org.apache.spark.rdd._
 class GraphSuite extends FunSuite with LocalSparkContext {
 
   def starGraph(sc: SparkContext, n: Int): Graph[String, Int] = {
-    Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: VertexID, x: VertexID)), 3), "v")
+    Graph.fromEdgeTuples(sc.parallelize((1 to n).map(x => (0: VertexId, x: VertexId)), 3), "v")
   }
 
   test("Graph.fromEdgeTuples") {
@@ -57,7 +57,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val rawEdges = (0L to 98L).zip((1L to 99L) :+ 0L)
       val edges: RDD[Edge[Int]] = sc.parallelize(rawEdges).map { case (s, t) => Edge(s, t, 1) }
-      val vertices: RDD[(VertexID, Boolean)] = sc.parallelize((0L until 10L).map(id => (id, true)))
+      val vertices: RDD[(VertexId, Boolean)] = sc.parallelize((0L until 10L).map(id => (id, true)))
       val graph = Graph(vertices, edges, false)
       assert( graph.edges.count() === rawEdges.size )
       // Vertices not explicitly provided but referenced by edges should be created automatically
@@ -74,7 +74,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val n = 5
       val star = starGraph(sc, n)
       assert(star.triplets.map(et => (et.srcId, et.dstId, et.srcAttr, et.dstAttr)).collect.toSet ===
-        (1 to n).map(x => (0: VertexID, x: VertexID, "v", "v")).toSet)
+        (1 to n).map(x => (0: VertexId, x: VertexId, "v", "v")).toSet)
     }
   }
 
@@ -110,7 +110,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val p = 100
       val verts = 1 to n
       val graph = Graph.fromEdgeTuples(sc.parallelize(verts.flatMap(x =>
-        verts.filter(y => y % x == 0).map(y => (x: VertexID, y: VertexID))), p), 0)
+        verts.filter(y => y % x == 0).map(y => (x: VertexId, y: VertexId))), p), 0)
       assert(graph.edges.partitions.length === p)
       val partitionedGraph = graph.partitionBy(EdgePartition2D)
       assert(graph.edges.partitions.length === p)
@@ -136,10 +136,10 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val star = starGraph(sc, n)
       // mapVertices preserving type
       val mappedVAttrs = star.mapVertices((vid, attr) => attr + "2")
-      assert(mappedVAttrs.vertices.collect.toSet === (0 to n).map(x => (x: VertexID, "v2")).toSet)
+      assert(mappedVAttrs.vertices.collect.toSet === (0 to n).map(x => (x: VertexId, "v2")).toSet)
       // mapVertices changing type
       val mappedVAttrs2 = star.mapVertices((vid, attr) => attr.length)
-      assert(mappedVAttrs2.vertices.collect.toSet === (0 to n).map(x => (x: VertexID, 1)).toSet)
+      assert(mappedVAttrs2.vertices.collect.toSet === (0 to n).map(x => (x: VertexId, 1)).toSet)
     }
   }
 
@@ -168,7 +168,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
     withSpark { sc =>
       val n = 5
       val star = starGraph(sc, n)
-      assert(star.reverse.outDegrees.collect.toSet === (1 to n).map(x => (x: VertexID, 1)).toSet)
+      assert(star.reverse.outDegrees.collect.toSet === (1 to n).map(x => (x: VertexId, 1)).toSet)
     }
   }
 
@@ -191,7 +191,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
   test("mask") {
     withSpark { sc =>
       val n = 5
-      val vertices = sc.parallelize((0 to n).map(x => (x:VertexID, x)))
+      val vertices = sc.parallelize((0 to n).map(x => (x:VertexId, x)))
       val edges = sc.parallelize((1 to n).map(x => Edge(0, x, x)))
       val graph: Graph[Int, Int] = Graph(vertices, edges).cache()
 
@@ -218,7 +218,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val star = starGraph(sc, n)
       val doubleStar = Graph.fromEdgeTuples(
         sc.parallelize((1 to n).flatMap(x =>
-          List((0: VertexID, x: VertexID), (0: VertexID, x: VertexID))), 1), "v")
+          List((0: VertexId, x: VertexId), (0: VertexId, x: VertexId))), 1), "v")
       val star2 = doubleStar.groupEdges { (a, b) => a}
       assert(star2.edges.collect.toArray.sorted(Edge.lexicographicOrdering[Int]) ===
         star.edges.collect.toArray.sorted(Edge.lexicographicOrdering[Int]))
@@ -237,7 +237,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       assert(neighborDegreeSums.collect().toSet === (0 to n).map(x => (x, n)).toSet)
 
       // activeSetOpt
-      val allPairs = for (x <- 1 to n; y <- 1 to n) yield (x: VertexID, y: VertexID)
+      val allPairs = for (x <- 1 to n; y <- 1 to n) yield (x: VertexId, y: VertexId)
       val complete = Graph.fromEdgeTuples(sc.parallelize(allPairs, 3), 0)
       val vids = complete.mapVertices((vid, attr) => vid).cache()
       val active = vids.vertices.filter { case (vid, attr) => attr % 2 == 0 }
@@ -248,10 +248,10 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         }
         Iterator((et.srcId, 1))
       }, (a: Int, b: Int) => a + b, Some((active, EdgeDirection.In))).collect.toSet
-      assert(numEvenNeighbors === (1 to n).map(x => (x: VertexID, n / 2)).toSet)
+      assert(numEvenNeighbors === (1 to n).map(x => (x: VertexId, n / 2)).toSet)
 
       // outerJoinVertices followed by mapReduceTriplets(activeSetOpt)
-      val ringEdges = sc.parallelize((0 until n).map(x => (x: VertexID, (x+1) % n: VertexID)), 3)
+      val ringEdges = sc.parallelize((0 until n).map(x => (x: VertexId, (x+1) % n: VertexId)), 3)
       val ring = Graph.fromEdgeTuples(ringEdges, 0) .mapVertices((vid, attr) => vid).cache()
       val changed = ring.vertices.filter { case (vid, attr) => attr % 2 == 1 }.mapValues(-_).cache()
       val changedGraph = ring.outerJoinVertices(changed) { (vid, old, newOpt) => newOpt.getOrElse(old) }
@@ -262,7 +262,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
         }
         Iterator((et.dstId, 1))
       }, (a: Int, b: Int) => a + b, Some(changed, EdgeDirection.Out)).collect.toSet
-      assert(numOddNeighbors === (2 to n by 2).map(x => (x: VertexID, 1)).toSet)
+      assert(numOddNeighbors === (2 to n by 2).map(x => (x: VertexId, 1)).toSet)
 
     }
   }
@@ -277,7 +277,7 @@ class GraphSuite extends FunSuite with LocalSparkContext {
       val neighborDegreeSums = reverseStarDegrees.mapReduceTriplets(
         et => Iterator((et.srcId, et.dstAttr), (et.dstId, et.srcAttr)),
         (a: Int, b: Int) => a + b).collect.toSet
-      assert(neighborDegreeSums === Set((0: VertexID, n)) ++ (1 to n).map(x => (x: VertexID, 0)))
+      assert(neighborDegreeSums === Set((0: VertexId, n)) ++ (1 to n).map(x => (x: VertexId, 0)))
       // outerJoinVertices preserving type
       val messages = reverseStar.vertices.mapValues { (vid, attr) => vid.toString }
       val newReverseStar =
