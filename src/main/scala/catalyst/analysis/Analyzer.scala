@@ -39,7 +39,9 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       PromoteNumericTypes,
       PromoteStrings,
       ConvertNaNs,
-      BooleanComparisons)
+      BooleanComparisons,
+      FunctionArgumentConversion,
+      PropagateTypes)
   )
 
   /**
