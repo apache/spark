@@ -3,19 +3,17 @@
 SparkR is an R package that provides a light-weight frontend to use Spark from
 R.
 
-## Building
+## Installing SparkR
 
-### Installing Spark
-SparkR requires Scala 2.10 and Spark version >= 0.9.0. As Spark 0.9.0 has not
-been released yet, you will need to clone the Spark master branch and
-run `sbt/sbt publish-local` to publish 0.9.0-SNAPSHOT.
-
-### Building SparkR
-SparkR requires the R package `rJava` to be installed. To install `rJava`,
+### Requirements
+SparkR requires Scala 2.10 and Spark version >= 0.9.0. SparkR also
+requires the R package `rJava` to be installed. To install `rJava`,
 you can run the following command in R:
 
     install.packages("rJava")
 
+
+### Package installation
 To develop SparkR, you can build the scala package and the R package using
 
     ./install-dev.sh
@@ -39,7 +37,7 @@ Spark master you can launch R and then run
     library(SparkR)
     sc <- sparkR.init(master="local")
 
-SparkR also comes with several sample programs in the `examples` directory.
+SparkR comes with several sample programs in the `examples` directory.
 To run one of them, use `./sparkR <filename> <args>`. For example:
 
     ./sparkR examples/pi.R local[2]  
