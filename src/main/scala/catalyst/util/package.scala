@@ -78,7 +78,7 @@ package object util {
   def stringOrNull(a: AnyRef) = if (a == null) null else a.toString
 
   implicit class debugLogging(a: AnyRef) {
-    def debugLogging {
+    def debugLogging() {
       org.apache.log4j.Logger.getLogger(a.getClass.getName).setLevel(org.apache.log4j.Level.DEBUG)
     }
   }
