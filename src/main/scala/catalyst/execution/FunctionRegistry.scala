@@ -162,6 +162,7 @@ case class HiveGenericUdf(
     case LongType => PrimitiveObjectInspectorFactory.javaLongObjectInspector
     case ShortType => PrimitiveObjectInspectorFactory.javaShortObjectInspector
     case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
+    case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
   }
 
   lazy val instance = {
