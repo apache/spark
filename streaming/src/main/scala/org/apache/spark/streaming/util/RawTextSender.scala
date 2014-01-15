@@ -33,6 +33,7 @@ import org.apache.spark.util.IntParam
  * A helper program that sends blocks of Kryo-serialized text strings out on a socket at a
  * specified rate. Used to feed data into RawInputDStream.
  */
+private[streaming]
 object RawTextSender extends Logging {
   def main(args: Array[String]) {
     if (args.length != 4) {
