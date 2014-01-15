@@ -1,0 +1,6 @@
+# Compile spark jars into dist folder
+../make-distribution.sh --tgz --hadoop 2.0.0-mr1-cdh4.4.0
+# Remove everything not in dist
+find * -maxdepth 0 -name 'dist' -prune -o -exec rm -rf '{}' ';'
+# Copy everything out of dist
+mv dist/* .
