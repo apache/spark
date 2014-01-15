@@ -17,5 +17,6 @@ clean:
 	rm -rf project/target
 	rm -rf project/project
 	rm sbt/sbt-launch-*.jar
+	rm ../inst/$(JAR_NAME)
 
 .PHONY: all clean

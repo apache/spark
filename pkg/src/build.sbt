@@ -17,7 +17,7 @@ scalaVersion := "2.10.3"
 libraryDependencies ++= Seq(
   "org.slf4j" % "slf4j-api" % "1.7.2",
   "org.slf4j" % "slf4j-log4j12" % "1.7.2",
-  "org.apache.spark" % "spark-core_2.10" % "0.9.0-incubating-SNAPSHOT"
+  "org.apache.spark" % "spark-core_2.10" % "0.9.0-incubating"
 )
 
 {
@@ -30,7 +30,8 @@ libraryDependencies ++= Seq(
 resolvers ++= Seq(
   "Typesafe" at "http://repo.typesafe.com/typesafe/releases",
   "Scala Tools Snapshots" at "http://scala-tools.org/repo-snapshots/",
-  "Spray" at "http://repo.spray.cc"
+  "Spray" at "http://repo.spray.cc",
+  "Apache Staging" at "https://repository.apache.org/content/repositories/staging/"
 )
 
 mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
