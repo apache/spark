@@ -1,0 +1,2 @@
+compute-classpath.sh uses the existence of this file to decide whether to put the assembly jar on the
+classpath or instead to use classfiles in the source tree. 
