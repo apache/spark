@@ -75,6 +75,14 @@ package object util {
     }
   }
 
+  def stackTraceToString(t: Throwable): String = {
+    val out = new java.io.ByteArrayOutputStream
+    val writer = new PrintWriter(out)
+    t.printStackTrace(writer)
+    writer.flush()
+    new String(out.toByteArray)
+  }
+
   def stringOrNull(a: AnyRef) = if (a == null) null else a.toString
 
   implicit class debugLogging(a: AnyRef) {
