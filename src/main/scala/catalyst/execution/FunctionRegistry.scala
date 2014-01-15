@@ -40,6 +40,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry {
   def javaClassToDataType(clz: Class[_]): DataType = clz match {
     case c: Class[_] if c == classOf[DoubleWritable] => DoubleType
     case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.DoubleWritable] => DoubleType
+    case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.HiveDecimalWritable] => DecimalType
     case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.ByteWritable] => ByteType
     case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.ShortWritable] => ShortType
     case c: Class[_] if c == classOf[Text] => StringType
