@@ -257,7 +257,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       this
     } else {
       number.i -= 1
-      children.map(_.getNodeNumbered(number)).find(_ != null).getOrElse(sys.error("No such node."))
+      children.map(_.getNodeNumbered(number)).find(_ != null).getOrElse(null.asInstanceOf[BaseType])
     }
   }
 
