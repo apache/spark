@@ -578,7 +578,8 @@ object HiveQl {
       val Token("TOK_TABNAME", Token(tableName, Nil) :: Nil) = nameClause
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
-        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) => key -> value
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) => key -> Some(value)
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => key -> None
       }.toMap).getOrElse(Map.empty)
 
       InsertIntoTable(UnresolvedRelation(tableName, None), partitionKeys, query)
