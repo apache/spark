@@ -678,6 +678,7 @@ object HiveQl {
     case Token("REGEXP", left :: right:: Nil) => UnresolvedFunction("REGEXP", Seq(nodeToExpr(left), nodeToExpr(right)))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) => IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) => IsNull(nodeToExpr(child))
+    case Token("TOK_FUNCTION", Token("IN", Nil) :: value :: list) => In(nodeToExpr(value), list.map(nodeToExpr))
 
     /* Boolean Logic */
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))

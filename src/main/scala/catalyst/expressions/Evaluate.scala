@@ -158,6 +158,10 @@ object Evaluate extends Logging {
         else
           left == right
 
+      case In(value, list) =>
+        val evaluatedValue = eval(value)
+        list.exists(e => eval(e) == evaluatedValue)
+
       // Strings
       case GreaterThan(l, r) if l.dataType == StringType && r.dataType == StringType =>
         eval(l).asInstanceOf[String] > eval(r).asInstanceOf[String]
