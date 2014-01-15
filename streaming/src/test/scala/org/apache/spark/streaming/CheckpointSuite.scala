@@ -151,17 +151,29 @@ class CheckpointSuite extends TestSuiteBase {
     val value = "myvalue"
     System.setProperty(key, value)
     ssc = new StreamingContext(master, framework, batchDuration)
+    val originalConf = ssc.conf
+
     val cp = new Checkpoint(ssc, Time(1000))
-    assert(!cp.sparkConf.contains("spark.driver.host"))
-    assert(!cp.sparkConf.contains("spark.driver.port"))
-    assert(!cp.sparkConf.contains("spark.hostPort"))
-    assert(cp.sparkConf.get(key) === value)
+    val cpConf = cp.sparkConf
+    assert(cpConf.get("spark.master") === originalConf.get("spark.master"))
+    assert(cpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
+    assert(cpConf.get(key) === value)
     ssc.stop()
+
+    // Serialize/deserialize to simulate write to storage and reading it back
     val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
-    assert(!newCp.sparkConf.contains("spark.driver.host"))
-    assert(!newCp.sparkConf.contains("spark.driver.port"))
-    assert(!newCp.sparkConf.contains("spark.hostPort"))
-    assert(newCp.sparkConf.get(key) === value)
+
+    val newCpConf = newCp.sparkConf
+    assert(newCpConf.get("spark.master") === originalConf.get("spark.master"))
+    assert(newCpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
+    assert(newCpConf.get(key) === value)
+    assert(!newCpConf.contains("spark.driver.host"))
+    assert(!newCpConf.contains("spark.driver.port"))
+
+    // Check if all the parameters have been restored
+    ssc = new StreamingContext(null, newCp, null)
+    val restoredConf = ssc.conf
+    assert(restoredConf.get(key) === value)
   }
 
 

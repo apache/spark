@@ -39,5 +39,6 @@ class TwitterStreamSuite extends TestSuiteBase {
 
     // Note that actually testing the data receiving is hard as authentication keys are
     // necessary for accessing Twitter live stream
+    ssc.stop()
   }
 }

@@ -4,6 +4,7 @@ import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
 import com.typesafe.config.ConfigFactory
+import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
@@ -24,7 +25,7 @@ import com.typesafe.config.ConfigFactory
  *
  * @param loadDefaults whether to load values from the system properties and classpath
  */
-class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with Logging {
+class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
