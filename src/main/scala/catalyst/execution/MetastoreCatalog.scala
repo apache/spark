@@ -79,6 +79,9 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
 
 object HiveMetatoreTypes {
   val VARCHAR = "(?i)VARCHAR\\((\\d+)\\)".r
+  // TODO: this will not work for nested arrays or maps.
+  val ARRAY = "(?i)array<([^>]+)>".r
+  val MAP = "(?i)map<([^,]+),([^>]*)>".r
   def toDataType(metastoreType: String): DataType =
     metastoreType match {
       case "string" => StringType
@@ -87,7 +90,11 @@ object HiveMetatoreTypes {
       case "double" => DoubleType
       case "bigint" => LongType
       case "binary" => BinaryType
+      case "boolean" => BooleanType
       case VARCHAR(_) => StringType
+      case ARRAY(elemType) => ArrayType(toDataType(elemType))
+      case MAP(keyType, valueType) => MapType(toDataType(keyType), toDataType(valueType))
+      case _ => sys.error(s"Unsupported dataType: $metastoreType")
     }
 }
 
