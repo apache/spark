@@ -127,7 +127,9 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
 
   test("repeatedly failing task that crashes JVM") {
     // Ensures that if a task fails in a way that crashes the JVM, the job eventually fails rather
-    // than hanging.
+    // than hanging due to retrying the failed task infinitely many times (eventually the
+    // standalone scheduler will remove the application, causing the job to hang waiting to
+    // reconnect to the master).
     sc = new SparkContext(clusterUrl, "test")
     failAfter(Span(100000, Millis)) {
       val thrown = intercept[SparkException] {
