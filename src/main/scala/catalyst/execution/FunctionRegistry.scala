@@ -87,7 +87,9 @@ abstract class HiveUdf extends Expression with ImplementedUdf with Logging {
     case l: LongWritable => l.get
     case d: DoubleWritable => d.get()
     case d: org.apache.hadoop.hive.serde2.io.DoubleWritable => d.get
+    case s: org.apache.hadoop.hive.serde2.io.ShortWritable => s.get
     case b: BooleanWritable => b.get()
+    case b: org.apache.hadoop.hive.serde2.io.ByteWritable => b.get
     case list: java.util.List[_] => list.map(unwrap)
     case p: java.lang.Short => p
     case p: java.lang.Long => p
