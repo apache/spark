@@ -57,6 +57,9 @@ class HiveCompatibility extends HiveQueryFileTest {
     "index_auto_mult_tables",
     "index_auto_file_format",
     "index_auth",
+    "index_auto_empty",
+    "index_auto_partitioned",
+    "index_bitmap_auto_partitioned",
 
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
