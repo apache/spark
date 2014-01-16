@@ -18,6 +18,6 @@ rem limitations under the License.
 rem
 
 rem Find the path of sbin
-set SBIN=%~dp0..\sbin\
+set BIN=%~dp0..\bin\
 
-cmd /V /E /C %SBIN%spark-class2.cmd org.apache.spark.repl.Main %*
+cmd /V /E /C %BIN%spark-class2.cmd org.apache.spark.repl.Main %*
