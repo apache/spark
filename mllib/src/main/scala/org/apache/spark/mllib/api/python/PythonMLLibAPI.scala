@@ -24,7 +24,6 @@ import org.apache.spark.mllib.recommendation._
 import org.apache.spark.rdd.RDD
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.DoubleBuffer
 
 /**
  * The Java stubs necessary for the Python mllib bindings.
@@ -81,7 +80,6 @@ class PythonMLLibAPI extends Serializable {
     }
     val db = bb.asDoubleBuffer()
     val ans = new Array[Array[Double]](rows.toInt)
-    var i = 0
     for (i <- 0 until rows.toInt) {
       ans(i) = new Array[Double](cols.toInt)
       db.get(ans(i))
@@ -236,7 +234,7 @@ class PythonMLLibAPI extends Serializable {
     * Serialize a Rating object into an array of bytes.
     * It can be deserialized using RatingDeserializer().
     *
-    * @param rate
+    * @param rate the Rating object to serialize
     * @return
     */
   private[spark] def serializeRating(rate: Rating): Array[Byte] = {

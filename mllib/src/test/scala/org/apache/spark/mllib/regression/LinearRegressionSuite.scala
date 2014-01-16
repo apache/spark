@@ -21,7 +21,6 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.LinearDataGenerator
 
 class LinearRegressionSuite extends FunSuite with BeforeAndAfterAll {
@@ -37,10 +36,10 @@ class LinearRegressionSuite extends FunSuite with BeforeAndAfterAll {
   }
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
-    val numOffPredictions = predictions.zip(input).filter { case (prediction, expected) =>
+    val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       // A prediction is off if the prediction is more than 0.5 away from expected value.
       math.abs(prediction - expected.label) > 0.5
-    }.size
+    }
     // At least 80% of the predictions should be on.
     assert(numOffPredictions < input.length / 5)
   }

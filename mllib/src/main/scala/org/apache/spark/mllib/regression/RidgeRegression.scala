@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
@@ -76,7 +76,7 @@ class RidgeRegressionWithSGD private (
   def createModel(weights: Array[Double], intercept: Double) = {
     val weightsMat = new DoubleMatrix(weights.length + 1, 1, (Array(intercept) ++ weights):_*)
     val weightsScaled = weightsMat.div(xColSd)
-    val interceptScaled = yMean - (weightsMat.transpose().mmul(xColMean.div(xColSd)).get(0))
+    val interceptScaled = yMean - weightsMat.transpose().mmul(xColMean.div(xColSd)).get(0)
 
     new RidgeRegressionModel(weightsScaled.data, interceptScaled)
   }
@@ -86,7 +86,7 @@ class RidgeRegressionWithSGD private (
       initialWeights: Array[Double])
     : RidgeRegressionModel =
   {
-    val nfeatures: Int = input.first.features.length
+    val nfeatures: Int = input.first().features.length
     val nexamples: Long = input.count()
 
     // To avoid penalizing the intercept, we center and scale the data.

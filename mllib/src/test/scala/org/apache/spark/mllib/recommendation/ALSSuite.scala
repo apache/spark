@@ -24,7 +24,6 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 
 import org.jblas._
 
