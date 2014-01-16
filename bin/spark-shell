@@ -50,8 +50,8 @@ if [ -z "$MASTER" ]; then
   if [ -e "$FWDIR/conf/spark-env.sh" ]; then
     . "$FWDIR/conf/spark-env.sh"
   fi
-  if [ "x" != "x$SPARK_MASTER_IP" ];then
-    if [ "y" != "y$SPARK_MASTER_PORT" ];then
+  if [ "x" != "x$SPARK_MASTER_IP" ]; then
+    if [ "y" != "y$SPARK_MASTER_PORT" ]; then
       SPARK_MASTER_PORT="${SPARK_MASTER_PORT}"
     else
       SPARK_MASTER_PORT=$DEFAULT_SPARK_MASTER_PORT
