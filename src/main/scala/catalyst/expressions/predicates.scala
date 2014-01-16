@@ -2,6 +2,7 @@ package catalyst
 package expressions
 
 import types._
+import catalyst.analysis.UnresolvedException
 
 trait Predicate extends Expression {
   self: Product =>
@@ -73,4 +74,17 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
   def references = child.references
   override def foldable = child.foldable
   def nullable = false
+}
+
+case class If(predicate: Expression, trueValue: Expression, falseValue: Expression) extends Expression {
+  def children = predicate :: trueValue :: falseValue :: Nil
+  def nullable = children.exists(_.nullable)
+  def references = children.flatMap(_.references).toSet
+  override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
+  def dataType = {
+    if (!resolved)
+      throw new UnresolvedException(
+        this, s"datatype. Can not resolve due to differing types ${trueValue.dataType}, ${falseValue.dataType}")
+    trueValue.dataType
+  }
 }

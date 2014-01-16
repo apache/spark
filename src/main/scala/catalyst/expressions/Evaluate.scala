@@ -149,6 +149,9 @@ object Evaluate extends Logging {
       case Remainder(l, r) => i2(l,r, _.rem(_, _))
       case UnaryMinus(child) => n1(child, _.negate(_))
 
+      /* Control Flow */
+      case If(e, t, f) => if(eval(e).asInstanceOf[Boolean]) eval(t) else eval(f)
+
       /* Comparisons */
       case Equals(l, r) =>
         val left = eval(l)
