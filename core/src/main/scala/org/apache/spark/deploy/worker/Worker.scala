@@ -204,17 +204,15 @@ private[spark] class Worker(
         System.exit(1)
       }
 
-    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
+    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
       } else {
         try {
           logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
-          // TODO (pwendell): We shuld make sparkHome an Option[String] in
-          // ApplicationDescription to be more explicit about this.
-          val effectiveSparkHome = Option(execSparkHome_).getOrElse(sparkHome.getAbsolutePath)
           val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-            self, workerId, host, new File(effectiveSparkHome), workDir, akkaUrl, ExecutorState.RUNNING)
+            self, workerId, host, new File(appDesc.sparkHome.getOrElse(sparkHome.getAbsolutePath)),
+            workDir, akkaUrl, ExecutorState.RUNNING)
           executors(appId + "/" + execId) = manager
           manager.start()
           coresUsed += cores_
@@ -224,6 +222,10 @@ private[spark] class Worker(
           }
         } catch {
           case e: Exception => {
+            logError("Failed to launch exector %s/%d for %s".format(appId, execId, appDesc.name))
+            if (executors.contains(appId + "/" + execId)) {
+              executors(appId + "/" + execId).kill()
+            }
             masterLock.synchronized {
               master ! ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None)
             }
