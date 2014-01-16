@@ -104,9 +104,9 @@ object Evaluate extends Logging {
       case Add(l, r) => n2(l,r, _.plus(_, _))
       case Subtract(l, r) => n2(l,r, _.minus(_, _))
       case Multiply(l, r) => n2(l,r, _.times(_, _))
-      // Divide & remainder implementation are different for fractional and integral dataTypes.
-      case Divide(l, r) if (l.dataType == DoubleType || l.dataType == FloatType) => f2(l,r, _.div(_, _))
-      case Divide(l, r) => i2(l,r, _.quot(_, _))
+      // Divide implementation are different for fractional and integral dataTypes.
+      case Divide(l @ FractionalType(), r)  => f2(l,r, _.div(_, _))
+      case Divide(l @ IntegralType(), r) => i2(l,r, _.quot(_, _))
       // Remainder is only allowed on Integral types.
       case Remainder(l, r) => i2(l,r, _.rem(_, _))
       case UnaryMinus(child) => n1(child, _.negate(_))
@@ -162,16 +162,14 @@ object Evaluate extends Logging {
         }
 
       // String => Numeric Types
-      case Cast(e, IntegerType) if e.dataType == StringType =>
-        eval(e) match {
-          case null => null
-          case s: String => castOrNull(s.toInt)
-        }
-      case Cast(e, DoubleType) if e.dataType == StringType =>
-        eval(e) match {
-          case null => null
-          case s: String => castOrNull(s.toDouble)
-        }
+      case Cast(e @ StringType(), IntegerType) => castOrNull(e, _.toInt)
+      case Cast(e @ StringType(), DoubleType) => castOrNull(e, _.toDouble)
+      case Cast(e @ StringType(), FloatType) => castOrNull(e, _.toFloat)
+      case Cast(e @ StringType(), LongType) => castOrNull(e, _.toLong)
+      case Cast(e @ StringType(), ShortType) => castOrNull(e, _.toShort)
+      case Cast(e @ StringType(), ByteType) => castOrNull(e, _.toByte)
+      case Cast(e @ StringType(), DecimalType) => castOrNull(e, BigDecimal(_))
+
       // Boolean conversions
       case Cast(e, ByteType) if e.dataType == BooleanType =>
         eval(e) match {

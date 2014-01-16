@@ -36,6 +36,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("Aggregation", Once,
       GlobalAggregates),
     Batch("Type Coersion", fixedPoint,
+      StringToIntegralCasts,
+      BooleanCasts,
       PromoteNumericTypes,
       PromoteStrings,
       ConvertNaNs,
