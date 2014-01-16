@@ -4,17 +4,21 @@ package execution
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
-import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFEvaluator, AbstractGenericUDAFResolver, GenericUDF}
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.AbstractPrimitiveJavaObjectInspector
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.{io => hadoopIo}
 
 import expressions._
 import types._
+import org.apache.hadoop.hive.serde2.objectinspector.{ListObjectInspector, StructObjectInspector, ObjectInspector}
+import catalyst.types.StructField
+import catalyst.types.StructType
+import catalyst.types.ArrayType
+import catalyst.expressions.Cast
 
-object HiveFunctionRegistry extends analysis.FunctionRegistry {
+object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionFactory {
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
     // We only look it up to see if it exists, but do not include it in the HiveUDF since it is
     // not always serializable.
@@ -22,8 +26,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry {
       sys.error(s"Couldn't find function $name"))
 
     if (classOf[UDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      val functionInfo = FunctionRegistry.getFunctionInfo(name)
-      val function = functionInfo.getFunctionClass.newInstance.asInstanceOf[UDF]
+      val function = createFunction[UDF](name)
       val method = function.getResolver.getEvalMethod(children.map(_.dataType.toTypeInfo))
 
       lazy val expectedDataTypes = method.getParameterTypes.map(javaClassToDataType)
@@ -34,6 +37,8 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry {
       )
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdf(name, IntegerType, children)
+    } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
+      HiveGenericUdaf(name, children)
     } else {
       sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
     }
@@ -67,20 +72,10 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry {
   }
 }
 
-abstract class HiveUdf extends Expression with ImplementedUdf with Logging {
-  self: Product =>
-
-  type UDFType
-  val name: String
-
-  def nullable = true
-  def references = children.flatMap(_.references).toSet
-
-  // FunctionInfo is not serializable so we must look it up here again.
-  lazy val functionInfo = FunctionRegistry.getFunctionInfo(name)
-  lazy val function = functionInfo.getFunctionClass.newInstance.asInstanceOf[UDFType]
-
-  override def toString = s"${nodeName}#${functionInfo.getDisplayName}(${children.mkString(",")})"
+trait HiveFunctionFactory {
+  def getFunctionInfo(name: String) = FunctionRegistry.getFunctionInfo(name)
+  def getFunctionClass(name: String) = getFunctionInfo(name).getFunctionClass
+  def createFunction[UDFType](name: String) = getFunctionClass(name).newInstance.asInstanceOf[UDFType]
 
   def unwrap(a: Any): Any = a match {
     case null => null
@@ -93,6 +88,7 @@ abstract class HiveUdf extends Expression with ImplementedUdf with Logging {
     case b: hadoopIo.BooleanWritable => b.get()
     case b: hiveIo.ByteWritable => b.get
     case list: java.util.List[_] => list.map(unwrap)
+    case array: Array[_] => array.map(unwrap)
     case p: java.lang.Short => p
     case p: java.lang.Long => p
     case p: java.lang.Float => p
@@ -102,6 +98,24 @@ abstract class HiveUdf extends Expression with ImplementedUdf with Logging {
     case p: java.lang.Boolean => p
     case str: String => str
   }
+}
+
+abstract class HiveUdf extends Expression with ImplementedUdf with Logging with HiveFunctionFactory {
+  self: Product =>
+
+  type UDFType
+  val name: String
+
+  def nullable = true
+  def references = children.flatMap(_.references).toSet
+
+  // FunctionInfo is not serializable so we must look it up here again.
+  lazy val functionInfo = getFunctionInfo(name)
+  lazy val function = createFunction[UDFType](name)
+
+  override def toString = s"${nodeName}#${functionInfo.getDisplayName}(${children.mkString(",")})"
+
+
 }
 
 case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUdf {
@@ -193,4 +207,55 @@ case class HiveGenericUdf(
     }.toArray
     unwrap(instance.evaluate(args))
   }
+}
+
+trait HiveInspectors {
+  def toInspectors(exprs: Seq[Expression]) = exprs.map(_.dataType).map {
+    case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
+    case IntegerType => PrimitiveObjectInspectorFactory.javaIntObjectInspector
+    case DoubleType => PrimitiveObjectInspectorFactory.javaDoubleObjectInspector
+    case BooleanType => PrimitiveObjectInspectorFactory.javaBooleanObjectInspector
+    case LongType => PrimitiveObjectInspectorFactory.javaLongObjectInspector
+    case ShortType => PrimitiveObjectInspectorFactory.javaShortObjectInspector
+    case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
+  }
+
+  def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
+    case s: StructObjectInspector =>
+      StructType(s.getAllStructFieldRefs.map(f => {
+        StructField(f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), true)
+      }))
+    case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
+    case _: WritableStringObjectInspector => StringType
+    case _: WritableIntObjectInspector => IntegerType
+    case _: WritableDoubleObjectInspector => DoubleType
+    case _: WritableBooleanObjectInspector => BooleanType
+    case _: WritableLongObjectInspector => LongType
+    case _: WritableShortObjectInspector => ShortType
+    case _: WritableByteObjectInspector => ByteType
+  }
+}
+
+case class HiveGenericUdaf(
+  name: String,
+  children: Seq[Expression]) extends AggregateExpression
+  with HiveInspectors
+  with HiveFunctionFactory {
+
+  lazy val resolver = createFunction[AbstractGenericUDAFResolver](name)
+
+  lazy val objectInspector: ObjectInspector  = {
+    resolver.getEvaluator(children.map(_.dataType.toTypeInfo).toArray)
+      .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
+  }
+
+  type UDFType = AbstractGenericUDAFResolver
+
+  lazy val inspectors: Seq[ObjectInspector] = toInspectors(children)
+
+  def dataType: DataType = inspectorToDataType(objectInspector)
+
+  def nullable: Boolean = true
+
+  def references: Set[Attribute] = children.map(_.references).flatten.toSet
 }
