@@ -21,6 +21,16 @@ case class Not(child: Expression) extends Predicate with trees.UnaryNode[Express
   override def toString = s"NOT $child"
 }
 
+/**
+ * Evaluates to `true` if `list` contains `value`.
+ */
+case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+  def children = value +: list
+  def references = children.flatMap(_.references).toSet
+  def nullable = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString = s"$value IN ${list.mkString("(", ",", ")")}"
+}
+
 case class And(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "&&"
 }

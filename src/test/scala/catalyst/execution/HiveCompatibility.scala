@@ -13,7 +13,7 @@ class HiveCompatibility extends HiveQueryFileTest {
   lazy val hiveQueryDir = new File(TestShark.hiveDevHome, "ql/src/test/queries/clientpositive")
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
-  /** A list of tests deemed out of scope currently and thus completely disregarded */
+  /** A list of tests deemed out of scope currently and thus completely disregarded. */
   override def blackList = Seq(
     // These tests use hooks that are not on the classpath and thus break all subsequent execution.
     "hook_order",
@@ -26,6 +26,8 @@ class HiveCompatibility extends HiveQueryFileTest {
     "updateAccessTime",
     "index_compact_binary_search",
     "bucket_num_reducers",
+    "column_access_stats",
+    "concatenate_inherit_table_location",
 
     // User specific test answers, breaks the caching mechanism.
     "authorization_3",
@@ -55,6 +57,9 @@ class HiveCompatibility extends HiveQueryFileTest {
     "index_auto_mult_tables",
     "index_auto_file_format",
     "index_auth",
+    "index_auto_empty",
+    "index_auto_partitioned",
+    "index_bitmap_auto_partitioned",
 
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
@@ -92,18 +97,31 @@ class HiveCompatibility extends HiveQueryFileTest {
     "alter1",
     "input16",
 
+    // No support for unpublished test udfs.
+    "autogen_colalias",
+
     // Shark does not support buckets.
     ".*bucket.*",
 
     // No window support yet
-    ".* window.*",
+    ".*window.*",
+
+    // Views are not supported
+    ".*view.*",
 
     // Fails in hive with authorization errors.
-    "alter_rename_partition_authorization"
+    "alter_rename_partition_authorization",
+    "authorization.*",
+
+    // Hadoop version specific tests
+    "archive_corrupt",
+
+    // No support for case sensitivity is resolution using hive properties atm.
+    "case_sensitivity"
   )
 
   /**
-   * The set of tests that are believed to be working in catalyst. Tests not in whiteList
+   * The set of tests that are believed to be working in catalyst. Tests not on whiteList or
    * blacklist are implicitly marked as ignored.
    */
   override def whiteList = Seq(
@@ -124,7 +142,9 @@ class HiveCompatibility extends HiveQueryFileTest {
     "auto_join24",
     "auto_join26",
     "auto_join28",
+    "auto_join32",
     "auto_join_nulls",
+    "auto_join_reordering_values",
     "auto_sortmerge_join_1",
     "auto_sortmerge_join_10",
     "auto_sortmerge_join_11",
@@ -155,11 +175,14 @@ class HiveCompatibility extends HiveQueryFileTest {
     "create_like2",
     "create_like_tbl_props",
     "create_view_translate",
+    "create_skewed_table1",
     "ct_case_insensitive",
+    "database_location",
     "database_properties",
     "default_partition_name",
     "delimiter",
     "desc_non_existent_tbl",
+    "describe_comment_indent",
     "describe_database_json",
     "describe_table_json",
     "describe_formatted_view_partitioned",
@@ -177,9 +200,10 @@ class HiveCompatibility extends HiveQueryFileTest {
     "drop_table",
     "drop_table2",
     "drop_view",
+    "escape_clusterby1",
+    "escape_distributeby1",
     "escape_orderby1",
     "escape_sortby1",
-    "filter_join_breaktask",
     "groupby1",
     "groupby1_map",
     "groupby1_map_nomap",
@@ -202,7 +226,6 @@ class HiveCompatibility extends HiveQueryFileTest {
     "groupby_multi_single_reducer2",
     "groupby_mutli_insert_common_distinct",
     "groupby_sort_6",
-    "groupby_sort_8",
     "groupby_sort_test_1",
     "implicit_cast1",
     "index_auto_self_join",
@@ -215,6 +238,9 @@ class HiveCompatibility extends HiveQueryFileTest {
     "index_auto_multiple",
     "index_bitmap_compression",
     "index_compression",
+    "index_auto_empty",
+    "index_auto_partitioned",
+    "index_bitmap_auto_partitioned",
     "innerjoin",
     "inoutdriver",
     "input",
@@ -226,7 +252,6 @@ class HiveCompatibility extends HiveQueryFileTest {
     "input23",
     "input24",
     "input25",
-    "input28",
     "input2_limit",
     "input41",
     "input4_cb_delim",
@@ -238,6 +263,8 @@ class HiveCompatibility extends HiveQueryFileTest {
     "input_limit",
     "input_part1",
     "input_part2",
+    "input_part4",
+    "input_part6",
     "inputddl4",
     "inputddl7",
     "inputddl8",
@@ -306,8 +333,6 @@ class HiveCompatibility extends HiveQueryFileTest {
     "mapjoin_subquery2",
     "mapjoin_test_outer",
     "mapreduce3",
-    "merge1",
-    "merge2",
     "mergejoins",
     "mergejoins_mixed",
     "misc_json",
@@ -330,7 +355,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "outer_join_ppr",
     "part_inherit_tbl_props",
     "part_inherit_tbl_props_empty",
-    "partition_schema1",
+    "part_inherit_tbl_props_with_star",
     "partitions_json",
     "plan_json",
     "ppd1",
@@ -351,19 +376,17 @@ class HiveCompatibility extends HiveQueryFileTest {
     "ppd_union",
     "progress_1",
     "protectmode",
-    "push_or",
     "query_with_semi",
     "quote2",
     "rename_column",
+    "reduce_deduplicate_exclude_join",
     "router_join_ppr",
     "select_as_omitted",
-    "select_unquote_and",
-    "select_unquote_not",
-    "select_unquote_or",
     "serde_reported_schema",
     "set_variable_sub",
     "show_describe_func_quotes",
     "show_functions",
+    "show_partitions",
     "skewjoinopt13",
     "skewjoinopt18",
     "skewjoinopt9",
@@ -373,15 +396,11 @@ class HiveCompatibility extends HiveQueryFileTest {
     "smb_mapjoin_15",
     "smb_mapjoin_16",
     "smb_mapjoin_17",
-    "smb_mapjoin_21",
     "sort",
     "sort_merge_join_desc_1",
     "sort_merge_join_desc_2",
     "sort_merge_join_desc_3",
     "sort_merge_join_desc_4",
-    "sort_merge_join_desc_5",
-    "sort_merge_join_desc_6",
-    "sort_merge_join_desc_7",
     "subq2",
     "tablename_with_select",
     "udf2",
@@ -429,6 +448,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "udf_int",
     "udf_isnotnull",
     "udf_isnull",
+    "udf_java_method",
     "udf_lcase",
     "udf_length",
     "udf_lessthan",
@@ -452,12 +472,12 @@ class HiveCompatibility extends HiveQueryFileTest {
     "udf_positive",
     "udf_pow",
     "udf_power",
+    "udf_radians",
     "udf_rand",
     "udf_regexp_extract",
     "udf_regexp_replace",
     "udf_repeat",
     "udf_rlike",
-    "udf_round",
     "udf_rpad",
     "udf_rtrim",
     "udf_second",
@@ -494,6 +514,8 @@ class HiveCompatibility extends HiveQueryFileTest {
     "udf_xpath_int",
     "udf_xpath_long",
     "udf_xpath_short",
+    "udf_xpath_string",
+    "unicode_notation",
     "union10",
     "union11",
     "union13",

@@ -78,7 +78,7 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
 }
 
 case class InsertIntoHiveTable(
-    table: MetastoreRelation, partition: Map[String, String], child: SharkPlan)
+    table: MetastoreRelation, partition: Map[String, Option[String]], child: SharkPlan)
     (@transient sc: SharkContext)
   extends UnaryNode {
 
@@ -110,6 +110,7 @@ case class InsertIntoHiveTable(
   def output = child.output
 
   def execute() = {
+    require(partition.isEmpty, "Inserting into partitioned table not supported.")
     val childRdd = child.execute()
     assert(childRdd != null)
 
@@ -122,7 +123,7 @@ case class InsertIntoHiveTable(
 
     val partitionSpec =
       if (partition.nonEmpty) {
-        s"PARTITION (${partition.map { case (k,v) => s"$k=$v" }.mkString(",")})"
+        s"PARTITION (${partition.map { case (k,v) => s"$k=${v.get}" }.mkString(",")})"
       } else {
         ""
       }

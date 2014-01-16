@@ -40,6 +40,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry {
   def javaClassToDataType(clz: Class[_]): DataType = clz match {
     case c: Class[_] if c == classOf[DoubleWritable] => DoubleType
     case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.DoubleWritable] => DoubleType
+    case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.HiveDecimalWritable] => DecimalType
     case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.ByteWritable] => ByteType
     case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.ShortWritable] => ShortType
     case c: Class[_] if c == classOf[Text] => StringType
@@ -162,6 +163,7 @@ case class HiveGenericUdf(
     case LongType => PrimitiveObjectInspectorFactory.javaLongObjectInspector
     case ShortType => PrimitiveObjectInspectorFactory.javaShortObjectInspector
     case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
+    case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
   }
 
   lazy val instance = {
@@ -178,7 +180,7 @@ case class HiveGenericUdf(
     case l: Short => l: java.lang.Short
     case l: Byte => l: java.lang.Byte
     case s: Seq[_] => seqAsJavaList(s.map(wrap))
-    case null => null // NullWritable.get()
+    case null => null
   }
 
   def evaluate(evaluatedChildren: Seq[Any]): Any = {

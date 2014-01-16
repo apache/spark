@@ -81,6 +81,12 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
             } else {
               right.asInstanceOf[Double] compare left.asInstanceOf[Double]
             }
+          } else if (curDataType == LongType) {
+            if (curDirection == Ascending) {
+              left.asInstanceOf[Long] compare right.asInstanceOf[Long]
+            } else {
+              right.asInstanceOf[Long] compare left.asInstanceOf[Long]
+            }
           } else if (curDataType == StringType) {
             if (curDirection == Ascending) {
               left.asInstanceOf[String] compare right.asInstanceOf[String]
@@ -111,6 +117,7 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
   def output = child.output
 }
 
+// TODO: Rename: SchemaRDD
 case class LocalRelation(output: Seq[Attribute], data: Seq[IndexedSeq[Any]])
                         (@transient sc: SharkContext) extends LeafNode {
   def execute() = sc.makeRDD(data.map(buildRow), 1)

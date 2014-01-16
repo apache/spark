@@ -33,6 +33,8 @@ object EliminateSubqueries extends Rule[LogicalPlan] {
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
+      // Skip redundant folding of literals.
+      case l: Literal => l
       case e if e.foldable => Literal(Evaluate(e, Nil), e.dataType)
     }
   }

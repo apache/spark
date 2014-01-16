@@ -14,11 +14,13 @@ case object LongType extends DataType
 case object ByteType extends DataType
 case object ShortType extends DataType
 
+case object DecimalType extends DataType
+
 case object NullType extends DataType
 
 case class ArrayType(elementType: DataType) extends DataType
 
-case class StructField(name: String, dataType: DataType)
+case class StructField(name: String, dataType: DataType, nullable: Boolean)
 case class StructType(fields: Seq[StructField]) extends DataType
 
 case class MapType(keyType: DataType, valueType: DataType) extends DataType
