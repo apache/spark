@@ -114,6 +114,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
     "grantTime",
     "lastUpdateTime",
     "last_modified_time",
+    "Owner:",
     // The following are hive specific schema parameters which we do not need to match exactly.
     "numFiles",
     "numRows",
