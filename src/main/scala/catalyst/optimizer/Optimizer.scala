@@ -12,8 +12,8 @@ object Optimize extends RuleExecutor[LogicalPlan] {
       EliminateSubqueries) ::
     Batch("ConstantFolding", Once,
       ConstantFolding,
-      BooleanSimplification
-    ) :: Nil
+      BooleanSimplification,
+      SimplifyCasts) :: Nil
 }
 
 /**
@@ -67,5 +67,14 @@ object BooleanSimplification extends Rule[LogicalPlan] {
         }
       }
     }
+  }
+}
+
+/**
+ * Removes casts that are unnecessary because the input is already the correct type.
+ */
+object SimplifyCasts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case Cast(e, dataType) if e.dataType == dataType => e
   }
 }
