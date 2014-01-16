@@ -88,7 +88,7 @@ extends Actor with Receiver {
   override def preStart = remotePublisher ! SubscribeReceiver(context.self)
 
   def receive = {
-    case msg ⇒ context.parent ! pushBlock(msg.asInstanceOf[T])
+    case msg ⇒ pushBlock(msg.asInstanceOf[T])
   }
 
   override def postStop() = remotePublisher ! UnsubscribeReceiver(context.self)

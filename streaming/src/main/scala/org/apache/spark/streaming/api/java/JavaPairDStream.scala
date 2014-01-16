@@ -37,6 +37,10 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.rdd.PairRDDFunctions
 import org.apache.spark.streaming.dstream.DStream
 
+/**
+ * A Java-friendly interface to a DStream of key-value pairs, which provides extra methods
+ * like `reduceByKey` and `join`.
+ */
 class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
     implicit val kManifest: ClassTag[K],
     implicit val vManifest: ClassTag[V])
