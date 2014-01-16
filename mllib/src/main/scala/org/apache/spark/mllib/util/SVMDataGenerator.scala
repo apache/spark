@@ -56,7 +56,7 @@ object SVMDataGenerator {
       val x = Array.fill[Double](nfeatures) {
         rnd.nextDouble() * 2.0 - 1.0
       }
-      val yD = (new DoubleMatrix(1, x.length, x:_*)).dot(trueWeights) + rnd.nextGaussian() * 0.1
+      val yD = new DoubleMatrix(1, x.length, x: _*).dot(trueWeights) + rnd.nextGaussian() * 0.1
       val y = if (yD < 0) 0.0 else 1.0
       LabeledPoint(y, x)
     }

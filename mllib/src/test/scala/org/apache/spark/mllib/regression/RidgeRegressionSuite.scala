@@ -17,15 +17,12 @@
 
 package org.apache.spark.mllib.regression
 
-import scala.collection.JavaConversions._
-import scala.util.Random
 
 import org.jblas.DoubleMatrix
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.LinearDataGenerator
 
 class RidgeRegressionSuite extends FunSuite with BeforeAndAfterAll {

@@ -97,7 +97,7 @@ object MLUtils {
     while (col < nfeatures) {
       xColMean.put(col, xColSumsMap(col)._1 / nexamples)
       val variance =
-        (xColSumsMap(col)._2 - (math.pow(xColSumsMap(col)._1, 2) / nexamples)) / (nexamples)
+        (xColSumsMap(col)._2 - (math.pow(xColSumsMap(col)._1, 2) / nexamples)) / nexamples
       xColSd.put(col, math.sqrt(variance))
       col += 1
     }
