@@ -84,6 +84,52 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   }
 
   /**
+   * Returns a copy of this node where `f` has been applied to all the nodes children.
+   */
+  def mapChildren(f: BaseType => BaseType): this.type = {
+    var changed = false
+    val newArgs = productIterator.map {
+      case arg: TreeNode[_] if (children contains arg) =>
+        val newChild = f(arg.asInstanceOf[BaseType])
+        if(newChild fastEquals arg)
+          arg
+        else {
+          changed = true
+          newChild
+        }
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }.toArray
+    if(changed) makeCopy(newArgs) else this
+  }
+
+  /**
+   * Returns a copy of this node with the children replaced.
+   * TODO: Validate somewhere (in debug mode?) that children are ordered correctly.
+   */
+  def withNewChildren(newChildren: Seq[BaseType]): this.type = {
+    assert(newChildren.size == children.size, "Incorrect number of children")
+    var changed = false
+    val remainingNewChildren = newChildren.toBuffer
+    val remainingOldChildren = children.toBuffer
+    val newArgs = productIterator.map {
+      case arg: TreeNode[_] if (children contains arg) =>
+        val newChild = remainingNewChildren.remove(0)
+        val oldChild = remainingOldChildren.remove(0)
+        if(newChild fastEquals oldChild)
+          oldChild
+        else {
+          changed = true
+          newChild
+        }
+      case nonChild: AnyRef => nonChild
+      case null => null
+    }.toArray
+
+    if(changed) makeCopy(newArgs) else this
+  }
+
+  /**
    * Returns a copy of this node where `rule` has been recursively applied to the tree.
    * When `rule` does not apply to a given node it is left unchanged.
    * Users should not expect a specific directionality. If a specific directionality is needed,
