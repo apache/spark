@@ -37,7 +37,6 @@ import org.apache.mesos.MesosNativeLibrary
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
-import org.apache.spark.executor.ExecutorURLClassLoader
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
@@ -46,7 +45,8 @@ import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, Me
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
+import org.apache.spark.util.{Utils, TimeStampedHashMap, MetadataCleaner, MetadataCleanerType,
+  ClosureCleaner, SparkURLClassLoader}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -140,7 +140,7 @@ class SparkContext(
   // Create a classLoader for use by the driver so that jars added via addJar are available to the driver
   // Do this before all other initialization so that any thread pools created for this SparkContext
   // uses the class loader
-  private[spark] val classLoader = new ExecutorURLClassLoader(Array.empty[URL],
+  private[spark] val classLoader = new SparkURLClassLoader(Array.empty[URL],
                                      this.getClass.getClassLoader)
   Thread.currentThread.setContextClassLoader(classLoader)
 
