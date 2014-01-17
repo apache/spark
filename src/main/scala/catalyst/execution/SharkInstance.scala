@@ -135,7 +135,7 @@ abstract class SharkInstance extends Logging {
       s"""== Logical Plan ==
          |${stringOrError(analyzed)}
          |== Physical Plan ==
-         |${stringOrError(sharkPlan)}
+         |${stringOrError(executedPlan)}
       """.stripMargin.trim
   }
 
