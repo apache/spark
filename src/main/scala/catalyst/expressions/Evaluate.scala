@@ -226,6 +226,7 @@ object Evaluate extends Logging {
       case implementedFunction: ImplementedUdf =>
         implementedFunction.evaluate(implementedFunction.children.map(eval))
 
+      case a: Attribute => throw new OptimizationException(a, "Unable to evaluate unbound reference without access to the input schema.")
       case other => throw new OptimizationException(other, "evaluation not implemented")
     }
 
