@@ -1,5 +1,6 @@
 #exportPattern("^[[:alpha:]]+")
 exportClasses("RDD")
+exportClasses("PipelinedRDD")
 exportClasses("Broadcast")
 exportMethods(
               "cache",
