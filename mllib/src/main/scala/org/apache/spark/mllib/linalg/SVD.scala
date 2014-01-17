@@ -33,7 +33,7 @@ class SVD {
   /**
    * Set the number of top-k singular vectors to return
    */
-  def setK(k: Int): this.type = {
+  def setK(k: Int): SVD = {
     this.k = k
     this
   }
