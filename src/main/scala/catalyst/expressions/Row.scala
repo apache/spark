@@ -1,6 +1,8 @@
 package catalyst
 package expressions
 
+import types._
+
 /**
  * Represents one row of output from a relational operator.  Allows both generic access by ordinal,
  * which will incur boxing overhead for primitives, as well as native primitive access.
@@ -75,5 +77,52 @@ class GenericRow(input: Seq[Any]) extends Row {
   def getByte(i: Int): Byte = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive byte value.")
     values(i).asInstanceOf[Byte]
+  }
+}
+
+object OrderedRow {
+  def apply(ordering: Seq[SortOrder], input: Iterator[Row]): Iterator[(OrderedRow, Row)] =  {
+    val expressions = ordering.map(_.child)
+    val orderingObjects = ordering.map { o =>
+      o.dataType match {
+        case nativeType: NativeType =>
+          if(o.direction == Ascending)
+            nativeType.ordering.asInstanceOf[Ordering[Any]]
+          else
+            nativeType.ordering.asInstanceOf[Ordering[Any]].reverse
+        case _ => sys.error(s"No ordering available for ${o.dataType}")
+      }
+    }
+    val directions = ordering.map(_.direction)
+
+    input.map { row =>
+      (new OrderedRow(orderingObjects, directions, expressions.map(Evaluate(_, Vector(row)))), row)
+    }
+  }
+}
+
+class OrderedRow(ordering: Seq[Ordering[Any]], directions: Seq[SortDirection], input: Seq[Any])
+    extends GenericRow(input) with Ordered[OrderedRow] {
+
+  def compare(other: OrderedRow): Int = {
+    var i = 0
+    while (i < values.size) {
+      val left = values(i)
+      val right = other.values(i)
+
+      val comparison =
+        if (left == null && right == null) {
+          0
+        } else if (left == null) {
+          if (directions(i) == Ascending) -1 else 1
+        } else if (right == null) {
+          if (directions(i) == Ascending) 1 else -1
+        } else {
+          ordering(i).compare(left, right)
+        }
+      if (comparison != 0) return comparison
+      i += 1
+    }
+    return 0
   }
 }
