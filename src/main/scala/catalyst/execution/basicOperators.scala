@@ -90,6 +90,12 @@ case class Sort(
             } else {
               right.asInstanceOf[Double] compare left.asInstanceOf[Double]
             }
+          } else if (curDataType == LongType) {
+            if (curDirection == Ascending) {
+              left.asInstanceOf[Long] compare right.asInstanceOf[Long]
+            } else {
+              right.asInstanceOf[Long] compare left.asInstanceOf[Long]
+            }
           } else if (curDataType == StringType) {
             if (curDirection == Ascending) {
               left.asInstanceOf[String] compare right.asInstanceOf[String]
