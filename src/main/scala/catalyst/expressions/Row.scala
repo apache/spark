@@ -86,7 +86,7 @@ object OrderedRow {
     val orderingObjects = ordering.map { o =>
       o.dataType match {
         case nativeType: NativeType =>
-          if(o.direction == Ascending)
+          if (o.direction == Ascending)
             nativeType.ordering.asInstanceOf[Ordering[Any]]
           else
             nativeType.ordering.asInstanceOf[Ordering[Any]].reverse
