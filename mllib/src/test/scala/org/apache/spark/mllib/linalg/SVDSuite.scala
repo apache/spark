@@ -45,7 +45,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
   val EPSILON = 1e-4
 
   // Return jblas matrix from sparse matrix RDD
-  def getDenseMatrix(matrix:SparseMatrix) : DoubleMatrix = {
+  def getDenseMatrix(matrix: SparseMatrix) : DoubleMatrix = {
     val data = matrix.data
     val m = matrix.m
     val n = matrix.n
@@ -54,7 +54,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     ret
   }
 
-  def assertMatrixEquals(a:DoubleMatrix, b:DoubleMatrix) {
+  def assertMatrixEquals(a: DoubleMatrix, b: DoubleMatrix) {
     assert(a.rows == b.rows && a.columns == b.columns, "dimension mismatch")
     val diff = DoubleMatrix.zeros(a.rows, a.columns)
     Array.tabulate(a.rows, a.columns){(i, j) =>
