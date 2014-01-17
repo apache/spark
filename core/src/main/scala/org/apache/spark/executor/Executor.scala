@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, SparkURLClassLoader}
 
 /**
  * Spark executor used with Mesos and the standalone scheduler.
@@ -293,7 +293,7 @@ private[spark] class Executor(
    * Create a ClassLoader for use in tasks, adding any JARs specified by the user or any classes
    * created by the interpreter to the search path
    */
-  private def createClassLoader(): ExecutorURLClassLoader = {
+  private def createClassLoader(): SparkURLClassLoader = {
     val loader = this.getClass.getClassLoader
 
     // For each of the jars in the jarSet, add them to the class loader.
@@ -301,7 +301,7 @@ private[spark] class Executor(
     val urls = currentJars.keySet.map { uri =>
       new File(uri.split("/").last).toURI.toURL
     }.toArray
-    new ExecutorURLClassLoader(urls, loader)
+    new SparkURLClassLoader(urls, loader)
   }
 
   /**
