@@ -152,8 +152,8 @@ object BooleanComparisons extends Rule[LogicalPlan] {
 }
 
 /**
- * Casts to/from [[BooleanType]] are transformed into comparisons since the JVM does not consider
- * Booleans to be numeric types.
+ * Casts to/from [[catalyst.types.BooleanType BooleanType]] are transformed into comparisons since
+ * the JVM does not consider Booleans to be numeric types.
  */
 object BooleanCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
@@ -165,7 +165,7 @@ object BooleanCasts extends Rule[LogicalPlan] {
 
 /**
  * When encountering a cast from a string representing a valid fractional number to an integral type
- * the jvm will throw a [[java.lang.NumberFormatException]].  Hive, in contrast, returns the
+ * the jvm will throw a `java.lang.NumberFormatException`.  Hive, in contrast, returns the
  * truncated version of this number.
  */
 object StringToIntegralCasts extends Rule[LogicalPlan] {

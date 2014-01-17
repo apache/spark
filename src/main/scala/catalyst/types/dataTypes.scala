@@ -4,7 +4,7 @@ package types
 import expressions.Expression
 
 abstract class DataType {
-  /** Matches any expression that evaluates to this [[DataType]] */
+  /** Matches any expression that evaluates to this DataType */
   def unapply(a: Expression): Boolean = a match {
     case e: Expression if e.dataType == this => true
     case _ => false
