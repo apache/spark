@@ -137,12 +137,14 @@ class SparkContext(
   // An asynchronous listener bus for Spark events
   private[spark] val listenerBus = new LiveListenerBus
 
-  // Create a classLoader for use by the driver so that jars added via addJar are available to the driver
-  // Do this before all other initialization so that any thread pools created for this SparkContext
-  // uses the class loader
-  private[spark] val classLoader = new SparkURLClassLoader(Array.empty[URL],
-                                     this.getClass.getClassLoader)
-  Thread.currentThread.setContextClassLoader(classLoader)
+  // Create a classLoader for use by the driver so that jars added via addJar are available to the
+  // driver.  Do this before all other initialization so that any thread pools created for this
+  // SparkContext uses the class loader.
+  private[spark] val classLoader = if (conf.getBoolean("spark.driver.add-dynamic-jars", false)) {
+    val loader = new SparkURLClassLoader(Array.empty[URL], this.getClass.getClassLoader)
+    Thread.currentThread.setContextClassLoader(loader)
+    Some(loader)
+  } else None
 
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.create(
@@ -839,9 +841,11 @@ class SparkContext(
   }
 
   private def addUrlToDriverLoader(url: URL) {
-    if (!classLoader.getURLs.contains(url)) {
-      logInfo("Adding JAR " + url + " to driver class loader")
-      classLoader.addURL(url)
+    classLoader.foreach { loader =>
+      if (!loader.getURLs.contains(url)) {
+        logInfo("Adding JAR " + url + " to driver class loader")
+        loader.addURL(url)
+      }
     }
   }
 
