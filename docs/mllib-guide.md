@@ -463,7 +463,7 @@ such values, then the dimensions of the return will be:
 * *U* is *m x k* and satisfies U^T*U = eye(k).
 * *V* is *n x k* and satisfies V^TV = eye(k).
 
-All input and output is expected in sparse matrix format, 1-indexed
+All input and output is expected in sparse matrix format, 0-indexed
 as tuples of the form ((i,j),value) all in
 SparseMatrix RDDs. Below is example usage.
 
