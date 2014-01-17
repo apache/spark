@@ -152,6 +152,30 @@ object BooleanComparisons extends Rule[LogicalPlan] {
 }
 
 /**
+ * Casts to/from [[catalyst.types.BooleanType BooleanType]] are transformed into comparisons since
+ * the JVM does not consider Booleans to be numeric types.
+ */
+object BooleanCasts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case Cast(e, BooleanType) => Not(Equals(e, Literal(0)))
+    case Cast(e, dataType) if e.dataType == BooleanType =>
+      Cast(If(e, Literal(1), Literal(0)), dataType)
+  }
+}
+
+/**
+ * When encountering a cast from a string representing a valid fractional number to an integral type
+ * the jvm will throw a `java.lang.NumberFormatException`.  Hive, in contrast, returns the
+ * truncated version of this number.
+ */
+object StringToIntegralCasts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case Cast(e @ StringType(), t: IntegralType) =>
+      Cast(Cast(e, DecimalType), t)
+  }
+}
+
+/**
  * This ensure that the types for various functions are as expected.  Most of these rules are
  * actually Hive specific.
  * TODO: Move this to the hive specific package once we make that separation.
@@ -162,9 +186,9 @@ object FunctionArgumentConversion extends Rule[LogicalPlan] {
     case e if !e.childrenResolved => e
 
     // Promote SUM to largest types to prevent overflows.
-    // TODO: This is enough to make most of the tests pass, but we really need a full set of our own
-    // to really ensure compatibility.
-    case Sum(e) if e.dataType == IntegerType => Sum(Cast(e, LongType))
+    case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
+    case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
+    case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
 
   }
 }
