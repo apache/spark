@@ -45,16 +45,7 @@ case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) 
   def execute() = sc.makeRDD(executeCollect(), 1)
 }
 
-case class Sort(
-    sortExprs: Seq[SortOrder],
-    child: SharkPlan)
-    (override val outputDataProperty: DataProperty =
-       SortProperty(sortExprs)) extends UnaryNode {
-  val numPartitions = 1 // TODO: Set with input cardinality
-
-  override val requiredDataProperty: DataProperty = SortProperty(sortExprs)
-  override def otherCopyArgs = outputDataProperty :: Nil
-
+case class SortPartitions(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
   private final val directions = sortExprs.map(_.direction).toIndexedSeq
   private final val dataTypes = sortExprs.map(_.dataType).toIndexedSeq
 

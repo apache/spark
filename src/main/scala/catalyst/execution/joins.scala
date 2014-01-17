@@ -15,16 +15,13 @@ case class SparkEquiInnerJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SharkPlan,
-    right: SharkPlan)
-  (override val outputDataProperty: DataProperty =
-    GroupProperty(leftKeys))
-  extends BinaryNode {
+    right: SharkPlan) extends BinaryNode {
+
+
+  override def requiredChildPartitioning =
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   def output = left.output ++ right.output
-
-  override val leftRequiredDataProperty: DataProperty = GroupProperty(leftKeys)
-  override val rightRequiredDataProperty: DataProperty = GroupProperty(rightKeys)
-  override def otherCopyArgs = outputDataProperty :: Nil
 
   def execute() = attachTree(this, "execute") {
     val leftWithKeys = left.execute.map { row =>

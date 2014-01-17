@@ -13,14 +13,10 @@ case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SharkPlan)
-    (override val outputDataProperty: DataProperty =
-       GroupProperty(groupingExpressions))
   extends UnaryNode {
 
-  override val requiredDataProperty: DataProperty = GroupProperty(groupingExpressions)
-  override def otherCopyArgs = outputDataProperty :: Nil
-
-
+  val requiredPartitioning = ClusteredDistribution(groupingExpressions)
+  override def requiredChildPartitioning = Seq(requiredPartitioning, requiredPartitioning)
 
   def output = aggregateExpressions.map(_.toAttribute)
 
@@ -46,6 +42,7 @@ case class Aggregate(
         val remainingAttributes = impl.collect { case a: Attribute => a }
         // If any references exist that are not inside agg functions then the must be grouping exprs
         // in this case we must rebind them to the grouping tuple.
+        // TODO: Is this right still? Do we need this?
         if (remainingAttributes.nonEmpty) {
           val unaliasedAggregateExpr = agg transform { case Alias(c, _) => c }
 
@@ -154,7 +151,6 @@ case class SparkAggregate(aggregateExprs: Seq[NamedExpression], child: SharkPlan
                          (@transient sc: SharkContext) extends UnaryNode {
   def output = aggregateExprs.map(_.toAttribute)
   override def otherCopyArgs = Seq(sc)
-  override val requiredDataProperty: DataProperty = GroupProperty(Nil)
 
   case class AverageFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
     def this() = this(null, null) // Required for serialization.

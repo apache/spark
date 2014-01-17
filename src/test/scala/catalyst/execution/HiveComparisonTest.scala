@@ -100,7 +100,8 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
       // Clean out non-deterministic time schema info.
       case _: Command => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _ =>
-        val isOrdered = sharkQuery.executedPlan.collect { case s: Sort => s}.nonEmpty
+        // TODO: Really we only care about the final total ordering here...
+        val isOrdered = sharkQuery.executedPlan.collect { case s @ Exchange(OrderedDistribution(_), _, _) => s}.nonEmpty
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
         if (!isOrdered) answer.sorted else answer
     }

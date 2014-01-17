@@ -3,8 +3,6 @@ package plans
 
 import catalyst.expressions.{SortOrder, Attribute, Expression}
 import catalyst.trees._
-import catalyst.execution.GroupProperty
-import catalyst.execution.SortProperty
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
   self: PlanType with Product =>
@@ -51,14 +49,6 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
         case e: Expression => transformExpressionDown(e)
         case other => other
       }
-      case g @ GroupProperty(groupingExpressions) => GroupProperty(
-        groupingExpressions.map {
-          case e: Expression => transformExpressionDown(e)
-          case other => other})
-      case g @ SortProperty(sortingExpressions) => SortProperty(
-        sortingExpressions.map {
-          case e: Expression => transformExpressionDown(e)
-          case other => other}.asInstanceOf[Seq[SortOrder]])
       case other: AnyRef => other
     }.toArray
 
@@ -91,14 +81,6 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
         case e: Expression => transformExpressionUp(e)
         case other => other
       }
-      case g @ GroupProperty(groupingExpressions) => GroupProperty(
-        groupingExpressions.map {
-          case e: Expression => transformExpressionUp(e)
-          case other => other})
-      case g @ SortProperty(sortingExpressions) => SortProperty(
-        sortingExpressions.map {
-          case e: Expression => transformExpressionUp(e)
-          case other => other}.asInstanceOf[Seq[SortOrder]])
       case other: AnyRef => other
     }.toArray
 
@@ -118,15 +100,6 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
     productIterator.flatMap {
       case e: Expression => e :: Nil
       case Some(e: Expression) => e :: Nil
-      case seq: Seq[_] => seq.flatMap {
-        case e: Expression => e :: Nil
-        case other => Nil
-      }
-      case g @ GroupProperty(groupingExpressions) => groupingExpressions.flatMap {
-          case e: Expression => e :: Nil
-          case other => Nil
-      }
-      case g @ SortProperty(sortingExpressions) => sortingExpressions.flatMap {
       case seq: Traversable[_] => seq.flatMap {
         case e: Expression => e :: Nil
         case other => Nil

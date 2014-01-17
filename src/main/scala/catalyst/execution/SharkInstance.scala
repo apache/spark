@@ -82,11 +82,6 @@ abstract class SharkInstance extends Logging {
   }
 
   object PrepareForExecution extends RuleExecutor[SharkPlan] {
-    // TODO: [[catalyst.execution.AddExchange]] should be in a phase before
-    // PrepareForExecution. We may also need a phase of physical optimizations.
-    // In this phase, we can alter the data property in an Exchange operator to
-    // reduce the number of shuffling phases. Or, this physical optimization phase can be
-    // a part of QueryPlanner when a planner can accept a physical operator (a SharkPlan).
     val batches =
       Batch("Add exchange", Once,
         AddExchange) ::

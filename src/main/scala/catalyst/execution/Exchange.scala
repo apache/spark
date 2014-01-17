@@ -9,29 +9,29 @@ import catalyst.types._
 import org.apache.spark.{RangePartitioner, HashPartitioner}
 import org.apache.spark.rdd.ShuffledRDD
 
-case class Exchange(
-    dataProperty: DataProperty,
-    child: SharkPlan,
-    numPartitions: Int = 8) extends UnaryNode {
+case class Exchange(newPartitioning: Distribution, numPartitions: Int, child: SharkPlan)
+    extends UnaryNode {
 
+  override def outputPartitioning = newPartitioning
   def output = child.output
 
   def execute() = attachTree(this , "execute") {
-    dataProperty match {
-      case NotSpecifiedProperty() => child.execute()
-      case g @ GroupProperty(groupingExpressions) => {
+    newPartitioning match {
+      case ClusteredDistribution(expressions) =>
+        // TODO: Eliminate redundant expressions in grouping key and value.
         val rdd = child.execute().map { row =>
-          (buildRow(groupingExpressions.toSeq.map(Evaluate(_, Vector(row)))), row)
+          (buildRow(expressions.toSeq.map(Evaluate(_, Vector(row)))), row)
         }
         val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, (Row, Row)](rdd, part)
 
         shuffled.map(_._2)
-      }
-      case s @ SortProperty(sortingExpressions) => {
+
+      case OrderedDistribution(sortingExpressions) =>
         val directions = sortingExpressions.map(_.direction).toIndexedSeq
         val dataTypes = sortingExpressions.map(_.dataType).toIndexedSeq
 
+        // TODO: MOVE THIS!
         class SortKey(val keyValues: IndexedSeq[Any])
           extends Ordered[SortKey]
           with Serializable {
@@ -98,63 +98,26 @@ case class Exchange(
         val shuffled = new ShuffledRDD[SortKey, Row, (SortKey, Row)](rdd, part)
 
         shuffled.map(_._2)
-      }
+      case UnknownDistribution =>
+        logger.warn("Worthless repartitioning requested.")
+        child.execute()
     }
   }
 }
 
 object AddExchange extends Rule[SharkPlan] {
-  def apply(plan: SharkPlan): SharkPlan = {
-    // TODO: determine the number of partitions.
-    // TODO: We need to consider the number of partitions to determine if we
-    // will add an Exchange operator. If a dataset only has a single partition,
-    // even if needExchange returns true, we do not need to shuffle the data again.
-    val numPartitions = 8
-    plan.transformUp {
-      case aggregate @ Aggregate(
-        groupingExpressions,
-        aggregateExpressions,
-        child) => {
-        if (child.outputDataProperty.needExchange(aggregate.requiredDataProperty)) {
-          val exchange = new Exchange(aggregate.requiredDataProperty, child, numPartitions)
+  // TODO: determine the number of partitions.
+  // TODO: We need to consider the number of partitions to determine if we
+  // will add an Exchange operator. If a dataset only has a single partition,
+  // even if needExchange returns true, we do not need to shuffle the data again.
+  val numPartitions = 8
 
-          Aggregate(groupingExpressions, aggregateExpressions, exchange)()
-        } else {
-          aggregate
-        }
-      }
-      case equiInnerJoin @ SparkEquiInnerJoin(
-        leftKeys,
-        rightKeys,
-        left,
-        right) => {
-        val newLeft = {
-          if (left.outputDataProperty.needExchange(equiInnerJoin.leftRequiredDataProperty)) {
-            new Exchange(equiInnerJoin.leftRequiredDataProperty, left, numPartitions)
-          } else {
-            left
-          }
-        }
-
-        val newRight = {
-          if (right.outputDataProperty.needExchange(equiInnerJoin.rightRequiredDataProperty)) {
-            new Exchange(equiInnerJoin.rightRequiredDataProperty, right, numPartitions)
-          } else {
-            right
-          }
-        }
-
-        SparkEquiInnerJoin(leftKeys, rightKeys, newLeft, newRight)()
-      }
-      case sort @ Sort(sortExprs, child) => {
-        if (child.outputDataProperty.needExchange(sort.requiredDataProperty)) {
-          val exchange = new Exchange(sort.requiredDataProperty, child, numPartitions)
-
-          Sort(sortExprs, exchange)()
-        } else {
-          sort
-        }
-      }
-    }
+  def apply(plan: SharkPlan): SharkPlan = plan.transformUp {
+    case operator: SharkPlan =>
+      operator.withNewChildren(operator.requiredChildPartitioning.zip(operator.children).map {
+        case (required, child) if !child.outputPartitioning.satisfies(required)  =>
+          Exchange(required, numPartitions, child)
+        case (_, child) => child
+      })
   }
 }
