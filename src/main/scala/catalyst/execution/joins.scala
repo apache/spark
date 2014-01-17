@@ -29,13 +29,13 @@ case class SparkEquiInnerJoin(
   def execute() = attachTree(this, "execute") {
     val leftWithKeys = left.execute.map { row =>
       val joinKeys = leftKeys.map(Evaluate(_, Vector(row)))
-      logger.debug(s"Generated left join keys ($leftKeys) => ($joinKeys) given row $row")
+      logger.debug(s"Generated left join keys [${leftKeys.mkString(",")}] => [${joinKeys.mkString(",")}] given row $row")
       (joinKeys, row)
     }
 
     val rightWithKeys = right.execute.map { row =>
       val joinKeys = rightKeys.map(Evaluate(_, Vector(EmptyRow, row)))
-      logger.debug(s"Generated right join keys ($rightKeys) => ($joinKeys) given row $row")
+      logger.debug(s"Generated right join keys [${rightKeys.mkString(",")}] => [${joinKeys.mkString(",")}] given row $row")
       (joinKeys, row)
     }
 
@@ -51,7 +51,7 @@ case class SparkEquiInnerJoin(
    */
   protected def filterNulls(rdd: RDD[(Seq[Any], Row)]) =
     rdd.filter {
-      case (key: Seq[_], _) => !key.map(_ == null).reduceLeft(_ || _)
+      case (key: Seq[_], _) => !key.exists(_ == null)
     }
 }
 
