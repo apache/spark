@@ -476,8 +476,8 @@ import org.apache.spark.mllib.linalg.MatrixEntry
 
 // Load and parse the data file
 val data = sc.textFile("mllib/data/als/test.data").map { line =>
-      val parts = line.split(',')
-      MatrixEntry(parts(0).toInt, parts(1).toInt, parts(2).toDouble)
+  val parts = line.split(',')
+  MatrixEntry(parts(0).toInt, parts(1).toInt, parts(2).toDouble)
 }
 val m = 4
 val n = 4

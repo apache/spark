@@ -50,7 +50,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val m = matrix.m
     val n = matrix.n
     val ret = DoubleMatrix.zeros(m, n)
-    matrix.data.toArray.map(x => ret.put(x.i - 1, x.j - 1, x.mval))
+    matrix.data.toArray.map(x => ret.put(x.i, x.j, x.mval))
     ret
   }
 
@@ -68,7 +68,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val m = 10
     val n = 3
     val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a + 1, b + 1, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten )
+      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten )
 
     val a = SparseMatrix(data, m, n)
 
@@ -97,7 +97,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val m = 10
     val n = 3   
     val data = sc.makeRDD(Array.tabulate(m, n){ (a,b) =>
-      MatrixEntry(a + 1, b + 1, 1.0) }.flatten )
+      MatrixEntry(a, b, 1.0) }.flatten )
     val k = 1
 
     val a = SparseMatrix(data, m, n)
@@ -130,7 +130,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val m = 10
     val n = 3
     val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
-      MatrixEntry(a + 1, b + 1, (a + 2).toDouble * (b + 1)/(1 + a + b)) }.flatten )
+      MatrixEntry(a, b, (a + 2).toDouble * (b + 1)/(1 + a + b)) }.flatten )
     val a = SparseMatrix(data, m, n)
     
     val k = 1 // only one svalue above this

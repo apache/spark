@@ -49,7 +49,7 @@ class SVD {
 
 /**
  * Top-level methods for calling Singular Value Decomposition
- * NOTE: All matrices are in 1-indexed sparse format RDD[((int, int), value)]
+ * NOTE: All matrices are in 0-indexed sparse format RDD[((int, int), value)]
  */
 object SVD {
 /**
@@ -73,7 +73,7 @@ object SVD {
  * U is m x k and satisfies U'U = eye(k)
  * V is n x k and satisfies V'V = eye(k)
  *
- * All input and output is expected in sparse matrix format, 1-indexed
+ * All input and output is expected in sparse matrix format, 0-indexed
  * as tuples of the form ((i,j),value) all in RDDs using the
  * SparseMatrix class
  *
@@ -110,7 +110,7 @@ object SVD {
     // Construct jblas A^T A locally
     val ata = DoubleMatrix.zeros(n, n)
     for (entry <- emits.toArray) {
-      ata.put(entry._1._1 - 1, entry._1._2 - 1, entry._2)
+      ata.put(entry._1._1, entry._1._2, entry._2)
     }
 
     // Since A^T A is small, we can compute its SVD directly
@@ -129,18 +129,18 @@ object SVD {
     // prepare V for returning
     val retVdata = sc.makeRDD(
             Array.tabulate(V.rows, sigma.length){ (i,j) =>
-                    MatrixEntry(i + 1, j + 1, V.get(i,j)) }.flatten)
+                    MatrixEntry(i, j, V.get(i,j)) }.flatten)
     val retV = SparseMatrix(retVdata, V.rows, sigma.length)
      
     val retSdata = sc.makeRDD(Array.tabulate(sigma.length){
-      x => MatrixEntry(x + 1, x + 1, sigma(x))})
+      x => MatrixEntry(x, x, sigma(x))})
 
     val retS = SparseMatrix(retSdata, sigma.length, sigma.length)
 
     // Compute U as U = A V S^-1
     // turn V S^-1 into an RDD as a sparse matrix
     val vsirdd = sc.makeRDD(Array.tabulate(V.rows, sigma.length)
-                { (i,j) => ((i + 1, j + 1), V.get(i,j) / sigma(j))  }.flatten)
+                { (i,j) => ((i, j), V.get(i,j) / sigma(j))  }.flatten)
 
     // Multiply A by VS^-1
     val aCols = data.map(entry => (entry.j, (entry.i, entry.mval)))
