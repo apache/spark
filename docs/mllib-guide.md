@@ -445,11 +445,12 @@ Given an *m x n* matrix *A*, we can compute matrices *U, S, V* such that
 
 *A = U * S * V^T*
 
-There is no restriction on m, but we require n^2 doubles to fit in memory.
+There is no restriction on m, but we require n^2 doubles to
+fit in memory locally on one machine.
 Further, n should be less than m.
 
 The decomposition is computed by first computing *A^TA = V S^2 V^T*,
-computing svd locally on that (since n x n is small),
+computing SVD locally on that (since n x n is small),
 from which we recover S and V.
 Then we compute U via easy matrix multiplication
 as *U =  A * V * S^-1*

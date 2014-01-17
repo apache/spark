@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.examples
+package org.apache.spark.examples.mllib
       
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.linalg.SVD
