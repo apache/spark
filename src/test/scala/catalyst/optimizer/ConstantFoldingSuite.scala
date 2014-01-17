@@ -36,9 +36,9 @@ class ConstantFoldingSuite extends OptimizerTest {
     comparePlans(optimized, correctAnswer)
   }
 
-    /*
-      * Unit tests for constant folding in expressions.
-      * */
+  /**
+   * Unit tests for constant folding in expressions.
+   */
   test("Constant folding test: expressions only have literals") {
     val originalQuery =
       testRelation
@@ -48,8 +48,8 @@ class ConstantFoldingSuite extends OptimizerTest {
           Literal(2) * (Literal(3) + Literal(4)) as Symbol("2*(3+4)"))
         .where(
           Literal(1) === Literal(1) &&
-            Literal(2) > Literal(3) ||
-            Literal(3) > Literal(2) )
+          Literal(2) > Literal(3) ||
+          Literal(3) > Literal(2) )
         .groupBy(
           Literal(2) * Literal(3) - Literal(6) / (Literal(4) - Literal(2))
         )(Literal(9) / Literal(3) as Symbol("9/3"))
@@ -99,13 +99,13 @@ class ConstantFoldingSuite extends OptimizerTest {
       testRelation
         .where(
           (('a > 1 && Literal(1) === Literal(1)) ||
-            ('a < 10 && Literal(1) === Literal(2)) ||
-            (Literal(1) === Literal(1) && 'b > 1) ||
-            (Literal(1) === Literal(2) && 'b < 10)) &&
-            (('a > 1 || Literal(1) === Literal(1)) &&
-              ('a < 10 || Literal(1) === Literal(2)) &&
-              (Literal(1) === Literal(1) || 'b > 1) &&
-              (Literal(1) === Literal(2) || 'b < 10)))
+           ('a < 10 && Literal(1) === Literal(2)) ||
+           (Literal(1) === Literal(1) && 'b > 1) ||
+           (Literal(1) === Literal(2) && 'b < 10)) &&
+           (('a > 1 || Literal(1) === Literal(1)) &&
+            ('a < 10 || Literal(1) === Literal(2)) &&
+            (Literal(1) === Literal(1) || 'b > 1) &&
+            (Literal(1) === Literal(2) || 'b < 10)))
 
     val optimized = Optimize(originalQuery.analyze)
 

@@ -23,8 +23,9 @@ object Optimize extends RuleExecutor[LogicalPlan] {
 }
 
 /**
- * Removes [[Subquery]] operators from the plan.  Subqueries are only required to provide scoping
- * information for attributes and can be removed once analysis is complete.
+ * Removes [[catalyst.plans.logical.Subquery Subquery]] operators from the plan.  Subqueries are
+ * only required to provide scoping information for attributes and can be removed once analysis is
+ * complete.
  */
 object EliminateSubqueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -33,8 +34,8 @@ object EliminateSubqueries extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces [[Expression]]s that can be statically evaluated with equivalent [[expressions.Literal]]
- * values.
+ * Replaces [[catalyst.expressions.Expression Expressions]] that can be statically evaluated with
+ * equivalent [[catalyst.expressions.Literal Literal]] values.
  */
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -77,8 +78,8 @@ object BooleanSimplification extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines two adjacent [[Filter]] operators into one, merging the conditions into one conjunctive
- * predicate.
+ * Combines two adjacent [[catalyst.plans.logical.Filter Filter]] operators into one, merging the
+ * conditions into one conjunctive predicate.
  */
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -87,8 +88,9 @@ object CombineFilters extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes [[Filter]] operators through [[Project]] operators, in-lining any [[Alias]]es that were
- * defined in the projection.
+ * Pushes [[catalyst.plans.logical.Filter Filter]] operators through
+ * [[catalyst.plans.logical.Project Project]] operators, in-lining any
+ * [[catalyst.expressions.Alias Aliases]] that were defined in the projection.
  *
  * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
@@ -110,9 +112,10 @@ object PushPredicateThroughProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down [[Filter]] operators where the `condition` can be evaluated using only the attributes
- * of the left or right side of an inner join.  Other [[Filter]] conditions are moved into the
- * `condition` of the [[Join]].
+ * Pushes down [[catalyst.plans.logical.Filter Filter]] operators where the `condition` can be
+ * evaluated using only the attributes of the left or right side of an inner join.  Other
+ * [[catalyst.plans.logical.Filter Filter]] conditions are moved into the `condition` of the
+ * [[catalyst.plans.logical.Join Join]].
  */
 object PushPredicateThroughInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -136,7 +139,8 @@ object PushPredicateThroughInnerJoin extends Rule[LogicalPlan] with PredicateHel
 }
 
 /**
- * Removes [[Cast]]s that are unnecessary because the input is already the correct type.
+ * Removes [[catalyst.expressions.Cast Casts]] that are unnecessary because the input is already
+ * the correct type.
  */
 object SimplifyCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
