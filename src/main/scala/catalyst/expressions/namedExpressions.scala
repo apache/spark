@@ -24,6 +24,15 @@ abstract class NamedExpression extends Expression {
   def qualifiers: Seq[String]
 
   def toAttribute: Attribute
+
+  protected def typeSuffix =
+    if(resolved)
+      dataType match {
+        case LongType => "L"
+        case _ => ""
+      }
+    else
+      ""
 }
 
 abstract class Attribute extends NamedExpression {
@@ -62,7 +71,7 @@ case class Alias(child: Expression, name: String)
     }
   }
 
-  override def toString: String = s"$child AS $name#${exprId.id}"
+  override def toString: String = s"$child AS $name#${exprId.id}$typeSuffix"
 
   override protected final def otherCopyArgs = exprId :: qualifiers :: Nil
 }
@@ -84,7 +93,7 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
   extends Attribute with trees.LeafNode[Expression] {
 
   override def equals(other: Any) = other match {
-    case ar: AttributeReference => exprId == ar.exprId
+    case ar: AttributeReference => exprId == ar.exprId && dataType == ar.dataType
     case _ => false
   }
 
@@ -109,5 +118,5 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     else
       AttributeReference(name, dataType, nullable)(exprId, newQualifiers)
 
-  override def toString: String = s"$name#${exprId.id}"
+  override def toString: String = s"$name#${exprId.id}$typeSuffix"
 }

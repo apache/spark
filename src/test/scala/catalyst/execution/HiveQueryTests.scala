@@ -60,4 +60,9 @@ class HiveQueryTests extends HiveComparisonTest {
 
   createQueryTest("LIKE",
     "SELECT * FROM src WHERE value LIKE '%1%'")
+
+  ignore("empty aggregate input") {
+    createQueryTest("empty aggregate input",
+      "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
+  }
 }

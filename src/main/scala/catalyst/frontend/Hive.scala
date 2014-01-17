@@ -77,6 +77,7 @@ object HiveQl {
     "TOK_CREATEFUNCTION",
     "TOK_DROPFUNCTION",
 
+    "TOK_ANALYZE",
     "TOK_ALTERDATABASE_PROPERTIES",
     "TOK_ALTERINDEX_PROPERTIES",
     "TOK_ALTERINDEX_REBUILD",
@@ -324,12 +325,12 @@ object HiveQl {
     case Token("TOK_TABCOL",
            Token(fieldName, Nil) ::
            dataType :: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType))
+      StructField(fieldName, nodeToDataType(dataType), nullable = true)
     case Token("TOK_TABCOL",
            Token(fieldName, Nil) ::
              dataType ::
              _ /* comment */:: Nil) =>
-      StructField(fieldName, nodeToDataType(dataType) )
+      StructField(fieldName, nodeToDataType(dataType), nullable = true)
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for StructField:\n ${dumpTree(a).toString} ")
   }
@@ -343,7 +344,8 @@ object HiveQl {
 
   protected def nodeToPlan(node: Node): LogicalPlan = node match {
     // Just fake explain for any of the native commands.
-    case Token("TOK_EXPLAIN", Token(explainType, _) :: Nil) if nativeCommands contains explainType => NoRelation
+    case Token("TOK_EXPLAIN", explainArgs) if nativeCommands contains explainArgs.head.getText =>
+      NoRelation
     case Token("TOK_EXPLAIN", explainArgs) =>
       // Ignore FORMATTED if present.
       val Some(query) :: _ :: _ :: Nil = getClauses(Seq("TOK_QUERY", "FORMATTED", "EXTENDED"), explainArgs)
@@ -374,7 +376,9 @@ object HiveQl {
             groupByClause ::
             orderByClause ::
             sortByClause ::
-            limitClause :: Nil) = getClauses(Seq("TOK_INSERT_INTO", "TOK_DESTINATION", "TOK_SELECT", "TOK_SELECTDI", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_LIMIT"), singleInsert)
+            clusterByClause ::
+            distributeByClause ::
+            limitClause :: Nil) = getClauses(Seq("TOK_INSERT_INTO", "TOK_DESTINATION", "TOK_SELECT", "TOK_SELECTDI", "TOK_WHERE", "TOK_GROUPBY", "TOK_ORDERBY", "TOK_SORTBY", "TOK_CLUSTERBY", "TOK_DISTRIBUTEBY", "TOK_LIMIT"), singleInsert)
 
         val relations = nodeToRelation(fromClause)
         val withWhere = whereClause.map { whereNode =>
@@ -392,14 +396,21 @@ object HiveQl {
                  Token("TOK_TRANSFORM",
                    Token("TOK_EXPLIST", inputExprs) ::
                    Token("TOK_SERDE", Nil) ::
-                   Token("TOK_RECORDWRITER", Nil) :: // TODO: Need to support other types of (in/out)put
+                   Token("TOK_RECORDWRITER", writerClause) :: // TODO: Need to support other types of (in/out)put
                    Token(script, Nil)::
-                   Token("TOK_SERDE", Nil) ::
-                   Token("TOK_RECORDREADER", Nil) ::
-                   Token("TOK_ALIASLIST", aliases) :: Nil) :: Nil) =>
+                   Token("TOK_SERDE", serdeClause) ::
+                   Token("TOK_RECORDREADER", readerClause) ::
+                   outputClause :: Nil) :: Nil) =>
 
-            val output = aliases.map { case Token(n, Nil) => AttributeReference(n, StringType)() }
+            val output = outputClause match {
+              case Token("TOK_ALIASLIST", aliases) =>
+                aliases.map { case Token(name, Nil) => AttributeReference(name, StringType)() }
+              case Token("TOK_TABCOLLIST", attributes) =>
+                attributes.map { case Token("TOK_TABCOL", Token(name, Nil) :: dataType :: Nil) =>
+                  AttributeReference(name, nodeToDataType(dataType))() }
+            }
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
+
             Some(Transform(inputExprs.map(nodeToExpr), unescapedScript, output, withWhere))
           case _ => None
         }
@@ -422,13 +433,24 @@ object HiveQl {
           else
             withProject
 
-        require(!(orderByClause.isDefined && sortByClause.isDefined), "Can't have both a sort by and order by.")
-        // Right now we treat sorting and ordering as identical.
         val withSort =
-          (orderByClause orElse sortByClause)
-            .map(_.getChildren.map(nodeToSortOrder))
-            .map(Sort(_, withDistinct))
-            .getOrElse(withDistinct)
+          (orderByClause, sortByClause, distributeByClause, clusterByClause) match {
+            case (Some(totalOrdering), None, None, None) =>
+              Sort(totalOrdering.getChildren.map(nodeToSortOrder), withDistinct)
+            case (None, Some(perPartitionOrdering), None, None) =>
+              SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder), withDistinct)
+            case (None, None, Some(partitionExprs), None) =>
+              Repartition(partitionExprs.getChildren.map(nodeToExpr), withDistinct)
+            case (None, Some(perPartitionOrdering), Some(partitionExprs), None) =>
+              SortPartitions(perPartitionOrdering.getChildren.map(nodeToSortOrder),
+                Repartition(partitionExprs.getChildren.map(nodeToExpr), withDistinct))
+            case (None, None, None, Some(clusterExprs)) =>
+              SortPartitions(clusterExprs.getChildren.map(nodeToExpr).map(SortOrder(_, Ascending)),
+                Repartition(clusterExprs.getChildren.map(nodeToExpr), withDistinct))
+            case (None, None, None, None) => withDistinct
+            case _ => sys.error("Unsupported set of ordering / distribution clauses.")
+          }
+
         val withLimit =
           limitClause.map(l => nodeToExpr(l.getChildren.head))
             .map(StopAfter(_, withSort))
@@ -578,7 +600,8 @@ object HiveQl {
       val Token("TOK_TABNAME", Token(tableName, Nil) :: Nil) = nameClause
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
-        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) => key -> value
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) => key -> Some(value)
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => key -> None
       }.toMap).getOrElse(Map.empty)
 
       InsertIntoTable(UnresolvedRelation(tableName, None), partitionKeys, query)
@@ -633,6 +656,10 @@ object HiveQl {
     case Token(".", qualifier :: Token(attr, Nil) :: Nil) =>
       nodeToExpr(qualifier) match {
         case UnresolvedAttribute(qualifierName) => UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr))
+        // The precidence for . seems to be wrong, so [] binds tighter an we need to go inside to find
+        // the underlying attribute references.
+        case GetItem(UnresolvedAttribute(qualifierName), ordinal) =>
+          GetItem(UnresolvedAttribute(qualifierName + "." + cleanIdentifier(attr)), ordinal)
       }
 
     /* Stars (*) */
@@ -655,6 +682,7 @@ object HiveQl {
     case Token("TOK_FUNCTION", Token("TOK_SMALLINT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), ShortType)
     case Token("TOK_FUNCTION", Token("TOK_TINYINT", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), ByteType)
     case Token("TOK_FUNCTION", Token("TOK_BINARY", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), BinaryType)
+    case Token("TOK_FUNCTION", Token("TOK_BOOLEAN", Nil) :: arg :: Nil) => Cast(nodeToExpr(arg), BooleanType)
 
     /* Arithmetic */
     case Token("-", child :: Nil) => UnaryMinus(nodeToExpr(child))
@@ -678,11 +706,16 @@ object HiveQl {
     case Token("REGEXP", left :: right:: Nil) => UnresolvedFunction("REGEXP", Seq(nodeToExpr(left), nodeToExpr(right)))
     case Token("TOK_FUNCTION", Token("TOK_ISNOTNULL", Nil) :: child :: Nil) => IsNotNull(nodeToExpr(child))
     case Token("TOK_FUNCTION", Token("TOK_ISNULL", Nil) :: child :: Nil) => IsNull(nodeToExpr(child))
+    case Token("TOK_FUNCTION", Token("IN", Nil) :: value :: list) => In(nodeToExpr(value), list.map(nodeToExpr))
 
     /* Boolean Logic */
     case Token(AND(), left :: right:: Nil) => And(nodeToExpr(left), nodeToExpr(right))
     case Token(OR(), left :: right:: Nil) => Or(nodeToExpr(left), nodeToExpr(right))
     case Token(NOT(), child :: Nil) => Not(nodeToExpr(child))
+
+    /* Complex datatype manipulation */
+    case Token("[", child :: ordinal :: Nil) =>
+      GetItem(nodeToExpr(child), nodeToExpr(ordinal))
 
     /* Other functions */
     case Token("TOK_FUNCTION", Token(RAND(), Nil) :: Nil) => Rand
@@ -694,7 +727,7 @@ object HiveQl {
       UnresolvedFunction(name, Star(None) :: Nil)
 
     /* Literals */
-    case Token("TOK_NULL", Nil) => Literal(null, IntegerType) // TODO: What type is null?
+    case Token("TOK_NULL", Nil) => Literal(null, NullType)
     case Token(TRUE(), Nil) => Literal(true, BooleanType)
     case Token(FALSE(), Nil) => Literal(false, BooleanType)
     case Token("TOK_STRINGLITERALSEQUENCE", strings) =>
@@ -714,19 +747,9 @@ object HiveQl {
           // Literal tinyint.
           v = Literal(ast.getText().substring(0, ast.getText().length() - 1).toByte, ByteType)
         } else if (ast.getText().endsWith("BD")) {
-          throw new NotImplementedError("Hive Decimal not implemented yet")
-          /* TODO: Implement!
           // Literal decimal
           val strVal = ast.getText().substring(0, ast.getText().length() - 2);
-          HiveDecimal hd = HiveDecimal.create(strVal);
-          int prec = 1;
-          int scale = 0;
-          if (hd != null) {
-            prec = hd.precision();
-            scale = hd.scale();
-          }
-          DecimalTypeInfo typeInfo = TypeInfoFactory.getDecimalTypeInfo(prec, scale);
-          return new ExprNodeConstantDesc(typeInfo, strVal);   */
+          BigDecimal(strVal)
         } else {
           v = Literal(ast.getText().toDouble, DoubleType)
           v = Literal(ast.getText().toLong, LongType)

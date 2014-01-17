@@ -13,17 +13,18 @@ object Optimize extends RuleExecutor[LogicalPlan] {
       EliminateSubqueries) ::
     Batch("ConstantFolding", Once,
       ConstantFolding,
-      BooleanSimplification) ::
+      BooleanSimplification,
+      SimplifyCasts) ::
     Batch("Filter Pushdown", Once,
       EliminateSubqueries,
       CombineFilters,
-      PredicatePushDownThoughProject,
+      PushPredicateThroughProject,
       PushPredicateThroughInnerJoin) :: Nil
 }
 
 /**
- * Removes subqueries from the plan.  Subqueries are only required to provide scoping information
- * for attributes and can be removed once analysis is complete.
+ * Removes [[Subquery]] operators from the plan.  Subqueries are only required to provide scoping
+ * information for attributes and can be removed once analysis is complete.
  */
 object EliminateSubqueries extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -32,12 +33,14 @@ object EliminateSubqueries extends Rule[LogicalPlan] {
 }
 
 /**
- * Replaces expressions that can be statically evaluated with equivalent [[expressions.Literal]]
+ * Replaces [[Expression]]s that can be statically evaluated with equivalent [[expressions.Literal]]
  * values.
  */
 object ConstantFolding extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case q: LogicalPlan => q transformExpressionsDown {
+      // Skip redundant folding of literals.
+      case l: Literal => l
       case e if e.foldable => Literal(Evaluate(e, Nil), e.dataType)
     }
   }
@@ -74,7 +77,8 @@ object BooleanSimplification extends Rule[LogicalPlan] {
 }
 
 /**
- * Combines two filter operators into one
+ * Combines two adjacent [[Filter]] operators into one, merging the conditions into one conjunctive
+ * predicate.
  */
 object CombineFilters extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -83,9 +87,12 @@ object CombineFilters extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes predicate through project, also inlines project's aliases in filter
+ * Pushes [[Filter]] operators through [[Project]] operators, in-lining any [[Alias]]es that were
+ * defined in the projection.
+ *
+ * This heuristic is valid assuming the expression evaluation cost is minimal.
  */
-object PredicatePushDownThoughProject extends Rule[LogicalPlan] {
+object PushPredicateThroughProject extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
     case filter@Filter(condition, project@Project(fields, grandChild)) =>
       val sourceAliases = fields.collect { case a@Alias(c, _) => a.toAttribute -> c }.toMap
@@ -94,7 +101,7 @@ object PredicatePushDownThoughProject extends Rule[LogicalPlan] {
         grandChild))
   }
 
-  // Assuming the expression cost is minimal, we can replace condition with the alias's child to push down predicate
+  //
   def replaceAlias(condition: Expression, sourceAliases: Map[Attribute, Expression]): Expression = {
     condition transform {
       case a: AttributeReference => sourceAliases.getOrElse(a, a)
@@ -103,8 +110,9 @@ object PredicatePushDownThoughProject extends Rule[LogicalPlan] {
 }
 
 /**
- * Pushes down predicates that can be evaluated using only the attributes of the left or right side
- * of a join.  Other predicates are left as a single filter on top of the join.
+ * Pushes down [[Filter]] operators where the `condition` can be evaluated using only the attributes
+ * of the left or right side of an inner join.  Other [[Filter]] conditions are moved into the
+ * `condition` of the [[Join]].
  */
 object PushPredicateThroughInnerJoin extends Rule[LogicalPlan] with PredicateHelper {
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -124,5 +132,14 @@ object PushPredicateThroughInnerJoin extends Rule[LogicalPlan] with PredicateHel
       val newLeft = leftConditions.reduceLeftOption(And).map(Filter(_, left)).getOrElse(left)
       val newRight = rightConditions.reduceLeftOption(And).map(Filter(_, right)).getOrElse(right)
       Join(newLeft, newRight, Inner, joinConditions.reduceLeftOption(And))
+  }
+}
+
+/**
+ * Removes [[Cast]]s that are unnecessary because the input is already the correct type.
+ */
+object SimplifyCasts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case Cast(e, dataType) if e.dataType == dataType => e
   }
 }

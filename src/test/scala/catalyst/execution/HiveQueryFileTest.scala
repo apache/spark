@@ -23,11 +23,15 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
 
   def testCases: Seq[(String, File)]
 
-  val runAll = !(System.getProperty("shark.hive.alltests") == null)
+  val runAll =
+    !(System.getProperty("shark.hive.alltests") == null) ||
+    runOnlyDirectories.nonEmpty ||
+    skipDirectories.nonEmpty
 
   val whiteListProperty = "shark.hive.whitelist"
   // Allow the whiteList to be overridden by a system property
-  val realWhiteList = Option(System.getProperty(whiteListProperty)).map(_.split(",").toSeq).getOrElse(whiteList)
+  val realWhiteList =
+    Option(System.getProperty(whiteListProperty)).map(_.split(",").toSeq).getOrElse(whiteList)
 
   // Go through all the test cases and add them to scala test.
   testCases.foreach {
@@ -41,7 +45,7 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
       } else {
         // Only output warnings for the built in whitelist as this clutters the output when the user
         // trying to execute a single test from the commandline.
-        if(System.getProperty(whiteListProperty) == null)
+        if(System.getProperty(whiteListProperty) == null && !runAll)
           ignore(testCaseName) {}
       }
   }

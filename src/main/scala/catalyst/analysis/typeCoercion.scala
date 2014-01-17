@@ -5,6 +5,33 @@ import expressions._
 import plans.logical._
 import rules._
 import types._
+import catalyst.execution.{HiveUdf, HiveGenericUdf}
+
+/**
+ * Applies any changes to [[catalyst.expressions.AttributeReference AttributeReference]] dataTypes
+ * that are made by other rules to instances higher in the query tree.
+ */
+object PropagateTypes extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    // No propagation required for leaf nodes.
+    case q: LogicalPlan if q.children.isEmpty => q
+
+    case q: LogicalPlan => q transformExpressions {
+      case a: AttributeReference =>
+        q.inputSet.find(_.exprId == a.exprId) match {
+          // This can happen when a Attribute reference is born in a non-leaf node, for example
+          // due to a call to an external script like in the Transform operator.
+          // TODO: Perhaps those should actually be aliases?
+          case None => a
+          // Leave the same if the dataTypes match.
+          case Some(newType) if a.dataType == newType.dataType => a
+          case Some(newType) =>
+            logger.debug(s"Promoting $a to ${newType} in ${q.simpleString}}")
+            newType
+        }
+      }
+  }
+}
 
 /**
  * Converts string "NaN"s that are in binary operators with a NaN-able types (Float / Double) to the
@@ -52,9 +79,9 @@ object ConvertNaNs extends Rule[LogicalPlan] {
  * String conversions are handled by the PromoteStrings rule.
  */
 object PromoteNumericTypes extends Rule[LogicalPlan] {
-  val integralPrecedence = Seq(ByteType, ShortType, IntegerType, LongType)
-  val toDouble = integralPrecedence ++ Seq(FloatType, DoubleType)
-  val toFloat = Seq(ByteType, ShortType, IntegerType) :+ FloatType
+  val integralPrecedence = Seq(NullType, ByteType, ShortType, IntegerType, LongType)
+  val toDouble = integralPrecedence ++ Seq(NullType, FloatType, DoubleType)
+  val toFloat = Seq(NullType, ByteType, ShortType, IntegerType) :+ FloatType
   val allPromotions = integralPrecedence :: toDouble :: toFloat :: Nil
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -121,5 +148,47 @@ object BooleanComparisons extends Rule[LogicalPlan] {
     // Otherwise turn them to Byte types so that there exists and ordering.
     case p: BinaryComparison if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
       p.makeCopy(Array(Cast(p.left, ByteType), Cast(p.right, ByteType)))
+  }
+}
+
+/**
+ * Casts to/from [[catalyst.types.BooleanType BooleanType]] are transformed into comparisons since
+ * the JVM does not consider Booleans to be numeric types.
+ */
+object BooleanCasts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case Cast(e, BooleanType) => Not(Equals(e, Literal(0)))
+    case Cast(e, dataType) if e.dataType == BooleanType =>
+      Cast(If(e, Literal(1), Literal(0)), dataType)
+  }
+}
+
+/**
+ * When encountering a cast from a string representing a valid fractional number to an integral type
+ * the jvm will throw a `java.lang.NumberFormatException`.  Hive, in contrast, returns the
+ * truncated version of this number.
+ */
+object StringToIntegralCasts extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    case Cast(e @ StringType(), t: IntegralType) =>
+      Cast(Cast(e, DecimalType), t)
+  }
+}
+
+/**
+ * This ensure that the types for various functions are as expected.  Most of these rules are
+ * actually Hive specific.
+ * TODO: Move this to the hive specific package once we make that separation.
+ */
+object FunctionArgumentConversion extends Rule[LogicalPlan] {
+  def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    // Skip nodes who's children have not been resolved yet.
+    case e if !e.childrenResolved => e
+
+    // Promote SUM to largest types to prevent overflows.
+    case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
+    case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
+    case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
+
   }
 }

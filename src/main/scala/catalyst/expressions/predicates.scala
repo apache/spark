@@ -2,6 +2,7 @@ package catalyst
 package expressions
 
 import types._
+import catalyst.analysis.UnresolvedException
 
 trait Predicate extends Expression {
   self: Product =>
@@ -26,6 +27,16 @@ case class Not(child: Expression) extends Predicate with trees.UnaryNode[Express
   override def foldable = child.foldable
   def nullable = child.nullable
   override def toString = s"NOT $child"
+}
+
+/**
+ * Evaluates to `true` if `list` contains `value`.
+ */
+case class In(value: Expression, list: Seq[Expression]) extends Predicate {
+  def children = value +: list
+  def references = children.flatMap(_.references).toSet
+  def nullable = true // TODO: Figure out correct nullability semantics of IN.
+  override def toString = s"$value IN ${list.mkString("(", ",", ")")}"
 }
 
 case class And(left: Expression, right: Expression) extends BinaryPredicate {
@@ -70,4 +81,20 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
   def references = child.references
   override def foldable = child.foldable
   def nullable = false
+}
+
+case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
+    extends Expression {
+
+  def children = predicate :: trueValue :: falseValue :: Nil
+  def nullable = trueValue.nullable || falseValue.nullable
+  def references = children.flatMap(_.references).toSet
+  override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
+  def dataType = {
+    if (!resolved) {
+      throw new UnresolvedException(
+        this, s"Invalid types: ${trueValue.dataType}, ${falseValue.dataType}")
+    }
+    trueValue.dataType
+  }
 }

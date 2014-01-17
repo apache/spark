@@ -17,7 +17,7 @@ class FilterPushdownSuite extends OptimizerTest {
       Batch("Filter Pushdown", Once,
         EliminateSubqueries,
         CombineFilters,
-        PredicatePushDownThoughProject,
+        PushPredicateThroughProject,
         PushPredicateThroughInnerJoin) :: Nil
   }
 

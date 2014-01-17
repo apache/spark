@@ -40,6 +40,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry {
   def javaClassToDataType(clz: Class[_]): DataType = clz match {
     case c: Class[_] if c == classOf[DoubleWritable] => DoubleType
     case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.DoubleWritable] => DoubleType
+    case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.HiveDecimalWritable] => DecimalType
     case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.ByteWritable] => ByteType
     case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.ShortWritable] => ShortType
     case c: Class[_] if c == classOf[Text] => StringType
@@ -86,7 +87,9 @@ abstract class HiveUdf extends Expression with ImplementedUdf with Logging {
     case l: LongWritable => l.get
     case d: DoubleWritable => d.get()
     case d: org.apache.hadoop.hive.serde2.io.DoubleWritable => d.get
+    case s: org.apache.hadoop.hive.serde2.io.ShortWritable => s.get
     case b: BooleanWritable => b.get()
+    case b: org.apache.hadoop.hive.serde2.io.ByteWritable => b.get
     case list: java.util.List[_] => list.map(unwrap)
     case p: java.lang.Short => p
     case p: java.lang.Long => p
@@ -162,6 +165,7 @@ case class HiveGenericUdf(
     case LongType => PrimitiveObjectInspectorFactory.javaLongObjectInspector
     case ShortType => PrimitiveObjectInspectorFactory.javaShortObjectInspector
     case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
+    case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
   }
 
   lazy val instance = {
@@ -178,7 +182,7 @@ case class HiveGenericUdf(
     case l: Short => l: java.lang.Short
     case l: Byte => l: java.lang.Byte
     case s: Seq[_] => seqAsJavaList(s.map(wrap))
-    case null => null // NullWritable.get()
+    case null => null
   }
 
   def evaluate(evaluatedChildren: Seq[Any]): Any = {

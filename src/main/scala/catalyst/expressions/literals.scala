@@ -29,7 +29,7 @@ object IntegerLiteral {
 
 case class Literal(value: Any, dataType: DataType) extends LeafExpression {
   override def foldable = true
-  def nullable = false
+  def nullable = value == null
   def references = Set.empty
 
   override def toString = if (value != null) value.toString else "null"

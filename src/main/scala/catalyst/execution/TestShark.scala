@@ -144,7 +144,7 @@ object TestShark extends SharkInstance {
    * A list of test tables and the DDL required to initialize them.  A test table is loaded on
    * demand when a query are run against it.
    */
-  val testTables = new mutable.HashMap[String, TestTable]()
+  lazy val testTables = new mutable.HashMap[String, TestTable]()
   def registerTestTable(testTable: TestTable) = testTables += (testTable.name -> testTable)
 
   // The test tables that are defined in the Hive QTestUtil.
@@ -269,6 +269,7 @@ object TestShark extends SharkInstance {
       // Analyzer and thus the test table auto-loading mechanism.
       // Remove after we handle more DDL operations natively.
       loadTestTable("src")
+      loadTestTable("srcpart")
     } catch {
       case e: Exception =>
         logger.error(s"FATAL ERROR: Failed to reset TestDB state. $e")
