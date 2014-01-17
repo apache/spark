@@ -41,7 +41,7 @@ class SVD {
    /**
    * Compute SVD using the current set parameters
    */
-  def compute(matrix: SparseMatrix) : SVDecomposedMatrix = {
+  def compute(matrix: SparseMatrix) : MatrixSVD = {
     SVD.sparseSVD(matrix, k)
   }
 }
@@ -84,7 +84,7 @@ object SVD {
   def sparseSVD(
       matrix: SparseMatrix,
       k: Int)
-    : SVDecomposedMatrix =
+    : MatrixSVD =
   {
     val data = matrix.data
     val m = matrix.m
