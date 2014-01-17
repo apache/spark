@@ -43,7 +43,7 @@ object SparkSVD {
     // Load and parse the data file
     val data = sc.textFile(args(1)).map { line =>
       val parts = line.split(',')
-      MatrixEntry(parts(0).toInt, parts(1).toInt, parts(2).toDouble)
+      MatrixEntry(parts(0).toInt - 1, parts(1).toInt - 1, parts(2).toDouble)
     }
     val m = args(2).toInt
     val n = args(3).toInt
