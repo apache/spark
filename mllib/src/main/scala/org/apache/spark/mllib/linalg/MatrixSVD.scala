@@ -24,6 +24,6 @@ package org.apache.spark.mllib.linalg
  * @param S such that A = USV^T
  * @param V such that A = USV^T
  */
-case class SVDecomposedMatrix(val U: SparseMatrix,
-                              val S: SparseMatrix,
-                              val V: SparseMatrix)
+case class MatrixSVD(val U: SparseMatrix,
+                     val S: SparseMatrix,
+                     val V: SparseMatrix)

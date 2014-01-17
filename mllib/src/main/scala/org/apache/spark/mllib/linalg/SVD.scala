@@ -150,7 +150,7 @@ object SVD {
           .map{ case ((row, col), mval) => MatrixEntry(row, col, mval)}
     val retU = SparseMatrix(retUdata, m, sigma.length) 
    
-    SVDecomposedMatrix(retU, retS, retV)  
+    MatrixSVD(retU, retS, retV)  
   }
 
 
