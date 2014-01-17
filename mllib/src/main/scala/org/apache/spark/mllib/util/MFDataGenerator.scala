@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.recommendation
+package org.apache.spark.mllib.util
 
 import scala.util.Random
 
@@ -23,7 +23,6 @@ import org.jblas.DoubleMatrix
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import org.apache.spark.mllib.util.MLUtils
 
 /**
 * Generate RDD(s) containing data for Matrix Factorization.
@@ -31,9 +30,9 @@ import org.apache.spark.mllib.util.MLUtils
 * This method samples training entries according to the oversampling factor
 * 'trainSampFact', which is a multiplicative factor of the number of
 * degrees of freedom of the matrix: rank*(m+n-rank).
-* 
-* It optionally samples entries for a testing matrix using 
-* 'testSampFact', the percentage of the number of training entries 
+*
+* It optionally samples entries for a testing matrix using
+* 'testSampFact', the percentage of the number of training entries
 * to use for testing.
 *
 * This method takes the following inputs:
@@ -73,7 +72,7 @@ object MFDataGenerator{
 
     val A = DoubleMatrix.randn(m, rank)
     val B = DoubleMatrix.randn(rank, n)
-    val z = 1 / (scala.math.sqrt(scala.math.sqrt(rank)))
+    val z = 1 / scala.math.sqrt(scala.math.sqrt(rank))
     A.mmuli(z)
     B.mmuli(z)
     val fullData = A.mmul(B)
@@ -91,7 +90,7 @@ object MFDataGenerator{
       .map(x => (fullData.indexRows(x - 1), fullData.indexColumns(x - 1), fullData.get(x - 1)))
 
     // optionally add gaussian noise
-    if (noise) { 
+    if (noise) {
       trainData.map(x => (x._1, x._2, x._3 + rand.nextGaussian * sigma))
     }
 
@@ -107,8 +106,8 @@ object MFDataGenerator{
         .map(x => (fullData.indexRows(x - 1), fullData.indexColumns(x - 1), fullData.get(x - 1)))
       testData.map(x => x._1 + "," + x._2 + "," + x._3).saveAsTextFile(outputPath)
     }
-        
+
     sc.stop()
-  
+
   }
 }

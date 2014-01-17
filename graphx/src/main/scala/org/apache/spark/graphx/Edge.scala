@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.graphx
 
 /**
@@ -11,8 +28,8 @@ package org.apache.spark.graphx
  * @param attr The attribute associated with the edge
  */
 case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] (
-    var srcId: VertexID = 0,
-    var dstId: VertexID = 0,
+    var srcId: VertexId = 0,
+    var dstId: VertexId = 0,
     var attr: ED = null.asInstanceOf[ED])
   extends Serializable {
 
@@ -22,7 +39,7 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
    * @param vid the id one of the two vertices on the edge.
    * @return the id of the other vertex on the edge.
    */
-  def otherVertexId(vid: VertexID): VertexID =
+  def otherVertexId(vid: VertexId): VertexId =
     if (srcId == vid) dstId else { assert(dstId == vid); srcId }
 
   /**
@@ -33,7 +50,7 @@ case class Edge[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED] 
    * @return the relative direction of the edge to the corresponding
    * vertex.
    */
-  def relativeDirection(vid: VertexID): EdgeDirection =
+  def relativeDirection(vid: VertexId): EdgeDirection =
     if (vid == srcId) EdgeDirection.Out else { assert(vid == dstId); EdgeDirection.In }
 }
 

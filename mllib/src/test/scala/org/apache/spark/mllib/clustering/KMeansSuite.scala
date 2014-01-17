@@ -17,15 +17,12 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
 
-import org.jblas._
 
 class KMeansSuite extends FunSuite with BeforeAndAfterAll {
   @transient private var sc: SparkContext = _

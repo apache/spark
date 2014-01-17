@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.graphx.lib
 
 import scala.reflect.ClassTag
@@ -18,7 +35,7 @@ object StronglyConnectedComponents {
    *
    * @return a graph with vertex attributes containing the smallest vertex id in each SCC
    */
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int): Graph[VertexID, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int): Graph[VertexId, ED] = {
 
     // the graph we update with final SCC ids, and the graph we return at the end
     var sccGraph = graph.mapVertices { case (vid, _) => vid }
@@ -54,7 +71,7 @@ object StronglyConnectedComponents {
 
       // collect min of all my neighbor's scc values, update if it's smaller than mine
       // then notify any neighbors with scc values larger than mine
-      sccWorkGraph = Pregel[(VertexID, Boolean), ED, VertexID](
+      sccWorkGraph = Pregel[(VertexId, Boolean), ED, VertexId](
         sccWorkGraph, Long.MaxValue, activeDirection = EdgeDirection.Out)(
         (vid, myScc, neighborScc) => (math.min(myScc._1, neighborScc), myScc._2),
         e => {
@@ -68,7 +85,7 @@ object StronglyConnectedComponents {
 
       // start at root of SCCs. Traverse values in reverse, notify all my neighbors
       // do not propagate if colors do not match!
-      sccWorkGraph = Pregel[(VertexID, Boolean), ED, Boolean](
+      sccWorkGraph = Pregel[(VertexId, Boolean), ED, Boolean](
         sccWorkGraph, false, activeDirection = EdgeDirection.In)(
         // vertex is final if it is the root of a color
         // or it has the same color as a neighbor that is final

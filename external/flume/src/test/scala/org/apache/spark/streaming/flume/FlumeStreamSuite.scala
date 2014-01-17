@@ -43,7 +43,7 @@ class FlumeStreamSuite extends TestSuiteBase {
     val outputBuffer = new ArrayBuffer[Seq[SparkFlumeEvent]]
       with SynchronizedBuffer[Seq[SparkFlumeEvent]]
     val outputStream = new TestOutputStream(flumeStream, outputBuffer)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc.start()
 
     val clock = ssc.scheduler.clock.asInstanceOf[ManualClock]

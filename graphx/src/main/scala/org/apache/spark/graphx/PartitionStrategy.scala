@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.graphx
 
 /**
@@ -6,7 +23,7 @@ package org.apache.spark.graphx
  */
 trait PartitionStrategy extends Serializable {
   /** Returns the partition number for a given edge. */
-  def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID
+  def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID
 }
 
 /**
@@ -56,9 +73,9 @@ object PartitionStrategy {
    * is used.
    */
   case object EdgePartition2D extends PartitionStrategy {
-    override def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID = {
+    override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
       val ceilSqrtNumParts: PartitionID = math.ceil(math.sqrt(numParts)).toInt
-      val mixingPrime: VertexID = 1125899906842597L
+      val mixingPrime: VertexId = 1125899906842597L
       val col: PartitionID = ((math.abs(src) * mixingPrime) % ceilSqrtNumParts).toInt
       val row: PartitionID = ((math.abs(dst) * mixingPrime) % ceilSqrtNumParts).toInt
       (col * ceilSqrtNumParts + row) % numParts
@@ -70,8 +87,8 @@ object PartitionStrategy {
    * source.
    */
   case object EdgePartition1D extends PartitionStrategy {
-    override def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID = {
-      val mixingPrime: VertexID = 1125899906842597L
+    override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
+      val mixingPrime: VertexId = 1125899906842597L
       (math.abs(src) * mixingPrime).toInt % numParts
     }
   }
@@ -82,7 +99,7 @@ object PartitionStrategy {
    * random vertex cut that colocates all same-direction edges between two vertices.
    */
   case object RandomVertexCut extends PartitionStrategy {
-    override def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID = {
+    override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
       math.abs((src, dst).hashCode()) % numParts
     }
   }
@@ -94,7 +111,7 @@ object PartitionStrategy {
    * regardless of direction.
    */
   case object CanonicalRandomVertexCut extends PartitionStrategy {
-    override def getPartition(src: VertexID, dst: VertexID, numParts: PartitionID): PartitionID = {
+    override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {
       val lower = math.min(src, dst)
       val higher = math.max(src, dst)
       math.abs((lower, higher).hashCode()) % numParts

@@ -25,7 +25,6 @@ import org.jblas.DoubleMatrix
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
  * Generate sample data used for Linear Data. This class generates
@@ -73,7 +72,7 @@ object LinearDataGenerator {
     val x = Array.fill[Array[Double]](nPoints)(
       Array.fill[Double](weights.length)(2 * rnd.nextDouble - 1.0))
     val y = x.map { xi =>
-      (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) + intercept + eps * rnd.nextGaussian()
+      new DoubleMatrix(1, xi.length, xi: _*).dot(weightsMat) + intercept + eps * rnd.nextGaussian()
     }
     y.zip(x).map(p => LabeledPoint(p._1, p._2))
   }
@@ -86,7 +85,6 @@ object LinearDataGenerator {
    * @param nexamples Number of examples that will be contained in the RDD.
    * @param nfeatures Number of features to generate for each example.
    * @param eps Epsilon factor by which examples are scaled.
-   * @param weights Weights associated with the first weights.length features.
    * @param nparts Number of partitions in the RDD. Default value is 2.
    *
    * @return RDD of LabeledPoint containing sample data.

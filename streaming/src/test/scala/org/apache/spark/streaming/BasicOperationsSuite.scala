@@ -381,7 +381,6 @@ class BasicOperationsSuite extends TestSuiteBase {
     val ssc = new StreamingContext(conf, Seconds(1))
     val input = Seq(Seq(1), Seq(2), Seq(3), Seq(4))
     val stream = new TestInputStream[Int](ssc, input, 2)
-    ssc.registerInputStream(stream)
     stream.foreachRDD(_ => {})  // Dummy output stream
     ssc.start()
     Thread.sleep(2000)

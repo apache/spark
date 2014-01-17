@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.graphx.util
 
 import scala.annotation.tailrec
@@ -33,7 +50,7 @@ object GraphGenerators {
     val mu = 4
     val sigma = 1.3
 
-    val vertices: RDD[(VertexID, Int)] = sc.parallelize(0 until numVertices).map{
+    val vertices: RDD[(VertexId, Int)] = sc.parallelize(0 until numVertices).map{
       src => (src, sampleLogNormal(mu, sigma, numVertices))
     }
     val edges = vertices.flatMap { v =>
@@ -42,9 +59,9 @@ object GraphGenerators {
     Graph(vertices, edges, 0)
   }
 
-  def generateRandomEdges(src: Int, numEdges: Int, maxVertexID: Int): Array[Edge[Int]] = {
+  def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int): Array[Edge[Int]] = {
     val rand = new Random()
-    Array.fill(maxVertexID) { Edge[Int](src, rand.nextInt(maxVertexID), 1) }
+    Array.fill(maxVertexId) { Edge[Int](src, rand.nextInt(maxVertexId), 1) }
   }
 
   /**
@@ -189,9 +206,9 @@ object GraphGenerators {
    */
   def gridGraph(sc: SparkContext, rows: Int, cols: Int): Graph[(Int,Int), Double] = {
     // Convert row column address into vertex ids (row major order)
-    def sub2ind(r: Int, c: Int): VertexID = r * cols + c
+    def sub2ind(r: Int, c: Int): VertexId = r * cols + c
 
-    val vertices: RDD[(VertexID, (Int,Int))] =
+    val vertices: RDD[(VertexId, (Int,Int))] =
       sc.parallelize(0 until rows).flatMap( r => (0 until cols).map( c => (sub2ind(r,c), (r,c)) ) )
     val edges: RDD[Edge[Double]] =
       vertices.flatMap{ case (vid, (r,c)) =>
@@ -211,7 +228,7 @@ object GraphGenerators {
    * being the center vertex.
    */
   def starGraph(sc: SparkContext, nverts: Int): Graph[Int, Int] = {
-    val edges: RDD[(VertexID, VertexID)] = sc.parallelize(1 until nverts).map(vid => (vid, 0))
+    val edges: RDD[(VertexId, VertexId)] = sc.parallelize(1 until nverts).map(vid => (vid, 0))
     Graph.fromEdgeTuples(edges, 1)
   } // end of starGraph
 

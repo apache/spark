@@ -340,8 +340,8 @@ class SparkContext(
    * Hadoop-supported file system URI, and return it as an RDD of Strings.
    */
   def textFile(path: String, minSplits: Int = defaultMinSplits): RDD[String] = {
-    hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text], minSplits)
-      .map(pair => pair._2.toString)
+    hadoopFile(path, classOf[TextInputFormat], classOf[LongWritable], classOf[Text],
+      minSplits, cloneRecords = false).map(pair => pair._2.toString)
   }
 
   /**

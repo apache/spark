@@ -191,7 +191,7 @@ object MasterFailureTest extends Logging {
     val inputStream = ssc.textFileStream(testDir.toString)
     val operatedStream = operation(inputStream)
     val outputStream = new TestOutputStream(operatedStream)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc
   }
 

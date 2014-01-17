@@ -71,9 +71,7 @@ object KafkaUtils {
       topics: Map[String, Int],
       storageLevel: StorageLevel
     ): DStream[(K, V)] = {
-    val inputStream = new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, storageLevel)
-    ssc.registerInputStream(inputStream)
-    inputStream
+    new KafkaInputDStream[K, V, U, T](ssc, kafkaParams, topics, storageLevel)
   }
 
   /**

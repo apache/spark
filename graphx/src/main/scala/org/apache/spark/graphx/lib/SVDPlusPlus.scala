@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.graphx.lib
 
 import scala.util.Random
@@ -62,13 +79,13 @@ object SVDPlusPlus {
       (g1: (Long, Double), g2: (Long, Double)) => (g1._1 + g2._1, g1._2 + g2._2))
 
     g = g.outerJoinVertices(t0) {
-      (vid: VertexID, vd: (RealVector, RealVector, Double, Double), msg: Option[(Long, Double)]) =>
+      (vid: VertexId, vd: (RealVector, RealVector, Double, Double), msg: Option[(Long, Double)]) =>
         (vd._1, vd._2, msg.get._2 / msg.get._1, 1.0 / scala.math.sqrt(msg.get._1))
     }
 
     def mapTrainF(conf: Conf, u: Double)
         (et: EdgeTriplet[(RealVector, RealVector, Double, Double), Double])
-      : Iterator[(VertexID, (RealVector, RealVector, Double))] = {
+      : Iterator[(VertexId, (RealVector, RealVector, Double))] = {
       val (usr, itm) = (et.srcAttr, et.dstAttr)
       val (p, q) = (usr._1, itm._1)
       var pred = u + usr._3 + itm._3 + q.dotProduct(usr._2)
@@ -95,7 +112,7 @@ object SVDPlusPlus {
         et => Iterator((et.srcId, et.dstAttr._2)),
         (g1: RealVector, g2: RealVector) => g1.add(g2))
       g = g.outerJoinVertices(t1) {
-        (vid: VertexID, vd: (RealVector, RealVector, Double, Double), msg: Option[RealVector]) =>
+        (vid: VertexId, vd: (RealVector, RealVector, Double, Double), msg: Option[RealVector]) =>
           if (msg.isDefined) (vd._1, vd._1.add(msg.get.mapMultiply(vd._4)), vd._3, vd._4) else vd
       }
 
@@ -106,7 +123,7 @@ object SVDPlusPlus {
         (g1: (RealVector, RealVector, Double), g2: (RealVector, RealVector, Double)) =>
           (g1._1.add(g2._1), g1._2.add(g2._2), g1._3 + g2._3))
       g = g.outerJoinVertices(t2) {
-        (vid: VertexID,
+        (vid: VertexId,
          vd: (RealVector, RealVector, Double, Double),
          msg: Option[(RealVector, RealVector, Double)]) =>
           (vd._1.add(msg.get._1), vd._2.add(msg.get._2), vd._3 + msg.get._3, vd._4)
@@ -116,7 +133,7 @@ object SVDPlusPlus {
     // calculate error on training set
     def mapTestF(conf: Conf, u: Double)
         (et: EdgeTriplet[(RealVector, RealVector, Double, Double), Double])
-      : Iterator[(VertexID, Double)] =
+      : Iterator[(VertexId, Double)] =
     {
       val (usr, itm) = (et.srcAttr, et.dstAttr)
       val (p, q) = (usr._1, itm._1)
@@ -129,7 +146,7 @@ object SVDPlusPlus {
     g.cache()
     val t3 = g.mapReduceTriplets(mapTestF(conf, u), (g1: Double, g2: Double) => g1 + g2)
     g = g.outerJoinVertices(t3) {
-      (vid: VertexID, vd: (RealVector, RealVector, Double, Double), msg: Option[Double]) =>
+      (vid: VertexId, vd: (RealVector, RealVector, Double, Double), msg: Option[Double]) =>
         if (msg.isDefined) (vd._1, vd._2, vd._3, msg.get) else vd
     }
 

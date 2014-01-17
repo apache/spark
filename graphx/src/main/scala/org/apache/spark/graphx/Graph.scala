@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
@@ -109,7 +126,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * }}}
    *
    */
-  def mapVertices[VD2: ClassTag](map: (VertexID, VD) => VD2): Graph[VD2, ED]
+  def mapVertices[VD2: ClassTag](map: (VertexId, VD) => VD2): Graph[VD2, ED]
 
   /**
    * Transforms each edge attribute in the graph using the map function.  The map function is not
@@ -225,7 +242,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    */
   def subgraph(
       epred: EdgeTriplet[VD,ED] => Boolean = (x => true),
-      vpred: (VertexID, VD) => Boolean = ((v, d) => true))
+      vpred: (VertexId, VD) => Boolean = ((v, d) => true))
     : Graph[VD, ED]
 
   /**
@@ -275,7 +292,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    * vertex
    * {{{
    * val rawGraph: Graph[(),()] = Graph.textFile("twittergraph")
-   * val inDeg: RDD[(VertexID, Int)] =
+   * val inDeg: RDD[(VertexId, Int)] =
    *   mapReduceTriplets[Int](et => Iterator((et.dst.id, 1)), _ + _)
    * }}}
    *
@@ -287,7 +304,7 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    */
   def mapReduceTriplets[A: ClassTag](
-      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexID, A)],
+      mapFunc: EdgeTriplet[VD, ED] => Iterator[(VertexId, A)],
       reduceFunc: (A, A) => A,
       activeSetOpt: Option[(VertexRDD[_], EdgeDirection)] = None)
     : VertexRDD[A]
@@ -311,14 +328,14 @@ abstract class Graph[VD: ClassTag, ED: ClassTag] protected () extends Serializab
    *
    * {{{
    * val rawGraph: Graph[_, _] = Graph.textFile("webgraph")
-   * val outDeg: RDD[(VertexID, Int)] = rawGraph.outDegrees()
+   * val outDeg: RDD[(VertexId, Int)] = rawGraph.outDegrees()
    * val graph = rawGraph.outerJoinVertices(outDeg) {
    *   (vid, data, optDeg) => optDeg.getOrElse(0)
    * }
    * }}}
    */
-  def outerJoinVertices[U: ClassTag, VD2: ClassTag](other: RDD[(VertexID, U)])
-      (mapFunc: (VertexID, VD, Option[U]) => VD2)
+  def outerJoinVertices[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
+      (mapFunc: (VertexId, VD, Option[U]) => VD2)
     : Graph[VD2, ED]
 
   /**
@@ -347,7 +364,7 @@ object Graph {
    * (if `uniqueEdges` is `None`) and vertex attributes containing the total degree of each vertex.
    */
   def fromEdgeTuples[VD: ClassTag](
-      rawEdges: RDD[(VertexID, VertexID)],
+      rawEdges: RDD[(VertexId, VertexId)],
       defaultValue: VD,
       uniqueEdges: Option[PartitionStrategy] = None): Graph[VD, Int] =
   {
@@ -388,7 +405,7 @@ object Graph {
    *                          mentioned in edges but not in vertices
    */
   def apply[VD: ClassTag, ED: ClassTag](
-      vertices: RDD[(VertexID, VD)],
+      vertices: RDD[(VertexId, VD)],
       edges: RDD[Edge[ED]],
       defaultVertexAttr: VD = null.asInstanceOf[VD]): Graph[VD, ED] = {
     GraphImpl(vertices, edges, defaultVertexAttr)

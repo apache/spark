@@ -141,8 +141,12 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    */
   def this(path: String, hadoopConf: Configuration) = this(new StreamingContext(path, hadoopConf))
 
+
+  @deprecated("use sparkContext", "0.9.0")
+  val sc: JavaSparkContext = sparkContext
+
   /** The underlying SparkContext */
-  val sc: JavaSparkContext = new JavaSparkContext(ssc.sc)
+  val sparkContext = new JavaSparkContext(ssc.sc)
 
   /**
    * Create a input stream from network source hostname:port. Data is received using
@@ -317,13 +321,6 @@ class JavaStreamingContext(val ssc: StreamingContext) {
     implicit val cm: ClassTag[T] =
       implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[T]]
     ssc.actorStream[T](props, name)
-  }
-
-  /**
-   * Registers an output stream that will be computed every interval
-   */
-  def registerOutputStream(outputStream: JavaDStreamLike[_, _, _]) {
-    ssc.registerOutputStream(outputStream.dstream)
   }
 
   /**

@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
@@ -63,19 +80,19 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @return the set of neighboring ids for each vertex
    */
-  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexID]] = {
+  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexId]] = {
     val nbrs =
       if (edgeDirection == EdgeDirection.Either) {
-        graph.mapReduceTriplets[Array[VertexID]](
+        graph.mapReduceTriplets[Array[VertexId]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _
         )
       } else if (edgeDirection == EdgeDirection.Out) {
-        graph.mapReduceTriplets[Array[VertexID]](
+        graph.mapReduceTriplets[Array[VertexId]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId))),
           reduceFunc = _ ++ _)
       } else if (edgeDirection == EdgeDirection.In) {
-        graph.mapReduceTriplets[Array[VertexID]](
+        graph.mapReduceTriplets[Array[VertexId]](
           mapFunc = et => Iterator((et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _)
       } else {
@@ -83,7 +100,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
           "direction. (EdgeDirection.Both is not supported; use EdgeDirection.Either instead.)")
       }
     graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
-      nbrsOpt.getOrElse(Array.empty[VertexID])
+      nbrsOpt.getOrElse(Array.empty[VertexId])
     }
   } // end of collectNeighborIds
 
@@ -99,8 +116,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @return the vertex set of neighboring vertex attributes for each vertex
    */
-  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexID, VD)]] = {
-    val nbrs = graph.mapReduceTriplets[Array[(VertexID,VD)]](
+  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexId, VD)]] = {
+    val nbrs = graph.mapReduceTriplets[Array[(VertexId,VD)]](
       edge => {
         val msgToSrc = (edge.srcId, Array((edge.dstId, edge.dstAttr)))
         val msgToDst = (edge.dstId, Array((edge.srcId, edge.srcAttr)))
@@ -116,7 +133,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       (a, b) => a ++ b)
 
     graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
-      nbrsOpt.getOrElse(Array.empty[(VertexID, VD)])
+      nbrsOpt.getOrElse(Array.empty[(VertexId, VD)])
     }
   } // end of collectNeighbor
 
@@ -147,9 +164,9 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * }}}
    *
    */
-  def joinVertices[U: ClassTag](table: RDD[(VertexID, U)])(mapFunc: (VertexID, VD, U) => VD)
+  def joinVertices[U: ClassTag](table: RDD[(VertexId, U)])(mapFunc: (VertexId, VD, U) => VD)
     : Graph[VD, ED] = {
-    val uf = (id: VertexID, data: VD, o: Option[U]) => {
+    val uf = (id: VertexId, data: VD, o: Option[U]) => {
       o match {
         case Some(u) => mapFunc(id, data, u)
         case None => data
@@ -180,7 +197,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *     val degrees: VertexRDD[Int] = graph.outDegrees
    *     graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
    *   },
-   *   vpred = (vid: VertexID, deg:Int) => deg > 0
+   *   vpred = (vid: VertexId, deg:Int) => deg > 0
    * )
    * }}}
    *
@@ -188,7 +205,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def filter[VD2: ClassTag, ED2: ClassTag](
       preprocess: Graph[VD, ED] => Graph[VD2, ED2],
       epred: (EdgeTriplet[VD2, ED2]) => Boolean = (x: EdgeTriplet[VD2, ED2]) => true,
-      vpred: (VertexID, VD2) => Boolean = (v:VertexID, d:VD2) => true): Graph[VD, ED] = {
+      vpred: (VertexId, VD2) => Boolean = (v:VertexId, d:VD2) => true): Graph[VD, ED] = {
     graph.mask(preprocess(graph).subgraph(epred, vpred))
   }
 
@@ -243,8 +260,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
       activeDirection: EdgeDirection = EdgeDirection.Either)(
-      vprog: (VertexID, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
+      vprog: (VertexId, VD, A) => VD,
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
     Pregel(graph, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
@@ -276,7 +293,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
    */
-  def connectedComponents(): Graph[VertexID, ED] = {
+  def connectedComponents(): Graph[VertexId, ED] = {
     ConnectedComponents.run(graph)
   }
 
@@ -295,7 +312,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @see [[org.apache.spark.graphx.lib.StronglyConnectedComponents$#run]]
    */
-  def stronglyConnectedComponents(numIter: Int): Graph[VertexID, ED] = {
+  def stronglyConnectedComponents(numIter: Int): Graph[VertexId, ED] = {
     StronglyConnectedComponents.run(graph, numIter)
   }
 } // end of GraphOps

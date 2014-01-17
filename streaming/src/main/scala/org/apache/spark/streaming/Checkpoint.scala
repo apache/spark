@@ -42,11 +42,13 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.getPendingTimes().toArray
   val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
-  val sparkConf = ssc.conf
+  val sparkConfPairs = ssc.conf.getAll
 
-  // These should be unset when a checkpoint is deserialized,
-  // otherwise the SparkContext won't initialize correctly.
-  sparkConf.remove("spark.driver.host").remove("spark.driver.port")
+  def sparkConf = {
+    new SparkConf(false).setAll(sparkConfPairs)
+      .remove("spark.driver.host")
+      .remove("spark.driver.port")
+  }
 
   def validate() {
     assert(master != null, "Checkpoint.master is null")
