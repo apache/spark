@@ -245,7 +245,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         return false
       }
     }
-    return true
+    true
   }
 
   override def contains(blockId: BlockId): Boolean = {

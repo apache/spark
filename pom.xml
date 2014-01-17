@@ -87,12 +87,18 @@
   <modules>
     <module>core</module>
     <module>bagel</module>
-    <module>examples</module>
+    <module>graphx</module>
     <module>mllib</module>
     <module>tools</module>
     <module>streaming</module>
     <module>repl</module>
     <module>assembly</module>
+    <module>external/twitter</module>
+    <module>external/kafka</module>
+    <module>external/flume</module>
+    <module>external/zeromq</module>
+    <module>external/mqtt</module>
+    <module>examples</module>
   </modules>
 
   <properties>
@@ -118,7 +124,7 @@
   </properties>
 
   <repositories>
-    <repository> 
+    <repository>
       <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
       <url>http://repo.maven.apache.org/maven2</url>
@@ -141,15 +147,9 @@
       </snapshots>
     </repository>
     <repository>
-      <id>mqtt-repo</id>
-      <name>MQTT Repository</name>
-      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
+      <id>cloudera-repo</id>
+      <name>Cloudera Repository</name>
+      <url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
     </repository>
   </repositories>
 
@@ -188,7 +188,7 @@
       <dependency>
         <groupId>com.ning</groupId>
         <artifactId>compress-lzf</artifactId>
-        <version>0.8.4</version>
+        <version>1.0.0</version>
       </dependency>
       <dependency>
         <groupId>org.xerial.snappy</groupId>
@@ -200,9 +200,14 @@
         <artifactId>asm</artifactId>
         <version>4.0</version>
       </dependency>
+      <dependency>
+        <groupId>com.clearspring.analytics</groupId>
+        <artifactId>stream</artifactId>
+        <version>2.4.0</version>
+      </dependency>
       <!-- In theory we need not directly depend on protobuf since Spark does not directly
            use it. However, when building with Hadoop/YARN 2.2 Maven doesn't correctly bump
-           the protobuf version up from the one Mesos gives. For now we include this variable 
+           the protobuf version up from the one Mesos gives. For now we include this variable
            to explicitly bump the version when building with YARN. It would be nice to figure
            out why Maven can't resolve this correctly (like SBT does). -->
       <dependency>
@@ -255,7 +260,7 @@
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
-        <artifactId>akka-zeromq_${scala.binary.version}</artifactId>
+        <artifactId>akka-testkit_${scala.binary.version}</artifactId>
         <version>${akka.version}</version>
         <exclusions>
           <exclusion>
@@ -282,7 +287,7 @@
       <dependency>
         <groupId>io.netty</groupId>
         <artifactId>netty-all</artifactId>
-        <version>4.0.0.CR1</version>
+        <version>4.0.13.Final</version>
       </dependency>
       <dependency>
         <groupId>org.apache.derby</groupId>
@@ -351,6 +356,12 @@
         <artifactId>scalatest_${scala.binary.version}</artifactId>
         <version>1.9.1</version>
         <scope>test</scope>
+      </dependency>
+      <dependency>
+          <groupId>org.mockito</groupId>
+          <artifactId>mockito-all</artifactId>
+          <scope>test</scope>
+          <version>1.8.5</version>
       </dependency>
       <dependency>
         <groupId>commons-io</groupId>
@@ -717,12 +728,11 @@
 
   <profiles>
     <profile>
-      <id>hadoop2-yarn</id>
+      <id>yarn-alpha</id>
       <properties>
         <hadoop.major.version>2</hadoop.major.version>
         <!-- 0.23.* is same as 2.0.* - except hardened to run production jobs -->
         <hadoop.version>0.23.7</hadoop.version>
-        <protobuf.version>2.5.0</protobuf.version>
         <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
 
@@ -730,66 +740,19 @@
         <module>yarn</module>
       </modules>
 
-      <repositories>
-        <repository>
-          <id>maven-root</id>
-          <name>Maven root repository</name>
-          <url>http://repo1.maven.org/maven2</url>
-          <releases>
-            <enabled>true</enabled>
-          </releases>
-          <snapshots>
-            <enabled>false</enabled>
-          </snapshots>
-        </repository>
-      </repositories>
-
-      <dependencyManagement>
-        <dependencies>
-        </dependencies>
-      </dependencyManagement>
     </profile>
 
     <profile>
-      <id>new-yarn</id>
-       <properties>
-         <hadoop.major.version>2</hadoop.major.version>
-         <hadoop.version>2.2.0</hadoop.version>
-         <protobuf.version>2.5.0</protobuf.version>
-       </properties>
-
-       <modules>
-         <module>new-yarn</module>
-       </modules>
-
-       <repositories>
-         <repository>
-           <id>maven-root</id>
-           <name>Maven root repository</name>
-           <url>http://repo1.maven.org/maven2</url>
-           <releases>
-             <enabled>true</enabled>
-           </releases>
-           <snapshots>
-             <enabled>false</enabled>
-           </snapshots>
-         </repository>
-       </repositories>
-
-       <dependencyManagement>
-         <dependencies>
-         </dependencies>
-       </dependencyManagement>
-     </profile>
-
-    <profile>
-      <id>repl-bin</id>
-      <activation>
-        <activeByDefault>false</activeByDefault>
-      </activation>
+      <id>yarn</id>
+      <properties>
+        <hadoop.major.version>2</hadoop.major.version>
+        <hadoop.version>2.2.0</hadoop.version>
+        <protobuf.version>2.5.0</protobuf.version>
+      </properties>
       <modules>
-        <module>repl-bin</module>
+        <module>yarn</module>
       </modules>
+
     </profile>
   </profiles>
 </project>

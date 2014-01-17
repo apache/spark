@@ -17,25 +17,29 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Time, Duration, StreamingContext, DStream}
+import org.apache.spark.streaming.{Time, Duration, StreamingContext}
 
 import scala.reflect.ClassTag
 
 /**
- * This is the abstract base class for all input streams. This class provides to methods
- * start() and stop() which called by the scheduler to start and stop receiving data/
- * Input streams that can generated RDDs from new data just by running a service on
- * the driver node (that is, without running a receiver onworker nodes) can be
- * implemented by directly subclassing this InputDStream. For example,
- * FileInputDStream, a subclass of InputDStream, monitors a HDFS directory for
- * new files and generates RDDs on the new files. For implementing input streams
- * that requires running a receiver on the worker nodes, use NetworkInputDStream
- * as the parent class.
+ * This is the abstract base class for all input streams. This class provides methods
+ * start() and stop() which is called by Spark Streaming system to start and stop receiving data.
+ * Input streams that can generate RDDs from new data by running a service/thread only on
+ * the driver node (that is, without running a receiver on worker nodes), can be
+ * implemented by directly inheriting this InputDStream. For example,
+ * FileInputDStream, a subclass of InputDStream, monitors a HDFS directory from the driver for
+ * new files and generates RDDs with the new files. For implementing input streams
+ * that requires running a receiver on the worker nodes, use
+ * [[org.apache.spark.streaming.dstream.NetworkInputDStream]] as the parent class.
+ *
+ * @param ssc_ Streaming context that will execute this input stream
  */
 abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
   extends DStream[T](ssc_) {
 
-  var lastValidTime: Time = null
+  private[streaming] var lastValidTime: Time = null
+
+  ssc.graph.addInputStream(this)
 
   /**
    * Checks whether the 'time' is valid wrt slideDuration for generating RDD.
@@ -43,7 +47,7 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
    * This ensures that InputDStream.compute() is called strictly on increasing
    * times.
    */
-  override protected def isTimeValid(time: Time): Boolean = {
+  override private[streaming] def isTimeValid(time: Time): Boolean = {
     if (!super.isTimeValid(time)) {
       false // Time not valid
     } else {

@@ -35,7 +35,7 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * It can also work with a local setup by using a LocalBackend and setting isLocal to true.
  * It handles common logic, like determining a scheduling order across jobs, waking up to launch
  * speculative tasks, etc.
- * 
+ *
  * Clients should first call initialize() and start(), then submit task sets through the
  * runTasks method.
  *
@@ -47,15 +47,19 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  */
 private[spark] class TaskSchedulerImpl(
     val sc: SparkContext,
-    val maxTaskFailures : Int = System.getProperty("spark.task.maxFailures", "4").toInt,
+    val maxTaskFailures: Int,
     isLocal: Boolean = false)
-  extends TaskScheduler with Logging {
+  extends TaskScheduler with Logging
+{
+  def this(sc: SparkContext) = this(sc, sc.conf.getInt("spark.task.maxFailures", 4))
+
+  val conf = sc.conf
 
   // How often to check for speculative tasks
-  val SPECULATION_INTERVAL = System.getProperty("spark.speculation.interval", "100").toLong
+  val SPECULATION_INTERVAL = conf.getLong("spark.speculation.interval", 100)
 
   // Threshold above which we warn user initial TaskSet may be starved
-  val STARVATION_TIMEOUT = System.getProperty("spark.starvation.timeout", "15000").toLong
+  val STARVATION_TIMEOUT = conf.getLong("spark.starvation.timeout", 15000)
 
   // TaskSetManagers are not thread safe, so any access to one should be synchronized
   // on this class.
@@ -92,7 +96,7 @@ private[spark] class TaskSchedulerImpl(
   var rootPool: Pool = null
   // default scheduler is FIFO
   val schedulingMode: SchedulingMode = SchedulingMode.withName(
-    System.getProperty("spark.scheduler.mode", "FIFO"))
+    conf.get("spark.scheduler.mode", "FIFO"))
 
   // This is a var so that we can reset it for testing purposes.
   private[spark] var taskResultGetter = new TaskResultGetter(sc.env, this)
@@ -110,7 +114,7 @@ private[spark] class TaskSchedulerImpl(
         case SchedulingMode.FIFO =>
           new FIFOSchedulableBuilder(rootPool)
         case SchedulingMode.FAIR =>
-          new FairSchedulableBuilder(rootPool)
+          new FairSchedulableBuilder(rootPool, conf)
       }
     }
     schedulableBuilder.buildPools()
@@ -121,7 +125,7 @@ private[spark] class TaskSchedulerImpl(
   override def start() {
     backend.start()
 
-    if (!isLocal && System.getProperty("spark.speculation", "false").toBoolean) {
+    if (!isLocal && conf.getBoolean("spark.speculation", false)) {
       logInfo("Starting speculative execution thread")
       import sc.env.actorSystem.dispatcher
       sc.env.actorSystem.scheduler.schedule(SPECULATION_INTERVAL milliseconds,
@@ -281,7 +285,8 @@ private[spark] class TaskSchedulerImpl(
               }
             }
           case None =>
-            logInfo("Ignoring update from TID " + tid + " because its task set is gone")
+            logInfo("Ignoring update with state %s from TID %s because its task set is gone"
+              .format(state, tid))
         }
       } catch {
         case e: Exception => logError("Exception in statusUpdate", e)
@@ -324,7 +329,7 @@ private[spark] class TaskSchedulerImpl(
         // Have each task set throw a SparkException with the error
         for ((taskSetId, manager) <- activeTaskSets) {
           try {
-            manager.error(message)
+            manager.abort(message)
           } catch {
             case e: Exception => logError("Exception in error callback", e)
           }
@@ -347,9 +352,8 @@ private[spark] class TaskSchedulerImpl(
       taskResultGetter.stop()
     }
 
-    // sleeping for an arbitrary 5 seconds : to ensure that messages are sent out.
-    // TODO: Do something better !
-    Thread.sleep(5000L)
+    // sleeping for an arbitrary 1 seconds to ensure that messages are sent out.
+    Thread.sleep(1000L)
   }
 
   override def defaultParallelism() = backend.defaultParallelism()
@@ -362,13 +366,6 @@ private[spark] class TaskSchedulerImpl(
     }
     if (shouldRevive) {
       backend.reviveOffers()
-    }
-  }
-
-  // Check for pending tasks in all our active jobs.
-  def hasPendingTasks: Boolean = {
-    synchronized {
-      rootPool.hasPendingTasks()
     }
   }
 

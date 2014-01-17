@@ -30,10 +30,10 @@ import java.lang.management.ManagementFactory
 import scala.collection.mutable.ArrayBuffer
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
-import org.apache.spark.Logging
+import org.apache.spark.{SparkEnv, SparkConf, SparkContext, Logging}
 
 /**
- * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in 
+ * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in
  * memory-aware caches.
  *
  * Based on the following JavaWorld article:
@@ -89,9 +89,11 @@ private[spark] object SizeEstimator extends Logging {
     classInfos.put(classOf[Object], new ClassInfo(objectSize, Nil))
   }
 
-  private def getIsCompressedOops : Boolean = {
+  private def getIsCompressedOops: Boolean = {
+    // This is only used by tests to override the detection of compressed oops. The test
+    // actually uses a system property instead of a SparkConf, so we'll stick with that.
     if (System.getProperty("spark.test.useCompressedOops") != null) {
-      return System.getProperty("spark.test.useCompressedOops").toBoolean 
+      return System.getProperty("spark.test.useCompressedOops").toBoolean
     }
 
     try {
@@ -103,10 +105,10 @@ private[spark] object SizeEstimator extends Logging {
       val getVMMethod = hotSpotMBeanClass.getDeclaredMethod("getVMOption",
           Class.forName("java.lang.String"))
 
-      val bean = ManagementFactory.newPlatformMXBeanProxy(server, 
+      val bean = ManagementFactory.newPlatformMXBeanProxy(server,
         hotSpotMBeanName, hotSpotMBeanClass)
       // TODO: We could use reflection on the VMOption returned ?
-      return getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
+      getVMMethod.invoke(bean, "UseCompressedOops").toString.contains("true")
     } catch {
       case e: Exception => {
         // Guess whether they've enabled UseCompressedOops based on whether maxMemory < 32 GB
@@ -139,7 +141,7 @@ private[spark] object SizeEstimator extends Logging {
     def dequeue(): AnyRef = {
       val elem = stack.last
       stack.trimEnd(1)
-      return elem
+      elem
     }
   }
 
@@ -160,7 +162,7 @@ private[spark] object SizeEstimator extends Logging {
     while (!state.isFinished) {
       visitSingleObject(state.dequeue(), state)
     }
-    return state.size
+    state.size
   }
 
   private def visitSingleObject(obj: AnyRef, state: SearchState) {
@@ -251,7 +253,7 @@ private[spark] object SizeEstimator extends Logging {
     if (info != null) {
       return info
     }
-    
+
     val parent = getClassInfo(cls.getSuperclass)
     var shellSize = parent.shellSize
     var pointerFields = parent.pointerFields
@@ -274,11 +276,11 @@ private[spark] object SizeEstimator extends Logging {
     // Create and cache a new ClassInfo
     val newInfo = new ClassInfo(shellSize, pointerFields)
     classInfos.put(cls, newInfo)
-    return newInfo
+    newInfo
   }
 
   private def alignSize(size: Long): Long = {
     val rem = size % ALIGN_SIZE
-    return if (rem == 0) size else (size + ALIGN_SIZE - rem)
+    if (rem == 0) size else (size + ALIGN_SIZE - rem)
   }
 }

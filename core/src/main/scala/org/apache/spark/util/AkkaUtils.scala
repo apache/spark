@@ -17,10 +17,14 @@
 
 package org.apache.spark.util
 
+import scala.collection.JavaConversions.mapAsJavaMap
 import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import akka.actor.{ActorSystem, ExtendedActorSystem, IndestructibleActorSystem}
 import com.typesafe.config.ConfigFactory
+
+import org.apache.log4j.{Level, Logger}
+import org.apache.spark.SparkConf
 
 /**
  * Various utility classes for working with Akka.
@@ -38,25 +42,33 @@ private[spark] object AkkaUtils {
    * of a fatal exception. This is used by [[org.apache.spark.executor.Executor]].
    */
   def createActorSystem(name: String, host: String, port: Int,
-                        indestructible: Boolean = false,
-                        classLoader: ClassLoader = Thread.currentThread.getContextClassLoader)
-    : (ActorSystem, Int) = {
+                        indestructible: Boolean = false, conf: SparkConf,
+                        classLoader: ClassLoader = Thread.currentThread.getContextClassLoader):
+    (ActorSystem, Int) = {
 
-    val akkaThreads   = System.getProperty("spark.akka.threads", "4").toInt
-    val akkaBatchSize = System.getProperty("spark.akka.batchSize", "15").toInt
+    val akkaThreads   = conf.getInt("spark.akka.threads", 4)
+    val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
 
-    val akkaTimeout = System.getProperty("spark.akka.timeout", "100").toInt
+    val akkaTimeout = conf.getInt("spark.akka.timeout", 100)
 
-    val akkaFrameSize = System.getProperty("spark.akka.frameSize", "10").toInt
-    val lifecycleEvents =
-      if (System.getProperty("spark.akka.logLifecycleEvents", "false").toBoolean) "on" else "off"
+    val akkaFrameSize = conf.getInt("spark.akka.frameSize", 10)
+    val akkaLogLifecycleEvents = conf.getBoolean("spark.akka.logLifecycleEvents", false)
+    val lifecycleEvents = if (akkaLogLifecycleEvents) "on" else "off"
+    if (!akkaLogLifecycleEvents) {
+      // As a workaround for Akka issue #3787, we coerce the "EndpointWriter" log to be silent.
+      // See: https://www.assembla.com/spaces/akka/tickets/3787#/
+      Option(Logger.getLogger("akka.remote.EndpointWriter")).map(l => l.setLevel(Level.FATAL))
+    }
 
-    val akkaHeartBeatPauses = System.getProperty("spark.akka.heartbeat.pauses", "600").toInt
+    val logAkkaConfig = if (conf.getBoolean("spark.akka.logAkkaConfig", false)) "on" else "off"
+
+    val akkaHeartBeatPauses = conf.getInt("spark.akka.heartbeat.pauses", 600)
     val akkaFailureDetector =
-      System.getProperty("spark.akka.failure-detector.threshold", "300.0").toDouble
-    val akkaHeartBeatInterval = System.getProperty("spark.akka.heartbeat.interval", "1000").toInt
+      conf.getDouble("spark.akka.failure-detector.threshold", 300.0)
+    val akkaHeartBeatInterval = conf.getInt("spark.akka.heartbeat.interval", 1000)
 
-    val akkaConf = ConfigFactory.parseString(
+    val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]).withFallback(
+      ConfigFactory.parseString(
       s"""
       |akka.daemonic = on
       |akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
@@ -74,8 +86,11 @@ private[spark] object AkkaUtils {
       |akka.remote.netty.tcp.maximum-frame-size = ${akkaFrameSize}MiB
       |akka.remote.netty.tcp.execution-pool-size = $akkaThreads
       |akka.actor.default-dispatcher.throughput = $akkaBatchSize
+      |akka.log-config-on-start = $logAkkaConfig
       |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
-      """.stripMargin)
+      |akka.log-dead-letters = $lifecycleEvents
+      |akka.log-dead-letters-during-shutdown = $lifecycleEvents
+      """.stripMargin))
 
     val actorSystem = if (indestructible) {
       IndestructibleActorSystem(name, akkaConf, classLoader)
@@ -89,7 +104,12 @@ private[spark] object AkkaUtils {
   }
 
   /** Returns the default Spark timeout to use for Akka ask operations. */
-  def askTimeout: FiniteDuration = {
-    Duration.create(System.getProperty("spark.akka.askTimeout", "30").toLong, "seconds")
+  def askTimeout(conf: SparkConf): FiniteDuration = {
+    Duration.create(conf.getLong("spark.akka.askTimeout", 30), "seconds")
+  }
+
+  /** Returns the default Spark timeout to use for Akka remote actor lookup. */
+  def lookupTimeout(conf: SparkConf): FiniteDuration = {
+    Duration.create(conf.get("spark.akka.lookupTimeout", "30").toLong, "seconds")
   }
 }

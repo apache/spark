@@ -54,12 +54,14 @@ private[spark] class TaskSetManager(
     clock: Clock = SystemClock)
   extends Schedulable with Logging
 {
+  val conf = sched.sc.conf
+
   // CPUs to request per task
-  val CPUS_PER_TASK = System.getProperty("spark.task.cpus", "1").toInt
+  val CPUS_PER_TASK = conf.getInt("spark.task.cpus", 1)
 
   // Quantile of tasks at which to start speculation
-  val SPECULATION_QUANTILE = System.getProperty("spark.speculation.quantile", "0.75").toDouble
-  val SPECULATION_MULTIPLIER = System.getProperty("spark.speculation.multiplier", "1.5").toDouble
+  val SPECULATION_QUANTILE = conf.getDouble("spark.speculation.quantile", 0.75)
+  val SPECULATION_MULTIPLIER = conf.getDouble("spark.speculation.multiplier", 1.5)
 
   // Serializer for closures and tasks.
   val env = SparkEnv.get
@@ -112,13 +114,9 @@ private[spark] class TaskSetManager(
   // Task index, start and finish time for each task attempt (indexed by task ID)
   val taskInfos = new HashMap[Long, TaskInfo]
 
-  // Did the TaskSet fail?
-  var failed = false
-  var causeOfFailure = ""
-
   // How frequently to reprint duplicate exceptions in full, in milliseconds
   val EXCEPTION_PRINT_INTERVAL =
-    System.getProperty("spark.logging.exceptionPrintInterval", "10000").toLong
+    conf.getLong("spark.logging.exceptionPrintInterval", 10000)
 
   // Map of recent exceptions (identified by string representation and top stack frame) to
   // duplicate count (how many times the same exception has appeared) and time the full exception
@@ -230,7 +228,7 @@ private[spark] class TaskSetManager(
         return Some(index)
       }
     }
-    return None
+    None
   }
 
   /** Check whether a task is currently running an attempt on a given host */
@@ -293,7 +291,7 @@ private[spark] class TaskSetManager(
       }
     }
 
-    return None
+    None
   }
 
   /**
@@ -334,7 +332,7 @@ private[spark] class TaskSetManager(
     }
 
     // Finally, if all else has failed, find a speculative task
-    return findSpeculativeTask(execId, host, locality)
+    findSpeculativeTask(execId, host, locality)
   }
 
   /**
@@ -389,7 +387,7 @@ private[spark] class TaskSetManager(
         case _ =>
       }
     }
-    return None
+    None
   }
 
   /**
@@ -550,14 +548,7 @@ private[spark] class TaskSetManager(
     }
   }
 
-  def error(message: String) {
-    // Save the error message
-    abort("Error: " + message)
-  }
-
   def abort(message: String) {
-    failed = true
-    causeOfFailure = message
     // TODO: Kill running tasks if we were not terminated due to a Mesos error
     sched.dagScheduler.taskSetFailed(taskSet, message)
     removeAllRunningTasks()
@@ -593,7 +584,7 @@ private[spark] class TaskSetManager(
   }
 
   override def getSchedulableByName(name: String): Schedulable = {
-    return null
+    null
   }
 
   override def addSchedulable(schedulable: Schedulable) {}
@@ -603,7 +594,7 @@ private[spark] class TaskSetManager(
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
     var sortedTaskSetQueue = ArrayBuffer[TaskSetManager](this)
     sortedTaskSetQueue += this
-    return sortedTaskSetQueue
+    sortedTaskSetQueue
   }
 
   /** Called by TaskScheduler when an executor is lost so we can re-enqueue our tasks */
@@ -638,7 +629,7 @@ private[spark] class TaskSetManager(
     }
     // Also re-enqueue any tasks that were running on the node
     for ((tid, info) <- taskInfos if info.running && info.executorId == execId) {
-      handleFailedTask(tid, TaskState.KILLED, None)
+      handleFailedTask(tid, TaskState.FAILED, None)
     }
   }
 
@@ -678,22 +669,18 @@ private[spark] class TaskSetManager(
         }
       }
     }
-    return foundTasks
-  }
-
-  override def hasPendingTasks(): Boolean = {
-    numTasks > 0 && tasksSuccessful < numTasks
+    foundTasks
   }
 
   private def getLocalityWait(level: TaskLocality.TaskLocality): Long = {
-    val defaultWait = System.getProperty("spark.locality.wait", "3000")
+    val defaultWait = conf.get("spark.locality.wait", "3000")
     level match {
       case TaskLocality.PROCESS_LOCAL =>
-        System.getProperty("spark.locality.wait.process", defaultWait).toLong
+        conf.get("spark.locality.wait.process", defaultWait).toLong
       case TaskLocality.NODE_LOCAL =>
-        System.getProperty("spark.locality.wait.node", defaultWait).toLong
+        conf.get("spark.locality.wait.node", defaultWait).toLong
       case TaskLocality.RACK_LOCAL =>
-        System.getProperty("spark.locality.wait.rack", defaultWait).toLong
+        conf.get("spark.locality.wait.rack", defaultWait).toLong
       case TaskLocality.ANY =>
         0L
     }

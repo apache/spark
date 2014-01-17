@@ -20,7 +20,7 @@ package org.apache.spark.streaming.dstream
 import org.apache.spark.Partitioner
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
-import org.apache.spark.streaming.{Duration, DStream, Time}
+import org.apache.spark.streaming.{Duration, Time}
 import scala.reflect.ClassTag
 
 private[streaming]
@@ -29,8 +29,9 @@ class ShuffledDStream[K: ClassTag, V: ClassTag, C: ClassTag](
     createCombiner: V => C,
     mergeValue: (C, V) => C,
     mergeCombiner: (C, C) => C,
-    partitioner: Partitioner
-  ) extends DStream [(K,C)] (parent.ssc) {
+    partitioner: Partitioner,
+    mapSideCombine: Boolean = true
+  ) extends DStream[(K,C)] (parent.ssc) {
 
   override def dependencies = List(parent)
 
@@ -38,8 +39,8 @@ class ShuffledDStream[K: ClassTag, V: ClassTag, C: ClassTag](
 
   override def compute(validTime: Time): Option[RDD[(K,C)]] = {
     parent.getOrCompute(validTime) match {
-      case Some(rdd) =>
-        Some(rdd.combineByKey[C](createCombiner, mergeValue, mergeCombiner, partitioner))
+      case Some(rdd) => Some(rdd.combineByKey[C](
+          createCombiner, mergeValue, mergeCombiner, partitioner, mapSideCombine))
       case None => None
     }
   }

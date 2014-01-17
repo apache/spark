@@ -100,20 +100,20 @@ private[spark] class MesosSchedulerBackend(
     }
     val command = CommandInfo.newBuilder()
       .setEnvironment(environment)
-    val uri = System.getProperty("spark.executor.uri")
+    val uri = sc.conf.get("spark.executor.uri", null)
     if (uri == null) {
-      command.setValue(new File(sparkHome, "spark-executor").getCanonicalPath)
+      command.setValue(new File(sparkHome, "/sbin/spark-executor").getCanonicalPath)
     } else {
       // Grab everything to the first '.'. We'll use that and '*' to
       // glob the directory "correctly".
       val basename = uri.split('/').last.split('.').head
-      command.setValue("cd %s*; ./spark-executor".format(basename))
+      command.setValue("cd %s*; ./sbin/spark-executor".format(basename))
       command.addUris(CommandInfo.URI.newBuilder().setValue(uri))
     }
     val memory = Resource.newBuilder()
       .setName("mem")
       .setType(Value.Type.SCALAR)
-      .setScalar(Value.Scalar.newBuilder().setValue(executorMemory).build())
+      .setScalar(Value.Scalar.newBuilder().setValue(sc.executorMemory).build())
       .build()
     ExecutorInfo.newBuilder()
       .setExecutorId(ExecutorID.newBuilder().setValue(execId).build())
@@ -141,13 +141,13 @@ private[spark] class MesosSchedulerBackend(
       // Serialize the map as an array of (String, String) pairs
       execArgs = Utils.serialize(props.toArray)
     }
-    return execArgs
+    execArgs
   }
 
   private def setClassLoader(): ClassLoader = {
     val oldClassLoader = Thread.currentThread.getContextClassLoader
     Thread.currentThread.setContextClassLoader(classLoader)
-    return oldClassLoader
+    oldClassLoader
   }
 
   private def restoreClassLoader(oldClassLoader: ClassLoader) {
@@ -198,7 +198,7 @@ private[spark] class MesosSchedulerBackend(
         def enoughMemory(o: Offer) = {
           val mem = getResource(o.getResourcesList, "mem")
           val slaveId = o.getSlaveId.getValue
-          mem >= executorMemory || slaveIdsWithExecutors.contains(slaveId)
+          mem >= sc.executorMemory || slaveIdsWithExecutors.contains(slaveId)
         }
 
         for ((offer, index) <- offers.zipWithIndex if enoughMemory(offer)) {
@@ -255,7 +255,7 @@ private[spark] class MesosSchedulerBackend(
       .setType(Value.Type.SCALAR)
       .setScalar(Value.Scalar.newBuilder().setValue(1).build())
       .build()
-    return MesosTaskInfo.newBuilder()
+    MesosTaskInfo.newBuilder()
       .setTaskId(taskId)
       .setSlaveId(SlaveID.newBuilder().setValue(slaveId).build())
       .setExecutor(createExecutorInfo(slaveId))
@@ -340,5 +340,5 @@ private[spark] class MesosSchedulerBackend(
   }
 
   // TODO: query Mesos for number of cores
-  override def defaultParallelism() = System.getProperty("spark.default.parallelism", "8").toInt
+  override def defaultParallelism() = sc.conf.getInt("spark.default.parallelism", 8)
 }

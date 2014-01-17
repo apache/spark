@@ -48,8 +48,6 @@ private[spark] class Executor(
 
   private val EMPTY_BYTE_BUFFER = ByteBuffer.wrap(new Array[Byte](0))
 
-  initLogging()
-
   // No ip or host:port - just hostname
   Utils.checkHost(slaveHostname, "Expected executed slave to be a hostname")
   // must not have port specified.
@@ -58,16 +56,17 @@ private[spark] class Executor(
   // Make sure the local hostname we report matches the cluster scheduler's name for this host
   Utils.setCustomHostname(slaveHostname)
 
-  // Set spark.* system properties from executor arg
-  for ((key, value) <- properties) {
-    System.setProperty(key, value)
-  }
+  // Set spark.* properties from executor arg
+  val conf = new SparkConf(true)
+  conf.setAll(properties)
 
   // If we are in yarn mode, systems can have different disk layouts so we must set it
   // to what Yarn on this system said was available. This will be used later when SparkEnv
   // created.
-  if (java.lang.Boolean.valueOf(System.getenv("SPARK_YARN_MODE"))) {
-    System.setProperty("spark.local.dir", getYarnLocalDirs())
+  if (java.lang.Boolean.valueOf(
+      System.getProperty("SPARK_YARN_MODE", System.getenv("SPARK_YARN_MODE"))))
+  {
+    conf.set("spark.local.dir", getYarnLocalDirs())
   }
 
   // Create our ClassLoader and set it on this thread
@@ -108,7 +107,7 @@ private[spark] class Executor(
   // Initialize Spark environment (using system properties read above)
   private val env = {
     if (!isLocal) {
-      val _env = SparkEnv.createFromSystemProperties(executorId, slaveHostname, 0,
+      val _env = SparkEnv.create(conf, executorId, slaveHostname, 0,
         isDriver = false, isLocal = false)
       SparkEnv.set(_env)
       _env.metricsSystem.registerSource(executorSource)
@@ -142,11 +141,6 @@ private[spark] class Executor(
     val tr = runningTasks.get(taskId)
     if (tr != null) {
       tr.kill()
-      // We remove the task also in the finally block in TaskRunner.run.
-      // The reason we need to remove it here is because killTask might be called before the task
-      // is even launched, and never reaching that finally block. ConcurrentHashMap's remove is
-      // idempotent.
-      runningTasks.remove(taskId)
     }
   }
 
@@ -167,6 +161,8 @@ private[spark] class Executor(
 
   class TaskRunner(execBackend: ExecutorBackend, taskId: Long, serializedTask: ByteBuffer)
     extends Runnable {
+
+    object TaskKilledException extends Exception
 
     @volatile private var killed = false
     @volatile private var task: Task[Any] = _
@@ -201,9 +197,11 @@ private[spark] class Executor(
         // If this task has been killed before we deserialized it, let's quit now. Otherwise,
         // continue executing the task.
         if (killed) {
-          logInfo("Executor killed task " + taskId)
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
-          return
+          // Throw an exception rather than returning, because returning within a try{} block
+          // causes a NonLocalReturnControl exception to be thrown. The NonLocalReturnControl
+          // exception will be caught by the catch block, leading to an incorrect ExceptionFailure
+          // for the task.
+          throw TaskKilledException
         }
 
         attemptedTask = Some(task)
@@ -217,9 +215,7 @@ private[spark] class Executor(
 
         // If the task has been killed, let's fail it.
         if (task.killed) {
-          logInfo("Executor killed task " + taskId)
-          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
-          return
+          throw TaskKilledException
         }
 
         val resultSer = SparkEnv.get.serializer.newInstance()
@@ -261,6 +257,11 @@ private[spark] class Executor(
           execBackend.statusUpdate(taskId, TaskState.FAILED, ser.serialize(reason))
         }
 
+        case TaskKilledException => {
+          logInfo("Executor killed task " + taskId)
+          execBackend.statusUpdate(taskId, TaskState.KILLED, ser.serialize(TaskKilled))
+        }
+
         case t: Throwable => {
           val serviceTime = (System.currentTimeMillis() - taskStart).toInt
           val metrics = attemptedTask.flatMap(t => t.metrics)
@@ -278,6 +279,11 @@ private[spark] class Executor(
           //System.exit(1)
         }
       } finally {
+        // TODO: Unregister shuffle memory only for ResultTask
+        val shuffleMemoryMap = env.shuffleMemoryMap
+        shuffleMemoryMap.synchronized {
+          shuffleMemoryMap.remove(Thread.currentThread().getId)
+        }
         runningTasks.remove(taskId)
       }
     }
@@ -303,7 +309,7 @@ private[spark] class Executor(
    * new classes defined by the REPL as the user types code
    */
   private def addReplClassLoaderIfNeeded(parent: ClassLoader): ClassLoader = {
-    val classUri = System.getProperty("spark.repl.class.uri")
+    val classUri = conf.get("spark.repl.class.uri", null)
     if (classUri != null) {
       logInfo("Using REPL class URI: " + classUri)
       try {
@@ -331,12 +337,12 @@ private[spark] class Executor(
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf)
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory))
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf)
         currentJars(name) = timestamp
         // Add it to our class loader
         val localName = name.split("/").last

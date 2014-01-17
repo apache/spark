@@ -37,8 +37,6 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockM
 
   def length = blockMessages.length 
 
-  initLogging()
-  
   def set(bufferMessage: BufferMessage) {
     val startTime = System.currentTimeMillis
     val newBlockMessages = new ArrayBuffer[BlockMessage]()
@@ -98,7 +96,7 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockM
     println()
     println()
     */
-    return Message.createBufferMessage(buffers)
+    Message.createBufferMessage(buffers)
   }
 }
 

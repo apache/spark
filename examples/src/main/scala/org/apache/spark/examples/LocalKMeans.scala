@@ -55,7 +55,7 @@ object LocalKMeans {
       }
     }
 
-    return bestIndex
+    bestIndex
   }
 
   def main(args: Array[String]) {

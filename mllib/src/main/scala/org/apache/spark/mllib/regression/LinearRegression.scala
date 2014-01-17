@@ -17,7 +17,7 @@
 
 package org.apache.spark.mllib.regression
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.optimization._
 import org.apache.spark.mllib.util.MLUtils
@@ -162,6 +162,8 @@ object LinearRegressionWithSGD {
     val sc = new SparkContext(args(0), "LinearRegression")
     val data = MLUtils.loadLabeledData(sc, args(1))
     val model = LinearRegressionWithSGD.train(data, args(3).toInt, args(2).toDouble)
+    println("Weights: " + model.weights.mkString("[", ", ", "]"))
+    println("Intercept: " + model.intercept)
 
     sc.stop()
   }

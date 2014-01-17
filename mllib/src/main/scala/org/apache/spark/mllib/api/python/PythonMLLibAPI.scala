@@ -24,7 +24,6 @@ import org.apache.spark.mllib.recommendation._
 import org.apache.spark.rdd.RDD
 import java.nio.ByteBuffer
 import java.nio.ByteOrder
-import java.nio.DoubleBuffer
 
 /**
  * The Java stubs necessary for the Python mllib bindings.
@@ -48,7 +47,7 @@ class PythonMLLibAPI extends Serializable {
     val db = bb.asDoubleBuffer()
     val ans = new Array[Double](length.toInt)
     db.get(ans)
-    return ans
+    ans
   }
 
   private def serializeDoubleVector(doubles: Array[Double]): Array[Byte] = {
@@ -60,7 +59,7 @@ class PythonMLLibAPI extends Serializable {
     bb.putLong(len)
     val db = bb.asDoubleBuffer()
     db.put(doubles)
-    return bytes
+    bytes
   }
 
   private def deserializeDoubleMatrix(bytes: Array[Byte]): Array[Array[Double]] = {
@@ -81,12 +80,11 @@ class PythonMLLibAPI extends Serializable {
     }
     val db = bb.asDoubleBuffer()
     val ans = new Array[Array[Double]](rows.toInt)
-    var i = 0
     for (i <- 0 until rows.toInt) {
       ans(i) = new Array[Double](cols.toInt)
       db.get(ans(i))
     }
-    return ans
+    ans
   }
 
   private def serializeDoubleMatrix(doubles: Array[Array[Double]]): Array[Byte] = {
@@ -102,11 +100,10 @@ class PythonMLLibAPI extends Serializable {
     bb.putLong(rows)
     bb.putLong(cols)
     val db = bb.asDoubleBuffer()
-    var i = 0
     for (i <- 0 until rows) {
       db.put(doubles(i))
     }
-    return bytes
+    bytes
   }
 
   private def trainRegressionModel(trainFunc: (RDD[LabeledPoint], Array[Double]) => GeneralizedLinearModel,
@@ -121,7 +118,7 @@ class PythonMLLibAPI extends Serializable {
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(serializeDoubleVector(model.weights))
     ret.add(model.intercept: java.lang.Double)
-    return ret
+    ret
   }
 
   /**
@@ -130,7 +127,7 @@ class PythonMLLibAPI extends Serializable {
   def trainLinearRegressionModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]],
       numIterations: Int, stepSize: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    return trainRegressionModel((data, initialWeights) =>
+    trainRegressionModel((data, initialWeights) =>
         LinearRegressionWithSGD.train(data, numIterations, stepSize,
                                       miniBatchFraction, initialWeights),
         dataBytesJRDD, initialWeightsBA)
@@ -142,7 +139,7 @@ class PythonMLLibAPI extends Serializable {
   def trainLassoModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
       stepSize: Double, regParam: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    return trainRegressionModel((data, initialWeights) =>
+    trainRegressionModel((data, initialWeights) =>
         LassoWithSGD.train(data, numIterations, stepSize, regParam,
                            miniBatchFraction, initialWeights),
         dataBytesJRDD, initialWeightsBA)
@@ -154,7 +151,7 @@ class PythonMLLibAPI extends Serializable {
   def trainRidgeModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
       stepSize: Double, regParam: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    return trainRegressionModel((data, initialWeights) =>
+    trainRegressionModel((data, initialWeights) =>
         RidgeRegressionWithSGD.train(data, numIterations, stepSize, regParam,
                                      miniBatchFraction, initialWeights),
         dataBytesJRDD, initialWeightsBA)
@@ -166,7 +163,7 @@ class PythonMLLibAPI extends Serializable {
   def trainSVMModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]], numIterations: Int,
       stepSize: Double, regParam: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    return trainRegressionModel((data, initialWeights) =>
+    trainRegressionModel((data, initialWeights) =>
         SVMWithSGD.train(data, numIterations, stepSize, regParam,
                                      miniBatchFraction, initialWeights),
         dataBytesJRDD, initialWeightsBA)
@@ -178,10 +175,27 @@ class PythonMLLibAPI extends Serializable {
   def trainLogisticRegressionModelWithSGD(dataBytesJRDD: JavaRDD[Array[Byte]],
       numIterations: Int, stepSize: Double, miniBatchFraction: Double,
       initialWeightsBA: Array[Byte]): java.util.List[java.lang.Object] = {
-    return trainRegressionModel((data, initialWeights) =>
+    trainRegressionModel((data, initialWeights) =>
         LogisticRegressionWithSGD.train(data, numIterations, stepSize,
                                      miniBatchFraction, initialWeights),
         dataBytesJRDD, initialWeightsBA)
+  }
+
+  /**
+   * Java stub for NaiveBayes.train()
+   */
+  def trainNaiveBayes(dataBytesJRDD: JavaRDD[Array[Byte]], lambda: Double)
+      : java.util.List[java.lang.Object] =
+  {
+    val data = dataBytesJRDD.rdd.map(xBytes => {
+      val x = deserializeDoubleVector(xBytes)
+      LabeledPoint(x(0), x.slice(1, x.length))
+    })
+    val model = NaiveBayes.train(data, lambda)
+    val ret = new java.util.LinkedList[java.lang.Object]()
+    ret.add(serializeDoubleVector(model.pi))
+    ret.add(serializeDoubleMatrix(model.theta))
+    ret
   }
 
   /**
@@ -194,16 +208,46 @@ class PythonMLLibAPI extends Serializable {
     val model = KMeans.train(data, k, maxIterations, runs, initializationMode)
     val ret = new java.util.LinkedList[java.lang.Object]()
     ret.add(serializeDoubleMatrix(model.clusterCenters))
-    return ret
+    ret
   }
 
+  /** Unpack a Rating object from an array of bytes */
   private def unpackRating(ratingBytes: Array[Byte]): Rating = {
     val bb = ByteBuffer.wrap(ratingBytes)
     bb.order(ByteOrder.nativeOrder())
     val user = bb.getInt()
     val product = bb.getInt()
     val rating = bb.getDouble()
-    return new Rating(user, product, rating)
+    new Rating(user, product, rating)
+  }
+
+  /** Unpack a tuple of Ints from an array of bytes */
+  private[spark] def unpackTuple(tupleBytes: Array[Byte]): (Int, Int) = {
+    val bb = ByteBuffer.wrap(tupleBytes)
+    bb.order(ByteOrder.nativeOrder())
+    val v1 = bb.getInt()
+    val v2 = bb.getInt()
+    (v1, v2)
+  }
+
+  /**
+    * Serialize a Rating object into an array of bytes.
+    * It can be deserialized using RatingDeserializer().
+    *
+    * @param rate the Rating object to serialize
+    * @return
+    */
+  private[spark] def serializeRating(rate: Rating): Array[Byte] = {
+    val len = 3
+    val bytes = new Array[Byte](4 + 8 * len)
+    val bb = ByteBuffer.wrap(bytes)
+    bb.order(ByteOrder.nativeOrder())
+    bb.putInt(len)
+    val db = bb.asDoubleBuffer()
+    db.put(rate.user.toDouble)
+    db.put(rate.product.toDouble)
+    db.put(rate.rating)
+    bytes
   }
 
   /**
@@ -215,7 +259,7 @@ class PythonMLLibAPI extends Serializable {
   def trainALSModel(ratingsBytesJRDD: JavaRDD[Array[Byte]], rank: Int,
       iterations: Int, lambda: Double, blocks: Int): MatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
-    return ALS.train(ratings, rank, iterations, lambda, blocks)
+    ALS.train(ratings, rank, iterations, lambda, blocks)
   }
 
   /**
@@ -227,6 +271,6 @@ class PythonMLLibAPI extends Serializable {
   def trainImplicitALSModel(ratingsBytesJRDD: JavaRDD[Array[Byte]], rank: Int,
       iterations: Int, lambda: Double, blocks: Int, alpha: Double): MatrixFactorizationModel = {
     val ratings = ratingsBytesJRDD.rdd.map(unpackRating)
-    return ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
+    ALS.trainImplicit(ratings, rank, iterations, lambda, blocks, alpha)
   }
 }

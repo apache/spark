@@ -17,11 +17,12 @@
 
 package org.apache.spark.streaming.examples
 
-import org.apache.spark.streaming.{Seconds, StreamingContext}
-import org.apache.spark.storage.StorageLevel
-import com.twitter.algebird.HyperLogLog._
 import com.twitter.algebird.HyperLogLogMonoid
-import org.apache.spark.streaming.dstream.TwitterInputDStream
+import com.twitter.algebird.HyperLogLog._
+
+import org.apache.spark.storage.StorageLevel
+import org.apache.spark.streaming.{Seconds, StreamingContext}
+import org.apache.spark.streaming.twitter._
 
 /**
  * Illustrates the use of the HyperLogLog algorithm, from Twitter's Algebird library, to compute
@@ -44,13 +45,15 @@ object TwitterAlgebirdHLL {
       System.exit(1)
     }
 
+    StreamingExamples.setStreamingLogLevels()
+
     /** Bit size parameter for HyperLogLog, trades off accuracy vs size */
     val BIT_SIZE = 12
     val (master, filters) = (args.head, args.tail)
 
     val ssc = new StreamingContext(master, "TwitterAlgebirdHLL", Seconds(5),
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
-    val stream = ssc.twitterStream(None, filters, StorageLevel.MEMORY_ONLY_SER)
+      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
+    val stream = TwitterUtils.createStream(ssc, None, filters, StorageLevel.MEMORY_ONLY_SER)
 
     val users = stream.map(status => status.getUser.getId)
 
@@ -64,7 +67,7 @@ object TwitterAlgebirdHLL {
 
     val exactUsers = users.map(id => Set(id)).reduce(_ ++ _)
 
-    approxUsers.foreach(rdd => {
+    approxUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partial = rdd.first()
         globalHll += partial
@@ -73,7 +76,7 @@ object TwitterAlgebirdHLL {
       }
     })
 
-    exactUsers.foreach(rdd => {
+    exactUsers.foreachRDD(rdd => {
       if (rdd.count() != 0) {
         val partial = rdd.first()
         userSet ++= partial

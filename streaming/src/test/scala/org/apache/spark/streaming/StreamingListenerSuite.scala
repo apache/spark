@@ -20,6 +20,7 @@ package org.apache.spark.streaming
 import org.apache.spark.streaming.scheduler._
 import scala.collection.mutable.ArrayBuffer
 import org.scalatest.matchers.ShouldMatchers
+import org.apache.spark.streaming.dstream.DStream
 
 class StreamingListenerSuite extends TestSuiteBase with ShouldMatchers {
 

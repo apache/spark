@@ -48,7 +48,7 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
         {if (isFairScheduler) {<th>Pool Name</th>} else {}}
         <th>Description</th>
         <th>Submitted</th>
-        <th>Task Time</th>
+        <th>Duration</th>
         <th>Tasks: Succeeded/Total</th>
         <th>Shuffle Read</th>
         <th>Shuffle Write</th>

@@ -27,7 +27,6 @@ import scala.io.Source
 import scala.reflect.ClassTag
 
 import org.apache.spark.{SparkEnv, Partition, TaskContext}
-import org.apache.spark.broadcast.Broadcast
 
 
 /**
@@ -96,7 +95,7 @@ class PipedRDD[T: ClassTag](
 
     // Return an iterator that read lines from the process's stdout
     val lines = Source.fromInputStream(proc.getInputStream).getLines
-    return new Iterator[String] {
+    new Iterator[String] {
       def next() = lines.next()
       def hasNext = {
         if (lines.hasNext) {
@@ -113,7 +112,7 @@ class PipedRDD[T: ClassTag](
   }
 }
 
-object PipedRDD {
+private object PipedRDD {
   // Split a string into words using a standard StringTokenizer
   def tokenize(command: String): Seq[String] = {
     val buf = new ArrayBuffer[String]

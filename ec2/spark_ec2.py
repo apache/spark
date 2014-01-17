@@ -185,7 +185,11 @@ def get_spark_ami(opts):
     "hi1.4xlarge": "hvm",
     "m3.xlarge":   "hvm",
     "m3.2xlarge":  "hvm",
-    "cr1.8xlarge": "hvm"
+    "cr1.8xlarge": "hvm",
+    "i2.xlarge":   "hvm",
+    "i2.2xlarge":  "hvm",
+    "i2.4xlarge":  "hvm",
+    "i2.8xlarge":  "hvm"
   }
   if opts.instance_type in instance_types:
     instance_type = instance_types[opts.instance_type]
@@ -436,7 +440,7 @@ def setup_cluster(conn, master_nodes, slave_nodes, opts, deploy_ssh_key):
 def setup_standalone_cluster(master, slave_nodes, opts):
   slave_ips = '\n'.join([i.public_dns_name for i in slave_nodes])
   ssh(master, opts, "echo \"%s\" > spark/conf/slaves" % (slave_ips))
-  ssh(master, opts, "/root/spark/bin/start-all.sh")
+  ssh(master, opts, "/root/spark/sbin/start-all.sh")
 
 def setup_spark_cluster(master, opts):
   ssh(master, opts, "chmod u+x spark-ec2/setup.sh")
@@ -478,7 +482,11 @@ def get_num_disks(instance_type):
     "cr1.8xlarge": 2,
     "hi1.4xlarge": 2,
     "m3.xlarge":   0,
-    "m3.2xlarge":  0
+    "m3.2xlarge":  0,
+    "i2.xlarge":   1,
+    "i2.2xlarge":  2,
+    "i2.4xlarge":  4,
+    "i2.8xlarge":  8
   }
   if instance_type in disks_by_instance:
     return disks_by_instance[instance_type]

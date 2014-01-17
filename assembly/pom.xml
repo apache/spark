@@ -30,6 +30,13 @@
   <name>Spark Project Assembly</name>
   <url>http://spark.incubator.apache.org/</url>
 
+  <properties>
+    <spark.jar>${project.build.directory}/scala-${scala.binary.version}/${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</spark.jar>
+    <deb.pkg.name>spark</deb.pkg.name>
+    <deb.install.path>/usr/share/spark</deb.install.path>
+    <deb.user>root</deb.user>
+  </properties>
+
   <repositories>
     <!-- A repository in the local filesystem for the Py4J JAR, which is not in Maven central -->
     <repository>
@@ -67,7 +74,7 @@
     <dependency>
       <groupId>net.sf.py4j</groupId>
       <artifactId>py4j</artifactId>
-      <version>0.7</version>
+      <version>0.8.1</version>
     </dependency>
   </dependencies>
 
@@ -79,7 +86,7 @@
         <artifactId>maven-shade-plugin</artifactId>
         <configuration>
           <shadedArtifactAttached>false</shadedArtifactAttached>
-          <outputFile>${project.build.directory}/scala-${scala.binary.version}/${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</outputFile>
+          <outputFile>${spark.jar}</outputFile>
           <artifactSet>
             <includes>
               <include>*:*</include>
@@ -108,11 +115,11 @@
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>META-INF/services/org.apache.hadoop.fs.FileSystem</resource>
                 </transformer>
-              </transformers>
-              <transformers>
-                <transformer implementation="org.apache.maven.plugins.shade.resource.ServicesResourceTransformer" />
                 <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                   <resource>reference.conf</resource>
+                </transformer>
+                <transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
+                  <resource>log4j.properties</resource>
                 </transformer>
               </transformers>
             </configuration>
@@ -124,7 +131,17 @@
 
   <profiles>
     <profile>
-      <id>hadoop2-yarn</id>
+      <id>yarn-alpha</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.spark</groupId>
+          <artifactId>spark-yarn-alpha_${scala.binary.version}</artifactId>
+          <version>${project.version}</version>
+        </dependency>
+      </dependencies>
+    </profile>
+    <profile>
+      <id>yarn</id>
       <dependencies>
         <dependency>
           <groupId>org.apache.spark</groupId>
@@ -154,6 +171,113 @@
                   <descriptors>
                     <descriptor>src/main/assembly/assembly.xml</descriptor>
                   </descriptors>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+        </plugins>
+      </build>
+    </profile>
+    <profile>
+      <id>deb</id>
+      <build>
+        <plugins>
+          <plugin>
+            <groupId>org.codehaus.mojo</groupId>
+            <artifactId>buildnumber-maven-plugin</artifactId>
+            <version>1.1</version>
+            <executions>
+              <execution>
+                <phase>validate</phase>
+                <goals>
+                  <goal>create</goal>
+                </goals>
+                <configuration>
+                  <shortRevisionLength>8</shortRevisionLength>
+                </configuration>
+              </execution>
+            </executions>
+          </plugin>
+          <plugin>
+            <groupId>org.vafer</groupId>
+            <artifactId>jdeb</artifactId>
+            <version>0.11</version>
+            <executions>
+              <execution>
+                <phase>package</phase>
+                <goals>
+                  <goal>jdeb</goal>
+                </goals>
+                <configuration>
+                  <deb>${project.build.directory}/${deb.pkg.name}_${project.version}-${buildNumber}_all.deb</deb>
+                  <attach>false</attach>
+                  <compression>gzip</compression>
+                  <dataSet>
+                    <data>
+                      <src>${spark.jar}</src>
+                      <type>file</type>
+                      <mapper>
+                        <type>perm</type>
+                        <user>${deb.user}</user>
+                        <group>${deb.user}</group>
+                        <prefix>${deb.install.path}/jars</prefix>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${basedir}/src/deb/RELEASE</src>
+                      <type>file</type>
+                      <mapper>
+                        <type>perm</type>
+                        <user>${deb.user}</user>
+                        <group>${deb.user}</group>
+                        <prefix>${deb.install.path}</prefix>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${basedir}/../conf</src>
+                      <type>directory</type>
+                      <mapper>
+                        <type>perm</type>
+                        <user>${deb.user}</user>
+                        <group>${deb.user}</group>
+                        <prefix>${deb.install.path}/conf</prefix>
+                        <filemode>744</filemode>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${basedir}/../bin</src>
+                      <type>directory</type>
+                      <mapper>
+                        <type>perm</type>
+                        <user>${deb.user}</user>
+                        <group>${deb.user}</group>
+                        <prefix>${deb.install.path}/bin</prefix>
+                        <filemode>744</filemode>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${basedir}/../sbin</src>
+                      <type>directory</type>
+                      <mapper>
+                        <type>perm</type>
+                        <user>${deb.user}</user>
+                        <group>${deb.user}</group>
+                        <prefix>${deb.install.path}/sbin</prefix>
+                        <filemode>744</filemode>
+                      </mapper>
+                    </data>
+                    <data>
+                      <src>${basedir}/../python</src>
+                      <type>directory</type>
+                      <mapper>
+                        <type>perm</type>
+                        <user>${deb.user}</user>
+                        <group>${deb.user}</group>
+                        <prefix>${deb.install.path}/python</prefix>
+                        <filemode>744</filemode>
+                      </mapper>
+                    </data>
+                  </dataSet>
                 </configuration>
               </execution>
             </executions>

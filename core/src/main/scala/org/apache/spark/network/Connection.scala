@@ -330,7 +330,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
       // Is highly unlikely unless there was an unclean close of socket, etc
       registerInterest()
       logInfo("Connected to [" + address + "], " + outbox.messages.size + " messages pending")
-      return true
+      true
     } catch {
       case e: Exception => {
         logWarning("Error finishing connection to " + address, e)
@@ -385,7 +385,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
       }
     }
     // should not happen - to keep scala compiler happy
-    return true
+    true
   }
 
   // This is a hack to determine if remote socket was closed or not.
@@ -559,7 +559,7 @@ private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : S
       }
     }
     // should not happen - to keep scala compiler happy
-    return true
+    true
   }
 
   def onReceive(callback: (Connection, Message) => Unit) {onReceiveCallback = callback}

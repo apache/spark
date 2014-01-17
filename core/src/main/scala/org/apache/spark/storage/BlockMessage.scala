@@ -154,7 +154,7 @@ private[spark] class BlockMessage() {
     println()
     */
     val finishTime = System.currentTimeMillis
-    return Message.createBufferMessage(buffers)
+    Message.createBufferMessage(buffers)
   }
 
   override def toString: String = {

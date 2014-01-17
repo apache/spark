@@ -17,23 +17,19 @@
 
 package org.apache.spark.streaming
 
-import dstream.FileInputDStream
-import org.apache.spark.streaming.StreamingContext._
 import java.io.File
 
 import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
-
 import org.apache.commons.io.FileUtils
-import org.scalatest.BeforeAndAfter
-
 import com.google.common.io.Files
-
-import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
-import org.apache.spark.streaming.dstream.FileInputDStream
+import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.conf.Configuration
+import org.apache.spark.streaming.StreamingContext._
+import org.apache.spark.streaming.dstream.{DStream, FileInputDStream}
 import org.apache.spark.streaming.util.ManualClock
-
-
+import org.apache.spark.util.Utils
+import org.apache.spark.SparkConf
 
 /**
  * This test suites tests the checkpointing functionality of DStreams -
@@ -63,10 +59,10 @@ class CheckpointSuite extends TestSuiteBase {
 
     assert(batchDuration === Milliseconds(500), "batchDuration for this test must be 1 second")
 
-    System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+    conf.set("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
 
     val stateStreamCheckpointInterval = Seconds(1)
-
+    val fs = FileSystem.getLocal(new Configuration())
     // this ensure checkpointing occurs at least once
     val firstNumBatches = (stateStreamCheckpointInterval / batchDuration).toLong * 2
     val secondNumBatches = firstNumBatches
@@ -90,19 +86,21 @@ class CheckpointSuite extends TestSuiteBase {
     ssc.start()
     advanceTimeWithRealDelay(ssc, firstNumBatches)
     logInfo("Checkpoint data of state stream = \n" + stateStream.checkpointData)
-    assert(!stateStream.checkpointData.checkpointFiles.isEmpty, "No checkpointed RDDs in state stream before first failure")
-    stateStream.checkpointData.checkpointFiles.foreach {
-      case (time, data) => {
-        val file = new File(data.toString)
-        assert(file.exists(), "Checkpoint file '" + file +"' for time " + time + " for state stream before first failure does not exist")
+    assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
+      "No checkpointed RDDs in state stream before first failure")
+    stateStream.checkpointData.currentCheckpointFiles.foreach {
+      case (time, file) => {
+        assert(fs.exists(new Path(file)), "Checkpoint file '" + file +"' for time " + time +
+            " for state stream before first failure does not exist")
       }
     }
 
     // Run till a further time such that previous checkpoint files in the stream would be deleted
     // and check whether the earlier checkpoint files are deleted
-    val checkpointFiles = stateStream.checkpointData.checkpointFiles.map(x => new File(x._2))
+    val checkpointFiles = stateStream.checkpointData.currentCheckpointFiles.map(x => new File(x._2))
     advanceTimeWithRealDelay(ssc, secondNumBatches)
-    checkpointFiles.foreach(file => assert(!file.exists, "Checkpoint file '" + file + "' was not deleted"))
+    checkpointFiles.foreach(file =>
+      assert(!file.exists, "Checkpoint file '" + file + "' was not deleted"))
     ssc.stop()
 
     // Restart stream computation using the checkpoint file and check whether
@@ -110,19 +108,20 @@ class CheckpointSuite extends TestSuiteBase {
     ssc = new StreamingContext(checkpointDir)
     stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
     logInfo("Restored data of state stream = \n[" + stateStream.generatedRDDs.mkString("\n") + "]")
-    assert(!stateStream.generatedRDDs.isEmpty, "No restored RDDs in state stream after recovery from first failure")
+    assert(!stateStream.generatedRDDs.isEmpty,
+      "No restored RDDs in state stream after recovery from first failure")
 
 
     // Run one batch to generate a new checkpoint file and check whether some RDD
     // is present in the checkpoint data or not
     ssc.start()
     advanceTimeWithRealDelay(ssc, 1)
-    assert(!stateStream.checkpointData.checkpointFiles.isEmpty, "No checkpointed RDDs in state stream before second failure")
-    stateStream.checkpointData.checkpointFiles.foreach {
-      case (time, data) => {
-        val file = new File(data.toString)
-        assert(file.exists(),
-          "Checkpoint file '" + file +"' for time " + time + " for state stream before seconds failure does not exist")
+    assert(!stateStream.checkpointData.currentCheckpointFiles.isEmpty,
+      "No checkpointed RDDs in state stream before second failure")
+    stateStream.checkpointData.currentCheckpointFiles.foreach {
+      case (time, file) => {
+        assert(fs.exists(new Path(file)), "Checkpoint file '" + file +"' for time " + time +
+          " for state stream before seconds failure does not exist")
       }
     }
     ssc.stop()
@@ -132,16 +131,51 @@ class CheckpointSuite extends TestSuiteBase {
     ssc = new StreamingContext(checkpointDir)
     stateStream = ssc.graph.getOutputStreams().head.dependencies.head.dependencies.head
     logInfo("Restored data of state stream = \n[" + stateStream.generatedRDDs.mkString("\n") + "]")
-    assert(!stateStream.generatedRDDs.isEmpty, "No restored RDDs in state stream after recovery from second failure")
+    assert(!stateStream.generatedRDDs.isEmpty,
+      "No restored RDDs in state stream after recovery from second failure")
 
-    // Adjust manual clock time as if it is being restarted after a delay
-    System.setProperty("spark.streaming.manualClock.jump", (batchDuration.milliseconds * 7).toString)
+    // Adjust manual clock time as if it is being restarted after a delay; this is a hack because
+    // we modify the conf object, but it works for this one property
+    ssc.conf.set("spark.streaming.manualClock.jump", (batchDuration.milliseconds * 7).toString)
     ssc.start()
     advanceTimeWithRealDelay(ssc, 4)
     ssc.stop()
     System.clearProperty("spark.streaming.manualClock.jump")
     ssc = null
   }
+
+  // This tests whether spark conf persists through checkpoints, and certain
+  // configs gets scrubbed
+  test("persistence of conf through checkpoints") {
+    val key = "spark.mykey"
+    val value = "myvalue"
+    System.setProperty(key, value)
+    ssc = new StreamingContext(master, framework, batchDuration)
+    val originalConf = ssc.conf
+
+    val cp = new Checkpoint(ssc, Time(1000))
+    val cpConf = cp.sparkConf
+    assert(cpConf.get("spark.master") === originalConf.get("spark.master"))
+    assert(cpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
+    assert(cpConf.get(key) === value)
+    ssc.stop()
+
+    // Serialize/deserialize to simulate write to storage and reading it back
+    val newCp = Utils.deserialize[Checkpoint](Utils.serialize(cp))
+
+    val newCpConf = newCp.sparkConf
+    assert(newCpConf.get("spark.master") === originalConf.get("spark.master"))
+    assert(newCpConf.get("spark.app.name") === originalConf.get("spark.app.name"))
+    assert(newCpConf.get(key) === value)
+    assert(!newCpConf.contains("spark.driver.host"))
+    assert(!newCpConf.contains("spark.driver.port"))
+
+    // Check if all the parameters have been restored
+    ssc = new StreamingContext(null, newCp, null)
+    val restoredConf = ssc.conf
+    assert(restoredConf.get(key) === value)
+  }
+
 
   // This tests whether the systm can recover from a master failure with simple
   // non-stateful operations. This assumes as reliable, replayable input
@@ -191,15 +225,12 @@ class CheckpointSuite extends TestSuiteBase {
     testCheckpointedOperation(input, operation, output, 7)
   }
 
+
   // This tests whether file input stream remembers what files were seen before
   // the master failure and uses them again to process a large window operation.
   // It also tests whether batches, whose processing was incomplete due to the
   // failure, are re-processed or not.
   test("recovery with file input stream") {
-    // Disable manual clock as FileInputDStream does not work with manual clock
-    val clockProperty = System.getProperty("spark.streaming.clock")
-    System.clearProperty("spark.streaming.clock")
-
     // Set up the streaming context and input streams
     val testDir = Files.createTempDir()
     var ssc = new StreamingContext(master, framework, Seconds(1))
@@ -218,7 +249,7 @@ class CheckpointSuite extends TestSuiteBase {
     val reducedStream = mappedStream.reduceByWindow(_ + _, Seconds(30), Seconds(1))
     val outputBuffer = new ArrayBuffer[Seq[Int]]
     var outputStream = new TestOutputStream(reducedStream, outputBuffer)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc.start()
 
     // Create files and advance manual clock to process them
@@ -296,10 +327,6 @@ class CheckpointSuite extends TestSuiteBase {
     )
     // To ensure that all the inputs were received correctly
     assert(expectedOutput.last === output.last)
-
-    // Enable manual clock back again for other tests
-    if (clockProperty != null)
-      System.setProperty("spark.streaming.clock", clockProperty)
   }
 
 
@@ -343,7 +370,6 @@ class CheckpointSuite extends TestSuiteBase {
     )
     ssc = new StreamingContext(checkpointDir)
     System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
     ssc.start()
     val outputNew = advanceTimeWithRealDelay[V](ssc, nextNumBatches)
     // the first element will be re-processed data of the last batch before restart

@@ -17,10 +17,10 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.UnionRDD
+import org.apache.spark.rdd.{PartitionerAwareUnionRDD, RDD, UnionRDD}
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{Duration, Interval, Time, DStream}
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.Duration
 
 import scala.reflect.ClassTag
 
@@ -32,13 +32,14 @@ class WindowedDStream[T: ClassTag](
   extends DStream[T](parent.ssc) {
 
   if (!_windowDuration.isMultipleOf(parent.slideDuration))
-    throw new Exception("The window duration of WindowedDStream (" + _slideDuration + ") " +
-    "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")")
+    throw new Exception("The window duration of windowed DStream (" + _slideDuration + ") " +
+    "must be a multiple of the slide duration of parent DStream (" + parent.slideDuration + ")")
 
   if (!_slideDuration.isMultipleOf(parent.slideDuration))
-    throw new Exception("The slide duration of WindowedDStream (" + _slideDuration + ") " +
-    "must be multiple of the slide duration of parent DStream (" + parent.slideDuration + ")")
+    throw new Exception("The slide duration of windowed DStream (" + _slideDuration + ") " +
+    "must be a multiple of the slide duration of parent DStream (" + parent.slideDuration + ")")
 
+  // Persist parent level by default, as those RDDs are going to be obviously reused.
   parent.persist(StorageLevel.MEMORY_ONLY_SER)
 
   def windowDuration: Duration =  _windowDuration
@@ -49,8 +50,24 @@ class WindowedDStream[T: ClassTag](
 
   override def parentRememberDuration: Duration = rememberDuration + windowDuration
 
+  override def persist(level: StorageLevel): DStream[T] = {
+    // Do not let this windowed DStream be persisted as windowed (union-ed) RDDs share underlying
+    // RDDs and persisting the windowed RDDs would store numerous copies of the underlying data.
+    // Instead control the persistence of the parent DStream.
+    parent.persist(level)
+    this
+  }
+
   override def compute(validTime: Time): Option[RDD[T]] = {
     val currentWindow = new Interval(validTime - windowDuration + parent.slideDuration, validTime)
-    Some(new UnionRDD(ssc.sc, parent.slice(currentWindow)))
+    val rddsInWindow = parent.slice(currentWindow)
+    val windowRDD = if (rddsInWindow.flatMap(_.partitioner).distinct.length == 1) {
+      logDebug("Using partition aware union for windowing at " + validTime)
+      new PartitionerAwareUnionRDD(ssc.sc, rddsInWindow)
+    } else {
+      logDebug("Using normal union for windowing at " + validTime)
+      new UnionRDD(ssc.sc,rddsInWindow)
+    }
+    Some(windowRDD)
   }
 }

@@ -245,6 +245,11 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   }
 
   /**
+   * Return an array that contains all of the elements in this RDD.
+   */
+  def toArray(): JList[T] = collect()
+
+  /**
    * Return an array that contains all of the elements in a specific partition of this RDD.
    */
   def collectPartitions(partitionIds: Array[Int]): Array[JList[T]] = {
@@ -444,4 +449,16 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     val comp = com.google.common.collect.Ordering.natural().asInstanceOf[Comparator[T]]
     takeOrdered(num, comp)
   }
+
+  /**
+   * Return approximate number of distinct elements in the RDD.
+   *
+   * The accuracy of approximation can be controlled through the relative standard deviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. The default value of
+   * relativeSD is 0.05.
+   */
+  def countApproxDistinct(relativeSD: Double = 0.05): Long = rdd.countApproxDistinct(relativeSD)
+
+  def name(): String = rdd.name
 }

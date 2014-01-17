@@ -25,23 +25,16 @@ import scala.collection.mutable.HashMap
 import scala.concurrent.duration._
 
 import akka.actor._
-import akka.remote.{ DisassociatedEvent, RemotingLifecycleEvent}
+import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{SparkException, Logging}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
-import org.apache.spark.deploy.master.Master
+import org.apache.spark.deploy.master.{DriverState, Master}
+import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.util.{Utils, AkkaUtils}
-import org.apache.spark.deploy.DeployMessages.WorkerStateResponse
-import org.apache.spark.deploy.DeployMessages.RegisterWorkerFailed
-import org.apache.spark.deploy.DeployMessages.KillExecutor
-import org.apache.spark.deploy.DeployMessages.ExecutorStateChanged
-import org.apache.spark.deploy.DeployMessages.Heartbeat
-import org.apache.spark.deploy.DeployMessages.RegisteredWorker
-import org.apache.spark.deploy.DeployMessages.LaunchExecutor
-import org.apache.spark.deploy.DeployMessages.RegisterWorker
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
   * @param masterUrls Each url should look like spark://host:port.
@@ -53,7 +46,10 @@ private[spark] class Worker(
     cores: Int,
     memory: Int,
     masterUrls: Array[String],
-    workDirPath: String = null)
+    actorSystemName: String,
+    actorName: String,
+    workDirPath: String = null,
+    val conf: SparkConf)
   extends Actor with Logging {
   import context.dispatcher
 
@@ -63,7 +59,7 @@ private[spark] class Worker(
   val DATE_FORMAT = new SimpleDateFormat("yyyyMMddHHmmss")  // For worker and executor IDs
 
   // Send a heartbeat every (heartbeat timeout) / 4 milliseconds
-  val HEARTBEAT_MILLIS = System.getProperty("spark.worker.timeout", "60").toLong * 1000 / 4
+  val HEARTBEAT_MILLIS = conf.getLong("spark.worker.timeout", 60) * 1000 / 4
 
   val REGISTRATION_TIMEOUT = 20.seconds
   val REGISTRATION_RETRIES = 3
@@ -76,6 +72,7 @@ private[spark] class Worker(
   var masterAddress: Address = null
   var activeMasterUrl: String = ""
   var activeMasterWebUiUrl : String = ""
+  val akkaUrl = "akka.tcp://%s@%s:%s/user/%s".format(actorSystemName, host, port, actorName)
   @volatile var registered = false
   @volatile var connected = false
   val workerId = generateWorkerId()
@@ -83,6 +80,9 @@ private[spark] class Worker(
   var workDir: File = null
   val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]
+  val drivers = new HashMap[String, DriverRunner]
+  val finishedDrivers = new HashMap[String, DriverRunner]
+
   val publicAddress = {
     val envVar = System.getenv("SPARK_PUBLIC_DNS")
     if (envVar != null) envVar else host
@@ -92,7 +92,7 @@ private[spark] class Worker(
   var coresUsed = 0
   var memoryUsed = 0
 
-  val metricsSystem = MetricsSystem.createMetricsSystem("worker")
+  val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf)
   val workerSource = new WorkerSource(this)
 
   def coresFree: Int = cores - coresUsed
@@ -193,7 +193,10 @@ private[spark] class Worker(
 
       val execs = executors.values.
         map(e => new ExecutorDescription(e.appId, e.execId, e.cores, e.state))
-      sender ! WorkerSchedulerStateResponse(workerId, execs.toList)
+      sender ! WorkerSchedulerStateResponse(workerId, execs.toList, drivers.keys.toSeq)
+
+    case Heartbeat =>
+      logInfo(s"Received heartbeat from driver ${sender.path}")
 
     case RegisterWorkerFailed(message) =>
       if (!registered) {
@@ -206,8 +209,11 @@ private[spark] class Worker(
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
       } else {
         logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
+        // TODO (pwendell): We shuld make sparkHome an Option[String] in
+        // ApplicationDescription to be more explicit about this.
+        val effectiveSparkHome = Option(execSparkHome_).getOrElse(sparkHome.getAbsolutePath)
         val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-          self, workerId, host, new File(execSparkHome_), workDir, ExecutorState.RUNNING)
+          self, workerId, host, new File(effectiveSparkHome), workDir, akkaUrl, ExecutorState.RUNNING)
         executors(appId + "/" + execId) = manager
         manager.start()
         coresUsed += cores_
@@ -227,8 +233,8 @@ private[spark] class Worker(
         logInfo("Executor " + fullId + " finished with state " + state +
           message.map(" message " + _).getOrElse("") +
           exitStatus.map(" exitStatus " + _).getOrElse(""))
-        finishedExecutors(fullId) = executor
         executors -= fullId
+        finishedExecutors(fullId) = executor
         coresUsed -= executor.cores
         memoryUsed -= executor.memory
       }
@@ -247,13 +253,52 @@ private[spark] class Worker(
         }
       }
 
+    case LaunchDriver(driverId, driverDesc) => {
+      logInfo(s"Asked to launch driver $driverId")
+      val driver = new DriverRunner(driverId, workDir, sparkHome, driverDesc, self, akkaUrl)
+      drivers(driverId) = driver
+      driver.start()
+
+      coresUsed += driverDesc.cores
+      memoryUsed += driverDesc.mem
+    }
+
+    case KillDriver(driverId) => {
+      logInfo(s"Asked to kill driver $driverId")
+      drivers.get(driverId) match {
+        case Some(runner) =>
+          runner.kill()
+        case None =>
+          logError(s"Asked to kill unknown driver $driverId")
+      }
+    }
+
+    case DriverStateChanged(driverId, state, exception) => {
+      state match {
+        case DriverState.ERROR =>
+          logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+        case DriverState.FINISHED =>
+          logInfo(s"Driver $driverId exited successfully")
+        case DriverState.KILLED =>
+          logInfo(s"Driver $driverId was killed by user")
+      }
+      masterLock.synchronized {
+        master ! DriverStateChanged(driverId, state, exception)
+      }
+      val driver = drivers.remove(driverId).get
+      finishedDrivers(driverId) = driver
+      memoryUsed -= driver.driverDesc.mem
+      coresUsed -= driver.driverDesc.cores
+    }
+
     case x: DisassociatedEvent if x.remoteAddress == masterAddress =>
       logInfo(s"$x Disassociated !")
       masterDisconnected()
 
     case RequestWorkerState => {
       sender ! WorkerStateResponse(host, port, workerId, executors.values.toList,
-        finishedExecutors.values.toList, activeMasterUrl, cores, memory,
+        finishedExecutors.values.toList, drivers.values.toList,
+        finishedDrivers.values.toList, activeMasterUrl, cores, memory,
         coresUsed, memoryUsed, activeMasterWebUiUrl)
     }
   }
@@ -275,6 +320,7 @@ private[spark] class Worker(
 }
 
 private[spark] object Worker {
+
   def main(argStrings: Array[String]) {
     val args = new WorkerArguments(argStrings)
     val (actorSystem, _) = startSystemAndActor(args.host, args.port, args.webUiPort, args.cores,
@@ -283,13 +329,17 @@ private[spark] object Worker {
   }
 
   def startSystemAndActor(host: String, port: Int, webUiPort: Int, cores: Int, memory: Int,
-    masterUrls: Array[String], workDir: String, workerNumber: Option[Int] = None)
-    : (ActorSystem, Int) = {
+      masterUrls: Array[String], workDir: String, workerNumber: Option[Int] = None)
+      : (ActorSystem, Int) =
+  {
     // The LocalSparkCluster runs multiple local sparkWorkerX actor systems
+    val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port)
+    val actorName = "Worker"
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
+      conf = conf)
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, workDir), name = "Worker")
+      masterUrls, systemName, actorName,  workDir, conf), name = actorName)
     (actorSystem, boundPort)
   }
 

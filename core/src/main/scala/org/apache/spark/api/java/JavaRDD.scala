@@ -127,6 +127,12 @@ JavaRDDLike[T, JavaRDD[T]] {
     wrapRDD(rdd.subtract(other, p))
 
   override def toString = rdd.toString
+
+  /** Assign a name to this RDD */
+  def setName(name: String): JavaRDD[T] = {
+    rdd.setName(name)
+    this
+  }
 }
 
 object JavaRDD {

@@ -9,4 +9,5 @@ Here you can find links to the Scaladoc generated for the Spark sbt subprojects.
 - [Spark Examples](api/examples/index.html)
 - [Spark Streaming](api/streaming/index.html)
 - [Bagel](api/bagel/index.html)
+- [GraphX](api/graphx/index.html)
 - [PySpark](api/pyspark/index.html)

@@ -23,7 +23,6 @@ import scala.collection.Map
 import scala.collection.JavaConversions.mapAsScalaMap
 import scala.collection.mutable.ArrayBuffer
 
-import scala.collection.mutable.HashMap
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.hadoop.io.BytesWritable
@@ -33,6 +32,7 @@ import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.TextOutputFormat
 
 import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
 
 import org.apache.spark.Partitioner._
 import org.apache.spark.api.java.JavaRDD
@@ -41,7 +41,7 @@ import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, BoundedPriorityQueue}
+import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableHyperLogLog}
 
 import org.apache.spark.SparkContext._
 import org.apache.spark._
@@ -51,11 +51,13 @@ import org.apache.spark._
  * partitioned collection of elements that can be operated on in parallel. This class contains the
  * basic operations available on all RDDs, such as `map`, `filter`, and `persist`. In addition,
  * [[org.apache.spark.rdd.PairRDDFunctions]] contains operations available only on RDDs of key-value
- * pairs, such as `groupByKey` and `join`; [[org.apache.spark.rdd.DoubleRDDFunctions]] contains
- * operations available only on RDDs of Doubles; and [[org.apache.spark.rdd.SequenceFileRDDFunctions]]
- * contains operations available on RDDs that can be saved as SequenceFiles. These operations are
- * automatically available on any RDD of the right type (e.g. RDD[(Int, Int)] through implicit
- * conversions when you `import org.apache.spark.SparkContext._`.
+ * pairs, such as `groupByKey` and `join`;
+ * [[org.apache.spark.rdd.DoubleRDDFunctions]] contains operations available only on RDDs of
+ * Doubles; and
+ * [[org.apache.spark.rdd.SequenceFileRDDFunctions]] contains operations available on RDDs that
+ * can be saved as SequenceFiles.
+ * These operations are automatically available on any RDD of the right type (e.g. RDD[(Int, Int)]
+ * through implicit conversions when you `import org.apache.spark.SparkContext._`.
  *
  * Internally, each RDD is characterized by five main properties:
  *
@@ -81,6 +83,7 @@ abstract class RDD[T: ClassTag](
   def this(@transient oneParent: RDD[_]) =
     this(oneParent.context , List(new OneToOneDependency(oneParent)))
 
+  private[spark] def conf = sc.conf
   // =======================================================================
   // Methods that should be implemented by subclasses of RDD
   // =======================================================================
@@ -233,12 +236,9 @@ abstract class RDD[T: ClassTag](
   /**
    * Compute an RDD partition or read it from a checkpoint if the RDD is checkpointing.
    */
-  private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] = {
-    if (isCheckpointed) {
-      firstParent[T].iterator(split, context)
-    } else {
-      compute(split, context)
-    }
+  private[spark] def computeOrReadCheckpoint(split: Partition, context: TaskContext): Iterator[T] =
+  {
+    if (isCheckpointed) firstParent[T].iterator(split, context) else compute(split, context)
   }
 
   // Transformations (return a new RDD)
@@ -266,6 +266,9 @@ abstract class RDD[T: ClassTag](
   def distinct(numPartitions: Int): RDD[T] =
     map(x => (x, null)).reduceByKey((x, y) => x, numPartitions).map(_._1)
 
+  /**
+   * Return a new RDD containing the distinct elements in this RDD.
+   */
   def distinct(): RDD[T] = distinct(partitions.size)
 
   /**
@@ -278,7 +281,7 @@ abstract class RDD[T: ClassTag](
    * which can avoid performing a shuffle.
    */
   def repartition(numPartitions: Int): RDD[T] = {
-    coalesce(numPartitions, true)
+    coalesce(numPartitions, shuffle = true)
   }
 
   /**
@@ -546,6 +549,11 @@ abstract class RDD[T: ClassTag](
    * of elements in each partition.
    */
   def zipPartitions[B: ClassTag, V: ClassTag]
+      (rdd2: RDD[B], preservesPartitioning: Boolean)
+      (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] =
+    new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2, preservesPartitioning)
+
+  def zipPartitions[B: ClassTag, V: ClassTag]
       (rdd2: RDD[B])
       (f: (Iterator[T], Iterator[B]) => Iterator[V]): RDD[V] =
     new ZippedPartitionsRDD2(sc, sc.clean(f), this, rdd2, false)
@@ -644,7 +652,8 @@ abstract class RDD[T: ClassTag](
   }
 
   /**
-   * Reduces the elements of this RDD using the specified commutative and associative binary operator.
+   * Reduces the elements of this RDD using the specified commutative and
+   * associative binary operator.
    */
   def reduce(f: (T, T) => T): T = {
     val cleanF = sc.clean(f)
@@ -760,7 +769,7 @@ abstract class RDD[T: ClassTag](
         val entry = iter.next()
         m1.put(entry.getKey, m1.getLong(entry.getKey) + entry.getLongValue)
       }
-      return m1
+      m1
     }
     val myResult = mapPartitions(countPartition).reduce(mergeMaps)
     myResult.asInstanceOf[java.util.Map[T, Long]]   // Will be wrapped as a Scala mutable Map
@@ -786,6 +795,19 @@ abstract class RDD[T: ClassTag](
     }
     val evaluator = new GroupedCountEvaluator[T](partitions.size, confidence)
     sc.runApproximateJob(this, countPartition, evaluator, timeout)
+  }
+
+  /**
+   * Return approximate number of distinct elements in the RDD.
+   *
+   * The accuracy of approximation can be controlled through the relative standard deviation
+   * (relativeSD) parameter, which also controls the amount of memory used. Lower values result in
+   * more accurate counts but increase the memory footprint and vise versa. The default value of
+   * relativeSD is 0.05.
+   */
+  def countApproxDistinct(relativeSD: Double = 0.05): Long = {
+    val zeroCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
+    aggregate(zeroCounter)(_.add(_), _.merge(_)).value.cardinality()
   }
 
   /**
@@ -825,7 +847,7 @@ abstract class RDD[T: ClassTag](
       partsScanned += numPartsToTry
     }
 
-    return buf.toArray
+    buf.toArray
   }
 
   /**
@@ -938,7 +960,7 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** Record user function generating this RDD. */
-  @transient private[spark] val origin = Utils.formatSparkCallSite
+  @transient private[spark] val origin = sc.getCallSite()
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 

@@ -17,23 +17,20 @@
 
 package org.apache.spark.streaming;
 
-import com.google.common.base.Optional;
-import com.google.common.collect.Lists;
-import com.google.common.collect.Maps;
-import com.google.common.io.Files;
+import scala.Tuple2;
 
-import kafka.serializer.StringDecoder;
-
-import org.apache.hadoop.mapreduce.lib.input.SequenceFileInputFormat;
-import org.apache.spark.streaming.api.java.JavaDStreamLike;
 import org.junit.After;
 import org.junit.Assert;
-import org.junit.Before;
 import org.junit.Test;
+import java.io.*;
+import java.util.*;
 
-import scala.Tuple2;
-import twitter4j.Status;
+import com.google.common.base.Optional;
+import com.google.common.collect.Lists;
+import com.google.common.io.Files;
+import com.google.common.collect.Sets;
 
+import org.apache.spark.SparkConf;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -43,39 +40,11 @@ import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.dstream.SparkFlumeEvent;
-import org.apache.spark.streaming.JavaTestUtils;
-import org.apache.spark.streaming.JavaCheckpointTestUtils;
-
-import java.io.*;
-import java.util.*;
-
-import akka.actor.Props;
-import akka.zeromq.Subscribe;
-
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
-public class JavaAPISuite implements Serializable {
-  private transient JavaStreamingContext ssc;
-
-  @Before
-  public void setUp() {
-      System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock");
-      ssc = new JavaStreamingContext("local[2]", "test", new Duration(1000));
-    ssc.checkpoint("checkpoint");
-  }
-
-  @After
-  public void tearDown() {
-    ssc.stop();
-    ssc = null;
-
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port");
-  }
-
+public class JavaAPISuite extends LocalJavaStreamingContext implements Serializable {
   @Test
   public void testCount() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -101,7 +70,7 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList("hello", "world"),
         Arrays.asList("goodnight", "moon"));
 
-   List<List<Integer>> expected = Arrays.asList(
+    List<List<Integer>> expected = Arrays.asList(
         Arrays.asList(5,5),
         Arrays.asList(9,4));
 
@@ -328,9 +297,9 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList(7,8,9));
 
     JavaSparkContext jsc = new JavaSparkContext(ssc.ssc().sc());
-    JavaRDD<Integer> rdd1 = ssc.sc().parallelize(Arrays.asList(1, 2, 3));
-    JavaRDD<Integer> rdd2 = ssc.sc().parallelize(Arrays.asList(4, 5, 6));
-    JavaRDD<Integer> rdd3 = ssc.sc().parallelize(Arrays.asList(7,8,9));
+    JavaRDD<Integer> rdd1 = ssc.sparkContext().parallelize(Arrays.asList(1, 2, 3));
+    JavaRDD<Integer> rdd2 = ssc.sparkContext().parallelize(Arrays.asList(4, 5, 6));
+    JavaRDD<Integer> rdd3 = ssc.sparkContext().parallelize(Arrays.asList(7,8,9));
 
     LinkedList<JavaRDD<Integer>> rdds = Lists.newLinkedList();
     rdds.add(rdd1);
@@ -473,13 +442,13 @@ public class JavaAPISuite implements Serializable {
             new Tuple2<String, String>("new york", "islanders")));
 
 
-    List<List<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
-        Arrays.asList(
+    List<HashSet<Tuple2<String, Tuple2<String, String>>>> expected = Arrays.asList(
+        Sets.newHashSet(
             new Tuple2<String, Tuple2<String, String>>("california",
                 new Tuple2<String, String>("dodgers", "giants")),
             new Tuple2<String, Tuple2<String, String>>("new york",
-                    new Tuple2<String, String>("yankees", "mets"))),
-        Arrays.asList(
+                new Tuple2<String, String>("yankees", "mets"))),
+        Sets.newHashSet(
             new Tuple2<String, Tuple2<String, String>>("california",
                 new Tuple2<String, String>("sharks", "ducks")),
             new Tuple2<String, Tuple2<String, String>>("new york",
@@ -514,8 +483,12 @@ public class JavaAPISuite implements Serializable {
 
     JavaTestUtils.attachTestOutputStream(joined);
     List<List<Tuple2<String, Tuple2<String, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<HashSet<Tuple2<String, Tuple2<String, String>>>> unorderedResult = Lists.newArrayList();
+    for (List<Tuple2<String, Tuple2<String, String>>> res: result) {
+        unorderedResult.add(Sets.newHashSet(res));
+    }
 
-    Assert.assertEquals(expected, result);
+    Assert.assertEquals(expected, unorderedResult);
   }
 
 
@@ -1228,15 +1201,15 @@ public class JavaAPISuite implements Serializable {
         Arrays.asList("hello", "moon"),
         Arrays.asList("hello"));
 
-    List<List<Tuple2<String, Long>>> expected = Arrays.asList(
-        Arrays.asList(
+    List<HashSet<Tuple2<String, Long>>> expected = Arrays.asList(
+        Sets.newHashSet(
             new Tuple2<String, Long>("hello", 1L),
             new Tuple2<String, Long>("world", 1L)),
-        Arrays.asList(
+        Sets.newHashSet(
             new Tuple2<String, Long>("hello", 2L),
             new Tuple2<String, Long>("world", 1L),
             new Tuple2<String, Long>("moon", 1L)),
-        Arrays.asList(
+        Sets.newHashSet(
             new Tuple2<String, Long>("hello", 2L),
             new Tuple2<String, Long>("moon", 1L)));
 
@@ -1246,8 +1219,12 @@ public class JavaAPISuite implements Serializable {
       stream.countByValueAndWindow(new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(counted);
     List<List<Tuple2<String, Long>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
+    List<HashSet<Tuple2<String, Long>>> unorderedResult = Lists.newArrayList();
+    for (List<Tuple2<String, Long>> res: result) {
+      unorderedResult.add(Sets.newHashSet(res));
+    }
 
-    Assert.assertEquals(expected, result);
+    Assert.assertEquals(expected, unorderedResult);
   }
 
   @Test
@@ -1597,26 +1574,6 @@ public class JavaAPISuite implements Serializable {
   // Java arguments and assign it to a JavaDStream without producing type errors. Testing of the
   // InputStream functionality is deferred to the existing Scala tests.
   @Test
-  public void testKafkaStream() {
-    HashMap<String, Integer> topics = Maps.newHashMap();
-    JavaPairDStream<String, String> test1 = ssc.kafkaStream("localhost:12345", "group", topics);
-    JavaPairDStream<String, String> test2 = ssc.kafkaStream("localhost:12345", "group", topics,
-      StorageLevel.MEMORY_AND_DISK());
-
-    HashMap<String, String> kafkaParams = Maps.newHashMap();
-    kafkaParams.put("zookeeper.connect","localhost:12345");
-    kafkaParams.put("group.id","consumer-group");
-    JavaPairDStream<String, String> test3 = ssc.kafkaStream(
-      String.class,
-      String.class,
-      StringDecoder.class,
-      StringDecoder.class,
-      kafkaParams,
-      topics,
-      StorageLevel.MEMORY_AND_DISK());
-  }
-
-  @Test
   public void testSocketTextStream() {
     JavaDStream<String> test = ssc.socketTextStream("localhost", 12345);
   }
@@ -1653,37 +1610,5 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void testRawSocketStream() {
     JavaDStream<String> test = ssc.rawSocketStream("localhost", 12345);
-  }
-
-  @Test
-  public void testFlumeStream() {
-    JavaDStream<SparkFlumeEvent> test = ssc.flumeStream("localhost", 12345, StorageLevel.MEMORY_ONLY());
-  }
-
-  @Test
-  public void testFileStream() {
-    JavaPairDStream<String, String> foo =
-      ssc.<String, String, SequenceFileInputFormat<String,String>>fileStream("/tmp/foo");
-  }
-
-  @Test
-  public void testTwitterStream() {
-    String[] filters = new String[] { "good", "bad", "ugly" };
-    JavaDStream<Status> test = ssc.twitterStream(filters, StorageLevel.MEMORY_ONLY());
-  }
-
-  @Test
-  public void testActorStream() {
-    JavaDStream<String> test = ssc.actorStream((Props)null, "TestActor", StorageLevel.MEMORY_ONLY());
-  }
-
-  @Test
-  public void testZeroMQStream() {
-    JavaDStream<String> test = ssc.zeroMQStream("url", (Subscribe) null, new Function<byte[][], Iterable<String>>() {
-      @Override
-      public Iterable<String> call(byte[][] b) throws Exception {
-        return null;
-      }
-    });
   }
 }

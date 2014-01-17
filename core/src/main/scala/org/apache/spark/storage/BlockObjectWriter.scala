@@ -32,7 +32,7 @@ import org.apache.spark.serializer.{SerializationStream, Serializer}
  *
  * This interface does not support concurrent writes.
  */
-abstract class BlockObjectWriter(val blockId: BlockId) {
+private[spark] abstract class BlockObjectWriter(val blockId: BlockId) {
 
   def open(): BlockObjectWriter
 
@@ -69,12 +69,13 @@ abstract class BlockObjectWriter(val blockId: BlockId) {
 }
 
 /** BlockObjectWriter which writes directly to a file on disk. Appends to the given file. */
-class DiskBlockObjectWriter(
+private[spark] class DiskBlockObjectWriter(
     blockId: BlockId,
     file: File,
     serializer: Serializer,
     bufferSize: Int,
-    compressStream: OutputStream => OutputStream)
+    compressStream: OutputStream => OutputStream,
+    syncWrites: Boolean)
   extends BlockObjectWriter(blockId)
   with Logging
 {
@@ -96,8 +97,6 @@ class DiskBlockObjectWriter(
     override def close() = out.close()
     override def flush() = out.flush()
   }
-
-  private val syncWrites = System.getProperty("spark.shuffle.sync", "false").toBoolean
 
   /** The file channel, used for repositioning / truncating the file. */
   private var channel: FileChannel = null
@@ -182,4 +181,8 @@ class DiskBlockObjectWriter(
 
   // Only valid if called after close()
   override def timeWriting() = _timeWriting
+
+  def bytesWritten: Long = {
+    lastValidPosition - initialPosition
+  }
 }
