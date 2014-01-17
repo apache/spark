@@ -20,75 +20,7 @@ case class Aggregate(
   override val requiredDataProperty: DataProperty = GroupProperty(groupingExpressions)
   override def otherCopyArgs = outputDataProperty :: Nil
 
-  case class AverageFunction(expr: Expression, base: AggregateExpression)
-    extends AggregateFunction {
 
-    def this() = this(null, null) // Required for serialization.
-
-    var count: Long = _
-    var sum: Long = _
-
-    def result: Any = sum.toDouble / count.toDouble
-
-    def apply(input: Seq[Row]): Unit = {
-      count += 1
-      // TODO: Support all types here...
-      sum += Evaluate(expr, input).asInstanceOf[Int]
-    }
-  }
-
-  case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
-    def this() = this(null, null) // Required for serialization.
-
-    var count: Int = _
-
-    def apply(input: Seq[Row]): Unit = {
-      val evaluatedExpr = expr.map(Evaluate(_, input))
-      if (evaluatedExpr.map(_ != null).reduceLeft(_ || _)) {
-        count += 1
-      }
-    }
-
-    def result: Any = count
-  }
-
-  case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
-    def this() = this(null, null) // Required for serialization.
-
-    var sum = Evaluate(Cast(Literal(0), expr.dataType), Nil)
-
-    def apply(input: Seq[Row]): Unit =
-      sum = Evaluate(Add(Literal(sum), expr), input)
-
-    def result: Any = sum
-  }
-
-  case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpression)
-    extends AggregateFunction {
-
-    def this() = this(null, null) // Required for serialization.
-
-    val seen = new scala.collection.mutable.HashSet[Any]()
-
-    def apply(input: Seq[Row]): Unit = {
-      val evaluatedExpr = expr.map(Evaluate(_, input))
-      if (evaluatedExpr.map(_ != null).reduceLeft(_ && _))
-        seen += evaluatedExpr
-    }
-
-    def result: Any = seen.size
-  }
-
-  case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
-    def this() = this(null, null) // Required for serialization.
-
-    var result: Any = null
-
-    def apply(input: Seq[Row]): Unit = {
-      if (result == null)
-        result = Evaluate(expr, input)
-    }
-  }
 
   def output = aggregateExpressions.map(_.toAttribute)
 
@@ -140,6 +72,76 @@ case class Aggregate(
       }
       buildRow(aggImplementations.map(Evaluate(_, Vector(group))))
     }
+  }
+}
+
+case class AverageFunction(expr: Expression, base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  var count: Long = _
+  var sum: Long = _
+
+  def result: Any = sum.toDouble / count.toDouble
+
+  def apply(input: Seq[Row]): Unit = {
+    count += 1
+    // TODO: Support all types here...
+    sum += Evaluate(expr, input).asInstanceOf[Int]
+  }
+}
+
+case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  var count: Int = _
+
+  def apply(input: Seq[Row]): Unit = {
+    val evaluatedExpr = expr.map(Evaluate(_, input))
+    if (evaluatedExpr.map(_ != null).reduceLeft(_ || _)) {
+      count += 1
+    }
+  }
+
+  def result: Any = count
+}
+
+case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  var sum = Evaluate(Cast(Literal(0), expr.dataType), Nil)
+
+  def apply(input: Seq[Row]): Unit =
+    sum = Evaluate(Add(Literal(sum), expr), input)
+
+  def result: Any = sum
+}
+
+case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  val seen = new scala.collection.mutable.HashSet[Any]()
+
+  def apply(input: Seq[Row]): Unit = {
+    val evaluatedExpr = expr.map(Evaluate(_, input))
+    if (evaluatedExpr.map(_ != null).reduceLeft(_ && _))
+      seen += evaluatedExpr
+  }
+
+  def result: Any = seen.size
+}
+
+case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  var result: Any = null
+
+  def apply(input: Seq[Row]): Unit = {
+    if (result == null)
+      result = Evaluate(expr, input)
   }
 }
 
