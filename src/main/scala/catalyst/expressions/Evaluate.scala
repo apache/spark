@@ -26,7 +26,8 @@ object Evaluate extends Logging {
       else
         e.dataType match {
           case n: NumericType =>
-            f.asInstanceOf[(Numeric[n.JvmType], n.JvmType) => n.JvmType](n.numeric, eval(e).asInstanceOf[n.JvmType])
+            val castedFunction = f.asInstanceOf[(Numeric[n.JvmType], n.JvmType) => n.JvmType]
+            castedFunction(n.numeric, eval(e).asInstanceOf[n.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
     }
@@ -34,7 +35,7 @@ object Evaluate extends Logging {
     @inline
     def n2(e1: Expression, e2: Expression, f: ((Numeric[Any], Any, Any) => Any)): Any  = {
       if (e1.dataType != e2.dataType)
-        throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+        throw new OptimizationException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
 
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
@@ -52,7 +53,7 @@ object Evaluate extends Logging {
     @inline
     def f2(e1: Expression, e2: Expression, f: ((Fractional[Any], Any, Any) => Any)): Any  = {
       if (e1.dataType != e2.dataType)
-        throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+        throw new OptimizationException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
 
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
@@ -69,7 +70,8 @@ object Evaluate extends Logging {
 
     @inline
     def i2(e1: Expression, e2: Expression, f: ((Integral[Any], Any, Any) => Any)): Any  = {
-      if (e1.dataType != e2.dataType) throw new OptimizationException(e,  s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+      if (e1.dataType != e2.dataType)
+        throw new OptimizationException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
       if (evalE1 == null || evalE2 == null)
@@ -112,7 +114,7 @@ object Evaluate extends Logging {
       case UnaryMinus(child) => n1(child, _.negate(_))
 
       /* Control Flow */
-      case If(e, t, f) => if(eval(e).asInstanceOf[Boolean]) eval(t) else eval(f)
+      case If(e, t, f) => if (eval(e).asInstanceOf[Boolean]) eval(t) else eval(f)
 
       /* Comparisons */
       case Equals(l, r) =>
@@ -226,7 +228,9 @@ object Evaluate extends Logging {
       case implementedFunction: ImplementedUdf =>
         implementedFunction.evaluate(implementedFunction.children.map(eval))
 
-      case a: Attribute => throw new OptimizationException(a, "Unable to evaluate unbound reference without access to the input schema.")
+      case a: Attribute =>
+        throw new OptimizationException(a,
+          "Unable to evaluate unbound reference without access to the input schema.")
       case other => throw new OptimizationException(other, "evaluation not implemented")
     }
 

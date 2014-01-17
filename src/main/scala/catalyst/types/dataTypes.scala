@@ -36,6 +36,7 @@ object IntegralType {
     case _ => false
   }
 }
+
 abstract class IntegralType extends NumericType {
   val integral: Integral[JvmType]
 }

@@ -89,18 +89,18 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def mapChildren(f: BaseType => BaseType): this.type = {
     var changed = false
     val newArgs = productIterator.map {
-      case arg: TreeNode[_] if (children contains arg) =>
+      case arg: TreeNode[_] if children contains arg =>
         val newChild = f(arg.asInstanceOf[BaseType])
-        if(newChild fastEquals arg)
+        if (newChild fastEquals arg) {
           arg
-        else {
+        } else {
           changed = true
           newChild
         }
       case nonChild: AnyRef => nonChild
       case null => null
     }.toArray
-    if(changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs) else this
   }
 
   /**
@@ -113,12 +113,12 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val remainingNewChildren = newChildren.toBuffer
     val remainingOldChildren = children.toBuffer
     val newArgs = productIterator.map {
-      case arg: TreeNode[_] if (children contains arg) =>
+      case arg: TreeNode[_] if children contains arg =>
         val newChild = remainingNewChildren.remove(0)
         val oldChild = remainingOldChildren.remove(0)
-        if(newChild fastEquals oldChild)
+        if (newChild fastEquals oldChild) {
           oldChild
-        else {
+        } else {
           changed = true
           newChild
         }
@@ -126,7 +126,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       case null => null
     }.toArray
 
-    if(changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs) else this
   }
 
   /**
@@ -163,7 +163,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def transformChildrenDown(rule: PartialFunction[BaseType, BaseType]): this.type = {
     var changed = false
     val newArgs = productIterator.map {
-      case arg: TreeNode[_] if (children contains arg) =>
+      case arg: TreeNode[_] if children contains arg =>
         val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
         if (!(newChild fastEquals arg)) {
           changed = true
@@ -172,7 +172,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
           arg
         }
       case args: Seq[_] => args.map {
-        case arg: TreeNode[_] if (children contains arg) =>
+        case arg: TreeNode[_] if children contains arg =>
           val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
           if (!(newChild fastEquals arg)) {
             changed = true
@@ -206,7 +206,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def transformChildrenUp(rule: PartialFunction[BaseType, BaseType]): this.type = {
     var changed = false
     val newArgs = productIterator.map {
-      case arg: TreeNode[_] if (children contains arg) =>
+      case arg: TreeNode[_] if children contains arg =>
         val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
         if (!(newChild fastEquals arg)) {
           changed = true
@@ -215,7 +215,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
           arg
         }
       case args: Seq[_] => args.map {
-        case arg: TreeNode[_] if (children contains arg) =>
+        case arg: TreeNode[_] if children contains arg =>
           val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
           if (!(newChild fastEquals arg)) {
             changed = true
