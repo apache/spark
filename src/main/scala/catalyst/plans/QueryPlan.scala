@@ -1,8 +1,10 @@
 package catalyst
 package plans
 
-import expressions.{Attribute, Expression}
-import trees._
+import catalyst.expressions.{SortOrder, Attribute, Expression}
+import catalyst.trees._
+import catalyst.execution.HashPartitioned
+import catalyst.execution.RangePartitioned
 
 abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanType] {
   self: PlanType with Product =>
@@ -48,6 +50,14 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
         case e: Expression => transformExpressionDown(e)
         case other => other
       }
+      case g @ HashPartitioned(groupingExpressions) => HashPartitioned(
+        groupingExpressions.map {
+          case e: Expression => transformExpressionDown(e)
+          case other => other})
+      case g @ RangePartitioned(sortingExpressions) => RangePartitioned(
+        sortingExpressions.map {
+          case e: Expression => transformExpressionDown(e)
+          case other => other}.asInstanceOf[Seq[SortOrder]])
       case other: AnyRef => other
     }.toArray
 
@@ -79,6 +89,14 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
         case e: Expression => transformExpressionUp(e)
         case other => other
       }
+      case g @ HashPartitioned(groupingExpressions) => HashPartitioned(
+        groupingExpressions.map {
+          case e: Expression => transformExpressionUp(e)
+          case other => other})
+      case g @ RangePartitioned(sortingExpressions) => RangePartitioned(
+        sortingExpressions.map {
+          case e: Expression => transformExpressionUp(e)
+          case other => other}.asInstanceOf[Seq[SortOrder]])
       case other: AnyRef => other
     }.toArray
 
@@ -99,6 +117,14 @@ abstract class QueryPlan[PlanType <: TreeNode[PlanType]] extends TreeNode[PlanTy
       case e: Expression => e :: Nil
       case Some(e: Expression) => e :: Nil
       case seq: Seq[_] => seq.flatMap {
+        case e: Expression => e :: Nil
+        case other => Nil
+      }
+      case g @ HashPartitioned(groupingExpressions) => groupingExpressions.flatMap {
+          case e: Expression => e :: Nil
+          case other => Nil
+      }
+      case g @ RangePartitioned(sortingExpressions) => sortingExpressions.flatMap {
         case e: Expression => e :: Nil
         case other => Nil
       }

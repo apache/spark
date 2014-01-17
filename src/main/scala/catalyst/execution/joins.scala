@@ -9,33 +9,38 @@ import errors._
 import expressions._
 import plans._
 
-/* Implicits */
-import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.SharkPairRDDFunctions._
 
 case class SparkEquiInnerJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SharkPlan,
     right: SharkPlan)
+  (override val outputPartitioningScheme: Partitioned =
+    HashPartitioned(leftKeys))
   extends BinaryNode {
 
   def output = left.output ++ right.output
 
+  override val leftRequiredPartitioningScheme: Partitioned = HashPartitioned(leftKeys)
+  override val rightRequiredPartitioningScheme: Partitioned = HashPartitioned(rightKeys)
+  override def otherCopyArgs = outputPartitioningScheme :: Nil
+
   def execute() = attachTree(this, "execute") {
-    val leftWithKeys = left.execute .map { row =>
+    val leftWithKeys = left.execute.map { row =>
       val joinKeys = leftKeys.map(Evaluate(_, Vector(row)))
       logger.debug(s"Generated left join keys ($leftKeys) => ($joinKeys) given row $row")
       (joinKeys, row)
     }
 
-    val rightWithKeys = right.execute().map { row =>
+    val rightWithKeys = right.execute.map { row =>
       val joinKeys = rightKeys.map(Evaluate(_, Vector(EmptyRow, row)))
       logger.debug(s"Generated right join keys ($rightKeys) => ($joinKeys) given row $row")
       (joinKeys, row)
     }
 
     // Do the join.
-    val joined = filterNulls(leftWithKeys).join(filterNulls(rightWithKeys))
+    val joined = filterNulls(leftWithKeys).joinLocally(filterNulls(rightWithKeys))
     // Drop join keys and merge input tuples.
     joined.map { case (_, (leftTuple, rightTuple)) => buildRow(leftTuple ++ rightTuple) }
   }
@@ -63,7 +68,7 @@ case class BroadcastNestedLoopJoin(
     (@transient sc: SharkContext)
   extends BinaryNode {
 
-  override  def otherCopyArgs = sc :: Nil
+  override def otherCopyArgs = sc :: Nil
 
   def output = left.output ++ right.output
 

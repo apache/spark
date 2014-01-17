@@ -88,7 +88,7 @@ trait PlanningStrategies {
           val rightKeys = joinKeys.map(_._2)
 
           val joinOp = execution.SparkEquiInnerJoin(
-            leftKeys, rightKeys, planLater(left), planLater(right))
+            leftKeys, rightKeys, planLater(left), planLater(right))()
 
           // Make sure other conditions are met if present.
           if (otherPredicates.nonEmpty) {
@@ -135,16 +135,16 @@ trait PlanningStrategies {
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Sort(sortExprs, child) =>
-        execution.Sort(sortExprs, planLater(child)) :: Nil
+        execution.Sort(sortExprs, planLater(child))() :: Nil
       // TODO: It is correct, but overkill to do a global sorting here.
       case logical.SortPartitions(sortExprs, child) =>
-        execution.Sort(sortExprs, planLater(child)) :: Nil
+        execution.Sort(sortExprs, planLater(child))() :: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
-        execution.Aggregate(group, agg, planLater(child)) :: Nil
+        execution.Aggregate(group, agg, planLater(child))() :: Nil
       case logical.LocalRelation(output, data) =>
         execution.LocalRelation(output, data.map(_.productIterator.toVector))(sc) :: Nil
       case logical.StopAfter(limit, child) =>
