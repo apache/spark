@@ -140,6 +140,7 @@ class SparkContext(
   // Create a classLoader for use by the driver so that jars added via addJar are available to the
   // driver.  Do this before all other initialization so that any thread pools created for this
   // SparkContext uses the class loader.
+  // Note that this is config-enabled as classloaders can introduce subtle side effects
   private[spark] val classLoader = if (conf.getBoolean("spark.driver.add-dynamic-jars", false)) {
     val loader = new SparkURLClassLoader(Array.empty[URL], this.getClass.getClassLoader)
     Thread.currentThread.setContextClassLoader(loader)
@@ -774,9 +775,10 @@ class SparkContext(
 
   /**
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
-   * This also makes the JAR available to this driver process.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   * NOTE: If you enable spark.driver.add-dynamic-jars, then the JAR will also be made available
+   * to this SparkContext.  local: JARs must be available on the driver node.
    */
   def addJar(path: String) {
     if (path == null) {

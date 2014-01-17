@@ -111,6 +111,7 @@ Apart from these, the following properties are also available, and may be useful
     it if you configure your own old generation size.
   </td>
 </tr>
+
 <tr>
   <td>spark.shuffle.memoryFraction</td>
   <td>0.3</td>
@@ -375,7 +376,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.akka.heartbeat.interval</td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those. 
+    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those.
   </td>
 </tr>
 <tr>
@@ -390,6 +391,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>(random)</td>
   <td>
     Port for the driver to listen on.
+  </td>
+</tr>
+<tr>
+  <td>spark.driver.add-dynamic-jars</td>
+  <td>false</td>
+  <td>
+    If true, the SparkContext uses a class loader to make jars added via `addJar` available to the SparkContext.
+    The default behavior is that jars added via `addJar` are only made available to executors, and Spark apps
+    must include all its jars in the application CLASSPATH even if `addJar` is used.
   </td>
 </tr>
 <tr>
@@ -430,7 +440,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.broadcast.blockSize</td>
   <td>4096</td>
   <td>
-    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>. 
+    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>
