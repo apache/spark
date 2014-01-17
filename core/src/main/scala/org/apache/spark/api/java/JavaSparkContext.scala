@@ -401,7 +401,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     sc.setCheckpointDir(dir)
   }
 
-  def getCheckpointDir = sc.getCheckpointDir.getOrElse(null)
+  def getCheckpointDir = JavaUtils.optionToOptional(sc.getCheckpointDir)
 
   protected def checkpointFile[T](path: String): JavaRDD[T] = {
     implicit val cm: ClassTag[T] =
