@@ -41,7 +41,7 @@ class SVD {
    /**
    * Compute SVD using the current set parameters
    */
-  def computeSVD(matrix: SparseMatrix) : SVDecomposedMatrix = {
+  def compute(matrix: SparseMatrix) : SVDecomposedMatrix = {
     SVD.sparseSVD(matrix, k)
   }
 }
