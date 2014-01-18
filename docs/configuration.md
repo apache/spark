@@ -18,8 +18,8 @@ Spark provides three locations to configure the system:
 Spark properties control most application settings and are configured separately for each application.
 The preferred way to set them is by passing a [SparkConf](api/core/index.html#org.apache.spark.SparkConf)
 class to your SparkContext constructor.
-Alternatively, Spark will also load them from Java system properties (for compatibility with old versions
-of Spark) and from a [`spark.conf` file](#configuration-files) on your classpath.
+Alternatively, Spark will also load them from Java system properties, for compatibility with old versions
+of Spark.
 
 SparkConf lets you configure most of the common properties to initialize a cluster (e.g., master URL and
 application name), as well as arbitrary key-value pairs through the `set()` method. For example, we could
@@ -467,30 +467,6 @@ Apart from these, the following properties are also available, and may be useful
 
 The application web UI at `http://<driver>:4040` lists Spark properties in the "Environment" tab.
 This is a useful place to check to make sure that your properties have been set correctly.
-
-## Configuration Files
-
-You can also configure Spark properties through a `spark.conf` file on your Java classpath.
-Because these properties are usually application-specific, we recommend putting this fine *only* on your
-application's classpath, and not in a global Spark classpath.
-
-The `spark.conf` file uses Typesafe Config's [HOCON format](https://github.com/typesafehub/config#json-superset),
-which is a superset of Java properties files and JSON. For example, the following is a simple config file:
-
-{% highlight awk %}
-# Comments are allowed
-spark.executor.memory = 512m
-spark.serializer = org.apache.spark.serializer.KryoSerializer
-{% endhighlight %}
-
-The format also allows hierarchical nesting, as follows:
-
-{% highlight awk %}
-spark.akka {
-  threads = 8
-  timeout = 200
-}
-{% endhighlight %}
 
 # Environment Variables
 

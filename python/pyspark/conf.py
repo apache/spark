@@ -61,14 +61,12 @@ class SparkConf(object):
 
     Most of the time, you would create a SparkConf object with
     C{SparkConf()}, which will load values from C{spark.*} Java system
-    properties and any C{spark.conf} on your Spark classpath. In this
-    case, system properties take priority over C{spark.conf}, and any
-    parameters you set directly on the C{SparkConf} object take priority
-    over both of those.
+    properties as well. In this case, any parameters you set directly on
+    the C{SparkConf} object take priority over system properties.
 
     For unit tests, you can also call C{SparkConf(false)} to skip
     loading external settings and get the same configuration no matter
-    what is on the classpath.
+    what the system properties are.
 
     All setter methods in this class support chaining. For example,
     you can write C{conf.setMaster("local").setAppName("My app")}.
@@ -82,7 +80,7 @@ class SparkConf(object):
         Create a new Spark configuration.
 
         @param loadDefaults: whether to load values from Java system
-               properties and classpath (True by default)
+               properties (True by default)
         @param _jvm: internal parameter used to pass a handle to the
                Java VM; does not need to be set by users
         """
