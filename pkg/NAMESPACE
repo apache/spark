@@ -3,6 +3,7 @@ exportClasses("RDD")
 exportClasses("Broadcast")
 exportMethods(
               "cache",
+              "checkpoint",
               "collect",
               "collectPartition",
               "combineByKey",

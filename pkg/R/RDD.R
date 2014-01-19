@@ -8,6 +8,7 @@
 #' @rdname RDD
 #' @seealso parallelize, textFile
 #'
+#' @param env An R environment that stores bookkeeping states of the RDD
 #' @param jrdd Java object reference to the backing JavaRDD
 #' @param serialized TRUE if the JavaRDD contains serialized R objects
 #' @export
@@ -16,13 +17,14 @@ setClass("RDD",
                       jrdd = "jobjRef",
                       serialized = "logical"))
 
-setMethod("initialize", "RDD", function(.Object, jrdd, serialized, isCached) {
+setMethod("initialize", "RDD", function(.Object, jrdd, serialized, isCached, isCheckpointed) {
   # We use an environment to store mutable states inside an RDD object (currently
   # only `isCached'). Note that R's call-by-value semantics makes modifying slots
   # inside an object (passed as an argument into a function, such as cache())
   # difficult.
   .Object@env <- new.env()
   .Object@env$isCached <- isCached
+  .Object@env$isCheckpointed <- isCheckpointed
 
   .Object@jrdd <- jrdd
   .Object@serialized <- serialized
@@ -42,8 +44,8 @@ setValidity("RDD",
 
 #' @rdname RDD
 #' @export
-RDD <- function(jrdd, serialized = TRUE, isCached = FALSE) {
-  new("RDD", jrdd, serialized, isCached)
+RDD <- function(jrdd, serialized = TRUE, isCached = FALSE, isCheckpointed = FALSE) {
+  new("RDD", jrdd, serialized, isCached, isCheckpointed)
 }
 
 #' Persist an RDD
@@ -95,6 +97,37 @@ setMethod("unpersist",
           function(rdd) {
             .jcall(rdd@jrdd, "Lorg/apache/spark/api/java/JavaRDD;", "unpersist")
             rdd@env$isCached <- FALSE
+            rdd
+          })
+
+
+#' Checkpoint an RDD
+#'
+#' Mark this RDD for checkpointing. It will be saved to a file inside the
+#' checkpoint directory set with SparkContext.setCheckpointDir() and all
+#' references to its parent RDDs will be removed. This function must be called
+#' before any job has been executed on this RDD. It is strongly recommended that
+#' this RDD is persisted in memory, otherwise saving it on a file will require
+#' recomputation.
+#'
+#' @param rdd The RDD to checkpoint
+#' @rdname checkpoint-methods
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 2L)
+#' checkpoint(rdd)
+#'}
+setGeneric("checkpoint", function(rdd) { standardGeneric("checkpoint") })
+
+#' @rdname checkpoint-methods
+#' @aliases checkpoint,RDD-method
+setMethod("checkpoint",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            .jcall(rdd@jrdd$rdd(), "V", "checkpoint")
+            rdd@env$isCheckpointed <- TRUE
             rdd
           })
 
