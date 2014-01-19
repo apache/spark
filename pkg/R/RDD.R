@@ -11,7 +11,23 @@
 #' @param jrdd Java object reference to the backing JavaRDD
 #' @param serialized TRUE if the JavaRDD contains serialized R objects
 #' @export
-setClass("RDD", slots = list(jrdd = "jobjRef", serialized = "logical"))
+setClass("RDD",
+         slots = list(env = "environment",
+                      jrdd = "jobjRef",
+                      serialized = "logical"))
+
+setMethod("initialize", "RDD", function(.Object, jrdd, serialized, isCached) {
+  # We use an environment to store mutable states inside an RDD object (currently only
+  # `isCached'). Note that R's call-by-value semantics makes modifying slots
+  # inside an object (passed as an argument into a function, such as
+  # cache()) difficult.
+  .Object@env <- new.env()
+  .Object@env$isCached <- isCached
+
+  .Object@jrdd <- jrdd
+  .Object@serialized <- serialized
+  .Object
+})
 
 setValidity("RDD",
             function(object) {
@@ -26,8 +42,8 @@ setValidity("RDD",
 
 #' @rdname RDD
 #' @export
-RDD <- function(jrdd, serialized = TRUE) {
-  new("RDD", jrdd = jrdd, serialized = serialized)
+RDD <- function(jrdd, serialized = TRUE, isCached = FALSE) {
+  new("RDD", jrdd, serialized, isCached)
 }
 
 #' Persist an RDD
@@ -51,6 +67,34 @@ setMethod("cache",
           signature(rdd = "RDD"),
           function(rdd) {
             .jcall(rdd@jrdd, "Lorg/apache/spark/api/java/JavaRDD;", "cache")
+            rdd@env$isCached <- TRUE
+            rdd
+          })
+
+
+#' Unpersist an RDD
+#'
+#' Mark the RDD as non-persistent, and remove all blocks for it from memory and disk.
+#'
+#' @param rdd The RDD to unpersist
+#' @rdname unpersist-methods
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 2L)
+#' cache(rdd) # rdd@env$isCached == TRUE
+#' unpersist(rdd) # rdd@env$isCached == FALSE
+#'}
+setGeneric("unpersist", function(rdd) { standardGeneric("unpersist") })
+
+#' @rdname unpersist-methods
+#' @aliases unpersist,RDD-method
+setMethod("unpersist",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            .jcall(rdd@jrdd, "Lorg/apache/spark/api/java/JavaRDD;", "unpersist")
+            rdd@env$isCached <- FALSE
             rdd
           })
 
