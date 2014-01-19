@@ -17,10 +17,10 @@ setClass("RDD",
                       serialized = "logical"))
 
 setMethod("initialize", "RDD", function(.Object, jrdd, serialized, isCached) {
-  # We use an environment to store mutable states inside an RDD object (currently only
-  # `isCached'). Note that R's call-by-value semantics makes modifying slots
-  # inside an object (passed as an argument into a function, such as
-  # cache()) difficult.
+  # We use an environment to store mutable states inside an RDD object (currently
+  # only `isCached'). Note that R's call-by-value semantics makes modifying slots
+  # inside an object (passed as an argument into a function, such as cache())
+  # difficult.
   .Object@env <- new.env()
   .Object@env$isCached <- isCached
 
