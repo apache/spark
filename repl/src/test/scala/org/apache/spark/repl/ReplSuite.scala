@@ -29,6 +29,8 @@ import org.apache.spark.SparkContext
 
 class ReplSuite extends FunSuite {
 
+  System.setProperty("spark.authenticate", "false")
+
   def runInterpreter(master: String, input: String): String = {
     val in = new BufferedReader(new StringReader(input + "\n"))
     val out = new StringWriter()

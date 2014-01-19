@@ -20,7 +20,8 @@ package org.apache.spark.deploy.worker.ui
 import java.io.File
 
 import javax.servlet.http.HttpServletRequest
-import org.eclipse.jetty.server.{Handler, Server}
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
@@ -46,12 +47,12 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   val metricsHandlers = worker.metricsSystem.getServletHandlers
 
-  val handlers = metricsHandlers ++ Array[(String, Handler)](
-    ("/static", createStaticHandler(WorkerWebUI.STATIC_RESOURCE_DIR)),
-    ("/log", (request: HttpServletRequest) => log(request)),
-    ("/logPage", (request: HttpServletRequest) => logPage(request)),
-    ("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
-    ("*", (request: HttpServletRequest) => indexPage.render(request))
+  val handlers = metricsHandlers ++ Seq[ServletContextHandler](
+    createStaticHandler(WorkerWebUI.STATIC_RESOURCE_DIR, "/static/*"),
+    createServletHandler("/log", (request: HttpServletRequest) => log(request)),
+    createServletHandler("/logPage", (request: HttpServletRequest) => logPage(request)),
+    createServletHandler("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
+    createServletHandler("*", (request: HttpServletRequest) => indexPage.render(request))
   )
 
   def start() {
@@ -198,6 +199,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 }
 
 private[spark] object WorkerWebUI {
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+  val STATIC_RESOURCE_DIR = "org/apache/spark/ui"
   val DEFAULT_PORT="8081"
 }

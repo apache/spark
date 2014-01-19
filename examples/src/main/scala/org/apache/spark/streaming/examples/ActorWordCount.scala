@@ -23,7 +23,7 @@ import scala.util.Random
 
 import akka.actor.{Actor, ActorRef, Props, actorRef2Scala}
 
-import org.apache.spark.SparkConf
+import org.apache.spark.{SparkConf, SecurityManager}
 import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext.toPairDStreamFunctions
 import org.apache.spark.streaming.receivers.Receiver
@@ -113,7 +113,8 @@ object FeederActor {
     val Seq(host, port) = args.toSeq
 
 
-    val actorSystem = AkkaUtils.createActorSystem("test", host, port.toInt, conf = new SparkConf)._1
+    val actorSystem = AkkaUtils.createActorSystem("test", host, port.toInt, conf = new SparkConf,
+      securityManager = new SecurityManager)._1
     val feeder = actorSystem.actorOf(Props[FeederActor], "FeederActor")
 
     println("Feeder started as:" + feeder)

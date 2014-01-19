@@ -21,6 +21,7 @@ import java.security.PrivilegedExceptionAction
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 
 import org.apache.spark.{SparkContext, SparkException}
@@ -63,6 +64,10 @@ class SparkHadoopUtil {
   def addCredentials(conf: JobConf) {}
 
   def isYarnMode(): Boolean = { false }
+
+  def getCurrentUserCredentials(): Credentials = { null }
+
+  def addCurrentUserCredentials(creds: Credentials) {}
 }
 
 object SparkHadoopUtil {

@@ -24,9 +24,10 @@ import com.fasterxml.jackson.databind.ObjectMapper
 
 import java.util.Properties
 import java.util.concurrent.TimeUnit
+
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.ui.JettyUtils
 
@@ -44,8 +45,9 @@ class MetricsServlet(val property: Properties, val registry: MetricRegistry) ext
   val mapper = new ObjectMapper().registerModule(
     new MetricsModule(TimeUnit.SECONDS, TimeUnit.MILLISECONDS, servletShowSample))
 
-  def getHandlers = Array[(String, Handler)](
-    (servletPath, JettyUtils.createHandler(request => getMetricsSnapshot(request), "text/json"))
+  def getHandlers = Array[ServletContextHandler](
+    JettyUtils.createServletHandler(servletPath, 
+      JettyUtils.createHandler(request => getMetricsSnapshot(request), "text/json"))
   )
 
   def getMetricsSnapshot(request: HttpServletRequest): String = {

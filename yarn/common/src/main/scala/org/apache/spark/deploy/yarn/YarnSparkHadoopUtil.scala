@@ -19,6 +19,7 @@ package org.apache.spark.deploy.yarn
 
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.hadoop.mapred.JobConf
+import org.apache.hadoop.security.Credentials
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.conf.Configuration
@@ -39,5 +40,13 @@ class YarnSparkHadoopUtil extends SparkHadoopUtil {
   override def addCredentials(conf: JobConf) {
     val jobCreds = conf.getCredentials()
     jobCreds.mergeAll(UserGroupInformation.getCurrentUser().getCredentials())
+  }
+
+  override def getCurrentUserCredentials(): Credentials = { 
+    UserGroupInformation.getCurrentUser().getCredentials()
+  }
+
+  override def addCurrentUserCredentials(creds: Credentials) {
+    UserGroupInformation.getCurrentUser().addCredentials(creds)
   }
 }

@@ -31,7 +31,7 @@ import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
 
 
-import org.apache.spark.{SparkConf, Logging, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, Logging, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.MasterMessages._
@@ -704,7 +704,8 @@ private[spark] object Master {
   def startSystemAndActor(host: String, port: Int, webUiPort: Int, conf: SparkConf)
       : (ActorSystem, Int, Int) =
   {
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf)
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf,
+      securityManager = new SecurityManager)
     val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort), actorName)
     val timeout = AkkaUtils.askTimeout(conf)
     val respFuture = actor.ask(RequestWebUIPort)(timeout)

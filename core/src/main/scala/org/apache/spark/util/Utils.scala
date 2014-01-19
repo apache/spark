@@ -18,7 +18,8 @@
 package org.apache.spark.util
 
 import java.io._
-import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address}
+import java.net.{Authenticator, PasswordAuthentication}
+import java.net.{InetAddress, URL, URLConnection, URI, NetworkInterface, Inet4Address, ServerSocket}
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
@@ -38,7 +39,7 @@ import org.apache.hadoop.io._
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.deploy.SparkHadoopUtil
 import java.nio.ByteBuffer
-import org.apache.spark.{SparkConf, SparkException, Logging}
+import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, Logging}
 
 
 /**
@@ -271,7 +272,44 @@ private[spark] object Utils extends Logging {
     uri.getScheme match {
       case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
-        val in = new URL(url).openStream()
+
+        var uc: URLConnection = null
+        // First try to get the security Manager from the SparkEnv. If that doesn't exist, create
+        // a new one and rely on the configs being set
+        val sparkEnv = SparkEnv.get
+        val securityMgr = if (sparkEnv != null) sparkEnv.securityManager else new SecurityManager()
+        if (securityMgr.isAuthenticationEnabled()) {
+          val userCred = securityMgr.getSecretKey()
+          if (userCred == null) {
+            throw new Exception("secret key is null with authentication on")
+          }
+          val userInfo = securityMgr.getHttpUser()  + ":" + userCred
+          val newuri = new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(), 
+            uri.getPath(), uri.getQuery(), uri.getFragment())
+          uc = newuri.toURL().openConnection()
+          uc.setAllowUserInteraction(false)
+          logDebug("in security enabled")
+
+          // set our own authenticator to properly negotiate user/password
+          Authenticator.setDefault(
+            new Authenticator() {
+              override def getPasswordAuthentication(): PasswordAuthentication = {
+                var passAuth: PasswordAuthentication = null
+                val userInfo = getRequestingURL().getUserInfo()
+                if (userInfo != null) {
+                  val  parts = userInfo.split(":", 2)
+                  passAuth = new PasswordAuthentication(parts(0), parts(1).toCharArray())
+                }
+                return passAuth
+              }
+            }
+          );
+        } else {
+          logDebug("fetchFile not using security")
+          uc = new URL(url).openConnection()
+        }
+
+        val in = uc.getInputStream();
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {

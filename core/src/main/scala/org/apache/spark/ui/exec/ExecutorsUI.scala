@@ -22,7 +22,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable.{HashMap, HashSet}
 import scala.xml.Node
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{ExceptionFailure, Logging, SparkContext}
 import org.apache.spark.executor.TaskMetrics
@@ -44,8 +44,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     sc.addSparkListener(listener)
   }
 
-  def getHandlers = Seq[(String, Handler)](
-    ("/executors", (request: HttpServletRequest) => render(request))
+  def getHandlers = Seq[ServletContextHandler](
+    createServletHandler("/executors", (request: HttpServletRequest) => render(request))
   )
 
   def render(request: HttpServletRequest): Seq[Node] = {

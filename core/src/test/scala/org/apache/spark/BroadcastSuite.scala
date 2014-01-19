@@ -21,6 +21,9 @@ import org.scalatest.FunSuite
 
 class BroadcastSuite extends FunSuite with LocalSparkContext {
 
+  System.setProperty("spark.authenticate", "false")
+
+
   override def afterEach() {
     super.afterEach()
     System.clearProperty("spark.broadcast.factory")

@@ -23,6 +23,7 @@ import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
 import java.net._
+import java.util.concurrent.atomic.AtomicInteger
 import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
 
 import scala.collection.mutable.HashSet
@@ -37,7 +38,7 @@ import scala.concurrent.duration._
 
 import org.apache.spark.util.Utils
 
-private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Logging {
+private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManager: SecurityManager) extends Logging {
 
   class MessageStatus(
       val message: Message,
@@ -52,6 +53,9 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
   }
 
   private val selector = SelectorProvider.provider.openSelector()
+
+  // TODO -update to use spark conf
+  private val numAuthRetries = System.getProperty("spark.core.connection.num.auth.retries","10").toInt
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.handler.threads.min", 20),
@@ -73,6 +77,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
     new LinkedBlockingDeque[Runnable]())
 
   private val serverChannel = ServerSocketChannel.open()
+  private val connectionsAwaitingSasl = new HashMap[ConnectionId, SendingConnection] with SynchronizedMap[ConnectionId, SendingConnection]
   private val connectionsByKey = new HashMap[SelectionKey, Connection] with SynchronizedMap[SelectionKey, Connection]
   private val connectionsById = new HashMap[ConnectionManagerId, SendingConnection] with SynchronizedMap[ConnectionManagerId, SendingConnection]
   private val messageStatuses = new HashMap[Int, MessageStatus]
@@ -84,6 +89,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
 
   private var onReceiveCallback: (BufferMessage, ConnectionManagerId) => Option[Message]= null
 
+  private val authEnabled = securityManager.isAuthenticationEnabled()
+
   serverChannel.configureBlocking(false)
   serverChannel.socket.setReuseAddress(true)
   serverChannel.socket.setReceiveBufferSize(256 * 1024)
@@ -93,6 +100,10 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
 
   val id = new ConnectionManagerId(Utils.localHostName, serverChannel.socket.getLocalPort)
   logInfo("Bound socket to port " + serverChannel.socket.getLocalPort() + " with id = " + id)
+
+  // used in combination with the ConnectionManagerId to create unique Connection ids
+  // to be able to track asynchronous messages
+  private val idCount: AtomicInteger = new AtomicInteger(1)
 
   private val selectorThread = new Thread("connection-manager-thread") {
     override def run() = ConnectionManager.this.run()
@@ -125,7 +136,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
         } finally {
           writeRunnableStarted.synchronized {
             writeRunnableStarted -= key
-            val needReregister = register || conn.resetForceReregister()
+            val needReregister = register || conn.resetForceReregister() 
             if (needReregister && conn.changeInterestForWrite()) {
               conn.registerInterest()
             }
@@ -367,7 +378,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
     // accept them all in a tight loop. non blocking accept with no processing, should be fine
     while (newChannel != null) {
       try {
-        val newConnection = new ReceivingConnection(newChannel, selector)
+        val newConnectionId = ConnectionId.createConnectionId(id, idCount.getAndIncrement.intValue)
+        val newConnection = new ReceivingConnection(newChannel, selector, newConnectionId)
         newConnection.onReceive(receiveMessage)
         addListeners(newConnection)
         addConnection(newConnection)
@@ -401,6 +413,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
         logInfo("Removing SendingConnection to " + sendingConnectionManagerId)
 
         connectionsById -= sendingConnectionManagerId
+        connectionsAwaitingSasl -= connection.connectionId
 
         messageStatuses.synchronized {
           messageStatuses
@@ -475,7 +488,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
       val creationTime = System.currentTimeMillis
       def run() {
         logDebug("Handler thread delay is " + (System.currentTimeMillis - creationTime) + " ms")
-        handleMessage(connectionManagerId, message)
+        handleMessage(connectionManagerId, message, connection)
         logDebug("Handling delay is " + (System.currentTimeMillis - creationTime) + " ms")
       }
     }
@@ -483,10 +496,131 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
     /*handleMessage(connection, message)*/
   }
 
-  private def handleMessage(connectionManagerId: ConnectionManagerId, message: Message) {
+  private def handleClientAuthNeg(
+      waitingConn: SendingConnection,
+      securityMsg: SecurityMessage, 
+      connectionId : ConnectionId) {
+    if (waitingConn.isSaslComplete()) {
+      logDebug("Client sasl completed for id: "  + waitingConn.connectionId)
+      connectionsAwaitingSasl -= waitingConn.connectionId
+      waitingConn.getAuthenticated().synchronized {
+        waitingConn.getAuthenticated().notifyAll();
+      }
+      return
+    } else {
+      var replyToken : Array[Byte] = null
+      try {
+        replyToken = waitingConn.sparkSaslClient.saslResponse(securityMsg.getToken);
+        if (waitingConn.isSaslComplete()) {
+          logDebug("Client sasl completed after evaluate for id: " + waitingConn.connectionId)
+          connectionsAwaitingSasl -= waitingConn.connectionId
+          waitingConn.getAuthenticated().synchronized {
+            waitingConn.getAuthenticated().notifyAll()
+          }
+          return
+        }
+        var securityMsgResp = SecurityMessage.fromResponse(replyToken, securityMsg.getConnectionId)
+        var message = securityMsgResp.toBufferMessage
+        if (message == null) throw new Exception("Error creating security message")
+        sendSecurityMessage(waitingConn.getRemoteConnectionManagerId(), message)
+      } catch  {
+        case e: Exception => {
+          logError("Error doing sasl client: " + e)
+          waitingConn.close()
+          throw new Exception("error evaluating sasl response: " + e)
+        }
+      }
+    }
+  }
+
+  private def handleServerAuthNeg(
+      connection: Connection, 
+      securityMsg: SecurityMessage,
+      connectionId: ConnectionId) {
+    if (!connection.isSaslComplete()) {
+      logDebug("saslContext not established")
+      var replyToken : Array[Byte] = null
+      try {
+        connection.synchronized {
+          if (connection.sparkSaslServer == null) {
+            logDebug("Creating sasl Server")
+            connection.sparkSaslServer = new SparkSaslServer(securityManager)
+          }
+        }
+        replyToken = connection.sparkSaslServer.response(securityMsg.getToken)
+        if (connection.isSaslComplete()) {
+          logDebug("Server sasl completed: " + connection.connectionId) 
+        } else {
+          logDebug("Server sasl not completed: " + connection.connectionId)
+        }
+        if (replyToken != null) {
+          var securityMsgResp = SecurityMessage.fromResponse(replyToken, securityMsg.getConnectionId)
+          var message = securityMsgResp.toBufferMessage
+          if (message == null) throw new Exception("Error creating security Message")
+          sendSecurityMessage(connection.getRemoteConnectionManagerId(), message)
+        } 
+      } catch {
+        case e: Exception => {
+          logError("Error in server auth negotiation: " + e)
+          // It would probably be better to send an error message telling other side auth failed
+          // but for now just close
+          connection.close()
+        }
+      }
+    } else {
+      logDebug("connection already established for this connection id: " + connection.connectionId) 
+    }
+  }
+
+
+  private def handleAuthentication(conn: Connection, bufferMessage: BufferMessage): Boolean = {
+    if (bufferMessage.isSecurityNeg) {
+      logDebug("This is security neg message")
+
+      // parse as SecurityMessage
+      val securityMsg = SecurityMessage.fromBufferMessage(bufferMessage)
+      val connectionId = new ConnectionId(securityMsg.getConnectionId)
+
+      connectionsAwaitingSasl.get(connectionId) match {
+        case Some(waitingConn) => {
+          // Client - this must be in response to us doing Send
+          logDebug("Client handleAuth for id: " +  waitingConn.connectionId)
+          handleClientAuthNeg(waitingConn, securityMsg, connectionId)
+        }
+        case None => {
+          // Server - someone sent us something and we haven't authenticated yet
+          logDebug("Server handleAuth for id: " + connectionId)
+          handleServerAuthNeg(conn, securityMsg, connectionId)
+        }
+      }
+      return true
+    } else {
+      if (!conn.isSaslComplete()) {
+        // We could handle this better and tell the client we need to do authentication 
+        // negotiation, but for now just ignore them. 
+        logError("message sent that is not security negotiation message on connection " +
+                 "not authenticated yet, ignoring it!!")
+        return true
+      }
+    }
+    return false
+  }
+
+  private def handleMessage(
+      connectionManagerId: ConnectionManagerId,
+      message: Message,
+      connection: Connection) {
     logDebug("Handling [" + message + "] from [" + connectionManagerId + "]")
     message match {
       case bufferMessage: BufferMessage => {
+        if (authEnabled) {
+          val res = handleAuthentication(connection, bufferMessage)
+          if (res == true) {
+            // message was security negotiation so skip the rest
+            logDebug("After handleAuth result was true, returning");
+            return
+          }
+        }
         if (bufferMessage.hasAckId) {
           val sentMessageStatus = messageStatuses.synchronized {
             messageStatuses.get(bufferMessage.ackId) match {
@@ -533,10 +667,65 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
     }
   }
 
+  private def checkSendAuthFirst(connManagerId: ConnectionManagerId, conn: SendingConnection) {
+    // see if we need to do sasl before writing
+    // this should only be the first negotiation as the Client!!!
+    if (!conn.isSaslComplete()) {
+      conn.synchronized {
+        if (conn.sparkSaslClient == null) {
+          conn.sparkSaslClient = new SparkSaslClient(securityManager)
+          var firstResponse: Array[Byte] = null
+          try {
+            firstResponse = conn.sparkSaslClient.firstToken()
+            var securityMsg = SecurityMessage.fromResponse(firstResponse, conn.connectionId.id)
+            var message = securityMsg.toBufferMessage
+            if (message == null) throw new Exception("Error creating security message")
+            sendSecurityMessage(connManagerId, message)
+            logDebug("adding connectionsAwaitingSasl id: " + conn.connectionId)
+            connectionsAwaitingSasl += ((conn.connectionId, conn))
+          } catch {
+            case e: Exception => {
+              logError("Error getting first response from the SaslClient")
+              conn.close()
+              throw new Exception("Error getting first response from the SaslClient")
+            }
+          }
+        }
+      }
+    } else {
+      logDebug("Sasl already established ") 
+    }
+  }
+
+  // allow us to add messages to the inbox for doing sasl negotiating 
+  private def sendSecurityMessage(connManagerId: ConnectionManagerId, message: Message) {
+    def startNewConnection(): SendingConnection = {
+      val inetSocketAddress = new InetSocketAddress(connManagerId.host, connManagerId.port)
+      val newConnectionId = ConnectionId.createConnectionId(id, idCount.getAndIncrement.intValue)
+      val newConnection = new SendingConnection(inetSocketAddress, selector, connManagerId, newConnectionId)
+      logInfo("creating new sending connection for security! " + newConnectionId )
+      registerRequests.enqueue(newConnection)
+
+      newConnection
+    }
+    // I removed the lookupKey stuff as part of merge ... should I re-add it ? We did not find it useful in our test-env ...
+    // If we do re-add it, we should consistently use it everywhere I guess ?
+    message.senderAddress = id.toSocketAddress()
+    logDebug("Sending Security [" + message + "] to [" + connManagerId + "]")
+    val connection = connectionsById.getOrElseUpdate(connManagerId, startNewConnection())
+
+    //send security message until going connection has been authenticated
+    connection.send(message)
+
+    wakeupSelector()
+  }
+
   private def sendMessage(connectionManagerId: ConnectionManagerId, message: Message) {
     def startNewConnection(): SendingConnection = {
       val inetSocketAddress = new InetSocketAddress(connectionManagerId.host, connectionManagerId.port)
-      val newConnection = new SendingConnection(inetSocketAddress, selector, connectionManagerId)
+      val newConnectionId = ConnectionId.createConnectionId(id, idCount.getAndIncrement.intValue)
+      val newConnection = new SendingConnection(inetSocketAddress, selector, connectionManagerId, newConnectionId)
+      logInfo("creating new sending connection: " + newConnectionId)
       registerRequests.enqueue(newConnection)
 
       newConnection
@@ -544,7 +733,53 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
     // I removed the lookupKey stuff as part of merge ... should I re-add it ? We did not find it useful in our test-env ...
     // If we do re-add it, we should consistently use it everywhere I guess ?
     val connection = connectionsById.getOrElseUpdate(connectionManagerId, startNewConnection())
+    if (authEnabled) {
+      checkSendAuthFirst(connectionManagerId, connection)
+    }
     message.senderAddress = id.toSocketAddress()
+    logDebug("Before Sending [" + message + "] to [" + connectionManagerId + "]" + " connectionid: " + connection.connectionId)
+
+    if (authEnabled) {
+      // if we aren't authenticated yet lets block the senders until authentication completes
+      try {
+        connection.getAuthenticated().synchronized {
+          var totalWaitTimes = 0
+          while (!connection.isSaslComplete()) {
+            // should we specify timeout as fallback?
+            logDebug("getAuthenticated wait connectionid: " + connection.connectionId)
+            // have timeout in case remote side never responds
+            totalWaitTimes += 1
+            connection.getAuthenticated().wait(500)
+            if (totalWaitTimes >= numAuthRetries) {
+              // took to long to auth connection something probably went wrong
+              throw new Exception("Took to long for authentication to " + connectionManagerId + 
+                ", waited " + 500 * numAuthRetries + "ms, failing.")
+            }
+          }
+        }
+      } catch {
+        case e: Exception => logError("Exception while waiting for authentication. " + e)
+
+        // need to tell sender it failed
+        messageStatuses.synchronized {
+          val s = messageStatuses.get(message.id)
+          s match {
+            case Some(msgStatus) => {
+              messageStatuses -= message.id
+              logInfo("Notifying " + msgStatus.connectionManagerId)
+              msgStatus.synchronized {
+                msgStatus.attempted = true
+                msgStatus.acked = false
+                msgStatus.markDone()
+              }
+            }
+            case None => {
+              logError("no messageStatus for failed message id: " + message.id) 
+            }
+          }
+        }
+      }
+    }
     logDebug("Sending [" + message + "] to [" + connectionManagerId + "]")
     connection.send(message)
 
@@ -594,7 +829,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
 private[spark] object ConnectionManager {
 
   def main(args: Array[String]) {
-    val manager = new ConnectionManager(9999, new SparkConf)
+    val manager = new ConnectionManager(9999, new SparkConf, new SecurityManager)
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       println("Received [" + msg + "] from [" + id + "]")
       None

@@ -30,7 +30,7 @@ import scala.concurrent.duration._
 
 import it.unimi.dsi.fastutil.io.{FastBufferedOutputStream, FastByteArrayOutputStream}
 
-import org.apache.spark.{SparkConf, Logging, SparkEnv, SparkException}
+import org.apache.spark.{SecurityManager, SparkConf, Logging, SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
@@ -44,7 +44,8 @@ private[spark] class BlockManager(
     val master: BlockManagerMaster,
     val defaultSerializer: Serializer,
     maxMemory: Long,
-    val conf: SparkConf)
+    val conf: SparkConf,
+    securityManager: SecurityManager)
   extends Logging {
 
   val shuffleBlockManager = new ShuffleBlockManager(this)
@@ -63,7 +64,7 @@ private[spark] class BlockManager(
     if (useNetty) diskBlockManager.startShuffleBlockSender(nettyPortConfig) else 0
   }
 
-  val connectionManager = new ConnectionManager(0, conf)
+  val connectionManager = new ConnectionManager(0, conf, securityManager)
   implicit val futureExecContext = connectionManager.futureExecContext
 
   val blockManagerId = BlockManagerId(
@@ -119,8 +120,9 @@ private[spark] class BlockManager(
    * Construct a BlockManager with a memory limit set based on system properties.
    */
   def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
-           serializer: Serializer, conf: SparkConf) = {
-    this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf), conf)
+           serializer: Serializer, conf: SparkConf, securityManager: SecurityManager) = {
+    this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf), conf, 
+      securityManager)
   }
 
   /**

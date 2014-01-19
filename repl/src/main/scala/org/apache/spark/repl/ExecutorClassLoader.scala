@@ -19,10 +19,14 @@ package org.apache.spark.repl
 
 import java.io.{ByteArrayOutputStream, InputStream}
 import java.net.{URI, URL, URLClassLoader, URLEncoder}
+import java.net.Authenticator
+import java.net.PasswordAuthentication
 import java.util.concurrent.{Executors, ExecutorService}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
+
+import org.apache.spark.SparkEnv
 
 import org.objectweb.asm._
 import org.objectweb.asm.Opcodes._
@@ -52,7 +56,35 @@ extends ClassLoader(parent) {
         if (fileSystem != null)
           fileSystem.open(new Path(directory, pathInDirectory))
         else
+          if (SparkEnv.get.securityManager.isAuthenticationEnabled()) {
+            val uri = new URI(classUri + "/" + urlEncode(pathInDirectory))
+            val userCred = SparkEnv.get.securityManager.getSecretKey()
+            if (userCred == null) {
+              throw new Exception("secret key is null with authentication on")
+            } 
+            val userInfo = SparkEnv.get.securityManager.getHttpUser()  + ":" + userCred
+            val newuri = new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(),
+              uri.getPath(), uri.getQuery(), uri.getFragment())
+
+            // set our own authenticator to properly negotiate user/password
+            Authenticator.setDefault(
+              new Authenticator() {
+                override def getPasswordAuthentication(): PasswordAuthentication = {
+                  var passAuth: PasswordAuthentication = null
+                  val userInfo = getRequestingURL().getUserInfo()
+                  if (userInfo != null) {
+                    val  parts = userInfo.split(":", 2)
+                    passAuth = new PasswordAuthentication(parts(0), parts(1).toCharArray())
+                  }
+                  return passAuth
+                }
+              }
+            );
+
+            newuri.toURL().openStream()
+        } else {
           new URL(classUri + "/" + urlEncode(pathInDirectory)).openStream()
+        }
       }
       val bytes = readAndTransformClass(name, inputStream)
       inputStream.close()

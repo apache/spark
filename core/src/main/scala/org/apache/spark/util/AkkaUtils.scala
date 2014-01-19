@@ -25,11 +25,12 @@ import com.typesafe.config.ConfigFactory
 
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
+import org.apache.spark.{Logging, SecurityManager}
 
 /**
  * Various utility classes for working with Akka.
  */
-private[spark] object AkkaUtils {
+private[spark] object AkkaUtils extends Logging {
 
   /**
    * Creates an ActorSystem ready for remoting, with various Spark features. Returns both the
@@ -42,7 +43,7 @@ private[spark] object AkkaUtils {
    * of a fatal exception. This is used by [[org.apache.spark.executor.Executor]].
    */
   def createActorSystem(name: String, host: String, port: Int, indestructible: Boolean = false,
-    conf: SparkConf): (ActorSystem, Int) = {
+    conf: SparkConf, securityManager: SecurityManager): (ActorSystem, Int) = {
 
     val akkaThreads   = conf.getInt("spark.akka.threads", 4)
     val akkaBatchSize = conf.getInt("spark.akka.batchSize", 15)
@@ -65,6 +66,15 @@ private[spark] object AkkaUtils {
       conf.getDouble("spark.akka.failure-detector.threshold", 300.0)
     val akkaHeartBeatInterval = conf.getInt("spark.akka.heartbeat.interval", 1000)
 
+    val secretKey = securityManager.getSecretKey()
+    val isAuthOn = securityManager.isAuthenticationEnabled()
+    if (isAuthOn && secretKey == null) {
+      throw new Exception("Secret key is null with authentication on")
+    }
+    val requireCookie = if (isAuthOn) "on" else "off"
+    val secureCookie = if (isAuthOn) secretKey else ""
+    logDebug("In createActorSystem, requireCookie is: " + requireCookie)
+
     val akkaConf = ConfigFactory.parseMap(conf.getAkkaConf.toMap[String, String]).withFallback(
       ConfigFactory.parseString(
       s"""
@@ -72,6 +82,8 @@ private[spark] object AkkaUtils {
       |akka.loggers = [""akka.event.slf4j.Slf4jLogger""]
       |akka.stdout-loglevel = "ERROR"
       |akka.jvm-exit-on-fatal-error = off
+      |akka.remote.require-cookie = "$requireCookie"
+      |akka.remote.secure-cookie = "$secureCookie"
       |akka.remote.transport-failure-detector.heartbeat-interval = $akkaHeartBeatInterval s
       |akka.remote.transport-failure-detector.acceptable-heartbeat-pause = $akkaHeartBeatPauses s
       |akka.remote.transport-failure-detector.threshold = $akkaFailureDetector
@@ -88,6 +100,8 @@ private[spark] object AkkaUtils {
       |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
       |akka.log-dead-letters = $lifecycleEvents
       |akka.log-dead-letters-during-shutdown = $lifecycleEvents
+      |akka.remote.netty.require-cookie = "$requireCookie"
+      |akka.remote.netty.secure-cookie = "$secureCookie"
       """.stripMargin))
 
     val actorSystem = if (indestructible) {

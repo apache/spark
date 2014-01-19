@@ -23,7 +23,7 @@ import java.text.SimpleDateFormat
 
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import scala.Seq
 import scala.collection.mutable.{HashSet, ListBuffer, HashMap, ArrayBuffer}
@@ -53,9 +53,9 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)
 
-  def getHandlers = Seq[(String, Handler)](
-    ("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),
-    ("/stages/pool", (request: HttpServletRequest) => poolPage.render(request)),
-    ("/stages", (request: HttpServletRequest) => indexPage.render(request))
+  def getHandlers = Seq[ServletContextHandler](
+    createServletHandler("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),
+    createServletHandler("/stages/pool", (request: HttpServletRequest) => poolPage.render(request)),
+    createServletHandler("/stages", (request: HttpServletRequest) => indexPage.render(request))
   )
 }

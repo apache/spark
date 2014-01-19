@@ -34,7 +34,7 @@ import scala.tools.reflect.StdRuntimeTags._
 import scala.util.control.ControlThrowable
 import util.stackTraceString
 
-import org.apache.spark.{HttpServer, SparkConf, Logging}
+import org.apache.spark.{HttpServer, SparkConf, Logging, SecurityManager}
 import org.apache.spark.util.Utils
 
 // /** directory to save .class files to */
@@ -97,7 +97,7 @@ import org.apache.spark.util.Utils
       }
 
     val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
-    val classServer                                   = new HttpServer(outputDir)     /** Jetty server that will serve our classes to worker nodes */
+    val classServer                                   = new HttpServer(outputDir, new SecurityManager()) /** Jetty server that will serve our classes to worker nodes */
     private var currentSettings: Settings             = initialSettings
     var printResults                                  = true      // whether to print result lines
     var totalSilence                                  = false     // whether to print anything

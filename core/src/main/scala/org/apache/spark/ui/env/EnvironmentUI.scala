@@ -23,7 +23,7 @@ import scala.collection.JavaConversions._
 import scala.util.Properties
 import scala.xml.Node
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.UIUtils
@@ -33,8 +33,8 @@ import org.apache.spark.SparkContext
 
 private[spark] class EnvironmentUI(sc: SparkContext) {
 
-  def getHandlers = Seq[(String, Handler)](
-    ("/environment", (request: HttpServletRequest) => envDetails(request))
+  def getHandlers = Seq[ServletContextHandler](
+    createServletHandler("/environment", (request: HttpServletRequest) => envDetails(request))
   )
 
   def envDetails(request: HttpServletRequest): Seq[Node] = {

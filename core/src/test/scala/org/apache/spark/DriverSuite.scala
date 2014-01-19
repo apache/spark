@@ -29,6 +29,7 @@ import org.scalatest.time.SpanSugar._
 import org.apache.spark.util.Utils
 
 class DriverSuite extends FunSuite with Timeouts {
+
   test("driver should exit after finishing") {
     val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
     // Regression test for SPARK-530: "Spark driver process doesn't exit after finishing"
@@ -50,6 +51,7 @@ class DriverSuite extends FunSuite with Timeouts {
  */
 object DriverWithoutCleanup {
   def main(args: Array[String]) {
+    System.setProperty("spark.authenticate", "false")
     Logger.getRootLogger().setLevel(Level.WARN)
     val sc = new SparkContext(args(0), "DriverWithoutCleanup")
     sc.parallelize(1 to 100, 4).count()
