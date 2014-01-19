@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
+import org.apache.spark.mllib.util.LocalSparkContext
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
@@ -59,17 +60,7 @@ object NaiveBayesSuite {
   }
 }
 
-class NaiveBayesSuite extends FunSuite with BeforeAndAfterAll {
-  @transient private var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-  }
-
-  override def afterAll() {
-    sc.stop()
-    System.clearProperty("spark.driver.port")
-  }
+class NaiveBayesSuite extends FunSuite with LocalSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOfPredictions = predictions.zip(input).count {
