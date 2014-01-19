@@ -708,8 +708,11 @@ class SparkContext(
                 env.httpFileServer.addJar(new File(fileName))
               } catch {
                 case e: Exception => {
+                  // For now just throw an error but allow to go through so spark examples work.
+                  // The spark examples don't really need the jar distributed since its also 
+                  // the app jar.
                   logError("Error adding jar (" + e + "), was the --addJars option used?")
-                  throw e
+                  null
                 }
               }
             } else {
@@ -722,8 +725,10 @@ class SparkContext(
             path
         }
       }
-      addedJars(key) = System.currentTimeMillis
-      logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+      if (key != null) {
+        addedJars(key) = System.currentTimeMillis
+        logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+      }
     }
   }
 
