@@ -708,7 +708,7 @@ class SparkContext(
                 env.httpFileServer.addJar(new File(fileName))
               } catch {
                 case e: Exception => {
-                  // For now just throw an error but allow to go through so spark examples work.
+                  // For now just log an error but allow to go through so spark examples work.
                   // The spark examples don't really need the jar distributed since its also 
                   // the app jar.
                   logError("Error adding jar (" + e + "), was the --addJars option used?")
