@@ -277,7 +277,6 @@ object SparkBuild extends Build {
         "com.codahale.metrics"     % "metrics-graphite" % "3.0.0",
         "com.twitter"             %% "chill"            % "0.3.1",
         "com.twitter"              % "chill-java"       % "0.3.1",
-        "com.typesafe"             % "config"           % "1.0.2",
         "com.clearspring.analytics" % "stream"          % "2.5.1"
       )
   )
