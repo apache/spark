@@ -28,7 +28,6 @@ import org.apache.spark.{SparkContext, SparkException}
 /**
  * Contains util methods to interact with Hadoop from Spark.
  */
-private[spark]
 class SparkHadoopUtil {
   val conf = newConfiguration()
   UserGroupInformation.setConfiguration(conf)
