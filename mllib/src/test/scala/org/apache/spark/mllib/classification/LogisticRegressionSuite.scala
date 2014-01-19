@@ -17,6 +17,7 @@
 
 package org.apache.spark.mllib.classification
 
+import org.apache.spark.mllib.util.LocalSparkContext
 import scala.util.Random
 import scala.collection.JavaConversions._
 
@@ -66,19 +67,7 @@ object LogisticRegressionSuite {
 
 }
 
-class LogisticRegressionSuite extends FunSuite with BeforeAndAfterAll with ShouldMatchers {
-  @transient private var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-  }
-
-
-  override def afterAll() {
-    sc.stop()
-    System.clearProperty("spark.driver.port")
-  }
-
+class LogisticRegressionSuite extends FunSuite with LocalSparkContext with ShouldMatchers {
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
       prediction != expected.label
