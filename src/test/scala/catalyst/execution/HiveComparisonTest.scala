@@ -5,7 +5,9 @@ import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import frontend.hive.{ExplainCommand, Command}
+import plans.physical._
 import util._
+
 
 /**
  * Allows the creations of tests that execute the same query against both hive
@@ -101,7 +103,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
       case _: Command => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _ =>
         // TODO: Really we only care about the final total ordering here...
-        val isOrdered = sharkQuery.executedPlan.collect { case s @ Exchange(OrderedDistribution(_), _, _) => s}.nonEmpty
+        val isOrdered = sharkQuery.executedPlan.collect { case s @ Exchange(r: RangePartitioning, _) => s}.nonEmpty
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
         if (!isOrdered) answer.sorted else answer
     }

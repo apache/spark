@@ -5,6 +5,7 @@ import expressions._
 import planning._
 import plans._
 import plans.logical.LogicalPlan
+import plans.physical._
 
 trait PlanningStrategies {
   self: QueryPlanner[SharkPlan] =>
@@ -137,7 +138,7 @@ trait PlanningStrategies {
       case logical.Sort(sortExprs, child) =>
         // First repartition then sort locally.
         execution.SortPartitions(sortExprs,
-          execution.Exchange(OrderedDistribution(sortExprs), 8, planLater(child))) :: Nil
+          execution.Exchange(RangePartitioning(sortExprs, 8), planLater(child))) :: Nil
       case logical.SortPartitions(sortExprs, child) =>
         execution.SortPartitions(sortExprs, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>

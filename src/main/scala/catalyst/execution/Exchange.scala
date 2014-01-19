@@ -4,12 +4,13 @@ package execution
 import catalyst.rules.Rule
 import catalyst.errors._
 import catalyst.expressions._
+import catalyst.plans.physical._
 import catalyst.types._
 
 import org.apache.spark.{RangePartitioner, HashPartitioner}
 import org.apache.spark.rdd.ShuffledRDD
 
-case class Exchange(newPartitioning: Distribution, numPartitions: Int, child: SharkPlan)
+case class Exchange(newPartitioning: Partitioning, child: SharkPlan)
     extends UnaryNode {
 
   override def outputPartitioning = newPartitioning
@@ -17,17 +18,17 @@ case class Exchange(newPartitioning: Distribution, numPartitions: Int, child: Sh
 
   def execute() = attachTree(this , "execute") {
     newPartitioning match {
-      case ClusteredDistribution(expressions) =>
+      case HashPartitioning(expressions, width) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
         val rdd = child.execute().map { row =>
           (buildRow(expressions.toSeq.map(Evaluate(_, Vector(row)))), row)
         }
-        val part = new HashPartitioner(numPartitions)
+        val part = new HashPartitioner(width)
         val shuffled = new ShuffledRDD[Row, Row, (Row, Row)](rdd, part)
 
         shuffled.map(_._2)
 
-      case OrderedDistribution(sortingExpressions) =>
+      case RangePartitioning(sortingExpressions, width) =>
         val directions = sortingExpressions.map(_.direction).toIndexedSeq
         val dataTypes = sortingExpressions.map(_.dataType).toIndexedSeq
 
@@ -94,30 +95,49 @@ case class Exchange(newPartitioning: Distribution, numPartitions: Int, child: Sh
 
           (sortKey, row)
         }
-        val part = new RangePartitioner(numPartitions, rdd, ascending = true)
+        val part = new RangePartitioner(width, rdd, ascending = true)
         val shuffled = new ShuffledRDD[SortKey, Row, (SortKey, Row)](rdd, part)
 
         shuffled.map(_._2)
-      case UnknownDistribution =>
-        logger.warn("Worthless repartitioning requested.")
-        child.execute()
+      case _ => sys.error("Not implemented")
     }
   }
 }
 
 object AddExchange extends Rule[SharkPlan] {
   // TODO: determine the number of partitions.
-  // TODO: We need to consider the number of partitions to determine if we
-  // will add an Exchange operator. If a dataset only has a single partition,
-  // even if needExchange returns true, we do not need to shuffle the data again.
   val numPartitions = 8
 
   def apply(plan: SharkPlan): SharkPlan = plan.transformUp {
     case operator: SharkPlan =>
-      operator.withNewChildren(operator.requiredChildPartitioning.zip(operator.children).map {
-        case (required, child) if !child.outputPartitioning.satisfies(required)  =>
-          Exchange(required, numPartitions, child)
-        case (_, child) => child
-      })
+      def meetsRequirements =
+        !operator.requiredChildDistribution.zip(operator.children).map {
+          case (required, child) => !child.outputPartitioning.satisfies(required)
+        }.exists(_ == false)
+
+      // TODO ASUUMES TRANSITIVITY?
+      def compatible =
+        !operator.children
+          .map(_.outputPartitioning)
+          .sliding(2)
+          .map {
+            case Seq(a) => true
+            case Seq(a,b) => a compatibleWith b
+          }.exists(_ == false)
+
+
+      if (false && meetsRequirements && compatible) {
+        operator
+      } else {
+        val repartitionedChildren = operator.requiredChildDistribution.zip(operator.children).map {
+          case (ClusteredDistribution(clustering), child) =>
+            Exchange(HashPartitioning(clustering, 8), child)
+          case (OrderedDistribution(ordering), child) =>
+            Exchange(RangePartitioning(ordering, 8), child)
+          case (UnknownDistribution, child) => child
+          case (dist, _) => sys.error(s"Don't know how to ensure $dist")
+        }
+        operator.withNewChildren(repartitionedChildren)
+      }
   }
 }

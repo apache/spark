@@ -3,6 +3,7 @@ package execution
 
 import catalyst.errors._
 import catalyst.expressions._
+import catalyst.plans.physical._
 import org.apache.spark.rdd.SharkPairRDDFunctions
 
 /* Implicits */
@@ -16,7 +17,7 @@ case class Aggregate(
   extends UnaryNode {
 
   val requiredPartitioning = ClusteredDistribution(groupingExpressions)
-  override def requiredChildPartitioning = Seq(requiredPartitioning, requiredPartitioning)
+  override def requiredChildDistribution = Seq(requiredPartitioning, requiredPartitioning)
 
   def output = aggregateExpressions.map(_.toAttribute)
 

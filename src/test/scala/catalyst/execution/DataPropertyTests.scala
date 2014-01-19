@@ -5,6 +5,8 @@ import catalyst.dsl._
 import org.scalatest.FunSuite
 
 class DistributionTests extends FunSuite {
+  /*
+
   protected def checkSatisfied(
       inputDistribution: Distribution,
       requiredDistribution: Distribution,
@@ -150,4 +152,6 @@ class DistributionTests extends FunSuite {
       ClusteredDistribution(Nil),
       false)
   }
+
+  */
 }

@@ -8,6 +8,7 @@ import org.apache.spark.rdd.RDD
 import errors._
 import expressions._
 import plans._
+import plans.physical._
 
 import org.apache.spark.rdd.SharkPairRDDFunctions._
 
@@ -18,7 +19,7 @@ case class SparkEquiInnerJoin(
     right: SharkPlan) extends BinaryNode {
 
 
-  override def requiredChildPartitioning =
+  override def requiredChildDistribution=
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   def output = left.output ++ right.output

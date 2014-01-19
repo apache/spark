@@ -1,7 +1,7 @@
 package org.apache.spark.rdd
 
 import org.apache.spark._
-import org.apache.spark.util.AppendOnlyMap
+import org.apache.spark.util.collection.AppendOnlyMap
 import scala.collection.mutable.ArrayBuffer
 
 /**
