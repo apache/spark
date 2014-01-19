@@ -17,7 +17,14 @@
 package org.apache.spark.mllib.tree.impurity
 
 import javax.naming.OperationNotSupportedException
+import org.apache.spark.Logging
 
-object Variance extends Impurity {
+object Variance extends Impurity with Logging {
    def calculate(c0: Double, c1: Double): Double = throw new OperationNotSupportedException("Variance.calculate")
- }
+
+  def calculate(count: Double, sum: Double, sumSquares: Double): Double = {
+    val squaredLoss = sumSquares - (sum*sum)/count
+    squaredLoss/count
+  }
+
+}

@@ -16,6 +16,7 @@
  */
 package org.apache.spark.mllib.tree
 
+import org.apache.spark.SparkContext._
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.mllib.tree.impurity.{Gini,Entropy,Variance}
 import org.apache.spark.rdd.RDD
@@ -95,6 +96,9 @@ object DecisionTreeRunner extends Logging {
     val accuracy = accuracyScore(model, testData)
     logDebug("accuracy = " + accuracy)
 
+    val mse = meanSquaredError(model,testData)
+    logDebug("mean square error = " + mse)
+
     sc.stop()
   }
 
@@ -125,6 +129,14 @@ object DecisionTreeRunner extends Logging {
     logDebug("data count = " + count)
     correctCount.toDouble / count
   }
+
+  //TODO: Make these generic MLTable metrics
+  def meanSquaredError(tree : DecisionTreeModel, data : RDD[LabeledPoint]) : Double = {
+    val meanSumOfSquares = data.map(y => (tree.predict(y.features) - y.label)*(tree.predict(y.features) - y.label)).mean()
+    println("meanSumOfSquares = " + meanSumOfSquares)
+    meanSumOfSquares
+  }
+
 
 
 

@@ -20,4 +20,6 @@ trait Impurity extends Serializable {
 
   def calculate(c0 : Double, c1 : Double): Double
 
+  def calculate(count : Double, sum : Double, sumSquares : Double) : Double
+
 }

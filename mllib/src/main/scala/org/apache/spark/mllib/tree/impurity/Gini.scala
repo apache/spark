@@ -16,6 +16,8 @@
  */
 package org.apache.spark.mllib.tree.impurity
 
+import javax.naming.OperationNotSupportedException
+
 object Gini extends Impurity {
 
   def calculate(c0 : Double, c1 : Double): Double = {
@@ -29,4 +31,5 @@ object Gini extends Impurity {
     }
   }
 
- }
+  def calculate(count: Double, sum: Double, sumSquares: Double): Double = throw new OperationNotSupportedException("Gini.calculate")
+}

@@ -16,6 +16,8 @@
  */
 package org.apache.spark.mllib.tree.impurity
 
+import javax.naming.OperationNotSupportedException
+
 object Entropy extends Impurity {
 
    def log2(x: Double) = scala.math.log(x) / scala.math.log(2)
@@ -31,4 +33,6 @@ object Entropy extends Impurity {
      }
    }
 
- }
+  def calculate(count: Double, sum: Double, sumSquares: Double): Double =
+    throw new OperationNotSupportedException("Entropy.calculate")
+}
