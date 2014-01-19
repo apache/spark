@@ -2,6 +2,30 @@ Spark Change Log
 
 Release 0.9.0-incubating
 
+  03019d1 Sat Jan 18 16:29:43 2014 -0800
+  Merge pull request #459 from srowen/UpdaterL2Regularization
+  [Correct L2 regularized weight update with canonical form]
+
+  76147a2 Sat Jan 18 16:24:16 2014 -0800
+  Merge pull request #437 from mridulm/master
+  [Minor api usability changes]
+
+  4ac8cab Sat Jan 18 16:22:46 2014 -0800
+  Merge pull request #426 from mateiz/py-ml-tests
+  [Re-enable Python MLlib tests (require Python 2.7 and NumPy 1.7+)]
+
+  34e911c Sat Jan 18 16:17:34 2014 -0800
+  Merge pull request #462 from mateiz/conf-file-fix
+  [Remove Typesafe Config usage and conf files to fix nested property names]
+
+  ff7201c Sat Jan 18 12:50:02 2014 -0800
+  Merge pull request #461 from pwendell/master
+  [Use renamed shuffle spill config in CoGroupedRDD.scala]
+
+  7b0d5a5 Thu Jan 16 23:18:48 2014 -0800
+  Merge pull request #451 from Qiuzhuang/master
+  [Fixed Window spark shell launch script error.]
+
   4ccedb3 Wed Jan 15 14:26:48 2014 -0800
   Merge pull request #444 from mateiz/py-version
   [Clarify that Python 2.7 is only needed for MLlib]
