@@ -2,6 +2,14 @@ Spark Change Log
 
 Release 0.9.0-incubating
 
+  94ae25d Sun Jan 19 11:33:51 2014 -0800
+  Merge pull request #470 from tgravescs/fix_spark_examples_yarn
+  [Only log error on missing jar to allow spark examples to jar.]
+
+  0f077b5 Sun Jan 19 10:30:29 2014 -0800
+  Merge pull request #458 from tdas/docs-update
+  [Updated java API docs for streaming, along with very minor changes in the code examples.]
+
   03019d1 Sat Jan 18 16:29:43 2014 -0800
   Merge pull request #459 from srowen/UpdaterL2Regularization
   [Correct L2 regularized weight update with canonical form]
