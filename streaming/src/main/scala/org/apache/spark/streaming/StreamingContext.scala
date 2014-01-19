@@ -42,9 +42,15 @@ import org.apache.spark.streaming.scheduler._
 import org.apache.hadoop.conf.Configuration
 
 /**
- * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
- * information (such as, cluster URL and job name) to internally create a SparkContext, it provides
- * methods used to create DStream from various input sources.
+ * Main entry point for Spark Streaming functionality. It provides methods used to create
+ * [[org.apache.spark.streaming.dstream.DStream]]s from various input sources. It can be either
+ * created by providing a Spark master URL and an appName, or from a org.apache.spark.SparkConf
+ * configuration (see core Spark documentation), or from an existing org.apache.spark.SparkContext.
+ * The associated SparkContext can be accessed using `context.sparkContext`. After
+ * creating and transforming DStreams, the streaming computation can be started and stopped
+ * using `context.start()` and `context.stop()`, respectively.
+ * `context.awaitTransformation()` allows the current thread to wait for the termination
+ * of the context by `stop()` or by an exception.
  */
 class StreamingContext private[streaming] (
     sc_ : SparkContext,
@@ -63,7 +69,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a StreamingContext by providing the configuration necessary for a new SparkContext.
-   * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
+   * @param conf a org.apache.spark.SparkConf object specifying Spark parameters
    * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(conf: SparkConf, batchDuration: Duration) = {
@@ -88,7 +94,7 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Re-create a StreamingContext from a checkpoint file.
+   * Recreate a StreamingContext from a checkpoint file.
    * @param path Path to the directory that was specified as the checkpoint directory
    * @param hadoopConf Optional, configuration object if necessary for reading from
    *                   HDFS compatible filesystems
@@ -151,6 +157,7 @@ class StreamingContext private[streaming] (
   private[streaming] val scheduler = new JobScheduler(this)
 
   private[streaming] val waiter = new ContextWaiter
+
   /**
    * Return the associated Spark context
    */
