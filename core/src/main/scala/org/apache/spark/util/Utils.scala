@@ -268,7 +268,7 @@ private[spark] object Utils extends Logging {
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
-    val fileOverwrite = System.getProperty("spark.files.overwrite", "false").toBoolean
+    val fileOverwrite = conf.getBoolean("spark.files.overwrite", false)
     uri.getScheme match {
       case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)

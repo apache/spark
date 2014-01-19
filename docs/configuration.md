@@ -431,7 +431,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-<<<<<<< HEAD
   <td>spark.logConf</td>
   <td>false</td>
   <td>
