@@ -20,7 +20,7 @@ package org.apache.spark.streaming.util
 import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
 import org.apache.spark.streaming._
-import org.apache.spark.streaming.dstream.ForEachDStream
+import org.apache.spark.streaming.dstream.{DStream, ForEachDStream}
 import StreamingContext._
 
 import scala.util.Random
@@ -191,7 +191,7 @@ object MasterFailureTest extends Logging {
     val inputStream = ssc.textFileStream(testDir.toString)
     val operatedStream = operation(inputStream)
     val outputStream = new TestOutputStream(operatedStream)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc
   }
 

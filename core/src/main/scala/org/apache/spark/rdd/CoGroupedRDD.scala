@@ -66,7 +66,6 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   private type CoGroupValue = (Any, Int)  // Int is dependency number
   private type CoGroupCombiner = Seq[CoGroup]
 
-  private val sparkConf = SparkEnv.get.conf
   private var serializerClass: String = null
 
   def setSerializer(cls: String): CoGroupedRDD[K] = {
@@ -106,7 +105,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
   override val partitioner = Some(part)
 
   override def compute(s: Partition, context: TaskContext): Iterator[(K, CoGroupCombiner)] = {
-    val externalSorting = sparkConf.getBoolean("spark.shuffle.externalSorting", true)
+    val sparkConf = SparkEnv.get.conf
+    val externalSorting = sparkConf.getBoolean("spark.shuffle.spill", true)
     val split = s.asInstanceOf[CoGroupPartition]
     val numRdds = split.deps.size
 
@@ -150,6 +150,8 @@ class CoGroupedRDD[K](@transient var rdds: Seq[RDD[_ <: Product2[K, _]]], part: 
           map.insert(kv._1, new CoGroupValue(kv._2, depNum))
         }
       }
+      context.taskMetrics.memoryBytesSpilled = map.memoryBytesSpilled
+      context.taskMetrics.diskBytesSpilled = map.diskBytesSpilled
       new InterruptibleIterator(context, map.iterator)
     }
   }

@@ -32,5 +32,6 @@ class MQTTStreamSuite extends TestSuiteBase {
     val test2 = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_AND_DISK_SER_2)
 
     // TODO: Actually test receiving data
+    ssc.stop()
   }
 }

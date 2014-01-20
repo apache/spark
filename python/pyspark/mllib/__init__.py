@@ -18,3 +18,13 @@
 """
 Python bindings for MLlib.
 """
+
+# MLlib currently needs Python 2.7+ and NumPy 1.7+, so complain if lower
+
+import sys
+if sys.version_info[0:2] < (2, 7):
+    raise Exception("MLlib requires Python 2.7+")
+
+import numpy
+if numpy.version.version < '1.7':
+    raise Exception("MLlib requires NumPy 1.7+")

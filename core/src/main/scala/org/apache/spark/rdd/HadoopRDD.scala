@@ -78,7 +78,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
     keyClass: Class[K],
     valueClass: Class[V],
     minSplits: Int,
-    cloneRecords: Boolean)
+    cloneRecords: Boolean = true)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   def this(

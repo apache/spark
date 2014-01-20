@@ -18,9 +18,10 @@
 package org.apache.spark.streaming.mqtt
 
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.streaming.{StreamingContext, DStream}
+import org.apache.spark.streaming.StreamingContext
 import org.apache.spark.streaming.api.java.{JavaStreamingContext, JavaDStream}
 import scala.reflect.ClassTag
+import org.apache.spark.streaming.dstream.DStream
 
 object MQTTUtils {
   /**
@@ -36,13 +37,12 @@ object MQTTUtils {
       topic: String,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[String] = {
-    val inputStream = new MQTTInputDStream[String](ssc, brokerUrl, topic, storageLevel)
-    ssc.registerInputStream(inputStream)
-    inputStream
+    new MQTTInputDStream[String](ssc, brokerUrl, topic, storageLevel)
   }
 
   /**
    * Create an input stream that receives messages pushed by a MQTT publisher.
+   * Storage level of the data will be the default StorageLevel.MEMORY_AND_DISK_SER_2.
    * @param jssc      JavaStreamingContext object
    * @param brokerUrl Url of remote MQTT publisher
    * @param topic     Topic name to subscribe to

@@ -71,8 +71,8 @@ This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the
 
 ## Building Spark Debian Packages ##
 
-It includes support for building a Debian package containing a 'fat-jar' which includes the repl, the examples and bagel. This can be created by specifying the following profiles:
+The maven build includes support for building a Debian package containing the assembly 'fat-jar', PySpark, and the necessary scripts and configuration files. This can be created by specifying the following:
 
-    $ mvn -Prepl-bin -Pdeb clean package
+    $ mvn -Pdeb -DskipTests clean package
 
-The debian package can then be found under repl/target. We added the short commit hash to the file name so that we can distinguish individual packages build for SNAPSHOT versions.
+The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.

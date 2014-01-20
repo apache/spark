@@ -29,6 +29,9 @@ package org.apache
  * be saved as SequenceFiles. These operations are automatically available on any RDD of the right
  * type (e.g. RDD[(Int, Int)] through implicit conversions when you
  * `import org.apache.spark.SparkContext._`.
+ *
+ * Java programmers should reference the [[spark.api.java]] package
+ * for Spark programming APIs in Java.
  */
 package object spark {
   // For package docs only

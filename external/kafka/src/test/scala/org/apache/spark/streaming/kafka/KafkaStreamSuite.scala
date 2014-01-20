@@ -35,5 +35,6 @@ class KafkaStreamSuite extends TestSuiteBase {
       ssc, kafkaParams, topics, StorageLevel.MEMORY_AND_DISK_SER_2)
 
     // TODO: Actually test receiving data
+    ssc.stop()
   }
 }

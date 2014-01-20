@@ -20,7 +20,7 @@ include FileUtils
 
 if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   # Build Scaladoc for Java/Scala
-  projects = ["core", "examples", "repl", "bagel", "streaming", "mllib"]
+  projects = ["core", "examples", "repl", "bagel", "graphx", "streaming", "mllib"]
 
   puts "Moving to project root and building scaladoc."
   curr_dir = pwd

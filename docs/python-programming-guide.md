@@ -149,6 +149,12 @@ sc = SparkContext(conf = conf)
 [API documentation](api/pyspark/index.html) for PySpark is available as Epydoc.
 Many of the methods also contain [doctests](http://docs.python.org/2/library/doctest.html) that provide additional usage examples.
 
+# Libraries
+
+[MLlib](mllib-guide.html) is also available in PySpark. To use it, you'll need
+[NumPy](http://www.numpy.org) version 1.7 or newer, and Python 2.7. The [MLlib guide](mllib-guide.html) contains
+some example applications.
+
 # Where to Go from Here
 
 PySpark also includes several sample programs in the [`python/examples` folder](https://github.com/apache/incubator-spark/tree/master/python/examples).

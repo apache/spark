@@ -17,19 +17,23 @@
 
 package org.apache.spark.streaming.util
 
-import java.nio.ByteBuffer
-import org.apache.spark.util.{RateLimitedOutputStream, IntParam}
-import java.net.ServerSocket
-import org.apache.spark.{SparkConf, Logging}
-import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
-import scala.io.Source
 import java.io.IOException
+import java.net.ServerSocket
+import java.nio.ByteBuffer
+
+import scala.io.Source
+
+import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.IntParam
 
 /**
  * A helper program that sends blocks of Kryo-serialized text strings out on a socket at a
  * specified rate. Used to feed data into RawInputDStream.
  */
+private[streaming]
 object RawTextSender extends Logging {
   def main(args: Array[String]) {
     if (args.length != 4) {

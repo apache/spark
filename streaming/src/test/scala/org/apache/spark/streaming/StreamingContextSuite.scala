@@ -23,6 +23,7 @@ import org.scalatest.concurrent.Timeouts
 import org.scalatest.time.SpanSugar._
 import org.apache.spark.{SparkException, SparkConf, SparkContext}
 import org.apache.spark.util.{Utils, MetadataCleaner}
+import org.apache.spark.streaming.dstream.DStream
 
 class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
 
@@ -186,7 +187,7 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
     ssc = new StreamingContext(master, appName, batchDuration)
     val inputStream = addInputStream(ssc)
     inputStream.map(x => { throw new TestException("error in map task"); x})
-               .foreach(_.count)
+               .foreachRDD(_.count)
 
     val exception = intercept[Exception] {
       ssc.start()
@@ -210,7 +211,6 @@ class StreamingContextSuite extends FunSuite with BeforeAndAfter with Timeouts {
   def addInputStream(s: StreamingContext): DStream[Int] = {
     val input = (1 to 100).map(i => (1 to i))
     val inputStream = new TestInputStream(s, input, 1)
-    s.registerInputStream(inputStream)
     inputStream
   }
 }

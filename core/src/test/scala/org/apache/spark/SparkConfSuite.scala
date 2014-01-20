@@ -1,37 +1,42 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark
 
 import org.scalatest.FunSuite
 
 class SparkConfSuite extends FunSuite with LocalSparkContext {
-  // This test uses the spark.conf in core/src/test/resources, which has a few test properties
-  test("loading from spark.conf") {
-    val conf = new SparkConf()
-    assert(conf.get("spark.test.intTestProperty") === "1")
-    assert(conf.get("spark.test.stringTestProperty") === "hi")
-    // NOTE: we don't use list properties yet, but when we do, we'll have to deal with this syntax
-    assert(conf.get("spark.test.listTestProperty") === "[a, b]")
-  }
-
-  // This test uses the spark.conf in core/src/test/resources, which has a few test properties
-  test("system properties override spark.conf") {
+  test("loading from system properties") {
     try {
-      System.setProperty("spark.test.intTestProperty", "2")
+      System.setProperty("spark.test.testProperty", "2")
       val conf = new SparkConf()
-      assert(conf.get("spark.test.intTestProperty") === "2")
-      assert(conf.get("spark.test.stringTestProperty") === "hi")
+      assert(conf.get("spark.test.testProperty") === "2")
     } finally {
-      System.clearProperty("spark.test.intTestProperty")
+      System.clearProperty("spark.test.testProperty")
     }
   }
 
   test("initializing without loading defaults") {
     try {
-      System.setProperty("spark.test.intTestProperty", "2")
+      System.setProperty("spark.test.testProperty", "2")
       val conf = new SparkConf(false)
-      assert(!conf.contains("spark.test.intTestProperty"))
-      assert(!conf.contains("spark.test.stringTestProperty"))
+      assert(!conf.contains("spark.test.testProperty"))
     } finally {
-      System.clearProperty("spark.test.intTestProperty")
+      System.clearProperty("spark.test.testProperty")
     }
   }
 
@@ -106,5 +111,26 @@ class SparkConfSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local[2]", "My other app", conf)
     assert(sc.master === "local[2]")
     assert(sc.appName === "My other app")
+  }
+
+  test("nested property names") {
+    // This wasn't supported by some external conf parsing libraries
+    try {
+      System.setProperty("spark.test.a", "a")
+      System.setProperty("spark.test.a.b", "a.b")
+      System.setProperty("spark.test.a.b.c", "a.b.c")
+      val conf = new SparkConf()
+      assert(conf.get("spark.test.a") === "a")
+      assert(conf.get("spark.test.a.b") === "a.b")
+      assert(conf.get("spark.test.a.b.c") === "a.b.c")
+      conf.set("spark.test.a.b", "A.B")
+      assert(conf.get("spark.test.a") === "a")
+      assert(conf.get("spark.test.a.b") === "A.B")
+      assert(conf.get("spark.test.a.b.c") === "a.b.c")
+    } finally {
+      System.clearProperty("spark.test.a")
+      System.clearProperty("spark.test.a.b")
+      System.clearProperty("spark.test.a.b.c")
+    }
   }
 }

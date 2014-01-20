@@ -40,6 +40,11 @@ run_test "-m doctest pyspark/broadcast.py"
 run_test "-m doctest pyspark/accumulators.py"
 run_test "-m doctest pyspark/serializers.py"
 run_test "pyspark/tests.py"
+run_test "pyspark/mllib/_common.py"
+run_test "pyspark/mllib/classification.py"
+run_test "pyspark/mllib/clustering.py"
+run_test "pyspark/mllib/recommendation.py"
+run_test "pyspark/mllib/regression.py"
 
 if [[ $FAILED != 0 ]]; then
     echo -en "\033[31m"  # Red

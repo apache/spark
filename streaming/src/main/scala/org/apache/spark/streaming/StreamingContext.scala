@@ -42,9 +42,15 @@ import org.apache.spark.streaming.scheduler._
 import org.apache.hadoop.conf.Configuration
 
 /**
- * A StreamingContext is the main entry point for Spark Streaming functionality. Besides the basic
- * information (such as, cluster URL and job name) to internally create a SparkContext, it provides
- * methods used to create DStream from various input sources.
+ * Main entry point for Spark Streaming functionality. It provides methods used to create
+ * [[org.apache.spark.streaming.dstream.DStream]]s from various input sources. It can be either
+ * created by providing a Spark master URL and an appName, or from a org.apache.spark.SparkConf
+ * configuration (see core Spark documentation), or from an existing org.apache.spark.SparkContext.
+ * The associated SparkContext can be accessed using `context.sparkContext`. After
+ * creating and transforming DStreams, the streaming computation can be started and stopped
+ * using `context.start()` and `context.stop()`, respectively.
+ * `context.awaitTransformation()` allows the current thread to wait for the termination
+ * of the context by `stop()` or by an exception.
  */
 class StreamingContext private[streaming] (
     sc_ : SparkContext,
@@ -63,7 +69,7 @@ class StreamingContext private[streaming] (
 
   /**
    * Create a StreamingContext by providing the configuration necessary for a new SparkContext.
-   * @param conf a [[org.apache.spark.SparkConf]] object specifying Spark parameters
+   * @param conf a org.apache.spark.SparkConf object specifying Spark parameters
    * @param batchDuration the time interval at which streaming data will be divided into batches
    */
   def this(conf: SparkConf, batchDuration: Duration) = {
@@ -88,7 +94,7 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Re-create a StreamingContext from a checkpoint file.
+   * Recreate a StreamingContext from a checkpoint file.
    * @param path Path to the directory that was specified as the checkpoint directory
    * @param hadoopConf Optional, configuration object if necessary for reading from
    *                   HDFS compatible filesystems
@@ -151,6 +157,7 @@ class StreamingContext private[streaming] (
   private[streaming] val scheduler = new JobScheduler(this)
 
   private[streaming] val waiter = new ContextWaiter
+
   /**
    * Return the associated Spark context
    */
@@ -168,7 +175,7 @@ class StreamingContext private[streaming] (
   }
 
   /**
-   * Set the context to periodically checkpoint the DStream operations for master
+   * Set the context to periodically checkpoint the DStream operations for driver
    * fault-tolerance.
    * @param directory HDFS-compatible directory where the checkpoint data will be reliably stored.
    *                  Note that this must be a fault-tolerant file system like HDFS for
@@ -199,10 +206,7 @@ class StreamingContext private[streaming] (
    */
   def networkStream[T: ClassTag](
     receiver: NetworkReceiver[T]): DStream[T] = {
-    val inputStream = new PluggableInputDStream[T](this,
-      receiver)
-    graph.addInputStream(inputStream)
-    inputStream
+    new PluggableInputDStream[T](this, receiver)
   }
 
   /**
@@ -220,7 +224,7 @@ class StreamingContext private[streaming] (
   def actorStream[T: ClassTag](
       props: Props,
       name: String,
-      storageLevel: StorageLevel = StorageLevel.MEMORY_ONLY_SER_2,
+      storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
     ): DStream[T] = {
     networkStream(new ActorReceiver[T](props, name, storageLevel, supervisorStrategy))
@@ -259,9 +263,7 @@ class StreamingContext private[streaming] (
       converter: (InputStream) => Iterator[T],
       storageLevel: StorageLevel
     ): DStream[T] = {
-    val inputStream = new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
-    registerInputStream(inputStream)
-    inputStream
+    new SocketInputDStream[T](this, hostname, port, converter, storageLevel)
   }
 
   /**
@@ -272,6 +274,7 @@ class StreamingContext private[streaming] (
    * @param hostname      Hostname to connect to for receiving data
    * @param port          Port to connect to for receiving data
    * @param storageLevel  Storage level to use for storing the received objects
+   *                      (default: StorageLevel.MEMORY_AND_DISK_SER_2)
    * @tparam T            Type of the objects in the received blocks
    */
   def rawSocketStream[T: ClassTag](
@@ -279,9 +282,7 @@ class StreamingContext private[streaming] (
       port: Int,
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2
     ): DStream[T] = {
-    val inputStream = new RawInputDStream[T](this, hostname, port, storageLevel)
-    registerInputStream(inputStream)
-    inputStream
+    new RawInputDStream[T](this, hostname, port, storageLevel)
   }
 
   /**
@@ -299,9 +300,7 @@ class StreamingContext private[streaming] (
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String): DStream[(K, V)] = {
-    val inputStream = new FileInputDStream[K, V, F](this, directory)
-    registerInputStream(inputStream)
-    inputStream
+    new FileInputDStream[K, V, F](this, directory)
   }
 
   /**
@@ -321,9 +320,7 @@ class StreamingContext private[streaming] (
     V: ClassTag,
     F <: NewInputFormat[K, V]: ClassTag
   ] (directory: String, filter: Path => Boolean, newFilesOnly: Boolean): DStream[(K, V)] = {
-    val inputStream = new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
-    registerInputStream(inputStream)
-    inputStream
+    new FileInputDStream[K, V, F](this, directory, filter, newFilesOnly)
   }
 
   /**
@@ -366,9 +363,7 @@ class StreamingContext private[streaming] (
       oneAtATime: Boolean,
       defaultRDD: RDD[T]
     ): DStream[T] = {
-    val inputStream = new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
-    registerInputStream(inputStream)
-    inputStream
+    new QueueInputDStream(this, queue, oneAtATime, defaultRDD)
   }
 
   /**
@@ -387,21 +382,6 @@ class StreamingContext private[streaming] (
       transformFunc: (Seq[RDD[_]], Time) => RDD[T]
     ): DStream[T] = {
     new TransformedDStream[T](dstreams, sparkContext.clean(transformFunc))
-  }
-
-  /**
-   * Register an input stream that will be started (InputDStream.start() called) to get the
-   * input data.
-   */
-  def registerInputStream(inputStream: InputDStream[_]) {
-    graph.addInputStream(inputStream)
-  }
-
-  /**
-   * Register an output stream that will be computed every interval
-   */
-  def registerOutputStream(outputStream: DStream[_]) {
-    graph.addOutputStream(outputStream)
   }
 
   /** Add a [[org.apache.spark.streaming.scheduler.StreamingListener]] object for

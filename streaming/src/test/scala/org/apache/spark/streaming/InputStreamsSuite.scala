@@ -54,7 +54,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc.start()
 
     // Feed data to the server to send to the network receiver
@@ -103,7 +103,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     def output = outputBuffer.flatMap(x => x)
     val outputStream = new TestOutputStream(fileStream, outputBuffer)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc.start()
 
     // Create files in the temporary directory so that Spark Streaming can read data from it
@@ -156,7 +156,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val outputBuffer = new ArrayBuffer[Seq[String]] with SynchronizedBuffer[Seq[String]]
     val outputStream = new TestOutputStream(networkStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc.start()
 
     // Feed data to the server to send to the network receiver
@@ -209,7 +209,7 @@ class InputStreamsSuite extends TestSuiteBase with BeforeAndAfter {
     val outputBuffer = new ArrayBuffer[Seq[Long]] with SynchronizedBuffer[Seq[Long]]
     val outputStream = new TestOutputStream(countStream, outputBuffer)
     def output = outputBuffer.flatMap(x => x)
-    ssc.registerOutputStream(outputStream)
+    outputStream.register()
     ssc.start()
 
     // Let the data from the receiver be received

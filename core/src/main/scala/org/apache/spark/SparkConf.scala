@@ -1,20 +1,36 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark
 
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
-import com.typesafe.config.ConfigFactory
+import java.io.{ObjectInputStream, ObjectOutputStream, IOException}
 
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
  *
  * Most of the time, you would create a SparkConf object with `new SparkConf()`, which will load
- * values from both the `spark.*` Java system properties and any `spark.conf` on your application's
- * classpath (if it has one). In this case, system properties take priority over `spark.conf`, and
- * any parameters you set directly on the `SparkConf` object take priority over both of those.
+ * values from any `spark.*` Java system properties set in your application as well. In this case,
+ * parameters you set directly on the `SparkConf` object take priority over system properties.
  *
  * For unit tests, you can also call `new SparkConf(false)` to skip loading external settings and
- * get the same configuration no matter what is on the classpath.
+ * get the same configuration no matter what the system properties are.
  *
  * All setter methods in this class support chaining. For example, you can write
  * `new SparkConf().setMaster("local").setAppName("My app")`.
@@ -22,9 +38,9 @@ import com.typesafe.config.ConfigFactory
  * Note that once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
  * by the user. Spark does not support modifying the configuration at runtime.
  *
- * @param loadDefaults whether to load values from the system properties and classpath
+ * @param loadDefaults whether to also load values from Java system properties
  */
-class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with Logging {
+class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
@@ -32,11 +48,9 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with 
   private val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
-    ConfigFactory.invalidateCaches()
-    val typesafeConfig = ConfigFactory.systemProperties()
-      .withFallback(ConfigFactory.parseResources("spark.conf"))
-    for (e <- typesafeConfig.entrySet().asScala if e.getKey.startsWith("spark.")) {
-      settings(e.getKey) = e.getValue.unwrapped.toString
+    // Load any spark.* system properties
+    for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
+      settings(k) = v
     }
   }
 

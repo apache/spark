@@ -73,7 +73,7 @@ for %%d in ("%TOOLS_DIR%\target\scala-%SCALA_VERSION%\spark-tools*assembly*.jar"
 
 rem Compute classpath using external script
 set DONT_PRINT_CLASSPATH=1
-call "%FWDIR%sbin\compute-classpath.cmd"
+call "%FWDIR%bin\compute-classpath.cmd"
 set DONT_PRINT_CLASSPATH=0
 set CLASSPATH=%CLASSPATH%;%SPARK_TOOLS_JAR%
 
