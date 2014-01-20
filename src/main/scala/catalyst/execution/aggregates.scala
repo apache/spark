@@ -16,8 +16,7 @@ case class Aggregate(
     child: SharkPlan)
   extends UnaryNode {
 
-  val requiredPartitioning = ClusteredDistribution(groupingExpressions)
-  override def requiredChildDistribution = Seq(requiredPartitioning, requiredPartitioning)
+  override def requiredChildDistribution = Seq(ClusteredDistribution(groupingExpressions))
 
   def output = aggregateExpressions.map(_.toAttribute)
 
