@@ -629,7 +629,7 @@ object DecisionTree extends Serializable with Logging {
             bins(featureIndex)(index) = bin
           }
           bins(featureIndex)(numBins-1)
-            = new Bin(splits(featureIndex)(numBins-3),new DummyHighSplit(Continuous),Continuous)
+            = new Bin(splits(featureIndex)(numBins-2),new DummyHighSplit(Continuous),Continuous)
         }
 
         (splits,bins)
