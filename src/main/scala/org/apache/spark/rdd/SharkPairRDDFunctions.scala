@@ -7,6 +7,7 @@ import org.apache.spark.Aggregator
 import org.apache.spark.SparkContext._
 
 import scala.language.implicitConversions
+import org.apache.spark.util.collection.AppendOnlyMap
 
 /**
  * Extra functions for Shark available on RDDs of (key, value) pairs through an implicit conversion.
@@ -25,11 +26,24 @@ class SharkPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * This function will not introduce a shuffling operation.
    */
   def cogroupLocally[W](other: RDD[(K, W)]): RDD[(K, (Seq[V], Seq[W]))] = {
-    val cg = new CoGroupedLocallyRDD[K](Seq(self, other))
-    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classTag[K], ClassTags.seqSeqClassTag)
-    prfs.mapValues { case Seq(vs, ws) =>
-      (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
-    }
+    val cg = self.zipPartitions(other)((iter1:Iterator[(K, V)], iter2:Iterator[(K, W)]) => {
+      val map = new AppendOnlyMap[K, Seq[ArrayBuffer[Any]]]
+
+      val update: (Boolean, Seq[ArrayBuffer[Any]]) => Seq[ArrayBuffer[Any]] = (hadVal, oldVal) => {
+        if (hadVal) oldVal else Array.fill(2)(new ArrayBuffer[Any])
+      }
+
+      val getSeq = (k: K) => {
+        map.changeValue(k, update)
+      }
+
+      iter1.foreach { kv => getSeq(kv._1)(0) += kv._2 }
+      iter2.foreach { kv => getSeq(kv._1)(1) += kv._2 }
+
+      map.iterator
+    }).mapValues { case Seq(vs, ws) => (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])}
+
+    cg
   }
 
   /**
@@ -53,8 +67,8 @@ class SharkPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * This function will not introduce a shuffling operation.
    */
   def joinLocally[W](other: RDD[(K, W)]): RDD[(K, (V, W))] = {
-    cogroupLocally(other).flatMapValues { case (vs, ws) =>
-      for (v <- vs.iterator; w <- ws.iterator) yield (v, w)
+    cogroupLocally(other).flatMapValues {
+      case (vs, ws) => for (v <- vs.iterator; w <- ws.iterator) yield (v, w)
     }
   }
 }
