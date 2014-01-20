@@ -36,11 +36,11 @@ private[spark] class SecurityManager extends Logging {
   logDebug("is auth enabled = " + isAuthOn + " is uiAuth enabled = " + isUIAuthOn)
  
   /**
-   * In Yarn mode its uses Hadoop UGI to pass the secret as that
+   * In Yarn mode it uses Hadoop UGI to pass the secret as that
    * will keep it protected.  For a standalone SPARK cluster
    * use a environment variable SPARK_SECRET to specify the secret.
    * This probably isn't ideal but only the user who starts the process
-   * should have access to view the variable (atleast on Linux).
+   * should have access to view the variable (at least on Linux).
    * Since we can't set the environment variable we set the 
    * java system property SPARK_SECRET so it will automatically
    * generate a secret is not specified.  This definitely is not

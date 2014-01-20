@@ -51,29 +51,17 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     System.setProperty("SPARK_SECRET", "bad")
     val securityManagerBad= new SecurityManager();
 
+    assert(securityManagerBad.isAuthenticationEnabled() === true)
+
     val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0, 
       conf = conf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTracker(conf)
     val selection = slaveSystem.actorSelection(
       s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
     val timeout = AkkaUtils.lookupTimeout(conf)
-    slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
-
-    assert(securityManagerBad.isAuthenticationEnabled() === true)
-
-    masterTracker.registerShuffle(10, 1)
-    masterTracker.incrementEpoch()
-    slaveTracker.updateEpoch(masterTracker.getEpoch)
-
-    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-    val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
-    masterTracker.registerMapOutput(10, 0, new MapStatus(
-      BlockManagerId("a", "hostA", 1000, 0), Array(compressedSize1000)))
-    masterTracker.incrementEpoch()
-    slaveTracker.updateEpoch(masterTracker.getEpoch)
-
-    // this should fail since password wrong
-    intercept[SparkException] { slaveTracker.getServerStatuses(10, 0) }
+    intercept[akka.actor.ActorNotFound] { 
+      slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout) 
+    }
 
     actorSystem.shutdown()
     slaveSystem.shutdown()
@@ -198,30 +186,17 @@ class AkkaUtilsSuite extends FunSuite with LocalSparkContext {
     System.setProperty("SPARK_SECRET", "bad")
     val securityManagerBad = new SecurityManager();
 
+    assert(securityManagerBad.isAuthenticationEnabled() === false)
+
     val (slaveSystem, _) = AkkaUtils.createActorSystem("spark-slave", hostname, 0,
       conf = conf, securityManager = securityManagerBad)
     val slaveTracker = new MapOutputTracker(conf)
     val selection = slaveSystem.actorSelection(
       s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
     val timeout = AkkaUtils.lookupTimeout(conf)
-    slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
-
-
-    assert(securityManagerBad.isAuthenticationEnabled() === false)
-
-    masterTracker.registerShuffle(10, 1)
-    masterTracker.incrementEpoch()
-    slaveTracker.updateEpoch(masterTracker.getEpoch)
-
-    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-    val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
-    masterTracker.registerMapOutput(10, 0, new MapStatus(
-      BlockManagerId("a", "hostA", 1000, 0), Array(compressedSize1000)))
-    masterTracker.incrementEpoch()
-    slaveTracker.updateEpoch(masterTracker.getEpoch)
-
-    // this should fail since security on in server and off in client
-    intercept[SparkException] { slaveTracker.getServerStatuses(10, 0) }
+    intercept[akka.actor.ActorNotFound] { 
+      slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout) 
+    }
 
     actorSystem.shutdown()
     slaveSystem.shutdown()

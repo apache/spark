@@ -100,8 +100,6 @@ private[spark] object AkkaUtils extends Logging {
       |akka.remote.log-remote-lifecycle-events = $lifecycleEvents
       |akka.log-dead-letters = $lifecycleEvents
       |akka.log-dead-letters-during-shutdown = $lifecycleEvents
-      |akka.remote.netty.require-cookie = "$requireCookie"
-      |akka.remote.netty.secure-cookie = "$secureCookie"
       """.stripMargin))
 
     val actorSystem = if (indestructible) {
