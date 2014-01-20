@@ -309,6 +309,10 @@ object SparkBuild extends Build {
     name := "spark-tools"
   ) ++ assemblySettings ++ extraAssemblySettings
 
+  def graphxSettings = sharedSettings ++ Seq(
+    name := "spark-graphx"
+  )
+
   def bagelSettings = sharedSettings ++ Seq(
     name := "spark-bagel"
   )
