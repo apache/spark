@@ -173,15 +173,10 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
      * most likely require using the file channel API.
      */
 
-    val codec = new LZFCompressionCodec(sparkConf)
-
+    val shouldCompress = blockManager.shouldCompress(blockId)
+    val compressionCodec = new LZFCompressionCodec(sparkConf)
     def wrapForCompression(outputStream: OutputStream) = {
-      blockManager.shouldCompress(blockId) match {
-        case true =>
-          codec.compressedOutputStream(outputStream)
-        case false =>
-          outputStream
-      }
+      if (shouldCompress) compressionCodec.compressedOutputStream(outputStream) else outputStream
     }
 
     def getNewWriter = new DiskBlockObjectWriter(blockId, file, serializer, fileBufferSize,

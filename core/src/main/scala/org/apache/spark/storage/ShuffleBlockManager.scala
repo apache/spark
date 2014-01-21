@@ -109,9 +109,12 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
           val blockFile = blockManager.diskBlockManager.getFile(blockId)
           // Because of previous failures, the shuffle file may already exist on this machine.
           // If so, remove it.
-          if (blockFile.exists()) {
-            val removed = blockFile.delete()
-            logInfo(s"Removed existing shuffle file $blockFile successfully: $removed")
+          if (blockFile.exists) {
+            if (blockFile.delete()) {
+              logInfo(s"Removed existing shuffle file $blockFile")
+            } else {
+              logWarning(s"Failed to remove existing shuffle file $blockFile")
+            }
           }
           blockManager.getDiskWriter(blockId, blockFile, serializer, bufferSize)
         }
