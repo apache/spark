@@ -27,5 +27,13 @@ exportMethods(
              )
 
 # S3 methods exported
-export("textFile", "parallelize", "hashCode", "includePackage", "broadcast", "setBroadcastValue")
+export(
+       "textFile",
+       "parallelize",
+       "hashCode",
+       "includePackage",
+       "broadcast",
+       "setBroadcastValue",
+       "setCheckpointDir"
+      )
 export("sparkR.init")
