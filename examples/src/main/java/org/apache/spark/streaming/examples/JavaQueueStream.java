@@ -80,5 +80,6 @@ public final class JavaQueueStream {
 
     reducedStream.print();
     ssc.start();
+    ssc.awaitTermination();
   }
 }

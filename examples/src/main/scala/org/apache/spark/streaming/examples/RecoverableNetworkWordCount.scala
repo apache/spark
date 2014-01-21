@@ -114,5 +114,6 @@ object RecoverableNetworkWordCount {
         createContext(master, ip, port, outputPath)
       })
     ssc.start()
+    ssc.awaitTermination()
   }
 }

@@ -101,5 +101,6 @@ object MQTTWordCount {
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.print()
     ssc.start()
+    ssc.awaitTermination()
   }
 }
