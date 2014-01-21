@@ -17,7 +17,6 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.mllib.util.LocalSparkContext
 import scala.util.Random
 import scala.collection.JavaConversions._
 
@@ -27,6 +26,7 @@ import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.SparkContext
 import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.util.LocalSparkContext
 
 object LogisticRegressionSuite {
 

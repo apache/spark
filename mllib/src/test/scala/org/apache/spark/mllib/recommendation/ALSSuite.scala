@@ -23,9 +23,9 @@ import scala.util.Random
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.apache.spark.mllib.util.LocalSparkContext
-
 import org.jblas._
+
+import org.apache.spark.mllib.util.LocalSparkContext
 
 object ALSSuite {
 
