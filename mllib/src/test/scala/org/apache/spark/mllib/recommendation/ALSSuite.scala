@@ -23,9 +23,9 @@ import scala.util.Random
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext
-
 import org.jblas._
+
+import org.apache.spark.mllib.util.LocalSparkContext
 
 object ALSSuite {
 
@@ -73,17 +73,7 @@ object ALSSuite {
 }
 
 
-class ALSSuite extends FunSuite with BeforeAndAfterAll {
-  @transient private var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-  }
-
-  override def afterAll() {
-    sc.stop()
-    System.clearProperty("spark.driver.port")
-  }
+class ALSSuite extends FunSuite with LocalSparkContext {
 
   test("rank-1 matrices") {
     testALS(50, 100, 1, 15, 0.7, 0.3)
