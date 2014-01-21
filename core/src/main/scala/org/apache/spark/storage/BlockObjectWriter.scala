@@ -138,6 +138,7 @@ private[spark] class DiskBlockObjectWriter(
       fos = null
       ts = null
       objOut = null
+      initialized = false
     }
   }
 
@@ -175,7 +176,6 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   override def fileSegment(): FileSegment = {
-    val bytesWritten = lastValidPosition - initialPosition
     new FileSegment(file, initialPosition, bytesWritten)
   }
 
