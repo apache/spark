@@ -22,7 +22,6 @@ import org.jblas.DoubleMatrix
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext
 import org.apache.spark.mllib.util.{LinearDataGenerator, LocalSparkContext}
 
 

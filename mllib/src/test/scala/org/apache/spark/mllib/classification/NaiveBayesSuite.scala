@@ -17,14 +17,13 @@
 
 package org.apache.spark.mllib.classification
 
-import org.apache.spark.mllib.util.LocalSparkContext
 import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.SparkContext
+import org.apache.spark.mllib.util.LocalSparkContext
 
 object NaiveBayesSuite {
 
