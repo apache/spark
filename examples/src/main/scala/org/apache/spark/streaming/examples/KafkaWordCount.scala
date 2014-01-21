@@ -61,6 +61,7 @@ object KafkaWordCount {
     wordCounts.print()
     
     ssc.start()
+    ssc.awaitTermination()
   }
 }
 

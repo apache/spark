@@ -65,5 +65,6 @@ object StatefulNetworkWordCount {
     val stateDstream = wordDstream.updateStateByKey[Int](updateFunc)
     stateDstream.print()
     ssc.start()
+    ssc.awaitTermination()
   }
 }
