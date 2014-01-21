@@ -43,8 +43,8 @@ class CheckpointRDD[T: ClassTag](sc: SparkContext, val checkpointPath: String)
     val numPartitions =
     // listStatus can throw exception if path does not exist.
     if (fs.exists(cpath)) {
-      val dirContents = fs.listStatus(cpath)
-      val partitionFiles = dirContents.map(_.getPath.toString).filter(_.contains("part-")).sorted
+      val dirContents = fs.listStatus(cpath).map(_.getPath)
+      val partitionFiles = dirContents.filter(_.getName.startsWith("part-")).map(_.toString).sorted
       val numPart =  partitionFiles.size
       if (numPart > 0 && (! partitionFiles(0).endsWith(CheckpointRDD.splitIdToFile(0)) ||
           ! partitionFiles(numPart-1).endsWith(CheckpointRDD.splitIdToFile(numPart-1)))) {
