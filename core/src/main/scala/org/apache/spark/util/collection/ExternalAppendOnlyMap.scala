@@ -168,6 +168,8 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
 
         if (objectsWritten == serializerBatchSize) {
           writer.commit()
+          writer.close()
+          _diskBytesSpilled += writer.bytesWritten
           writer = getNewWriter
           objectsWritten = 0
         }
@@ -176,8 +178,8 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
       if (objectsWritten > 0) writer.commit()
     } finally {
       // Partial failures cannot be tolerated; do not revert partial writes
-      _diskBytesSpilled += writer.bytesWritten
       writer.close()
+      _diskBytesSpilled += writer.bytesWritten
     }
     currentMap = new SizeTrackingAppendOnlyMap[K, C]
     spilledMaps.append(new DiskMapIterator(file, blockId))
