@@ -61,5 +61,5 @@ fi
 if [[ "$IPYTHON" = "1" ]] ; then
   exec ipython $IPYTHON_OPTS
 else
-  exec "$PYSPARK_PYTHON" - "$@"
+  exec "$PYSPARK_PYTHON" "$@"
 fi
