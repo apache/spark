@@ -17,9 +17,19 @@
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.tree.configuration.Algo._
 
-class DecisionTreeModel(val topNode : Node) extends Serializable {
+class DecisionTreeModel(val topNode : Node, val algo : Algo) extends Serializable {
 
-  def predict(features : Array[Double]) = if (topNode.predictIfLeaf(features) >= 0.5) 0.0 else 1.0
+  def predict(features : Array[Double]) = {
+    algo match {
+      case Classification => {
+        if (topNode.predictIfLeaf(features) >= 0.5) 0.0 else 1.0
+      }
+      case Regression => {
+        topNode.predictIfLeaf(features)
+      }
+    }
+  }
 
 }
