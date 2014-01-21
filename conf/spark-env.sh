@@ -19,5 +19,8 @@
 # - SPARK_WORKER_PORT / SPARK_WORKER_WEBUI_PORT
 # - SPARK_WORKER_INSTANCES, to set the number of worker processes per node
 # - SPARK_WORKER_DIR, to set the working directory of worker processes
-MASTER=spark://dn05.chi.shopify.com:7077
-REMOTE_SPARK_HOME=/u/apps/spark/current
+if [[ -z "$MASTER" ]]; then
+  export MASTER=spark://dn05.chi.shopify.com:7077;
+  export REMOTE_SPARK_HOME=/u/apps/spark/current;
+  export SPARK_LOCAL_IP=`ifconfig tap0 | grep "inet" | awk '{print $2}'`;
+fi
