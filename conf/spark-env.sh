@@ -20,7 +20,21 @@
 # - SPARK_WORKER_INSTANCES, to set the number of worker processes per node
 # - SPARK_WORKER_DIR, to set the working directory of worker processes
 if [[ -z "$MASTER" ]]; then
-  export MASTER=spark://dn05.chi.shopify.com:7077;
-  export REMOTE_SPARK_HOME=/u/apps/spark/current;
-  export SPARK_LOCAL_IP=`ifconfig tap0 | grep "inet" | awk '{print $2}'`;
+  echo "Sparkify: Connecting to chicago spark cluster ..."
+  export MASTER=spark://dn05.chi.shopify.com:7077
+  export REMOTE_SPARK_HOME=/u/apps/spark/current
+  export SPARK_JAVA_OPTS="-Dspark.cores.max=10"
+
+  vpn_interface=tap0;
+  if ifconfig $vpn_interface > /dev/null 2>&1; then
+    export SPARK_LOCAL_IP=`ifconfig $vpn_interface 2>&1 | grep "inet" | awk '{print $2}'`
+  else
+    echo
+    echo "WARNING: could not find an VPN interface to connect to the Shopify Spark Cluster! Is your VPN connected?"
+    echo
+  fi
+
+  if which ipython > /dev/null; then
+    export IPYTHON=1
+  fi
 fi
