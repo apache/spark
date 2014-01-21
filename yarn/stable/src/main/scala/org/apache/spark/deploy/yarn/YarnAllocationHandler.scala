@@ -102,8 +102,7 @@ private[yarn] class YarnAllocationHandler(
   def getNumWorkersFailed: Int = numWorkersFailed.intValue
 
   def isResourceConstraintSatisfied(container: Container): Boolean = {
-    (container.getResource.getMemory >= (workerMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
-      && container.getResource.getVirtualCores >= workerCores)
+    container.getResource.getMemory >= (workerMemory + YarnAllocationHandler.MEMORY_OVERHEAD)
   }
 
   def releaseContainer(container: Container) {
