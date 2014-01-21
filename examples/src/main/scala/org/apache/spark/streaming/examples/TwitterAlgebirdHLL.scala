@@ -87,5 +87,6 @@ object TwitterAlgebirdHLL {
     })
 
     ssc.start()
+    ssc.awaitTermination()
   }
 }

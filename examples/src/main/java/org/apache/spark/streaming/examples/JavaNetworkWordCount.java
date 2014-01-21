@@ -84,5 +84,6 @@ public final class JavaNetworkWordCount {
 
     wordCounts.print();
     ssc.start();
+    ssc.awaitTermination();
   }
 }

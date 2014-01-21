@@ -171,5 +171,6 @@ object ActorWordCount {
     lines.flatMap(_.split("\\s+")).map(x => (x, 1)).reduceByKey(_ + _).print()
 
     ssc.start()
+    ssc.awaitTermination()
   }
 }
