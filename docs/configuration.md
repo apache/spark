@@ -158,7 +158,9 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.shuffle.spill.compress</td>
   <td>true</td>
   <td>
-    Whether to compress data spilled during shuffles.
+    Whether to compress data spilled during shuffles. If enabled, spill compression
+    always uses the `org.apache.spark.io.LZFCompressionCodec` codec, 
+    regardless of the value of `spark.io.compression.codec`.
   </td>
 </tr>
 <tr>
