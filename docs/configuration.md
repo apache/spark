@@ -98,7 +98,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.default.parallelism</td>
   <td>8</td>
   <td>
-    Default number of tasks to use for distributed shuffle operations (<code>groupByKey</code>,
+    Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
     <code>reduceByKey</code>, etc) when not set by user.
   </td>
 </tr>
