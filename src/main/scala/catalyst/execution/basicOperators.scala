@@ -7,7 +7,6 @@ import types._
 
 import org.apache.spark.SparkContext._
 
-
 case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
 
@@ -53,9 +52,14 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
 
   // TODO: Don't include redundant expressions in both sortKey and row.
   def execute() = attachTree(this, "sort") {
+    import scala.math.Ordering.Implicits._
+    implicit val ordering = new RowOrdering(sortExprs)
+
+    // TODO: Allows spark to take the ordering as an argument, avoid needless pair creation.
     child.execute()
-      .mapPartitions(OrderedRow(sortExprs, _))
-      .sortByKey(ascending = true, numPartitions).map(_._2)
+      .mapPartitions(iter => iter.map(row => (row, null)))
+      .sortByKey(ascending = true, 8)
+      .map(_._1)
   }
 
   def output = child.output

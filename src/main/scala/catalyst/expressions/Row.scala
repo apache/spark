@@ -80,48 +80,27 @@ class GenericRow(input: Seq[Any]) extends Row {
   }
 }
 
-object OrderedRow {
-  def apply(ordering: Seq[SortOrder], input: Iterator[Row]): Iterator[(OrderedRow, Row)] =  {
-    val expressions = ordering.map(_.child)
-    val orderingObjects = ordering.map { o =>
-      o.dataType match {
-        case nativeType: NativeType =>
-          if (o.direction == Ascending)
-            nativeType.ordering.asInstanceOf[Ordering[Any]]
-          else
-            nativeType.ordering.asInstanceOf[Ordering[Any]].reverse
-        case _ => sys.error(s"No ordering available for ${o.dataType}")
-      }
-    }
-    val directions = ordering.map(_.direction)
+class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
+  def compare(a: Row, b: Row): Int = {
+    ordering.foreach { order =>
+      val left = Evaluate(order.child, Vector(a))
+      val right = Evaluate(order.child, Vector(b))
 
-    input.map { row =>
-      (new OrderedRow(orderingObjects, directions, expressions.map(Evaluate(_, Vector(row)))), row)
-    }
-  }
-}
-
-class OrderedRow(ordering: Seq[Ordering[Any]], directions: Seq[SortDirection], input: Seq[Any])
-    extends GenericRow(input) with Ordered[OrderedRow] {
-
-  def compare(other: OrderedRow): Int = {
-    var i = 0
-    while (i < values.size) {
-      val left = values(i)
-      val right = other.values(i)
-
-      val comparison =
-        if (left == null && right == null) {
-          0
-        } else if (left == null) {
-          if (directions(i) == Ascending) -1 else 1
-        } else if (right == null) {
-          if (directions(i) == Ascending) 1 else -1
-        } else {
-          ordering(i).compare(left, right)
+      if (left == null && right == null) {
+        // Both null, continue looking.
+      } else if (left == null) {
+        return if (order.direction == Ascending) -1 else 1
+      } else if (right == null) {
+        return if (order.direction == Ascending) 1 else -1
+      } else {
+        val comparison = order.dataType match {
+          case n: NativeType if order.direction == Ascending =>
+            n.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
+          case n: NativeType if order.direction == Descending =>
+            n.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
         }
-      if (comparison != 0) return comparison
-      i += 1
+        if (comparison != 0) return comparison
+      }
     }
     return 0
   }
