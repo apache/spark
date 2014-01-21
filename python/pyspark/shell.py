@@ -23,8 +23,16 @@ This file is designed to be launched as a PYTHONSTARTUP script.
 import os
 import platform
 import pyspark
+import argparse
 from pyspark.context import SparkContext
 from pyspark.storagelevel import StorageLevel
+
+parser = argparse.ArgumentParser()
+parser.add_argument('-c', dest="cores")
+args = parser.parse_args()
+
+if args.cores is not None:
+    SparkContext.setSystemProperty("spark.cores.max", args.cores)
 
 # this is the equivalent of ADD_JARS
 add_files = os.environ.get("ADD_FILES").split(',') if os.environ.get("ADD_FILES") != None else None
