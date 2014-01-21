@@ -76,11 +76,20 @@ else
   fi
 fi
 
+# Set JAVA_OPTS to be able to load native libraries and to set heap size
+JAVA_OPTS="$SPARK_JAVA_OPTS"
+JAVA_OPTS="$JAVA_OPTS -Djava.library.path=$SPARK_LIBRARY_PATH"
+# Load extra JAVA_OPTS from conf/java-opts, if it exists
+if [ -e "$FWDIR/conf/java-opts" ] ; then
+  JAVA_OPTS="$JAVA_OPTS `cat $FWDIR/conf/java-opts`"
+fi
+export JAVA_OPTS
+
 if [ "$SPARK_PRINT_LAUNCH_COMMAND" == "1" ]; then
   echo -n "Spark Command: "
-  echo "$RUNNER" -cp "$CLASSPATH" "$@"
+  echo "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
   echo "========================================"
   echo
 fi
 
-exec "$RUNNER" -cp "$CLASSPATH" "$@"
+exec "$RUNNER" -cp "$CLASSPATH" $JAVA_OPTS "$@"
