@@ -138,6 +138,7 @@ private[spark] class DiskBlockObjectWriter(
       fos = null
       ts = null
       objOut = null
+      initialized = false
     }
   }
 
@@ -145,7 +146,8 @@ private[spark] class DiskBlockObjectWriter(
 
   override def commit(): Long = {
     if (initialized) {
-      // NOTE: Flush the serializer first and then the compressed/buffered output stream
+      // NOTE: Because Kryo doesn't flush the underlying stream we explicitly flush both the
+      //       serializer stream and the lower level stream.
       objOut.flush()
       bs.flush()
       val prevPos = lastValidPosition
@@ -175,7 +177,6 @@ private[spark] class DiskBlockObjectWriter(
   }
 
   override def fileSegment(): FileSegment = {
-    val bytesWritten = lastValidPosition - initialPosition
     new FileSegment(file, initialPosition, bytesWritten)
   }
 
