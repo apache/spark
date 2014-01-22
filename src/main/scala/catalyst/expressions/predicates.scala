@@ -10,6 +10,13 @@ trait Predicate extends Expression {
   def dataType = BooleanType
 }
 
+abstract trait PredicateHelper {
+  def splitConjunctivePredicates(condition: Expression): Seq[Expression] = condition match {
+    case And(cond1, cond2) => splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
+    case other => other :: Nil
+  }
+}
+
 abstract class BinaryPredicate extends BinaryExpression with Predicate {
   self: Product =>
   def nullable = left.nullable || right.nullable
