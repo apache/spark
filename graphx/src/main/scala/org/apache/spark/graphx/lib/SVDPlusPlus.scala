@@ -18,7 +18,7 @@
 package org.apache.spark.graphx.lib
 
 import scala.util.Random
-import org.apache.commons.math.linear._
+import org.apache.commons.math3.linear._
 import org.apache.spark.rdd._
 import org.apache.spark.graphx._
 
