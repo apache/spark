@@ -293,7 +293,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     // Update the DAGScheduler without holding a lock on this, since that can deadlock
-    if (failedExecutor != None) {
+    if (failedExecutor.isDefined) {
       dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }
@@ -387,7 +387,7 @@ private[spark] class TaskSchedulerImpl(
       }
     }
     // Call dagScheduler.executorLost without holding the lock on this to prevent deadlock
-    if (failedExecutor != None) {
+    if (failedExecutor.isDefined) {
       dagScheduler.executorLost(failedExecutor.get)
       backend.reviveOffers()
     }

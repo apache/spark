@@ -877,7 +877,7 @@ class DAGScheduler(
               logInfo("running: " + running)
               logInfo("waiting: " + waiting)
               logInfo("failed: " + failed)
-              if (stage.shuffleDep != None) {
+              if (stage.shuffleDep.isDefined) {
                 // We supply true to increment the epoch number here in case this is a
                 // recomputation of the map outputs. In that case, some nodes may have cached
                 // locations with holes (from when we detected the error) and will need the

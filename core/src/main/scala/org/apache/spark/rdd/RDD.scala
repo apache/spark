@@ -666,7 +666,7 @@ abstract class RDD[T: ClassTag](
     }
     var jobResult: Option[T] = None
     val mergeResult = (index: Int, taskResult: Option[T]) => {
-      if (taskResult != None) {
+      if (taskResult.isDefined) {
         jobResult = jobResult match {
           case Some(value) => Some(f(value, taskResult.get))
           case None => taskResult
