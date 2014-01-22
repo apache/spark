@@ -30,11 +30,11 @@ public final class JavaSparkPi {
 
   public static void main(String[] args) throws Exception {
     if (args.length == 0) {
-      System.err.println("Usage: JavaLogQuery <master> [slices]");
+      System.err.println("Usage: JavaSparkPi <master> [slices]");
       System.exit(1);
     }
 
-    JavaSparkContext jsc = new JavaSparkContext(args[0], "JavaLogQuery",
+    JavaSparkContext jsc = new JavaSparkContext(args[0], "JavaSparkPi",
       System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaSparkPi.class));
 
     int slices = (args.length == 2) ? Integer.parseInt(args[1]) : 2;
