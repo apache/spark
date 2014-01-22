@@ -22,7 +22,7 @@ class LocalSharkInstance(val master: String) extends SharkInstance {
 
 /**
  * An instance of the shark execution engine. This class is responsible for taking queries
- * expressed either in SQl or as raw catalyst logical plans and optimizing them for execution
+ * expressed either in SQL or as raw catalyst logical plans and optimizing them for execution
  * using Spark.  Additionally this class maintains the connection with the hive metadata store.
  */
 abstract class SharkInstance extends Logging {
