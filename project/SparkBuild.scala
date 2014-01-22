@@ -316,7 +316,10 @@ object SparkBuild extends Build {
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def graphxSettings = sharedSettings ++ Seq(
-    name := "spark-graphx"
+    name := "spark-graphx",
+    libraryDependencies ++= Seq(
+      "org.apache.commons" % "commons-math3" % "3.2"
+    )
   )
 
   def bagelSettings = sharedSettings ++ Seq(
