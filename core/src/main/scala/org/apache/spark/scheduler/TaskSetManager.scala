@@ -592,7 +592,7 @@ private[spark] class TaskSetManager(
   override def removeSchedulable(schedulable: Schedulable) {}
 
   override def getSortedTaskSetQueue(): ArrayBuffer[TaskSetManager] = {
-    var sortedTaskSetQueue = ArrayBuffer[TaskSetManager](this)
+    var sortedTaskSetQueue = new ArrayBuffer[TaskSetManager]()
     sortedTaskSetQueue += this
     sortedTaskSetQueue
   }
