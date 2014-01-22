@@ -55,10 +55,10 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
     import scala.math.Ordering.Implicits._
     implicit val ordering = new RowOrdering(sortExprs)
 
-    // TODO: Allows spark to take the ordering as an argument, avoid needless pair creation.
+    // TODO: Allow spark to take the ordering as an argument, also avoid needless pair creation.
     child.execute()
       .mapPartitions(iter => iter.map(row => (row, null)))
-      .sortByKey(ascending = true, 8)
+      .sortByKey(ascending = true, numPartitions)
       .map(_._1)
   }
 
