@@ -2,6 +2,8 @@ catalyst
 ========
 Catalyst is a functional framework for optimizing relational query plans.
 
+[![Build Status](https://databricks.ci.cloudbees.com/buildStatus/icon?job=Catalyst-Master)](https://databricks.ci.cloudbees.com/job/Catalyst-Master/)
+
 More documentation can be found in the project's [scaladoc](http://databricks.github.io/catalyst/latest/api/#catalyst.package)
 
 Getting Started
