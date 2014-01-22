@@ -22,6 +22,13 @@ case class Filter(condition: Expression, child: SharkPlan) extends UnaryNode {
   }
 }
 
+case class Sample(fraction: Double, withReplacement: Boolean, child: SharkPlan) extends UnaryNode {
+  def output = child.output
+
+  // TODO: How to pick seed?
+  def execute() = child.execute().sample(withReplacement, fraction, (math.random * 1000).toInt)
+}
+
 case class Union(left: SharkPlan, right: SharkPlan)(@transient sc: SharkContext)
   extends BinaryNode {
   // TODO: attributes output by union should be distinct for nullability purposes

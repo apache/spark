@@ -114,6 +114,9 @@ package object dsl {
     def filter(dynamicUdf: (DynamicRow) => Boolean) =
       Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(plan.output))), plan)
 
+    def sample(fraction: Double, withReplacement: Boolean = true) =
+      Sample(fraction, withReplacement, plan)
+
     def analyze = analysis.SimpleAnalyzer(plan)
   }
 }
