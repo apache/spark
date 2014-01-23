@@ -22,7 +22,7 @@ import java.util.concurrent.atomic.AtomicLong
 
 import org.apache.spark._
 
-abstract class Broadcast[T](private[spark] val id: Long) extends Serializable {
+abstract class Broadcast[T](val id: Long) extends Serializable {
   def value: T
 
   // We cannot have an abstract readObject here due to some weird issues with
