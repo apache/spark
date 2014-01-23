@@ -75,6 +75,8 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     println(splits(1)(0))
     println(splits(1)(1))
     println(bins(1)(0))
+    //TODO: Add asserts
+
   }
 
   test("split and bin calculations for categorical variables with no sample for one category"){
@@ -100,12 +102,28 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     println(bins(1)(1))
     println(bins(0)(2))
     println(bins(0)(3))
+    //TODO: Add asserts
+
   }
 
   //TODO: Test max feature value > num bins
 
 
-  test("stump with fixed label 0 for Gini"){
+  test("stump with all categorical variables"){
+    val arr = DecisionTreeSuite.generateCategoricalDataPoints()
+    assert(arr.length == 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(Classification,Gini,3,100,categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
+    strategy.numBins = 100
+    val bestSplits = DecisionTree.findBestSplits(rdd,new Array(7),strategy,0,Array[List[Filter]](),splits,bins)
+    println(bestSplits(0)._1)
+    println(bestSplits(0)._2)
+    //TODO: Add asserts
+  }
+
+
+    test("stump with fixed label 0 for Gini"){
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)

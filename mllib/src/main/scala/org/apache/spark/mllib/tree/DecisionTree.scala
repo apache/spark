@@ -204,15 +204,12 @@ object DecisionTree extends Serializable with Logging {
     }
 
     /*Finds the right bin for the given feature*/
-    def findBin(featureIndex: Int, labeledPoint: LabeledPoint) : Int = {
-      //logDebug("finding bin for labeled point " + labeledPoint.features(featureIndex))
+    def findBin(featureIndex: Int, labeledPoint: LabeledPoint, isFeatureContinous : Boolean) : Int = {
 
-      val isFeatureContinous = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
       if (isFeatureContinous){
         //TODO: Do binary search
         for (binIndex <- 0 until strategy.numBins) {
           val bin = bins(featureIndex)(binIndex)
-          //TODO: Remove this requirement post basic functional
           val lowThreshold = bin.lowSplit.threshold
           val highThreshold = bin.highSplit.threshold
           val features = labeledPoint.features
@@ -222,9 +219,9 @@ object DecisionTree extends Serializable with Logging {
         }
         throw new UnknownError("no bin was found for continuous variable.")
       } else {
+
         for (binIndex <- 0 until strategy.numBins) {
           val bin = bins(featureIndex)(binIndex)
-          //TODO: Remove this requirement post basic functional
           val category = bin.category
           val features = labeledPoint.features
           if (category == features(featureIndex)) {
@@ -262,7 +259,8 @@ object DecisionTree extends Serializable with Logging {
         } else {
           for (featureIndex <- 0 until numFeatures) {
             //logDebug("shift+featureIndex =" + (shift+featureIndex))
-            arr(shift + featureIndex) = findBin(featureIndex, labeledPoint)
+            val isFeatureContinous = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
+            arr(shift + featureIndex) = findBin(featureIndex, labeledPoint,isFeatureContinous)
           }
         }
 
