@@ -515,7 +515,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     // There may be one or more refs to dead workers on this same node (w/ different ID's),
     // remove them.
     workers.filter { w =>
-      (w.host == host && w.port == port) && (w.state == WorkerState.DEAD)
+      (w.host == worker.host && w.port == worker.port) && (w.state == WorkerState.DEAD)
     }.foreach { w =>
       workers -= w
     }
