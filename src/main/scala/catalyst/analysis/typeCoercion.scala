@@ -76,38 +76,86 @@ object ConvertNaNs extends Rule[LogicalPlan] {
  *   - TINYINT, SMALLINT, and INT can all be converted to FLOAT.
  *   - BOOLEAN types cannot be converted to any other type.
  *
- * String conversions are handled by the PromoteStrings rule.
+ * Additionally, all types when UNION-ed with strings will be promoted to strings.
+ * Other string conversions are handled by PromoteStrings
  */
-object PromoteNumericTypes extends Rule[LogicalPlan] {
+object WidenTypes extends Rule[LogicalPlan] {
   val integralPrecedence = Seq(NullType, ByteType, ShortType, IntegerType, LongType)
   val toDouble = integralPrecedence ++ Seq(NullType, FloatType, DoubleType)
   val toFloat = Seq(NullType, ByteType, ShortType, IntegerType) :+ FloatType
   val allPromotions = integralPrecedence :: toDouble :: toFloat :: Nil
 
   def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+    case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
+      val castedInput = left.output.zip(right.output).map {
+        // When a string is found on one side, make the other side a string too.
+        case (l,r) if l.dataType == StringType && r.dataType != StringType =>
+          (l, Alias(Cast(r, StringType), r.name)())
+        case (l,r) if l.dataType != StringType && r.dataType == StringType =>
+          (Alias(Cast(l, StringType), l.name)(), r)
+
+        case (l,r) if l.dataType != r.dataType =>
+          logger.debug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
+          findWidestType(l.dataType, r.dataType).map { widestType =>
+            val newLeft =
+              if (l.dataType == widestType)
+                l
+              else
+                Alias(Cast(l, widestType), l.name)()
+            val newRight =
+              if (r.dataType == widestType)
+                r
+              else
+                Alias(Cast(r, widestType), r.name)()
+
+            (newLeft, newRight)
+          }.getOrElse((l,r)) // If there is no applicable conversion, leave expression unchanged.
+        case other => other
+      }
+
+      val (castedLeft, castedRight) = castedInput.unzip
+
+      val newLeft =
+        if(castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
+          logger.debug(s"Widening numeric types in union ${castedLeft} ${left.output}")
+          Project(castedLeft, left)
+        } else {
+          left
+        }
+
+      val newRight =
+        if(castedRight.map(_.dataType) != right.output.map(_.dataType)) {
+          logger.debug(s"Widening numeric types in union ${castedRight} ${right.output}")
+          Project(castedRight, right)
+        } else {
+          right
+        }
+
+      Union(newLeft, newRight)
+
+    // Also widen types for BinaryExpressions.
     case q: LogicalPlan => q transformExpressions {
       // Skip nodes who's children have not been resolved yet.
       case e if !e.childrenResolved => e
 
       case b: BinaryExpression if b.left.dataType != b.right.dataType =>
-        // Try and find a promotion rule that contains both types in question.
-        val applicableConversion =
-          allPromotions.find(p => p.contains(b.left.dataType) && p.contains(b.right.dataType))
-
-        applicableConversion match {
-          case Some(promotionRule) =>
-            val widestType =
-              promotionRule.filter(t => t == b.left.dataType || t == b.right.dataType).last
+        findWidestType(b.left.dataType, b.right.dataType).map { widestType =>
             val newLeft =
               if (b.left.dataType == widestType) b.left else Cast(b.left, widestType)
             val newRight =
               if (b.right.dataType == widestType) b.right else Cast(b.right, widestType)
             b.makeCopy(Array(newLeft, newRight))
-
-          // If there is no applicable conversion, leave expression unchanged.
-          case None => b
-        }
+        }.getOrElse(b)  // If there is no applicable conversion, leave expression unchanged.
     }
+  }
+
+  def findWidestType(t1: DataType, t2: DataType): Option[DataType] = {
+    // Try and find a promotion rule that contains both types in question.
+    val applicableConversion =
+      allPromotions.find(p => p.contains(t1) && p.contains(t2))
+
+    // If found return the widest common type, otherwise None
+    applicableConversion.map(_.filter(t => t == t1 || t == t2).last)
   }
 }
 
