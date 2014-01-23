@@ -43,6 +43,7 @@ class SparkContext(object):
     _gateway = None
     _jvm = None
     _writeIteratorToPickleFile = None
+    _takePartition = None
     _next_accum_id = 0
     _active_spark_context = None
     _lock = Lock()
@@ -126,6 +127,8 @@ class SparkContext(object):
                 SparkContext._jvm = SparkContext._gateway.jvm
                 SparkContext._writeIteratorToPickleFile = \
                     SparkContext._jvm.PythonRDD.writeIteratorToPickleFile
+                SparkContext._takePartition = \
+                    SparkContext._jvm.PythonRDD.takePartition
 
             if instance:
                 if SparkContext._active_spark_context and SparkContext._active_spark_context != instance:
