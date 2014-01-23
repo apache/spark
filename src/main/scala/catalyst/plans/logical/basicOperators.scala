@@ -20,7 +20,7 @@ case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
 
   override lazy val resolved =
     childrenResolved &&
-    left.output.zip(right.output).filter { case (l,r) => l.dataType != r.dataType }.isEmpty
+    !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
 
   def references = Set.empty
 }

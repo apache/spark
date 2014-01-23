@@ -18,7 +18,7 @@ object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true
  * a [[FunctionRegistry]].
  */
 class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Boolean)
-  extends RuleExecutor[LogicalPlan] {
+  extends RuleExecutor[LogicalPlan] with HiveTypeCoercion {
 
   // TODO: pass this in as a parameter.
   val fixedPoint = FixedPoint(100)
@@ -29,19 +29,12 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("CaseInsensitiveAttributeReferences", Once,
       (if (caseSensitive) Nil else LowercaseAttributeReferences :: Nil) : _*),
     Batch("Resolution", fixedPoint,
-      ResolveReferences,
-      ResolveRelations,
-      StarExpansion,
-      ResolveFunctions,
-      GlobalAggregates,
-      StringToIntegralCasts,
-      BooleanCasts,
-      WidenTypes,
-      PromoteStrings,
-      ConvertNaNs,
-      BooleanComparisons,
-      FunctionArgumentConversion,
-      PropagateTypes)
+      ResolveReferences ::
+      ResolveRelations ::
+      StarExpansion ::
+      ResolveFunctions ::
+      GlobalAggregates ::
+      typeCoercionRules :_*)
   )
 
   /**
