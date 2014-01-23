@@ -372,6 +372,37 @@ class SparkContext(object):
         return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
             storageLevel.deserialized, storageLevel.replication)
 
+    def setJobGroup(self, groupId, description):
+        """
+        Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+        different value or cleared.
+
+        Often, a unit of execution in an application consists of multiple Spark actions or jobs.
+        Application programmers can use this method to group all those jobs together and give a
+        group description. Once set, the Spark web UI will associate such jobs with this group.
+        """
+        self._jsc.setJobGroup(groupId, description)
+
+    def setLocalProperty(self, key, value):
+        """
+        Set a local property that affects jobs submitted from this thread, such as the
+        Spark fair scheduler pool.
+        """
+        self._jsc.setLocalProperty(key, value)
+
+    def getLocalProperty(self, key):
+        """
+        Get a local property set in this thread, or null if it is missing. See
+        L{setLocalProperty}
+        """
+        return self._jsc.getLocalProperty(key)
+
+    def sparkUser(self):
+        """
+        Get SPARK_USER for user who is running SparkContext.
+        """
+        return self._jsc.sc().sparkUser()
+
 def _test():
     import atexit
     import doctest
