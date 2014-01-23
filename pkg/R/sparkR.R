@@ -5,8 +5,8 @@ assemblyJarName <- "sparkr-assembly-0.1.jar"
 sparkR.onLoad <- function(libname, pkgname) {
   assemblyJarPath <- paste(libname, "/SparkR/", assemblyJarName, sep="")
   packageStartupMessage("[SparkR] Initializing with classpath ", assemblyJarPath, "\n")
-  .sparkREnv[["libname"]] <- libname
-  .sparkREnv[["assemblyJarPath"]] <- assemblyJarPath
+  .sparkREnv$libname <- libname
+  .sparkREnv$assemblyJarPath <- assemblyJarPath
   .jinit(classpath=assemblyJarPath)
 }
 
@@ -41,7 +41,7 @@ sparkR.init <- function(
     ".sparkRjsc",
      .jnew("org/apache/spark/api/java/JavaSparkContext", master, appName,
            as.character(sparkHome),
-           as.character(.sparkREnv[["assemblyJarPath"]])),
+           as.character(.sparkREnv$assemblyJarPath)),
      envir=.sparkREnv
   )
 

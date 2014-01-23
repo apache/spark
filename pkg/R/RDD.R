@@ -283,7 +283,7 @@ setMethod("lapplyPartitionsWithIndex",
             serializedFunc <- serialize("computeFunc",
                                         connection = NULL, ascii = TRUE)
             serializedFuncArr <- .jarray(serializedFunc)
-            packageNamesArr <- .jarray(serialize(.sparkREnv[[".packages"]],
+            packageNamesArr <- .jarray(serialize(.sparkREnv$.packages,
                                                  connection = NULL,
                                                  ascii = TRUE))
             refs <- lapply(ls(.broadcastNames), function(name) {
@@ -300,7 +300,7 @@ setMethod("lapplyPartitionsWithIndex",
                            X@serialized,
                            depsBinArr,
                            packageNamesArr,
-                           as.character(.sparkREnv[["libname"]]),
+                           as.character(.sparkREnv$libname),
                            broadcastArr,
                            X@jrdd$classTag())
             jrdd <- rddRef$asJavaRDD()
@@ -591,7 +591,7 @@ setMethod("partitionBy",
                                             ascii = TRUE)
             serializedHashFuncBytes <- .jarray(serializedHashFunc)
 
-            packageNamesArr <- .jarray(serialize(.sparkREnv[[".packages"]],
+            packageNamesArr <- .jarray(serialize(.sparkREnv$.packages,
                                                  connection = NULL,
                                                  ascii = TRUE))
             refs <- lapply(ls(.broadcastNames), function(name) {
@@ -610,7 +610,7 @@ setMethod("partitionBy",
                                 rdd@serialized,
                                 depsBinArr,
                                 packageNamesArr,
-                                as.character(.sparkREnv[["libname"]]),
+                                as.character(.sparkREnv$libname),
                                 broadcastArr,
                                 rdd@jrdd$classTag())
 
