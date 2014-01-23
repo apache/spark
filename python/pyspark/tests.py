@@ -159,6 +159,15 @@ class TestRDDFunctions(PySparkTestCase):
         cart = rdd1.cartesian(rdd2)
         result = cart.map(lambda (x, y): x + y).collect()
 
+    def test_cartesian_on_textfile(self):
+        # Regression test for
+        path = os.path.join(SPARK_HOME, "python/test_support/hello.txt")
+        a = self.sc.textFile(path)
+        result = a.cartesian(a).collect()
+        (x, y) = result[0]
+        self.assertEqual("Hello World!", x.strip())
+        self.assertEqual("Hello World!", y.strip())
+
 
 class TestIO(PySparkTestCase):
 
