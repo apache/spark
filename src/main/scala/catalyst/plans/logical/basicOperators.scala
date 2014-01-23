@@ -17,6 +17,11 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   // TODO: These aren't really the same attributes as nullability etc might change.
   def output = left.output
+
+  override lazy val resolved =
+    childrenResolved &&
+    !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+
   def references = Set.empty
 }
 
@@ -68,7 +73,9 @@ case class Subquery(alias: String, child: LogicalPlan) extends UnaryNode {
   def references = Set.empty
 }
 
-case class Sample(percentage: Double, child: LogicalPlan) extends UnaryNode {
+case class Sample(fraction: Double, withReplacement: Boolean, seed: Int, child: LogicalPlan)
+    extends UnaryNode {
+
   def output = child.output
   def references = Set.empty
 }

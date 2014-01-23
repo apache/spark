@@ -2,6 +2,8 @@ catalyst
 ========
 Catalyst is a functional framework for optimizing relational query plans.
 
+[![Build Status](https://databricks.ci.cloudbees.com/buildStatus/icon?job=Catalyst-Master)](https://databricks.ci.cloudbees.com/job/Catalyst-Master/)
+
 More documentation can be found in the project's [scaladoc](http://databricks.github.io/catalyst/latest/api/#catalyst.package)
 
 Getting Started
@@ -73,7 +75,7 @@ Project {key#0,value#1}
  HiveTableScan {key#0,value#1}, (MetastoreRelation default, src, None)
 ```
 
-From the console you can even write rules that transform query plans.  For example, the above query has redundant project operators that aren't doing anything.  This redundancy can be eliminated using the `transform` function that is available on all [`TreeNode`](http://marmbrus.github.io/catalyst/latest/api/index.html#catalyst.trees.TreeNode) objects.
+From the console you can even write rules that transform query plans.  For example, the above query has redundant project operators that aren't doing anything.  This redundancy can be eliminated using the `transform` function that is available on all [`TreeNode`](http://databricks.github.io/catalyst/latest/api/#catalyst.trees.TreeNode) objects.
 ```scala
 scala> query.optimizedPlan
 res1: catalyst.plans.logical.LogicalPlan = 

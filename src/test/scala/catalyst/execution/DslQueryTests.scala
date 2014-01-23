@@ -84,7 +84,7 @@ class DslQueryTests extends FunSuite with BeforeAndAfterAll {
   }
 
   test("random sample") {
-    testData.where(Rand > 0.5).orderBy(Rand.asc).toRdd.collect()
+    testData.sample(0.5).toRdd.collect()
   }
 
   test("sorting") {

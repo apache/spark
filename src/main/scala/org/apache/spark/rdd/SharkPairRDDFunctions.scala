@@ -55,7 +55,7 @@ class SharkPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
     val aggregator = new Aggregator[K, V, ArrayBuffer[V]](createCombiner _, mergeValue _, null)
     val bufs = self.mapPartitionsWithContext((context, iter) => {
-      new InterruptibleIterator(context, aggregator.combineValuesByKey(iter))
+      new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
     }, preservesPartitioning = true)
     bufs.asInstanceOf[RDD[(K, Seq[V])]]
   }
