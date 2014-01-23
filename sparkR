@@ -13,7 +13,7 @@ if [ $# -gt 0 ]; then
 cat > /tmp/sparkR.profile << EOF
 .First <- function() {
   projecHome <- Sys.getenv("PROJECT_HOME")
-  .libPaths(c( .libPaths(), paste(projecHome,"/lib", sep="")))
+  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
   Sys.setenv(NOAWT=1)
 }
 EOF
@@ -26,7 +26,7 @@ cat > /tmp/sparkR.profile << EOF
 .First <- function() {
   projecHome <- Sys.getenv("PROJECT_HOME")
   Sys.setenv(NOAWT=1)
-  .libPaths(c( .libPaths(), paste(projecHome,"/lib", sep="")))
+  .libPaths(c(paste(projecHome,"/lib", sep=""), .libPaths()))
   require(SparkR)
   sc <- sparkR.init(Sys.getenv("MASTER", unset = "local"))
   assign("sc", sc, envir=.GlobalEnv)
