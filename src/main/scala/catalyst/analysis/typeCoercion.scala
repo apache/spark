@@ -157,6 +157,9 @@ object BooleanComparisons extends Rule[LogicalPlan] {
  */
 object BooleanCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    // Skip nodes who's children have not been resolved yet.
+    case e if !e.childrenResolved => e
+
     case Cast(e, BooleanType) => Not(Equals(e, Literal(0)))
     case Cast(e, dataType) if e.dataType == BooleanType =>
       Cast(If(e, Literal(1), Literal(0)), dataType)
@@ -170,6 +173,9 @@ object BooleanCasts extends Rule[LogicalPlan] {
  */
 object StringToIntegralCasts extends Rule[LogicalPlan] {
   def apply(plan: LogicalPlan): LogicalPlan = plan transformAllExpressions {
+    // Skip nodes who's children have not been resolved yet.
+    case e if !e.childrenResolved => e
+
     case Cast(e @ StringType(), t: IntegralType) =>
       Cast(Cast(e, DecimalType), t)
   }
