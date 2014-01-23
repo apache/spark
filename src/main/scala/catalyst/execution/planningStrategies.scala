@@ -41,29 +41,6 @@ trait PlanningStrategies {
     }
   }
 
-  /**
-   * Aggregate functions that use sparks accumulator functionality.
-   */
-  object SparkAggregates extends Strategy {
-    val allowedAggregates = Set[Class[_]](
-      classOf[Count],
-      classOf[Average])
-
-    /**
-     * Returns true if `exprs` only contains aggregates that can be computed using Accumulators.
-     */
-    def onlyAllowedAggregates(exprs: Seq[Expression]): Boolean = {
-      val aggs = exprs.flatMap(_.collect { case a: AggregateExpression => a}).map(_.getClass)
-      aggs.map(allowedAggregates contains _).reduceLeft(_ && _)
-    }
-
-    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
-      case logical.Aggregate(Nil, agg, child) if onlyAllowedAggregates(agg) =>
-        execution.SparkAggregate(agg, planLater(child))(sc) :: Nil
-      case _ => Nil
-    }
-  }
-
   object SparkEquiInnerJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case FilteredOperation(predicates, logical.Join(left, right, Inner, condition)) =>
@@ -144,7 +121,7 @@ trait PlanningStrategies {
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
-        execution.Aggregate(group, agg, planLater(child)) :: Nil
+        execution.Aggregate(group, agg, planLater(child))(sc) :: Nil
       case logical.LocalRelation(output, data) =>
         execution.LocalRelation(output, data.map(_.productIterator.toVector))(sc) :: Nil
       case logical.StopAfter(limit, child) =>

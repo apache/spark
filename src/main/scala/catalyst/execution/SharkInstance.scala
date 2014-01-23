@@ -73,7 +73,6 @@ abstract class SharkInstance extends Logging {
     val sc = self.sc
     val strategies =
       SparkEquiInnerJoin ::
-      SparkAggregates ::
       HiveTableScans ::
       DataSinks ::
       BasicOperators ::
