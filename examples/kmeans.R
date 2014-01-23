@@ -11,7 +11,7 @@ parseVector <- function(line) {
 
 closestPoint <- function(p, centers) {
   bestIndex <- 0
-  closest <- .Machine[["double.xmax"]]
+  closest <- .Machine$double.xmax
   for (i in 1:length(centers)) {
     tempDist <- sum((p - centers[[i]]) ** 2)
     if (tempDist < closest) {
