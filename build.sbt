@@ -12,7 +12,10 @@ scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
 
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
-libraryDependencies += "org.apache.spark" %% "spark-core" % "0.9.0-incubating-SNAPSHOT"
+// TODO: Remove when Spark 0.9.0 is released for real.
+resolvers += "SparkStaging" at "https://repository.apache.org/content/repositories/orgapachespark-1005/"
+
+libraryDependencies += "org.apache.spark" %% "spark-core" % "0.9.0-incubating"
 
 libraryDependencies += "catalyst" % "hive-golden" % "4" % "test" from "http://repository-databricks.forge.cloudbees.com/snapshot/catalystGolden4.jar"
 
