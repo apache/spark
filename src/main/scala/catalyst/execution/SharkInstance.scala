@@ -69,7 +69,7 @@ abstract class SharkInstance extends Logging {
     results
   }
 
-  object TrivalPlanner extends QueryPlanner[SharkPlan] with PlanningStrategies {
+  object TrivialPlanner extends QueryPlanner[SharkPlan] with PlanningStrategies {
     val sc = self.sc
     val strategies =
       SparkEquiInnerJoin ::
@@ -101,7 +101,7 @@ abstract class SharkInstance extends Logging {
     lazy val analyzed = analyze(parsed)
     lazy val optimizedPlan = Optimize(catalog.CreateTables(analyzed))
     // TODO: Don't just pick the first one...
-    lazy val sharkPlan = TrivalPlanner(optimizedPlan).next()
+    lazy val sharkPlan = TrivialPlanner(optimizedPlan).next()
     lazy val executedPlan: SharkPlan = PrepareForExecution(sharkPlan)
 
     lazy val toRdd = executedPlan.execute()
