@@ -18,7 +18,7 @@ object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true
  * a [[FunctionRegistry]].
  */
 class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Boolean)
-  extends RuleExecutor[LogicalPlan] {
+  extends RuleExecutor[LogicalPlan] with HiveTypeCoercion {
 
   // TODO: pass this in as a parameter.
   val fixedPoint = FixedPoint(100)
@@ -29,21 +29,12 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("CaseInsensitiveAttributeReferences", Once,
       (if (caseSensitive) Nil else LowercaseAttributeReferences :: Nil) : _*),
     Batch("Resolution", fixedPoint,
-      ResolveReferences,
-      ResolveRelations,
-      StarExpansion,
-      ResolveFunctions),
-    Batch("Aggregation", Once,
-      GlobalAggregates),
-    Batch("Type Coersion", fixedPoint,
-      StringToIntegralCasts,
-      BooleanCasts,
-      PromoteNumericTypes,
-      PromoteStrings,
-      ConvertNaNs,
-      BooleanComparisons,
-      FunctionArgumentConversion,
-      PropagateTypes)
+      ResolveReferences ::
+      ResolveRelations ::
+      StarExpansion ::
+      ResolveFunctions ::
+      GlobalAggregates ::
+      typeCoercionRules :_*)
   )
 
   /**
@@ -76,7 +67,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
-      case q: LogicalPlan if childIsFullyResolved(q) =>
+      case q: LogicalPlan if q.childrenResolved =>
         logger.trace(s"Attempting to resolve ${q.simpleString}")
         q transformExpressions {
           case u @ UnresolvedAttribute(name) =>
@@ -125,7 +116,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   object StarExpansion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       // Wait until children are resolved
-      case p: LogicalPlan if !childIsFullyResolved(p) => p
+      case p: LogicalPlan if !p.childrenResolved => p
       // If the projection list contains Stars, expand it.
       case p @ Project(projectList, child) if containsStar(projectList) =>
         Project(
@@ -150,10 +141,4 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     protected def containsStar(exprs: Seq[NamedExpression]): Boolean =
       exprs.collect { case _: Star => true }.nonEmpty
   }
-
-  /**
-   * Returns true if all the inputs to the given LogicalPlan node are resolved and non-empty.
-   */
-  protected def childIsFullyResolved(plan: LogicalPlan): Boolean =
-    (!plan.inputSet.isEmpty) && plan.inputSet.map(_.resolved).reduceLeft(_ && _)
 }

@@ -527,6 +527,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "union19",
     "union2",
     "union20",
+    "union23",
     "union27",
     "union28",
     "union29",
