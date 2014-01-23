@@ -6,11 +6,12 @@ import expressions._
 import types._
 
 /**
- * Specifies how tuples that share common expressions will be distributed.  Distribution can
- * be used to refer to two distinct physical properties:
+ * Specifies how tuples that share common expressions will be distributed when a query is executed
+ * in parallel on many machines.  Distribution can be used to refer to two distinct physical
+ * properties:
  *  - Inter-node partitioning of data: In this case the distribution describes how tuples are
  *    partitioned across physical machines in a cluster.  Knowing this property allows some
- *    operators (e.g., [[Aggregate]]) to perform partition local operations instead of global ones.
+ *    operators (e.g., Aggregate) to perform partition local operations instead of global ones.
  *  - Intra-partition ordering of data: In this case the distribution describes guarantees made
  *    about how tuples are distributed within a single partition.
  */
@@ -28,17 +29,18 @@ case object UnknownDistribution extends Distribution
 case object AllTuples extends Distribution
 
 /**
- * Represents data where tuples that share the same values for the `clustering` [[Expression]]s will
- * be co-located. Based on the context, this can mean such tuples are either co-located in the same
- * partition or they will be contiguous within a single partition.
+ * Represents data where tuples that share the same values for the `clustering`
+ * [[catalyst.expressions.Expression Expressions]] will be co-located. Based on the context, this
+ * can mean such tuples are either co-located in the same partition or they will be contiguous
+ * within a single partition.
  */
 case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution
 
 /**
- * Represents data where tuples have been ordered according to the `ordering` [[Expression]]s.  This
- * is a strictly stronger guarantee than [[ClusteredDistribution]] as an ordering will ensure that
- * tuples that share the same value for the ordering expressions are contiguous and will never be
- * split across partitions.
+ * Represents data where tuples have been ordered according to the `ordering`
+ * [[catalyst.expressions.Expression Expressions]].  This is a strictly stronger guarantee than
+ * [[ClusteredDistribution]] as an ordering will ensure that tuples that share the same value for
+ * the ordering expressions are contiguous and will never be split across partitions.
  */
 case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   def clustering = ordering.map(_.child).toSet
