@@ -10,7 +10,7 @@ import org.apache.spark.SparkContext._
 case class Aggregate(
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
-    child: SharkPlan)
+    child: SharkPlan)(@transient sc: SharkContext)
   extends UnaryNode {
 
   case class AverageFunction(expr: Expression, base: AggregateExpression)
@@ -83,42 +83,45 @@ case class Aggregate(
     }
   }
 
+  override def otherCopyArgs = sc :: Nil
   def output = aggregateExpressions.map(_.toAttribute)
+
+  def createAggregateImplementations() = aggregateExpressions.map { agg =>
+    val impl = agg transform {
+      case base @ Average(expr) => new AverageFunction(expr, base)
+      case base @ Sum(expr) => new SumFunction(expr, base)
+      case base @ Count(expr) => new CountFunction(expr, base)
+      case base @ CountDistinct(expr) => new CountDistinctFunction(expr, base)
+      case base @ First(expr) => new FirstFunction(expr, base)
+    }
+
+    val remainingAttributes = impl.collect { case a: Attribute => a }
+    // If any references exist that are not inside agg functions then the must be grouping exprs
+    // in this case we must rebind them to the grouping tuple.
+    if (remainingAttributes.nonEmpty) {
+      val unaliasedAggregateExpr = agg transform { case Alias(c, _) => c }
+
+      // An exact match with a grouping expression
+      val exactGroupingExpr = groupingExpressions.indexOf(unaliasedAggregateExpr) match {
+        case -1 => None
+        case ordinal => Some(BoundReference(0, ordinal, Alias(impl, "AGGEXPR")().toAttribute))
+      }
+
+      exactGroupingExpr.getOrElse(
+        sys.error(s"$agg is not in grouping expressions: $groupingExpressions"))
+    } else {
+      impl
+    }
+  }
 
   def execute() = attachTree(this, "execute") {
     val grouped = child.execute().map { row =>
       (buildRow(groupingExpressions.map(Evaluate(_, Vector(row)))), row)
     }.groupByKey()
 
-    grouped.map { case (group, rows) =>
+    val result = grouped.map { case (group, rows) =>
       // Replace all aggregate expressions with spark functions that will compute the result.
-      val aggImplementations = aggregateExpressions.map { agg =>
-        val impl = agg transform {
-          case base @ Average(expr) => new AverageFunction(expr, base)
-          case base @ Sum(expr) => new SumFunction(expr, base)
-          case base @ Count(expr) => new CountFunction(expr, base)
-          case base @ CountDistinct(expr) => new CountDistinctFunction(expr, base)
-          case base @ First(expr) => new FirstFunction(expr, base)
-        }
-
-        val remainingAttributes = impl.collect { case a: Attribute => a }
-        // If any references exist that are not inside agg functions then the must be grouping exprs
-        // in this case we must rebind them to the grouping tuple.
-        if (remainingAttributes.nonEmpty) {
-          val unaliasedAggregateExpr = agg transform { case Alias(c, _) => c }
-
-          // An exact match with a grouping expression
-          val exactGroupingExpr = groupingExpressions.indexOf(unaliasedAggregateExpr) match {
-            case -1 => None
-            case ordinal => Some(BoundReference(0, ordinal, Alias(impl, "AGGEXPR")().toAttribute))
-          }
-
-          exactGroupingExpr.getOrElse(
-            sys.error(s"$agg is not in grouping expressions: $groupingExpressions"))
-        } else {
-          impl
-        }
-      }
+      val aggImplementations = createAggregateImplementations()
 
       // Pull out all the functions so we can feed each row into them.
       val aggFunctions = aggImplementations.flatMap(_ collect { case f: AggregateFunction => f })
@@ -129,6 +132,15 @@ case class Aggregate(
         aggFunctions.foreach(_.apply(input))
       }
       buildRow(aggImplementations.map(Evaluate(_, Vector(group))))
+    }
+
+    // TODO: THIS DOES NOT PRESERVE LINEAGE
+    if(groupingExpressions.isEmpty && result.count == 0) {
+      // When there there is no output to the Aggregate operator, we still output an empty row.
+      val aggImplementations = createAggregateImplementations()
+      sc.makeRDD(buildRow(aggImplementations.map(Evaluate(_, Nil))) :: Nil)
+    } else {
+      result
     }
   }
 }

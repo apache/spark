@@ -121,7 +121,7 @@ trait PlanningStrategies {
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
-        execution.Aggregate(group, agg, planLater(child)) :: Nil
+        execution.Aggregate(group, agg, planLater(child))(sc) :: Nil
       case logical.LocalRelation(output, data) =>
         execution.LocalRelation(output, data.map(_.productIterator.toVector))(sc) :: Nil
       case logical.StopAfter(limit, child) =>
