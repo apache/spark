@@ -91,7 +91,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
     val newArgs = productIterator.map {
       case arg: TreeNode[_] if (children contains arg) =>
         val newChild = f(arg.asInstanceOf[BaseType])
-        if(newChild fastEquals arg)
+        if (newChild fastEquals arg)
           arg
         else {
           changed = true
@@ -100,7 +100,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       case nonChild: AnyRef => nonChild
       case null => null
     }.toArray
-    if(changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs) else this
   }
 
   /**
@@ -116,7 +116,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       case arg: TreeNode[_] if (children contains arg) =>
         val newChild = remainingNewChildren.remove(0)
         val oldChild = remainingOldChildren.remove(0)
-        if(newChild fastEquals oldChild)
+        if (newChild fastEquals oldChild)
           oldChild
         else {
           changed = true
@@ -126,7 +126,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       case null => null
     }.toArray
 
-    if(changed) makeCopy(newArgs) else this
+    if (changed) makeCopy(newArgs) else this
   }
 
   /**
