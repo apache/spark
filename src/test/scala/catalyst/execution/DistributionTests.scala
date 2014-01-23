@@ -1,78 +1,79 @@
-package catalyst.execution
-
-import catalyst.dsl._
+package catalyst
+package plans
+package physical
 
 import org.scalatest.FunSuite
 
+import catalyst.dsl._
+
 class DistributionTests extends FunSuite {
-  /*
 
   protected def checkSatisfied(
-      inputDistribution: Distribution,
+      inputPartitioning: Partitioning,
       requiredDistribution: Distribution,
       satisfied: Boolean) {
-    if(inputDistribution.satisfies(requiredDistribution) != satisfied)
+    if(inputPartitioning.satisfies(requiredDistribution) != satisfied)
       fail(
         s"""
         |== Input Distribution ==
-        |$inputDistribution
+        |$inputPartitioning
         |== Required Distribution ==
         |$requiredDistribution
         |== Does input distribution satisfy requirements? ==
-        |Expected $satisfied got ${inputDistribution.satisfies(requiredDistribution)}
+        |Expected $satisfied got ${inputPartitioning.satisfies(requiredDistribution)}
         """.stripMargin)
   }
 
   test("needExchange test: ClusteredDistribution is the output DataProperty") {
     // Cases which do not need an exchange between two data properties.
     checkSatisfied(
-      ClusteredDistribution(Seq('a, 'b, 'c)),
+      HashPartitioning(Seq('a, 'b, 'c), 10),
       UnknownDistribution,
       true)
 
     checkSatisfied(
-      ClusteredDistribution(Seq('a, 'b, 'c)),
-      ClusteredDistribution(Seq('a, 'b, 'c)),
-      true)
-
-    checkSatisfied(
-      ClusteredDistribution(Seq('b, 'c)),
+      HashPartitioning(Seq('a, 'b, 'c), 10),
       ClusteredDistribution(Seq('a, 'b, 'c)),
       true)
 
     checkSatisfied(
-      ClusteredDistribution(Nil),
+      HashPartitioning(Seq('b, 'c), 10),
       ClusteredDistribution(Seq('a, 'b, 'c)),
       true)
 
     checkSatisfied(
-      ClusteredDistribution(Nil),
+      Unpartitioned,
+      ClusteredDistribution(Seq('a, 'b, 'c)),
+      true)
+
+    checkSatisfied(
+      Unpartitioned,
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       true)
 
     // Cases which need an exchange between two data properties.
     checkSatisfied(
-      ClusteredDistribution(Seq('a, 'b, 'c)),
+      HashPartitioning(Seq('a, 'b, 'c), 10),
       ClusteredDistribution(Seq('b, 'c)),
       false)
 
     checkSatisfied(
-      ClusteredDistribution(Seq('a, 'b, 'c)),
+      HashPartitioning(Seq('a, 'b, 'c), 10),
       ClusteredDistribution(Seq('d, 'e)),
       false)
 
     checkSatisfied(
-      ClusteredDistribution(Seq('a, 'b, 'c)),
-      ClusteredDistribution(Nil),
+      HashPartitioning(Seq('a, 'b, 'c), 10),
+      AllTuples,
       false)
 
     checkSatisfied(
-      ClusteredDistribution(Seq('a, 'b, 'c)),
+      HashPartitioning(Seq('a, 'b, 'c), 10),
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       false)
 
     checkSatisfied(
-      ClusteredDistribution(Seq('b, 'c)),
+      HashPartitioning(Seq('b, 'c), 10),
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       false)
 
@@ -88,37 +89,37 @@ class DistributionTests extends FunSuite {
   test("needExchange test: OrderedDistribution is the output DataProperty") {
     // Cases which do not need an exchange between two data properties.
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       UnknownDistribution,
       true)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       true)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       OrderedDistribution(Seq('a.asc, 'b.asc)),
       true)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc, 'd.desc)),
       true)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       ClusteredDistribution(Seq('a, 'b, 'c)),
       true)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       ClusteredDistribution(Seq('c, 'b, 'a)),
       true)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       ClusteredDistribution(Seq('b, 'c, 'a, 'd)),
       true)
 
@@ -128,30 +129,28 @@ class DistributionTests extends FunSuite {
     // should tradeoff the benefit of a less number of Exchange operators
     // and the parallelism.
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       OrderedDistribution(Seq('a.asc, 'b.desc, 'c.asc)),
       false)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       OrderedDistribution(Seq('b.asc, 'a.asc)),
       false)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       ClusteredDistribution(Seq('a, 'b)),
       false)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       ClusteredDistribution(Seq('c, 'd)),
       false)
 
     checkSatisfied(
-      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
       ClusteredDistribution(Nil),
       false)
   }
-
-  */
 }

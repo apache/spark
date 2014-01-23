@@ -13,13 +13,6 @@ import types._
  *    operators (e.g., [[Aggregate]]) to perform partition local operations instead of global ones.
  *  - Intra-partition ordering of data: In this case the distribution describes guarantees made
  *    about how tuples are distributed within a single partition.
- *
- *  TOOD(marmbrus): Given the way that Spark does partitioning, I think the order of the grouping
- *                  actually does matter, and thus our subset checking is probably not sufficient
- *                  to ensure correct colocation for joins.?
- *  TODO(marmbrus): Similarly I'm not sure that satisfies is a sufficient check to see if an sort
- *                  aggregation can be done.  Maybe we need two checks? Separate ordering from
- *                  partitioning?
  */
 sealed trait Distribution {
 }
@@ -54,6 +47,7 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
 sealed abstract trait Partitioning {
   self: Product =>
 
+  /** Returns the number of partitions that the data is split across */
   val width: Int
 
   /**
