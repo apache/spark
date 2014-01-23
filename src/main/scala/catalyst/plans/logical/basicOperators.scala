@@ -17,6 +17,11 @@ case class Filter(condition: Expression, child: LogicalPlan) extends UnaryNode {
 case class Union(left: LogicalPlan, right: LogicalPlan) extends BinaryNode {
   // TODO: These aren't really the same attributes as nullability etc might change.
   def output = left.output
+
+  override lazy val resolved =
+    childrenResolved &&
+    !left.output.zip(right.output).exists { case (l,r) => l.dataType != r.dataType }
+
   def references = Set.empty
 }
 
