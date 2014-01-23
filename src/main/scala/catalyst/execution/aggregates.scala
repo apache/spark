@@ -13,6 +13,7 @@ case class Aggregate(
     child: SharkPlan)(@transient sc: SharkContext)
   extends UnaryNode {
 
+  // TODO: Move these default functions back to expressions. Build framework for instantiating them.
   case class AverageFunction(expr: Expression, base: AggregateExpression)
     extends AggregateFunction {
 
@@ -91,6 +92,7 @@ case class Aggregate(
       case base @ Average(expr) => new AverageFunction(expr, base)
       case base @ Sum(expr) => new SumFunction(expr, base)
       case base @ Count(expr) => new CountFunction(expr, base)
+      // TODO: Create custom query plan node that calculates distinct values efficiently.
       case base @ CountDistinct(expr) => new CountDistinctFunction(expr, base)
       case base @ First(expr) => new FirstFunction(expr, base)
     }
@@ -134,7 +136,7 @@ case class Aggregate(
       buildRow(aggImplementations.map(Evaluate(_, Vector(group))))
     }
 
-    // TODO: THIS DOES NOT PRESERVE LINEAGE
+    // TODO: THIS DOES NOT PRESERVE LINEAGE AND BREAKS PIPELINING.
     if(groupingExpressions.isEmpty && result.count == 0) {
       // When there there is no output to the Aggregate operator, we still output an empty row.
       val aggImplementations = createAggregateImplementations()
