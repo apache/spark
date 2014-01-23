@@ -29,77 +29,15 @@ case class Exchange(newPartitioning: Partitioning, child: SharkPlan)
         shuffled.map(_._2)
 
       case RangePartitioning(sortingExpressions, width) =>
-        val directions = sortingExpressions.map(_.direction).toIndexedSeq
-        val dataTypes = sortingExpressions.map(_.dataType).toIndexedSeq
+        // TODO: ShuffledRDD should take an Ordering.
+        import scala.math.Ordering.Implicits._
+        implicit val ordering = new RowOrdering(sortingExpressions)
 
-        // TODO: MOVE THIS!
-        class SortKey(val keyValues: IndexedSeq[Any])
-          extends Ordered[SortKey]
-          with Serializable {
-          def compare(other: SortKey): Int = {
-            var i = 0
-            while (i < keyValues.size) {
-              val left = keyValues(i)
-              val right = other.keyValues(i)
-              val curDirection = directions(i)
-              val curDataType = dataTypes(i)
-
-              logger.debug(s"Comparing $left, $right as $curDataType order $curDirection")
-              // TODO: Use numeric here too?
-              val comparison =
-                if (left == null && right == null) {
-                  0
-                } else if (left == null) {
-                  if (curDirection == Ascending) -1 else 1
-                } else if (right == null) {
-                  if (curDirection == Ascending) 1 else -1
-                } else if (curDataType == IntegerType) {
-                  if (curDirection == Ascending) {
-                    left.asInstanceOf[Int] compare right.asInstanceOf[Int]
-                  } else {
-                    right.asInstanceOf[Int] compare left.asInstanceOf[Int]
-                  }
-                } else if (curDataType == DoubleType) {
-                  if (curDirection == Ascending) {
-                    left.asInstanceOf[Double] compare right.asInstanceOf[Double]
-                  } else {
-                    right.asInstanceOf[Double] compare left.asInstanceOf[Double]
-                  }
-                } else if (curDataType == LongType) {
-                  if (curDirection == Ascending) {
-                    left.asInstanceOf[Long] compare right.asInstanceOf[Long]
-                  } else {
-                    right.asInstanceOf[Long] compare left.asInstanceOf[Long]
-                  }
-                } else if (curDataType == StringType) {
-                  if (curDirection == Ascending) {
-                    left.asInstanceOf[String] compare right.asInstanceOf[String]
-                  } else {
-                    right.asInstanceOf[String] compare left.asInstanceOf[String]
-                  }
-                } else {
-                  sys.error(s"Comparison not yet implemented for: $curDataType")
-                }
-
-              if (comparison != 0) return comparison
-              i += 1
-            }
-            return 0
-          }
-        }
-
-        val rdd = child.execute().map { row =>
-          val input = Vector(row)
-          val sortKey = new SortKey(
-            sortingExpressions.map(s => Evaluate(s.child, input)).toIndexedSeq)
-
-          (sortKey, row)
-        }
+        val rdd = child.execute().map(r => (r,null))
         val part = new RangePartitioner(width, rdd, ascending = true)
-        val shuffled = new ShuffledRDD[SortKey, Row, (SortKey, Row)](rdd, part)
-
-        shuffled.map(_._2)
-      case _ => sys.error("Not implemented")
+        val shuffled = new ShuffledRDD[Row, Null, (Row, Null)](rdd, part)
+        shuffled.map(_._1)
+      case _ => sys.error(s"Exchange not implemented for $newPartitioning")
     }
   }
 }
