@@ -1,6 +1,8 @@
 package catalyst
 package expressions
 
+import types._
+
 /**
  * Represents one row of output from a relational operator.  Allows both generic access by ordinal,
  * which will incur boxing overhead for primitives, as well as native primitive access.
@@ -75,5 +77,31 @@ class GenericRow(input: Seq[Any]) extends Row {
   def getByte(i: Int): Byte = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive byte value.")
     values(i).asInstanceOf[Byte]
+  }
+}
+
+class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
+  def compare(a: Row, b: Row): Int = {
+    ordering.foreach { order =>
+      val left = Evaluate(order.child, Vector(a))
+      val right = Evaluate(order.child, Vector(b))
+
+      if (left == null && right == null) {
+        // Both null, continue looking.
+      } else if (left == null) {
+        return if (order.direction == Ascending) -1 else 1
+      } else if (right == null) {
+        return if (order.direction == Ascending) 1 else -1
+      } else {
+        val comparison = order.dataType match {
+          case n: NativeType if order.direction == Ascending =>
+            n.ordering.asInstanceOf[Ordering[Any]].compare(left, right)
+          case n: NativeType if order.direction == Descending =>
+            n.ordering.asInstanceOf[Ordering[Any]].reverse.compare(left, right)
+        }
+        if (comparison != 0) return comparison
+      }
+    }
+    return 0
   }
 }

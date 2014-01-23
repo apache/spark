@@ -507,7 +507,7 @@ object HiveQl {
         case Token("TOK_TABLEBUCKETSAMPLE",
                Token(numerator, Nil) ::
                Token(denominator, Nil) :: Nil) =>
-          Sample(numerator.toDouble / denominator.toDouble, relation)
+          Sample(numerator.toDouble / denominator.toDouble, false, (math.random * 1000).toInt, relation)
       }.getOrElse(relation)
 
     case Token("TOK_UNIQUEJOIN", joinArgs) =>
