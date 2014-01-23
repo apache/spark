@@ -3,15 +3,15 @@ package execution
 
 import org.apache.spark.rdd.RDD
 
-import plans.QueryPlan
-import plans.physical._
+import catalyst.plans.QueryPlan
+import catalyst.plans.physical._
 
 abstract class SharkPlan extends QueryPlan[SharkPlan] with Logging {
   self: Product =>
 
   // TODO: Move to `DistributedPlan`
   /** Specifies how data is partitioned across different nodes in the cluster. */
-  def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG!
+  def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
   /** Specifies any partition requirements on the input data for this operator. */
   def requiredChildDistribution: Seq[Distribution] = Seq.fill(children.size)(UnknownDistribution)
 

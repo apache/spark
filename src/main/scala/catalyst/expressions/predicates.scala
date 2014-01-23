@@ -83,15 +83,18 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
   def nullable = false
 }
 
-case class If(predicate: Expression, trueValue: Expression, falseValue: Expression) extends Expression {
+case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
+    extends Expression {
+
   def children = predicate :: trueValue :: falseValue :: Nil
-  def nullable = children.exists(_.nullable)
+  def nullable = trueValue.nullable || falseValue.nullable
   def references = children.flatMap(_.references).toSet
   override lazy val resolved = childrenResolved && trueValue.dataType == falseValue.dataType
   def dataType = {
-    if (!resolved)
+    if (!resolved) {
       throw new UnresolvedException(
-        this, s"datatype. Can not resolve due to differing types ${trueValue.dataType}, ${falseValue.dataType}")
+        this, s"Can not resolve due to differing types ${trueValue.dataType}, ${falseValue.dataType}")
+    }
     trueValue.dataType
   }
 }

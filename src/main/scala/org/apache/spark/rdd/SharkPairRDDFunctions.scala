@@ -1,12 +1,13 @@
 package org.apache.spark.rdd
 
+import scala.language.implicitConversions
+
 import scala.reflect._
-import org.apache.spark._
 import scala.collection.mutable.ArrayBuffer
+
+import org.apache.spark._
 import org.apache.spark.Aggregator
 import org.apache.spark.SparkContext._
-
-import scala.language.implicitConversions
 import org.apache.spark.util.collection.AppendOnlyMap
 
 /**
