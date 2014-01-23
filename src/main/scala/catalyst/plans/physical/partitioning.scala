@@ -15,8 +15,7 @@ import types._
  *  - Intra-partition ordering of data: In this case the distribution describes guarantees made
  *    about how tuples are distributed within a single partition.
  */
-sealed trait Distribution {
-}
+sealed trait Distribution
 
 /**
  * Represents a distribution where no promises are made about co-location of data.
@@ -46,9 +45,7 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
   def clustering = ordering.map(_.child).toSet
 }
 
-sealed abstract trait Partitioning {
-  self: Product =>
-
+sealed trait Partitioning {
   /** Returns the number of partitions that the data is split across */
   val width: Int
 
@@ -58,6 +55,11 @@ sealed abstract trait Partitioning {
    */
   def satisfies(required: Distribution): Boolean
 
+  /**
+   * Returns true iff all distribution guarantees made by this partitioning can also be made
+   * for the `other` specified partitioning.  For example, [[HashPartitioning]]s are only compatible
+   * if the `width` of the two partitionings is the same.
+   */
   def compatibleWith(other: Partitioning): Boolean
 }
 
@@ -92,7 +94,14 @@ case object Broadcast extends Partitioning {
   }
 }
 
-case class HashPartitioning(expressions: Seq[Expression], width: Int) extends Expression with Partitioning {
+/**
+ * Represents a partitioning where rows are split up across partitions based on based on the hash
+ * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
+ * in the same partition.
+ */
+case class HashPartitioning(expressions: Seq[Expression], width: Int)
+    extends Expression with Partitioning {
+
   def children = expressions.toSeq
   def references = expressions.flatMap(_.references).toSet
   def nullable = false
@@ -113,7 +122,18 @@ case class HashPartitioning(expressions: Seq[Expression], width: Int) extends Ex
   }
 }
 
-case class RangePartitioning(ordering: Seq[SortOrder], width: Int) extends Expression with Partitioning {
+/**
+ * Represents a partitioning where rows are split across partitions based on some total ordering of
+ * the expressions specified in `ordering`.  When data is partitioned in this manner the following
+ * two conditions are guaranteed to hold:
+ *  - All row where the expressions in `ordering` evaluate to the same values will be in the same
+ *    partition.
+ *  - Each partition will have a `min` and `max` row, relative to the given ordering.  All rows
+ *    that are in between `min` and `max` in this `ordering` will reside in this partition.
+ */
+case class RangePartitioning(ordering: Seq[SortOrder], width: Int)
+    extends Expression with Partitioning {
+
   def children = ordering.toSeq
   def references = ordering.flatMap(_.references).toSet
   def nullable = false

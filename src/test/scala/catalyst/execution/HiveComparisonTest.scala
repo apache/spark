@@ -8,7 +8,6 @@ import frontend.hive.{ExplainCommand, Command}
 import plans.physical._
 import util._
 
-
 /**
  * Allows the creations of tests that execute the same query against both hive
  * and catalyst, comparing the results.
