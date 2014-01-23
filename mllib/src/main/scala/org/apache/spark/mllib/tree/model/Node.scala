@@ -18,6 +18,7 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
+import org.apache.spark.mllib.tree.configuration.FeatureType._
 
 class Node ( val id : Int,
              val predict : Double,
@@ -49,10 +50,18 @@ class Node ( val id : Int,
     if (isLeaf) {
       predict
     } else{
-      if (feature(split.get.feature) <= split.get.threshold) {
-        leftNode.get.predictIfLeaf(feature)
+      if (split.get.featureType == Continuous) {
+        if (feature(split.get.feature) <= split.get.threshold) {
+          leftNode.get.predictIfLeaf(feature)
+        } else {
+          rightNode.get.predictIfLeaf(feature)
+        }
       } else {
-        rightNode.get.predictIfLeaf(feature)
+        if (split.get.categories.contains(feature(split.get.feature))) {
+          leftNode.get.predictIfLeaf(feature)
+        } else {
+          rightNode.get.predictIfLeaf(feature)
+        }
       }
     }
   }

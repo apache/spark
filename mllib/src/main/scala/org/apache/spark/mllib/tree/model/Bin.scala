@@ -18,6 +18,6 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 
-case class Bin(lowSplit : Split, highSplit : Split, featureType : FeatureType) {
+case class Bin(lowSplit : Split, highSplit : Split, featureType : FeatureType, category : Double) {
 
 }

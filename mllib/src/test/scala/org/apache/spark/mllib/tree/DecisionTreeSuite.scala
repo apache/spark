@@ -31,6 +31,7 @@ import org.apache.spark.mllib.tree.impurity.{Entropy, Gini}
 import org.apache.spark.mllib.tree.model.Filter
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.Algo._
+import scala.collection.mutable
 
 class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
 
@@ -50,7 +51,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification,Gini,3,100)
-    val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
     assert(splits.length==2)
     assert(bins.length==2)
     assert(splits(0).length==99)
@@ -58,12 +59,58 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     //println(splits(1)(98))
   }
 
+  test("split and bin calculation for categorical variables"){
+    val arr = DecisionTreeSuite.generateCategoricalDataPoints()
+    assert(arr.length == 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(Classification,Gini,3,100,categoricalFeaturesInfo = Map(0 -> 2, 1-> 2))
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
+    assert(splits.length==2)
+    assert(bins.length==2)
+    assert(splits(0).length==99)
+    assert(bins(0).length==100)
+    println(splits(0)(0))
+    println(splits(0)(1))
+    println(bins(0)(0))
+    println(splits(1)(0))
+    println(splits(1)(1))
+    println(bins(1)(0))
+  }
+
+  test("split and bin calculations for categorical variables with no sample for one category"){
+    val arr = DecisionTreeSuite.generateCategoricalDataPoints()
+    assert(arr.length == 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(Classification,Gini,3,100,categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
+    assert(splits.length==2)
+    assert(bins.length==2)
+    assert(splits(0).length==99)
+    assert(bins(0).length==100)
+    println(splits(0)(0))
+    println(splits(0)(1))
+    println(splits(0)(2))
+    println(bins(0)(0))
+    println(bins(0)(1))
+    println(bins(0)(2))
+    println(splits(1)(0))
+    println(splits(1)(1))
+    println(splits(1)(2))
+    println(bins(1)(0))
+    println(bins(1)(1))
+    println(bins(0)(2))
+    println(bins(0)(3))
+  }
+
+  //TODO: Test max feature value > num bins
+
+
   test("stump with fixed label 0 for Gini"){
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification,Gini,3,100)
-    val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
     assert(splits.length==2)
     assert(splits(0).length==99)
     assert(bins.length==2)
@@ -73,15 +120,13 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
 
     strategy.numBins = 100
     val bestSplits = DecisionTree.findBestSplits(rdd,new Array(7),strategy,0,Array[List[Filter]](),splits,bins)
-    println("here")
     assert(bestSplits.length == 1)
     assert(0==bestSplits(0)._1.feature)
     assert(10==bestSplits(0)._1.threshold)
     assert(0==bestSplits(0)._2.gain)
-    assert(10==bestSplits(0)._2.leftSamples)
     assert(0==bestSplits(0)._2.leftImpurity)
-    assert(990==bestSplits(0)._2.rightSamples)
     assert(0==bestSplits(0)._2.rightImpurity)
+    assert(0.01==bestSplits(0)._2.predict)
   }
 
   test("stump with fixed label 1 for Gini"){
@@ -89,7 +134,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification,Gini,3,100)
-    val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
     assert(splits.length==2)
     assert(splits(0).length==99)
     assert(bins.length==2)
@@ -103,10 +148,10 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(0==bestSplits(0)._1.feature)
     assert(10==bestSplits(0)._1.threshold)
     assert(0==bestSplits(0)._2.gain)
-    assert(10==bestSplits(0)._2.leftSamples)
     assert(0==bestSplits(0)._2.leftImpurity)
-    assert(990==bestSplits(0)._2.rightSamples)
     assert(0==bestSplits(0)._2.rightImpurity)
+    assert(0.01==bestSplits(0)._2.predict)
+
   }
 
 
@@ -115,7 +160,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification,Entropy,3,100)
-    val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
     assert(splits.length==2)
     assert(splits(0).length==99)
     assert(bins.length==2)
@@ -129,10 +174,9 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(0==bestSplits(0)._1.feature)
     assert(10==bestSplits(0)._1.threshold)
     assert(0==bestSplits(0)._2.gain)
-    assert(10==bestSplits(0)._2.leftSamples)
     assert(0==bestSplits(0)._2.leftImpurity)
-    assert(990==bestSplits(0)._2.rightSamples)
     assert(0==bestSplits(0)._2.rightImpurity)
+    assert(0.01==bestSplits(0)._2.predict)
   }
 
   test("stump with fixed label 1 for Entropy"){
@@ -140,7 +184,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
     val strategy = new Strategy(Classification,Entropy,3,100)
-    val (splits, bins) = DecisionTree.find_splits_bins(rdd,strategy)
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
     assert(splits.length==2)
     assert(splits(0).length==99)
     assert(bins.length==2)
@@ -154,10 +198,9 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(0==bestSplits(0)._1.feature)
     assert(10==bestSplits(0)._1.threshold)
     assert(0==bestSplits(0)._2.gain)
-    assert(10==bestSplits(0)._2.leftSamples)
     assert(0==bestSplits(0)._2.leftImpurity)
-    assert(990==bestSplits(0)._2.rightSamples)
     assert(0==bestSplits(0)._2.rightImpurity)
+    assert(0.01==bestSplits(0)._2.predict)
   }
 
 
@@ -180,6 +223,18 @@ object DecisionTreeSuite {
     for (i <- 0 until 1000){
       val lp = new LabeledPoint(1.0,Array(i.toDouble,999.0-i))
       arr(i) = lp
+    }
+    arr
+  }
+
+  def generateCategoricalDataPoints() : Array[LabeledPoint] = {
+    val arr = new Array[LabeledPoint](1000)
+    for (i <- 0 until 1000){
+      if (i < 600){
+        arr(i) = new LabeledPoint(1.0,Array(0.0,1.0))
+      } else {
+        arr(i) = new LabeledPoint(0.0,Array(1.0,0.0))
+      }
     }
     arr
   }
