@@ -41,29 +41,6 @@ trait PlanningStrategies {
     }
   }
 
-  /**
-   * Aggregate functions that use sparks accumulator functionality.
-   */
-  object SparkAggregates extends Strategy {
-    val allowedAggregates = Set[Class[_]](
-      classOf[Count],
-      classOf[Average])
-
-    /**
-     * Returns true if `exprs` only contains aggregates that can be computed using Accumulators.
-     */
-    def onlyAllowedAggregates(exprs: Seq[Expression]): Boolean = {
-      val aggs = exprs.flatMap(_.collect { case a: AggregateExpression => a}).map(_.getClass)
-      aggs.map(allowedAggregates contains _).reduceLeft(_ && _)
-    }
-
-    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
-      case logical.Aggregate(Nil, agg, child) if onlyAllowedAggregates(agg) =>
-        execution.SparkAggregate(agg, planLater(child))(sc) :: Nil
-      case _ => Nil
-    }
-  }
-
   object SparkEquiInnerJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case FilteredOperation(predicates, logical.Join(left, right, Inner, condition)) =>
