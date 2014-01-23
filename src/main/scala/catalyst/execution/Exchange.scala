@@ -42,6 +42,11 @@ case class Exchange(newPartitioning: Partitioning, child: SharkPlan)
   }
 }
 
+/**
+ * Ensures that the [[catalyst.plans.physical.Partitioning Partitioning]] of input data meets the
+ * [[catalyst.plans.physical.Distribution Distribution]] requirements for each operator by inserting
+ * [[Exchange]] Operators where required.
+ */
 object AddExchange extends Rule[SharkPlan] {
   // TODO: determine the number of partitions.
   val numPartitions = 8
@@ -50,10 +55,14 @@ object AddExchange extends Rule[SharkPlan] {
     case operator: SharkPlan =>
       def meetsRequirements =
         !operator.requiredChildDistribution.zip(operator.children).map {
-          case (required, child) => !child.outputPartitioning.satisfies(required)
+          case (required, child) =>
+            val valid = child.outputPartitioning.satisfies(required)
+            logger.debug(
+              s"${if (valid) "Valid" else "Invalid"} distribution, required: $required current: ${child.outputPartitioning}")
+            valid
         }.exists(_ == false)
 
-      // TODO ASUUMES TRANSITIVITY?
+      // TODO ASSUMES TRANSITIVITY?
       def compatible =
         !operator.children
           .map(_.outputPartitioning)
@@ -64,14 +73,14 @@ object AddExchange extends Rule[SharkPlan] {
           }.exists(_ == false)
 
 
-      if (false && meetsRequirements && compatible) {
+      if (meetsRequirements && compatible) {
         operator
       } else {
         val repartitionedChildren = operator.requiredChildDistribution.zip(operator.children).map {
           case (ClusteredDistribution(clustering), child) =>
-            Exchange(HashPartitioning(clustering, 8), child)
+            Exchange(HashPartitioning(clustering, numPartitions), child)
           case (OrderedDistribution(ordering), child) =>
-            Exchange(RangePartitioning(ordering, 8), child)
+            Exchange(RangePartitioning(ordering, numPartitions), child)
           case (UnknownDistribution, child) => child
           case (dist, _) => sys.error(s"Don't know how to ensure $dist")
         }
