@@ -491,4 +491,16 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)
     }
   }
+
+  test("sortByKey") {
+    val data = sc.parallelize(Seq("5|50|A","4|60|C", "6|40|B"))
+
+    val one   = Array("4|60|C", "5|50|A", "6|40|B")
+    val two   = Array("6|40|B", "5|50|A", "4|60|C")
+    val three = Array("5|50|A", "6|40|B", "4|60|C")
+
+    assert(data.sortBy(_.split("\\|")(0)).collect === one)
+    assert(data.sortBy(_.split("\\|")(1)).collect === two)
+    assert(data.sortBy(_.split("\\|")(2)).collect === three)
+  }
 }

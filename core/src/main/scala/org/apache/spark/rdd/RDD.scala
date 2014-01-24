@@ -372,6 +372,14 @@ abstract class RDD[T: ClassTag](
   def ++(other: RDD[T]): RDD[T] = this.union(other)
 
   /**
+   * Return this RDD sorted by the given key function.
+   */
+  def sortBy[K <% Ordered[K]: ClassTag](f: T => K): RDD[T] =
+    this.keyBy[K](f)
+        .sortByKey()
+        .values
+
+  /**
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
   def glom(): RDD[Array[T]] = new GlommedRDD(this)
