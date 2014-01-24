@@ -52,6 +52,8 @@ private[spark] class PythonRDD[T: ClassTag](
     val env = SparkEnv.get
     val worker = env.createPythonWorker(pythonExec, envVars.toMap)
 
+    @volatile var readerException: Exception = null
+
     // Start a thread to feed the process input from our parent's iterator
     new Thread("stdin writer for " + pythonExec) {
       override def run() {
@@ -82,6 +84,10 @@ private[spark] class PythonRDD[T: ClassTag](
           dataOut.flush()
           worker.shutdownOutput()
         } catch {
+          case e: java.io.FileNotFoundException =>
+            readerException = e
+            // Kill the Python worker process:
+            worker.shutdownOutput()
           case e: IOException =>
             // This can happen for legitimate reasons if the Python code stops returning data before we are done
             // passing elements through, e.g., for take(). Just log a message to say it happened.
@@ -106,6 +112,9 @@ private[spark] class PythonRDD[T: ClassTag](
       }
 
       private def read(): Array[Byte] = {
+        if (readerException != null) {
+          throw readerException
+        }
         try {
           stream.readInt() match {
             case length if length > 0 =>
