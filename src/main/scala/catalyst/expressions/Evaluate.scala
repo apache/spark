@@ -27,7 +27,7 @@ object Evaluate extends Logging {
         e.dataType match {
           case n: NumericType =>
             val castedFunction = f.asInstanceOf[(Numeric[n.JvmType], n.JvmType) => n.JvmType]
-            castedFunction(n.numeric, eval(e).asInstanceOf[n.JvmType])
+            castedFunction(n.numeric, evalE.asInstanceOf[n.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
     }
