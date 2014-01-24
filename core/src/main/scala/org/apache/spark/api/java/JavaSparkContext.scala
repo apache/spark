@@ -139,7 +139,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
-    * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
     * record, directly caching the returned RDD will create many references to the same object.
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
@@ -156,7 +156,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /** Get an RDD for a Hadoop SequenceFile.
     *
-    * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
     * record, directly caching the returned RDD will create many references to the same object.
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
@@ -197,7 +197,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -218,7 +218,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -236,7 +236,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat.
     *
-    * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
     * record, directly caching the returned RDD will create many references to the same object.
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
@@ -255,7 +255,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
     *
-    * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
     * record, directly caching the returned RDD will create many references to the same object.
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
@@ -276,7 +276,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -296,7 +296,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.

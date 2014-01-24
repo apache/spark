@@ -355,7 +355,7 @@ class SparkContext(
    * @param valueClass Class of the values
    * @param minSplits Minimum number of Hadoop Splits to generate.
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -374,7 +374,7 @@ class SparkContext(
 
   /** Get an RDD for a Hadoop file with an arbitrary InputFormat
     *
-    * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
     * record, directly caching the returned RDD will create many references to the same object.
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
@@ -407,7 +407,7 @@ class SparkContext(
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path, minSplits)
    * }}}
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -428,8 +428,9 @@ class SparkContext(
    * can just write, for example,
    * {{{
    * val file = sparkContext.hadoopFile[LongWritable, Text, TextInputFormat](path)
+   * }}}
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -453,7 +454,7 @@ class SparkContext(
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -474,7 +475,7 @@ class SparkContext(
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -489,12 +490,12 @@ class SparkContext(
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
-    * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
     * record, directly caching the returned RDD will create many references to the same object.
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
-    * */
-  def sequenceFile[K: ClassTag, V: ClassTag](path: String,
+    */
+  def sequenceFile[K, V](path: String,
       keyClass: Class[K],
       valueClass: Class[V],
       minSplits: Int
@@ -505,12 +506,12 @@ class SparkContext(
 
   /** Get an RDD for a Hadoop SequenceFile with given key and value types.
     *
-    * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
     * record, directly caching the returned RDD will create many references to the same object.
     * If you plan to directly cache Hadoop writable objects, you should first copy them using
     * a `map` function.
     * */
-  def sequenceFile[K: ClassTag, V: ClassTag](path: String, keyClass: Class[K], valueClass: Class[V]
+  def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]
       ): RDD[(K, V)] =
     sequenceFile(path, keyClass, valueClass, defaultMinSplits)
 
@@ -530,7 +531,7 @@ class SparkContext(
    * for the appropriate type. In addition, we pass the converter a ClassTag of its type to
    * allow it to figure out the Writable class to use in the subclass case.
    *
-   * Note: Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
    * record, directly caching the returned RDD will create many references to the same object.
    * If you plan to directly cache Hadoop writable objects, you should first copy them using
    * a `map` function.
@@ -1058,7 +1059,7 @@ object SparkContext {
   implicit def rddToAsyncRDDActions[T: ClassTag](rdd: RDD[T]) = new AsyncRDDActions(rdd)
 
   implicit def rddToSequenceFileRDDFunctions[K <% Writable: ClassTag, V <% Writable: ClassTag](
-      rdd: RDD[(K, V)]) =
+      rdd: RDD[(K, V)])   =
     new SequenceFileRDDFunctions(rdd)
 
   implicit def rddToOrderedRDDFunctions[K <% Ordered[K]: ClassTag, V: ClassTag](
