@@ -2,6 +2,38 @@ Spark Change Log
 
 Release 0.9.0-incubating
 
+  d0a105d Thu Jan 23 20:53:31 2014 -0800
+  Merge pull request #505 from JoshRosen/SPARK-1026
+  [Deprecate mapPartitionsWithSplit in PySpark (SPARK-1026)]
+
+  e66d4c2 Thu Jan 23 19:47:16 2014 -0800
+  Merge pull request #503 from pwendell/master
+  [Fix bug on read-side of external sort when using Snappy.]
+
+  e8d3f2b Thu Jan 23 19:20:22 2014 -0800
+  Merge pull request #502 from pwendell/clone-1
+  [Remove Hadoop object cloning and warn users making Hadoop RDD's.]
+
+  7a62353 Thu Jan 23 19:09:25 2014 -0800
+  Merge pull request #501 from JoshRosen/cartesian-rdd-fixes
+  [Fix two bugs in PySpark cartesian(): SPARK-978 and SPARK-1034]
+
+  51960b8 Wed Jan 22 19:37:50 2014 -0800
+  Merge pull request #496 from pwendell/master
+  [Fix bug in worker clean-up in UI]
+
+  828f7b4 Wed Jan 22 15:45:18 2014 -0800
+  Merge pull request #495 from srowen/GraphXCommonsMathDependency
+  [Fix graphx Commons Math dependency]
+
+  dc5857a Wed Jan 22 14:33:25 2014 -0800
+  Merge pull request #492 from skicavs/master
+  [fixed job name and usage information for the JavaSparkPi example]
+
+  dd533c9 Wed Jan 22 14:15:58 2014 -0800
+  Merge pull request #478 from sryza/sandy-spark-1033
+  [SPARK-1033. Ask for cores in Yarn container requests]
+
   b6fd3cd Tue Jan 21 00:12:01 2014 -0800
   Merge pull request #480 from pwendell/0.9-fixes
   [Handful of 0.9 fixes]
