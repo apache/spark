@@ -113,9 +113,7 @@ class NewHadoopRDD[K, V](
           throw new java.util.NoSuchElementException("End of stream")
         }
         havePair = false
-        val key = reader.getCurrentKey
-        val value = reader.getCurrentValue
-        (key, value)
+        (reader.getCurrentKey, reader.getCurrentValue)
       }
 
       private def close() {

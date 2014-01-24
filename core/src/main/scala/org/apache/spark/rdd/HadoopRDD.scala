@@ -19,10 +19,7 @@ package org.apache.spark.rdd
 
 import java.io.EOFException
 
-import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.{Configuration, Configurable}
-import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
