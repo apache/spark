@@ -331,7 +331,15 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   private class DiskMapIterator(file: File, blockId: BlockId) extends Iterator[(K, C)] {
     val fileStream = new FileInputStream(file)
     val bufferedStream = new FastBufferedInputStream(fileStream, fileBufferSize)
-    val compressedStream = blockManager.wrapForCompression(blockId, bufferedStream)
+
+    val shouldCompress = blockManager.shouldCompress(blockId)
+    val compressionCodec = new LZFCompressionCodec(sparkConf)
+    val compressedStream =
+      if (shouldCompress) {
+        compressionCodec.compressedInputStream(bufferedStream)
+      } else {
+        bufferedStream
+      }
     var deserializeStream = ser.deserializeStream(compressedStream)
     var objectsRead = 0
 
