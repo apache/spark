@@ -20,15 +20,11 @@ package org.apache.spark.rdd
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import scala.reflect.ClassTag
-
 import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.mapreduce._
 
 import org.apache.spark.{InterruptibleIterator, Logging, Partition, SerializableWritable, SparkContext, TaskContext}
-import org.apache.spark.util.Utils.cloneWritables
-
 
 private[spark]
 class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputSplit with Writable)
@@ -48,19 +44,13 @@ class NewHadoopPartition(rddId: Int, val index: Int, @transient rawSplit: InputS
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param conf The Hadoop configuration.
- * @param cloneRecords If true, Spark will clone the records produced by Hadoop RecordReader.
- *                     Most RecordReader implementations reuse wrapper objects across multiple
- *                     records, and can cause problems in RDD collect or aggregation operations.
- *                     By default the records are cloned in Spark. However, application
- *                     programmers can explicitly disable the cloning for better performance.
  */
-class NewHadoopRDD[K: ClassTag, V: ClassTag](
+class NewHadoopRDD[K, V](
     sc : SparkContext,
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    @transient conf: Configuration,
-    cloneRecords: Boolean)
+    @transient conf: Configuration)
   extends RDD[(K, V)](sc, Nil)
   with SparkHadoopMapReduceUtil
   with Logging {
@@ -107,8 +97,6 @@ class NewHadoopRDD[K: ClassTag, V: ClassTag](
 
       // Register an on-task-completion callback to close the input stream.
       context.addOnCompleteCallback(() => close())
-      val keyCloneFunc = cloneWritables[K](conf)
-      val valueCloneFunc = cloneWritables[V](conf)
       var havePair = false
       var finished = false
 
@@ -125,13 +113,7 @@ class NewHadoopRDD[K: ClassTag, V: ClassTag](
           throw new java.util.NoSuchElementException("End of stream")
         }
         havePair = false
-        val key = reader.getCurrentKey
-        val value = reader.getCurrentValue
-        if (cloneRecords) {
-          (keyCloneFunc(key.asInstanceOf[Writable]), valueCloneFunc(value.asInstanceOf[Writable]))
-        } else {
-          (key, value)
-        }
+        (reader.getCurrentKey, reader.getCurrentValue)
       }
 
       private def close() {
