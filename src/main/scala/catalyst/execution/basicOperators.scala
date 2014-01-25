@@ -31,12 +31,10 @@ case class Sample(fraction: Double, withReplacement: Boolean, seed: Int, child: 
   def execute() = child.execute().sample(withReplacement, fraction, seed)
 }
 
-case class Union(left: SharkPlan, right: SharkPlan)(@transient sc: SharkContext)
-  extends BinaryNode {
+case class Union(children: Seq[SharkPlan])(@transient sc: SharkContext) extends SharkPlan {
   // TODO: attributes output by union should be distinct for nullability purposes
-  def output = left.output
-  // TODO: is it more efficient to union a bunch of rdds at once? should union be variadic?
-  def execute() = sc.union(left.execute(), right.execute())
+  def output = children.head.output
+  def execute() = sc.union(children.map(_.execute()))
 
   override def otherCopyArgs = sc :: Nil
 }

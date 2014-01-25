@@ -128,8 +128,8 @@ trait PlanningStrategies {
         execution.LocalRelation(output, data.map(_.productIterator.toVector))(sc) :: Nil
       case logical.StopAfter(limit, child) =>
         execution.StopAfter(Evaluate(limit, Nil).asInstanceOf[Int], planLater(child))(sc) :: Nil
-      case logical.Union(left, right) =>
-        execution.Union(planLater(left), planLater(right))(sc) :: Nil
+      case Unions(unionChildren) =>
+        execution.Union(unionChildren.map(planLater))(sc) :: Nil
       case logical.Transform(input, script, output, child) =>
         execution.Transform(input, script, output, planLater(child))(sc) :: Nil
       case _ => Nil
