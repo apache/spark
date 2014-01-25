@@ -10,7 +10,7 @@ class HiveTypeCoercionSuite extends FunSuite {
   val rules = new HiveTypeCoercion { }
   import rules._
 
-  test("tightest common bound for numeric types") {
+  test("tightest common bound for numeric and boolean types") {
     def widenTest(t1: DataType, t2: DataType, tightestCommon: Option[DataType]) {
       var found = WidenTypes.findTightestCommonType(t1, t2)
       assert(found == tightestCommon,
@@ -20,6 +20,12 @@ class HiveTypeCoercionSuite extends FunSuite {
       assert(found == tightestCommon,
         s"Expected $tightestCommon as tightest common type for $t2 and $t1, found $found")
     }
+
+    // Boolean
+    widenTest(NullType, BooleanType, Some(BooleanType))
+    widenTest(BooleanType, BooleanType, Some(BooleanType))
+    widenTest(IntegerType, BooleanType, None)
+    widenTest(LongType, BooleanType, None)
 
     // Integral
     widenTest(NullType, ByteType, Some(ByteType))

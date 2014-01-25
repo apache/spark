@@ -93,23 +93,18 @@ trait HiveTypeCoercion {
   object WidenTypes extends Rule[LogicalPlan] {
     // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
     // The conversion for integral and floating point types have a linear widening hierarchy:
-    // NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType
-    val integralPrecedence = Seq(NullType, ByteType, ShortType, IntegerType, LongType)
-    val floatingPrecedence = Seq(FloatType, DoubleType)
-    val precedence = integralPrecedence ++ floatingPrecedence
+    val numericPrecedence =
+      Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
+    // Boolean is only wider than Void
+    val booleanPrecedence = Seq(NullType, BooleanType)
+    val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil
 
     def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
-      // Make sure both types are in the precedence list.
-      val t1pos = precedence.indexOf(t1)
-      val t2pos = precedence.indexOf(t2)
+      // Try and find a promotion rule that contains both types in question.
+      val applicableConversion = allPromotions.find(p => p.contains(t1) && p.contains(t2))
 
-      if (t1pos != -1 && t2pos != -1) {
-        // Found both types in the list, return the max of t1pos and t2pos to find the tightest
-        // common type.
-        Some(precedence(math.max(t1pos, t2pos)))
-      } else {
-        None
-      }
+      // If found return the widest common type, otherwise None
+      applicableConversion.map(_.filter(t => t == t1 || t == t2).last)
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
