@@ -68,6 +68,7 @@ case class UnknownPartitioning(width: Int) extends Partitioning {
     case UnknownDistribution => true
     case _ => false
   }
+
   def compatibleWith(other: Partitioning): Boolean = other match {
     case UnknownPartitioning(_) => true
     case _ => false
@@ -78,6 +79,7 @@ case object Unpartitioned extends Partitioning {
   val width = 1
 
   override def satisfies(required: Distribution): Boolean = true
+
   override def compatibleWith(other: Partitioning) = other match {
     case Unpartitioned => true
     case _ => false
@@ -87,7 +89,8 @@ case object Unpartitioned extends Partitioning {
 case object Broadcast extends Partitioning {
   val width = 1
 
-  override def satisfies(required:Distribution): Boolean = true
+  override def satisfies(required: Distribution): Boolean = true
+
   override def compatibleWith(other: Partitioning) = other match {
     case Unpartitioned => true
     case _ => false
@@ -95,12 +98,13 @@ case object Broadcast extends Partitioning {
 }
 
 /**
- * Represents a partitioning where rows are split up across partitions based on based on the hash
+ * Represents a partitioning where rows are split up across partitions based on the hash
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
  */
 case class HashPartitioning(expressions: Seq[Expression], width: Int)
-    extends Expression with Partitioning {
+  extends Expression
+  with Partitioning {
 
   def children = expressions.toSeq
   def references = expressions.flatMap(_.references).toSet
@@ -115,6 +119,7 @@ case class HashPartitioning(expressions: Seq[Expression], width: Int)
       clusteringSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
+
   override def compatibleWith(other: Partitioning) = other match {
     case Broadcast => true
     case h: HashPartitioning if h == this => true
@@ -132,7 +137,8 @@ case class HashPartitioning(expressions: Seq[Expression], width: Int)
  *    that are in between `min` and `max` in this `ordering` will reside in this partition.
  */
 case class RangePartitioning(ordering: Seq[SortOrder], width: Int)
-    extends Expression with Partitioning {
+  extends Expression
+  with Partitioning {
 
   def children = ordering.toSeq
   def references = ordering.flatMap(_.references).toSet

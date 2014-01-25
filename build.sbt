@@ -76,3 +76,7 @@ mergeStrategy in assembly := {
   case "reference.conf" => MergeStrategy.concat
   case _ => MergeStrategy.first
 }
+
+scalacOptions in (Compile, doc)  <++= (baseDirectory) map {
+  bd => Seq("-sourcepath", bd.getAbsolutePath, "-doc-source-url","https://github.com/databricks/catalyst/blob/master/€{FILE_PATH}.scala")
+}

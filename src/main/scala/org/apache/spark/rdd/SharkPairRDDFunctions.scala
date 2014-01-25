@@ -11,8 +11,10 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.util.collection.AppendOnlyMap
 
 /**
- * Extra functions for Shark available on RDDs of (key, value) pairs through an implicit conversion.
- * Import `org.apache.spark.SharkPairRDDFunctions._` at the top of your program to use these functions.
+ * Extra functions for Shark available on RDDs of (key, value) pairs through
+ * an implicit conversion.
+ * Import `org.apache.spark.SharkPairRDDFunctions._` at the top of your program to
+ * use these functions.
  */
 class SharkPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   extends Logging

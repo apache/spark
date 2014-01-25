@@ -11,7 +11,7 @@ import org.apache.spark.{RangePartitioner, HashPartitioner}
 import org.apache.spark.rdd.ShuffledRDD
 
 case class Exchange(newPartitioning: Partitioning, child: SharkPlan)
-    extends UnaryNode {
+  extends UnaryNode {
 
   override def outputPartitioning = newPartitioning
   def output = child.output
@@ -30,7 +30,6 @@ case class Exchange(newPartitioning: Partitioning, child: SharkPlan)
 
       case RangePartitioning(sortingExpressions, width) =>
         // TODO: ShuffledRDD should take an Ordering.
-        import scala.math.Ordering.Implicits._
         implicit val ordering = new RowOrdering(sortingExpressions)
 
         val rdd = child.execute().map(r => (r,null))
@@ -58,7 +57,8 @@ object AddExchange extends Rule[SharkPlan] {
           case (required, child) =>
             val valid = child.outputPartitioning.satisfies(required)
             logger.debug(
-              s"${if (valid) "Valid" else "Invalid"} distribution, required: $required current: ${child.outputPartitioning}")
+              s"${if (valid) "Valid" else "Invalid"} distribution," +
+                s"required: $required current: ${child.outputPartitioning}")
             valid
         }.exists(_ == false)
 

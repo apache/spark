@@ -18,22 +18,23 @@ case class SparkEquiInnerJoin(
     left: SharkPlan,
     right: SharkPlan) extends BinaryNode {
 
-
-  override def requiredChildDistribution=
+  override def requiredChildDistribution =
     ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   def output = left.output ++ right.output
 
   def execute() = attachTree(this, "execute") {
-    val leftWithKeys = left.execute.map { row =>
+    val leftWithKeys = left.execute().map { row =>
       val joinKeys = leftKeys.map(Evaluate(_, Vector(row)))
-      logger.debug(s"Generated left join keys [${leftKeys.mkString(",")}] => [${joinKeys.mkString(",")}] given row $row")
+      logger.debug(s"Generated left join keys [${leftKeys.mkString(",")}] =>" +
+        s"[${joinKeys.mkString(",")}] given row $row")
       (joinKeys, row)
     }
 
-    val rightWithKeys = right.execute.map { row =>
+    val rightWithKeys = right.execute().map { row =>
       val joinKeys = rightKeys.map(Evaluate(_, Vector(EmptyRow, row)))
-      logger.debug(s"Generated right join keys [${rightKeys.mkString(",")}] => [${joinKeys.mkString(",")}] given row $row")
+      logger.debug(s"Generated right join keys [${rightKeys.mkString(",")}] =>" +
+        s"[${joinKeys.mkString(",")}] given row $row")
       (joinKeys, row)
     }
 
