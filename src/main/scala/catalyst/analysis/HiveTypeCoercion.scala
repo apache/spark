@@ -5,7 +5,6 @@ import expressions._
 import plans.logical._
 import rules._
 import types._
-import catalyst.execution.{HiveUdf, HiveGenericUdf}
 
 /**
  * A collection of [[catalyst.rules.Rule Rules]] that can be used to coerce differing types that
@@ -38,7 +37,7 @@ trait HiveTypeCoercion {
             // Leave the same if the dataTypes match.
             case Some(newType) if a.dataType == newType.dataType => a
             case Some(newType) =>
-              logger.debug(s"Promoting $a to ${newType} in ${q.simpleString}}")
+              logger.debug(s"Promoting $a to $newType in ${q.simpleString}}")
               newType
           }
       }
@@ -89,33 +88,40 @@ trait HiveTypeCoercion {
    *   - BOOLEAN types cannot be converted to any other type.
    *
    * Additionally, all types when UNION-ed with strings will be promoted to strings.
-   * Other string conversions are handled by PromoteStrings
+   * Other string conversions are handled by PromoteStrings.
    */
   object WidenTypes extends Rule[LogicalPlan] {
+    // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
+    // The conversion for integral and floating point types have a linear widening hierarchy:
+    // NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType
     val integralPrecedence = Seq(NullType, ByteType, ShortType, IntegerType, LongType)
-    val toDouble = integralPrecedence ++ Seq(NullType, FloatType, DoubleType)
-    val toFloat = Seq(NullType, ByteType, ShortType, IntegerType) :+ FloatType
-    val allPromotions: Seq[Seq[DataType]] = integralPrecedence :: toDouble :: toFloat :: Nil
+    val floatingPrecedence = Seq(FloatType, DoubleType)
+    val precedence = integralPrecedence ++ floatingPrecedence
 
     def findTightestCommonType(t1: DataType, t2: DataType): Option[DataType] = {
-      // Try and find a promotion rule that contains both types in question.
-      val applicableConversion =
-        allPromotions.find(p => p.contains(t1) && p.contains(t2))
+      // Make sure both types are in the precedence list.
+      val t1pos = precedence.indexOf(t1)
+      val t2pos = precedence.indexOf(t2)
 
-      // If found return the widest common type, otherwise None
-      applicableConversion.map(_.filter(t => t == t1 || t == t2).last)
+      if (t1pos != -1 && t2pos != -1) {
+        // Found both types in the list, return the max of t1pos and t2pos to find the tightest
+        // common type.
+        Some(precedence(math.max(t1pos, t2pos)))
+      } else {
+        None
+      }
     }
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case u @ Union(left, right) if u.childrenResolved && !u.resolved =>
         val castedInput = left.output.zip(right.output).map {
           // When a string is found on one side, make the other side a string too.
-          case (l,r) if l.dataType == StringType && r.dataType != StringType =>
+          case (l, r) if l.dataType == StringType && r.dataType != StringType =>
             (l, Alias(Cast(r, StringType), r.name)())
-          case (l,r) if l.dataType != StringType && r.dataType == StringType =>
+          case (l, r) if l.dataType != StringType && r.dataType == StringType =>
             (Alias(Cast(l, StringType), l.name)(), r)
 
-          case (l,r) if l.dataType != r.dataType =>
+          case (l, r) if l.dataType != r.dataType =>
             logger.debug(s"Resolving mismatched union input ${l.dataType}, ${r.dataType}")
             findTightestCommonType(l.dataType, r.dataType).map { widestType =>
               val newLeft =
@@ -124,14 +130,14 @@ trait HiveTypeCoercion {
                 if (r.dataType == widestType) r else Alias(Cast(r, widestType), r.name)()
 
               (newLeft, newRight)
-            }.getOrElse((l,r)) // If there is no applicable conversion, leave expression unchanged.
+            }.getOrElse((l, r)) // If there is no applicable conversion, leave expression unchanged.
           case other => other
         }
 
         val (castedLeft, castedRight) = castedInput.unzip
 
         val newLeft =
-          if(castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
+          if (castedLeft.map(_.dataType) != left.output.map(_.dataType)) {
             logger.debug(s"Widening numeric types in union $castedLeft ${left.output}")
             Project(castedLeft, left)
           } else {
@@ -139,7 +145,7 @@ trait HiveTypeCoercion {
           }
 
         val newRight =
-          if(castedRight.map(_.dataType) != right.output.map(_.dataType)) {
+          if (castedRight.map(_.dataType) != right.output.map(_.dataType)) {
             logger.debug(s"Widening numeric types in union $castedRight ${right.output}")
             Project(castedRight, right)
           } else {
