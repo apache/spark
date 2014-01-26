@@ -21,7 +21,7 @@ import org.apache.spark.rdd.{HadoopRDD, UnionRDD, EmptyRDD, RDD}
  * type of table storage: HeapTableReader for Shark tables in Spark's block manager,
  * TachyonTableReader for tables in Tachyon, and HadoopTableReader for Hive tables in a filesystem.
  */
-sealed trait TableReader {
+private[catalyst] sealed trait TableReader {
 
   def makeRDDForTable(hiveTable: HiveTable): RDD[_]
 
@@ -34,7 +34,7 @@ sealed trait TableReader {
  * Helper class for scanning tables stored in Hadoop - e.g., to read Hive tables that reside in the
  * data warehouse directory.
  */
-class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf: HiveConf)
+private[catalyst] class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf: HiveConf)
   extends TableReader {
 
   // Choose the minimum number of splits. If mapred.map.tasks is set, then use that unless
@@ -93,11 +93,9 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
       deserializer.initialize(hconf, tableDesc.getProperties)
 
       // Deserialize each Writable to get the row value.
-      iter.map { value =>
-        value match {
-          case v: Writable => deserializer.deserialize(v)
-          case _ => throw new RuntimeException("Failed to match " + value.toString)
-        }
+      iter.map {
+        case v: Writable => deserializer.deserialize(v)
+        case value => throw new RuntimeException("Failed to match " + value.toString)
       }
     }
     deserializedHadoopRDD
@@ -130,8 +128,8 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
       val ifc = partDesc.getInputFileFormatClass
         .asInstanceOf[java.lang.Class[InputFormat[Writable, Writable]]]
       // Get partition field info
-      val partSpec = partDesc.getPartSpec()
-      val partProps = partDesc.getProperties()
+      val partSpec = partDesc.getPartSpec
+      val partProps = partDesc.getProperties
 
       val partColsDelimited: String = partProps.getProperty(META_TABLE_PARTITION_COLUMNS)
       // Partitioning columns are delimited by "/"
@@ -156,7 +154,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
         iter.map { value =>
           val deserializer = localDeserializer.newInstance()
           deserializer.initialize(hconf, partProps)
-          val deserializedRow = deserializer.deserialize(value) // LazyStruct
+          val deserializedRow = deserializer.deserialize(value)
           rowWithPartArr.update(0, deserializedRow)
           rowWithPartArr.update(1, partValues)
           rowWithPartArr.asInstanceOf[Object]
@@ -177,11 +175,10 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
    */
   private def applyFilterIfNeeded(path: Path, filterOpt: Option[PathFilter]): String = {
     filterOpt match {
-      case Some(filter) => {
+      case Some(filter) =>
         val fs = path.getFileSystem(_localHConf)
         val filteredFiles = fs.listStatus(path, filter).map(_.getPath.toString)
         filteredFiles.mkString(",")
-      }
       case None => path.toString
     }
   }
@@ -212,7 +209,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
 
 }
 
-object HadoopTableReader {
+private[catalyst] object HadoopTableReader {
 
   /**
    * Curried. After given an argument for 'path', the resulting JobConf => Unit closure is used to
