@@ -158,6 +158,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "auto_sortmerge_join_7",
     "auto_sortmerge_join_8",
     "auto_sortmerge_join_9",
+    "binary_constant",
     "binarysortable_1",
     "bucket1",
     "bucket_map_join_1",
