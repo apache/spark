@@ -23,7 +23,6 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
-import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
@@ -210,25 +209,9 @@ private[spark] object PythonRDD {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    val batcher = new ByteArrayOutputStream
-    val serializer = new DataOutputStream(batcher)
-    val data = new ArrayBuffer[Byte]
-    var count = 0
-
-    for (char <- str) {
-      serializer.writeUTF(char.toString)
-
-      batcher
-        .toByteArray
-        .slice(2, batcher.size)
-        .foreach { b => data += b }
-
-      count += batcher.size - 2
-      batcher.reset
-    }
-
-    dataOut.writeInt(count)
-    data.foreach { b => dataOut.write(b) }
+    val bytes = str.getBytes("UTF-8")
+    dataOut.writeInt(bytes.length)
+    dataOut.write(bytes)
   }
 
   def writeToStream(elem: Any, dataOut: DataOutputStream) {

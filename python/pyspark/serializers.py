@@ -261,9 +261,9 @@ class MarshalSerializer(FramedSerializer):
     loads = marshal.loads
 
 
-class MUTF8Deserializer(Serializer):
+class UTF8Deserializer(Serializer):
     """
-    Deserializes streams written by Java's DataOutputStream.writeUTF().
+    Deserializes streams written by getBytes.
     """
 
     def loads(self, stream):
