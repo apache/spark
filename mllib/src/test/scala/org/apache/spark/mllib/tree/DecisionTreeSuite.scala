@@ -109,7 +109,20 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
   //TODO: Test max feature value > num bins
 
 
-  test("stump with all categorical variables"){
+  test("classification stump with all categorical variables"){
+    val arr = DecisionTreeSuite.generateCategoricalDataPoints()
+    assert(arr.length == 1000)
+    val rdd = sc.parallelize(arr)
+    val strategy = new Strategy(Classification,Gini,3,100,categoricalFeaturesInfo = Map(0 -> 3, 1-> 3))
+    val (splits, bins) = DecisionTree.findSplitsBins(rdd,strategy)
+    strategy.numBins = 100
+    val bestSplits = DecisionTree.findBestSplits(rdd,new Array(7),strategy,0,Array[List[Filter]](),splits,bins)
+    println(bestSplits(0)._1)
+    println(bestSplits(0)._2)
+    //TODO: Add asserts
+  }
+
+  test("regression stump with all categorical variables"){
     val arr = DecisionTreeSuite.generateCategoricalDataPoints()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
@@ -123,7 +136,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
   }
 
 
-    test("stump with fixed label 0 for Gini"){
+  test("stump with fixed label 0 for Gini"){
     val arr = DecisionTreeSuite.generateOrderedLabeledPointsWithLabel0()
     assert(arr.length == 1000)
     val rdd = sc.parallelize(arr)
