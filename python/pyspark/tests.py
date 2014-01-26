@@ -168,6 +168,17 @@ class TestRDDFunctions(PySparkTestCase):
         self.assertEqual("Hello World!", x.strip())
         self.assertEqual("Hello World!", y.strip())
 
+    def test_deleting_input_files(self):
+        # Regression test for SPARK-1025
+        tempFile = NamedTemporaryFile(delete=False)
+        tempFile.write("Hello World!")
+        tempFile.close()
+        data = self.sc.textFile(tempFile.name)
+        filtered_data = data.filter(lambda x: True)
+        self.assertEqual(1, filtered_data.count())
+        os.unlink(tempFile.name)
+        self.assertRaises(Exception, lambda: filtered_data.count())
+
 
 class TestIO(PySparkTestCase):
 
