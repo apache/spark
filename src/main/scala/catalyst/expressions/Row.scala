@@ -82,7 +82,9 @@ class GenericRow(input: Seq[Any]) extends Row {
 
 class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
   def compare(a: Row, b: Row): Int = {
-    ordering.foreach { order =>
+    var i = 0
+    while(i < ordering.size) {
+      val order = ordering(i)
       val left = Evaluate(order.child, Vector(a))
       val right = Evaluate(order.child, Vector(b))
 
@@ -101,6 +103,7 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
         }
         if (comparison != 0) return comparison
       }
+      i += 1
     }
     return 0
   }
