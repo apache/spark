@@ -20,10 +20,11 @@ sealed trait Distribution
 /**
  * Represents a distribution where no promises are made about co-location of data.
  */
-case object UnknownDistribution extends Distribution
+case object UnspecifiedDistribution extends Distribution
 
 /**
- * Represents a distribution where a single operation can observe all tuples in the dataset.
+ * Represents a distribution that only has a single partition and all tuples of the dataset
+ * are co-located.
  */
 case object AllTuples extends Distribution
 
@@ -47,25 +48,27 @@ case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
 
 sealed trait Partitioning {
   /** Returns the number of partitions that the data is split across */
-  val width: Int
+  val numPartitions: Int
 
   /**
-   * Returns true iff the guarantees made by this [[Distribution]] are sufficient to satisfy all
-   * guarantees mandated by the `required` distribution.
+   * Returns true iff the guarantees made by this
+   * [[catalyst.plans.physical.Partitioning Partitioning]] are sufficient to satisfy all
+   * guarantees mandated by the `required` [[catalyst.plans.physical.Distribution Distribution]].
    */
   def satisfies(required: Distribution): Boolean
 
   /**
    * Returns true iff all distribution guarantees made by this partitioning can also be made
-   * for the `other` specified partitioning.  For example, [[HashPartitioning]]s are only compatible
-   * if the `width` of the two partitionings is the same.
+   * for the `other` specified partitioning.
+   * For example, two [[catalyst.plans.physical.HashPartitioning HashPartitioning]]s are
+   * only compatible if the `numPartitions` of them is the same.
    */
   def compatibleWith(other: Partitioning): Boolean
 }
 
-case class UnknownPartitioning(width: Int) extends Partitioning {
+case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
   def satisfies(required: Distribution): Boolean = required match {
-    case UnknownDistribution => true
+    case UnspecifiedDistribution => true
     case _ => false
   }
 
@@ -75,24 +78,24 @@ case class UnknownPartitioning(width: Int) extends Partitioning {
   }
 }
 
-case object Unpartitioned extends Partitioning {
-  val width = 1
+case object SinglePartition extends Partitioning {
+  val numPartitions = 1
 
   override def satisfies(required: Distribution): Boolean = true
 
   override def compatibleWith(other: Partitioning) = other match {
-    case Unpartitioned => true
+    case SinglePartition => true
     case _ => false
   }
 }
 
-case object Broadcast extends Partitioning {
-  val width = 1
+case object BroadcastPartitioning extends Partitioning {
+  val numPartitions = 1
 
   override def satisfies(required: Distribution): Boolean = true
 
   override def compatibleWith(other: Partitioning) = other match {
-    case Unpartitioned => true
+    case SinglePartition => true
     case _ => false
   }
 }
@@ -102,7 +105,7 @@ case object Broadcast extends Partitioning {
  * of `expressions`.  All rows where `expressions` evaluate to the same values are guaranteed to be
  * in the same partition.
  */
-case class HashPartitioning(expressions: Seq[Expression], width: Int)
+case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   extends Expression
   with Partitioning {
 
@@ -114,14 +117,14 @@ case class HashPartitioning(expressions: Seq[Expression], width: Int)
   lazy val clusteringSet = expressions.toSet
 
   def satisfies(required: Distribution): Boolean = required match {
-    case UnknownDistribution => true
+    case UnspecifiedDistribution => true
     case ClusteredDistribution(requiredClustering) =>
       clusteringSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
 
   override def compatibleWith(other: Partitioning) = other match {
-    case Broadcast => true
+    case BroadcastPartitioning => true
     case h: HashPartitioning if h == this => true
     case _ => false
   }
@@ -136,7 +139,7 @@ case class HashPartitioning(expressions: Seq[Expression], width: Int)
  *  - Each partition will have a `min` and `max` row, relative to the given ordering.  All rows
  *    that are in between `min` and `max` in this `ordering` will reside in this partition.
  */
-case class RangePartitioning(ordering: Seq[SortOrder], width: Int)
+case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   extends Expression
   with Partitioning {
 
@@ -148,7 +151,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], width: Int)
   lazy val clusteringSet = ordering.map(_.child).toSet
 
   def satisfies(required: Distribution): Boolean = required match {
-    case UnknownDistribution => true
+    case UnspecifiedDistribution => true
     case OrderedDistribution(requiredOrdering) =>
       val minSize = Seq(requiredOrdering.size, ordering.size).min
       requiredOrdering.take(minSize) == ordering.take(minSize)
@@ -158,7 +161,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], width: Int)
   }
 
   def compatibleWith(other: Partitioning) = other match {
-    case Broadcast => true
+    case BroadcastPartitioning => true
     case r: RangePartitioning if r == this => true
     case _ => false
   }

@@ -53,6 +53,7 @@ case class SortPartitions(sortOrder: Seq[SortOrder], child: SharkPlan) extends U
   lazy val ordering = new RowOrdering(sortOrder)
 
   def execute() = attachTree(this, "sort") {
+    // TODO: Optimize sorting operation?
     child.execute()
       .mapPartitions(
         iterator => iterator.toArray.sorted(ordering).iterator,

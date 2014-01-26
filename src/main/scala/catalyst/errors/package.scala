@@ -7,7 +7,7 @@ import trees._
  */
 package object errors {
 
-  class OptimizationException[TreeType <: TreeNode[_]]
+  class TreeNodeException[TreeType <: TreeNode[_]]
     (tree: TreeType, msg: String, cause: Throwable = null) extends Exception(msg, cause) {
 
     override def getMessage: String = {
@@ -17,17 +17,18 @@ package object errors {
   }
 
   /**
-   *  Wraps any exceptions that are thrown while executing `f` in an [[OptimizationException]],
-   *  attaching the provided `tree`.
+   *  Wraps any exceptions that are thrown while executing `f` in a
+   *  [[catalyst.errors.TreeNodeException TreeNodeException]], attaching the provided `tree`.
    */
   def attachTree[TreeType <: TreeNode[_], A](tree: TreeType, msg: String = "")(f: => A): A = {
     try f catch {
-      case e: Exception => throw new OptimizationException(tree, msg, e)
+      case e: Exception => throw new TreeNodeException(tree, msg, e)
     }
   }
 
   /**
-   * Executes `f` which is expected to throw an OptimizationException. The first tree encountered in
+   * Executes `f` which is expected to throw a
+   * [[catalyst.errors.TreeNodeException TreeNodeException]]. The first tree encountered in
    * the stack of exceptions of type `TreeType` is returned.
    */
   def getTree[TreeType <: TreeNode[_]](f: => Unit): TreeType = ??? // TODO: Implement

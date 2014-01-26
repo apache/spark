@@ -13,7 +13,7 @@ abstract class SharkPlan extends QueryPlan[SharkPlan] with Logging {
   /** Specifies how data is partitioned across different nodes in the cluster. */
   def outputPartitioning: Partitioning = UnknownPartitioning(0) // TODO: WRONG WIDTH!
   /** Specifies any partition requirements on the input data for this operator. */
-  def requiredChildDistribution: Seq[Distribution] = Seq.fill(children.size)(UnknownDistribution)
+  def requiredChildDistribution: Seq[Distribution] = Seq.fill(children.size)(UnspecifiedDistribution)
 
   /**
    * Runs this query returning the result as an RDD.

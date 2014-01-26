@@ -256,7 +256,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
-        throw new OptimizationException(
+        throw new TreeNodeException(
           this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName?")
     }
   }

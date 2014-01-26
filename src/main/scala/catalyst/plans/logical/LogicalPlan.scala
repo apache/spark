@@ -45,7 +45,7 @@ abstract class LogicalPlan extends QueryPlan[LogicalPlan] {
       case a :: Nil => Some(a) // One match, use it.
       case Nil => None         // No matches.
       case ambiguousReferences =>
-        throw new OptimizationException(
+        throw new TreeNodeException(
           this, s"Ambiguous references to $name: ${ambiguousReferences.mkString(",")}")
     }
   }

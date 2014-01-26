@@ -18,25 +18,26 @@ case class Exchange(newPartitioning: Partitioning, child: SharkPlan)
 
   def execute() = attachTree(this , "execute") {
     newPartitioning match {
-      case HashPartitioning(expressions, width) =>
+      case HashPartitioning(expressions, numPartitions) =>
         // TODO: Eliminate redundant expressions in grouping key and value.
         val rdd = child.execute().map { row =>
           (buildRow(expressions.toSeq.map(Evaluate(_, Vector(row)))), row)
         }
-        val part = new HashPartitioner(width)
+        val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, (Row, Row)](rdd, part)
 
         shuffled.map(_._2)
 
-      case RangePartitioning(sortingExpressions, width) =>
+      case RangePartitioning(sortingExpressions, numPartitions) =>
         // TODO: ShuffledRDD should take an Ordering.
         implicit val ordering = new RowOrdering(sortingExpressions)
 
         val rdd = child.execute().map(r => (r,null))
-        val part = new RangePartitioner(width, rdd, ascending = true)
+        val part = new RangePartitioner(numPartitions, rdd, ascending = true)
         val shuffled = new ShuffledRDD[Row, Null, (Row, Null)](rdd, part)
         shuffled.map(_._1)
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
+      // TODO: Handle SinglePartition and BroadcastPartitioning.
     }
   }
 }
@@ -47,7 +48,7 @@ case class Exchange(newPartitioning: Partitioning, child: SharkPlan)
  * [[Exchange]] Operators where required.
  */
 object AddExchange extends Rule[SharkPlan] {
-  // TODO: determine the number of partitions.
+  // TODO: Determine the number of partitions.
   val numPartitions = 8
 
   def apply(plan: SharkPlan): SharkPlan = plan.transformUp {
@@ -62,7 +63,7 @@ object AddExchange extends Rule[SharkPlan] {
             valid
         }.exists(_ == false)
 
-      // TODO ASSUMES TRANSITIVITY?
+      // TODO: ASSUMES TRANSITIVITY?
       def compatible =
         !operator.children
           .map(_.outputPartitioning)
@@ -76,12 +77,14 @@ object AddExchange extends Rule[SharkPlan] {
       if (meetsRequirements && compatible) {
         operator
       } else {
+        // TODO: It is possible that only a child does not meet requirement.
         val repartitionedChildren = operator.requiredChildDistribution.zip(operator.children).map {
           case (ClusteredDistribution(clustering), child) =>
             Exchange(HashPartitioning(clustering, numPartitions), child)
           case (OrderedDistribution(ordering), child) =>
             Exchange(RangePartitioning(ordering, numPartitions), child)
-          case (UnknownDistribution, child) => child
+          case (UnspecifiedDistribution, child) => child
+          // TODO: Handle AllTuples. One possible way is to use Exchange(HashPartitioning(Nil, 1), child).
           case (dist, _) => sys.error(s"Don't know how to ensure $dist")
         }
         operator.withNewChildren(repartitionedChildren)

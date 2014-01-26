@@ -28,7 +28,7 @@ class DistributionTests extends FunSuite {
     // Cases which do not need an exchange between two data properties.
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      UnknownDistribution,
+      UnspecifiedDistribution,
       true)
 
     checkSatisfied(
@@ -42,12 +42,12 @@ class DistributionTests extends FunSuite {
       true)
 
     checkSatisfied(
-      Unpartitioned,
+      SinglePartition,
       ClusteredDistribution(Seq('a, 'b, 'c)),
       true)
 
     checkSatisfied(
-      Unpartitioned,
+      SinglePartition,
       OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       true)
 
@@ -90,7 +90,7 @@ class DistributionTests extends FunSuite {
     // Cases which do not need an exchange between two data properties.
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      UnknownDistribution,
+      UnspecifiedDistribution,
       true)
 
     checkSatisfied(
