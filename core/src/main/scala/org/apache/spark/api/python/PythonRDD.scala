@@ -210,10 +210,10 @@ private[spark] object PythonRDD {
   }
 
   def writeUTF(str: String, dataOut: DataOutputStream) {
-    val batcher    = new ByteArrayOutputStream
+    val batcher = new ByteArrayOutputStream
     val serializer = new DataOutputStream(batcher)
-    val data       = new ArrayBuffer[Byte]
-    var count      = 0
+    val data = new ArrayBuffer[Byte]
+    var count = 0
 
     for (char <- str) {
       serializer.writeUTF(char.toString)
