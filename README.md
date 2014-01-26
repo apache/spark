@@ -1,5 +1,7 @@
 # R on Spark
 
+[![Build Status](https://travis-ci.org/amplab-extras/SparkR-pkg.png?branch=master)](https://travis-ci.org/amplab-extras/SparkR-pkg)
+
 SparkR is an R package that provides a light-weight frontend to use Spark from
 R.
 

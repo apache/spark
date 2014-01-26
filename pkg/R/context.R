@@ -114,21 +114,21 @@ parallelize <- function(sc, coll, numSlices = 1) {
 includePackage <- function(sc, pkg) {
   pkg <- as.character(substitute(pkg))
   if (exists(".packages", .sparkREnv)) {
-    packages <- .sparkREnv[[".packages"]]
+    packages <- .sparkREnv$.packages
   } else {
     packages <- list()
   }
   packages <- c(packages, pkg)
-  .sparkREnv[[".packages"]] <- packages
+  .sparkREnv$.packages <- packages
 }
 
-#' @title Broadcast a variable to all workers 
-#' 
+#' @title Broadcast a variable to all workers
+#'
 #' @description
 #' Broadcast a read-only variable to the cluster, returning a \code{Broadcast}
 #' object for reading it in distributed functions.
 #'
-#' @param sc Spark Context to use 
+#' @param sc Spark Context to use
 #' @param object Object to be broadcast
 #' @export
 #' @examples
@@ -139,7 +139,7 @@ includePackage <- function(sc, pkg) {
 #' # Large Matrix object that we want to broadcast
 #' randomMat <- matrix(nrow=100, ncol=10, data=rnorm(1000))
 #' randomMatBr <- broadcast(sc, randomMat)
-#' 
+#'
 #' # Use the broadcast variable inside the function
 #' useBroadcast <- function(x) {
 #'   sum(value(randomMatBr) * x)
