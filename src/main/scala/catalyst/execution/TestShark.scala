@@ -11,6 +11,10 @@ import scala.language.implicitConversions
 import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
+import org.apache.hadoop.hive.ql.io.avro.{AvroContainerOutputFormat, AvroContainerInputFormat}
+import org.apache.hadoop.hive.serde2.avro.AvroSerDe
+import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
+import org.apache.hadoop.hive.serde2.RegexSerDe
 
 import analysis._
 import plans.logical.LogicalPlan
@@ -19,8 +23,9 @@ import util._
 
 /**
  * A locally running test instance of spark.  The lifecycle for a given query is managed by the
- * inner class [[SharkQuery]].  A [[SharkQuery]] can either be instantiated directly or using the
- * implicit conversion '.q'.
+ * inner class [[catalyst.execution.TestShark.SharkQuery SharkQuery]].  A
+ * [[catalyst.execution.TestShark.SharkQuery SharkQuery]] can either be instantiated directly or
+ * using the implicit conversion '.q'.
  *
  * {{{
  *   scala> val query = "SELECT key FROM src".q
@@ -37,9 +42,10 @@ import util._
  *   res0: Array[IndexedSeq[Any]] = Array(Vector(238), Vector(86), Vector(311), ...
  * }}}
  *
- * Data from [[testTables]] will be automatically loaded whenever a query is run over those tables.
- * Calling [[reset]] will delete all tables and other state in the database, leaving the database
- * in a "clean" state.
+ * Data from [[catalyst.execution.TestShark.testTables testTables]] will be automatically loaded
+ * whenever a query is run over those tables.
+ * Calling [[catalyst.execution.TestShark.reset reset]] will delete all tables and other state in
+ * the database, leaving the database in a "clean" state.
  *
  * TestShark is implemented as a singleton object because instantiating multiple copies of the hive
  * metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
@@ -164,11 +170,11 @@ object TestShark extends SharkInstance {
       "CREATE TABLE IF NOT EXISTS dest3 (key INT, value STRING)".cmd),
     TestTable("srcpart", () => {
       runSqlHive("CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
-      Seq("2008-04-08", "2008-04-09").foreach { ds =>
-        Seq("11", "12").foreach { hr =>
-          val partSpec = Map("ds" -> ds, "hr" -> hr)
-          runSqlHive(s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')")
-        }
+      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
+        runSqlHive(
+          s"""LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt'
+             |OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')
+           """.stripMargin)
       }
     }),
     TestTable("src_thrift", () => {
@@ -194,7 +200,51 @@ object TestShark extends SharkInstance {
       catalog.client.createTable(srcThrift)
 
       runSqlHive(s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/complex.seq' INTO TABLE src_thrift")
-    })
+    }),
+    TestTable("serdeins",
+      s"""CREATE TABLE serdeins (key INT, value STRING)
+         |ROW FORMAT SERDE '${classOf[LazySimpleSerDe].getCanonicalName}'
+         |WITH SERDEPROPERTIES ('field.delim'='\\t')
+       """.stripMargin.cmd,
+      "INSERT OVERWRITE TABLE serdeins SELECT * FROM src".cmd),
+    TestTable("sales",
+      s"""CREATE TABLE IF NOT EXISTS sales (key STRING, value INT)
+         |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
+         |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
+       """.stripMargin.cmd,
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/sales.txt' INTO TABLE sales".cmd),
+    TestTable("episodes",
+      s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
+         |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
+         |STORED AS
+         |INPUTFORMAT '${classOf[AvroContainerInputFormat].getCanonicalName}'
+         |OUTPUTFORMAT '${classOf[AvroContainerOutputFormat].getCanonicalName}'
+         |TBLPROPERTIES (
+         |  'avro.schema.literal'='{
+         |    "type": "record",
+         |    "name": "episodes",
+         |    "namespace": "testing.hive.avro.serde",
+         |    "fields": [
+         |      {
+         |          "name": "title",
+         |          "type": "string",
+         |          "doc": "episode title"
+         |      },
+         |      {
+         |          "name": "air_date",
+         |          "type": "string",
+         |          "doc": "initial date"
+         |      },
+         |      {
+         |          "name": "doctor",
+         |          "type": "int",
+         |          "doc": "main actor playing the Doctor in episode"
+         |      }
+         |    ]
+         |  }'
+         |)
+       """.stripMargin.cmd,
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/episodes.avro' INTO TABLE episodes".cmd)
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)
@@ -203,11 +253,12 @@ object TestShark extends SharkInstance {
 
   def loadTestTable(name: String) {
     if (!(loadedTables contains name)) {
+      // Marks the table as loaded first to prevent infite mutually recursive table loading.
+      loadedTables += name
       logger.info(s"Loading test table $name")
       val createCmds =
         testTables.get(name).map(_.commands).getOrElse(sys.error(s"Unknown test table $name"))
       createCmds.foreach(_())
-      loadedTables += name
     }
   }
 

@@ -1,16 +1,19 @@
 package catalyst
 package execution
 
+import java.nio.file.Files
+
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
-import org.apache.hadoop.hive.ql.plan.FileSinkDesc
+import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde2.AbstractSerDe
-import org.apache.hadoop.hive.serde2.objectinspector.{PrimitiveObjectInspector, StructObjectInspector}
-import org.apache.hadoop.hive.serde2.`lazy`.LazyStruct
+import org.apache.hadoop.hive.serde2.objectinspector._
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
+import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.JobConf
+import org.apache.spark.SparkContext._
 
 import expressions.Attribute
-import util._
 
 /* Implicits */
 import scala.collection.JavaConversions._
@@ -31,18 +34,17 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
    * Functions that extract the requested attributes from the hive output.
    */
   @transient
-  protected lazy val attributeFunctions: Seq[(LazyStruct, Array[String]) => AnyRef] = {
+  protected lazy val attributeFunctions: Seq[(AnyRef, Array[String]) => AnyRef] = {
     attributes.map { a =>
-      if (relation.partitionKeys.contains(a)) {
-        val ordinal = relation.partitionKeys.indexOf(a)
-        (struct: LazyStruct, partitionKeys: Array[String]) => partitionKeys(ordinal)
+      val ordinal = relation.partitionKeys.indexOf(a)
+      if (ordinal >= 0) {
+        (_: AnyRef, partitionKeys: Array[String]) => partitionKeys(ordinal)
       } else {
         val ref = objectInspector.getAllStructFieldRefs
           .find(_.getFieldName == a.name)
           .getOrElse(sys.error(s"Can't find attribute $a"))
-
-        (struct: LazyStruct, _: Array[String]) => {
-          val data = objectInspector.getStructFieldData(struct, ref)
+        (row: AnyRef, _: Array[String]) => {
+          val data = objectInspector.getStructFieldData(row, ref)
           val inspector = ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector]
           inspector.getPrimitiveJavaObject(data)
         }
@@ -60,14 +62,13 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
   def execute() = {
     inputRdd.map { row =>
       val values = row match {
-        case Array(struct: LazyStruct, partitionKeys: Array[String]) =>
-          attributeFunctions.map(_(struct, partitionKeys))
-        case struct: LazyStruct =>
-          attributeFunctions.map(_(struct, Array.empty))
+        case Array(deserializedRow: AnyRef, partitionKeys: Array[String]) =>
+          attributeFunctions.map(_(deserializedRow, partitionKeys))
+        case deserializedRow: AnyRef =>
+          attributeFunctions.map(_(deserializedRow, Array.empty))
       }
       buildRow(values.map {
-        case "NULL" => null
-        case "null" => null
+        case n: String if n.toLowerCase == "null" => null
         case varchar: org.apache.hadoop.hive.common.`type`.HiveVarchar => varchar.getValue
         case other => other
       })
@@ -88,12 +89,7 @@ case class InsertIntoHiveTable(
    */
   val desc = new FileSinkDesc("./", table.tableDesc, false)
 
-  val outputClass = {
-    val serializer =
-      table.tableDesc.getDeserializerClass.newInstance().asInstanceOf[AbstractSerDe]
-    serializer.initialize(null, table.tableDesc.getProperties)
-    serializer.getSerializedClass
-  }
+  val outputClass = newSerializer(table.tableDesc).getSerializedClass
 
   lazy val conf = new JobConf()
 
@@ -105,30 +101,58 @@ case class InsertIntoHiveTable(
     new Path((new org.apache.hadoop.fs.RawLocalFileSystem).getWorkingDirectory, "test.out"),
     null)
 
+  private def newSerializer(tableDesc: TableDesc) = {
+    val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[AbstractSerDe]
+    serializer.initialize(null, tableDesc.getProperties)
+    serializer
+  }
+
   override def otherCopyArgs = sc :: Nil
 
   def output = child.output
 
+  /**
+   * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
+   * [[org.apache.hadoop.hive.serde2.SerDe SerDe]] and the [[org.apache.hadoop.mapred.OutputFormat
+   * OutputFormat]] provided by the table definition.
+   */
   def execute() = {
     require(partition.isEmpty, "Inserting into partitioned table not supported.")
     val childRdd = child.execute()
     assert(childRdd != null)
 
-    // TODO: write directly to hive
-    val tempDir = java.io.File.createTempFile("data", "tsv")
-    tempDir.delete()
-    tempDir.mkdir()
-    childRdd.map(_.map(a => stringOrNull(a.asInstanceOf[AnyRef])).mkString("\001"))
-      .saveAsTextFile(tempDir.getCanonicalPath)
+    // TODO write directly to Hive
+    val tempDir = Files.createTempDirectory("data").toFile
 
-    val partitionSpec =
-      if (partition.nonEmpty) {
-        s"PARTITION (${partition.map { case (k,v) => s"$k=${v.get}" }.mkString(",")})"
+    // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
+    // instances within the closure, since AbstractSerDe is not serializable while TableDesc is.
+    val tableDesc = table.tableDesc
+    childRdd.mapPartitions { iter =>
+      val serializer = newSerializer(tableDesc)
+      val standardOI = ObjectInspectorUtils
+        .getStandardObjectInspector(serializer.getObjectInspector, ObjectInspectorCopyOption.JAVA)
+        .asInstanceOf[StructObjectInspector]
+      iter.map { row =>
+        (null, serializer.serialize(Array(row: _*), standardOI))
+      }
+    }.saveAsHadoopFile(
+        tempDir.getCanonicalPath,
+        classOf[NullWritable],
+        outputClass,
+        tableDesc.getOutputFileFormatClass)
+
+    val partitionSpec = if (partition.nonEmpty) {
+        partition.map {
+          case (k, Some(v)) => s"$k=$v"
+          // Dynamic partition inserts
+          case (k, None) => s"$k"
+        }.mkString(" PARTITION (", ", ", ")")
       } else {
         ""
       }
 
-    sc.runHive(s"LOAD DATA LOCAL INPATH '${tempDir.getCanonicalPath}/*' INTO TABLE ${table.tableName} $partitionSpec")
+    val inpath = tempDir.getCanonicalPath + "/*"
+    sc.runHive(s"LOAD DATA LOCAL INPATH '$inpath' INTO TABLE ${table.tableName}$partitionSpec")
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which
