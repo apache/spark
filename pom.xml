@@ -389,7 +389,7 @@
       <dependency>
         <groupId>com.novocode</groupId>
         <artifactId>junit-interface</artifactId>
-        <version>0.9</version>
+        <version>0.10</version>
         <scope>test</scope>
       </dependency>
       <dependency>
