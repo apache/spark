@@ -23,6 +23,7 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
+import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
@@ -62,7 +63,7 @@ private[spark] class PythonRDD[T: ClassTag](
           // Partition index
           dataOut.writeInt(split.index)
           // sparkFilesDir
-          dataOut.writeUTF(SparkFiles.getRootDirectory)
+          PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
           // Broadcast variables
           dataOut.writeInt(broadcastVars.length)
           for (broadcast <- broadcastVars) {
@@ -72,7 +73,9 @@ private[spark] class PythonRDD[T: ClassTag](
           }
           // Python includes (*.zip and *.egg files)
           dataOut.writeInt(pythonIncludes.length)
-          pythonIncludes.foreach(dataOut.writeUTF)
+          for (include <- pythonIncludes) {
+            PythonRDD.writeUTF(include, dataOut)
+          }
           dataOut.flush()
           // Serialized command:
           dataOut.writeInt(command.length)
@@ -206,6 +209,28 @@ private[spark] object PythonRDD {
     JavaRDD.fromRDD(sc.sc.parallelize(objs, parallelism))
   }
 
+  def writeUTF(str: String, dataOut: DataOutputStream) {
+    val batcher    = new ByteArrayOutputStream
+    val serializer = new DataOutputStream(batcher)
+    val data       = new ArrayBuffer[Byte]
+    var count      = 0
+
+    for (char <- str) {
+      serializer.writeUTF(char.toString)
+
+      batcher
+        .toByteArray
+        .slice(2, batcher.size)
+        .foreach { b => data += b }
+
+      count += batcher.size - 2
+      batcher.reset
+    }
+
+    dataOut.writeInt(count)
+    data.foreach { b => dataOut.write(b) }
+  }
+
   def writeToStream(elem: Any, dataOut: DataOutputStream) {
     elem match {
       case bytes: Array[Byte] =>
@@ -217,7 +242,7 @@ private[spark] object PythonRDD {
         dataOut.writeInt(pair._2.length)
         dataOut.write(pair._2)
       case str: String =>
-        dataOut.writeUTF(str)
+        writeUTF(str, dataOut)
       case other =>
         throw new SparkException("Unexpected element type " + other.getClass)
     }
