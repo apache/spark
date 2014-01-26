@@ -156,6 +156,11 @@ object Evaluate extends Logging {
         currentExpression
 
       /* Casts */
+
+      // Binary Conversions
+      case Cast(e @ BinaryType(), StringType) => new String(eval(e).asInstanceOf[Array[Byte]])
+      case Cast(e @ StringType(), BinaryType) => eval(e).asInstanceOf[String].getBytes
+
       // toString
       case Cast(e, StringType) =>
         eval(e) match {
