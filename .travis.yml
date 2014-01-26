@@ -10,7 +10,7 @@ before_install:
 install:
   - sudo R CMD javareconf
   - ./travis-tool.sh install_deps
-  - ./travis-tool.sh install_r_binary Matrix
+  - ./travis-tool.sh install_r_binary plyr
   - cd ..
   - ./install-dev.sh
 script:
