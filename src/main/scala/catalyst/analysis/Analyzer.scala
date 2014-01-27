@@ -7,16 +7,20 @@ import plans.logical._
 import rules._
 
 /**
- * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
+ * A trivial [[catalyst.analysis.Analyzer Analyzer]] with an
+ * [[catalyst.analysis.EmptyCatalog EmptyCatalog]] and
+ * [[catalyst.analysis.EmptyFunctionRegistry EmptyFunctionRegistry]]. Used for testing
  * when all relations are already filled in and the analyser needs only to resolve attribute
  * references.
  */
 object SimpleAnalyzer extends Analyzer(EmptyCatalog, EmptyFunctionRegistry, true)
 
 /**
- * Provides a logical query plan analyzer, which translates [[UnresolvedAttribute]]s and
- * [[UnresolvedRelation]]s into fully typed objects using information in a schema [[Catalog]] and
- * a [[FunctionRegistry]].
+ * Provides a logical query plan analyzer, which translates
+ * [[catalyst.analysis.UnresolvedAttribute UnresolvedAttribute]]s and
+ * [[catalyst.analysis.UnresolvedRelation UnresolvedRelation]]s into fully typed objects using
+ * information in a schema [[catalyst.analysis.Catalog Catalog]] and a
+ * [[catalyst.analysis.FunctionRegistry]].
  */
 class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Boolean)
   extends RuleExecutor[LogicalPlan] with HiveTypeCoercion {
@@ -40,7 +44,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   )
 
   /**
-   * Replaces [[UnresolvedRelation]]s with concrete relations from the catalog.
+   * Replaces [[catalyst.analysis.UnresolvedRelation UnresolvedRelation]]s with concrete relations
+   * from the catalog.
    */
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -64,8 +69,9 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
-   * Replaces [[UnresolvedAttribute]]s with concrete
-   * [[expressions.AttributeReference AttributeReferences]] from a logical plan node's children.
+   * Replaces [[catalyst.analysis.UnresolvedAttribute UnresolvedAttribute]]s with concrete
+   * [[catalyst.expressions.AttributeReference AttributeReferences]] from a logical plan node's
+   * children.
    */
   object ResolveReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transformUp {
@@ -82,7 +88,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
-   * Replaces [[UnresolvedFunction]]s with concrete [[expressions.Expression Expressions]].
+   * Replaces [[catalyst.analysis.UnresolvedFunction UnresolvedFunction]]s with concrete
+   * [[catalyst.expressions.Expression Expressions]].
    */
   object ResolveFunctions extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -108,12 +115,12 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         case agg: AggregateExpression => return true
         case _ =>
       })
-      return false
+      false
     }
   }
 
   /**
-   * Expands any references to [[Star]] (*) in project operators.
+   * Expands any references to [[catalyst.analysis.Star Star]] (*) in project operators.
    */
   object StarExpansion extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
@@ -138,7 +145,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     }
 
     /**
-     * Returns true if `exprs` contains a [[Star]].
+     * Returns true if `exprs` contains a [[catalyst.analysis.Star Star]].
      */
     protected def containsStar(exprs: Seq[NamedExpression]): Boolean =
       exprs.collect { case _: Star => true }.nonEmpty
