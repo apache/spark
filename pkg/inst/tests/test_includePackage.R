@@ -4,32 +4,37 @@ context("include R packages")
 sc <- sparkR.init()
 
 # Partitioned data
-nums <- 1:3
-rdd <- parallelize(sc, nums, 3L)
+nums <- 1:2
+rdd <- parallelize(sc, nums, 2L)
 
 test_that("include inside function", {
-  # Only run the test if Matrix is installed.
-  if ("Matrix" %in% rownames(installed.packages())) {
-    suppressPackageStartupMessages(library(Matrix))
-    generateSparse <- function(x) {
-      suppressPackageStartupMessages(library(Matrix))
-      sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3))
+  # Only run the test if plyr is installed.
+  if ("plyr" %in% rownames(installed.packages())) {
+    suppressPackageStartupMessages(library(plyr))
+    generateData <- function(x) {
+      suppressPackageStartupMessages(library(plyr))
+      attach(airquality)
+      result <- transform(Ozone, logOzone = log(Ozone))
+      result
     }
 
-    sparseMat <- lapplyPartition(rdd, generateSparse)
-    actual <- collect(sparseMat)
+    data <- lapplyPartition(rdd, generateData)
+    actual <- collect(data)
   }
 })
 
 test_that("use include package", {
-  # Only run the test if Matrix is installed.
-  if ("Matrix" %in% rownames(installed.packages())) {
-    suppressPackageStartupMessages(library(Matrix))
-    generateSparse <- function(x) {
-      sparseMatrix(i=c(1, 2, 3), j=c(1, 2, 3), x=c(1, 2, 3))
+  # Only run the test if plyr is installed.
+  if ("plyr" %in% rownames(installed.packages())) {
+    suppressPackageStartupMessages(library(plyr))
+    generateData <- function(x) {
+      attach(airquality)
+      result <- transform(Ozone, logOzone = log(Ozone))
+      result
     }
-    includePackage(sc, Matrix)
-    sparseMat <- lapplyPartition(rdd, generateSparse)
-    actual <- collect(sparseMat)
+
+    includePackage(sc, plyr)
+    data <- lapplyPartition(rdd, generateData)
+    actual <- collect(data)
   }
 })
