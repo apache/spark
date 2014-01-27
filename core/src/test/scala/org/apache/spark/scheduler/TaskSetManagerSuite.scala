@@ -287,7 +287,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     // after the last failure.
     (1 to manager.maxTaskFailures).foreach { index =>
       val offerResult = manager.resourceOffer("exec1", "host1", 1, ANY)
-      assert(offerResult != None,
+      assert(offerResult.isDefined,
         "Expect resource offer on iteration %s to return a task".format(index))
       assert(offerResult.get.index === 0)
       manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, Some(TaskResultLost))
