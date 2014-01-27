@@ -4,7 +4,7 @@ package expressions
 import rules._
 import errors._
 
-import execution.SharkPlan
+import catalyst.plans.QueryPlan
 
 /**
  * A bound reference points to a specific slot in the input tuple, allowing the actual value to be retrieved more
@@ -27,26 +27,36 @@ case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: Attribut
   override def toString = s"$baseReference:$inputTuple.$ordinal"
 }
 
-// TODO: Should run against any query plan, not just SharkPlans
-object BindReferences extends Rule[SharkPlan] {
-  def apply(plan: SharkPlan): SharkPlan = {
+class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
+  import BindReferences._
+
+  def apply(plan: TreeNode): TreeNode = {
     plan.transform {
-      case leafNode: SharkPlan if leafNode.children.isEmpty => leafNode
-      case nonLeaf: SharkPlan => attachTree(nonLeaf, "Binding references in operator") {
-        logger.debug(s"Binding references in node ${nonLeaf.simpleString}")
-        nonLeaf.transformExpressions {
-          case a: AttributeReference => attachTree(a, "Binding attribute") {
-            val inputTuple = nonLeaf.children.indexWhere(_.output contains a)
-            val ordinal = if (inputTuple == -1) -1 else nonLeaf.children(inputTuple).output.indexWhere(_ == a)
-            if (ordinal == -1) {
-              logger.debug(s"No binding found for $a given input ${nonLeaf.children.map(_.output.mkString("{", ",", "}")).mkString(",")}")
-              a
-            } else {
-              logger.debug(s"Binding $a to $inputTuple.$ordinal given input ${nonLeaf.children.map(_.output.mkString("{", ",", "}")).mkString(",")}")
-              BoundReference(inputTuple, ordinal, a)
-            }
-          }
+      case leafNode if leafNode.children.isEmpty => leafNode
+      case nonLeaf => nonLeaf.transformExpressions { case e =>
+        bindReference(e, nonLeaf.children.map(_.output))
+      }
+    }
+  }
+}
+
+object BindReferences extends Logging {
+  def bindReference(expression: Expression, input: Seq[Seq[Attribute]]): Expression = {
+    expression.transform { case a: AttributeReference =>
+      attachTree(a, "Binding attribute") {
+        val inputAsString = input.map(_.mkString("{", ",", "}")).mkString(",")
+
+        for {
+          (tuple, inputTuple) <- input.zipWithIndex
+          (attr, ordinal) <- tuple.zipWithIndex
+          if attr == a
+        } {
+          logger.debug(s"Binding $attr to $inputTuple.$ordinal given input $inputAsString")
+          return BoundReference(inputTuple, ordinal, a)
         }
+
+        logger.debug(s"No binding found for $a given input $inputAsString")
+        a
       }
     }
   }

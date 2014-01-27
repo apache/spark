@@ -81,7 +81,8 @@ abstract class SharkInstance extends Logging {
   }
 
   object PrepareForExecution extends RuleExecutor[SharkPlan] {
-    val batches = Batch("Prepare Expressions", Once, expressions.BindReferences) :: Nil
+    val batches =
+      Batch("Prepare Expressions", Once, new expressions.BindReferences[SharkPlan]) :: Nil
   }
 
   class SharkSqlQuery(sql: String) extends SharkQuery {
