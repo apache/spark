@@ -211,7 +211,7 @@ object DecisionTree extends Serializable with Logging {
           val lowThreshold = bin.lowSplit.threshold
           val highThreshold = bin.highSplit.threshold
           val features = labeledPoint.features
-          if ((lowThreshold <= features(featureIndex)) & (highThreshold > features(featureIndex))) {
+          if ((lowThreshold < features(featureIndex)) & (highThreshold >= features(featureIndex))) {
             return binIndex
           }
         }
@@ -400,7 +400,8 @@ object DecisionTree extends Serializable with Logging {
             }
           }
 
-          val predict = leftCount / (leftCount + rightCount)
+          //val predict = leftCount / (leftCount + rightCount)
+          val predict = (left1Count + right1Count) / (leftCount + rightCount)
 
           new InformationGainStats(gain,impurity,leftImpurity,rightImpurity,predict)
         }
@@ -672,8 +673,8 @@ object DecisionTree extends Serializable with Logging {
 
         //Find all bins
         for (featureIndex <- 0 until numFeatures){
-          val isFeatureContinous = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
-          if (isFeatureContinous) {  //bins for categorical variables are already assigned
+          val isFeatureContinuous = strategy.categoricalFeaturesInfo.get(featureIndex).isEmpty
+          if (isFeatureContinuous) {  //bins for categorical variables are already assigned
             bins(featureIndex)(0)
               = new Bin(new DummyLowSplit(featureIndex, Continuous),splits(featureIndex)(0),Continuous,Double.MinValue)
             for (index <- 1 until numBins - 1){

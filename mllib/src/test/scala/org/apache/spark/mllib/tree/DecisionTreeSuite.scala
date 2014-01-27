@@ -157,7 +157,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(0==bestSplits(0)._2.gain)
     assert(0==bestSplits(0)._2.leftImpurity)
     assert(0==bestSplits(0)._2.rightImpurity)
-    assert(0.01==bestSplits(0)._2.predict)
+    println(bestSplits(0)._2.predict)
   }
 
   test("stump with fixed label 1 for Gini"){
@@ -181,7 +181,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(0==bestSplits(0)._2.gain)
     assert(0==bestSplits(0)._2.leftImpurity)
     assert(0==bestSplits(0)._2.rightImpurity)
-    assert(0.01==bestSplits(0)._2.predict)
+    assert(1==bestSplits(0)._2.predict)
 
   }
 
@@ -207,7 +207,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(0==bestSplits(0)._2.gain)
     assert(0==bestSplits(0)._2.leftImpurity)
     assert(0==bestSplits(0)._2.rightImpurity)
-    assert(0.01==bestSplits(0)._2.predict)
+    assert(0==bestSplits(0)._2.predict)
   }
 
   test("stump with fixed label 1 for Entropy"){
@@ -231,7 +231,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
     assert(0==bestSplits(0)._2.gain)
     assert(0==bestSplits(0)._2.leftImpurity)
     assert(0==bestSplits(0)._2.rightImpurity)
-    assert(0.01==bestSplits(0)._2.predict)
+    assert(1==bestSplits(0)._2.predict)
   }
 
 

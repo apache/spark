@@ -133,7 +133,6 @@ object DecisionTreeRunner extends Logging {
   //TODO: Make these generic MLTable metrics
   def meanSquaredError(tree : DecisionTreeModel, data : RDD[LabeledPoint]) : Double = {
     val meanSumOfSquares = data.map(y => (tree.predict(y.features) - y.label)*(tree.predict(y.features) - y.label)).mean()
-    println("meanSumOfSquares = " + meanSumOfSquares)
     meanSumOfSquares
   }
 

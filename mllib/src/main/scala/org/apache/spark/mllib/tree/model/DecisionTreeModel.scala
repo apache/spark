@@ -24,7 +24,7 @@ class DecisionTreeModel(val topNode : Node, val algo : Algo) extends Serializabl
   def predict(features : Array[Double]) = {
     algo match {
       case Classification => {
-        if (topNode.predictIfLeaf(features) >= 0.5) 0.0 else 1.0
+        if (topNode.predictIfLeaf(features) < 0.5) 0.0 else 1.0
       }
       case Regression => {
         topNode.predictIfLeaf(features)

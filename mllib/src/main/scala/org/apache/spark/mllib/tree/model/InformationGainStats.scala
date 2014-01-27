@@ -24,9 +24,10 @@ class InformationGainStats(val gain : Double,
                            //val rightSamples : Long
                            val predict : Double) extends Serializable {
 
-  override def toString =
-    "gain = " + gain + ", impurity = " + impurity + ", left impurity = "
-    + leftImpurity +  ", right impurity = " + rightImpurity + ", predict = " + predict
+  override def toString = {
+    "gain = %f, impurity = %f, left impurity = %f, right impurity = %f, predict = %f"
+      .format(gain, impurity, leftImpurity, rightImpurity, predict)
+  }
 
 
 }
