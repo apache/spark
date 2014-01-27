@@ -1,6 +1,7 @@
 package catalyst
 package analysis
 
+import execution.MetastoreRelation
 import expressions._
 import plans.logical._
 import rules._
@@ -34,6 +35,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
+      PreInsertionCasts ::
       typeCoercionRules :_*)
   )
 
@@ -140,5 +142,30 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
      */
     protected def containsStar(exprs: Seq[NamedExpression]): Boolean =
       exprs.collect { case _: Star => true }.nonEmpty
+  }
+
+  /**
+   * Casts input data to correct data types according to table definition before inserting into
+   * that table.
+   */
+  object PreInsertionCasts extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+      // Wait until children are resolved
+      case p: LogicalPlan if !p.childrenResolved => p
+
+      case p @ InsertIntoTable(table: MetastoreRelation, partition, child) =>
+        val childOutputDataTypes = child.output.map(_.dataType)
+        val tableOutputDataTypes = table.output.map(_.dataType)
+
+        // Only do the casting when child output data types differ from table output data types.
+        if (childOutputDataTypes sameElements tableOutputDataTypes) {
+          p
+        } else {
+          val castedChildOutput = child.output.zip(tableOutputDataTypes).map {
+            case (a, dataType) => Alias(Cast(a, dataType), a.name)()
+          }
+          p.copy(table, partition, Project(castedChildOutput, child))
+        }
+    }
   }
 }
