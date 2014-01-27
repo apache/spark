@@ -20,12 +20,22 @@ import catalyst.types.{BooleanType, DataType}
 /* Implicits */
 import scala.collection.JavaConversions._
 
+/**
+ * The Hive table scan operator.  Column and partition pruning are both handled.
+ *
+ * @constructor
+ * @param attributes Attributes to be fetched from the Hive table.
+ * @param relation The Hive table be be scanned.
+ * @param partitionPruningPred An optional partition pruning predicate for partitioned table.
+ */
 case class HiveTableScan(
     attributes: Seq[Attribute],
     relation: MetastoreRelation,
     partitionPruningPred: Option[Expression])
   extends LeafNode {
 
+  // Bind all partition key attribute references to the partition pruning predicate for later
+  // evaluation.
   private val boundPruningPred = partitionPruningPred.map { pred =>
     require(
       pred.dataType == BooleanType,
@@ -46,7 +56,8 @@ case class HiveTableScan(
     relation.tableDesc.getDeserializer.getObjectInspector.asInstanceOf[StructObjectInspector]
 
   /**
-   * Functions that extract the requested attributes from the hive output.
+   * Functions that extract the requested attributes from the hive output.  Partitioned values are
+   * casted from string to its declared data type.
    */
   @transient
   protected lazy val attributeFunctions: Seq[(Any, Array[String]) => Any] = {
@@ -82,14 +93,23 @@ case class HiveTableScan(
     hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))
   }
 
+  /**
+   * Prunes partitions not involve the query plan.
+   *
+   * @param partitions All partitions of the relation.
+   * @return Partitions that are involved in the query plan.
+   */
   private[catalyst] def prunePartitions(partitions: Seq[HivePartition]) = {
     boundPruningPred match {
-      case None =>partitions
+      case None => partitions
       case Some(shouldKeep) => partitions.filter { part =>
         val dataTypes = relation.partitionKeys.map(_.dataType)
         val castedValues = for ((value, dataType) <- part.getValues.zip(dataTypes)) yield {
           castFromString(value, dataType)
         }
+
+        // Only partitioned values are needed here, since the predicate has already been bound to
+        // partition key attribute references.
         val row = new GenericRow(castedValues)
         Evaluate(shouldKeep, Seq(row)).asInstanceOf[Boolean]
       }

@@ -41,6 +41,15 @@ trait PlanningStrategies {
     }
   }
 
+  /**
+   * A strategy used to detect filtering predicates on top of a partitioned relation to help
+   * partition pruning.
+   *
+   * This strategy itself doesn't perform partition pruning, it just collects and combines all the
+   * partition pruning predicates and pass them down to the underlying
+   * [[catalyst.execution.HiveTableScan HiveTableScan]] operator, which does the actual pruning
+   * work.
+   */
   object PartitionPrunings extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case p @ FilteredOperation(predicates, relation: MetastoreRelation) =>
@@ -48,6 +57,8 @@ trait PlanningStrategies {
           execution.HiveTableScan(relation.output, relation, None) :: Nil
         } else {
           val partitionKeys = relation.partitionKeys.map(_.name).toSet
+
+          // Filter out all predicates that only deal with partition keys
           val pruningPreds = predicates.filter {e =>
             val referenceNames = e.references.map(_.name)
             referenceNames.subsetOf(partitionKeys)
@@ -56,7 +67,8 @@ trait PlanningStrategies {
           val tableScan = if (pruningPreds.isEmpty) {
             execution.HiveTableScan(relation.output, relation, None)
           } else {
-            execution.HiveTableScan(relation.output, relation, Some(pruningPreds.reduceLeft(And)))
+            val combinedPruningPred = pruningPreds.reduceLeft(And)
+            execution.HiveTableScan(relation.output, relation, Some(combinedPruningPred))
           }
 
           execution.Filter(predicates.reduceLeft(And), tableScan) :: Nil
