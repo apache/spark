@@ -214,7 +214,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         while (maxMemory - (currentMemory - selectedMemory) < space && iterator.hasNext) {
           val pair = iterator.next()
           val blockId = pair.getKey
-          if (rddToAdd != None && rddToAdd == getRddId(blockId)) {
+          if (rddToAdd.isDefined && rddToAdd == getRddId(blockId)) {
             logInfo("Will not store " + blockIdToAdd + " as it would require dropping another " +
               "block from the same RDD")
             return false

@@ -137,9 +137,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY, tellMaster = false)
 
     // Checking whether blocks are in memory
-    assert(store.getSingle("a1") != None, "a1 was not in store")
-    assert(store.getSingle("a2") != None, "a2 was not in store")
-    assert(store.getSingle("a3") != None, "a3 was not in store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a3").isDefined, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
@@ -186,9 +186,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     val memStatus = master.getMemoryStatus.head._2
     assert(memStatus._1 == 2000L, "total memory " + memStatus._1 + " should equal 2000")
     assert(memStatus._2 <= 1200L, "remaining memory " + memStatus._2 + " should <= 1200")
-    assert(store.getSingle("a1-to-remove") != None, "a1 was not in store")
-    assert(store.getSingle("a2-to-remove") != None, "a2 was not in store")
-    assert(store.getSingle("a3-to-remove") != None, "a3 was not in store")
+    assert(store.getSingle("a1-to-remove").isDefined, "a1 was not in store")
+    assert(store.getSingle("a2-to-remove").isDefined, "a2 was not in store")
+    assert(store.getSingle("a3-to-remove").isDefined, "a3 was not in store")
 
     // Checking whether master knows about the blocks or not
     assert(master.getLocations("a1-to-remove").size > 0, "master was not told about a1")
@@ -259,7 +259,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
 
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
 
-    assert(store.getSingle("a1") != None, "a1 was not in store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
     assert(master.getLocations("a1").size > 0, "master was not told about a1")
 
     master.removeExecutor(store.blockManagerId.executorId)
@@ -333,14 +333,14 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY)
     store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY)
-    assert(store.getSingle("a2") != None, "a2 was not in store")
-    assert(store.getSingle("a3") != None, "a3 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a3").isDefined, "a3 was not in store")
     assert(store.getSingle("a1") === None, "a1 was in store")
-    assert(store.getSingle("a2") != None, "a2 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
     // At this point a2 was gotten last, so LRU will getSingle rid of a3
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY)
-    assert(store.getSingle("a1") != None, "a1 was not in store")
-    assert(store.getSingle("a2") != None, "a2 was not in store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
     assert(store.getSingle("a3") === None, "a3 was in store")
   }
 
@@ -352,14 +352,14 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a3", a3, StorageLevel.MEMORY_ONLY_SER)
-    assert(store.getSingle("a2") != None, "a2 was not in store")
-    assert(store.getSingle("a3") != None, "a3 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a3").isDefined, "a3 was not in store")
     assert(store.getSingle("a1") === None, "a1 was in store")
-    assert(store.getSingle("a2") != None, "a2 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
     // At this point a2 was gotten last, so LRU will getSingle rid of a3
     store.putSingle("a1", a1, StorageLevel.MEMORY_ONLY_SER)
-    assert(store.getSingle("a1") != None, "a1 was not in store")
-    assert(store.getSingle("a2") != None, "a2 was not in store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
     assert(store.getSingle("a3") === None, "a3 was in store")
   }
 
@@ -374,8 +374,8 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     // Even though we accessed rdd_0_3 last, it should not have replaced partitions 1 and 2
     // from the same RDD
     assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
-    assert(store.getSingle(rdd(0, 2)) != None, "rdd_0_2 was not in store")
-    assert(store.getSingle(rdd(0, 1)) != None, "rdd_0_1 was not in store")
+    assert(store.getSingle(rdd(0, 2)).isDefined, "rdd_0_2 was not in store")
+    assert(store.getSingle(rdd(0, 1)).isDefined, "rdd_0_1 was not in store")
     // Check that rdd_0_3 doesn't replace them even after further accesses
     assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
     assert(store.getSingle(rdd(0, 3)) === None, "rdd_0_3 was in store")
@@ -392,7 +392,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(!store.memoryStore.contains(rdd(0, 1)), "rdd_0_1 was in store")
     assert(store.memoryStore.contains(rdd(0, 2)), "rdd_0_2 was not in store")
     // Do a get() on rdd_0_2 so that it is the most recently used item
-    assert(store.getSingle(rdd(0, 2)) != None, "rdd_0_2 was not in store")
+    assert(store.getSingle(rdd(0, 2)).isDefined, "rdd_0_2 was not in store")
     // Put in more partitions from RDD 0; they should replace rdd_1_1
     store.putSingle(rdd(0, 3), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
     store.putSingle(rdd(0, 4), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
@@ -413,9 +413,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.DISK_ONLY)
     store.putSingle("a2", a2, StorageLevel.DISK_ONLY)
     store.putSingle("a3", a3, StorageLevel.DISK_ONLY)
-    assert(store.getSingle("a2") != None, "a2 was in store")
-    assert(store.getSingle("a3") != None, "a3 was in store")
-    assert(store.getSingle("a1") != None, "a1 was in store")
+    assert(store.getSingle("a2").isDefined, "a2 was in store")
+    assert(store.getSingle("a3").isDefined, "a3 was in store")
+    assert(store.getSingle("a1").isDefined, "a1 was in store")
   }
 
   test("disk and memory storage") {
@@ -426,11 +426,11 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK)
-    assert(store.getSingle("a2") != None, "a2 was not in store")
-    assert(store.getSingle("a3") != None, "a3 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a3").isDefined, "a3 was not in store")
     assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
-    assert(store.getSingle("a1") != None, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1") != None, "a1 was not in memory store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
   }
 
   test("disk and memory storage with getLocalBytes") {
@@ -441,11 +441,11 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK)
-    assert(store.getLocalBytes("a2") != None, "a2 was not in store")
-    assert(store.getLocalBytes("a3") != None, "a3 was not in store")
+    assert(store.getLocalBytes("a2").isDefined, "a2 was not in store")
+    assert(store.getLocalBytes("a3").isDefined, "a3 was not in store")
     assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
-    assert(store.getLocalBytes("a1") != None, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1") != None, "a1 was not in memory store")
+    assert(store.getLocalBytes("a1").isDefined, "a1 was not in store")
+    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
   }
 
   test("disk and memory storage with serialization") {
@@ -456,11 +456,11 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK_SER)
-    assert(store.getSingle("a2") != None, "a2 was not in store")
-    assert(store.getSingle("a3") != None, "a3 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a3").isDefined, "a3 was not in store")
     assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
-    assert(store.getSingle("a1") != None, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1") != None, "a1 was not in memory store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
   }
 
   test("disk and memory storage with serialization and getLocalBytes") {
@@ -471,11 +471,11 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a1", a1, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a2", a2, StorageLevel.MEMORY_AND_DISK_SER)
     store.putSingle("a3", a3, StorageLevel.MEMORY_AND_DISK_SER)
-    assert(store.getLocalBytes("a2") != None, "a2 was not in store")
-    assert(store.getLocalBytes("a3") != None, "a3 was not in store")
+    assert(store.getLocalBytes("a2").isDefined, "a2 was not in store")
+    assert(store.getLocalBytes("a3").isDefined, "a3 was not in store")
     assert(store.memoryStore.getValues("a1") == None, "a1 was in memory store")
-    assert(store.getLocalBytes("a1") != None, "a1 was not in store")
-    assert(store.memoryStore.getValues("a1") != None, "a1 was not in memory store")
+    assert(store.getLocalBytes("a1").isDefined, "a1 was not in store")
+    assert(store.memoryStore.getValues("a1").isDefined, "a1 was not in memory store")
   }
 
   test("LRU with mixed storage levels") {
@@ -489,18 +489,18 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a3", a3, StorageLevel.DISK_ONLY)
     // At this point LRU should not kick in because a3 is only on disk
-    assert(store.getSingle("a1") != None, "a2 was not in store")
-    assert(store.getSingle("a2") != None, "a3 was not in store")
-    assert(store.getSingle("a3") != None, "a1 was not in store")
-    assert(store.getSingle("a1") != None, "a2 was not in store")
-    assert(store.getSingle("a2") != None, "a3 was not in store")
-    assert(store.getSingle("a3") != None, "a1 was not in store")
+    assert(store.getSingle("a1").isDefined, "a2 was not in store")
+    assert(store.getSingle("a2").isDefined, "a3 was not in store")
+    assert(store.getSingle("a3").isDefined, "a1 was not in store")
+    assert(store.getSingle("a1").isDefined, "a2 was not in store")
+    assert(store.getSingle("a2").isDefined, "a3 was not in store")
+    assert(store.getSingle("a3").isDefined, "a1 was not in store")
     // Now let's add in a4, which uses both disk and memory; a1 should drop out
     store.putSingle("a4", a4, StorageLevel.MEMORY_AND_DISK_SER)
     assert(store.getSingle("a1") == None, "a1 was in store")
-    assert(store.getSingle("a2") != None, "a2 was not in store")
-    assert(store.getSingle("a3") != None, "a3 was not in store")
-    assert(store.getSingle("a4") != None, "a4 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a3").isDefined, "a3 was not in store")
+    assert(store.getSingle("a4").isDefined, "a4 was not in store")
   }
 
   test("in-memory LRU with streams") {
@@ -511,18 +511,18 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
     store.put("list3", list3.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    assert(store.get("list2") != None, "list2 was not in store")
+    assert(store.get("list2").isDefined, "list2 was not in store")
     assert(store.get("list2").get.size == 2)
-    assert(store.get("list3") != None, "list3 was not in store")
+    assert(store.get("list3").isDefined, "list3 was not in store")
     assert(store.get("list3").get.size == 2)
     assert(store.get("list1") === None, "list1 was in store")
-    assert(store.get("list2") != None, "list2 was not in store")
+    assert(store.get("list2").isDefined, "list2 was not in store")
     assert(store.get("list2").get.size == 2)
     // At this point list2 was gotten last, so LRU will getSingle rid of list3
     store.put("list1", list1.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
-    assert(store.get("list1") != None, "list1 was not in store")
+    assert(store.get("list1").isDefined, "list1 was not in store")
     assert(store.get("list1").get.size == 2)
-    assert(store.get("list2") != None, "list2 was not in store")
+    assert(store.get("list2").isDefined, "list2 was not in store")
     assert(store.get("list2").get.size == 2)
     assert(store.get("list3") === None, "list1 was in store")
   }
@@ -538,26 +538,26 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.put("list2", list2.iterator, StorageLevel.MEMORY_ONLY_SER, tellMaster = true)
     store.put("list3", list3.iterator, StorageLevel.DISK_ONLY, tellMaster = true)
     // At this point LRU should not kick in because list3 is only on disk
-    assert(store.get("list1") != None, "list2 was not in store")
+    assert(store.get("list1").isDefined, "list2 was not in store")
     assert(store.get("list1").get.size === 2)
-    assert(store.get("list2") != None, "list3 was not in store")
+    assert(store.get("list2").isDefined, "list3 was not in store")
     assert(store.get("list2").get.size === 2)
-    assert(store.get("list3") != None, "list1 was not in store")
+    assert(store.get("list3").isDefined, "list1 was not in store")
     assert(store.get("list3").get.size === 2)
-    assert(store.get("list1") != None, "list2 was not in store")
+    assert(store.get("list1").isDefined, "list2 was not in store")
     assert(store.get("list1").get.size === 2)
-    assert(store.get("list2") != None, "list3 was not in store")
+    assert(store.get("list2").isDefined, "list3 was not in store")
     assert(store.get("list2").get.size === 2)
-    assert(store.get("list3") != None, "list1 was not in store")
+    assert(store.get("list3").isDefined, "list1 was not in store")
     assert(store.get("list3").get.size === 2)
     // Now let's add in list4, which uses both disk and memory; list1 should drop out
     store.put("list4", list4.iterator, StorageLevel.MEMORY_AND_DISK_SER, tellMaster = true)
     assert(store.get("list1") === None, "list1 was in store")
-    assert(store.get("list2") != None, "list3 was not in store")
+    assert(store.get("list2").isDefined, "list3 was not in store")
     assert(store.get("list2").get.size === 2)
-    assert(store.get("list3") != None, "list1 was not in store")
+    assert(store.get("list3").isDefined, "list1 was not in store")
     assert(store.get("list3").get.size === 2)
-    assert(store.get("list4") != None, "list4 was not in store")
+    assert(store.get("list4").isDefined, "list4 was not in store")
     assert(store.get("list4").get.size === 2)
   }
 
@@ -579,7 +579,7 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     assert(store.getSingle("a1") === None, "a1 was in store")
     store.putSingle("a2", new Array[Byte](1000), StorageLevel.MEMORY_AND_DISK)
     assert(store.memoryStore.getValues("a2") === None, "a2 was in memory store")
-    assert(store.getSingle("a2") != None, "a2 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
   }
 
   test("block compression") {

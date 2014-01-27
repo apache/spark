@@ -67,7 +67,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
               <li><strong>User:</strong> {app.desc.user}</li>
               <li><strong>Cores:</strong>
                 {
-                if (app.desc.maxCores == None) {
+                if (app.desc.maxCores.isEmpty) {
                   "Unlimited (%s granted)".format(app.coresGranted)
                 } else {
                   "%s (%s granted, %s left)".format(
