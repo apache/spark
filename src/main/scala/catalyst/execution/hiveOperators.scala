@@ -172,8 +172,8 @@ case class InsertIntoHiveTable(
 
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
-   * [[org.apache.hadoop.hive.serde2.SerDe SerDe]] and the
-   * [[org.apache.hadoop.mapred.OutputFormat OutputFormat]] provided by the table definition.
+   * `org.apache.hadoop.hive.serde2.SerDe` and the
+   * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
    */
   def execute() = {
     require(partition.isEmpty, "Inserting into partitioned table not supported.")
