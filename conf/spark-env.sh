@@ -19,21 +19,24 @@
 # - SPARK_WORKER_PORT / SPARK_WORKER_WEBUI_PORT
 # - SPARK_WORKER_INSTANCES, to set the number of worker processes per node
 # - SPARK_WORKER_DIR, to set the working directory of worker processes
+echoerr() { echo "$@" 1>&2; }
+
 if [[ -z "$MASTER" ]]; then
-  echo "Sparkify: Connecting to chicago spark cluster ..."
+  echoerr "Sparkify: Connecting to chicago spark cluster ..."
   export MASTER=spark://dn05.chi.shopify.com:7077
+  export SPARK_HOME=/u/apps/spark/current
   export REMOTE_SPARK_HOME=/u/apps/spark/current
   export SPARK_JAVA_OPTS="-Dspark.cores.max=10"
   export HADOOP_CONF_DIR=/etc/hadoop/conf
 
   # Figure out the local IP to bind spark to for shell <-> master communication
   vpn_interface=tap0;
-  get_ip_command="ifconfig $vpn_interface 2>&1 | grep "inet" | awk '{print $2}'"
+  get_ip_command="ifconfig $vpn_interface 2>&1 | grep 'inet' | awk '{print \$2}'"
   if ifconfig $vpn_interface > /dev/null 2>&1; then
-    export SPARK_LOCAL_IP=`$get_ip_command`
+    export SPARK_LOCAL_IP=`bash -c "$get_ip_command"`
   else
     if [[ -e /Applications/Viscosity.app ]]; then
-      echo "WARNING: could not find an VPN interface to connect to the Shopify Spark Cluster! Trying to autoconnect..."
+      echoerr "WARNING: could not find an VPN interface to connect to the Shopify Spark Cluster! Trying to autoconnect..."
       osascript -e "
         tell application \"Viscosity\"
           connect first connection
@@ -47,7 +50,7 @@ if [[ -z "$MASTER" ]]; then
       "
       export SPARK_LOCAL_IP=`$get_ip_command`
     else
-      echo "ERROR: could not find an VPN interface to connect to the Shopify Spark Cluster! Please connect your VPN client! See https://vault-unicorn.shopify.com/VPN---Servers ."
+      echoerr "ERROR: could not find an VPN interface to connect to the Shopify Spark Cluster! Please connect your VPN client! See https://vault-unicorn.shopify.com/VPN---Servers ."
       exit 1
     fi
   fi
