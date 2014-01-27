@@ -23,9 +23,9 @@ trait PlanningStrategies {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       // Push attributes into table scan when possible.
       case p @ logical.Project(projectList, m: MetastoreRelation) if isSimpleProject(projectList) =>
-        execution.HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m) :: Nil
+        execution.HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m, None) :: Nil
       case m: MetastoreRelation =>
-        execution.HiveTableScan(m.output, m) :: Nil
+        execution.HiveTableScan(m.output, m, None) :: Nil
       case _ => Nil
     }
 
@@ -38,6 +38,32 @@ trait PlanningStrategies {
         case a: Attribute => true
         case _ => false
       }.reduceLeft(_ && _)
+    }
+  }
+
+  object PartitionPrunings extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
+      case p @ FilteredOperation(predicates, relation: MetastoreRelation) =>
+        if (predicates.isEmpty) {
+          execution.HiveTableScan(relation.output, relation, None) :: Nil
+        } else {
+          val partitionKeys = relation.partitionKeys.map(_.name).toSet
+          val pruningPreds = predicates.filter {e =>
+            val referenceNames = e.references.map(_.name)
+            referenceNames.subsetOf(partitionKeys)
+          }
+
+          val tableScan = if (pruningPreds.isEmpty) {
+            execution.HiveTableScan(relation.output, relation, None)
+          } else {
+            execution.HiveTableScan(relation.output, relation, Some(pruningPreds.reduceLeft(And)))
+          }
+
+          execution.Filter(predicates.reduceLeft(And), tableScan) :: Nil
+        }
+
+      case _ =>
+        Nil
     }
   }
 

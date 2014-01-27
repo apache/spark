@@ -177,6 +177,15 @@ object TestShark extends SharkInstance {
            """.stripMargin)
       }
     }),
+    TestTable("srcpart1", () => {
+      runSqlHive("CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
+      for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
+        runSqlHive(
+          s"""LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt'
+             |OVERWRITE INTO TABLE srcpart1 PARTITION (ds='$ds',hr='$hr')
+           """.stripMargin)
+      }
+    }),
     TestTable("src_thrift", () => {
       import org.apache.thrift.protocol.TBinaryProtocol
       import org.apache.hadoop.hive.serde2.thrift.test.Complex

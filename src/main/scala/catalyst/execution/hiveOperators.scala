@@ -5,6 +5,7 @@ import java.nio.file.Files
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
+import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
@@ -13,12 +14,26 @@ import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.SparkContext._
 
-import expressions.Attribute
+import catalyst.expressions._
+import catalyst.types.{BooleanType, DataType}
 
 /* Implicits */
 import scala.collection.JavaConversions._
 
-case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation) extends LeafNode {
+case class HiveTableScan(
+    attributes: Seq[Attribute],
+    relation: MetastoreRelation,
+    partitionPruningPred: Option[Expression])
+  extends LeafNode {
+
+  private val boundPruningPred = partitionPruningPred.map { pred =>
+    require(
+      pred.dataType == BooleanType,
+      s"Data type of predicate $pred must be BooleanType rather than ${pred.dataType}.")
+
+    BindReferences.bindReference(pred, Seq(relation.partitionKeys))
+  }
+
   @transient
   val hadoopReader = new HadoopTableReader(relation.tableDesc, SharkContext.hiveconf)
 
@@ -34,16 +49,20 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
    * Functions that extract the requested attributes from the hive output.
    */
   @transient
-  protected lazy val attributeFunctions: Seq[(AnyRef, Array[String]) => AnyRef] = {
+  protected lazy val attributeFunctions: Seq[(Any, Array[String]) => Any] = {
     attributes.map { a =>
       val ordinal = relation.partitionKeys.indexOf(a)
       if (ordinal >= 0) {
-        (_: AnyRef, partitionKeys: Array[String]) => partitionKeys(ordinal)
+        (_: Any, partitionKeys: Array[String]) => {
+          val value = partitionKeys(ordinal)
+          val dataType = relation.partitionKeys(ordinal).dataType
+          castFromString(value, dataType)
+        }
       } else {
         val ref = objectInspector.getAllStructFieldRefs
           .find(_.getFieldName == a.name)
           .getOrElse(sys.error(s"Can't find attribute $a"))
-        (row: AnyRef, _: Array[String]) => {
+        (row: Any, _: Array[String]) => {
           val data = objectInspector.getStructFieldData(row, ref)
           val inspector = ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector]
           inspector.getPrimitiveJavaObject(data)
@@ -52,11 +71,29 @@ case class HiveTableScan(attributes: Seq[Attribute], relation: MetastoreRelation
     }
   }
 
+  private def castFromString(value: String, dataType: DataType) = {
+    Evaluate(Cast(Literal(value), dataType), Nil)
+  }
+
   @transient
   def inputRdd = if (!relation.hiveQlTable.isPartitioned) {
     hadoopReader.makeRDDForTable(relation.hiveQlTable)
   } else {
-    hadoopReader.makeRDDForPartitionedTable(relation.hiveQlPartitions)
+    hadoopReader.makeRDDForPartitionedTable(prunePartitions(relation.hiveQlPartitions))
+  }
+
+  private[catalyst] def prunePartitions(partitions: Seq[HivePartition]) = {
+    boundPruningPred match {
+      case None =>partitions
+      case Some(shouldKeep) => partitions.filter { part =>
+        val dataTypes = relation.partitionKeys.map(_.dataType)
+        val castedValues = for ((value, dataType) <- part.getValues.zip(dataTypes)) yield {
+          castFromString(value, dataType)
+        }
+        val row = new GenericRow(castedValues)
+        Evaluate(shouldKeep, Seq(row)).asInstanceOf[Boolean]
+      }
+    }
   }
 
   def execute() = {
@@ -113,8 +150,8 @@ case class InsertIntoHiveTable(
 
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
-   * [[org.apache.hadoop.hive.serde2.SerDe SerDe]] and the [[org.apache.hadoop.mapred.OutputFormat
-   * OutputFormat]] provided by the table definition.
+   * [[org.apache.hadoop.hive.serde2.SerDe SerDe]] and the
+   * [[org.apache.hadoop.mapred.OutputFormat OutputFormat]] provided by the table definition.
    */
   def execute() = {
     require(partition.isEmpty, "Inserting into partitioned table not supported.")
