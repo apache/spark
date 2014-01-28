@@ -13,7 +13,7 @@ scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
 // TODO: Remove when Spark 0.9.0 is released for real.
-resolvers += "SparkStaging" at "https://repository.apache.org/content/repositories/orgapachespark-1005/"
+resolvers += "SparkStaging" at "https://repository.apache.org/content/repositories/orgapachespark-1006/"
 
 libraryDependencies += "org.apache.spark" %% "spark-core" % "0.9.0-incubating"
 
