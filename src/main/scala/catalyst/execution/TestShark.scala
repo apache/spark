@@ -23,9 +23,8 @@ import util._
 
 /**
  * A locally running test instance of spark.  The lifecycle for a given query is managed by the
- * inner class [[catalyst.execution.TestShark.SharkQuery SharkQuery]].  A
- * [[catalyst.execution.TestShark.SharkQuery SharkQuery]] can either be instantiated directly or
- * using the implicit conversion '.q'.
+ * inner class [[SharkQuery]].  A [[SharkQuery]] can either be instantiated directly or using the
+ * implicit conversion '.q'.
  *
  * {{{
  *   scala> val query = "SELECT key FROM src".q
@@ -42,10 +41,9 @@ import util._
  *   res0: Array[IndexedSeq[Any]] = Array(Vector(238), Vector(86), Vector(311), ...
  * }}}
  *
- * Data from [[catalyst.execution.TestShark.testTables testTables]] will be automatically loaded
- * whenever a query is run over those tables.
- * Calling [[catalyst.execution.TestShark.reset reset]] will delete all tables and other state in
- * the database, leaving the database in a "clean" state.
+ * Data from [[testTables]] will be automatically loaded whenever a query is run over those tables.
+ * Calling [[reset]] will delete all tables and other state in the database, leaving the database
+ * in a "clean" state.
  *
  * TestShark is implemented as a singleton object because instantiating multiple copies of the hive
  * metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of

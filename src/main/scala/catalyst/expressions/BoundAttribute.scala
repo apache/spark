@@ -44,7 +44,7 @@ object BindReferences extends Logging {
   def bindReference(expression: Expression, input: Seq[Seq[Attribute]]): Expression = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
-        val inputAsString = input.map(_.mkString("{", ",", "}")).mkString(",")
+        def inputAsString = input.map(_.mkString("{", ",", "}")).mkString(",")
 
         for {
           (tuple, inputTuple) <- input.zipWithIndex

@@ -36,7 +36,7 @@ case class HiveTableScan(
     partitionPruningPred: Option[Expression])
   extends LeafNode {
 
-  // Bind all partition key attribute references to the partition pruning predicate for later
+  // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
   private val boundPruningPred = partitionPruningPred.map { pred =>
     require(
@@ -193,7 +193,7 @@ case class InsertIntoHiveTable(
         .asInstanceOf[StructObjectInspector]
 
       iter.map { row =>
-        // TODO Should add a new VarcharType data type to handle HiveQL VARCHAR
+        // Casts Strings to HiveVarchars when necessary.
         val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector)
         val mappedRow = row.zip(fieldOIs).map {
           case (s: String, oi: JavaHiveVarcharObjectInspector) => new HiveVarchar(s, s.size)

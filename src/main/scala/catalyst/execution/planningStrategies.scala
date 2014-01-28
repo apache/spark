@@ -34,10 +34,7 @@ trait PlanningStrategies {
      * complex expressions.
      */
     def isSimpleProject(projectList: Seq[NamedExpression]) = {
-      projectList.map {
-        case a: Attribute => true
-        case _ => false
-      }.reduceLeft(_ && _)
+      projectList.forall(_.isInstanceOf[Attribute])
     }
   }
 
@@ -46,33 +43,26 @@ trait PlanningStrategies {
    * partition pruning.
    *
    * This strategy itself doesn't perform partition pruning, it just collects and combines all the
-   * partition pruning predicates and pass them down to the underlying
-   * [[catalyst.execution.HiveTableScan HiveTableScan]] operator, which does the actual pruning
-   * work.
+   * partition pruning predicates and pass them down to the underlying [[HiveTableScan]] operator,
+   * which does the actual pruning work.
    */
   object PartitionPrunings extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case p @ FilteredOperation(predicates, relation: MetastoreRelation) =>
-        if (predicates.isEmpty) {
-          execution.HiveTableScan(relation.output, relation, None) :: Nil
-        } else {
-          val partitionKeys = relation.partitionKeys.map(_.name).toSet
+        val partitionKeyIds = relation.partitionKeys.map(_.id).toSet
 
-          // Filter out all predicates that only deal with partition keys
-          val pruningPreds = predicates.filter {e =>
-            val referenceNames = e.references.map(_.name)
-            referenceNames.subsetOf(partitionKeys)
-          }
-
-          val tableScan = if (pruningPreds.isEmpty) {
-            execution.HiveTableScan(relation.output, relation, None)
-          } else {
-            val combinedPruningPred = pruningPreds.reduceLeft(And)
-            execution.HiveTableScan(relation.output, relation, Some(combinedPruningPred))
-          }
-
-          execution.Filter(predicates.reduceLeft(And), tableScan) :: Nil
+        // Filter out all predicates that only deal with partition keys
+        val (pruningPredicates, otherPredicates) = predicates.partition {
+          _.references.map(_.id).subsetOf(partitionKeyIds)
         }
+
+        val scan = execution.HiveTableScan(
+          relation.output, relation, pruningPredicates.reduceLeftOption(And))
+
+        otherPredicates
+          .reduceLeftOption(And)
+          .map(execution.Filter(_, scan))
+          .getOrElse(scan) :: Nil
 
       case _ =>
         Nil

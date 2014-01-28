@@ -95,7 +95,8 @@ private[catalyst] class HadoopTableReader(@transient _tableDesc: TableDesc, @tra
       // Deserialize each Writable to get the row value.
       iter.map {
         case v: Writable => deserializer.deserialize(v)
-        case value => throw new RuntimeException("Failed to match " + value.toString)
+        case value =>
+          sys.error(s"Unable to deserialize non-Writable: $value of ${value.getClass.getName}")
       }
     }
     deserializedHadoopRDD

@@ -1,7 +1,6 @@
 package catalyst
 package analysis
 
-import execution.MetastoreRelation
 import expressions._
 import plans.logical._
 import rules._
@@ -153,18 +152,20 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       // Wait until children are resolved
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case p @ InsertIntoTable(table: MetastoreRelation, partition, child) =>
+      case p @ InsertIntoTable(table, _, child) =>
         val childOutputDataTypes = child.output.map(_.dataType)
         val tableOutputDataTypes = table.output.map(_.dataType)
 
-        // Only do the casting when child output data types differ from table output data types.
         if (childOutputDataTypes sameElements tableOutputDataTypes) {
           p
         } else {
-          val castedChildOutput = child.output.zip(tableOutputDataTypes).map {
-            case (a, dataType) => Alias(Cast(a, dataType), a.name)()
+          // Only do the casting when child output data types differ from table output data types.
+          val castedChildOutput = child.output.zip(table.output).map {
+            case (l, r) if l.dataType != r.dataType => Alias(Cast(l, r.dataType), l.name)()
+            case (l, _) => l
           }
-          p.copy(table, partition, Project(castedChildOutput, child))
+
+          p.copy(child = Project(castedChildOutput, child))
         }
     }
   }
