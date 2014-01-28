@@ -454,6 +454,13 @@ Apart from these, the following properties are also available, and may be useful
     the whole cluster by default. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
     applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
+</td>
+</tr>
+<tr>
+  <td>spark.files.overwrite</td>
+  <td>false</td>
+  <td>
+    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
   </td>
 </tr>
 </table>
