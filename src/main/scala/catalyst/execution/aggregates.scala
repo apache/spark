@@ -107,7 +107,8 @@ case class Aggregate(
       evaluator
     }
 
-    val buffer = function.getNewAggregationBuffer
+	// Cast required to avoid type inference selecting a deprecated Hive API.
+    val buffer = function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
 
     def result: Any = unwrap(function.evaluate(buffer))
 
