@@ -36,6 +36,9 @@ case class HiveTableScan(
     partitionPruningPred: Option[Expression])
   extends LeafNode {
 
+  require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
+    "Partition pruning predicates only supported for partitioned tables.")
+
   // Bind all partition key attribute references in the partition pruning predicate for later
   // evaluation.
   private val boundPruningPred = partitionPruningPred.map { pred =>

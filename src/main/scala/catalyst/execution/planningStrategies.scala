@@ -48,7 +48,9 @@ trait PlanningStrategies {
    */
   object PartitionPrunings extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
-      case p @ FilteredOperation(predicates, relation: MetastoreRelation) =>
+      case p @ FilteredOperation(predicates, relation: MetastoreRelation)
+          if relation.hiveQlTable.isPartitioned =>
+
         val partitionKeyIds = relation.partitionKeys.map(_.id).toSet
 
         // Filter out all predicates that only deal with partition keys
