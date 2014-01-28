@@ -139,7 +139,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
   extends Expression
   with Partitioning {
 
-  def children = expressions.toSeq
+  def children = expressions
   def references = expressions.flatMap(_.references).toSet
   def nullable = false
   def dataType = IntegerType
@@ -173,7 +173,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
   extends Expression
   with Partitioning {
 
-  def children = ordering.toSeq
+  def children = ordering
   def references = ordering.flatMap(_.references).toSet
   def nullable = false
   def dataType = IntegerType
