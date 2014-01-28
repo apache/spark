@@ -3,6 +3,9 @@ package execution
 
 import catalyst.errors._
 import catalyst.expressions._
+import catalyst.plans.physical.Distribution._
+import catalyst.expressions.SortOrder
+import catalyst.plans.physical.{UnspecifiedDistribution, Distribution}
 
 case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
@@ -48,7 +51,13 @@ case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) 
   def execute() = sc.makeRDD(executeCollect(), 1)
 }
 
-case class SortPartitions(sortOrder: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
+case class SortPartitions(
+    sortOrder: Seq[SortOrder],
+    child: SharkPlan)
+    (override val requiredChildDistribution: Seq[Distribution] = UnspecifiedDistribution :: Nil)
+  extends UnaryNode {
+  override def otherCopyArgs = requiredChildDistribution :: Nil
+
   @transient
   lazy val ordering = new RowOrdering(sortOrder)
 

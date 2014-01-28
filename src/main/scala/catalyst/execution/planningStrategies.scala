@@ -113,11 +113,13 @@ trait PlanningStrategies {
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Sort(sortExprs, child) =>
-        // First repartition then sort locally.
-        execution.SortPartitions(sortExprs,
-          execution.Exchange(RangePartitioning(sortExprs, 8), planLater(child))) :: Nil
+        // Set the requiredDistribution of this SortPartitions to OrderedDistribution.
+        execution.SortPartitions(
+          sortExprs,
+          planLater(child))(OrderedDistribution(sortExprs) :: Nil) :: Nil
       case logical.SortPartitions(sortExprs, child) =>
-        execution.SortPartitions(sortExprs, planLater(child)) :: Nil
+        // Set the requiredDistribution of this SortPartitions to UnspecifiedDistribution.
+        execution.SortPartitions(sortExprs, planLater(child))() :: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
