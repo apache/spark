@@ -28,13 +28,20 @@ case object UnspecifiedDistribution extends Distribution
  */
 case object AllTuples extends Distribution
 
+// TODO: Add a BroadcastDistribution?
 /**
  * Represents data where tuples that share the same values for the `clustering`
  * [[catalyst.expressions.Expression Expressions]] will be co-located. Based on the context, this
  * can mean such tuples are either co-located in the same partition or they will be contiguous
  * within a single partition.
  */
-case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution
+case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
+  if (clustering == Nil) {
+    throw new IllegalArgumentException("The clustering expressions of a ClusteredDistribution " +
+      "should not be Nil. An AllTuples should be used to represent a distribution that only has " +
+      "a single partition.")
+  }
+}
 
 /**
  * Represents data where tuples have been ordered according to the `ordering`
@@ -43,7 +50,27 @@ case class ClusteredDistribution(clustering: Seq[Expression]) extends Distributi
  * the ordering expressions are contiguous and will never be split across partitions.
  */
 case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
+  if (ordering == Nil) {
+    throw new IllegalArgumentException("The ordering expressions of a OrderedDistribution " +
+      "should not be Nil. An AllTuples should be used to represent a distribution that only has " +
+      "a single partition.")
+  }
+
   def clustering = ordering.map(_.child).toSet
+}
+
+object Distribution {
+  def getSpecifiedDistribution(expressions: Seq[Expression]): Distribution = {
+    if (expressions == Nil) {
+      AllTuples
+    } else {
+      if (expressions.forall(exp => exp.isInstanceOf[SortOrder])) {
+        OrderedDistribution(expressions.asInstanceOf[Seq[SortOrder]])
+      } else {
+        ClusteredDistribution(expressions)
+      }
+    }
+  }
 }
 
 sealed trait Partitioning {
@@ -52,8 +79,11 @@ sealed trait Partitioning {
 
   /**
    * Returns true iff the guarantees made by this
-   * [[catalyst.plans.physical.Partitioning Partitioning]] are sufficient to satisfy all
-   * guarantees mandated by the `required` [[catalyst.plans.physical.Distribution Distribution]].
+   * [[catalyst.plans.physical.Partitioning Partitioning]] are sufficient to satisfy
+   * the partitioning scheme mandated by the `required`
+   * [[catalyst.plans.physical.Distribution Distribution]], i.e. the current dataset does not
+   * need to be re-partitioned for the `required` Distribution (it is possible that tuples within
+   * a partition need to be reorganized).
    */
   def satisfies(required: Distribution): Boolean
 
@@ -81,9 +111,9 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
-  override def satisfies(required: Distribution): Boolean = true
+  def satisfies(required: Distribution): Boolean = true
 
-  override def compatibleWith(other: Partitioning) = other match {
+  def compatibleWith(other: Partitioning) = other match {
     case SinglePartition => true
     case _ => false
   }
@@ -92,9 +122,9 @@ case object SinglePartition extends Partitioning {
 case object BroadcastPartitioning extends Partitioning {
   val numPartitions = 1
 
-  override def satisfies(required: Distribution): Boolean = true
+  def satisfies(required: Distribution): Boolean = true
 
-  override def compatibleWith(other: Partitioning) = other match {
+  def compatibleWith(other: Partitioning) = other match {
     case SinglePartition => true
     case _ => false
   }
@@ -123,7 +153,7 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
     case _ => false
   }
 
-  override def compatibleWith(other: Partitioning) = other match {
+  def compatibleWith(other: Partitioning) = other match {
     case BroadcastPartitioning => true
     case h: HashPartitioning if h == this => true
     case _ => false

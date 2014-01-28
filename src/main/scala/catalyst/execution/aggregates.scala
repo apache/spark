@@ -3,11 +3,10 @@ package execution
 
 import catalyst.errors._
 import catalyst.expressions._
-import catalyst.plans.physical._
+import catalyst.plans.physical.Distribution._
 import org.apache.spark.rdd.SharkPairRDDFunctions
 
 /* Implicits */
-import org.apache.spark.SparkContext._
 import SharkPairRDDFunctions._
 
 case class Aggregate(
@@ -16,7 +15,7 @@ case class Aggregate(
     child: SharkPlan)(@transient sc: SharkContext)
   extends UnaryNode {
 
-  override def requiredChildDistribution = Seq(ClusteredDistribution(groupingExpressions))
+  override def requiredChildDistribution = getSpecifiedDistribution(groupingExpressions) :: Nil
   override def otherCopyArgs = sc :: Nil
   def output = aggregateExpressions.map(_.toAttribute)
 
