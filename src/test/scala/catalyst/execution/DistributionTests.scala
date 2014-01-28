@@ -5,7 +5,6 @@ package physical
 import org.scalatest.FunSuite
 
 import catalyst.dsl._
-import catalyst.plans.physical.Distribution._
 
 class DistributionTests extends FunSuite {
 
@@ -34,48 +33,48 @@ class DistributionTests extends FunSuite {
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      getSpecifiedDistribution(Seq('a, 'b, 'c)),
+      ClusteredDistribution(Seq('a, 'b, 'c)),
       true)
 
     checkSatisfied(
       HashPartitioning(Seq('b, 'c), 10),
-      getSpecifiedDistribution(Seq('a, 'b, 'c)),
+      ClusteredDistribution(Seq('a, 'b, 'c)),
       true)
 
     checkSatisfied(
       SinglePartition,
-      getSpecifiedDistribution(Seq('a, 'b, 'c)),
+      ClusteredDistribution(Seq('a, 'b, 'c)),
       true)
 
     checkSatisfied(
       SinglePartition,
-      getSpecifiedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       true)
 
     // Cases which need an exchange between two data properties.
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      getSpecifiedDistribution(Seq('b, 'c)),
+      ClusteredDistribution(Seq('b, 'c)),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      getSpecifiedDistribution(Seq('d, 'e)),
+      ClusteredDistribution(Seq('d, 'e)),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      getSpecifiedDistribution(Nil),
+      AllTuples,
       false)
 
     checkSatisfied(
       HashPartitioning(Seq('a, 'b, 'c), 10),
-      getSpecifiedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       false)
 
     checkSatisfied(
       HashPartitioning(Seq('b, 'c), 10),
-      getSpecifiedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       false)
 
     // TODO: We should check functional dependencies
@@ -96,32 +95,32 @@ class DistributionTests extends FunSuite {
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc)),
       true)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('a.asc, 'b.asc)),
+      OrderedDistribution(Seq('a.asc, 'b.asc)),
       true)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('a.asc, 'b.asc, 'c.asc, 'd.desc)),
+      OrderedDistribution(Seq('a.asc, 'b.asc, 'c.asc, 'd.desc)),
       true)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('a, 'b, 'c)),
+      ClusteredDistribution(Seq('a, 'b, 'c)),
       true)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('c, 'b, 'a)),
+      ClusteredDistribution(Seq('c, 'b, 'a)),
       true)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('b, 'c, 'a, 'd)),
+      ClusteredDistribution(Seq('b, 'c, 'a, 'd)),
       true)
 
     // Cases which need an exchange between two data properties.
@@ -131,27 +130,27 @@ class DistributionTests extends FunSuite {
     // and the parallelism.
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('a.asc, 'b.desc, 'c.asc)),
+      OrderedDistribution(Seq('a.asc, 'b.desc, 'c.asc)),
       false)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('b.asc, 'a.asc)),
+      OrderedDistribution(Seq('b.asc, 'a.asc)),
       false)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('a, 'b)),
+      ClusteredDistribution(Seq('a, 'b)),
       false)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Seq('c, 'd)),
+      ClusteredDistribution(Seq('c, 'd)),
       false)
 
     checkSatisfied(
       RangePartitioning(Seq('a.asc, 'b.asc, 'c.asc), 10),
-      getSpecifiedDistribution(Nil),
+      AllTuples,
       false)
   }
 }

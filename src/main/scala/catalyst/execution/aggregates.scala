@@ -3,7 +3,7 @@ package execution
 
 import catalyst.errors._
 import catalyst.expressions._
-import catalyst.plans.physical.Distribution._
+import catalyst.plans.physical.{ClusteredDistribution, AllTuples}
 import org.apache.spark.rdd.SharkPairRDDFunctions
 
 /* Implicits */
@@ -15,7 +15,13 @@ case class Aggregate(
     child: SharkPlan)(@transient sc: SharkContext)
   extends UnaryNode {
 
-  override def requiredChildDistribution = getSpecifiedDistribution(groupingExpressions) :: Nil
+  override def requiredChildDistribution =
+    if (groupingExpressions == Nil) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(groupingExpressions) :: Nil
+    }
+
   override def otherCopyArgs = sc :: Nil
   def output = aggregateExpressions.map(_.toAttribute)
 

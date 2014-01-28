@@ -114,12 +114,10 @@ trait PlanningStrategies {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Sort(sortExprs, child) =>
         // Set the requiredDistribution of this SortPartitions to OrderedDistribution.
-        execution.SortPartitions(
-          sortExprs,
-          planLater(child))(OrderedDistribution(sortExprs) :: Nil) :: Nil
+        execution.Sort(sortExprs, true, planLater(child)):: Nil
       case logical.SortPartitions(sortExprs, child) =>
         // Set the requiredDistribution of this SortPartitions to UnspecifiedDistribution.
-        execution.SortPartitions(sortExprs, planLater(child))() :: Nil
+        execution.Sort(sortExprs, false, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>

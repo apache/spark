@@ -28,7 +28,6 @@ case object UnspecifiedDistribution extends Distribution
  */
 case object AllTuples extends Distribution
 
-// TODO: Add a BroadcastDistribution?
 /**
  * Represents data where tuples that share the same values for the `clustering`
  * [[catalyst.expressions.Expression Expressions]] will be co-located. Based on the context, this
@@ -36,11 +35,11 @@ case object AllTuples extends Distribution
  * within a single partition.
  */
 case class ClusteredDistribution(clustering: Seq[Expression]) extends Distribution {
-  if (clustering == Nil) {
-    throw new IllegalArgumentException("The clustering expressions of a ClusteredDistribution " +
-      "should not be Nil. An AllTuples should be used to represent a distribution that only has " +
+  require(
+    clustering != Nil,
+    "The clustering expressions of a ClusteredDistribution should not be Nil. " +
+      "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
-  }
 }
 
 /**
@@ -50,27 +49,13 @@ case class ClusteredDistribution(clustering: Seq[Expression]) extends Distributi
  * the ordering expressions are contiguous and will never be split across partitions.
  */
 case class OrderedDistribution(ordering: Seq[SortOrder]) extends Distribution {
-  if (ordering == Nil) {
-    throw new IllegalArgumentException("The ordering expressions of a OrderedDistribution " +
-      "should not be Nil. An AllTuples should be used to represent a distribution that only has " +
+  require(
+    ordering != Nil,
+    "The ordering expressions of a OrderedDistribution should not be Nil. " +
+      "An AllTuples should be used to represent a distribution that only has " +
       "a single partition.")
-  }
 
   def clustering = ordering.map(_.child).toSet
-}
-
-object Distribution {
-  def getSpecifiedDistribution(expressions: Seq[Expression]): Distribution = {
-    if (expressions == Nil) {
-      AllTuples
-    } else {
-      if (expressions.forall(exp => exp.isInstanceOf[SortOrder])) {
-        OrderedDistribution(expressions.asInstanceOf[Seq[SortOrder]])
-      } else {
-        ClusteredDistribution(expressions)
-      }
-    }
-  }
 }
 
 sealed trait Partitioning {
@@ -97,12 +82,12 @@ sealed trait Partitioning {
 }
 
 case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
-  def satisfies(required: Distribution): Boolean = required match {
+  override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case _ => false
   }
 
-  def compatibleWith(other: Partitioning): Boolean = other match {
+  override def compatibleWith(other: Partitioning): Boolean = other match {
     case UnknownPartitioning(_) => true
     case _ => false
   }
@@ -111,9 +96,9 @@ case class UnknownPartitioning(numPartitions: Int) extends Partitioning {
 case object SinglePartition extends Partitioning {
   val numPartitions = 1
 
-  def satisfies(required: Distribution): Boolean = true
+  override def satisfies(required: Distribution): Boolean = true
 
-  def compatibleWith(other: Partitioning) = other match {
+  override def compatibleWith(other: Partitioning) = other match {
     case SinglePartition => true
     case _ => false
   }
@@ -122,9 +107,9 @@ case object SinglePartition extends Partitioning {
 case object BroadcastPartitioning extends Partitioning {
   val numPartitions = 1
 
-  def satisfies(required: Distribution): Boolean = true
+  override def satisfies(required: Distribution): Boolean = true
 
-  def compatibleWith(other: Partitioning) = other match {
+  override def compatibleWith(other: Partitioning) = other match {
     case SinglePartition => true
     case _ => false
   }
@@ -146,14 +131,14 @@ case class HashPartitioning(expressions: Seq[Expression], numPartitions: Int)
 
   lazy val clusteringSet = expressions.toSet
 
-  def satisfies(required: Distribution): Boolean = required match {
+  override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case ClusteredDistribution(requiredClustering) =>
       clusteringSet.subsetOf(requiredClustering.toSet)
     case _ => false
   }
 
-  def compatibleWith(other: Partitioning) = other match {
+  override def compatibleWith(other: Partitioning) = other match {
     case BroadcastPartitioning => true
     case h: HashPartitioning if h == this => true
     case _ => false
@@ -180,7 +165,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
 
   lazy val clusteringSet = ordering.map(_.child).toSet
 
-  def satisfies(required: Distribution): Boolean = required match {
+  override def satisfies(required: Distribution): Boolean = required match {
     case UnspecifiedDistribution => true
     case OrderedDistribution(requiredOrdering) =>
       val minSize = Seq(requiredOrdering.size, ordering.size).min
@@ -190,7 +175,7 @@ case class RangePartitioning(ordering: Seq[SortOrder], numPartitions: Int)
     case _ => false
   }
 
-  def compatibleWith(other: Partitioning) = other match {
+  override def compatibleWith(other: Partitioning) = other match {
     case BroadcastPartitioning => true
     case r: RangePartitioning if r == this => true
     case _ => false

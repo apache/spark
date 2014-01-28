@@ -7,11 +7,10 @@ import scala.Some
 import errors._
 import expressions._
 import plans._
-import catalyst.plans.physical.Distribution._
 import org.apache.spark.rdd.SharkPairRDDFunctions._
 
 import org.apache.spark.rdd.RDD
-import catalyst.plans.physical.Partitioning
+import catalyst.plans.physical.{ClusteredDistribution, Partitioning}
 
 case class SparkEquiInnerJoin(
     leftKeys: Seq[Expression],
@@ -22,7 +21,7 @@ case class SparkEquiInnerJoin(
   override def outputPartitioning: Partitioning = left.outputPartitioning
 
   override def requiredChildDistribution =
-    getSpecifiedDistribution(leftKeys) :: getSpecifiedDistribution(rightKeys) :: Nil
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   def output = left.output ++ right.output
 
@@ -69,7 +68,7 @@ case class BroadcastNestedLoopJoin(
     streamed: SharkPlan, broadcast: SharkPlan, joinType: JoinType, condition: Option[Expression])
     (@transient sc: SharkContext)
   extends BinaryNode {
-  // TODO: Override requiredChildDistribution, outputPartitioning, and use Exchange to broadcast
+  // TODO: Override requiredChildDistribution and outputPartitioning.
 
   override def otherCopyArgs = sc :: Nil
 
