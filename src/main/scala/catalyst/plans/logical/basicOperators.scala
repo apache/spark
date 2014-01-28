@@ -41,6 +41,10 @@ case class InsertIntoTable(table: BaseRelation, partition: Map[String, Option[St
   def children = table :: child :: Nil
   def references = Set.empty
   def output = child.output
+
+  override lazy val resolved = childrenResolved && child.output.zip(table.output).forall {
+    case (childAttr, tableAttr) => childAttr.dataType == tableAttr.dataType
+  }
 }
 
 case class InsertIntoCreatedTable(tableName: String, child: LogicalPlan) extends UnaryNode {

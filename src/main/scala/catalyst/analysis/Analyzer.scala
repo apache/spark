@@ -34,6 +34,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
+      PreInsertionCasts ::
       typeCoercionRules :_*)
   )
 
@@ -106,7 +107,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         case agg: AggregateExpression => return true
         case _ =>
       })
-      return false
+      false
     }
   }
 
@@ -140,5 +141,32 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
      */
     protected def containsStar(exprs: Seq[NamedExpression]): Boolean =
       exprs.collect { case _: Star => true }.nonEmpty
+  }
+
+  /**
+   * Casts input data to correct data types according to table definition before inserting into
+   * that table.
+   */
+  object PreInsertionCasts extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan.transform {
+      // Wait until children are resolved
+      case p: LogicalPlan if !p.childrenResolved => p
+
+      case p @ InsertIntoTable(table, _, child) =>
+        val childOutputDataTypes = child.output.map(_.dataType)
+        val tableOutputDataTypes = table.output.map(_.dataType)
+
+        if (childOutputDataTypes sameElements tableOutputDataTypes) {
+          p
+        } else {
+          // Only do the casting when child output data types differ from table output data types.
+          val castedChildOutput = child.output.zip(table.output).map {
+            case (l, r) if l.dataType != r.dataType => Alias(Cast(l, r.dataType), l.name)()
+            case (l, _) => l
+          }
+
+          p.copy(child = Project(castedChildOutput, child))
+        }
+    }
   }
 }

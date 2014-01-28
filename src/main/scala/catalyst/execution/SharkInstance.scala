@@ -73,6 +73,7 @@ abstract class SharkInstance extends Logging {
     val sc = self.sc
     val strategies =
       SparkEquiInnerJoin ::
+      PartitionPrunings ::
       HiveTableScans ::
       DataSinks ::
       BasicOperators ::
@@ -81,7 +82,8 @@ abstract class SharkInstance extends Logging {
   }
 
   object PrepareForExecution extends RuleExecutor[SharkPlan] {
-    val batches = Batch("Prepare Expressions", Once, expressions.BindReferences) :: Nil
+    val batches =
+      Batch("Prepare Expressions", Once, new expressions.BindReferences[SharkPlan]) :: Nil
   }
 
   class SharkSqlQuery(sql: String) extends SharkQuery {
