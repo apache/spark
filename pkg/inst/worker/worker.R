@@ -18,7 +18,7 @@ outputCon <- file(outputFileName, open="wb")
 # TODO: Figure out if we can avoid this by not loading any objects that require
 # SparkR namespace
 rLibDir <- readLines(inputCon, n = 1)
-.libPaths(c(.libPaths(), rLibDir))
+.libPaths(c(rLibDir, .libPaths()))
 
 suppressPackageStartupMessages(library(SparkR))
 
