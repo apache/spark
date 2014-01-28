@@ -34,6 +34,7 @@ trait LeafNode extends SharkPlan with trees.LeafNode[SharkPlan] {
 
 trait UnaryNode extends SharkPlan with trees.UnaryNode[SharkPlan] {
   self: Product =>
+  override def outputPartitioning: Partitioning = child.outputPartitioning
 }
 
 trait BinaryNode extends SharkPlan with trees.BinaryNode[SharkPlan] {
