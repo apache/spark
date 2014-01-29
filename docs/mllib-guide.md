@@ -489,3 +489,4 @@ val decomposed = SVD.sparseSVD(SparseMatrix(data, m, n), k)
 val = decomposed.S.data
 
 println("singular values = " + s.toArray.mkString)
+{% endhighlight %}

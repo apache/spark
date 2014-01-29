@@ -362,7 +362,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.streaming.blockInterval</td>
   <td>200</td>
   <td>
-    Duration (milliseconds) of how long to batch new objects coming from network receivers.
+    Duration (milliseconds) of how long to batch new objects coming from network receivers used
+    in Spark Streaming.
+  </td>
+</tr>
+<tr>
+  <td>spark.streaming.unpersist</td>
+  <td>false</td>
+  <td>
+    Force RDDs generated and persisted by Spark Streaming to be automatically unpersisted from
+    Spark's memory. Setting this to true is likely to reduce Spark's RDD memory usage.
   </td>
 </tr>
 <tr>
