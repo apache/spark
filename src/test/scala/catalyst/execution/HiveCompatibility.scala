@@ -39,6 +39,13 @@ class HiveCompatibility extends HiveQueryFileTest {
     "keyword_1",
     "misc_json",
     "create_like_tbl_props",
+    "load_overwrite",
+    "alter_table_serde2",
+    "alter_table_not_sorted",
+    "alter_skewed_table",
+    "alter_partition_clusterby_sortby",
+    "alter_merge",
+    "alter_concatenate_indexed_table",
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
@@ -63,7 +70,11 @@ class HiveCompatibility extends HiveQueryFileTest {
     "index_auth",
     "index_auto_empty",
     "index_auto_partitioned",
+    "index_auto_unused",
     "index_bitmap_auto_partitioned",
+    "ql_rewrite_gbtoidx",
+    "stats1.*",
+    "alter_merge_stats",
 
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
     // http://stackoverflow.com/a/1573715
