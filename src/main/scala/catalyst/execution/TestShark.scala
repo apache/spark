@@ -87,7 +87,7 @@ object TestShark extends SharkInstance {
    */
   private def rewritePaths(cmd: String): String =
     if (cmd.toUpperCase.contains("LOAD DATA") && cmd.contains("..")) {
-      "[\"\']([\\./\\w]+)[\"\'] ".r.findFirstMatchIn(cmd)
+      "[\"\'](../.*)[\"\'] ".r.findFirstMatchIn(cmd)
         .map(r => {
         val newPath = new File(TestShark.inRepoTests.getCanonicalPath, cmd.substring(r.start + 1, r.end - 2).replaceFirst("(\\.\\./)+", "")).getAbsolutePath
         cmd.substring(0, r.start + 1) + newPath + cmd.substring(r.end - 2)
