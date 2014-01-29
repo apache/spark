@@ -179,7 +179,6 @@ case class InsertIntoHiveTable(
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
    */
   def execute() = {
-    require(partition.isEmpty, "Inserting into partitioned table not supported.")
     val childRdd = child.execute()
     assert(childRdd != null)
 
