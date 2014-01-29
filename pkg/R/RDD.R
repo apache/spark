@@ -14,8 +14,7 @@
 #' @export
 setClass("RDD",
          slots = list(env = "environment",
-                      jrdd = "jobjRef",
-                      serialized = "logical"))
+                      jrdd = "jobjRef"))
 
 setClass("PipelinedRDD",
          slots = list(prev = "RDD",
@@ -33,9 +32,9 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serialized,
   .Object@env <- new.env()
   .Object@env$isCached <- isCached
   .Object@env$isCheckpointed <- isCheckpointed
+  .Object@env$serialized <- serialized
 
   .Object@jrdd <- jrdd
-  .Object@serialized <- serialized
   .Object
 })
 
@@ -44,8 +43,7 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
   .Object@env$isCached <- FALSE
   .Object@env$isCheckpointed <- FALSE
   .Object@env$jrdd_val <- jrdd_val
-  .Object@env$serialized <- if (class(prev) == "RDD") prev@serialized
-                            else prev@env$serialized
+  .Object@env$serialized <- prev@env$serialized
   .Object@prev <- prev
 
   isPipelinable <- function(rdd) {
@@ -347,17 +345,10 @@ setMethod("length",
 setMethod("lapply",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
-            # TODO: An iterator here is really a list; problematic?
             func <- function(split, iterator) {
               lapply(iterator, FUN)
             }
             PipelinedRDD(X, func)
-
-            # partitionFunc <- function(part) {
-              # lapply(part, FUN)
-            # }
-
-            # lapplyPartition(X, partitionFunc)
           })
 
 #' @rdname lapply
@@ -766,7 +757,7 @@ setMethod("partitionBy",
                                 jrdd$rdd(),
                                 as.integer(numPartitions),
                                 serializedHashFuncBytes,
-                                rdd@serialized,
+                                rdd@env$serialized,
                                 depsBinArr,
                                 packageNamesArr,
                                 as.character(.sparkREnv$libname),
