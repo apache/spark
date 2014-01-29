@@ -24,6 +24,17 @@ test_that("lapplyPartition on RDD", {
   expect_equal(actual, list(15, 40))
 })
 
+test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
+  rdd2 <- rdd
+  for (i in 1:12)
+    rdd2 <- lapplyPartitionsWithIndex(
+              rdd2, function(split, part) {
+                part <- as.list(unlist(part) * split + i)
+              })
+  rdd2 <- lapply(rdd2, function(x) x + x)
+  collect(rdd2)
+})
+
 test_that("reduce on RDD", {
   sum <- reduce(rdd, "+")
   expect_equal(sum, 55)
