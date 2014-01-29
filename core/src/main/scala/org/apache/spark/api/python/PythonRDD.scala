@@ -62,7 +62,7 @@ private[spark] class PythonRDD[T: ClassTag](
           // Partition index
           dataOut.writeInt(split.index)
           // sparkFilesDir
-          dataOut.writeUTF(SparkFiles.getRootDirectory)
+          PythonRDD.writeUTF(SparkFiles.getRootDirectory, dataOut)
           // Broadcast variables
           dataOut.writeInt(broadcastVars.length)
           for (broadcast <- broadcastVars) {
@@ -72,7 +72,9 @@ private[spark] class PythonRDD[T: ClassTag](
           }
           // Python includes (*.zip and *.egg files)
           dataOut.writeInt(pythonIncludes.length)
-          pythonIncludes.foreach(dataOut.writeUTF)
+          for (include <- pythonIncludes) {
+            PythonRDD.writeUTF(include, dataOut)
+          }
           dataOut.flush()
           // Serialized command:
           dataOut.writeInt(command.length)
@@ -219,7 +221,7 @@ private[spark] object PythonRDD {
           }
         case string: String =>
           newIter.asInstanceOf[Iterator[String]].foreach { str =>
-            dataOut.writeUTF(str)
+            writeUTF(str, dataOut)
           }
         case pair: Tuple2[_, _] =>
           pair._1 match {
@@ -232,8 +234,8 @@ private[spark] object PythonRDD {
               }
             case stringPair: String =>
               newIter.asInstanceOf[Iterator[Tuple2[String, String]]].foreach { pair =>
-                dataOut.writeUTF(pair._1)
-                dataOut.writeUTF(pair._2)
+                writeUTF(pair._1, dataOut)
+                writeUTF(pair._2, dataOut)
               }
             case other =>
               throw new SparkException("Unexpected Tuple2 element type " + pair._1.getClass)
@@ -242,6 +244,12 @@ private[spark] object PythonRDD {
           throw new SparkException("Unexpected element type " + first.getClass)
       }
     }
+  }
+
+  def writeUTF(str: String, dataOut: DataOutputStream) {
+    val bytes = str.getBytes("UTF-8")
+    dataOut.writeInt(bytes.length)
+    dataOut.write(bytes)
   }
 
   def writeToFile[T](items: java.util.Iterator[T], filename: String) {
