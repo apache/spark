@@ -8,3 +8,4 @@ SPARK_VERSION_SHORT: 0.9.0
 SCALA_VERSION: "2.10"
 MESOS_VERSION: 0.13.0
 SPARK_ISSUE_TRACKER_URL: https://spark-project.atlassian.net
+SPARK_GITHUB_URL: https://github.com/apache/incubator-spark

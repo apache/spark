@@ -151,7 +151,7 @@ You can also pass an option `-c <numCores>` to control the number of cores that 
 You may also run your application entirely inside of the cluster by submitting your application driver using the submission client. The syntax for submitting applications is as follows:
 
 
-    ./spark-class org.apache.spark.deploy.Client launch 
+    ./bin/spark-class org.apache.spark.deploy.Client launch
        [client-options] \
        <cluster-url> <application-jar-url> <main-class> \
        [application-options]
@@ -176,7 +176,7 @@ Once you submit a driver program, it will appear in the cluster management UI at
 be assigned an identifier. If you'd like to prematurely terminate the program, you can do so using
 the same client:
 
-    ./spark-class org.apache.spark.deploy.client.DriverClient kill <driverId>
+    ./bin/spark-class org.apache.spark.deploy.Client kill <driverId>
 
 # Resource Scheduling
 
