@@ -5,8 +5,6 @@ package execution
  * A set of test cases expressed in Hive QL that are not covered by the tests included in the hive distribution.
  */
 class HiveQueryTests extends HiveComparisonTest {
-  import TestShark._
-
   createQueryTest("Simple Average",
     "SELECT AVG(key) FROM src")
 

@@ -59,7 +59,7 @@ trait PlanningStrategies {
         }
 
         val scan = execution.HiveTableScan(
-          relation.output, relation, pruningPredicates.reduceLeftOption(And))
+          relation.output, relation, pruningPredicates.reduceOption(And))
 
         otherPredicates
           .reduceLeftOption(And)
@@ -79,39 +79,32 @@ trait PlanningStrategies {
         // as join keys. Note we can only mix in the conditions with other predicates because the
         // match above ensures that this is and Inner join.
         val (joinPredicates, otherPredicates) = (predicates ++ condition).partition {
-          case Equals(l, r) if (canEvaluate(l, left) && canEvaluate(r, right)) ||
-                               (canEvaluate(l, right) && canEvaluate(r, left)) => true
+          case Equals(l, r) => (canEvaluate(l, left) && canEvaluate(r, right)) ||
+                               (canEvaluate(l, right) && canEvaluate(r, left))
           case _ => false
         }
 
         val joinKeys = joinPredicates.map {
-          case Equals(l,r) if (canEvaluate(l, left) && canEvaluate(r, right)) => (l, r)
-          case Equals(l,r) if (canEvaluate(l, right) && canEvaluate(r, left)) => (r, l)
+          case Equals(l, r) if canEvaluate(l, left) && canEvaluate(r, right) => (l, r)
+          case Equals(l, r) if canEvaluate(l, right) && canEvaluate(r, left) => (r, l)
         }
 
         // Do not consider this strategy if there are no join keys.
         if (joinKeys.nonEmpty) {
-          val leftKeys = joinKeys.map(_._1)
-          val rightKeys = joinKeys.map(_._2)
-
+          val (leftKeys, rightKeys) = joinKeys.unzip
           val joinOp = execution.SparkEquiInnerJoin(
             leftKeys, rightKeys, planLater(left), planLater(right))
 
-          // Make sure other conditions are met if present.
-          if (otherPredicates.nonEmpty) {
-            execution.Filter(combineConjunctivePredicates(otherPredicates), joinOp) :: Nil
-          } else {
-            joinOp :: Nil
-          }
+          otherPredicates
+            .reduceOption(And)
+            .map(execution.Filter(_, joinOp))
+            .getOrElse(joinOp) :: Nil
         } else {
           logger.debug(s"Avoiding spark join with no join keys.")
           Nil
         }
       case _ => Nil
     }
-
-    private def combineConjunctivePredicates(predicates: Seq[Expression]) =
-      predicates.reduceLeft(And(_, _))
 
     /** Returns true if `expr` can be evaluated using only the output of `plan`. */
     protected def canEvaluate(expr: Expression, plan: LogicalPlan): Boolean =
