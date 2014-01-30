@@ -399,6 +399,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.shuffle.file.buffer.kb</td>
+  <td>100</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
+    reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
+  </td>
+</tr>
+<tr>
   <td>spark.shuffle.spill</td>
   <td>true</td>
   <td>
