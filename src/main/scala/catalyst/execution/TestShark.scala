@@ -68,7 +68,7 @@ object TestShark extends SharkInstance {
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")
   /** The location of the hive source code. */
-  lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME")
+  lazy val hiveDevHome = envVarToFile("HIVE_DEV_HOME").getCanonicalPath
 
   // Override so we can intercept relative paths and rewrite them to point at hive.
   override def runSqlHive(sql: String): Seq[String] = super.runSqlHive(rewritePaths(sql))
@@ -89,10 +89,7 @@ object TestShark extends SharkInstance {
    * hive test cases assume the system is set up.
    */
   private def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase contains "LOAD DATA")
-      cmd.replaceAll("\\.\\.", hiveDevHome.getCanonicalPath)
-    else
-      cmd
+    if (cmd.toUpperCase contains "LOAD DATA") cmd.replaceAll("\\.\\.", hiveDevHome) else cmd
 
   val describedTable = "DESCRIBE (\\w+)".r
 
@@ -130,7 +127,7 @@ object TestShark extends SharkInstance {
   }
 
 
-  /* We must repeat the implicits so that we bind to the overriden versions */
+  /* We must repeat the implicits so that we bind to the overridden versions */
 
   implicit class stringToTestQuery(str: String) {
     def q = new SharkSqlQuery(str)
@@ -152,14 +149,14 @@ object TestShark extends SharkInstance {
   def registerTestTable(testTable: TestTable) = testTables += (testTable.name -> testTable)
 
   // The test tables that are defined in the Hive QTestUtil.
-  // https://github.com/apache/hive/blob/trunk/itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
+  // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
   val hiveQTestUtilTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)".cmd,
-      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt' INTO TABLE src".cmd),
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome}/data/files/kv1.txt' INTO TABLE src".cmd),
     TestTable("src1",
       "CREATE TABLE src1 (key INT, value STRING)".cmd,
-      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv3.txt' INTO TABLE src1".cmd),
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome}/data/files/kv3.txt' INTO TABLE src1".cmd),
     TestTable("dest1",
       "CREATE TABLE IF NOT EXISTS dest1 (key INT, value STRING)".cmd),
     TestTable("dest2",
@@ -167,10 +164,11 @@ object TestShark extends SharkInstance {
     TestTable("dest3",
       "CREATE TABLE IF NOT EXISTS dest3 (key INT, value STRING)".cmd),
     TestTable("srcpart", () => {
-      runSqlHive("CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
+      runSqlHive(
+        "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
         runSqlHive(
-          s"""LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt'
+          s"""LOAD DATA LOCAL INPATH '${hiveDevHome}/data/files/kv1.txt'
              |OVERWRITE INTO TABLE srcpart PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
       }
@@ -179,7 +177,7 @@ object TestShark extends SharkInstance {
       runSqlHive("CREATE TABLE srcpart1 (key INT, value STRING) PARTITIONED BY (ds STRING, hr INT)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- 11 to 12) {
         runSqlHive(
-          s"""LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/kv1.txt'
+          s"""LOAD DATA LOCAL INPATH '${hiveDevHome}/data/files/kv1.txt'
              |OVERWRITE INTO TABLE srcpart1 PARTITION (ds='$ds',hr='$hr')
            """.stripMargin)
       }
@@ -206,7 +204,10 @@ object TestShark extends SharkInstance {
 
       catalog.client.createTable(srcThrift)
 
-      runSqlHive(s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/complex.seq' INTO TABLE src_thrift")
+      runSqlHive(
+        s"""LOAD DATA LOCAL INPATH '${hiveDevHome}/data/files/complex.seq'
+           |INTO TABLE src_thrift
+         """.stripMargin)
     }),
     TestTable("serdeins",
       s"""CREATE TABLE serdeins (key INT, value STRING)
@@ -219,7 +220,7 @@ object TestShark extends SharkInstance {
          |ROW FORMAT SERDE '${classOf[RegexSerDe].getCanonicalName}'
          |WITH SERDEPROPERTIES ("input.regex" = "([^ ]*)\t([^ ]*)")
        """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/sales.txt' INTO TABLE sales".cmd),
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome}/data/files/sales.txt' INTO TABLE sales".cmd),
     TestTable("episodes",
       s"""CREATE TABLE episodes (title STRING, air_date STRING, doctor INT)
          |ROW FORMAT SERDE '${classOf[AvroSerDe].getCanonicalName}'
@@ -251,7 +252,7 @@ object TestShark extends SharkInstance {
          |  }'
          |)
        """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${hiveDevHome.getCanonicalPath}/data/files/episodes.avro' INTO TABLE episodes".cmd)
+      s"LOAD DATA LOCAL INPATH '${hiveDevHome}/data/files/episodes.avro' INTO TABLE episodes".cmd)
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)

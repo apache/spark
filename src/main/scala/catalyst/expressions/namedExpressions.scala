@@ -26,13 +26,14 @@ abstract class NamedExpression extends Expression {
   def toAttribute: Attribute
 
   protected def typeSuffix =
-    if(resolved)
+    if (resolved) {
       dataType match {
         case LongType => "L"
         case _ => ""
       }
-    else
+    } else {
       ""
+    }
 }
 
 abstract class Attribute extends NamedExpression {
@@ -97,26 +98,29 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     case _ => false
   }
 
-  def newInstance =
-    AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
+  def newInstance = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
 
   /**
    * Returns a copy of this [[AttributeReference]] with changed nullability.
    */
-  def withNullability(newNullability: Boolean) =
-    if (nullable == newNullability)
+  def withNullability(newNullability: Boolean) = {
+    if (nullable == newNullability) {
       this
-    else
+    } else {
       AttributeReference(name, dataType, newNullability)(exprId, qualifiers)
+    }
+  }
 
   /**
    * Returns a copy of this [[AttributeReference]] with new qualifiers.
    */
-  def withQualifiers(newQualifiers: Seq[String]) =
-    if (newQualifiers == qualifiers)
+  def withQualifiers(newQualifiers: Seq[String]) = {
+    if (newQualifiers == qualifiers) {
       this
-    else
+    } else {
       AttributeReference(name, dataType, nullable)(exprId, newQualifiers)
+    }
+  }
 
   override def toString: String = s"$name#${exprId.id}$typeSuffix"
 }

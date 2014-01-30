@@ -31,7 +31,7 @@ package object util {
     finally {
       inStream.close()
     }
-    new String(outStream.toByteArray(), encoding)
+    new String(outStream.toByteArray, encoding)
   }
 
   def resourceToString(
@@ -53,7 +53,7 @@ package object util {
     finally {
       inStream.close()
     }
-    new String(outStream.toByteArray(), encoding)
+    new String(outStream.toByteArray, encoding)
   }
 
   def stringToFile(file: File, str: String): File = {
@@ -63,15 +63,17 @@ package object util {
     file
   }
 
-  def sideBySide(left: String, right: String): Seq[String] = sideBySide(left.split("\n"), right.split("\n"))
+  def sideBySide(left: String, right: String): Seq[String] = {
+    sideBySide(left.split("\n"), right.split("\n"))
+  }
 
   def sideBySide(left: Seq[String], right: Seq[String]): Seq[String] = {
     val maxLeftSize = left.map(_.size).max
-    val leftPadded = left ++ Seq.fill(if (left.size < right.size) right.size - left.size else 0)("")
-    val rightPadded = right ++ Seq.fill(if (right.size < left.size) left.size - right.size else 0)("")
+    val leftPadded = left ++ Seq.fill(math.max(right.size - left.size, 0))("")
+    val rightPadded = right ++ Seq.fill(math.max(left.size - right.size, 0))("")
 
     leftPadded.zip(rightPadded).map {
-      case (l,r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.size) + 3)) + r
+      case (l, r) => (if (l == r) " " else "!") + l + (" " * ((maxLeftSize - l.size) + 3)) + r
     }
   }
 

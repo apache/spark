@@ -109,7 +109,8 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
   }
 
   val tableDesc = new TableDesc(
-    Class.forName(table.getSd.getSerdeInfo.getSerializationLib).asInstanceOf[Class[AbstractDeserializer]],
+    Class.forName(table.getSd.getSerdeInfo.getSerializationLib)
+      .asInstanceOf[Class[AbstractDeserializer]],
     Class.forName(table.getSd.getInputFormat).asInstanceOf[Class[InputFormat[_,_]]],
     Class.forName(table.getSd.getOutputFormat),
     hiveQlTable.getMetadata

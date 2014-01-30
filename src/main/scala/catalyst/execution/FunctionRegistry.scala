@@ -6,8 +6,10 @@ import scala.collection.JavaConversions._
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
 import org.apache.hadoop.hive.ql.exec.UDF
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.{AbstractPrimitiveJavaObjectInspector, PrimitiveObjectInspectorFactory}
-import org.apache.hadoop.io._
+import org.apache.hadoop.hive.serde2.{io => hiveIo}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.AbstractPrimitiveJavaObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.PrimitiveObjectInspectorFactory
+import org.apache.hadoop.{io => hadoopIo}
 
 import expressions._
 import types._
@@ -38,15 +40,15 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry {
   }
 
   def javaClassToDataType(clz: Class[_]): DataType = clz match {
-    case c: Class[_] if c == classOf[DoubleWritable] => DoubleType
-    case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.DoubleWritable] => DoubleType
-    case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.HiveDecimalWritable] => DecimalType
-    case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.ByteWritable] => ByteType
-    case c: Class[_] if c == classOf[org.apache.hadoop.hive.serde2.io.ShortWritable] => ShortType
-    case c: Class[_] if c == classOf[Text] => StringType
-    case c: Class[_] if c == classOf[org.apache.hadoop.io.IntWritable] => IntegerType
-    case c: Class[_] if c == classOf[org.apache.hadoop.io.LongWritable] => LongType
-    case c: Class[_] if c == classOf[org.apache.hadoop.io.FloatWritable] => FloatType
+    case c: Class[_] if c == classOf[hadoopIo.DoubleWritable] => DoubleType
+    case c: Class[_] if c == classOf[hiveIo.DoubleWritable] => DoubleType
+    case c: Class[_] if c == classOf[hiveIo.HiveDecimalWritable] => DecimalType
+    case c: Class[_] if c == classOf[hiveIo.ByteWritable] => ByteType
+    case c: Class[_] if c == classOf[hiveIo.ShortWritable] => ShortType
+    case c: Class[_] if c == classOf[hadoopIo.Text] => StringType
+    case c: Class[_] if c == classOf[hadoopIo.IntWritable] => IntegerType
+    case c: Class[_] if c == classOf[hadoopIo.LongWritable] => LongType
+    case c: Class[_] if c == classOf[hadoopIo.FloatWritable] => FloatType
     case c: Class[_] if c == classOf[java.lang.String] => StringType
     case c: Class[_] if c == java.lang.Short.TYPE => ShortType
     case c: Class[_] if c == java.lang.Integer.TYPE => ShortType
@@ -82,14 +84,14 @@ abstract class HiveUdf extends Expression with ImplementedUdf with Logging {
 
   def unwrap(a: Any): Any = a match {
     case null => null
-    case i: IntWritable => i.get
-    case t: Text => t.toString
-    case l: LongWritable => l.get
-    case d: DoubleWritable => d.get()
-    case d: org.apache.hadoop.hive.serde2.io.DoubleWritable => d.get
-    case s: org.apache.hadoop.hive.serde2.io.ShortWritable => s.get
-    case b: BooleanWritable => b.get()
-    case b: org.apache.hadoop.hive.serde2.io.ByteWritable => b.get
+    case i: hadoopIo.IntWritable => i.get
+    case t: hadoopIo.Text => t.toString
+    case l: hadoopIo.LongWritable => l.get
+    case d: hadoopIo.DoubleWritable => d.get()
+    case d: hiveIo.DoubleWritable => d.get
+    case s: hiveIo.ShortWritable => s.get
+    case b: hadoopIo.BooleanWritable => b.get()
+    case b: hiveIo.ByteWritable => b.get
     case list: java.util.List[_] => list.map(unwrap)
     case p: java.lang.Short => p
     case p: java.lang.Long => p
@@ -174,7 +176,7 @@ case class HiveGenericUdf(
   }
 
   def wrap(a: Any): Any = a match {
-    case s: String => new Text(s)
+    case s: String => new hadoopIo.Text(s)
     case i: Int => i: java.lang.Integer
     case b: Boolean => b: java.lang.Boolean
     case d: Double => d: java.lang.Double

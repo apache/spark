@@ -31,7 +31,8 @@ case class Transform(
       val outputStream = proc.getOutputStream
       val reader = new BufferedReader(new InputStreamReader(inputStream))
 
-      // TODO: This should be exposed as an iterator instead of reading in all the data at once for a partition.
+      // TODO: This should be exposed as an iterator instead of reading in all the data
+      // at once for a partition.
       val outputLines = collection.mutable.ArrayBuffer[Row]()
       val readerThread = new Thread("Transform OutoutReader") {
         override def run() {

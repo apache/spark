@@ -12,9 +12,12 @@ import execution.TestShark._ // For .toRdd execution using locally running test 
 object ViewsExample {
   def main(args: Array[String]): Unit = {
     // Create a list of named views that can be substituted into logical plans.
-    // In this example the views read from local, in-memory relations with schema (a INT, b STRING) and (c INT, d STRING)
-    // respectively. loadData returns a copy of that relation with the specified tuples appended to the Rdd.
-    // The .select uses the DSL to add a projection on top of the relation that returns only the column "a".
+    // In this example the views read from local, in-memory relations with schema
+    // (a INT, b STRING) and (c INT, d STRING) respectively.
+    //
+    // loadData returns a copy of that relation with the specified tuples appended to the Rdd.
+    // The .select uses the DSL to add a projection on top of the relation that returns only
+    // the column "a".
     val views = Map(
       "view1" -> LocalRelation('a.int, 'b.string).loadData(("a", 1) :: ("b", 2) :: Nil).select('a),
       "view2" -> LocalRelation('c.int, 'd.string).loadData(("c", 1) :: ("d", 2) :: Nil)
@@ -35,6 +38,6 @@ object ViewsExample {
 
     println(s"With relations:\n$withRelations ")
     println(s"Analyzed:\n${withRelations.analyze}") // Print with all references resolved.
-    println(s"Answer: ${withRelations.toRdd.collect.toSeq}")
+    println(s"Answer: ${withRelations.toRdd.collect().toSeq}")
   }
 }

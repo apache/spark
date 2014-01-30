@@ -201,7 +201,8 @@ trait HiveTypeCoercion {
       // No need to change Equals operators as that actually makes sense for boolean types.
       case e: Equals => e
       // Otherwise turn them to Byte types so that there exists and ordering.
-      case p: BinaryComparison if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
+      case p: BinaryComparison
+          if p.left.dataType == BooleanType && p.right.dataType == BooleanType =>
         p.makeCopy(Array(Cast(p.left, ByteType), Cast(p.right, ByteType)))
     }
   }
