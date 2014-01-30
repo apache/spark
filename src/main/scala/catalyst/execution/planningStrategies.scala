@@ -28,14 +28,6 @@ trait PlanningStrategies {
         execution.HiveTableScan(m.output, m, None) :: Nil
       case _ => Nil
     }
-
-    /**
-     * Returns true if `projectList` only performs column pruning and does not evaluate other
-     * complex expressions.
-     */
-    def isSimpleProject(projectList: Seq[NamedExpression]) = {
-      projectList.forall(_.isInstanceOf[Attribute])
-    }
   }
 
   /**
@@ -65,6 +57,45 @@ trait PlanningStrategies {
           .reduceLeftOption(And)
           .map(execution.Filter(_, scan))
           .getOrElse(scan) :: Nil
+
+      case _ =>
+        Nil
+    }
+  }
+
+  /**
+   * A strategy that detects projection over filtered operation and applies column pruning if
+   * possible.
+   */
+  object ColumnPrunings extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
+      case logical.Project(projectList, child @ FilteredOperation(predicates, m: MetastoreRelation))
+          if isSimpleProject(projectList) =>
+
+        val projectAttributes = projectList.asInstanceOf[Seq[Attribute]]
+        val predicatesReferences = predicates.flatMap(_.references).toSet
+        val prunedAttributes = projectAttributes ++ (predicatesReferences -- projectAttributes)
+
+        if (m.hiveQlTable.isPartitioned) {
+          // Applies partition pruning first for partitioned table
+          PartitionPrunings(child).view.map { sharkPlan =>
+            execution.Project(
+              projectList,
+              sharkPlan.transform {
+                case scan@execution.HiveTableScan(attributes, _, _) =>
+                  scan.copy(attributes = prunedAttributes)
+              })
+          }
+        } else {
+          val scan = execution.HiveTableScan(prunedAttributes, m, None)
+          val conjunctionOpt = predicates.reduceOption(And)
+
+          execution.Project(
+            projectList,
+            conjunctionOpt
+              .map(execution.Filter(_, scan))
+              .getOrElse(scan)) :: Nil
+        }
 
       case _ =>
         Nil
@@ -159,4 +190,11 @@ trait PlanningStrategies {
     }
   }
 
+  /**
+   * Returns true if `projectList` only performs column pruning and does not evaluate other
+   * complex expressions.
+   */
+  private def isSimpleProject(projectList: Seq[NamedExpression]) = {
+    projectList.forall(_.isInstanceOf[Attribute])
+  }
 }
