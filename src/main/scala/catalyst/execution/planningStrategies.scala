@@ -24,9 +24,9 @@ trait PlanningStrategies {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       // Push attributes into table scan when possible.
       case p @ logical.Project(projectList, m: MetastoreRelation) if isSimpleProject(projectList) =>
-        execution.HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m) :: Nil
+        execution.HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m, None) :: Nil
       case m: MetastoreRelation =>
-        execution.HiveTableScan(m.output, m) :: Nil
+        execution.HiveTableScan(m.output, m, None) :: Nil
       case _ => Nil
     }
 
@@ -35,10 +35,40 @@ trait PlanningStrategies {
      * complex expressions.
      */
     def isSimpleProject(projectList: Seq[NamedExpression]) = {
-      projectList.map {
-        case a: Attribute => true
-        case _ => false
-      }.reduceLeft(_ && _)
+      projectList.forall(_.isInstanceOf[Attribute])
+    }
+  }
+
+  /**
+   * A strategy used to detect filtering predicates on top of a partitioned relation to help
+   * partition pruning.
+   *
+   * This strategy itself doesn't perform partition pruning, it just collects and combines all the
+   * partition pruning predicates and pass them down to the underlying [[HiveTableScan]] operator,
+   * which does the actual pruning work.
+   */
+  object PartitionPrunings extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
+      case p @ FilteredOperation(predicates, relation: MetastoreRelation)
+          if relation.hiveQlTable.isPartitioned =>
+
+        val partitionKeyIds = relation.partitionKeys.map(_.id).toSet
+
+        // Filter out all predicates that only deal with partition keys
+        val (pruningPredicates, otherPredicates) = predicates.partition {
+          _.references.map(_.id).subsetOf(partitionKeyIds)
+        }
+
+        val scan = execution.HiveTableScan(
+          relation.output, relation, pruningPredicates.reduceLeftOption(And))
+
+        otherPredicates
+          .reduceLeftOption(And)
+          .map(execution.Filter(_, scan))
+          .getOrElse(scan) :: Nil
+
+      case _ =>
+        Nil
     }
   }
 

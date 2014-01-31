@@ -13,11 +13,11 @@ scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
 // TODO: Remove when Spark 0.9.0 is released for real.
-resolvers += "SparkStaging" at "https://repository.apache.org/content/repositories/orgapachespark-1005/"
+resolvers += "SparkStaging" at "https://repository.apache.org/content/repositories/orgapachespark-1006/"
 
 libraryDependencies += "org.apache.spark" %% "spark-core" % "0.9.0-incubating"
 
-libraryDependencies += "catalyst" % "hive-golden" % "4" % "test" from "http://repository-databricks.forge.cloudbees.com/snapshot/catalystGolden4.jar"
+libraryDependencies += "catalyst" % "hive-golden" % "5" % "test" from "http://repository-databricks.forge.cloudbees.com/snapshot/catalystGolden5.jar"
 
 // Hive 0.10.0 relies on a weird version of jdo that is not published anywhere... Remove when we upgrade to 0.11.0
 libraryDependencies += "javax.jdo" % "jdo2-api" % "2.3-ec" from "http://www.datanucleus.org/downloads/maven2/javax/jdo/jdo2-api/2.3-ec/jdo2-api-2.3-ec.jar"
