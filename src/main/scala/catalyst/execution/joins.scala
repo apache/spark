@@ -68,7 +68,9 @@ case class BroadcastNestedLoopJoin(
     streamed: SharkPlan, broadcast: SharkPlan, joinType: JoinType, condition: Option[Expression])
     (@transient sc: SharkContext)
   extends BinaryNode {
-  // TODO: Override requiredChildDistribution and outputPartitioning.
+  // TODO: Override requiredChildDistribution.
+
+  override def outputPartitioning: Partitioning = streamed.outputPartitioning
 
   override def otherCopyArgs = sc :: Nil
 
