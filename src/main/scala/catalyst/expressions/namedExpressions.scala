@@ -98,6 +98,14 @@ case class AttributeReference(name: String, dataType: DataType, nullable: Boolea
     case _ => false
   }
 
+  override def hashCode: Int = {
+    // See http://stackoverflow.com/questions/113511/hash-code-implementation
+    var h = 17
+    h = h * 37 + exprId.hashCode()
+    h = h * 37 + dataType.hashCode()
+    h
+  }
+
   def newInstance = AttributeReference(name, dataType, nullable)(qualifiers = qualifiers)
 
   /**
