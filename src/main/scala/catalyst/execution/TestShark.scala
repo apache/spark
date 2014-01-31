@@ -86,10 +86,11 @@ object TestShark extends SharkInstance {
    * hive test cases assume the system is set up.
    */
   private def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase contains "LOAD DATA")
+    if (cmd.toUpperCase contains "LOAD DATA") {
       cmd.replaceAll("\\.\\.", TestShark.inRepoTests.getCanonicalPath)
-    else
+    } else {
       cmd
+    }
 
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
