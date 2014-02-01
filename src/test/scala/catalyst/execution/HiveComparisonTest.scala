@@ -109,7 +109,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
       case _ =>
         // TODO: Really we only care about the final total ordering here...
         val isOrdered = sharkQuery.executedPlan.collect {
-          case s @ Exchange(r: RangePartitioning, _) => s
+          case s @ Sort(_, global, _) if global => s
         }.nonEmpty
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
         if (!isOrdered) answer.sorted else answer
