@@ -17,6 +17,7 @@ import rules._
 import types._
 
 import collection.JavaConversions._
+import scala.util.parsing.combinator.RegexParsers
 
 class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
   val client = new HiveMetaStoreClient(hiveConf)
@@ -78,25 +79,43 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
   }
 }
 
-object HiveMetatoreTypes {
-  val VARCHAR = "(?i)VARCHAR\\((\\d+)\\)".r
-  // TODO: this will not work for nested arrays or maps.
-  val ARRAY = "(?i)array<([^>]+)>".r
-  val MAP = "(?i)map<([^,]+),([^>]*)>".r
-  def toDataType(metastoreType: String): DataType =
-    metastoreType match {
-      case "string" => StringType
-      case "float" => FloatType
-      case "int" => IntegerType
-      case "double" => DoubleType
-      case "bigint" => LongType
-      case "binary" => BinaryType
-      case "boolean" => BooleanType
-      case VARCHAR(_) => StringType
-      case ARRAY(elemType) => ArrayType(toDataType(elemType))
-      case MAP(keyType, valueType) => MapType(toDataType(keyType), toDataType(valueType))
-      case _ => sys.error(s"Unsupported dataType: $metastoreType")
+object HiveMetastoreTypes extends RegexParsers {
+  protected lazy val primitiveType: Parser[DataType] =
+    "string" ^^^ StringType |
+    "float" ^^^ FloatType |
+    "int" ^^^ IntegerType |
+    "double" ^^^ DoubleType |
+    "bigint" ^^^ LongType |
+    "binary" ^^^ BinaryType |
+    "boolean" ^^^ BooleanType |
+    "(?i)VARCHAR\\((\\d+)\\)".r ^^^ StringType
+
+  protected lazy val arrayType: Parser[DataType] =
+    "array" ~> "<" ~> dataType <~ ">" ^^ ArrayType
+
+  protected lazy val mapType: Parser[DataType] =
+    "map" ~> "<" ~> dataType ~ "," ~ dataType <~ ">" ^^ {
+      case t1 ~ _ ~ t2 => MapType(t1, t2)
     }
+
+  protected lazy val structField: Parser[StructField] =
+    "[a-zA-Z]".r ~ ":" ~ dataType ^^ {
+      case name ~ _ ~ tpe => StructField(name, tpe, true)
+    }
+
+  protected lazy val structType: Parser[DataType] =
+    "struct" ~> "<" ~> repsep(structField,",") <~ ">" ^^ StructType
+
+  protected lazy val dataType: Parser[DataType] =
+    arrayType |
+    mapType |
+    structType |
+    primitiveType
+
+  def toDataType(metastoreType: String): DataType = parseAll(dataType, metastoreType) match {
+    case Success(result, _) => result
+    case failure: NoSuccess => sys.error(s"Unsupported dataType: $metastoreType")
+  }
 }
 
 case class MetastoreRelation(databaseName: String, tableName: String, alias: Option[String])
@@ -120,7 +139,7 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
    implicit class SchemaAttribute(f: FieldSchema) {
      def toAttribute = AttributeReference(
        f.getName,
-       HiveMetatoreTypes.toDataType(f.getType),
+       HiveMetastoreTypes.toDataType(f.getType),
        // Since data can be dumped in randomly with no validation, everything is nullable.
        nullable = true
      )(qualifiers = tableName +: alias.toSeq)
