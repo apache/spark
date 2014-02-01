@@ -57,6 +57,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionF
     case c: Class[_] if c == classOf[hadoopIo.IntWritable] => IntegerType
     case c: Class[_] if c == classOf[hadoopIo.LongWritable] => LongType
     case c: Class[_] if c == classOf[hadoopIo.FloatWritable] => FloatType
+    case c: Class[_] if c == classOf[hadoopIo.BooleanWritable] => BooleanType
     case c: Class[_] if c == classOf[java.lang.String] => StringType
     case c: Class[_] if c == java.lang.Short.TYPE => ShortType
     case c: Class[_] if c == java.lang.Integer.TYPE => ShortType
