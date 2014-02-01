@@ -11,12 +11,13 @@ abstract class Expression extends TreeNode[Expression] {
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
    * executed.
+   *
    * The following conditions are used to determine suitability for constant folding:
    *  - A [[expressions.Coalesce Coalesce]] is foldable if all of its children are foldable
    *  - A [[expressions.BinaryExpression BinaryExpression]] is foldable if its both left and right
    *    child are foldable
-   *  - A [[expressions.Not Not]], [[expressions.IsNull IsNull]], or [[expressions.IsNotNull IsNotNull]]
-   *    is foldable if its child is foldable.
+   *  - A [[expressions.Not Not]], [[expressions.IsNull IsNull]], or
+   *    [[expressions.IsNotNull IsNotNull]] is foldable if its child is foldable.
    *  - A [[expressions.Literal]] is foldable.
    *  - A [[expressions.Cast Cast]] or [[expressions.UnaryMinus UnaryMinus]] is foldable if its
    *    child is foldable.

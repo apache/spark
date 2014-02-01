@@ -6,13 +6,14 @@ import plans.logical.LogicalPlan
 import trees._
 
 /**
- * Extended by classes that transform [[plans.logical.LogicalPlan LogicalPlan]]s into physical plans.
+ * Abstract class for transforming [[plans.logical.LogicalPlan LogicalPlan]]s into physical plans.
  * Child classes are responsible for specifying a list of [[Strategy]] objects that each of which
  * can return a list of possible physical plan options.  If a given strategy is unable to plan all
  * of the remaining operators in the tree, it can call [[planLater]], which returns a placeholder
  * object that will be filled in using other available strategies.
  *
- * TODO: RIGHT NOW ONLY ONE PLAN IS RETURNED EVER... PLAN SPACE EXPLORATION WILL BE IMPLEMENTED LATER.
+ * TODO: RIGHT NOW ONLY ONE PLAN IS RETURNED EVER...
+ *       PLAN SPACE EXPLORATION WILL BE IMPLEMENTED LATER.
  *
  * @tparam PhysicalPlan The type of physical plan produced by this [[QueryPlanner]]
  */

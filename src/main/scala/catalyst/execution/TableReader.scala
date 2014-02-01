@@ -34,7 +34,8 @@ private[catalyst] sealed trait TableReader {
  * Helper class for scanning tables stored in Hadoop - e.g., to read Hive tables that reside in the
  * data warehouse directory.
  */
-private[catalyst] class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf: HiveConf)
+private[catalyst]
+class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf: HiveConf)
   extends TableReader {
 
   // Choose the minimum number of splits. If mapred.map.tasks is set, then use that unless

@@ -3,6 +3,8 @@ all: s1 s2 s3 s4 s5 s6 s7 s8
 compile:
 	 sbt test:compile
 
+# There is likely some bug here... still a good way to get a feeling if things are working in
+# parallel.
 s1: compile
 	 sbt ${ARGS} -Dshark.hive.shard=0:8 "test-only catalyst.execution.HiveCompatibility"
 s2: compile

@@ -10,7 +10,7 @@ import util._
  */
 class HiveCompatibility extends HiveQueryFileTest {
   // TODO: bundle in jar files... get from classpath
-  lazy val hiveQueryDir = new File(TestShark.hiveDevHome, "ql/src/test/queries/clientpositive")
+  lazy val hiveQueryDir = TestShark.getHiveFile("ql/src/test/queries/clientpositive")
   def testCases = hiveQueryDir.listFiles.map(f => f.getName.stripSuffix(".q") -> f)
 
   /** A list of tests deemed out of scope currently and thus completely disregarded. */

@@ -12,77 +12,84 @@ object Evaluate extends Logging {
     def eval(e: Expression) = Evaluate(e, input)
 
     /**
-     * A set of helper functions that return the correct descendant of [[scala.math.Numeric]] type and do any casting
-     * necessary of child evaluation.
+     * A set of helper functions that return the correct descendant of [[scala.math.Numeric]] type
+     * and do any casting necessary of child evaluation.
      *
-     * Instead of matching here we could consider pushing the appropriate Fractional/Integral type into the type objects
-     * themselves.
+     * Instead of matching here we could consider pushing the appropriate Fractional/Integral type
+     * into the type objects themselves.
      */
     @inline
     def n1(e: Expression, f: ((Numeric[Any], Any) => Any)): Any  = {
       val evalE = eval(e)
-      if (evalE == null)
+      if (evalE == null) {
         null
-      else
+      } else {
         e.dataType match {
           case n: NumericType =>
             val castedFunction = f.asInstanceOf[(Numeric[n.JvmType], n.JvmType) => n.JvmType]
             castedFunction(n.numeric, evalE.asInstanceOf[n.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
+      }
     }
 
     @inline
     def n2(e1: Expression, e2: Expression, f: ((Numeric[Any], Any, Any) => Any)): Any  = {
-      if (e1.dataType != e2.dataType)
-        throw new TreeNodeException(e, s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+      if (e1.dataType != e2.dataType) {
+        throw new TreeNodeException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+      }
 
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
-      if (evalE1 == null || evalE2 == null)
+      if (evalE1 == null || evalE2 == null) {
         null
-      else
+      } else {
         e1.dataType match {
           case n: NumericType =>
             f.asInstanceOf[(Numeric[n.JvmType], n.JvmType, n.JvmType) => Int](
               n.numeric, evalE1.asInstanceOf[n.JvmType], evalE2.asInstanceOf[n.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
+      }
     }
 
     @inline
     def f2(e1: Expression, e2: Expression, f: ((Fractional[Any], Any, Any) => Any)): Any  = {
-      if (e1.dataType != e2.dataType)
-        throw new TreeNodeException(e, s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+      if (e1.dataType != e2.dataType) {
+        throw new TreeNodeException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+      }
 
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
-      if (evalE1 == null || evalE2 == null)
+      if (evalE1 == null || evalE2 == null) {
         null
-      else
+      } else {
         e1.dataType match {
           case f: FractionalType =>
             f.asInstanceOf[(Fractional[f.JvmType], f.JvmType, f.JvmType) => f.JvmType](
               f.fractional, evalE1.asInstanceOf[f.JvmType], evalE2.asInstanceOf[f.JvmType])
           case other => sys.error(s"Type $other does not support fractional operations")
         }
+      }
     }
 
     @inline
     def i2(e1: Expression, e2: Expression, f: ((Integral[Any], Any, Any) => Any)): Any  = {
-      if (e1.dataType != e2.dataType)
-        throw new TreeNodeException(e, s"Data types do not match ${e1.dataType} != ${e2.dataType}")
+      if (e1.dataType != e2.dataType) {
+        throw new TreeNodeException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+      }
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
-      if (evalE1 == null || evalE2 == null)
+      if (evalE1 == null || evalE2 == null) {
         null
-      else
+      } else {
         e1.dataType match {
           case i: IntegralType =>
             f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
               i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
           case other => sys.error(s"Type $other does not support numeric operations")
         }
+      }
     }
 
     @inline def castOrNull[A](e: Expression, f: String => A) =
@@ -120,10 +127,7 @@ object Evaluate extends Logging {
       case Equals(l, r) =>
         val left = eval(l)
         val right = eval(r)
-        if (left == null || right == null)
-          null
-        else
-          left == right
+        if (left == null || right == null) null else left == right
 
       case In(value, list) =>
         val evaluatedValue = eval(value)
@@ -138,6 +142,7 @@ object Evaluate extends Logging {
         eval(l).asInstanceOf[String] < eval(r).asInstanceOf[String]
       case LessThanOrEqual(l, r) if l.dataType == StringType && r.dataType == StringType =>
         eval(l).asInstanceOf[String] <= eval(r).asInstanceOf[String]
+
       // Numerics
       case GreaterThan(l, r) => n2(l, r, _.gt(_, _))
       case GreaterThanOrEqual(l, r) => n2(l, r, _.gteq(_, _))
@@ -204,21 +209,23 @@ object Evaluate extends Logging {
       case And(l,r) =>
         val left = eval(l)
         val right = eval(r)
-        if (left == false || right == false)
+        if (left == false || right == false) {
           false
-        else if (left == null || right == null )
+        } else if (left == null || right == null ) {
           null
-        else
+        } else {
           true
+        }
       case Or(l,r) =>
         val left = eval(l)
         val right = eval(r)
-        if (left == true || right == true)
+        if (left == true || right == true) {
           true
-        else if (left == null || right == null)
+        } else if (left == null || right == null) {
           null
-        else
+        } else {
           false
+        }
 
       /* References to input tuples */
       case br @ BoundReference(inputTuple, ordinal, _) => try input(inputTuple)(ordinal) catch {
@@ -239,7 +246,8 @@ object Evaluate extends Logging {
       case other => throw new TreeNodeException(other, "evaluation not implemented")
     }
 
-    logger.debug(s"Evaluated $e => $result of type ${if (result == null) "null" else result.getClass.getName}, expected: ${e.dataType}")
+    val resultType = if (result == null) "null" else result.getClass.getName
+    logger.debug(s"Evaluated $e => $result of type $resultType, expected: ${e.dataType}")
     result
   }
 }
