@@ -9,7 +9,7 @@ import plans.logical._
 import types._
 
 /**
- * A collection of implicit conversions that create a DSL for easily constructing catalyst data structures.
+ * A collection of implicit conversions that create a DSL for constructing catalyst data structures.
  *
  * {{{
  *  scala> import catalyst.dsl._
@@ -35,22 +35,22 @@ import types._
  * }}}
  */
 package object dsl {
-  abstract protected trait ImplicitOperators {
+  protected trait ImplicitOperators {
     def expr: Expression
 
-    def +(other: Expression) = Add(expr, other)
-    def -(other: Expression) = Subtract(expr, other)
-    def *(other: Expression) = Multiply(expr, other)
-    def /(other: Expression) = Divide(expr, other)
+    def + (other: Expression) = Add(expr, other)
+    def - (other: Expression) = Subtract(expr, other)
+    def * (other: Expression) = Multiply(expr, other)
+    def / (other: Expression) = Divide(expr, other)
 
-    def &&(other: Expression) = And(expr, other)
-    def ||(other: Expression) = Or(expr, other)
+    def && (other: Expression) = And(expr, other)
+    def || (other: Expression) = Or(expr, other)
 
-    def <(other: Expression) = LessThan(expr, other)
-    def <=(other: Expression) = LessThanOrEqual(expr, other)
-    def >(other: Expression) = GreaterThan(expr, other)
-    def >=(other: Expression) = GreaterThanOrEqual(expr, other)
-    def ===(other: Expression) = Equals(expr, other)
+    def < (other: Expression) = LessThan(expr, other)
+    def <= (other: Expression) = LessThanOrEqual(expr, other)
+    def > (other: Expression) = GreaterThan(expr, other)
+    def >= (other: Expression) = GreaterThanOrEqual(expr, other)
+    def === (other: Expression) = Equals(expr, other)
 
     def asc = SortOrder(expr, Ascending)
     def desc = SortOrder(expr, Descending)
@@ -79,9 +79,10 @@ package object dsl {
     def attr = analysis.UnresolvedAttribute(s)
 
     /** Creates a new typed attributes of type int */
-    def int = AttributeReference(s, IntegerType, false)()
+    def int = AttributeReference(s, IntegerType, nullable = false)()
+
     /** Creates a new typed attributes of type string */
-    def string = AttributeReference(s, StringType, false)()
+    def string = AttributeReference(s, StringType, nullable = false)()
   }
 
   implicit class DslAttribute(a: AttributeReference) {
@@ -94,10 +95,17 @@ package object dsl {
 
   implicit class DslLogicalPlan(plan: LogicalPlan) {
     def select(exprs: NamedExpression*) = Project(exprs, plan)
+
     def where(condition: Expression) = Filter(condition, plan)
-    def join(otherPlan: LogicalPlan, joinType: JoinType = Inner, condition: Option[Expression] = None) =
+
+    def join(
+        otherPlan: LogicalPlan,
+        joinType: JoinType = Inner,
+        condition: Option[Expression] = None) =
       Join(plan, otherPlan, joinType, condition)
+
     def orderBy(sortExprs: SortOrder*) = Sort(sortExprs, plan)
+
     def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*) = {
       val aliasedExprs = aggregateExprs.map {
         case ne: NamedExpression => ne
@@ -105,7 +113,9 @@ package object dsl {
       }
       Aggregate(groupingExprs, aliasedExprs, plan)
     }
+
     def subquery(alias: Symbol) = Subquery(alias.name, plan)
+
     def unionAll(otherPlan: LogicalPlan) = Union(plan, otherPlan)
 
     def filter[T1](arg1: Symbol)(udf: (T1) => Boolean) =

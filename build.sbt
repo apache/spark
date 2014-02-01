@@ -31,6 +31,8 @@ libraryDependencies ++= Seq(
  "org.apache.hive" % "hive-serde" % "0.12.0",
   "com.typesafe" %% "scalalogging-slf4j" % "1.0.1")
 
+org.scalastyle.sbt.ScalastylePlugin.Settings
+
 // Multiple queries rely on the TestShark singleton.  See comments there for more details.
 parallelExecution in Test := false
 

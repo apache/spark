@@ -86,10 +86,11 @@ object TestShark extends SharkInstance {
    * hive test cases assume the system is set up.
    */
   private def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase contains "LOAD DATA")
+    if (cmd.toUpperCase contains "LOAD DATA") {
       cmd.replaceAll("\\.\\.", TestShark.inRepoTests.getCanonicalPath)
-    else
+    } else {
       cmd
+    }
 
   val hiveFilesTemp = File.createTempFile("catalystHiveFiles", "")
   hiveFilesTemp.delete()
@@ -140,7 +141,7 @@ object TestShark extends SharkInstance {
   }
 
 
-  /* We must repeat the implicits so that we bind to the overriden versions */
+  /* We must repeat the implicits so that we bind to the overridden versions */
 
   implicit class stringToTestQuery(str: String) {
     def q = new SharkSqlQuery(str)
@@ -162,7 +163,7 @@ object TestShark extends SharkInstance {
   def registerTestTable(testTable: TestTable) = testTables += (testTable.name -> testTable)
 
   // The test tables that are defined in the Hive QTestUtil.
-  // https://github.com/apache/hive/blob/trunk/itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
+  // /itests/util/src/main/java/org/apache/hadoop/hive/ql/QTestUtil.java
   val hiveQTestUtilTables = Seq(
     TestTable("src",
       "CREATE TABLE src (key INT, value STRING)".cmd,
@@ -177,7 +178,8 @@ object TestShark extends SharkInstance {
     TestTable("dest3",
       "CREATE TABLE IF NOT EXISTS dest3 (key INT, value STRING)".cmd),
     TestTable("srcpart", () => {
-      runSqlHive("CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
+      runSqlHive(
+        "CREATE TABLE srcpart (key INT, value STRING) PARTITIONED BY (ds STRING, hr STRING)")
       for (ds <- Seq("2008-04-08", "2008-04-09"); hr <- Seq("11", "12")) {
         runSqlHive(
           s"""LOAD DATA LOCAL INPATH '${getHiveFile("data/files/kv1.txt")}'
@@ -216,7 +218,9 @@ object TestShark extends SharkInstance {
 
       catalog.client.createTable(srcThrift)
 
-      runSqlHive(s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}' INTO TABLE src_thrift")
+
+      runSqlHive(
+        s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/complex.seq")}' INTO TABLE src_thrift")
     }),
     TestTable("serdeins",
       s"""CREATE TABLE serdeins (key INT, value STRING)
@@ -261,7 +265,8 @@ object TestShark extends SharkInstance {
          |  }'
          |)
        """.stripMargin.cmd,
-      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/episodes.avro")}' INTO TABLE episodes".cmd)
+      s"LOAD DATA LOCAL INPATH '${getHiveFile("data/files/episodes.avro")}' INTO TABLE episodes".cmd
+    )
   )
 
   hiveQTestUtilTables.foreach(registerTestTable)

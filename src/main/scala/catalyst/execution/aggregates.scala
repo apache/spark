@@ -66,8 +66,9 @@ case class Aggregate(
 
     def apply(input: Seq[Row]): Unit = {
       val evaluatedExpr = expr.map(Evaluate(_, input))
-      if (evaluatedExpr.map(_ != null).reduceLeft(_ && _))
+      if (evaluatedExpr.map(_ != null).reduceLeft(_ && _)) {
         seen += evaluatedExpr
+      }
     }
 
     def result: Any = seen.size
@@ -79,8 +80,9 @@ case class Aggregate(
     var result: Any = null
 
     def apply(input: Seq[Row]): Unit = {
-      if (result == null)
+      if (result == null) {
         result = Evaluate(expr, input)
+      }
     }
   }
 

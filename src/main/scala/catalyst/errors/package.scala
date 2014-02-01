@@ -3,7 +3,7 @@ package catalyst
 import trees._
 
 /**
- * Functions for attaching and retrieving trees that are associated with errors in a catalyst optimizer.
+ * Functions for attaching and retrieving trees that are associated with errors.
  */
 package object errors {
 
