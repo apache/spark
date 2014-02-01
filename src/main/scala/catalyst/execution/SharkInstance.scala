@@ -10,6 +10,7 @@ import optimizer.Optimize
 import planning.QueryPlanner
 import plans.logical.LogicalPlan
 import rules.RuleExecutor
+import types._
 
 /**
  * Starts up an instance of shark where metadata is stored locally. An in-process metadata data is
@@ -108,11 +109,28 @@ abstract class SharkInstance extends Logging {
 
     lazy val toRdd = executedPlan.execute()
 
-    def toHiveString(a: Any): String = a match {
-      case seq: Seq[_] => seq.map(toHiveString).map(s => "\"" + s + "\"").mkString("[", ",", "]")
-      case "null" => "NULL"
-      case null => "NULL"
-      case other => other.toString
+    protected def toHiveString(a: (Any, DataType)): String = a match {
+      case (struct: Row, StructType(fields)) =>
+        struct.zip(fields).map {
+          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        }.mkString("{", ",", "}")
+      case (seq: Seq[_], typ)=>
+        seq.map(v => (v, typ)).map(toHiveString).map(s => "\"" + s + "\"").mkString("[", ",", "]")
+      case (null, _) => "NULL"
+      case (other, _) => other.toString
+    }
+
+    /** Hive outputs fields of structs slightly differently than top level attributes. */
+    protected def toHiveStructString(a: (Any, DataType)): String = a match {
+      case (struct: Row, StructType(fields)) =>
+        struct.zip(fields).map {
+          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+        }.mkString("{", ",", "}")
+      case (seq: Seq[_], typ)=>
+        seq.map(v => (v, typ)).map(toHiveString).map(s => "\"" + s + "\"").mkString("[", ",", "]")
+      case (null, _) => "null"
+      case (s: String, _) => "\"" + s + "\""
+      case (other, _) => other.toString
     }
 
     /**
@@ -125,8 +143,10 @@ abstract class SharkInstance extends Logging {
       case ExplainCommand(plan) => new SharkQuery { val parsed = plan }.toString.split("\n")
       case query =>
         val result: Seq[Seq[Any]] = toRdd.collect().toSeq
+        // We need the types so we can output struct field names
+        val types = analyzed.output.map(_.dataType)
         // Reformat to match hive tab delimited output.
-        val asString = result.map(_.map(toHiveString)).map(_.mkString("\t")).toSeq
+        val asString = result.map(_.zip(types).map(toHiveString)).map(_.mkString("\t")).toSeq
         asString
     }
 
