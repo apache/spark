@@ -236,6 +236,17 @@ object Evaluate extends Logging {
       /* Functions */
       case Rand => scala.util.Random.nextDouble()
 
+      /* Complex Type Access */
+      case GetField(e, name) =>
+        val baseValue = eval(e).asInstanceOf[Row]
+        if(baseValue == null) {
+          null
+        } else {
+          // TODO: We could bind this to avoid having to look it up each time.
+          val ordinal = e.dataType.asInstanceOf[StructType].fields.indexWhere(_.name == name)
+          baseValue(ordinal)
+        }
+
       /* UDFs */
       case implementedFunction: ImplementedUdf =>
         implementedFunction.evaluate(implementedFunction.children.map(eval))
