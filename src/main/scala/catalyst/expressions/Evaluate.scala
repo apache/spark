@@ -237,14 +237,12 @@ object Evaluate extends Logging {
       case Rand => scala.util.Random.nextDouble()
 
       /* Complex Type Access */
-      case GetField(e, name) =>
+      case g @ GetField(e, name) =>
         val baseValue = eval(e).asInstanceOf[Row]
         if(baseValue == null) {
           null
         } else {
-          // TODO: We could bind this to avoid having to look it up each time.
-          val ordinal = e.dataType.asInstanceOf[StructType].fields.indexWhere(_.name == name)
-          baseValue(ordinal)
+          baseValue(g.ordinal)
         }
 
       /* UDFs */

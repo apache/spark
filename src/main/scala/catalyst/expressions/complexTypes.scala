@@ -24,12 +24,19 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
 case class GetField(child: Expression, fieldName: String) extends UnaryExpression {
   def dataType = field.dataType
   def nullable = field.nullable
-  lazy val field = child.dataType match {
-    case s: StructType =>
-      s.fields
+
+  protected def structType = child.dataType match {
+    case s: StructType => s
+    case otherType => sys.error(s"GetField is not valid on fields of type $otherType")
+  }
+
+  lazy val field =
+    structType.fields
         .find(_.name == fieldName)
         .getOrElse(sys.error(s"No such field $fieldName in ${child.dataType}"))
-  }
+
+  lazy val ordinal = structType.fields.indexOf(field)
+
   override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[StructType]
   override def toString = s"$child.$fieldName"
 }
