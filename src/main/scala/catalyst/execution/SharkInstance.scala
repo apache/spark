@@ -109,38 +109,42 @@ abstract class SharkInstance extends Logging {
 
     lazy val toRdd = executedPlan.execute()
 
+    protected val primitiveTypes =
+      Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
+        ShortType)
+
     protected def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s"${t.name}:${toHiveStructString(v, t.dataType)}"
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], typ)=>
-        seq.map(v => (v, typ)).map(toHiveString).map(s => "\"" + s + "\"").mkString("[", ",", "]")
+      case (seq: Seq[_], ArrayType(typ))=>
+        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
       case (map: Map[_,_], MapType(kType, vType)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-        }.mkString("{", ",", "}")
+        }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "NULL"
-      case (other, _) => other.toString
+      case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
     /** Hive outputs fields of structs slightly differently than top level attributes. */
     protected def toHiveStructString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.zip(fields).map {
-          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
+          case (v, t) => s"${t.name}:${toHiveStructString(v, t.dataType)}"
         }.mkString("{", ",", "}")
-      case (seq: Seq[_], typ)=>
-        seq.map(v => (v, typ)).map(toHiveString).map(s => "\"" + s + "\"").mkString("[", ",", "]")
+      case (seq: Seq[_], ArrayType(typ))=>
+        seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
       case (map: Map[_,_], MapType(kType, vType)) =>
         map.map {
           case (key, value) =>
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
-        }.mkString("{", ",", "}")
+        }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "null"
       case (s: String, _) => "\"" + s + "\""
-      case (other, _) => other.toString
+      case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
     /**
