@@ -190,29 +190,11 @@ case class InsertIntoHiveTable(
     val childRdd = child.execute()
     assert(childRdd != null)
 
-    /** Create a temporary directory inside the given parent directory */
-    def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
-      var attempts = 0
-      val maxAttempts = 10
-      var dir: File = null
-      while (dir == null) {
-        attempts += 1
-        if (attempts > maxAttempts) {
-          throw new IOException("Failed to create a temp directory (under " + root + ") after " +
-            maxAttempts + " attempts!")
-        }
-        try {
-          dir = new File(root, "spark-" + UUID.randomUUID.toString)
-          if (dir.exists() || !dir.mkdirs()) {
-            dir = null
-          }
-        } catch { case e: IOException => ; }
-      }
-      dir
-    }
-
     // TODO write directly to Hive
-    val tempDir = createTempDir()
+    val tempDir = File.createTempFile("catalysthiveout", "")
+    tempDir.delete()
+    tempDir.mkdir()
+
 
     // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
     // instances within the closure, since AbstractSerDe is not serializable while TableDesc is.
