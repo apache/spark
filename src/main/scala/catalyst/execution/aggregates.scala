@@ -1,13 +1,14 @@
 package catalyst
 package execution
 
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFEvaluator, AbstractGenericUDAFResolver}
+
 import catalyst.errors._
 import catalyst.expressions._
 import catalyst.plans.physical.{ClusteredDistribution, AllTuples}
-import org.apache.spark.rdd.SharkPairRDDFunctions
 
 /* Implicits */
-import SharkPairRDDFunctions._
+import org.apache.spark.rdd.SharkPairRDDFunctions._
 
 case class Aggregate(
     groupingExpressions: Seq[Expression],
@@ -23,6 +24,36 @@ case class Aggregate(
     }
 
   override def otherCopyArgs = sc :: Nil
+
+  case class HiveUdafFunction(
+      exprs: Seq[Expression],
+      base: AggregateExpression,
+      functionName: String)
+    extends AggregateFunction
+    with HiveInspectors
+    with HiveFunctionFactory {
+
+    def this() = this(null, null, null)
+
+    val resolver = createFunction[AbstractGenericUDAFResolver](functionName)
+
+    val function = {
+      val evaluator = resolver.getEvaluator(exprs.map(_.dataType.toTypeInfo).toArray)
+      evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, toInspectors(exprs).toArray)
+      evaluator
+    }
+
+    // Cast required to avoid type inference selecting a deprecated Hive API.
+    val buffer = function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
+
+    def result: Any = unwrap(function.evaluate(buffer))
+
+    def apply(input: Seq[Row]): Unit = {
+      val inputs = exprs.map(Evaluate(_, input).asInstanceOf[AnyRef]).toArray
+      function.iterate(buffer, inputs)
+    }
+  }
+
   def output = aggregateExpressions.map(_.toAttribute)
 
   /* Replace all aggregate expressions with spark functions that will compute the result. */
@@ -34,6 +65,7 @@ case class Aggregate(
       // TODO: Create custom query plan node that calculates distinct values efficiently.
       case base @ CountDistinct(expr) => new CountDistinctFunction(expr, base)
       case base @ First(expr) => new FirstFunction(expr, base)
+      case base @ HiveGenericUdaf(resolver, expr) => new HiveUdafFunction(expr, base, resolver)
     }
 
     val remainingAttributes = impl.collect { case a: Attribute => a }

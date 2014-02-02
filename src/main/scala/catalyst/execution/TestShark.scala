@@ -86,8 +86,12 @@ object TestShark extends SharkInstance {
    * hive test cases assume the system is set up.
    */
   private def rewritePaths(cmd: String): String =
-    if (cmd.toUpperCase contains "LOAD DATA") {
-      cmd.replaceAll("\\.\\.", TestShark.inRepoTests.getCanonicalPath)
+    if (cmd.toUpperCase.contains("LOAD DATA") && cmd.contains("..")) {
+      "[\"\'](../.*)[\"\'] ".r.findFirstMatchIn(cmd)
+        .map(r => {
+        val newPath = new File(TestShark.inRepoTests.getCanonicalPath, cmd.substring(r.start + 1, r.end - 2).replaceFirst("(\\.\\./)+", "")).getAbsolutePath
+        cmd.substring(0, r.start + 1) + newPath + cmd.substring(r.end - 2)
+      }).getOrElse(cmd)
     } else {
       cmd
     }
