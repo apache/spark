@@ -99,8 +99,8 @@ object HiveMetastoreTypes extends RegexParsers {
     }
 
   protected lazy val structField: Parser[StructField] =
-    "[a-zA-Z]".r ~ ":" ~ dataType ^^ {
-      case name ~ _ ~ tpe => StructField(name, tpe, true)
+    "[a-zA-Z0-9]*".r ~ ":" ~ dataType ^^ {
+      case name ~ _ ~ tpe => StructField(name, tpe, nullable = true)
     }
 
   protected lazy val structType: Parser[DataType] =
