@@ -82,17 +82,28 @@ case class HiveTableScan(
           .getOrElse(sys.error(s"Can't find attribute $a"))
         (row: Any, _: Array[String]) => {
           val data = objectInspector.getStructFieldData(row, ref)
-          unwrapData(data, ref)
+          unwrapData(data, ref.getFieldObjectInspector)
         }
       }
     }
   }
 
-  def unwrapData(data: Any, ref: StructField): Any = ref.getFieldObjectInspector match {
+  def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
     case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
+    case li: ListObjectInspector =>
+      Option(
+        li.getList(data)).map(_.map(unwrapData(_, li.getListElementObjectInspector)).toSeq).orNull
+    case mi: MapObjectInspector =>
+      Option(mi.getMap(data)).map(
+        _.map {
+          case (k,v) =>
+            (unwrapData(k, mi.getMapKeyObjectInspector),
+             unwrapData(v, mi.getMapValueObjectInspector))
+      }.toMap).orNull
     case si: StructObjectInspector =>
       val allRefs = si.getAllStructFieldRefs
-      new GenericRow(allRefs.map(r => unwrapData(si.getStructFieldData(data,r), r)))
+      new GenericRow(
+        allRefs.map(r => unwrapData(si.getStructFieldData(data,r), r.getFieldObjectInspector)))
   }
 
   private def castFromString(value: String, dataType: DataType) = {
