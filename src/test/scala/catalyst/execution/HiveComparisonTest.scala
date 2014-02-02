@@ -5,6 +5,7 @@ import java.io._
 import org.scalatest.{BeforeAndAfterAll, FunSuite, GivenWhenThen}
 
 import frontend.hive.{ExplainCommand, Command}
+import plans.physical._
 import util._
 
 /**
@@ -86,7 +87,11 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
     hiveFailedDirectory.mkdir() // Not atomic!
 
   /** All directories that contain per-query output files */
-  val outputDirectories = Seq(passedDirectory, failedDirectory, wrongDirectory, hiveFailedDirectory)
+  val outputDirectories = Seq(
+    passedDirectory,
+    failedDirectory,
+    wrongDirectory,
+    hiveFailedDirectory)
 
   protected val cacheDigest = java.security.MessageDigest.getInstance("MD5")
   protected def getMd5(str: String): String = {
@@ -95,12 +100,17 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
     new java.math.BigInteger(1, digest.digest).toString(16)
   }
 
-  protected def prepareAnswer(sharkQuery: TestShark.type#SharkSqlQuery, answer: Seq[String]): Seq[String] = {
+  protected def prepareAnswer(
+    sharkQuery: TestShark.type#SharkSqlQuery,
+    answer: Seq[String]): Seq[String] = {
     val orderedAnswer = sharkQuery.parsed match {
       // Clean out non-deterministic time schema info.
       case _: Command => answer.filterNot(nonDeterministicLine).filterNot(_ == "")
       case _ =>
-        val isOrdered = sharkQuery.executedPlan.collect { case s: Sort => s}.nonEmpty
+        // TODO: Really we only care about the final total ordering here...
+        val isOrdered = sharkQuery.executedPlan.collect {
+          case s @ Sort(_, global, _) if global => s
+        }.nonEmpty
         // If the query results aren't sorted, then sort them to ensure deterministic answers.
         if (!isOrdered) answer.sorted else answer
     }

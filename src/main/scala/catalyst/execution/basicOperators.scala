@@ -1,11 +1,9 @@
 package catalyst
 package execution
 
-import errors._
-import expressions._
-import types._
-
-import org.apache.spark.SparkContext._
+import catalyst.errors._
+import catalyst.expressions._
+import catalyst.plans.physical.{UnspecifiedDistribution, OrderedDistribution}
 
 case class Project(projectList: Seq[NamedExpression], child: SharkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
@@ -51,22 +49,23 @@ case class StopAfter(limit: Int, child: SharkPlan)(@transient sc: SharkContext) 
   def execute() = sc.makeRDD(executeCollect(), 1)
 }
 
-case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
-  val numPartitions = 8 // TODO: Set with input cardinality
+case class Sort(
+    sortOrder: Seq[SortOrder],
+    global: Boolean,
+    child: SharkPlan)
+  extends UnaryNode {
+  override def requiredChildDistribution =
+    if (global) OrderedDistribution(sortOrder) :: Nil else UnspecifiedDistribution :: Nil
 
-  private final val directions = sortExprs.map(_.direction).toIndexedSeq
-  private final val dataTypes = sortExprs.map(_.dataType).toIndexedSeq
+  @transient
+  lazy val ordering = new RowOrdering(sortOrder)
 
-  // TODO: Don't include redundant expressions in both sortKey and row.
   def execute() = attachTree(this, "sort") {
-    import scala.math.Ordering.Implicits._
-    implicit val ordering = new RowOrdering(sortExprs)
-
-    // TODO: Allow spark to take the ordering as an argument, also avoid needless pair creation.
+    // TODO: Optimize sorting operation?
     child.execute()
-      .mapPartitions(iter => iter.map(row => (row, null)))
-      .sortByKey(ascending = true, numPartitions)
-      .map(_._1)
+      .mapPartitions(
+        iterator => iterator.toArray.sorted(ordering).iterator,
+        preservesPartitioning = true)
   }
 
   def output = child.output
@@ -75,6 +74,9 @@ case class Sort(sortExprs: Seq[SortOrder], child: SharkPlan) extends UnaryNode {
 // TODO: Rename: SchemaRDD
 case class LocalRelation(output: Seq[Attribute], data: Seq[IndexedSeq[Any]])
                         (@transient sc: SharkContext) extends LeafNode {
-  def execute() = sc.makeRDD(data.map(buildRow), 1)
+
+  // Since LocalRelation is used for unit tests, set the defaultParallelism to 2
+  // to make sure we can cover bugs appearing in a distributed environment.
+  def execute() = sc.makeRDD(data.map(buildRow), 2)
 }
 

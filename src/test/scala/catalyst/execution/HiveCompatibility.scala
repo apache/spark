@@ -293,7 +293,6 @@ class HiveCompatibility extends HiveQueryFileTest {
     "input40",
     "input41",
     "input4_cb_delim",
-    "input4_limit",
     "input6",
     "input7",
     "input8",

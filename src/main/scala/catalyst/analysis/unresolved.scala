@@ -10,7 +10,7 @@ import trees.TreeNode
  * resolved.
  */
 class UnresolvedException[TreeType <: TreeNode[_]](tree: TreeType, function: String) extends
-  errors.OptimizationException(tree, s"Invalid call to $function on unresolved object")
+  errors.TreeNodeException(tree, s"Invalid call to $function on unresolved object")
 
 /**
  * Holds the name of a relation that has yet to be looked up in a [[Catalog]].

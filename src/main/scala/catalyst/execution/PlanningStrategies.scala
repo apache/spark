@@ -5,6 +5,7 @@ import expressions._
 import planning._
 import plans._
 import plans.logical.LogicalPlan
+import plans.physical._
 
 trait PlanningStrategies {
   self: QueryPlanner[SharkPlan] =>
@@ -142,10 +143,12 @@ trait PlanningStrategies {
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Sort(sortExprs, child) =>
-        execution.Sort(sortExprs, planLater(child)) :: Nil
-      // TODO: It is correct, but overkill to do a global sorting here.
+        // This sort is a global sort. Its requiredDistribution will be an OrderedDistribution.
+        execution.Sort(sortExprs, true, planLater(child)):: Nil
       case logical.SortPartitions(sortExprs, child) =>
-        execution.Sort(sortExprs, planLater(child)) :: Nil
+        // This sort only sort tuples within a partition. Its requiredDistribution will be
+        // an UnspecifiedDistribution.
+        execution.Sort(sortExprs, false, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>

@@ -3,9 +3,11 @@ package execution
 
 import catalyst.errors._
 import catalyst.expressions._
+import catalyst.plans.physical.{ClusteredDistribution, AllTuples}
+import org.apache.spark.rdd.SharkPairRDDFunctions
 
 /* Implicits */
-import org.apache.spark.SparkContext._
+import SharkPairRDDFunctions._
 
 case class Aggregate(
     groupingExpressions: Seq[Expression],
@@ -13,82 +15,17 @@ case class Aggregate(
     child: SharkPlan)(@transient sc: SharkContext)
   extends UnaryNode {
 
-  // TODO: Move these default functions back to expressions. Build framework for instantiating them.
-  case class AverageFunction(expr: Expression, base: AggregateExpression)
-    extends AggregateFunction {
-
-    def this() = this(null, null) // Required for serialization.
-
-    var count: Long = _
-    var sum: Long = _
-
-    def result: Any = sum.toDouble / count.toDouble
-
-    def apply(input: Seq[Row]): Unit = {
-      count += 1
-      // TODO: Support all types here...
-      sum += Evaluate(expr, input).asInstanceOf[Int]
+  override def requiredChildDistribution =
+    if (groupingExpressions == Nil) {
+      AllTuples :: Nil
+    } else {
+      ClusteredDistribution(groupingExpressions) :: Nil
     }
-  }
-
-  case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
-    def this() = this(null, null) // Required for serialization.
-
-    var count: Int = _
-
-    def apply(input: Seq[Row]): Unit = {
-      val evaluatedExpr = expr.map(Evaluate(_, input))
-      if (evaluatedExpr.map(_ != null).reduceLeft(_ || _)) {
-        count += 1
-      }
-    }
-
-    def result: Any = count
-  }
-
-  case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
-    def this() = this(null, null) // Required for serialization.
-
-    var sum = Evaluate(Cast(Literal(0), expr.dataType), Nil)
-
-    def apply(input: Seq[Row]): Unit =
-      sum = Evaluate(Add(Literal(sum), expr), input)
-
-    def result: Any = sum
-  }
-
-  case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpression)
-    extends AggregateFunction {
-
-    def this() = this(null, null) // Required for serialization.
-
-    val seen = new scala.collection.mutable.HashSet[Any]()
-
-    def apply(input: Seq[Row]): Unit = {
-      val evaluatedExpr = expr.map(Evaluate(_, input))
-      if (evaluatedExpr.map(_ != null).reduceLeft(_ && _)) {
-        seen += evaluatedExpr
-      }
-    }
-
-    def result: Any = seen.size
-  }
-
-  case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
-    def this() = this(null, null) // Required for serialization.
-
-    var result: Any = null
-
-    def apply(input: Seq[Row]): Unit = {
-      if (result == null) {
-        result = Evaluate(expr, input)
-      }
-    }
-  }
 
   override def otherCopyArgs = sc :: Nil
   def output = aggregateExpressions.map(_.toAttribute)
 
+  /* Replace all aggregate expressions with spark functions that will compute the result. */
   def createAggregateImplementations() = aggregateExpressions.map { agg =>
     val impl = agg transform {
       case base @ Average(expr) => new AverageFunction(expr, base)
@@ -119,12 +56,14 @@ case class Aggregate(
   }
 
   def execute() = attachTree(this, "execute") {
+    // TODO: If the child of it is an [[catalyst.execution.Exchange]],
+    // do not evaluate the groupingExpressions again since we have evaluated it
+    // in the [[catalyst.execution.Exchange]].
     val grouped = child.execute().map { row =>
       (buildRow(groupingExpressions.map(Evaluate(_, Vector(row)))), row)
-    }.groupByKey()
+    }.groupByKeyLocally()
 
     val result = grouped.map { case (group, rows) =>
-      // Replace all aggregate expressions with spark functions that will compute the result.
       val aggImplementations = createAggregateImplementations()
 
       // Pull out all the functions so we can feed each row into them.
@@ -145,6 +84,79 @@ case class Aggregate(
       sc.makeRDD(buildRow(aggImplementations.map(Evaluate(_, Nil))) :: Nil)
     } else {
       result
+    }
+  }
+}
+
+// TODO: Move these default functions back to expressions. Build framework for instantiating them.
+case class AverageFunction(expr: Expression, base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  var count: Long = _
+  var sum: Long = _
+
+  def result: Any = sum.toDouble / count.toDouble
+
+  def apply(input: Seq[Row]): Unit = {
+    count += 1
+    // TODO: Support all types here...
+    sum += Evaluate(expr, input).asInstanceOf[Int]
+  }
+}
+
+case class CountFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  var count: Int = _
+
+  def apply(input: Seq[Row]): Unit = {
+    val evaluatedExpr = expr.map(Evaluate(_, input))
+    if (evaluatedExpr.map(_ != null).reduceLeft(_ || _)) {
+      count += 1
+    }
+  }
+
+  def result: Any = count
+}
+
+case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  var sum = Evaluate(Cast(Literal(0), expr.dataType), Nil)
+
+  def apply(input: Seq[Row]): Unit =
+    sum = Evaluate(Add(Literal(sum), expr), input)
+
+  def result: Any = sum
+}
+
+case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  val seen = new scala.collection.mutable.HashSet[Any]()
+
+  def apply(input: Seq[Row]): Unit = {
+    val evaluatedExpr = expr.map(Evaluate(_, input))
+    if (evaluatedExpr.map(_ != null).reduceLeft(_ && _)) {
+      seen += evaluatedExpr
+    }
+  }
+
+  def result: Any = seen.size
+}
+
+case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
+  def this() = this(null, null) // Required for serialization.
+
+  var result: Any = null
+
+  def apply(input: Seq[Row]): Unit = {
+    if (result == null) {
+      result = Evaluate(expr, input)
     }
   }
 }

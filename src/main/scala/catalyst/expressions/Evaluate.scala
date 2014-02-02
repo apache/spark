@@ -36,7 +36,7 @@ object Evaluate extends Logging {
     @inline
     def n2(e1: Expression, e2: Expression, f: ((Numeric[Any], Any, Any) => Any)): Any  = {
       if (e1.dataType != e2.dataType) {
-        throw new OptimizationException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+        throw new TreeNodeException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
       }
 
       val evalE1 = eval(e1)
@@ -56,7 +56,7 @@ object Evaluate extends Logging {
     @inline
     def f2(e1: Expression, e2: Expression, f: ((Fractional[Any], Any, Any) => Any)): Any  = {
       if (e1.dataType != e2.dataType) {
-        throw new OptimizationException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+        throw new TreeNodeException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
       }
 
       val evalE1 = eval(e1)
@@ -76,7 +76,7 @@ object Evaluate extends Logging {
     @inline
     def i2(e1: Expression, e2: Expression, f: ((Integral[Any], Any, Any) => Any)): Any  = {
       if (e1.dataType != e2.dataType) {
-        throw new OptimizationException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+        throw new TreeNodeException(e,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
       }
       val evalE1 = eval(e1)
       val evalE2 = eval(e2)
@@ -230,7 +230,7 @@ object Evaluate extends Logging {
       /* References to input tuples */
       case br @ BoundReference(inputTuple, ordinal, _) => try input(inputTuple)(ordinal) catch {
         case iob: IndexOutOfBoundsException =>
-          throw new OptimizationException(br, s"Reference not in tuple: $input")
+          throw new TreeNodeException(br, s"Reference not in tuple: $input")
       }
 
       /* Functions */
@@ -241,9 +241,9 @@ object Evaluate extends Logging {
         implementedFunction.evaluate(implementedFunction.children.map(eval))
 
       case a: Attribute =>
-        throw new OptimizationException(a,
+        throw new TreeNodeException(a,
           "Unable to evaluate unbound reference without access to the input schema.")
-      case other => throw new OptimizationException(other, "evaluation not implemented")
+      case other => throw new TreeNodeException(other, "evaluation not implemented")
     }
 
     val resultType = if (result == null) "null" else result.getClass.getName

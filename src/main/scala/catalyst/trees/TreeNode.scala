@@ -171,7 +171,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           arg
         }
-      case args: Seq[_] => args.map {
+      case m: Map[_,_] => m
+      case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
           val newChild = arg.asInstanceOf[BaseType].transformDown(rule)
           if (!(newChild fastEquals arg)) {
@@ -214,7 +215,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
         } else {
           arg
         }
-      case args: Seq[_] => args.map {
+      case m: Map[_,_] => m
+      case args: Traversable[_] => args.map {
         case arg: TreeNode[_] if children contains arg =>
           val newChild = arg.asInstanceOf[BaseType].transformUp(rule)
           if (!(newChild fastEquals arg)) {
@@ -254,7 +256,7 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
       }
     } catch {
       case e: java.lang.IllegalArgumentException =>
-        throw new OptimizationException(
+        throw new TreeNodeException(
           this, s"Failed to copy node.  Is otherCopyArgs specified correctly for $nodeName?")
     }
   }
@@ -271,7 +273,8 @@ abstract class TreeNode[BaseType <: TreeNode[BaseType]] {
   def argString: String = productIterator.flatMap {
     case tn: TreeNode[_] if children contains tn => Nil
     case tn: TreeNode[_] if tn.toString contains "\n" => s"(${tn.simpleString})" :: Nil
-    case seq: Seq[_] => seq.mkString("{", ",", "}") :: Nil
+    case seq: Seq[_] => seq.mkString("[", ",", "]") :: Nil
+    case set: Set[_] => set.mkString("{", ",", "}") :: Nil
     case other => other :: Nil
   }.mkString(", ")
 
