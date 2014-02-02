@@ -224,7 +224,7 @@ case class InsertIntoHiveTable(
           case (obj, _) => obj
         }
 
-        (null, serializer.serialize(Array(mappedRow: _*), standardOI))
+        (null, serializer.serialize(mappedRow.toArray, standardOI))
       }
     }.saveAsHadoopFile(
         tempDir.getCanonicalPath,
