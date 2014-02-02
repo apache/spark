@@ -26,9 +26,9 @@ case class Aggregate(
   override def otherCopyArgs = sc :: Nil
 
   case class HiveUdafFunction(
-    exprs: Seq[Expression],
-    base: AggregateExpression,
-    functionName: String)
+      exprs: Seq[Expression],
+      base: AggregateExpression,
+      functionName: String)
     extends AggregateFunction
     with HiveInspectors
     with HiveFunctionFactory {
