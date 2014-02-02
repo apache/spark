@@ -116,6 +116,11 @@ abstract class SharkInstance extends Logging {
         }.mkString("{", ",", "}")
       case (seq: Seq[_], typ)=>
         seq.map(v => (v, typ)).map(toHiveString).map(s => "\"" + s + "\"").mkString("[", ",", "]")
+      case (map: Map[_,_], MapType(kType, vType)) =>
+        map.map {
+          case (key, value) =>
+            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
+        }.mkString("{", ",", "}")
       case (null, _) => "NULL"
       case (other, _) => other.toString
     }
@@ -128,6 +133,11 @@ abstract class SharkInstance extends Logging {
         }.mkString("{", ",", "}")
       case (seq: Seq[_], typ)=>
         seq.map(v => (v, typ)).map(toHiveString).map(s => "\"" + s + "\"").mkString("[", ",", "]")
+      case (map: Map[_,_], MapType(kType, vType)) =>
+        map.map {
+          case (key, value) =>
+            toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
+        }.mkString("{", ",", "}")
       case (null, _) => "null"
       case (s: String, _) => "\"" + s + "\""
       case (other, _) => other.toString
