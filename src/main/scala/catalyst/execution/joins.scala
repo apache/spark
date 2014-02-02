@@ -2,40 +2,46 @@ package catalyst
 package execution
 
 import scala.collection.mutable
-
-import org.apache.spark.rdd.RDD
+import scala.Some
 
 import errors._
 import expressions._
 import plans._
+import org.apache.spark.rdd.SharkPairRDDFunctions._
 
-/* Implicits */
-import org.apache.spark.SparkContext._
+import org.apache.spark.rdd.RDD
+import catalyst.plans.physical.{ClusteredDistribution, Partitioning}
 
 case class SparkEquiInnerJoin(
     leftKeys: Seq[Expression],
     rightKeys: Seq[Expression],
     left: SharkPlan,
-    right: SharkPlan)
-  extends BinaryNode {
+    right: SharkPlan) extends BinaryNode {
+
+  override def outputPartitioning: Partitioning = left.outputPartitioning
+
+  override def requiredChildDistribution =
+    ClusteredDistribution(leftKeys) :: ClusteredDistribution(rightKeys) :: Nil
 
   def output = left.output ++ right.output
 
   def execute() = attachTree(this, "execute") {
-    val leftWithKeys = left.execute .map { row =>
+    val leftWithKeys = left.execute().map { row =>
       val joinKeys = leftKeys.map(Evaluate(_, Vector(row)))
-      logger.debug(s"Generated left join keys ($leftKeys) => ($joinKeys) given row $row")
+      logger.debug(s"Generated left join keys [${leftKeys.mkString(",")}] =>" +
+        s"[${joinKeys.mkString(",")}] given row $row")
       (joinKeys, row)
     }
 
     val rightWithKeys = right.execute().map { row =>
       val joinKeys = rightKeys.map(Evaluate(_, Vector(EmptyRow, row)))
-      logger.debug(s"Generated right join keys ($rightKeys) => ($joinKeys) given row $row")
+      logger.debug(s"Generated right join keys [${rightKeys.mkString(",")}] =>" +
+        s"[${joinKeys.mkString(",")}] given row $row")
       (joinKeys, row)
     }
 
     // Do the join.
-    val joined = filterNulls(leftWithKeys).join(filterNulls(rightWithKeys))
+    val joined = filterNulls(leftWithKeys).joinLocally(filterNulls(rightWithKeys))
     // Drop join keys and merge input tuples.
     joined.map { case (_, (leftTuple, rightTuple)) => buildRow(leftTuple ++ rightTuple) }
   }
@@ -46,7 +52,7 @@ case class SparkEquiInnerJoin(
    */
   protected def filterNulls(rdd: RDD[(Seq[Any], Row)]) =
     rdd.filter {
-      case (key: Seq[_], _) => !key.map(_ == null).reduceLeft(_ || _)
+      case (key: Seq[_], _) => !key.exists(_ == null)
     }
 }
 
@@ -62,8 +68,11 @@ case class BroadcastNestedLoopJoin(
     streamed: SharkPlan, broadcast: SharkPlan, joinType: JoinType, condition: Option[Expression])
     (@transient sc: SharkContext)
   extends BinaryNode {
+  // TODO: Override requiredChildDistribution.
 
-  override  def otherCopyArgs = sc :: Nil
+  override def outputPartitioning: Partitioning = streamed.outputPartitioning
+
+  override def otherCopyArgs = sc :: Nil
 
   def output = left.output ++ right.output
 

@@ -93,7 +93,7 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
   def dataType = {
     if (!resolved) {
       throw new UnresolvedException(
-        this, s"Invalid types: ${trueValue.dataType}, ${falseValue.dataType}")
+        this, s"Can not resolve due to differing types ${trueValue.dataType}, ${falseValue.dataType}")
     }
     trueValue.dataType
   }

@@ -114,8 +114,6 @@ abstract class HiveUdf extends Expression with ImplementedUdf with Logging with 
   lazy val function = createFunction[UDFType](name)
 
   override def toString = s"${nodeName}#${functionInfo.getDisplayName}(${children.mkString(",")})"
-
-
 }
 
 case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUdf {
@@ -237,10 +235,12 @@ trait HiveInspectors {
 }
 
 case class HiveGenericUdaf(
-  name: String,
-  children: Seq[Expression]) extends AggregateExpression
+    name: String,
+    children: Seq[Expression]) extends AggregateExpression
   with HiveInspectors
   with HiveFunctionFactory {
+
+  type UDFType = AbstractGenericUDAFResolver
 
   lazy val resolver = createFunction[AbstractGenericUDAFResolver](name)
 
@@ -248,8 +248,6 @@ case class HiveGenericUdaf(
     resolver.getEvaluator(children.map(_.dataType.toTypeInfo).toArray)
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
   }
-
-  type UDFType = AbstractGenericUDAFResolver
 
   lazy val inspectors: Seq[ObjectInspector] = toInspectors(children)
 

@@ -83,6 +83,7 @@ abstract class SharkInstance extends Logging {
 
   object PrepareForExecution extends RuleExecutor[SharkPlan] {
     val batches =
+      Batch("Add exchange", Once, AddExchange) ::
       Batch("Prepare Expressions", Once, new expressions.BindReferences[SharkPlan]) :: Nil
   }
 
