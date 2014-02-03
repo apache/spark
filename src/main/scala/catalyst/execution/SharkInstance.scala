@@ -116,7 +116,7 @@ abstract class SharkInstance extends Logging {
     protected def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.zip(fields).map {
-          case (v, t) => s"${t.name}:${toHiveStructString(v, t.dataType)}"
+          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ))=>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
@@ -133,7 +133,7 @@ abstract class SharkInstance extends Logging {
     protected def toHiveStructString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
         struct.zip(fields).map {
-          case (v, t) => s"${t.name}:${toHiveStructString(v, t.dataType)}"
+          case (v, t) => s""""${t.name}":${toHiveStructString(v, t.dataType)}"""
         }.mkString("{", ",", "}")
       case (seq: Seq[_], ArrayType(typ))=>
         seq.map(v => (v, typ)).map(toHiveStructString).mkString("[", ",", "]")
