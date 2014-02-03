@@ -101,7 +101,6 @@ case class Aggregate(
 
       // Pull out all the functions so we can feed each row into them.
       val aggFunctions = aggImplementations.flatMap(_ collect { case f: AggregateFunction => f })
-      assert(aggFunctions.nonEmpty)
 
       rows.foreach { row =>
         val input = Vector(row)
