@@ -143,7 +143,7 @@ abstract class SharkInstance extends Logging {
             toHiveStructString((key, kType)) + ":" + toHiveStructString((value, vType))
         }.toSeq.sorted.mkString("{", ",", "}")
       case (null, _) => "null"
-      case (s: String, _) => "\"" + s + "\""
+      case (s: String, StringType) => "\"" + s + "\""
       case (other, tpe) if primitiveTypes contains tpe => other.toString
     }
 
