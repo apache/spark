@@ -46,7 +46,7 @@ object ZeroMQUtils {
       ssc: StreamingContext,
       publisherUrl: String,
       subscribe: Subscribe,
-      bytesToObjects: Seq[ByteString] ⇒ Iterator[T],
+      bytesToObjects: Seq[ByteString] => Iterator[T],
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
     ): DStream[T] = {
