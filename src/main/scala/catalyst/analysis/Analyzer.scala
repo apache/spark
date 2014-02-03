@@ -4,6 +4,7 @@ package analysis
 import expressions._
 import plans.logical._
 import rules._
+import catalyst.execution.MetastoreRelation
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -152,17 +153,20 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       // Wait until children are resolved
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case p @ InsertIntoTable(table, _, child) =>
+      case p @ InsertIntoTable(table: MetastoreRelation, _, child) =>
         val childOutputDataTypes = child.output.map(_.dataType)
-        val tableOutputDataTypes = table.output.map(_.dataType)
+        // Only check attributes, not partitionKeys since they are always strings.
+        // TODO: Fully support inserting into partitioned tables.
+        val tableOutputDataTypes = table.attributes.map(_.dataType)
 
-        if (childOutputDataTypes sameElements tableOutputDataTypes) {
+        if (childOutputDataTypes == tableOutputDataTypes) {
           p
         } else {
           // Only do the casting when child output data types differ from table output data types.
           val castedChildOutput = child.output.zip(table.output).map {
-            case (l, r) if l.dataType != r.dataType => Alias(Cast(l, r.dataType), l.name)()
-            case (l, _) => l
+            case (input, table) if input.dataType != table.dataType =>
+              Alias(Cast(input, table.dataType), input.name)()
+            case (input, _) => input
           }
 
           p.copy(child = Project(castedChildOutput, child))
