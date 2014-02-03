@@ -3,22 +3,18 @@ package execution
 
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.hive.serde2.{io => hiveIo}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive._
+import org.apache.hadoop.hive.serde2.objectinspector.{ListObjectInspector, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.{MapObjectInspector, ObjectInspector}
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFEvaluator, AbstractGenericUDAFResolver}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
 import org.apache.hadoop.hive.ql.exec.UDF
-import org.apache.hadoop.hive.serde2.{io => hiveIo}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.{io => hadoopIo}
 
-import expressions._
-import types._
-import org.apache.hadoop.hive.serde2.objectinspector.{ListObjectInspector, StructObjectInspector}
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
-import catalyst.types.StructField
-import catalyst.types.StructType
-import catalyst.types.ArrayType
-import catalyst.expressions.Cast
+import catalyst.expressions._
+import catalyst.types._
 
 object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionFactory {
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
@@ -38,7 +34,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionF
         children.zip(expectedDataTypes).map { case (e, t) => Cast(e, t) }
       )
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveGenericUdf(name, IntegerType, children)
+      HiveGenericUdf(name, children)
     } else if (
          classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdaf(name, children)
@@ -172,8 +168,7 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
 
 case class HiveGenericUdf(
     name: String,
-    dataType: DataType,
-    children: Seq[Expression]) extends HiveUdf {
+    children: Seq[Expression]) extends HiveUdf with HiveInspectors {
   import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
   type UDFType = GenericUDF
 
@@ -188,10 +183,12 @@ case class HiveGenericUdf(
     case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
   }
 
-  lazy val instance = {
-    function.initialize(inspectors.toArray)
-    function
+  lazy val (objectInspector, instance) = {
+    val oi = function.initialize(inspectors.toArray)
+    (oi, function)
   }
+
+  def dataType: DataType = inspectorToDataType(objectInspector)
 
   def wrap(a: Any): Any = a match {
     case s: String => new hadoopIo.Text(s)
@@ -230,6 +227,10 @@ trait HiveInspectors {
         StructField(f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), true)
       }))
     case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
+    case m: MapObjectInspector =>
+      MapType(
+        inspectorToDataType(m.getMapKeyObjectInspector),
+        inspectorToDataType(m.getMapValueObjectInspector))
     case _: WritableStringObjectInspector => StringType
     case _: WritableIntObjectInspector => IntegerType
     case _: WritableDoubleObjectInspector => DoubleType
