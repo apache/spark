@@ -94,7 +94,7 @@ trait HiveTypeCoercion {
     // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
     // The conversion for integral and floating point types have a linear widening hierarchy:
     val numericPrecedence =
-      Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
+      Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
     // Boolean is only wider than Void
     val booleanPrecedence = Seq(NullType, BooleanType)
     val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil

@@ -88,6 +88,7 @@ object HiveMetastoreTypes extends RegexParsers {
     "bigint" ^^^ LongType |
     "binary" ^^^ BinaryType |
     "boolean" ^^^ BooleanType |
+    "decimal" ^^^ DecimalType |
     "(?i)VARCHAR\\((\\d+)\\)".r ^^^ StringType
 
   protected lazy val arrayType: Parser[DataType] =

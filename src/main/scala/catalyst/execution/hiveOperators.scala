@@ -5,14 +5,14 @@ import java.io.{File, IOException}
 import java.util.UUID
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.common.`type`.HiveVarchar
+import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.{JavaHiveDecimalObjectInspector, JavaHiveVarcharObjectInspector}
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.SparkContext._
@@ -151,6 +151,8 @@ case class HiveTableScan(
       buildRow(values.map {
         case n: String if n.toLowerCase == "null" => null
         case varchar: org.apache.hadoop.hive.common.`type`.HiveVarchar => varchar.getValue
+        case decimal: org.apache.hadoop.hive.common.`type`.HiveDecimal =>
+          BigDecimal(decimal.bigDecimalValue)
         case other => other
       })
     }
@@ -221,6 +223,8 @@ case class InsertIntoHiveTable(
         val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector)
         val mappedRow = row.zip(fieldOIs).map {
           case (s: String, oi: JavaHiveVarcharObjectInspector) => new HiveVarchar(s, s.size)
+          case (bd: BigDecimal, oi: JavaHiveDecimalObjectInspector) =>
+            new HiveDecimal(bd.underlying())
           case (obj, _) => obj
         }
 

@@ -111,7 +111,7 @@ abstract class SharkInstance extends Logging {
 
     protected val primitiveTypes =
       Seq(StringType, IntegerType, LongType, DoubleType, FloatType, BooleanType, ByteType,
-        ShortType)
+        ShortType, DecimalType)
 
     protected def toHiveString(a: (Any, DataType)): String = a match {
       case (struct: Row, StructType(fields)) =>
