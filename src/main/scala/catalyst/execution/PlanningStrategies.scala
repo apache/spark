@@ -150,7 +150,7 @@ trait PlanningStrategies {
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sort tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
-        execution.Sort(sortExprs, false, planLater(child)) :: Nil
+        execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
