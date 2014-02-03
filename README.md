@@ -50,3 +50,8 @@ To run one of them, use `./sparkR <filename> <args>`. For example:
 You can also run the unit-tests for SparkR by running
 
     ./run-tests.sh
+
+## Running on EC2
+
+Instructions for running SparkR on EC2 can be found in the
+[SparkR wiki](https://github.com/amplab-extras/SparkR-pkg/wiki/SparkR-on-EC2).

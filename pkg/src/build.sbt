@@ -31,7 +31,6 @@ resolvers ++= Seq(
   "Typesafe" at "http://repo.typesafe.com/typesafe/releases",
   "Scala Tools Snapshots" at "http://scala-tools.org/repo-snapshots/",
   "Spray" at "http://repo.spray.cc",
-  "Apache Staging" at "https://repository.apache.org/content/repositories/staging/"
 )
 
 mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
