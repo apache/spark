@@ -172,6 +172,7 @@ case class HiveGenericUdf(
   import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
   type UDFType = GenericUDF
 
+  @transient
   lazy val inspectors: Seq[AbstractPrimitiveJavaObjectInspector] = children.map(_.dataType).map {
     case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
     case IntegerType => PrimitiveObjectInspectorFactory.javaIntObjectInspector
@@ -183,12 +184,10 @@ case class HiveGenericUdf(
     case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
   }
 
-  lazy val (objectInspector, instance) = {
-    val oi = function.initialize(inspectors.toArray)
-    (oi, function)
-  }
+  @transient
+  lazy val objectInspector = function.initialize(inspectors.toArray)
 
-  def dataType: DataType = inspectorToDataType(objectInspector)
+  val dataType: DataType = inspectorToDataType(objectInspector)
 
   def wrap(a: Any): Any = a match {
     case s: String => new hadoopIo.Text(s)
@@ -203,10 +202,11 @@ case class HiveGenericUdf(
   }
 
   def evaluate(evaluatedChildren: Seq[Any]): Any = {
+    objectInspector // Make sure initialized.
     val args = evaluatedChildren.map(wrap).map { v =>
       new DeferredJavaObject(v): DeferredObject
     }.toArray
-    unwrap(instance.evaluate(args))
+    unwrap(function.evaluate(args))
   }
 }
 
@@ -232,6 +232,7 @@ trait HiveInspectors {
         inspectorToDataType(m.getMapKeyObjectInspector),
         inspectorToDataType(m.getMapValueObjectInspector))
     case _: WritableStringObjectInspector => StringType
+    case _: JavaStringObjectInspector => StringType
     case _: WritableIntObjectInspector => IntegerType
     case _: WritableDoubleObjectInspector => DoubleType
     case _: WritableBooleanObjectInspector => BooleanType
