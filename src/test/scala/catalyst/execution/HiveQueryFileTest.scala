@@ -34,7 +34,7 @@ abstract class HiveQueryFileTest extends HiveComparisonTest {
     Option(System.getProperty(whiteListProperty)).map(_.split(",").toSeq).getOrElse(whiteList)
 
   // Go through all the test cases and add them to scala test.
-  testCases.foreach {
+  testCases.sorted.foreach {
     case (testCaseName, testCaseFile) =>
       if (blackList.map(_.r.pattern.matcher(testCaseName).matches()).reduceLeft(_||_)) {
         logger.warn(s"Blacklisted test skipped $testCaseName")

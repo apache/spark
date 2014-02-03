@@ -171,12 +171,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
     }
 
     test(testCaseName) {
-      logger.error(
-       s"""
-          |=============================
-          |HIVE TEST: $testCaseName
-          |=============================
-          """.stripMargin)
+      logger.error(s"=== HIVE TEST: $testCaseName ===")
 
       // Clear old output for this testcase.
       outputDirectories.map(new File(_, testCaseName)).filter(_.exists()).foreach(_.delete())
@@ -236,7 +231,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
 
         val hiveResults: Seq[Seq[String]] =
           if (hiveCachedResults.size == queryList.size) {
-            logger.warn(s"Using answer cache for test: $testCaseName")
+            logger.info(s"Using answer cache for test: $testCaseName")
             hiveCachedResults
           } else {
 
@@ -252,7 +247,6 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
                     sys.error("hive exec hooks not supported for tests.")
 
                   logger.warn(s"Running query ${i+1}/${queryList.size} with hive.")
-                  info(s"HIVE: $queryString")
                   // Analyze the query with catalyst to ensure test tables are loaded.
                   val answer = sharkQuery.analyzed match {
                     case _: ExplainCommand => Nil // No need to execute EXPLAIN queries as we don't check the output.
@@ -287,7 +281,6 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
 
         // Run w/ catalyst
         val catalystResults = queryList.zip(hiveResults).map { case (queryString, hive) =>
-          info(queryString)
           val query = new TestShark.SharkSqlQuery(queryString)
           try { (query, prepareAnswer(query, query.stringResult())) } catch {
             case e: Exception =>
