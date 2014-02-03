@@ -46,6 +46,9 @@ class HiveCompatibility extends HiveQueryFileTest {
     "alter_partition_clusterby_sortby",
     "alter_merge",
     "alter_concatenate_indexed_table",
+    "protectmode2",
+    "describe_table",
+    "describe_comment_nonascii",
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
