@@ -69,7 +69,7 @@ object AddExchange extends Rule[SharkPlan] {
               s"${if (valid) "Valid" else "Invalid"} distribution," +
                 s"required: $required current: ${child.outputPartitioning}")
             valid
-        }.exists(_ == false)
+        }.exists(!_)
 
       // Check if outputPartitionings of children are compatible with each other.
       // It is possible that every child satisfies its required data distribution
@@ -86,7 +86,7 @@ object AddExchange extends Rule[SharkPlan] {
           .map {
             case Seq(a) => true
             case Seq(a,b) => a compatibleWith b
-          }.exists(_ == false)
+          }.exists(!_)
 
       // Check if the partitioning we want to ensure is the same as the child's output
       // partitioning. If so, we do not need to add the Exchange operator.

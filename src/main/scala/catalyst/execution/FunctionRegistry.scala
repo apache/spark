@@ -4,7 +4,8 @@ package execution
 import scala.collection.JavaConversions._
 
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
-import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFEvaluator, AbstractGenericUDAFResolver, GenericUDF}
+import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFEvaluator, AbstractGenericUDAFResolver}
+import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
 import org.apache.hadoop.hive.ql.exec.UDF
 import org.apache.hadoop.hive.serde2.{io => hiveIo}
 import org.apache.hadoop.hive.serde2.objectinspector.primitive._
@@ -12,7 +13,8 @@ import org.apache.hadoop.{io => hadoopIo}
 
 import expressions._
 import types._
-import org.apache.hadoop.hive.serde2.objectinspector.{ListObjectInspector, StructObjectInspector, ObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.{ListObjectInspector, StructObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
 import catalyst.types.StructField
 import catalyst.types.StructType
 import catalyst.types.ArrayType
@@ -37,7 +39,8 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionF
       )
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdf(name, IntegerType, children)
-    } else if (classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
+    } else if (
+         classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdaf(name, children)
     } else {
       sys.error(s"No handler for udf ${functionInfo.getFunctionClass}")
@@ -75,7 +78,8 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionF
 trait HiveFunctionFactory {
   def getFunctionInfo(name: String) = FunctionRegistry.getFunctionInfo(name)
   def getFunctionClass(name: String) = getFunctionInfo(name).getFunctionClass
-  def createFunction[UDFType](name: String) = getFunctionClass(name).newInstance.asInstanceOf[UDFType]
+  def createFunction[UDFType](name: String) =
+    getFunctionClass(name).newInstance.asInstanceOf[UDFType]
 
   def unwrap(a: Any): Any = a match {
     case null => null
@@ -100,7 +104,8 @@ trait HiveFunctionFactory {
   }
 }
 
-abstract class HiveUdf extends Expression with ImplementedUdf with Logging with HiveFunctionFactory {
+abstract class HiveUdf
+    extends Expression with ImplementedUdf with Logging with HiveFunctionFactory {
   self: Product =>
 
   type UDFType

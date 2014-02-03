@@ -25,3 +25,4 @@ case class Repartition(partitionExpressions: Seq[Expression], child: LogicalPlan
 
   def references = partitionExpressions.flatMap(_.references).toSet
 }
+
