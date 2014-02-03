@@ -30,7 +30,7 @@ libraryDependencies ++= Seq(
 resolvers ++= Seq(
   "Typesafe" at "http://repo.typesafe.com/typesafe/releases",
   "Scala Tools Snapshots" at "http://scala-tools.org/repo-snapshots/",
-  "Spray" at "http://repo.spray.cc",
+  "Spray" at "http://repo.spray.cc"
 )
 
 mergeStrategy in assembly <<= (mergeStrategy in assembly) { (old) =>
