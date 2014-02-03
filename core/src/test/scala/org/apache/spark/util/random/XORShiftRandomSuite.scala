@@ -15,10 +15,8 @@
  * limitations under the License.
  */
 
-package org.apache.spark.util
+package org.apache.spark.util.random
 
-import java.util.Random
-import org.scalatest.FlatSpec
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
 import org.apache.spark.util.Utils.times

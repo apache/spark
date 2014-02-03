@@ -486,6 +486,21 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("randomSplit") {
+    val n = 600
+    val data = sc.parallelize(1 to n, 2)
+    for(seed <- 1 to 5) {
+      val splits = data.randomSplit(Array(1.0, 2.0, 3.0), seed)
+      assert(splits.size == 3, "wrong number of splits")
+      assert(splits.flatMap(_.collect).sorted.toList == data.collect.toList,
+        "incomplete or wrong split")
+      val s = splits.map(_.count)
+      assert(math.abs(s(0) - 100) < 50) // std =  9.13
+      assert(math.abs(s(1) - 200) < 50) // std = 11.55
+      assert(math.abs(s(2) - 300) < 50) // std = 12.25
+    }
+  }
+
   test("runJob on an invalid partition") {
     intercept[IllegalArgumentException] {
       sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)
