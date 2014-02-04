@@ -4,7 +4,7 @@ package expressions
 import types._
 
 /**
- * Returns the item at `ordinal` in the Array `child`.
+ * Returns the item at `ordinal` in the Array `child` or the Key `ordinal` in Map `child`.
  */
 case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   val children = child :: ordinal :: Nil
@@ -13,8 +13,12 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   override def references = children.flatMap(_.references).toSet
   def dataType = child.dataType match {
     case ArrayType(dt) => dt
+    case MapType(_, vt) => vt
   }
-  override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[ArrayType]
+  override lazy val resolved =
+    childrenResolved &&
+    (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
+
   override def toString = s"$child[$ordinal]"
 }
 
@@ -24,12 +28,19 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
 case class GetField(child: Expression, fieldName: String) extends UnaryExpression {
   def dataType = field.dataType
   def nullable = field.nullable
-  lazy val field = child.dataType match {
-    case s: StructType =>
-      s.fields
+
+  protected def structType = child.dataType match {
+    case s: StructType => s
+    case otherType => sys.error(s"GetField is not valid on fields of type $otherType")
+  }
+
+  lazy val field =
+    structType.fields
         .find(_.name == fieldName)
         .getOrElse(sys.error(s"No such field $fieldName in ${child.dataType}"))
-  }
+
+  lazy val ordinal = structType.fields.indexOf(field)
+
   override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[StructType]
   override def toString = s"$child.$fieldName"
 }

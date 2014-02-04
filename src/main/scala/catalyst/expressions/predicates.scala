@@ -81,6 +81,7 @@ case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[E
   def references = child.references
   override def foldable = child.foldable
   def nullable = false
+  override def toString = s"IS NOT NULL $child"
 }
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
@@ -98,4 +99,6 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
     }
     trueValue.dataType
   }
+
+  override def toString = s"if ($predicate) $trueValue else $falseValue"
 }

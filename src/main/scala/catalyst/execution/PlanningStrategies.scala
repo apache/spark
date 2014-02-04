@@ -142,13 +142,15 @@ trait PlanningStrategies {
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
+      case logical.Distinct(child) =>
+        execution.Aggregate(child.output, child.output, planLater(child))(sc) :: Nil
       case logical.Sort(sortExprs, child) =>
         // This sort is a global sort. Its requiredDistribution will be an OrderedDistribution.
-        execution.Sort(sortExprs, true, planLater(child)):: Nil
+        execution.Sort(sortExprs, global = true, planLater(child)):: Nil
       case logical.SortPartitions(sortExprs, child) =>
         // This sort only sort tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
-        execution.Sort(sortExprs, false, planLater(child)) :: Nil
+        execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>

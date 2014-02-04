@@ -27,6 +27,9 @@ trait HiveTypeCoercion {
       // No propagation required for leaf nodes.
       case q: LogicalPlan if q.children.isEmpty => q
 
+      // Don't propagate types from unresolved children.
+      case q: LogicalPlan if !q.childrenResolved => q
+
       case q: LogicalPlan => q transformExpressions {
         case a: AttributeReference =>
           q.inputSet.find(_.exprId == a.exprId) match {
@@ -94,7 +97,7 @@ trait HiveTypeCoercion {
     // See https://cwiki.apache.org/confluence/display/Hive/LanguageManual+Types.
     // The conversion for integral and floating point types have a linear widening hierarchy:
     val numericPrecedence =
-      Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType)
+      Seq(NullType, ByteType, ShortType, IntegerType, LongType, FloatType, DoubleType, DecimalType)
     // Boolean is only wider than Void
     val booleanPrecedence = Seq(NullType, BooleanType)
     val allPromotions: Seq[Seq[DataType]] = numericPrecedence :: booleanPrecedence :: Nil

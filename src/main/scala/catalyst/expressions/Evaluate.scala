@@ -65,9 +65,9 @@ object Evaluate extends Logging {
         null
       } else {
         e1.dataType match {
-          case f: FractionalType =>
-            f.asInstanceOf[(Fractional[f.JvmType], f.JvmType, f.JvmType) => f.JvmType](
-              f.fractional, evalE1.asInstanceOf[f.JvmType], evalE2.asInstanceOf[f.JvmType])
+          case ft: FractionalType =>
+            f.asInstanceOf[(Fractional[ft.JvmType], ft.JvmType, ft.JvmType) => ft.JvmType](
+              ft.fractional, evalE1.asInstanceOf[ft.JvmType], evalE2.asInstanceOf[ft.JvmType])
           case other => sys.error(s"Type $other does not support fractional operations")
         }
       }
@@ -236,9 +236,38 @@ object Evaluate extends Logging {
       /* Functions */
       case Rand => scala.util.Random.nextDouble()
 
+      /* Complex Type Access */
+      case g @ GetField(e, name) =>
+        val baseValue = eval(e).asInstanceOf[Row]
+        if (baseValue == null) null else baseValue(g.ordinal)
+
+      case GetItem(e, o) if e.dataType.isInstanceOf[ArrayType] =>
+        val baseValue = eval(e).asInstanceOf[Seq[_]]
+        val ordinal = eval(o).asInstanceOf[Int]
+        if (baseValue == null) {
+          null
+        } else if (ordinal >= baseValue.size) {
+          null
+        } else {
+          baseValue(ordinal)
+        }
+
+      case GetItem(e, k) if e.dataType.isInstanceOf[MapType] =>
+        val baseValue = eval(e).asInstanceOf[Map[Any, _]]
+        val key = eval(k)
+        if (baseValue == null) {
+          null
+        } else {
+          baseValue.get(key).orNull
+        }
+
       /* UDFs */
       case implementedFunction: ImplementedUdf =>
-        implementedFunction.evaluate(implementedFunction.children.map(eval))
+        try implementedFunction.evaluate(implementedFunction.children.map(eval)) catch {
+          case e: Exception =>
+            logger.error(s"UDF Evaluation failed: $e")
+            null
+        }
 
       case a: Attribute =>
         throw new TreeNodeException(a,

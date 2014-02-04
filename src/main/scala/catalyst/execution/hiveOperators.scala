@@ -5,13 +5,14 @@ import java.io.{File, IOException}
 import java.util.UUID
 
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.hive.common.`type`.HiveVarchar
+import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveDecimalObjectInspector
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharObjectInspector
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.JobConf
@@ -82,11 +83,29 @@ case class HiveTableScan(
           .getOrElse(sys.error(s"Can't find attribute $a"))
         (row: Any, _: Array[String]) => {
           val data = objectInspector.getStructFieldData(row, ref)
-          val inspector = ref.getFieldObjectInspector.asInstanceOf[PrimitiveObjectInspector]
-          inspector.getPrimitiveJavaObject(data)
+          unwrapData(data, ref.getFieldObjectInspector)
         }
       }
     }
+  }
+
+  def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
+    case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
+    case li: ListObjectInspector =>
+      Option(li.getList(data))
+        .map(_.map(unwrapData(_, li.getListElementObjectInspector)).toSeq)
+        .orNull
+    case mi: MapObjectInspector =>
+      Option(mi.getMap(data)).map(
+        _.map {
+          case (k,v) =>
+            (unwrapData(k, mi.getMapKeyObjectInspector),
+             unwrapData(v, mi.getMapValueObjectInspector))
+      }.toMap).orNull
+    case si: StructObjectInspector =>
+      val allRefs = si.getAllStructFieldRefs
+      new GenericRow(
+        allRefs.map(r => unwrapData(si.getStructFieldData(data,r), r.getFieldObjectInspector)))
   }
 
   private def castFromString(value: String, dataType: DataType) = {
@@ -134,6 +153,8 @@ case class HiveTableScan(
       buildRow(values.map {
         case n: String if n.toLowerCase == "null" => null
         case varchar: org.apache.hadoop.hive.common.`type`.HiveVarchar => varchar.getValue
+        case decimal: org.apache.hadoop.hive.common.`type`.HiveDecimal =>
+          BigDecimal(decimal.bigDecimalValue)
         case other => other
       })
     }
@@ -176,6 +197,19 @@ case class InsertIntoHiveTable(
   def output = child.output
 
   /**
+   * Wraps with Hive types based on object inspector.
+   * TODO: Consolidate all hive OI/data interface code.
+   */
+  protected def wrap(a: (Any, ObjectInspector)): Any = a match {
+    case (s: String, oi: JavaHiveVarcharObjectInspector) => new HiveVarchar(s, s.size)
+    case (bd: BigDecimal, oi: JavaHiveDecimalObjectInspector) =>
+      new HiveDecimal(bd.underlying())
+    case (s: Seq[_], oi: ListObjectInspector) =>
+      seqAsJavaList(s.map(wrap(_, oi.getListElementObjectInspector)))
+    case (obj, _) => obj
+  }
+
+  /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
@@ -184,29 +218,11 @@ case class InsertIntoHiveTable(
     val childRdd = child.execute()
     assert(childRdd != null)
 
-    /** Create a temporary directory inside the given parent directory */
-    def createTempDir(root: String = System.getProperty("java.io.tmpdir")): File = {
-      var attempts = 0
-      val maxAttempts = 10
-      var dir: File = null
-      while (dir == null) {
-        attempts += 1
-        if (attempts > maxAttempts) {
-          throw new IOException("Failed to create a temp directory (under " + root + ") after " +
-            maxAttempts + " attempts!")
-        }
-        try {
-          dir = new File(root, "spark-" + UUID.randomUUID.toString)
-          if (dir.exists() || !dir.mkdirs()) {
-            dir = null
-          }
-        } catch { case e: IOException => ; }
-      }
-      dir
-    }
-
     // TODO write directly to Hive
-    val tempDir = createTempDir()
+    val tempDir = File.createTempFile("catalysthiveout", "")
+    tempDir.delete()
+    tempDir.mkdir()
+
 
     // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
     // instances within the closure, since AbstractSerDe is not serializable while TableDesc is.
@@ -220,12 +236,8 @@ case class InsertIntoHiveTable(
       iter.map { row =>
         // Casts Strings to HiveVarchars when necessary.
         val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector)
-        val mappedRow = row.zip(fieldOIs).map {
-          case (s: String, oi: JavaHiveVarcharObjectInspector) => new HiveVarchar(s, s.size)
-          case (obj, _) => obj
-        }
-
-        (null, serializer.serialize(Array(mappedRow: _*), standardOI))
+        val mappedRow = row.zip(fieldOIs).map(wrap)
+        (null, serializer.serialize(mappedRow.toArray, standardOI))
       }
     }.saveAsHadoopFile(
         tempDir.getCanonicalPath,

@@ -3,22 +3,18 @@ package execution
 
 import scala.collection.JavaConversions._
 
+import org.apache.hadoop.hive.common.`type`.HiveDecimal
+import org.apache.hadoop.hive.serde2.{io => hiveIo}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive._
+import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.ql.exec.{FunctionInfo, FunctionRegistry}
 import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFEvaluator, AbstractGenericUDAFResolver}
 import org.apache.hadoop.hive.ql.udf.generic.GenericUDF
 import org.apache.hadoop.hive.ql.exec.UDF
-import org.apache.hadoop.hive.serde2.{io => hiveIo}
-import org.apache.hadoop.hive.serde2.objectinspector.primitive._
 import org.apache.hadoop.{io => hadoopIo}
 
-import expressions._
-import types._
-import org.apache.hadoop.hive.serde2.objectinspector.{ListObjectInspector, StructObjectInspector}
-import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspector
-import catalyst.types.StructField
-import catalyst.types.StructType
-import catalyst.types.ArrayType
-import catalyst.expressions.Cast
+import catalyst.expressions._
+import catalyst.types._
 
 object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionFactory {
   def lookupFunction(name: String, children: Seq[Expression]): Expression = {
@@ -38,7 +34,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionF
         children.zip(expectedDataTypes).map { case (e, t) => Cast(e, t) }
       )
     } else if (classOf[GenericUDF].isAssignableFrom(functionInfo.getFunctionClass)) {
-      HiveGenericUdf(name, IntegerType, children)
+      HiveGenericUdf(name, children)
     } else if (
          classOf[AbstractGenericUDAFResolver].isAssignableFrom(functionInfo.getFunctionClass)) {
       HiveGenericUdaf(name, children)
@@ -57,6 +53,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionF
     case c: Class[_] if c == classOf[hadoopIo.IntWritable] => IntegerType
     case c: Class[_] if c == classOf[hadoopIo.LongWritable] => LongType
     case c: Class[_] if c == classOf[hadoopIo.FloatWritable] => FloatType
+    case c: Class[_] if c == classOf[hadoopIo.BooleanWritable] => BooleanType
     case c: Class[_] if c == classOf[java.lang.String] => StringType
     case c: Class[_] if c == java.lang.Short.TYPE => ShortType
     case c: Class[_] if c == java.lang.Integer.TYPE => ShortType
@@ -72,6 +69,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry with HiveFunctionF
     case c: Class[_] if c == classOf[java.lang.Byte] => ByteType
     case c: Class[_] if c == classOf[java.lang.Float] => FloatType
     case c: Class[_] if c == classOf[java.lang.Boolean] => BooleanType
+    case c: Class[_] if c.isArray => ArrayType(javaClassToDataType(c.getComponentType))
   }
 }
 
@@ -81,6 +79,7 @@ trait HiveFunctionFactory {
   def createFunction[UDFType](name: String) =
     getFunctionClass(name).newInstance.asInstanceOf[UDFType]
 
+  /** Converts hive types to native catalyst types. */
   def unwrap(a: Any): Any = a match {
     case null => null
     case i: hadoopIo.IntWritable => i.get
@@ -92,7 +91,8 @@ trait HiveFunctionFactory {
     case b: hadoopIo.BooleanWritable => b.get()
     case b: hiveIo.ByteWritable => b.get
     case list: java.util.List[_] => list.map(unwrap)
-    case array: Array[_] => array.map(unwrap)
+    case map: java.util.Map[_,_] => map.map { case (k, v) => (unwrap(k), unwrap(v)) }.toMap
+    case array: Array[_] => array.map(unwrap).toSeq
     case p: java.lang.Short => p
     case p: java.lang.Long => p
     case p: java.lang.Float => p
@@ -133,7 +133,8 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
   lazy val wrappers: Array[(Any) => AnyRef] = method.getParameterTypes.map { argClass =>
     val primitiveClasses = Seq(
       Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
-      classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long]
+      classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long],
+      classOf[HiveDecimal]
     )
     val matchingConstructor = argClass.getConstructors.find { c =>
       c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
@@ -151,6 +152,7 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
       } else {
         constructor.newInstance(a match {
           case i: Int => i: java.lang.Integer
+          case bd: BigDecimal => new HiveDecimal(bd.underlying)
           case other: AnyRef => other
         }).asInstanceOf[AnyRef]
       }
@@ -171,27 +173,19 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
 
 case class HiveGenericUdf(
     name: String,
-    dataType: DataType,
-    children: Seq[Expression]) extends HiveUdf {
+    children: Seq[Expression]) extends HiveUdf with HiveInspectors {
   import org.apache.hadoop.hive.ql.udf.generic.GenericUDF._
   type UDFType = GenericUDF
 
-  lazy val inspectors: Seq[AbstractPrimitiveJavaObjectInspector] = children.map(_.dataType).map {
-    case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
-    case IntegerType => PrimitiveObjectInspectorFactory.javaIntObjectInspector
-    case DoubleType => PrimitiveObjectInspectorFactory.javaDoubleObjectInspector
-    case BooleanType => PrimitiveObjectInspectorFactory.javaBooleanObjectInspector
-    case LongType => PrimitiveObjectInspectorFactory.javaLongObjectInspector
-    case ShortType => PrimitiveObjectInspectorFactory.javaShortObjectInspector
-    case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
-    case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
-  }
+  @transient
+  lazy val argumentInspectors: Seq[ObjectInspector] = children.map(_.dataType).map(toInspector)
 
-  lazy val instance = {
-    function.initialize(inspectors.toArray)
-    function
-  }
+  @transient
+  lazy val returnInspector = function.initialize(argumentInspectors.toArray)
 
+  val dataType: DataType = inspectorToDataType(returnInspector)
+
+  /** Converts native catalyst types to the types expected by Hive */
   def wrap(a: Any): Any = a match {
     case s: String => new hadoopIo.Text(s)
     case i: Int => i: java.lang.Integer
@@ -201,41 +195,62 @@ case class HiveGenericUdf(
     case l: Short => l: java.lang.Short
     case l: Byte => l: java.lang.Byte
     case s: Seq[_] => seqAsJavaList(s.map(wrap))
+    case m: Map[_,_] =>
+      mapAsJavaMap(m.map { case (k, v) => wrap(k) -> wrap(v) })
     case null => null
   }
 
   def evaluate(evaluatedChildren: Seq[Any]): Any = {
+    returnInspector // Make sure initialized.
     val args = evaluatedChildren.map(wrap).map { v =>
       new DeferredJavaObject(v): DeferredObject
     }.toArray
-    unwrap(instance.evaluate(args))
+    unwrap(function.evaluate(args))
   }
 }
 
 trait HiveInspectors {
-  def toInspectors(exprs: Seq[Expression]) = exprs.map(_.dataType).map {
+  def toInspector(dataType: DataType): ObjectInspector = dataType match {
+    case ArrayType(tpe) => ObjectInspectorFactory.getStandardListObjectInspector(toInspector(tpe))
+    case MapType(keyType, valueType) =>
+      ObjectInspectorFactory.getStandardMapObjectInspector(
+        toInspector(keyType), toInspector(valueType))
     case StringType => PrimitiveObjectInspectorFactory.javaStringObjectInspector
     case IntegerType => PrimitiveObjectInspectorFactory.javaIntObjectInspector
     case DoubleType => PrimitiveObjectInspectorFactory.javaDoubleObjectInspector
     case BooleanType => PrimitiveObjectInspectorFactory.javaBooleanObjectInspector
     case LongType => PrimitiveObjectInspectorFactory.javaLongObjectInspector
+    case FloatType => PrimitiveObjectInspectorFactory.javaFloatObjectInspector
     case ShortType => PrimitiveObjectInspectorFactory.javaShortObjectInspector
     case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
+    case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
     case s: StructObjectInspector =>
       StructType(s.getAllStructFieldRefs.map(f => {
-        StructField(f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), true)
+        types.StructField(
+          f.getFieldName, inspectorToDataType(f.getFieldObjectInspector), nullable = true)
       }))
     case l: ListObjectInspector => ArrayType(inspectorToDataType(l.getListElementObjectInspector))
+    case m: MapObjectInspector =>
+      MapType(
+        inspectorToDataType(m.getMapKeyObjectInspector),
+        inspectorToDataType(m.getMapValueObjectInspector))
     case _: WritableStringObjectInspector => StringType
+    case _: JavaStringObjectInspector => StringType
     case _: WritableIntObjectInspector => IntegerType
+    case _: JavaIntObjectInspector => IntegerType
     case _: WritableDoubleObjectInspector => DoubleType
+    case _: JavaDoubleObjectInspector => DoubleType
     case _: WritableBooleanObjectInspector => BooleanType
+    case _: JavaBooleanObjectInspector => BooleanType
     case _: WritableLongObjectInspector => LongType
+    case _: JavaLongObjectInspector => LongType
     case _: WritableShortObjectInspector => ShortType
+    case _: JavaShortObjectInspector => ShortType
     case _: WritableByteObjectInspector => ByteType
+    case _: JavaByteObjectInspector => ByteType
   }
 }
 
@@ -254,11 +269,13 @@ case class HiveGenericUdaf(
       .init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors.toArray)
   }
 
-  lazy val inspectors: Seq[ObjectInspector] = toInspectors(children)
+  lazy val inspectors: Seq[ObjectInspector] = children.map(_.dataType).map(toInspector)
 
   def dataType: DataType = inspectorToDataType(objectInspector)
 
   def nullable: Boolean = true
 
   def references: Set[Attribute] = children.map(_.references).flatten.toSet
+
+  override def toString = s"$nodeName#$name(${children.mkString(",")})"
 }
