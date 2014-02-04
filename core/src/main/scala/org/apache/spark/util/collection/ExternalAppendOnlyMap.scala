@@ -24,6 +24,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
+import com.google.common.io.ByteStreams
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.serializer.Serializer
@@ -83,12 +84,13 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   // Number of in-memory pairs inserted before tracking the map's shuffle memory usage
   private val trackMemoryThreshold = 1000
 
-  /* Size of object batches when reading/writing from serializers.
+  /**
+   * Size of object batches when reading/writing from serializers.
    *
    * Objects are written in batches, with each batch using its own serialization stream. This
    * cuts down on the size of reference-tracking maps constructed when deserializing a stream.
    *
-   * NOTE: Setting this too low can cause excess copying when serializing, since some serializers
+   * NOTE: Setting this too low can cause excessive copying when serializing, since some serializers
    * grow internal data structures by growing + copying every time the number of objects doubles.
    */
   private val serializerBatchSize = sparkConf.getLong("spark.shuffle.spill.batchSize", 10000)
@@ -340,65 +342,52 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   /**
    * An iterator that returns (K, C) pairs in sorted order from an on-disk map
    */
-  private class DiskMapIterator(file: File,
-                                blockId: BlockId,
-                                batchSizes: ArrayBuffer[Long]) extends Iterator[(K, C)] {
+  private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
+    extends Iterator[(K, C)] {
     val fileStream = new FileInputStream(file)
     val bufferedStream = new FastBufferedInputStream(fileStream, fileBufferSize)
 
-    // An intermediate stream that holds all the bytes from exactly one batch
+    // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
-    var batchStream = nextBatchStream(bufferedStream)
-
+    var batchStream = nextBatchStream()
     var compressedStream = blockManager.wrapForCompression(blockId, batchStream)
     var deserializeStream = ser.deserializeStream(compressedStream)
     var nextItem: (K, C) = null
-    var eof = false
+    var objectsRead = 0
 
     /**
-     * Construct a stream that contains all the bytes from the next batch
+     * Construct a stream that reads only from the next batch
      */
-    def nextBatchStream(stream: InputStream): ByteArrayInputStream = {
-      var batchBytes = Array[Byte]()
+    def nextBatchStream(): InputStream = {
       if (batchSizes.length > 0) {
-        val batchSize = batchSizes.remove(0)
-
-        // Read batchSize number of bytes into batchBytes
-        while (batchBytes.length < batchSize) {
-          val numBytesToRead = Math.min(8192, batchSize - batchBytes.length).toInt
-          val bytesRead = new Array[Byte](numBytesToRead)
-          stream.read(bytesRead, 0, numBytesToRead)
-          batchBytes ++= bytesRead
-        }
+        ByteStreams.limit(bufferedStream, batchSizes.remove(0))
       } else {
         // No more batches left
-        eof = true
+        bufferedStream
       }
-      new ByteArrayInputStream(batchBytes)
     }
 
     /**
      * Return the next (K, C) pair from the deserialization stream.
      *
-     * If the underlying batch stream is drained, construct a new stream for the next batch
-     * (if there is one) and stream from it. If there are no more batches left, return null.
+     * If the current batch is drained, construct a stream for the next batch and read from it.
+     * If no more pairs are left, return null.
      */
     def readNextItem(): (K, C) = {
       try {
-        deserializeStream.readObject().asInstanceOf[(K, C)]
+        val item = deserializeStream.readObject().asInstanceOf[(K, C)]
+        objectsRead += 1
+        if (objectsRead == serializerBatchSize) {
+          batchStream = nextBatchStream()
+          compressedStream = blockManager.wrapForCompression(blockId, batchStream)
+          deserializeStream = ser.deserializeStream(compressedStream)
+          objectsRead = 0
+        }
+        item
       } catch {
-        // End of current batch
         case e: EOFException =>
-          batchStream = nextBatchStream(bufferedStream)
-          if (!eof) {
-            compressedStream = blockManager.wrapForCompression(blockId, batchStream)
-            deserializeStream = ser.deserializeStream(compressedStream)
-            readNextItem()
-          } else {
-            // No more batches left
-            cleanup()
-            null
-          }
+          cleanup()
+          null
       }
     }
 
