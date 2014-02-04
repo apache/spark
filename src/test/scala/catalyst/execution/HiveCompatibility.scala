@@ -62,7 +62,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     // Cant run without local map/reduce.
     "index_auto_update",
     "index_auto_self_join",
-    "index_stale",
+    "index_stale.*",
     "type_cast_1",
     "index_compression",
     "index_bitmap_compression",
@@ -285,7 +285,6 @@ class HiveCompatibility extends HiveQueryFileTest {
     "groupby_sort_8",
     "groupby_sort_test_1",
     "implicit_cast1",
-    "index_stale_partitioned",
     "innerjoin",
     "inoutdriver",
     "input",
