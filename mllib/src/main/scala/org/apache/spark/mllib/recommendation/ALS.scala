@@ -18,11 +18,12 @@
 package org.apache.spark.mllib.recommendation
 
 import scala.collection.mutable.{ArrayBuffer, BitSet}
+import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
 
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext}
+import org.apache.spark.{Logging, HashPartitioner, Partitioner, SparkContext, SparkConf}
 import org.apache.spark.storage.StorageLevel
 import org.apache.spark.rdd.RDD
 import org.apache.spark.serializer.KryoRegistrator
@@ -301,7 +302,14 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
    * Make a random factor vector with the given random.
    */
   private def randomFactor(rank: Int, rand: Random): Array[Double] = {
-    Array.fill(rank)(rand.nextDouble)
+    // Choose a unit vector uniformly at random from the unit sphere, but from the
+    // "first quadrant" where all elements are nonnegative. This can be done by choosing
+    // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
+    // This appears to create factorizations that have a slightly better reconstruction
+    // (<1%) compared picking elements uniformly at random in [0,1].
+    val factor = Array.fill(rank)(abs(rand.nextGaussian()))
+    val norm = sqrt(factor.map(x => x * x).sum)
+    factor.map(x => x / norm)
   }
 
   /**
@@ -578,14 +586,14 @@ object ALS {
     val implicitPrefs = if (args.length >= 7) args(6).toBoolean else false
     val alpha = if (args.length >= 8) args(7).toDouble else 1
     val blocks = if (args.length == 9) args(8).toInt else -1
+    val conf = new SparkConf()
+      .set("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
+      .set("spark.kryo.registrator",  classOf[ALSRegistrator].getName)
+      .set("spark.kryo.referenceTracking", "false")
+      .set("spark.kryoserializer.buffer.mb", "8")
+      .set("spark.locality.wait", "10000")
+    val sc = new SparkContext(master, "ALS", conf)
 
-    System.setProperty("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
-    System.setProperty("spark.kryo.registrator", classOf[ALSRegistrator].getName)
-    System.setProperty("spark.kryo.referenceTracking", "false")
-    System.setProperty("spark.kryoserializer.buffer.mb", "8")
-    System.setProperty("spark.locality.wait", "10000")
-
-    val sc = new SparkContext(master, "ALS")
     val ratings = sc.textFile(ratingsFile).map { line =>
       val fields = line.split(',')
       Rating(fields(0).toInt, fields(1).toInt, fields(2).toDouble)

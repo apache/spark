@@ -18,7 +18,6 @@
 package org.apache.spark.mllib.classification
 
 import scala.util.Random
-import scala.math.signum
 import scala.collection.JavaConversions._
 
 import org.scalatest.BeforeAndAfterAll
@@ -26,8 +25,9 @@ import org.scalatest.FunSuite
 
 import org.jblas.DoubleMatrix
 
-import org.apache.spark.{SparkException, SparkContext}
+import org.apache.spark.SparkException
 import org.apache.spark.mllib.regression._
+import org.apache.spark.mllib.util.LocalSparkContext
 
 object SVMSuite {
 
@@ -50,7 +50,7 @@ object SVMSuite {
     val x = Array.fill[Array[Double]](nPoints)(
         Array.fill[Double](weights.length)(rnd.nextDouble() * 2.0 - 1.0))
     val y = x.map { xi =>
-      val yD = (new DoubleMatrix(1, xi.length, xi:_*)).dot(weightsMat) +
+      val yD = new DoubleMatrix(1, xi.length, xi: _*).dot(weightsMat) +
         intercept + 0.01 * rnd.nextGaussian()
       if (yD < 0) 0.0 else 1.0
     }
@@ -59,22 +59,12 @@ object SVMSuite {
 
 }
 
-class SVMSuite extends FunSuite with BeforeAndAfterAll {
-  @transient private var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-  }
-
-  override def afterAll() {
-    sc.stop()
-    System.clearProperty("spark.driver.port")
-  }
+class SVMSuite extends FunSuite with LocalSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
-    val numOffPredictions = predictions.zip(input).filter { case (prediction, expected) =>
-      (prediction != expected.label)
-    }.size
+    val numOffPredictions = predictions.zip(input).count { case (prediction, expected) =>
+      prediction != expected.label
+    }
     // At least 80% of the predictions should be on.
     assert(numOffPredictions < input.length / 5)
   }

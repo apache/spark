@@ -17,11 +17,12 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Duration, DStream, Time}
+import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
+import scala.reflect.ClassTag
 
 private[streaming]
-class MappedDStream[T: ClassManifest, U: ClassManifest] (
+class MappedDStream[T: ClassTag, U: ClassTag] (
     parent: DStream[T],
     mapFunc: T => U
   ) extends DStream[U](parent.ssc) {

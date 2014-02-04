@@ -17,13 +17,13 @@
 
 package org.apache.spark.streaming
 
-import dstream.InputDStream
+import scala.collection.mutable.ArrayBuffer
 import java.io.{ObjectInputStream, IOException, ObjectOutputStream}
-import collection.mutable.ArrayBuffer
 import org.apache.spark.Logging
+import org.apache.spark.streaming.scheduler.Job
+import org.apache.spark.streaming.dstream.{DStream, NetworkInputDStream, InputDStream}
 
 final private[streaming] class DStreamGraph extends Serializable with Logging {
-  initLogging()
 
   private val inputStreams = new ArrayBuffer[InputDStream[_]]()
   private val outputStreams = new ArrayBuffer[DStream[_]]()
@@ -78,7 +78,7 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
   def remember(duration: Duration) {
     this.synchronized {
       if (rememberDuration != null) {
-        throw new Exception("Batch duration already set as " + batchDuration +
+        throw new Exception("Remember duration already set as " + batchDuration +
           ". cannot set it again.")
       }
       rememberDuration = duration
@@ -103,37 +103,51 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   def getOutputStreams() = this.synchronized { outputStreams.toArray }
 
-  def generateJobs(time: Time): Seq[Job] = {
-    this.synchronized {
-      logInfo("Generating jobs for time " + time)
-      val jobs = outputStreams.flatMap(outputStream => outputStream.generateJob(time))
-      logInfo("Generated " + jobs.length + " jobs for time " + time)
-      jobs
-    }
+  def getNetworkInputStreams() = this.synchronized {
+    inputStreams.filter(_.isInstanceOf[NetworkInputDStream[_]])
+      .map(_.asInstanceOf[NetworkInputDStream[_]])
+      .toArray
   }
 
-  def clearOldMetadata(time: Time) {
-    this.synchronized {
-      logInfo("Clearing old metadata for time " + time)
-      outputStreams.foreach(_.clearOldMetadata(time))
-      logInfo("Cleared old metadata for time " + time)
+  def generateJobs(time: Time): Seq[Job] = {
+    logDebug("Generating jobs for time " + time)
+    val jobs = this.synchronized {
+      outputStreams.flatMap(outputStream => outputStream.generateJob(time))
     }
+    logDebug("Generated " + jobs.length + " jobs for time " + time)
+    jobs
+  }
+
+  def clearMetadata(time: Time) {
+    logDebug("Clearing metadata for time " + time)
+    this.synchronized {
+      outputStreams.foreach(_.clearMetadata(time))
+    }
+    logDebug("Cleared old metadata for time " + time)
   }
 
   def updateCheckpointData(time: Time) {
+    logInfo("Updating checkpoint data for time " + time)
     this.synchronized {
-      logInfo("Updating checkpoint data for time " + time)
       outputStreams.foreach(_.updateCheckpointData(time))
-      logInfo("Updated checkpoint data for time " + time)
     }
+    logInfo("Updated checkpoint data for time " + time)
+  }
+
+  def clearCheckpointData(time: Time) {
+    logInfo("Clearing checkpoint data for time " + time)
+    this.synchronized {
+      outputStreams.foreach(_.clearCheckpointData(time))
+    }
+    logInfo("Cleared checkpoint data for time " + time)
   }
 
   def restoreCheckpointData() {
+    logInfo("Restoring checkpoint data")
     this.synchronized {
-      logInfo("Restoring checkpoint data")
       outputStreams.foreach(_.restoreCheckpointData())
-      logInfo("Restored checkpoint data")
     }
+    logInfo("Restored checkpoint data")
   }
 
   def validate() {
@@ -146,18 +160,20 @@ final private[streaming] class DStreamGraph extends Serializable with Logging {
 
   @throws(classOf[IOException])
   private def writeObject(oos: ObjectOutputStream) {
+    logDebug("DStreamGraph.writeObject used")
     this.synchronized {
-      logDebug("DStreamGraph.writeObject used")
       checkpointInProgress = true
+      logDebug("Enabled checkpoint mode")
       oos.defaultWriteObject()
       checkpointInProgress = false
+      logDebug("Disabled checkpoint mode")
     }
   }
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream) {
+    logDebug("DStreamGraph.readObject used")
     this.synchronized {
-      logDebug("DStreamGraph.readObject used")
       checkpointInProgress = true
       ois.defaultReadObject()
       checkpointInProgress = false

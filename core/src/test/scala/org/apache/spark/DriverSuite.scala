@@ -30,13 +30,15 @@ import org.apache.spark.util.Utils
 
 class DriverSuite extends FunSuite with Timeouts {
   test("driver should exit after finishing") {
-    assert(System.getenv("SPARK_HOME") != null)
+    val sparkHome = sys.env.get("SPARK_HOME").orElse(sys.props.get("spark.home")).get
     // Regression test for SPARK-530: "Spark driver process doesn't exit after finishing"
     val masters = Table(("master"), ("local"), ("local-cluster[2,1,512]"))
     forAll(masters) { (master: String) =>
-      failAfter(30 seconds) {
-        Utils.execute(Seq("./spark-class", "org.apache.spark.DriverWithoutCleanup", master),
-          new File(System.getenv("SPARK_HOME")))
+      failAfter(60 seconds) {
+        Utils.executeAndGetOutput(
+          Seq("./bin/spark-class", "org.apache.spark.DriverWithoutCleanup", master),
+          new File(sparkHome), 
+          Map("SPARK_TESTING" -> "1", "SPARK_HOME" -> sparkHome))
       }
     }
   }

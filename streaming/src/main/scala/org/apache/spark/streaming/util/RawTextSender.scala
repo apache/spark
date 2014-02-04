@@ -17,19 +17,23 @@
 
 package org.apache.spark.streaming.util
 
-import java.nio.ByteBuffer
-import org.apache.spark.util.{RateLimitedOutputStream, IntParam}
-import java.net.ServerSocket
-import org.apache.spark.{Logging}
-import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
-import scala.io.Source
 import java.io.IOException
+import java.net.ServerSocket
+import java.nio.ByteBuffer
+
+import scala.io.Source
+
+import it.unimi.dsi.fastutil.io.FastByteArrayOutputStream
+
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.IntParam
 
 /**
  * A helper program that sends blocks of Kryo-serialized text strings out on a socket at a
  * specified rate. Used to feed data into RawInputDStream.
  */
+private[streaming]
 object RawTextSender extends Logging {
   def main(args: Array[String]) {
     if (args.length != 4) {
@@ -42,7 +46,7 @@ object RawTextSender extends Logging {
     // Repeat the input data multiple times to fill in a buffer
     val lines = Source.fromFile(file).getLines().toArray
     val bufferStream = new FastByteArrayOutputStream(blockSize + 1000)
-    val ser = new KryoSerializer().newInstance()
+    val ser = new KryoSerializer(new SparkConf()).newInstance()
     val serStream = ser.serializeStream(bufferStream)
     var i = 0
     while (bufferStream.position < blockSize) {

@@ -19,14 +19,14 @@ package org.apache.spark.executor
 
 import java.nio.ByteBuffer
 
-import akka.actor.{ActorRef, Actor, Props, Terminated}
-import akka.remote.{RemoteClientLifeCycleEvent, RemoteClientShutdown, RemoteClientDisconnected}
+import akka.actor._
+import akka.remote._
 
-import org.apache.spark.{Logging, SparkEnv}
+import org.apache.spark.{SparkConf, SparkContext, Logging}
 import org.apache.spark.TaskState.TaskState
+import org.apache.spark.deploy.worker.WorkerWatcher
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
-import org.apache.spark.util.{Utils, AkkaUtils}
-
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
@@ -40,14 +40,13 @@ private[spark] class CoarseGrainedExecutorBackend(
   Utils.checkHostPort(hostPort, "Expected hostport")
 
   var executor: Executor = null
-  var driver: ActorRef = null
+  var driver: ActorSelection = null
 
   override def preStart() {
     logInfo("Connecting to driver: " + driverUrl)
-    driver = context.actorFor(driverUrl)
+    driver = context.actorSelection(driverUrl)
     driver ! RegisterExecutor(executorId, hostPort, cores)
-    context.system.eventStream.subscribe(self, classOf[RemoteClientLifeCycleEvent])
-    context.watch(driver) // Doesn't work with remote actors, but useful for testing
+    context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
   }
 
   override def receive = {
@@ -77,8 +76,8 @@ private[spark] class CoarseGrainedExecutorBackend(
         executor.killTask(taskId)
       }
 
-    case Terminated(_) | RemoteClientDisconnected(_, _) | RemoteClientShutdown(_, _) =>
-      logError("Driver terminated or disconnected! Shutting down.")
+    case x: DisassociatedEvent =>
+      logError(s"Driver $x disassociated! Shutting down.")
       System.exit(1)
 
     case StopExecutor =>
@@ -93,30 +92,38 @@ private[spark] class CoarseGrainedExecutorBackend(
 }
 
 private[spark] object CoarseGrainedExecutorBackend {
-  def run(driverUrl: String, executorId: String, hostname: String, cores: Int) {
+  def run(driverUrl: String, executorId: String, hostname: String, cores: Int,
+          workerUrl: Option[String]) {
     // Debug code
     Utils.checkHost(hostname)
 
     // Create a new ActorSystem to run the backend, because we can't create a SparkEnv / Executor
     // before getting started with all our system properties, etc
-    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0)
+    val (actorSystem, boundPort) = AkkaUtils.createActorSystem("sparkExecutor", hostname, 0,
+      indestructible = true, conf = new SparkConf)
     // set it
     val sparkHostPort = hostname + ":" + boundPort
-    System.setProperty("spark.hostPort", sparkHostPort)
-    val actor = actorSystem.actorOf(
-      Props(new CoarseGrainedExecutorBackend(driverUrl, executorId, sparkHostPort, cores)),
+    actorSystem.actorOf(
+      Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId, sparkHostPort, cores),
       name = "Executor")
+    workerUrl.foreach{ url =>
+      actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
+    }
     actorSystem.awaitTermination()
   }
 
   def main(args: Array[String]) {
-    if (args.length < 4) {
-      //the reason we allow the last appid argument is to make it easy to kill rogue executors
-      System.err.println(
-        "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> <cores> " +
-        "[<appid>]")
-      System.exit(1)
+    args.length match {
+      case x if x < 4 =>
+        System.err.println(
+          // Worker url is used in spark standalone mode to enforce fate-sharing with worker
+          "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> " +
+          "<cores> [<workerUrl>]")
+        System.exit(1)
+      case 4 =>
+        run(args(0), args(1), args(2), args(3).toInt, None)
+      case x if x > 4 =>
+        run(args(0), args(1), args(2), args(3).toInt, Some(args(4)))
     }
-    run(args(0), args(1), args(2), args(3).toInt)
   }
 }

@@ -21,7 +21,6 @@ import scala.Tuple2;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
-import org.apache.spark.api.java.function.FlatMapFunction;
 import org.apache.spark.api.java.function.Function;
 import org.apache.spark.api.java.function.Function2;
 import org.apache.spark.api.java.function.PairFlatMapFunction;
@@ -29,6 +28,7 @@ import org.apache.spark.api.java.function.PairFunction;
 
 import java.util.List;
 import java.util.ArrayList;
+import java.util.regex.Pattern;
 
 /**
  * Computes the PageRank of URLs from an input file. Input file should
@@ -39,7 +39,9 @@ import java.util.ArrayList;
  * ...
  * where URL and their neighbors are separated by space(s).
  */
-public class JavaPageRank {
+public final class JavaPageRank {
+  private static final Pattern SPACES = Pattern.compile("\\s+");
+
   private static class Sum extends Function2<Double, Double, Double> {
     @Override
     public Double call(Double a, Double b) {
@@ -54,7 +56,7 @@ public class JavaPageRank {
     }
 
     JavaSparkContext ctx = new JavaSparkContext(args[0], "JavaPageRank",
-      System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+      System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaPageRank.class));
 
     // Loads in input file. It should be in format of:
     //     URL         neighbor URL
@@ -67,7 +69,7 @@ public class JavaPageRank {
     JavaPairRDD<String, List<String>> links = lines.map(new PairFunction<String, String, String>() {
       @Override
       public Tuple2<String, String> call(String s) {
-        String[] parts = s.split("\\s+");
+        String[] parts = SPACES.split(s);
         return new Tuple2<String, String>(parts[0], parts[1]);
       }
     }).distinct().groupByKey().cache();
@@ -75,7 +77,7 @@ public class JavaPageRank {
     // Loads all URLs with other URL(s) link to from input file and initialize ranks of them to one.
     JavaPairRDD<String, Double> ranks = links.mapValues(new Function<List<String>, Double>() {
       @Override
-      public Double call(List<String> rs) throws Exception {
+      public Double call(List<String> rs) {
         return 1.0;
       }
     });
@@ -98,7 +100,7 @@ public class JavaPageRank {
       // Re-calculates URL ranks based on neighbor contributions.
       ranks = contribs.reduceByKey(new Sum()).mapValues(new Function<Double, Double>() {
         @Override
-        public Double call(Double sum) throws Exception {
+        public Double call(Double sum) {
           return 0.15 + sum * 0.85;
         }
       });
@@ -106,7 +108,7 @@ public class JavaPageRank {
 
     // Collects all URL ranks and dump them to console.
     List<Tuple2<String, Double>> output = ranks.collect();
-    for (Tuple2 tuple : output) {
+    for (Tuple2<?,?> tuple : output) {
         System.out.println(tuple._1 + " has rank: " + tuple._2 + ".");
     }
 

@@ -17,7 +17,9 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{RangePartitioner, Logging}
+import scala.reflect.ClassTag
+
+import org.apache.spark.{Logging, RangePartitioner}
 
 /**
  * Extra functions available on RDDs of (key, value) pairs where the key is sortable through
@@ -25,9 +27,9 @@ import org.apache.spark.{RangePartitioner, Logging}
  * use these functions. They will work with any key type that has a `scala.math.Ordered`
  * implementation.
  */
-class OrderedRDDFunctions[K <% Ordered[K]: ClassManifest,
-                          V: ClassManifest,
-                          P <: Product2[K, V] : ClassManifest](
+class OrderedRDDFunctions[K <% Ordered[K]: ClassTag,
+                          V: ClassTag,
+                          P <: Product2[K, V] : ClassTag](
     self: RDD[P])
   extends Logging with Serializable {
 

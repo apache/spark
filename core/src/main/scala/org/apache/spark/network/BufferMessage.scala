@@ -46,7 +46,7 @@ class BufferMessage(id_ : Int, val buffers: ArrayBuffer[ByteBuffer], var ackId: 
       throw new Exception("Max chunk size is " + maxChunkSize)
     }
 
-    if (size == 0 && gotChunkForSendingOnce == false) {
+    if (size == 0 && !gotChunkForSendingOnce) {
       val newChunk = new MessageChunk(
         new MessageChunkHeader(typ, id, 0, 0, ackId, senderAddress), null)
       gotChunkForSendingOnce = true

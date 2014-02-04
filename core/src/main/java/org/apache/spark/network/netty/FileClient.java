@@ -19,31 +19,36 @@ package org.apache.spark.network.netty;
 
 import io.netty.bootstrap.Bootstrap;
 import io.netty.channel.Channel;
-import io.netty.channel.ChannelFuture;
-import io.netty.channel.ChannelFutureListener;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.oio.OioSocketChannel;
 
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.concurrent.TimeUnit;
+
 class FileClient {
 
-  private Logger LOG = LoggerFactory.getLogger(this.getClass().getName());
-  private FileClientHandler handler = null;
+  private static final Logger LOG = LoggerFactory.getLogger(FileClient.class.getName());
+
+  private final FileClientHandler handler;
   private Channel channel = null;
   private Bootstrap bootstrap = null;
-  private int connectTimeout = 60*1000; // 1 min
+  private EventLoopGroup group = null;
+  private final int connectTimeout;
+  private final int sendTimeout = 60; // 1 min
 
-  public FileClient(FileClientHandler handler, int connectTimeout) {
+  FileClient(FileClientHandler handler, int connectTimeout) {
     this.handler = handler;
     this.connectTimeout = connectTimeout;
   }
 
   public void init() {
+    group = new OioEventLoopGroup();
     bootstrap = new Bootstrap();
-    bootstrap.group(new OioEventLoopGroup())
+    bootstrap.group(group)
       .channel(OioSocketChannel.class)
       .option(ChannelOption.SO_KEEPALIVE, true)
       .option(ChannelOption.TCP_NODELAY, true)
@@ -58,6 +63,7 @@ class FileClient {
       // ChannelFuture cf = channel.closeFuture();
       //cf.addListener(new ChannelCloseListener(this));
     } catch (InterruptedException e) {
+      LOG.warn("FileClient interrupted while trying to connect", e);
       close();
     }
   }
@@ -73,16 +79,21 @@ class FileClient {
   public void sendRequest(String file) {
     //assert(file == null);
     //assert(channel == null);
-    channel.write(file + "\r\n");
+      try {
+          // Should be able to send the message to network link channel.
+          boolean bSent = channel.writeAndFlush(file + "\r\n").await(sendTimeout, TimeUnit.SECONDS);
+          if (!bSent) {
+              throw new RuntimeException("Failed to send");
+          }
+      } catch (InterruptedException e) {
+          LOG.error("Error", e);
+      }
   }
 
   public void close() {
-    if(channel != null) {
-      channel.close();
-      channel = null;
-    }
-    if ( bootstrap!=null) {
-      bootstrap.shutdown();
+    if (group != null) {
+      group.shutdownGracefully();
+      group = null;
       bootstrap = null;
     }
   }

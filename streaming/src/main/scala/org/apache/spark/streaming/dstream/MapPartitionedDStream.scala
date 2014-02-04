@@ -17,11 +17,12 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Duration, DStream, Time}
+import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
+import scala.reflect.ClassTag
 
 private[streaming]
-class MapPartitionedDStream[T: ClassManifest, U: ClassManifest](
+class MapPartitionedDStream[T: ClassTag, U: ClassTag](
     parent: DStream[T],
     mapPartFunc: Iterator[T] => Iterator[U],
     preservePartitioning: Boolean

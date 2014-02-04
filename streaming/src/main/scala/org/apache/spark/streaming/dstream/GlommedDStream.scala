@@ -17,11 +17,12 @@
 
 package org.apache.spark.streaming.dstream
 
-import org.apache.spark.streaming.{Duration, DStream, Time}
+import org.apache.spark.streaming.{Duration, Time}
 import org.apache.spark.rdd.RDD
+import scala.reflect.ClassTag
 
 private[streaming]
-class GlommedDStream[T: ClassManifest](parent: DStream[T])
+class GlommedDStream[T: ClassTag](parent: DStream[T])
   extends DStream[Array[T]](parent.ssc) {
 
   override def dependencies = List(parent)

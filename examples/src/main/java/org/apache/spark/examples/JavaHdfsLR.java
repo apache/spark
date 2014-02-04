@@ -24,19 +24,19 @@ import org.apache.spark.api.java.function.Function2;
 
 import java.io.Serializable;
 import java.util.Arrays;
-import java.util.StringTokenizer;
 import java.util.Random;
+import java.util.regex.Pattern;
 
 /**
  * Logistic regression based classification.
  */
-public class JavaHdfsLR {
+public final class JavaHdfsLR {
 
-  static int D = 10;   // Number of dimensions
-  static Random rand = new Random(42);
+  private static final int D = 10;   // Number of dimensions
+  private static final Random rand = new Random(42);
 
   static class DataPoint implements Serializable {
-    public DataPoint(double[] x, double y) {
+    DataPoint(double[] x, double y) {
       this.x = x;
       this.y = y;
     }
@@ -46,20 +46,22 @@ public class JavaHdfsLR {
   }
 
   static class ParsePoint extends Function<String, DataPoint> {
+    private static final Pattern SPACE = Pattern.compile(" ");
+
+    @Override
     public DataPoint call(String line) {
-      StringTokenizer tok = new StringTokenizer(line, " ");
-      double y = Double.parseDouble(tok.nextToken());
+      String[] tok = SPACE.split(line);
+      double y = Double.parseDouble(tok[0]);
       double[] x = new double[D];
-      int i = 0;
-      while (i < D) {
-        x[i] = Double.parseDouble(tok.nextToken());
-        i += 1;
+      for (int i = 0; i < D; i++) {
+        x[i] = Double.parseDouble(tok[i + 1]);
       }
       return new DataPoint(x, y);
     }
   }
 
   static class VectorSum extends Function2<double[], double[], double[]> {
+    @Override
     public double[] call(double[] a, double[] b) {
       double[] result = new double[D];
       for (int j = 0; j < D; j++) {
@@ -70,12 +72,13 @@ public class JavaHdfsLR {
   }
 
   static class ComputeGradient extends Function<DataPoint, double[]> {
-    double[] weights;
+    private final double[] weights;
 
-    public ComputeGradient(double[] weights) {
+    ComputeGradient(double[] weights) {
       this.weights = weights;
     }
 
+    @Override
     public double[] call(DataPoint p) {
       double[] gradient = new double[D];
       for (int i = 0; i < D; i++) {
@@ -106,7 +109,7 @@ public class JavaHdfsLR {
     }
 
     JavaSparkContext sc = new JavaSparkContext(args[0], "JavaHdfsLR",
-        System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+        System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaHdfsLR.class));
     JavaRDD<String> lines = sc.textFile(args[1]);
     JavaRDD<DataPoint> points = lines.map(new ParsePoint()).cache();
     int ITERATIONS = Integer.parseInt(args[2]);

@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.io.EOFException
 
-import org.apache.hadoop.mapred.FileInputFormat
+import org.apache.hadoop.conf.{Configuration, Configurable}
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
@@ -31,7 +31,6 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.NextIterator
-import org.apache.hadoop.conf.{Configuration, Configurable}
 
 
 /**
@@ -42,14 +41,14 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
 
   val inputSplit = new SerializableWritable[InputSplit](s)
 
-  override def hashCode(): Int = (41 * (41 + rddId) + idx).toInt
+  override def hashCode(): Int = 41 * (41 + rddId) + idx
 
   override val index: Int = idx
 }
 
 /**
  * An RDD that provides core functionality for reading data stored in Hadoop (e.g., files in HDFS,
- * sources in HBase, or S3).
+ * sources in HBase, or S3), using the older MapReduce API (`org.apache.hadoop.mapred`).
  *
  * @param sc The SparkContext to associate the RDD with.
  * @param broadcastedConf A general Hadoop Configuration, or a subclass of it. If the enclosed
@@ -99,11 +98,11 @@ class HadoopRDD[K, V](
     val conf: Configuration = broadcastedConf.value.value
     if (conf.isInstanceOf[JobConf]) {
       // A user-broadcasted JobConf was provided to the HadoopRDD, so always use it.
-      return conf.asInstanceOf[JobConf]
+      conf.asInstanceOf[JobConf]
     } else if (HadoopRDD.containsCachedMetadata(jobConfCacheKey)) {
       // getJobConf() has been called previously, so there is already a local cache of the JobConf
       // needed by this RDD.
-      return HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
+      HadoopRDD.getCachedMetadata(jobConfCacheKey).asInstanceOf[JobConf]
     } else {
       // Create a JobConf that will be cached and used across this RDD's getJobConf() calls in the
       // local process. The local cache is accessed through HadoopRDD.putCachedMetadata().
@@ -111,7 +110,7 @@ class HadoopRDD[K, V](
       val newJobConf = new JobConf(broadcastedConf.value.value)
       initLocalJobConfFuncOpt.map(f => f(newJobConf))
       HadoopRDD.putCachedMetadata(jobConfCacheKey, newJobConf)
-      return newJobConf
+      newJobConf
     }
   }
 
@@ -127,7 +126,7 @@ class HadoopRDD[K, V](
       newInputFormat.asInstanceOf[Configurable].setConf(conf)
     }
     HadoopRDD.putCachedMetadata(inputFormatCacheKey, newInputFormat)
-    return newInputFormat
+    newInputFormat
   }
 
   override def getPartitions: Array[Partition] = {
@@ -158,10 +157,8 @@ class HadoopRDD[K, V](
 
       // Register an on-task-completion callback to close the input stream.
       context.addOnCompleteCallback{ () => closeIfNeeded() }
-
       val key: K = reader.createKey()
       val value: V = reader.createValue()
-
       override def getNext() = {
         try {
           finished = !reader.next(key, value)

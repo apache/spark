@@ -74,7 +74,7 @@ class StorageLevel private(
     if (deserialized_) {
       ret |= 1
     }
-    return ret
+    ret
   }
 
   override def writeExternal(out: ObjectOutput) {
@@ -101,13 +101,17 @@ class StorageLevel private(
     var result = ""
     result += (if (useDisk) "Disk " else "")
     result += (if (useMemory) "Memory " else "")
-    result += (if (deserialized) "Deserialized " else "Serialized")
+    result += (if (deserialized) "Deserialized " else "Serialized ")
     result += "%sx Replicated".format(replication)
     result
   }
 }
 
 
+/**
+ * Various [[org.apache.spark.storage.StorageLevel]] defined and utility functions for creating
+ * new storage levels.
+ */
 object StorageLevel {
   val NONE = new StorageLevel(false, false, false)
   val DISK_ONLY = new StorageLevel(true, false, false)

@@ -20,34 +20,35 @@ package org.apache.spark.network.netty;
 import java.net.InetSocketAddress;
 
 import io.netty.bootstrap.ServerBootstrap;
-import io.netty.channel.Channel;
 import io.netty.channel.ChannelFuture;
 import io.netty.channel.ChannelOption;
+import io.netty.channel.EventLoopGroup;
 import io.netty.channel.oio.OioEventLoopGroup;
 import io.netty.channel.socket.oio.OioServerSocketChannel;
-
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-
 
 /**
  * Server that accept the path of a file an echo back its content.
  */
 class FileServer {
 
-  private Logger LOG = LoggerFactory.getLogger(this.getClass().getName());
+  private static final Logger LOG = LoggerFactory.getLogger(FileServer.class.getName());
 
-  private ServerBootstrap bootstrap = null;
+  private EventLoopGroup bossGroup = null;
+  private EventLoopGroup workerGroup = null;
   private ChannelFuture channelFuture = null;
   private int port = 0;
-  private Thread blockingThread = null;
 
-  public FileServer(PathResolver pResolver, int port) {
+  FileServer(PathResolver pResolver, int port) {
     InetSocketAddress addr = new InetSocketAddress(port);
 
     // Configure the server.
-    bootstrap = new ServerBootstrap();
-    bootstrap.group(new OioEventLoopGroup(), new OioEventLoopGroup())
+    bossGroup = new OioEventLoopGroup();
+    workerGroup = new OioEventLoopGroup();
+
+    ServerBootstrap bootstrap = new ServerBootstrap();
+    bootstrap.group(bossGroup, workerGroup)
         .channel(OioServerSocketChannel.class)
         .option(ChannelOption.SO_BACKLOG, 100)
         .option(ChannelOption.SO_RCVBUF, 1500)
@@ -68,7 +69,8 @@ class FileServer {
    * Start the file server asynchronously in a new thread.
    */
   public void start() {
-    blockingThread = new Thread() {
+    Thread blockingThread = new Thread() {
+      @Override
       public void run() {
         try {
           channelFuture.channel().closeFuture().sync();
@@ -90,13 +92,19 @@ class FileServer {
   public void stop() {
     // Close the bound channel.
     if (channelFuture != null) {
-      channelFuture.channel().close();
+      channelFuture.channel().close().awaitUninterruptibly();
       channelFuture = null;
     }
-    // Shutdown bootstrap.
-    if (bootstrap != null) {
-      bootstrap.shutdown();
-      bootstrap = null;
+
+    // Shutdown event groups
+    if (bossGroup != null) {
+       bossGroup.shutdownGracefully();
+       bossGroup = null;
+    }
+
+    if (workerGroup != null) {
+       workerGroup.shutdownGracefully();
+       workerGroup = null;
     }
     // TODO: Shutdown all accepted channels as well ?
   }

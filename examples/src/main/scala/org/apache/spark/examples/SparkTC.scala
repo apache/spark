@@ -46,7 +46,7 @@ object SparkTC {
       System.exit(1)
     }
     val spark = new SparkContext(args(0), "SparkTC",
-      System.getenv("SPARK_HOME"), Seq(System.getenv("SPARK_EXAMPLES_JAR")))
+      System.getenv("SPARK_HOME"), SparkContext.jarOfClass(this.getClass))
     val slices = if (args.length > 1) args(1).toInt else 2
     var tc = spark.parallelize(generateGraph, slices).cache()
 
@@ -65,7 +65,7 @@ object SparkTC {
       oldCount = nextCount
       // Perform the join, obtaining an RDD of (y, (z, x)) pairs,
       // then project the result to obtain the new (x, z) paths.
-      tc = tc.union(tc.join(edges).map(x => (x._2._2, x._2._1))).distinct().cache();
+      tc = tc.union(tc.join(edges).map(x => (x._2._2, x._2._1))).distinct().cache()
       nextCount = tc.count()
     } while (nextCount != oldCount)
 

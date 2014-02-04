@@ -35,9 +35,9 @@ import java.util.regex.Pattern;
 /**
  * Executes a roll up-style query against Apache logs.
  */
-public class JavaLogQuery {
+public final class JavaLogQuery {
 
-  public static List<String> exampleApacheLogs = Lists.newArrayList(
+  public static final List<String> exampleApacheLogs = Lists.newArrayList(
     "10.10.10.10 - \"FRED\" [18/Jan/2013:17:56:07 +1100] \"GET http://images.com/2013/Generic.jpg " +
       "HTTP/1.1\" 304 315 \"http://referall.com/\" \"Mozilla/4.0 (compatible; MSIE 7.0; " +
       "Windows NT 5.1; GTB7.4; .NET CLR 2.0.50727; .NET CLR 3.0.04506.30; .NET CLR 3.0.04506.648; " +
@@ -51,14 +51,14 @@ public class JavaLogQuery {
       "3.5.30729; Release=ARP)\" \"UD-1\" - \"image/jpeg\" \"whatever\" 0.352 \"-\" - \"\" 256 977 988 \"\" " +
       "0 73.23.2.15 images.com 1358492557 - Whatup");
 
-  public static Pattern apacheLogRegex = Pattern.compile(
+  public static final Pattern apacheLogRegex = Pattern.compile(
     "^([\\d.]+) (\\S+) (\\S+) \\[([\\w\\d:/]+\\s[+\\-]\\d{4})\\] \"(.+?)\" (\\d{3}) ([\\d\\-]+) \"([^\"]+)\" \"([^\"]+)\".*");
 
   /** Tracks the total query count and number of aggregate bytes for a particular group. */
   public static class Stats implements Serializable {
 
-    private int count;
-    private int numBytes;
+    private final int count;
+    private final int numBytes;
 
     public Stats(int count, int numBytes) {
       this.count = count;
@@ -92,38 +92,38 @@ public class JavaLogQuery {
     if (m.find()) {
       int bytes = Integer.parseInt(m.group(7));
       return new Stats(1, bytes);
-    }
-    else
+    } else {
       return new Stats(1, 0);
+    }
   }
 
-  public static void main(String[] args) throws Exception {
+  public static void main(String[] args) {
     if (args.length == 0) {
       System.err.println("Usage: JavaLogQuery <master> [logFile]");
       System.exit(1);
     }
 
     JavaSparkContext jsc = new JavaSparkContext(args[0], "JavaLogQuery",
-      System.getenv("SPARK_HOME"), System.getenv("SPARK_EXAMPLES_JAR"));
+      System.getenv("SPARK_HOME"), JavaSparkContext.jarOfClass(JavaLogQuery.class));
 
     JavaRDD<String> dataSet = (args.length == 2) ? jsc.textFile(args[1]) : jsc.parallelize(exampleApacheLogs);
 
     JavaPairRDD<Tuple3<String, String, String>, Stats> extracted = dataSet.map(new PairFunction<String, Tuple3<String, String, String>, Stats>() {
       @Override
-      public Tuple2<Tuple3<String, String, String>, Stats> call(String s) throws Exception {
+      public Tuple2<Tuple3<String, String, String>, Stats> call(String s) {
         return new Tuple2<Tuple3<String, String, String>, Stats>(extractKey(s), extractStats(s));
       }
     });
 
     JavaPairRDD<Tuple3<String, String, String>, Stats> counts = extracted.reduceByKey(new Function2<Stats, Stats, Stats>() {
       @Override
-      public Stats call(Stats stats, Stats stats2) throws Exception {
+      public Stats call(Stats stats, Stats stats2) {
         return stats.merge(stats2);
       }
     });
 
     List<Tuple2<Tuple3<String, String, String>, Stats>> output = counts.collect();
-    for (Tuple2 t : output) {
+    for (Tuple2<?,?> t : output) {
       System.out.println(t._1 + "\t" + t._2);
     }
     System.exit(0);

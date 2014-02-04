@@ -17,6 +17,7 @@
 
 package org.apache.spark.rdd
 
+import scala.reflect.ClassTag
 import java.util.Random
 
 import cern.jet.random.Poisson
@@ -24,14 +25,16 @@ import cern.jet.random.engine.DRand
 
 import org.apache.spark.{Partition, TaskContext}
 
+@deprecated("Replaced by PartitionwiseSampledRDDPartition", "1.0")
 private[spark]
 class SampledRDDPartition(val prev: Partition, val seed: Int) extends Partition with Serializable {
   override val index: Int = prev.index
 }
 
-class SampledRDD[T: ClassManifest](
+@deprecated("Replaced by PartitionwiseSampledRDD", "1.0")
+class SampledRDD[T: ClassTag](
     prev: RDD[T],
-    withReplacement: Boolean, 
+    withReplacement: Boolean,
     frac: Double,
     seed: Int)
   extends RDD[T](prev) {

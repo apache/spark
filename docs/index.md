@@ -5,7 +5,7 @@ title: Spark Overview
 
 Apache Spark is a fast and general-purpose cluster computing system.
 It provides high-level APIs in [Scala](scala-programming-guide.html), [Java](java-programming-guide.html), and [Python](python-programming-guide.html) that make parallel jobs easy to write, and an optimized engine that supports general computation graphs.
-It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [MLlib](mllib-guide.html) for machine learning, [Bagel](bagel-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
+It also supports a rich set of higher-level tools including [Shark](http://shark.cs.berkeley.edu) (Hive on Spark), [MLlib](mllib-guide.html) for machine learning, [GraphX](graphx-programming-guide.html) for graph processing, and [Spark Streaming](streaming-programming-guide.html).
 
 # Downloading
 
@@ -24,9 +24,9 @@ For its Scala API, Spark {{site.SPARK_VERSION}} depends on Scala {{site.SCALA_VE
 # Running the Examples and Shell
 
 Spark comes with several sample programs in the `examples` directory.
-To run one of the samples, use `./run-example <class> <params>` in the top-level Spark directory
-(the `run-example` script sets up the appropriate paths and launches that program).
-For example, try `./run-example org.apache.spark.examples.SparkPi local`.
+To run one of the samples, use `./bin/run-example <class> <params>` in the top-level Spark directory
+(the `bin/run-example` script sets up the appropriate paths and launches that program).
+For example, try `./bin/run-example org.apache.spark.examples.SparkPi local`.
 Each example prints usage help when run with no parameters.
 
 Note that all of the sample programs take a `<master>` parameter specifying the cluster URL
@@ -34,8 +34,8 @@ to connect to. This can be a [URL for a distributed cluster](scala-programming-g
 or `local` to run locally with one thread, or `local[N]` to run locally with N threads. You should start by using
 `local` for testing.
 
-Finally, you can run Spark interactively through modified versions of the Scala shell (`./spark-shell`) or
-Python interpreter (`./pyspark`). These are a great way to learn the framework.
+Finally, you can run Spark interactively through modified versions of the Scala shell (`./bin/spark-shell`) or
+Python interpreter (`./bin/pyspark`). These are a great way to learn the framework.
 
 # Launching on a Cluster
 
@@ -56,14 +56,16 @@ Hadoop, you must build Spark against the same version that your cluster uses.
 By default, Spark links to Hadoop 1.0.4. You can change this by setting the
 `SPARK_HADOOP_VERSION` variable when compiling:
 
-    SPARK_HADOOP_VERSION=1.2.1 sbt/sbt assembly
+    SPARK_HADOOP_VERSION=2.2.0 sbt/sbt assembly
 
-In addition, if you wish to run Spark on [YARN](running-on-yarn.md), set
+In addition, if you wish to run Spark on [YARN](running-on-yarn.html), set
 `SPARK_YARN` to `true`:
 
     SPARK_HADOOP_VERSION=2.0.5-alpha SPARK_YARN=true sbt/sbt assembly
 
-(Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.)
+Note that on Windows, you need to set the environment variables on separate lines, e.g., `set SPARK_HADOOP_VERSION=1.2.1`.
+
+For this version of Spark (0.8.1) Hadoop 2.2.x (or newer) users will have to build Spark and publish it locally. See [Launching Spark on YARN](running-on-yarn.html). This is needed because Hadoop 2.2 has non backwards compatible API changes.
 
 # Where to Go from Here
 
@@ -73,9 +75,10 @@ In addition, if you wish to run Spark on [YARN](running-on-yarn.md), set
 * [Spark Programming Guide](scala-programming-guide.html): an overview of Spark concepts, and details on the Scala API
   * [Java Programming Guide](java-programming-guide.html): using Spark from Java
   * [Python Programming Guide](python-programming-guide.html): using Spark from Python
-* [Spark Streaming](streaming-programming-guide.html): using the alpha release of Spark Streaming
+* [Spark Streaming](streaming-programming-guide.html): Spark's API for processing data streams
 * [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library
 * [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
+* [GraphX (Graphs on Spark)](graphx-programming-guide.html): Spark's new API for graphs
 
 **API Docs:**
 
@@ -84,6 +87,7 @@ In addition, if you wish to run Spark on [YARN](running-on-yarn.md), set
 * [Spark Streaming for Java/Scala (Scaladoc)](api/streaming/index.html)
 * [MLlib (Machine Learning) for Java/Scala (Scaladoc)](api/mllib/index.html)
 * [Bagel (Pregel on Spark) for Scala (Scaladoc)](api/bagel/index.html)
+* [GraphX (Graphs on Spark) for Scala (Scaladoc)](api/graphx/index.html)
 
 
 **Deployment guides:**

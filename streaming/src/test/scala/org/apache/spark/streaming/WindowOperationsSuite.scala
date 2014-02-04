@@ -18,23 +18,14 @@
 package org.apache.spark.streaming
 
 import org.apache.spark.streaming.StreamingContext._
-import collection.mutable.ArrayBuffer
+import org.apache.spark.streaming.dstream.DStream
+import org.apache.spark.storage.StorageLevel
 
 class WindowOperationsSuite extends TestSuiteBase {
 
-  System.setProperty("spark.streaming.clock", "org.apache.spark.streaming.util.ManualClock")
+  override def maxWaitTimeMillis = 20000  // large window tests can sometimes take longer
 
-  override def framework = "WindowOperationsSuite"
-
-  override def maxWaitTimeMillis = 20000
-
-  override def batchDuration = Seconds(1)
-
-  after {
-    // To avoid Akka rebinding to the same port, since it doesn't unbind immediately on shutdown
-    System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
-  }
+  override def batchDuration = Seconds(1)  // making sure its visible in this class
 
   val largerSlideInput = Seq(
     Seq(("a", 1)),
@@ -154,6 +145,19 @@ class WindowOperationsSuite extends TestSuiteBase {
     Seconds(3)
   )
 
+  test("window - persistence level") {
+    val input = Seq( Seq(0), Seq(1), Seq(2), Seq(3), Seq(4), Seq(5))
+    val ssc = new StreamingContext(conf, batchDuration)
+    val inputStream = new TestInputStream[Int](ssc, input, 1)
+    val windowStream1 = inputStream.window(batchDuration * 2)
+    assert(windowStream1.storageLevel === StorageLevel.NONE)
+    assert(inputStream.storageLevel === StorageLevel.MEMORY_ONLY_SER)
+    windowStream1.persist(StorageLevel.MEMORY_ONLY)
+    assert(windowStream1.storageLevel === StorageLevel.NONE)
+    assert(inputStream.storageLevel === StorageLevel.MEMORY_ONLY)
+    ssc.stop()
+  }
+
   // Testing naive reduceByKeyAndWindow (without invertible function)
 
   testReduceByKeyAndWindow(
@@ -235,9 +239,7 @@ class WindowOperationsSuite extends TestSuiteBase {
     val slideDuration = Seconds(1)
     val numBatches = expectedOutput.size * (slideDuration / batchDuration).toInt
     val operation = (s: DStream[(String, Int)]) => {
-      s.groupByKeyAndWindow(windowDuration, slideDuration)
-       .map(x => (x._1, x._2.toSet))
-       .persist()
+      s.groupByKeyAndWindow(windowDuration, slideDuration).map(x => (x._1, x._2.toSet))
     }
     testOperation(input, operation, expectedOutput, numBatches, true)
   }

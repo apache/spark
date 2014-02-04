@@ -20,7 +20,10 @@ include FileUtils
 
 if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   # Build Scaladoc for Java/Scala
-  projects = ["core", "examples", "repl", "bagel", "streaming", "mllib"]
+  core_projects = ["core", "examples", "repl", "bagel", "graphx", "streaming", "mllib"]
+  external_projects = ["flume", "kafka", "mqtt", "twitter", "zeromq"]
+
+  projects = core_projects + external_projects.map { |project_name| "external/" + project_name }
 
   puts "Moving to project root and building scaladoc."
   curr_dir = pwd
@@ -35,7 +38,7 @@ if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   # Copy over the scaladoc from each project into the docs directory.
   # This directory will be copied over to _site when `jekyll` command is run.
   projects.each do |project_name|
-    source = "../" + project_name + "/target/scala-2.9.3/api"
+    source = "../" + project_name + "/target/scala-2.10/api"
     dest = "api/" + project_name
 
     puts "echo making directory " + dest

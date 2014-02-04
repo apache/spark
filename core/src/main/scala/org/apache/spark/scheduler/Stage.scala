@@ -46,7 +46,7 @@ private[spark] class Stage(
     callSite: Option[String])
   extends Logging {
 
-  val isShuffleMap = shuffleDep != None
+  val isShuffleMap = shuffleDep.isDefined
   val numPartitions = rdd.partitions.size
   val outputLocs = Array.fill[List[MapStatus]](numPartitions)(Nil)
   var numAvailableOutputs = 0
@@ -96,7 +96,7 @@ private[spark] class Stage(
   def newAttemptId(): Int = {
     val id = nextAttemptId
     nextAttemptId += 1
-    return id
+    id
   }
 
   val name = callSite.getOrElse(rdd.origin)
