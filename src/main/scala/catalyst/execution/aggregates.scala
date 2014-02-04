@@ -37,9 +37,11 @@ case class Aggregate(
 
     val resolver = createFunction[AbstractGenericUDAFResolver](functionName)
 
+    val inspectors = exprs.map(_.dataType).map(toInspector).toArray
+
     val function = {
       val evaluator = resolver.getEvaluator(exprs.map(_.dataType.toTypeInfo).toArray)
-      evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, toInspectors(exprs).toArray)
+      evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
       evaluator
     }
 
