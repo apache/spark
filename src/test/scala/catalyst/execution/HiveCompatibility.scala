@@ -49,6 +49,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "protectmode2",
     "describe_table",
     "describe_comment_nonascii",
+    "udf5",
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
@@ -503,7 +504,6 @@ class HiveCompatibility extends HiveQueryFileTest {
     "udaf_covar_pop",
     "udaf_covar_samp",
     "udf2",
-    "udf5",
     "udf6",
     "udf9",
     "udf_10_trims",
