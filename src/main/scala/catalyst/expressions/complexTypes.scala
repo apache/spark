@@ -4,7 +4,7 @@ package expressions
 import types._
 
 /**
- * Returns the item at `ordinal` in the Array `child`.
+ * Returns the item at `ordinal` in the Array `child` or the Key `ordinal` in Map `child`.
  */
 case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   val children = child :: ordinal :: Nil
@@ -13,8 +13,12 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
   override def references = children.flatMap(_.references).toSet
   def dataType = child.dataType match {
     case ArrayType(dt) => dt
+    case MapType(_, vt) => vt
   }
-  override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[ArrayType]
+  override lazy val resolved =
+    childrenResolved &&
+    (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
+
   override def toString = s"$child[$ordinal]"
 }
 
