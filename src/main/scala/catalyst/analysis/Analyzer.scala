@@ -126,6 +126,13 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             case o => o :: Nil
           },
           child)
+      case t: Transform if containsStar(t.input) =>
+        t.copy(
+          input = t.input.flatMap {
+            case s: Star => s.expand(t.child.output)
+            case o => o :: Nil
+          }
+        )
       // If the aggregate function argument contains Stars, expand it.
       case a: Aggregate if containsStar(a.aggregateExpressions) =>
         a.copy(
@@ -139,7 +146,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     /**
      * Returns true if `exprs` contains a [[Star]].
      */
-    protected def containsStar(exprs: Seq[NamedExpression]): Boolean =
+    protected def containsStar(exprs: Seq[Expression]): Boolean =
       exprs.collect { case _: Star => true }.nonEmpty
   }
 
