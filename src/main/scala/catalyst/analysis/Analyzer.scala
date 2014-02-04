@@ -4,6 +4,7 @@ package analysis
 import expressions._
 import plans.logical._
 import rules._
+import catalyst.execution.MetastoreRelation
 
 /**
  * A trivial [[Analyzer]] with an [[EmptyCatalog]] and [[EmptyFunctionRegistry]]. Used for testing
@@ -159,9 +160,11 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
       // Wait until children are resolved
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case p @ InsertIntoTable(table, _, child) if !p.resolved =>
+      case p @ InsertIntoTable(table: MetastoreRelation, _, child) =>
         val childOutputDataTypes = child.output.map(_.dataType)
-        val tableOutputDataTypes = table.output.map(_.dataType)
+        // Only check attributes, not partitionKeys since they are always strings.
+        // TODO: Fully support inserting into partitioned tables.
+        val tableOutputDataTypes = table.attributes.map(_.dataType)
 
         if (childOutputDataTypes == tableOutputDataTypes) {
           p

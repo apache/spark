@@ -147,8 +147,11 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
      )(qualifiers = tableName +: alias.toSeq)
    }
 
+  // Must be a stable value since new attributes are born here.
   val partitionKeys = hiveQlTable.getPartitionKeys.map(_.toAttribute)
 
-  // Must be a stable value since new attributes are born here.
-  val output = table.getSd.getCols.map(_.toAttribute) ++ partitionKeys
+  /** Non-partitionKey attributes */
+  val attributes = table.getSd.getCols.map(_.toAttribute)
+
+  val output = attributes ++ partitionKeys
 }
