@@ -65,9 +65,9 @@ object Evaluate extends Logging {
         null
       } else {
         e1.dataType match {
-          case f: FractionalType =>
-            f.asInstanceOf[(Fractional[f.JvmType], f.JvmType, f.JvmType) => f.JvmType](
-              f.fractional, evalE1.asInstanceOf[f.JvmType], evalE2.asInstanceOf[f.JvmType])
+          case ft: FractionalType =>
+            f.asInstanceOf[(Fractional[ft.JvmType], ft.JvmType, ft.JvmType) => ft.JvmType](
+              ft.fractional, evalE1.asInstanceOf[ft.JvmType], evalE2.asInstanceOf[ft.JvmType])
           case other => sys.error(s"Type $other does not support fractional operations")
         }
       }
