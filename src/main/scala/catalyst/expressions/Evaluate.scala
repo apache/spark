@@ -267,7 +267,11 @@ object Evaluate extends Logging {
 
       /* UDFs */
       case implementedFunction: ImplementedUdf =>
-        implementedFunction.evaluate(implementedFunction.children.map(eval))
+        try implementedFunction.evaluate(implementedFunction.children.map(eval)) catch {
+          case e: Exception =>
+            logger.error(s"UDF Evaluation failed: $e")
+            null
+        }
 
       case a: Attribute =>
         throw new TreeNodeException(a,
