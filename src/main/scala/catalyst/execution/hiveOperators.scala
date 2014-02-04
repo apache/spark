@@ -195,6 +195,19 @@ case class InsertIntoHiveTable(
   def output = child.output
 
   /**
+   * Wraps with Hive types based on object inspector.
+   * TODO: Consolidate all hive OI/data interface code.
+   */
+  protected def wrap(a: (Any, ObjectInspector)): Any = a match {
+    case (s: String, oi: JavaHiveVarcharObjectInspector) => new HiveVarchar(s, s.size)
+    case (bd: BigDecimal, oi: JavaHiveDecimalObjectInspector) =>
+      new HiveDecimal(bd.underlying())
+    case (s: Seq[_], oi: ListObjectInspector) =>
+      seqAsJavaList(s.map(wrap(_, oi.getListElementObjectInspector)))
+    case (obj, _) => obj
+  }
+
+  /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the
    * `org.apache.hadoop.mapred.OutputFormat` provided by the table definition.
@@ -221,13 +234,7 @@ case class InsertIntoHiveTable(
       iter.map { row =>
         // Casts Strings to HiveVarchars when necessary.
         val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector)
-        val mappedRow = row.zip(fieldOIs).map {
-          case (s: String, oi: JavaHiveVarcharObjectInspector) => new HiveVarchar(s, s.size)
-          case (bd: BigDecimal, oi: JavaHiveDecimalObjectInspector) =>
-            new HiveDecimal(bd.underlying())
-          case (obj, _) => obj
-        }
-
+        val mappedRow = row.zip(fieldOIs).map(wrap)
         (null, serializer.serialize(mappedRow.toArray, standardOI))
       }
     }.saveAsHadoopFile(
