@@ -27,6 +27,9 @@ trait HiveTypeCoercion {
       // No propagation required for leaf nodes.
       case q: LogicalPlan if q.children.isEmpty => q
 
+      // Don't propagate types from unresolved children.
+      case q: LogicalPlan if !q.childrenResolved => q
+
       case q: LogicalPlan => q transformExpressions {
         case a: AttributeReference =>
           q.inputSet.find(_.exprId == a.exprId) match {
