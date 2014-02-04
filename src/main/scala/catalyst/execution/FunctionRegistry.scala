@@ -79,6 +79,7 @@ trait HiveFunctionFactory {
   def createFunction[UDFType](name: String) =
     getFunctionClass(name).newInstance.asInstanceOf[UDFType]
 
+  /** Converts hive types to native catalyst types. */
   def unwrap(a: Any): Any = a match {
     case null => null
     case i: hadoopIo.IntWritable => i.get
@@ -177,13 +178,14 @@ case class HiveGenericUdf(
   type UDFType = GenericUDF
 
   @transient
-  lazy val inspectors: Seq[ObjectInspector] = children.map(_.dataType).map(toInspector)
+  lazy val argumentInspectors: Seq[ObjectInspector] = children.map(_.dataType).map(toInspector)
 
   @transient
-  lazy val objectInspector = function.initialize(inspectors.toArray)
+  lazy val returnInspector = function.initialize(argumentInspectors.toArray)
 
-  val dataType: DataType = inspectorToDataType(objectInspector)
+  val dataType: DataType = inspectorToDataType(returnInspector)
 
+  /** Converts native catalyst types to the types expected by Hive */
   def wrap(a: Any): Any = a match {
     case s: String => new hadoopIo.Text(s)
     case i: Int => i: java.lang.Integer
@@ -199,7 +201,7 @@ case class HiveGenericUdf(
   }
 
   def evaluate(evaluatedChildren: Seq[Any]): Any = {
-    objectInspector // Make sure initialized.
+    returnInspector // Make sure initialized.
     val args = evaluatedChildren.map(wrap).map { v =>
       new DeferredJavaObject(v): DeferredObject
     }.toArray

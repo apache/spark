@@ -12,7 +12,8 @@ import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
 import org.apache.hadoop.hive.serde2.AbstractSerDe
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
-import org.apache.hadoop.hive.serde2.objectinspector.primitive.{JavaHiveDecimalObjectInspector, JavaHiveVarcharObjectInspector}
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveDecimalObjectInspector
+import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharObjectInspector
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.mapred.JobConf
 import org.apache.spark.SparkContext._
@@ -91,8 +92,9 @@ case class HiveTableScan(
   def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
     case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
     case li: ListObjectInspector =>
-      Option(
-        li.getList(data)).map(_.map(unwrapData(_, li.getListElementObjectInspector)).toSeq).orNull
+      Option(li.getList(data))
+        .map(_.map(unwrapData(_, li.getListElementObjectInspector)).toSeq)
+        .orNull
     case mi: MapObjectInspector =>
       Option(mi.getMap(data)).map(
         _.map {

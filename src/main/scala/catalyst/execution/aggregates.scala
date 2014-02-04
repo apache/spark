@@ -25,38 +25,6 @@ case class Aggregate(
 
   override def otherCopyArgs = sc :: Nil
 
-  case class HiveUdafFunction(
-      exprs: Seq[Expression],
-      base: AggregateExpression,
-      functionName: String)
-    extends AggregateFunction
-    with HiveInspectors
-    with HiveFunctionFactory {
-
-    def this() = this(null, null, null)
-
-    val resolver = createFunction[AbstractGenericUDAFResolver](functionName)
-
-    val inspectors = exprs.map(_.dataType).map(toInspector).toArray
-
-    val function = {
-      val evaluator = resolver.getEvaluator(exprs.map(_.dataType.toTypeInfo).toArray)
-      evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
-      evaluator
-    }
-
-    // Cast required to avoid type inference selecting a deprecated Hive API.
-    val buffer =
-      function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
-
-    def result: Any = unwrap(function.evaluate(buffer))
-
-    def apply(input: Seq[Row]): Unit = {
-      val inputs = exprs.map(Evaluate(_, input).asInstanceOf[AnyRef]).toArray
-      function.iterate(buffer, inputs)
-    }
-  }
-
   def output = aggregateExpressions.map(_.toAttribute)
 
   /* Replace all aggregate expressions with spark functions that will compute the result. */
@@ -119,6 +87,38 @@ case class Aggregate(
     } else {
       result
     }
+  }
+}
+
+case class HiveUdafFunction(
+    exprs: Seq[Expression],
+    base: AggregateExpression,
+    functionName: String)
+  extends AggregateFunction
+  with HiveInspectors
+  with HiveFunctionFactory {
+
+  def this() = this(null, null, null)
+
+  private val resolver = createFunction[AbstractGenericUDAFResolver](functionName)
+
+  private val inspectors = exprs.map(_.dataType).map(toInspector).toArray
+
+  private val function = {
+    val evaluator = resolver.getEvaluator(exprs.map(_.dataType.toTypeInfo).toArray)
+    evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
+    evaluator
+  }
+
+  // Cast required to avoid type inference selecting a deprecated Hive API.
+  private val buffer =
+    function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
+
+  def result: Any = unwrap(function.evaluate(buffer))
+
+  def apply(input: Seq[Row]): Unit = {
+    val inputs = exprs.map(Evaluate(_, input).asInstanceOf[AnyRef]).toArray
+    function.iterate(buffer, inputs)
   }
 }
 

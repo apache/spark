@@ -239,16 +239,12 @@ object Evaluate extends Logging {
       /* Complex Type Access */
       case g @ GetField(e, name) =>
         val baseValue = eval(e).asInstanceOf[Row]
-        if(baseValue == null) {
-          null
-        } else {
-          baseValue(g.ordinal)
-        }
+        if (baseValue == null) null else baseValue(g.ordinal)
 
       case GetItem(e, o) if e.dataType.isInstanceOf[ArrayType] =>
         val baseValue = eval(e).asInstanceOf[Seq[_]]
         val ordinal = eval(o).asInstanceOf[Int]
-        if(baseValue == null) {
+        if (baseValue == null) {
           null
         } else if (ordinal >= baseValue.size) {
           null
@@ -259,7 +255,7 @@ object Evaluate extends Logging {
       case GetItem(e, k) if e.dataType.isInstanceOf[MapType] =>
         val baseValue = eval(e).asInstanceOf[Map[Any, _]]
         val key = eval(k)
-        if(baseValue == null) {
+        if (baseValue == null) {
           null
         } else {
           baseValue.get(key).orNull
