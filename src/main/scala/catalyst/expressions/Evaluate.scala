@@ -245,6 +245,26 @@ object Evaluate extends Logging {
           baseValue(g.ordinal)
         }
 
+      case GetItem(e, o) if e.dataType.isInstanceOf[ArrayType] =>
+        val baseValue = eval(e).asInstanceOf[Seq[_]]
+        val ordinal = eval(o).asInstanceOf[Int]
+        if(baseValue == null) {
+          null
+        } else if (ordinal >= baseValue.size) {
+          null
+        } else {
+          baseValue(ordinal)
+        }
+
+      case GetItem(e, k) if e.dataType.isInstanceOf[MapType] =>
+        val baseValue = eval(e).asInstanceOf[Map[Any, _]]
+        val key = eval(k)
+        if(baseValue == null) {
+          null
+        } else {
+          baseValue.get(key).orNull
+        }
+
       /* UDFs */
       case implementedFunction: ImplementedUdf =>
         implementedFunction.evaluate(implementedFunction.children.map(eval))
