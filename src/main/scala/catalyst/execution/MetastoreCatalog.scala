@@ -84,6 +84,7 @@ object HiveMetastoreTypes extends RegexParsers {
     "string" ^^^ StringType |
     "float" ^^^ FloatType |
     "int" ^^^ IntegerType |
+    "tinyint" ^^^ ShortType |
     "double" ^^^ DoubleType |
     "bigint" ^^^ LongType |
     "binary" ^^^ BinaryType |
