@@ -8,7 +8,8 @@ version := "0.1-SNAPSHOT"
 
 scalaVersion := "2.10.3"
 
-scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
+// TODO: Re-enable -deprecation
+scalacOptions ++= Seq("-feature", "-unchecked")
 
 resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
 
