@@ -190,7 +190,7 @@ trait HiveTypeCoercion {
       case Sum(e) if e.dataType == StringType =>
         Sum(Cast(e, DoubleType))
       case Average(e) if e.dataType == StringType =>
-        Sum(Cast(e, DoubleType))
+        Average(Cast(e, DoubleType))
     }
   }
 
@@ -252,7 +252,6 @@ trait HiveTypeCoercion {
       case s @ Sum(e @ DecimalType()) => s // Decimal is already the biggest.
       case Sum(e @ IntegralType()) if e.dataType != LongType => Sum(Cast(e, LongType))
       case Sum(e @ FractionalType()) if e.dataType != DoubleType => Sum(Cast(e, DoubleType))
-
     }
   }
 }
