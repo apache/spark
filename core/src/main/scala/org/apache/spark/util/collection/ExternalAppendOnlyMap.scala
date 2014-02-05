@@ -242,7 +242,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
      * In the event of key hash collisions, this ensures no pairs are hidden from being merged.
      * Assume the given iterator is in sorted order.
      */
-    def getMorePairs(it: Iterator[(K, C)]): ArrayBuffer[(K, C)] = {
+    private def getMorePairs(it: Iterator[(K, C)]): ArrayBuffer[(K, C)] = {
       val kcPairs = new ArrayBuffer[(K, C)]
       if (it.hasNext) {
         var kc = it.next()
@@ -260,7 +260,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
      * If the given buffer contains a value for the given key, merge that value into
      * baseCombiner and remove the corresponding (K, C) pair from the buffer
      */
-    def mergeIfKeyExists(key: K, baseCombiner: C, buffer: StreamBuffer): C = {
+    private def mergeIfKeyExists(key: K, baseCombiner: C, buffer: StreamBuffer): C = {
       var i = 0
       while (i < buffer.pairs.size) {
         val (k, c) = buffer.pairs(i)
@@ -320,7 +320,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
      *
      * StreamBuffers are ordered by the minimum key hash found across all of their own pairs.
      */
-    case class StreamBuffer(iterator: Iterator[(K, C)], pairs: ArrayBuffer[(K, C)])
+    private case class StreamBuffer(iterator: Iterator[(K, C)], pairs: ArrayBuffer[(K, C)])
       extends Comparable[StreamBuffer] {
 
       def minKeyHash: Int = {
@@ -358,7 +358,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
     /**
      * Construct a stream that reads only from the next batch
      */
-    def nextBatchStream(): InputStream = {
+    private def nextBatchStream(): InputStream = {
       if (batchSizes.length > 0) {
         ByteStreams.limit(bufferedStream, batchSizes.remove(0))
       } else {
@@ -373,7 +373,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
      * If the current batch is drained, construct a stream for the next batch and read from it.
      * If no more pairs are left, return null.
      */
-    def readNextItem(): (K, C) = {
+    private def readNextItem(): (K, C) = {
       try {
         val item = deserializeStream.readObject().asInstanceOf[(K, C)]
         objectsRead += 1
@@ -408,7 +408,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
     }
 
     // TODO: Ensure this gets called even if the iterator isn't drained.
-    def cleanup() {
+    private def cleanup() {
       deserializeStream.close()
       file.delete()
     }
