@@ -183,6 +183,24 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   /**
+   * Drop a block from memory, possibly putting it on disk if applicable.
+   */
+  def dropFromMemory(blockId: BlockId) {
+    val entry = entries.synchronized { entries.get(blockId) }
+    // This should never be null as only one thread should be dropping
+    // blocks and removing entries. However the check is still here for
+    // future safety.
+    if (entry != null) {
+      val data = if (entry.deserialized) {
+        Left(entry.value.asInstanceOf[ArrayBuffer[Any]])
+      } else {
+        Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
+      }
+      blockManager.dropFromMemory(blockId, data)
+    }
+  }
+
+  /**
    * Tries to free up a given amount of space to store a particular block, but can fail and return
    * false if either the block is bigger than our memory or it would require replacing another
    * block from the same RDD (which leads to a wasteful cyclic replacement pattern for RDDs that
@@ -227,18 +245,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       if (maxMemory - (currentMemory - selectedMemory) >= space) {
         logInfo(selectedBlocks.size + " blocks selected for dropping")
         for (blockId <- selectedBlocks) {
-          val entry = entries.synchronized { entries.get(blockId) }
-          // This should never be null as only one thread should be dropping
-          // blocks and removing entries. However the check is still here for
-          // future safety.
-          if (entry != null) {
-            val data = if (entry.deserialized) {
-              Left(entry.value.asInstanceOf[ArrayBuffer[Any]])
-            } else {
-              Right(entry.value.asInstanceOf[ByteBuffer].duplicate())
-            }
-            blockManager.dropFromMemory(blockId, data)
-          }
+          dropFromMemory(blockId)
         }
         return true
       } else {

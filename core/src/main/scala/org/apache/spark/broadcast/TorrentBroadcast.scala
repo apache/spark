@@ -23,16 +23,36 @@ import scala.math
 import scala.util.Random
 
 import org.apache.spark._
-import org.apache.spark.storage.{BroadcastBlockId, BroadcastHelperBlockId, StorageLevel}
+import org.apache.spark.storage.{BlockId, BroadcastBlockId, BroadcastHelperBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
 
-private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
+private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long, registerBlocks: Boolean)
 extends Broadcast[T](id) with Logging with Serializable {
 
   def value = value_
 
+  def unpersist(removeSource: Boolean) {
+    SparkEnv.get.blockManager.master.removeBlock(broadcastId)
+    SparkEnv.get.blockManager.removeBlock(broadcastId)
+
+    if (removeSource) {
+      for (pid <- pieceIds) {
+        SparkEnv.get.blockManager.removeBlock(pieceBlockId(pid))
+      }
+      SparkEnv.get.blockManager.removeBlock(metaId)
+    } else {
+      for (pid <- pieceIds) {
+        SparkEnv.get.blockManager.dropFromMemory(pieceBlockId(pid))
+      }
+      SparkEnv.get.blockManager.dropFromMemory(metaId)
+    }
+  }
+
   def broadcastId = BroadcastBlockId(id)
+  private def metaId = BroadcastHelperBlockId(broadcastId, "meta")
+  private def pieceBlockId(pid: Int) = BroadcastHelperBlockId(broadcastId, "piece" + pid)
+  private def pieceIds = Array.iterate(0, totalBlocks)(_ + 1).toList
 
   TorrentBroadcast.synchronized {
     SparkEnv.get.blockManager.putSingle(broadcastId, value_, StorageLevel.MEMORY_AND_DISK, false)
@@ -55,7 +75,6 @@ extends Broadcast[T](id) with Logging with Serializable {
     hasBlocks = tInfo.totalBlocks
 
     // Store meta-info
-    val metaId = BroadcastHelperBlockId(broadcastId, "meta")
     val metaInfo = TorrentInfo(null, totalBlocks, totalBytes)
     TorrentBroadcast.synchronized {
       SparkEnv.get.blockManager.putSingle(
@@ -64,7 +83,7 @@ extends Broadcast[T](id) with Logging with Serializable {
 
     // Store individual pieces
     for (i <- 0 until totalBlocks) {
-      val pieceId = BroadcastHelperBlockId(broadcastId, "piece" + i)
+      val pieceId = pieceBlockId(i)
       TorrentBroadcast.synchronized {
         SparkEnv.get.blockManager.putSingle(
           pieceId, tInfo.arrayOfBlocks(i), StorageLevel.MEMORY_AND_DISK, true)
@@ -94,7 +113,7 @@ extends Broadcast[T](id) with Logging with Serializable {
             // This creates a tradeoff between memory usage and latency.
             // Storing copy doubles the memory footprint; not storing doubles deserialization cost.
             SparkEnv.get.blockManager.putSingle(
-              broadcastId, value_, StorageLevel.MEMORY_AND_DISK, false)
+              broadcastId, value_, StorageLevel.MEMORY_AND_DISK, registerBlocks)
 
             // Remove arrayOfBlocks from memory once value_ is on local cache
             resetWorkerVariables()
@@ -109,6 +128,11 @@ extends Broadcast[T](id) with Logging with Serializable {
   }
 
   private def resetWorkerVariables() {
+    if (arrayOfBlocks != null) {
+      for (pid <- pieceIds) {
+        SparkEnv.get.blockManager.removeBlock(pieceBlockId(pid))
+      }
+    }
     arrayOfBlocks = null
     totalBytes = -1
     totalBlocks = -1
@@ -117,7 +141,6 @@ extends Broadcast[T](id) with Logging with Serializable {
 
   def receiveBroadcast(variableID: Long): Boolean = {
     // Receive meta-info
-    val metaId = BroadcastHelperBlockId(broadcastId, "meta")
     var attemptId = 10
     while (attemptId > 0 && totalBlocks == -1) {
       TorrentBroadcast.synchronized {
@@ -140,9 +163,9 @@ extends Broadcast[T](id) with Logging with Serializable {
     }
 
     // Receive actual blocks
-    val recvOrder = new Random().shuffle(Array.iterate(0, totalBlocks)(_ + 1).toList)
+    val recvOrder = new Random().shuffle(pieceIds)
     for (pid <- recvOrder) {
-      val pieceId = BroadcastHelperBlockId(broadcastId, "piece" + pid)
+      val pieceId = pieceBlockId(pid)
       TorrentBroadcast.synchronized {
         SparkEnv.get.blockManager.getSingle(pieceId) match {
           case Some(x) =>
@@ -243,8 +266,8 @@ class TorrentBroadcastFactory extends BroadcastFactory {
 
   def initialize(isDriver: Boolean, conf: SparkConf) { TorrentBroadcast.initialize(isDriver, conf) }
 
-  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long) =
-    new TorrentBroadcast[T](value_, isLocal, id)
+  def newBroadcast[T](value_ : T, isLocal: Boolean, id: Long, registerBlocks: Boolean) =
+    new TorrentBroadcast[T](value_, isLocal, id, registerBlocks)
 
   def stop() { TorrentBroadcast.stop() }
 }
