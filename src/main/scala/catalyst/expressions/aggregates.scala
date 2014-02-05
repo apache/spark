@@ -14,7 +14,7 @@ abstract class AggregateExpression extends Expression {
  *
  * @param finalEvaluation an aggregate expression that evaluates to same final result as the
  *                        original aggregation.
- * @param partialEvaluations A sequence of [[NamedExpressions]] that can be computed on partial
+ * @param partialEvaluations A sequence of [[NamedExpression]]s that can be computed on partial
  *                           data sets and are required to compute the `finalEvaluation`.
  */
 case class SplitEvaluation(
