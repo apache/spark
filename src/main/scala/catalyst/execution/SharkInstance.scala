@@ -73,6 +73,7 @@ abstract class SharkInstance extends Logging {
   object TrivialPlanner extends QueryPlanner[SharkPlan] with PlanningStrategies {
     val sc = self.sc
     val strategies =
+      PartialAggregation ::
       SparkEquiInnerJoin ::
       PartitionPrunings ::
       HiveTableScans ::
