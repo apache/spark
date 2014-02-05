@@ -513,6 +513,23 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("kfoldRdd") {
+    val data = sc.parallelize(1 to 100, 2)
+    for (folds <- 1 to 10) {
+      for (seed <- 1 to 5) {
+        val foldedRdds = data.kFoldRdds(folds, seed)
+        assert(foldedRdds.size === folds)
+        foldedRdds.map{case (test, train) =>
+          assert(test.union(train).collect().sorted ===  data.collect().sorted,
+            "Each training+test set combined contains all of the data")
+        }
+        // K fold cross validation should only have each element in the test set exactly once
+        assert(foldedRdds.map(_._1).reduce((x,y) => x.union(y)).collect().sorted ===
+          data.collect().sorted)
+      }
+    }
+  }
+
   test("runJob on an invalid partition") {
     intercept[IllegalArgumentException] {
       sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)

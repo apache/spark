@@ -334,6 +334,17 @@ abstract class RDD[T: ClassTag](
     }.toArray
   }
 
+  /**
+   * Return a k element list of pairs of RDDs with the first element of each pair
+   * containing a unique 1/Kth of the data and the second element contain the composite of that. 
+   */
+  def kFoldRdds(folds: Int, seed: Int): List[Pair[RDD[T], RDD[T]]] = {
+    1.to(folds).map(fold => ((
+      new FoldedRDD(this, fold, folds, seed),
+      new CompositeFoldedRDD(this, fold, folds, seed)
+    ))).toList
+  }
+
   def takeSample(withReplacement: Boolean, num: Int, seed: Int): Array[T] = {
     var fraction = 0.0
     var total = 0
