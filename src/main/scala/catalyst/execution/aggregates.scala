@@ -5,22 +5,37 @@ import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFEvaluator, AbstractGene
 
 import catalyst.errors._
 import catalyst.expressions._
-import catalyst.plans.physical.{ClusteredDistribution, AllTuples}
+import catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples}
 
 /* Implicits */
 import org.apache.spark.rdd.SharkPairRDDFunctions._
 
+/**
+ * Groups input data by `groupingExpressions` and computes the `aggregateExpressions` for each
+ * group.
+ *
+ * @param partial if true then aggregation is done partially on local data without shuffling to
+ *                ensure all values where `groupingExpressions` are equal are present.
+ * @param groupingExpressions expressions that are evaluated to determine grouping.
+ * @param aggregateExpressions expressions that are computed for each group.
+ * @param child the input data source.
+ */
 case class Aggregate(
+    partial: Boolean,
     groupingExpressions: Seq[Expression],
     aggregateExpressions: Seq[NamedExpression],
     child: SharkPlan)(@transient sc: SharkContext)
   extends UnaryNode {
 
   override def requiredChildDistribution =
-    if (groupingExpressions == Nil) {
-      AllTuples :: Nil
+    if (partial) {
+      UnspecifiedDistribution :: Nil
     } else {
-      ClusteredDistribution(groupingExpressions) :: Nil
+      if (groupingExpressions == Nil) {
+        AllTuples :: Nil
+      } else {
+        ClusteredDistribution(groupingExpressions) :: Nil
+      }
     }
 
   override def otherCopyArgs = sc :: Nil

@@ -119,6 +119,60 @@ trait PlanningStrategies {
       expr.references subsetOf plan.outputSet
   }
 
+  object PartialAggregation extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
+      case logical.Aggregate(groupingExpressions, aggregateExpressions, child) =>
+        // Collect all aggregate expressions.
+        val allAggregates =
+          aggregateExpressions.flatMap(_ collect { case a: AggregateExpression => a})
+        // Collect all aggregate expressions that can be computed partially.
+        val partialAggregates =
+          aggregateExpressions.flatMap(_ collect { case p: PartialAggregate => p})
+
+        // Only do partial aggregation if supported by all aggregate expressions.
+        if (allAggregates.size == partialAggregates.size) {
+          // Create a map of expressions to their partial evaluations for all aggregate expressions.
+          val partialEvaluations: Map[Long, SplitEvaluation] =
+            partialAggregates.map(a => (a.id, a.asPartial)).toMap
+
+          // We need to pass all grouping expressions though so the grouping can happen a second
+          // time. However some of them might be unnamed so we alias them allowing them to be
+          // referenced in the second aggregation.
+          val namedGroupingExpressions: Map[Expression, NamedExpression] = groupingExpressions.map {
+            case n: NamedExpression => (n, n)
+            case other => (other, Alias(other, "PartialGroup")())
+          }.toMap
+
+          // Replace aggregations with a new expression that computes the result from the already
+          // computed partial evaluations and grouping values.
+          val rewrittenAggregateExpressions = aggregateExpressions.map(_.transformUp {
+            case e: Expression if partialEvaluations.contains(e.id) =>
+              partialEvaluations(e.id).finalEvaluation
+            case e: Expression if namedGroupingExpressions.contains(e) =>
+              namedGroupingExpressions(e).toAttribute
+          }).asInstanceOf[Seq[NamedExpression]]
+
+          val partialComputation =
+            (namedGroupingExpressions.values ++
+             partialEvaluations.values.flatMap(_.partialEvaluations)).toSeq
+
+          // Construct two phased aggregation.
+          execution.Aggregate(
+            partial = false,
+            namedGroupingExpressions.values.map(_.toAttribute).toSeq,
+            rewrittenAggregateExpressions,
+            execution.Aggregate(
+              partial = true,
+              groupingExpressions,
+              partialComputation,
+              planLater(child))(sc))(sc) :: Nil
+        } else {
+          Nil
+        }
+      case _ => Nil
+    }
+  }
+
   object BroadcastNestedLoopJoin extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Join(left, right, joinType, condition) =>
@@ -143,7 +197,8 @@ trait PlanningStrategies {
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
       case logical.Distinct(child) =>
-        execution.Aggregate(child.output, child.output, planLater(child))(sc) :: Nil
+        execution.Aggregate(
+          partial = false, child.output, child.output, planLater(child))(sc) :: Nil
       case logical.Sort(sortExprs, child) =>
         // This sort is a global sort. Its requiredDistribution will be an OrderedDistribution.
         execution.Sort(sortExprs, global = true, planLater(child)):: Nil
@@ -156,7 +211,7 @@ trait PlanningStrategies {
       case logical.Filter(condition, child) =>
         execution.Filter(condition, planLater(child)) :: Nil
       case logical.Aggregate(group, agg, child) =>
-        execution.Aggregate(group, agg, planLater(child))(sc) :: Nil
+        execution.Aggregate(partial = false, group, agg, planLater(child))(sc) :: Nil
       case logical.Sample(fraction, withReplacement, seed, child) =>
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
