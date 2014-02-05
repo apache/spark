@@ -224,12 +224,12 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
   private class ExternalIterator extends Iterator[(K, C)] {
 
     // A fixed-size queue that maintains a buffer for each stream we are currently merging
-    val mergeHeap = new mutable.PriorityQueue[StreamBuffer]
+    private val mergeHeap = new mutable.PriorityQueue[StreamBuffer]
 
     // Input streams are derived both from the in-memory map and spilled maps on disk
     // The in-memory map is sorted in place, while the spilled maps are already in sorted order
-    val sortedMap = currentMap.destructiveSortedIterator(comparator)
-    val inputStreams = Seq(sortedMap) ++ spilledMaps
+    private val sortedMap = currentMap.destructiveSortedIterator(comparator)
+    private val inputStreams = Seq(sortedMap) ++ spilledMaps
 
     inputStreams.foreach { it =>
       val kcPairs = getMorePairs(it)
@@ -344,16 +344,16 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
    */
   private class DiskMapIterator(file: File, blockId: BlockId, batchSizes: ArrayBuffer[Long])
     extends Iterator[(K, C)] {
-    val fileStream = new FileInputStream(file)
-    val bufferedStream = new FastBufferedInputStream(fileStream, fileBufferSize)
+    private val fileStream = new FileInputStream(file)
+    private val bufferedStream = new FastBufferedInputStream(fileStream, fileBufferSize)
 
     // An intermediate stream that reads from exactly one batch
     // This guards against pre-fetching and other arbitrary behavior of higher level streams
-    var batchStream = nextBatchStream()
-    var compressedStream = blockManager.wrapForCompression(blockId, batchStream)
-    var deserializeStream = ser.deserializeStream(compressedStream)
-    var nextItem: (K, C) = null
-    var objectsRead = 0
+    private var batchStream = nextBatchStream()
+    private var compressedStream = blockManager.wrapForCompression(blockId, batchStream)
+    private var deserializeStream = ser.deserializeStream(compressedStream)
+    private var nextItem: (K, C) = null
+    private var objectsRead = 0
 
     /**
      * Construct a stream that reads only from the next batch
