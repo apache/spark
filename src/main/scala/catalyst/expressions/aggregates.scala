@@ -78,7 +78,7 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
   def dataType = DoubleType
   override def toString = s"AVG($child)"
 
-  def asPartial: SplitEvaluation = {
+  override def asPartial: SplitEvaluation = {
     val partialSum = Alias(Sum(child), "PartialSum")()
     val partialCount = Alias(Count(child), "PartialCount")()
     val castedSum = Cast(Sum(partialSum.toAttribute), dataType)
@@ -96,7 +96,7 @@ case class Sum(child: Expression) extends AggregateExpression with trees.UnaryNo
   def dataType = child.dataType
   override def toString = s"SUM($child)"
 
-  def asPartial: SplitEvaluation = {
+  override def asPartial: SplitEvaluation = {
     val partialSum = Alias(Sum(child), "PartialSum")()
     SplitEvaluation(
       Sum(partialSum.toAttribute),
@@ -104,13 +104,13 @@ case class Sum(child: Expression) extends AggregateExpression with trees.UnaryNo
   }
 }
 
-case class First(child: Expression) extends AggregateExpression with trees.UnaryNode[Expression] {
+case class First(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   def references = child.references
   def nullable = child.nullable
   def dataType = child.dataType
   override def toString = s"FIRST($child)"
 
-  def asPartial: SplitEvaluation = {
+  override def asPartial: SplitEvaluation = {
     val partialFirst = Alias(Sum(child), "PartialFirst")()
     SplitEvaluation(
       First(partialFirst.toAttribute),
