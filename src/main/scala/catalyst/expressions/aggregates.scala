@@ -110,7 +110,7 @@ case class First(child: Expression) extends PartialAggregate with trees.UnaryNod
   override def toString = s"FIRST($child)"
 
   override def asPartial: SplitEvaluation = {
-    val partialFirst = Alias(Sum(child), "PartialFirst")()
+    val partialFirst = Alias(First(child), "PartialFirst")()
     SplitEvaluation(
       First(partialFirst.toAttribute),
       partialFirst :: Nil)
