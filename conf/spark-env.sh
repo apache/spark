@@ -24,7 +24,6 @@ echoerr() { echo "$@" 1>&2; }
 if [[ -z "$MASTER" ]]; then
   echoerr "Sparkify: Connecting to chicago spark cluster ..."
   export MASTER=spark://dn05.chi.shopify.com:7077
-  export SPARK_HOME=/u/apps/spark/current
   export REMOTE_SPARK_HOME=/u/apps/spark/current
   export SPARK_JAVA_OPTS="-Dspark.cores.max=10"
   export HADOOP_CONF_DIR=/etc/hadoop/conf
