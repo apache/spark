@@ -25,10 +25,11 @@ setClass("PipelinedRDD",
 
 setMethod("initialize", "RDD", function(.Object, jrdd, serialized,
                                         isCached, isCheckpointed) {
-  # We use an environment to store mutable states inside an RDD object (currently
-  # only `isCached'). Note that R's call-by-value semantics makes modifying slots
-  # inside an object (passed as an argument into a function, such as cache())
-  # difficult.
+  # We use an environment to store mutable states inside an RDD object.
+  # Note that R's call-by-value semantics makes modifying slots inside an
+  # object (passed as an argument into a function, such as cache()) difficult:
+  # i.e. one needs to make a copy of the RDD object and sets the new slot value
+  # there.
   .Object@env <- new.env()
   .Object@env$isCached <- isCached
   .Object@env$isCheckpointed <- isCheckpointed
@@ -122,7 +123,6 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                            as.character(.sparkREnv[["libname"]]),
                            broadcastArr,
                            prev_jrdd$classTag())
-            rdd@env$serialized <- TRUE
             rdd@env$jrdd_val <- rddRef$asJavaRDD()
             rdd@env$jrdd_val
           })
@@ -528,7 +528,8 @@ setMethod("take",
           function(rdd, num) {
             resList <- list()
             index <- -1
-            partitions <- .jcall(getJRDD(rdd), "Ljava/util/List;", "splits")
+            jrdd <- getJRDD(rdd)
+            partitions <- .jcall(jrdd, "Ljava/util/List;", "splits")
             numPartitions <- .jcall(partitions, "I", "size")
             # TODO(shivaram): Collect more than one partition based on size
             # estimates similar to the scala version of `take`.
@@ -539,7 +540,7 @@ setMethod("take",
                 break
 
               # a JList of byte arrays
-              partitionArr <- .jcall(getJRDD(rdd),
+              partitionArr <- .jcall(jrdd,
                                      "[Ljava/util/List;",
                                      "collectPartitions",
                                      .jarray(as.integer(index)))
