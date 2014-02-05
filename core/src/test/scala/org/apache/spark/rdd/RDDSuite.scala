@@ -48,7 +48,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
     assert(partitionSums.collect().toList === List(3, 7))
 
-    val partitionSumsWithSplit = nums.mapPartitionsWithSplit {
+    val partitionSumsWithSplit = nums.mapPartitionsWithIndex {
       case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
     }
     assert(partitionSumsWithSplit.collect().toList === List((0, 3), (1, 7)))

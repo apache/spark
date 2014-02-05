@@ -19,7 +19,6 @@ package org.apache.spark.api.python
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-import org.apache.spark.api.python.PythonRDD
 
 import java.io.{ByteArrayOutputStream, DataOutputStream}
 
