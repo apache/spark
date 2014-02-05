@@ -10,7 +10,7 @@ import catalyst.dsl._
 class PlannerSuite extends FunSuite {
   import TestData._
 
-  test("Unions are collapsed") {
+  test("unions are collapsed") {
     val query = testData.unionAll(testData).unionAll(testData)
     val planned = TestShark.TrivialPlanner.BasicOperators(query).head
     val logicalUnions = query collect { case u: logical.Union => u}
@@ -20,7 +20,7 @@ class PlannerSuite extends FunSuite {
     assert(physicalUnions.size === 1)
   }
 
-  test("counts are partially aggregated") {
+  test("count is partially aggregated") {
     val query = testData.groupBy('value)(Count('key)).analyze
     val planned = TestShark.TrivialPlanner.PartialAggregation(query).head
     val aggregations = planned.collect { case a: Aggregate => a }
@@ -28,8 +28,14 @@ class PlannerSuite extends FunSuite {
     assert(aggregations.size === 2)
   }
 
-  test("counts are not partially aggregated") {
+  test("count distinct is not partially aggregated") {
     val query = testData.groupBy('value)(CountDistinct('key :: Nil)).analyze
+    val planned = TestShark.TrivialPlanner.PartialAggregation(query)
+    assert(planned.isEmpty)
+  }
+
+  test("mixed aggregates are not partially aggregated") {
+    val query = testData.groupBy('value)(Count('value), CountDistinct('key :: Nil)).analyze
     val planned = TestShark.TrivialPlanner.PartialAggregation(query)
     assert(planned.isEmpty)
   }
