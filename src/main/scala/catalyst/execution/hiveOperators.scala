@@ -1,15 +1,14 @@
 package catalyst
 package execution
 
-import java.io.{File, IOException}
-import java.util.UUID
+import java.io.File
 
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
-import org.apache.hadoop.hive.serde2.AbstractSerDe
+import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveDecimalObjectInspector
@@ -186,8 +185,8 @@ case class InsertIntoHiveTable(
     new Path((new org.apache.hadoop.fs.RawLocalFileSystem).getWorkingDirectory, "test.out"),
     null)
 
-  private def newSerializer(tableDesc: TableDesc) = {
-    val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[AbstractSerDe]
+  private def newSerializer(tableDesc: TableDesc): Serializer = {
+    val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
     serializer.initialize(null, tableDesc.getProperties)
     serializer
   }
@@ -223,14 +222,15 @@ case class InsertIntoHiveTable(
     tempDir.delete()
     tempDir.mkdir()
 
-
     // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
-    // instances within the closure, since AbstractSerDe is not serializable while TableDesc is.
+    // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
     childRdd.mapPartitions { iter =>
       val serializer = newSerializer(tableDesc)
       val standardOI = ObjectInspectorUtils
-        .getStandardObjectInspector(serializer.getObjectInspector, ObjectInspectorCopyOption.JAVA)
+        .getStandardObjectInspector(
+          tableDesc.getDeserializer.getObjectInspector,
+          ObjectInspectorCopyOption.JAVA)
         .asInstanceOf[StructObjectInspector]
 
       iter.map { row =>

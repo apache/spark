@@ -5,7 +5,7 @@ import org.apache.hadoop.hive.metastore.api.hive_metastoreConstants._
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Table => HiveTable}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.serde2.AbstractSerDe
+import org.apache.hadoop.hive.serde2.Deserializer
 import org.apache.hadoop.hive.ql.exec.Utilities
 import org.apache.hadoop.io.Writable
 import org.apache.hadoop.fs.{Path, PathFilter}
@@ -55,7 +55,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
   override def makeRDDForTable(hiveTable: HiveTable): RDD[_] =
     makeRDDForTable(
       hiveTable,
-      _tableDesc.getDeserializerClass.asInstanceOf[Class[AbstractSerDe]],
+      _tableDesc.getDeserializerClass.asInstanceOf[Class[Deserializer]],
       filterOpt = None)
 
   /**
@@ -69,7 +69,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
    */
   def makeRDDForTable(
       hiveTable: HiveTable,
-      deserializerClass: Class[_ <: AbstractSerDe],
+      deserializerClass: Class[_ <: Deserializer],
       filterOpt: Option[PathFilter]): RDD[_] =
   {
     assert(!hiveTable.isPartitioned, """makeRDDForTable() cannot be called on a partitioned table,
@@ -105,7 +105,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
 
   override def makeRDDForPartitionedTable(partitions: Seq[HivePartition]): RDD[_] = {
     val partitionToDeserializer = partitions.map(part =>
-      (part, part.getDeserializer.getClass.asInstanceOf[Class[AbstractSerDe]])).toMap
+      (part, part.getDeserializer.getClass.asInstanceOf[Class[Deserializer]])).toMap
     makeRDDForPartitionedTable(partitionToDeserializer, filterOpt = None)
   }
 
@@ -120,7 +120,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient _localHConf
    *     subdirectory of each partition being read. If None, then all files are accepted.
    */
   def makeRDDForPartitionedTable(
-      partitionToDeserializer: Map[HivePartition, Class[_ <: AbstractSerDe]],
+      partitionToDeserializer: Map[HivePartition, Class[_ <: Deserializer]],
       filterOpt: Option[PathFilter]): RDD[_] =
   {
     val hivePartitionRDDs = partitionToDeserializer.map { case (partition, partDeserializer) =>
