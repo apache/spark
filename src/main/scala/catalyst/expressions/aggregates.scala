@@ -8,7 +8,6 @@ abstract class AggregateExpression extends Expression {
 
 }
 
-
 /**
  * Represents an aggregation that has been rewritten to be performed in two steps.
  *
@@ -90,7 +89,7 @@ case class Average(child: Expression) extends PartialAggregate with trees.UnaryN
   }
 }
 
-case class Sum(child: Expression) extends AggregateExpression with trees.UnaryNode[Expression] {
+case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[Expression] {
   def references = child.references
   def nullable = false
   def dataType = child.dataType
