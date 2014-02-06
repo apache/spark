@@ -26,3 +26,17 @@ test_that("textFile() followed by a collect() returns the same content", {
 
   unlink(fileName)
 })
+
+test_that("several transformations on RDD created by textFile()", {
+  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  writeLines(mockFile, fileName)
+
+  rdd <- textFile(sc, fileName) # RDD
+  for (i in 1:10)
+    # PipelinedRDD initially created from RDD
+    rdd <- lapply(rdd, function(x) paste(x, x))
+  collect(rdd)
+
+  unlink(fileName)
+})
+
