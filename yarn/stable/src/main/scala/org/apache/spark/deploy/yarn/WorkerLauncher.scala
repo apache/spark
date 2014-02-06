@@ -193,7 +193,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     // TODO: Handle container failure
 
     yarnAllocator.addResourceRequests(args.numWorkers)
-    while (yarnAllocator.getNumWorkersRunning < args.numWorkers) {
+    while ((yarnAllocator.getNumWorkersRunning < args.numWorkers) && (!driverClosed)) {
       yarnAllocator.allocateResources()
       Thread.sleep(100)
     }
