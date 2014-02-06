@@ -174,6 +174,7 @@ private[streaming] class ActorReceiver[T: ClassTag](
     blocksGenerator.start()
     supervisor
     logInfo("Supervision tree for receivers initialized at:" + supervisor.path)
+
   }
 
   protected def onStop() = {

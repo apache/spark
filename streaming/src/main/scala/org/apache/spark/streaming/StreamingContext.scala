@@ -158,6 +158,15 @@ class StreamingContext private[streaming] (
 
   private[streaming] val waiter = new ContextWaiter
 
+  /** Enumeration to identify current state of the StreamingContext */
+  private[streaming] object ContextState extends Enumeration {
+    type CheckpointState = Value
+    val Initialized, Started, Stopped = Value
+  }
+
+  import ContextState._
+  private[streaming] var state = Initialized
+
   /**
    * Return the associated Spark context
    */
@@ -405,9 +414,18 @@ class StreamingContext private[streaming] (
   /**
    * Start the execution of the streams.
    */
-  def start() = synchronized {
+  def start(): Unit = synchronized {
+    // Throw exception if the context has already been started once
+    // or if a stopped context is being started again
+    if (state == Started) {
+      throw new SparkException("StreamingContext has already been started")
+    }
+    if (state == Stopped) {
+      throw new SparkException("StreamingContext has already been stopped")
+    }
     validate()
     scheduler.start()
+    state = Started
   }
 
   /**
@@ -430,12 +448,27 @@ class StreamingContext private[streaming] (
   /**
    * Stop the execution of the streams.
    * @param stopSparkContext Stop the associated SparkContext or not
+   * @param stopGracefully Stop gracefully by waiting for the processing of all
+   *                       received data to be completed
    */
-  def stop(stopSparkContext: Boolean = true) = synchronized {
-    scheduler.stop()
+  def stop(
+      stopSparkContext: Boolean = true,
+      stopGracefully: Boolean = false
+    ): Unit = synchronized {
+    // Silently warn if context is stopped twice, or context is stopped before starting
+    if (state == Initialized) {
+      logWarning("StreamingContext has not been started yet")
+      return
+    }
+    if (state == Stopped) {
+      logWarning("StreamingContext has already been stopped")
+      return
+    } // no need to throw an exception as its okay to stop twice
+    scheduler.stop(stopGracefully)
     logInfo("StreamingContext stopped successfully")
     waiter.notifyStop()
     if (stopSparkContext) sc.stop()
+    state = Stopped
   }
 }
 
