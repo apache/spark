@@ -35,11 +35,15 @@ private[spark] class HttpBroadcast[T](@transient var value_ : T, isLocal: Boolea
   def value = value_
 
   def unpersist(removeSource: Boolean) {
-    SparkEnv.get.blockManager.master.removeBlock(blockId)
-    SparkEnv.get.blockManager.removeBlock(blockId)
+    HttpBroadcast.synchronized {
+      SparkEnv.get.blockManager.master.removeBlock(blockId)
+      SparkEnv.get.blockManager.removeBlock(blockId)
+    }
 
     if (removeSource) {
-      HttpBroadcast.cleanupById(id)
+      HttpBroadcast.synchronized {
+        HttpBroadcast.cleanupById(id)
+      }
     }
   }
 

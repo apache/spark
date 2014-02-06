@@ -33,19 +33,55 @@ extends Broadcast[T](id) with Logging with Serializable {
   def value = value_
 
   def unpersist(removeSource: Boolean) {
-    SparkEnv.get.blockManager.master.removeBlock(broadcastId)
-    SparkEnv.get.blockManager.removeBlock(broadcastId)
+    TorrentBroadcast.synchronized {
+      SparkEnv.get.blockManager.master.removeBlock(broadcastId)
+      SparkEnv.get.blockManager.removeBlock(broadcastId)
+    }
+
+    if (!removeSource) {
+      //We can't tell BlockManager master to remove blocks from all nodes except driver,
+      //so we need to save them here in order to store them on disk later.
+      //This may be inefficient if blocks were already dropped to disk,
+      //but since unpersist is supposed to be called right after working with
+      //a broadcast this should not happen (and getting them from memory is cheap).
+      arrayOfBlocks = new Array[TorrentBlock](totalBlocks)
+
+      for (pid <- 0 until totalBlocks) {
+        val pieceId = pieceBlockId(pid)
+        TorrentBroadcast.synchronized {
+          SparkEnv.get.blockManager.getSingle(pieceId) match {
+            case Some(x) =>
+              arrayOfBlocks(pid) = x.asInstanceOf[TorrentBlock]
+            case None =>
+              throw new SparkException("Failed to get " + pieceId + " of " + broadcastId)
+          }
+        }
+      }
+    }
+
+    for (pid <- 0 until totalBlocks) {
+      TorrentBroadcast.synchronized {
+        SparkEnv.get.blockManager.master.removeBlock(pieceBlockId(pid))
+      }
+    }
 
     if (removeSource) {
-      for (pid <- pieceIds) {
-        SparkEnv.get.blockManager.removeBlock(pieceBlockId(pid))
+      TorrentBroadcast.synchronized {
+        SparkEnv.get.blockManager.removeBlock(metaId)
       }
-      SparkEnv.get.blockManager.removeBlock(metaId)
     } else {
-      for (pid <- pieceIds) {
-        SparkEnv.get.blockManager.dropFromMemory(pieceBlockId(pid))
+      TorrentBroadcast.synchronized {
+        SparkEnv.get.blockManager.dropFromMemory(metaId)
       }
-      SparkEnv.get.blockManager.dropFromMemory(metaId)
+
+      for (i <- 0 until totalBlocks) {
+        val pieceId = pieceBlockId(i)
+        TorrentBroadcast.synchronized {
+          SparkEnv.get.blockManager.putSingle(
+            pieceId, arrayOfBlocks(i), StorageLevel.DISK_ONLY, true)
+        }
+      }
+      arrayOfBlocks = null
     }
   }
 
@@ -128,11 +164,6 @@ extends Broadcast[T](id) with Logging with Serializable {
   }
 
   private def resetWorkerVariables() {
-    if (arrayOfBlocks != null) {
-      for (pid <- pieceIds) {
-        SparkEnv.get.blockManager.removeBlock(pieceBlockId(pid))
-      }
-    }
     arrayOfBlocks = null
     totalBytes = -1
     totalBlocks = -1

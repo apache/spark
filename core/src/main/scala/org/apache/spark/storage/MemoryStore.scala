@@ -187,9 +187,9 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
    */
   def dropFromMemory(blockId: BlockId) {
     val entry = entries.synchronized { entries.get(blockId) }
-    // This should never be null as only one thread should be dropping
-    // blocks and removing entries. However the check is still here for
-    // future safety.
+    // This should never be null if called from ensureFreeSpace as only one
+    // thread should be dropping blocks and removing entries.
+    // However the check is required in other cases.
     if (entry != null) {
       val data = if (entry.deserialized) {
         Left(entry.value.asInstanceOf[ArrayBuffer[Any]])
