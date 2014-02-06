@@ -54,7 +54,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
-  val actorToWorker = new HashMap[ActorRef, WorkerInfo]
   val addressToWorker = new HashMap[Address, WorkerInfo]
 
   val apps = new HashSet[ApplicationInfo]
@@ -534,7 +533,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     workers += worker
     idToWorker(worker.id) = worker
-    actorToWorker(worker.actor) = worker
     addressToWorker(workerAddress) = worker
     true
   }
@@ -543,7 +541,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
-    actorToWorker -= worker.actor
     addressToWorker -= worker.actor.path.address
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
