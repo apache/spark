@@ -437,13 +437,13 @@ private[spark] class TaskSetManager(
     info.markSuccessful()
     removeRunningTask(tid)
     if (!successful(index)) {
+      tasksSuccessful += 1
       logInfo("Finished TID %s in %d ms on %s (progress: %d/%d)".format(
         tid, info.duration, info.host, tasksSuccessful, numTasks))
       sched.dagScheduler.taskEnded(
         tasks(index), Success, result.value, result.accumUpdates, info, result.metrics)
 
       // Mark successful and stop if all the tasks have succeeded.
-      tasksSuccessful += 1
       successful(index) = true
       if (tasksSuccessful == numTasks) {
         sched.taskSetFinished(this)
