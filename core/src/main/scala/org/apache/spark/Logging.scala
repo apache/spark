@@ -19,6 +19,7 @@ package org.apache.spark
 
 import org.apache.log4j.{LogManager, PropertyConfigurator}
 import org.slf4j.{Logger, LoggerFactory}
+import org.slf4j.impl.StaticLoggerBinder
 
 /**
  * Utility trait for classes that want to log data. Creates a SLF4J logger for the class and allows
@@ -101,9 +102,11 @@ trait Logging {
   }
 
   private def initializeLogging() {
-    // If Log4j doesn't seem initialized, load a default properties file
+    // If Log4j is being used, but is not initialized, load a default properties file
+    val binder = StaticLoggerBinder.getSingleton
+    val usingLog4j = binder.getLoggerFactoryClassStr.endsWith("Log4jLoggerFactory")
     val log4jInitialized = LogManager.getRootLogger.getAllAppenders.hasMoreElements
-    if (!log4jInitialized) {
+    if (!log4jInitialized && usingLog4j) {
       val defaultLogProps = "org/apache/spark/log4j-defaults.properties"
       val classLoader = this.getClass.getClassLoader
       Option(classLoader.getResource(defaultLogProps)) match {
