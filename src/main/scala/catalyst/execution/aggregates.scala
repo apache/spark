@@ -6,6 +6,7 @@ import org.apache.hadoop.hive.ql.udf.generic.{GenericUDAFEvaluator, AbstractGene
 import catalyst.errors._
 import catalyst.expressions._
 import catalyst.plans.physical.{UnspecifiedDistribution, ClusteredDistribution, AllTuples}
+import catalyst.types._
 
 /* Implicits */
 import org.apache.spark.rdd.SharkPairRDDFunctions._
@@ -47,6 +48,7 @@ case class Aggregate(
     val impl = agg transform {
       case base @ Average(expr) => new AverageFunction(expr, base)
       case base @ Sum(expr) => new SumFunction(expr, base)
+      case base @ SumDistinct(expr) => new SumDistinctFunction(expr, base)
       case base @ Count(expr) => new CountFunction(expr, base)
       // TODO: Create custom query plan node that calculates distinct values efficiently.
       case base @ CountDistinct(expr) => new CountDistinctFunction(expr, base)
@@ -179,6 +181,24 @@ case class SumFunction(expr: Expression, base: AggregateExpression) extends Aggr
     sum = Evaluate(Add(Literal(sum), expr), input)
 
   def result: Any = sum
+}
+
+case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
+  extends AggregateFunction {
+
+  def this() = this(null, null) // Required for serialization.
+
+  val seen = new scala.collection.mutable.HashSet[Any]()
+
+  def apply(input: Seq[Row]): Unit = {
+    val evaluatedExpr = Evaluate(expr, input)
+    if (evaluatedExpr != null) {
+      seen += evaluatedExpr
+    }
+  }
+
+  def result: Any =
+    seen.reduceLeft(base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
 }
 
 case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpression)
