@@ -373,8 +373,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       val prng42 = new Random(42)
       val prng43 = new Random(43)
       Array(1, 2, 3, 4, 5, 6).filter{i =>
-	      if (i < 4) 0 == prng42.nextInt(3)
-	      else 0 == prng43.nextInt(3)}
+        if (i < 4) 0 == prng42.nextInt(3)
+        else 0 == prng43.nextInt(3)}
     }
     assert(sample.size === checkSample.size)
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
@@ -505,5 +505,24 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     intercept[IllegalArgumentException] {
       sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)
     }
+  }
+
+  test("intersection") {
+    val all = sc.parallelize(1 to 10)
+    val evens = sc.parallelize(2 to 10 by 2)
+    val intersection = Array(2, 4, 6, 8, 10)
+
+    // intersection is commutative
+    assert(all.intersection(evens).collect.sorted === intersection)
+    assert(evens.intersection(all).collect.sorted === intersection)
+  }
+
+  test("intersection strips duplicates in an input") {
+    val a = sc.parallelize(Seq(1,2,3,3))
+    val b = sc.parallelize(Seq(1,1,2,3))
+    val intersection = Array(1,2,3)
+
+    assert(a.intersection(b).collect.sorted === intersection)
+    assert(b.intersection(a).collect.sorted === intersection)
   }
 }
