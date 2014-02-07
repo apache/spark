@@ -127,7 +127,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             case o => o :: Nil
           },
           child)
-      case t: Transform if containsStar(t.input) =>
+      case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(
           input = t.input.flatMap {
             case s: Star => s.expand(t.child.output)

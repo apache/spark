@@ -429,7 +429,8 @@ object HiveQl {
             }
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
 
-            Some(Transform(inputExprs.map(nodeToExpr), unescapedScript, output, withWhere))
+            Some(
+              ScriptTransformation(inputExprs.map(nodeToExpr), unescapedScript, output, withWhere))
           case _ => None
         }
 

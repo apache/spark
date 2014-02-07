@@ -11,7 +11,7 @@ import expressions._
  * @param script the command that should be executed.
  * @param output the attributes that are produced by the script.
  */
-case class Transform(
+case class ScriptTransformation(
     input: Seq[Expression],
     script: String,
     output: Seq[Attribute],

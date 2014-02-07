@@ -222,6 +222,8 @@ trait PlanningStrategies {
         execution.Union(unionChildren.map(planLater))(sc) :: Nil
       case logical.Transform(input, script, output, child) =>
         execution.Transform(input, script, output, planLater(child))(sc) :: Nil
+      case logical.ScriptTransformation(input, script, output, child) =>
+        execution.ScriptTransformation(input, script, output, planLater(child))(sc) :: Nil
       case _ => Nil
     }
   }
