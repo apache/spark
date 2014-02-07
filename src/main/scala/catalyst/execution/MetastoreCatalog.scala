@@ -50,10 +50,10 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
     import HiveMetastoreTypes._
 
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case InsertIntoCreatedTable(name, child) =>
-        val (databaseName, tableName) = name.split("\\.") match {
-          case Array(tableOnly) => (SessionState.get.getCurrentDatabase(), tableOnly)
-          case Array(db, table) => (db, table)
+      case InsertIntoCreatedTable(db, tableName, child) =>
+        val databaseName = db match {
+          case None => SessionState.get.getCurrentDatabase()
+          case Some(databaseName) => databaseName
         }
 
         val table = new Table()
