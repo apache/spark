@@ -21,6 +21,12 @@ import scala.collection._
 
 import org.apache.spark.executor.TaskMetrics
 
+/**
+ * Stores information about a stage to pass from the scheduler to SparkListeners.
+ *
+ * taskInfos stores the metrics for all tasks that have completed, including redundant, speculated
+ * tasks.
+ */
 class StageInfo(
     stage: Stage,
     val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] = mutable.Buffer[(TaskInfo, TaskMetrics)]()
