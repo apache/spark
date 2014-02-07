@@ -353,12 +353,15 @@ object HiveQl {
 
     case Token("TOK_CREATETABLE", children)
         if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
-      val (Some(Token("TOK_TABNAME", Token(tableName, Nil) :: Nil)) ::
+      getClauses(Seq("TOK_TABNAME", "TOK_LIKETABLE", "TOK_QUERY"), children) match {
+        case (Some(Token("TOK_TABNAME", Token(tableName, Nil) :: Nil)) ::
           _ /* likeTable */ ::
-          Some(query) :: Nil) = {
-        getClauses(Seq("TOK_TABNAME", "TOK_LIKETABLE", "TOK_QUERY"), children)
+          Some(query) :: Nil) => InsertIntoCreatedTable(None, tableName, nodeToPlan(query))
+        case (Some(Token("TOK_TABNAME", Token(databaseName, Nil) :: Token(tableName, Nil) ::
+          Nil)) :: _ /* likeTable */ ::
+          Some(query) :: Nil) =>
+            InsertIntoCreatedTable(Some(databaseName), tableName, nodeToPlan(query))
       }
-      InsertIntoCreatedTable(tableName, nodeToPlan(query))
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder

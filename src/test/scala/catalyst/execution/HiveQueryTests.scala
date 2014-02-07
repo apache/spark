@@ -51,6 +51,12 @@ class HiveQueryTests extends HiveComparisonTest {
       |SELECT * FROM createdtable
     """.stripMargin)
 
+  createQueryTest("create table as with db name",
+    """
+      |CREATE TABLE default.createdtable AS SELECT * FROM src;
+      |SELECT * FROM default.createdtable
+    """.stripMargin)
+
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 
