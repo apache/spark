@@ -64,4 +64,28 @@ class HiveQueryTests extends HiveComparisonTest {
     createQueryTest("empty aggregate input",
       "SELECT SUM(key) FROM (SELECT * FROM src LIMIT 0) a")
   }
+
+  createQueryTest("lateral view1",
+    "SELECT tbl.* FROM src LATERAL VIEW explode(array(1,2)) tbl as a")
+
+  createQueryTest("lateral view2",
+    "SELECT * FROM src LATERAL VIEW explode(array(1,2)) tbl")
+
+
+  createQueryTest("lateral view3",
+    "FROM src SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX")
+
+  createQueryTest("lateral view4",
+    """
+      |create table src_lv1 (key string, value string);
+      |create table src_lv2 (key string, value string);
+      |
+      |FROM src
+      |insert overwrite table src_lv1 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
+      |insert overwrite table src_lv2 SELECT key, D.* lateral view explode(array(key+3, key+4)) D as CX
+    """.stripMargin)
+
+  createQueryTest("lateral view5",
+    "FROM src SELECT explode(array(key+3, key+4))")
+
 }

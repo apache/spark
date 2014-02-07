@@ -220,8 +220,8 @@ trait PlanningStrategies {
         execution.StopAfter(Evaluate(limit, Nil).asInstanceOf[Int], planLater(child))(sc) :: Nil
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater))(sc) :: Nil
-      case logical.Transform(input, script, output, child) =>
-        execution.Transform(input, script, output, planLater(child))(sc) :: Nil
+      case logical.Generate(generator, join, outer, _, child) =>
+        execution.Generate(generator, join = join, outer = outer, planLater(child)) :: Nil
       case logical.ScriptTransformation(input, script, output, child) =>
         execution.ScriptTransformation(input, script, output, planLater(child))(sc) :: Nil
       case logical.NoRelation => execution.LocalRelation(Nil, Seq(IndexedSeq()))(sc) :: Nil

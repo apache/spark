@@ -125,9 +125,6 @@ class HiveCompatibility extends HiveQueryFileTest {
     // No window support yet
     ".*window.*",
 
-    // Views are not supported
-    ".*view.*",
-
     // Fails in hive with authorization errors.
     "alter_rename_partition_authorization",
     "authorization.*",
@@ -381,6 +378,9 @@ class HiveCompatibility extends HiveQueryFileTest {
     "join_reorder3",
     "join_reorder4",
     "join_star",
+    "lateral_view_cp",
+    "lateral_view_outer",
+    "lateral_view_ppd",
     "lineage1",
     "literal_double",
     "literal_ints",
@@ -664,6 +664,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "union7",
     "union8",
     "union9",
+    "union_lateralview",
     "union_ppr",
     "union_remove_3",
     "union_remove_6",

@@ -32,6 +32,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
       ResolveRelations ::
+      ImplicitGenerate ::
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
@@ -109,6 +110,17 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
         case _ =>
       })
       false
+    }
+  }
+
+  /**
+   * When a SELECT clause has only a single expression and that expression is a [[Generator]]
+   * we convert the [[Project]] to a [[Generate]].
+   */
+  object ImplicitGenerate extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Project(Seq(Alias(g: Generator, _)), child) =>
+        Generate(g, join = false, outer = false, None, child)
     }
   }
 
