@@ -31,7 +31,7 @@ class SharkContext(
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   val outputBuffer =  new java.io.OutputStream {
     var pos: Int = 0
-    var buffer = new Array[Int](1024)
+    var buffer = new Array[Int](10240)
     def write(i: Int): Unit = {
       buffer(pos) = i
       pos = (pos + 1) % buffer.size
@@ -49,6 +49,7 @@ class SharkContext(
       var line = reader.readLine()
       while(line != null) {
         stringBuilder.append(line)
+        stringBuilder.append("\n")
         line = reader.readLine()
       }
       stringBuilder.toString()
