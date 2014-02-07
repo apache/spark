@@ -224,6 +224,7 @@ trait PlanningStrategies {
         execution.Transform(input, script, output, planLater(child))(sc) :: Nil
       case logical.ScriptTransformation(input, script, output, child) =>
         execution.ScriptTransformation(input, script, output, planLater(child))(sc) :: Nil
+      case logical.NoRelation => execution.LocalRelation(Nil, Seq(IndexedSeq()))(sc) :: Nil
       case _ => Nil
     }
   }
