@@ -203,7 +203,7 @@ trait PlanningStrategies {
         // This sort is a global sort. Its requiredDistribution will be an OrderedDistribution.
         execution.Sort(sortExprs, global = true, planLater(child)):: Nil
       case logical.SortPartitions(sortExprs, child) =>
-        // This sort only sort tuples within a partition. Its requiredDistribution will be
+        // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
         execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
