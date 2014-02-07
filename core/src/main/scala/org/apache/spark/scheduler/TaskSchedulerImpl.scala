@@ -67,7 +67,6 @@ private[spark] class TaskSchedulerImpl(
 
   val taskIdToTaskSetId = new HashMap[Long, String]
   val taskIdToExecutorId = new HashMap[Long, String]
-  val taskSetTaskIds = new HashMap[String, HashSet[Long]]
 
   @volatile private var hasReceivedTask = false
   @volatile private var hasLaunchedTask = false
@@ -142,7 +141,6 @@ private[spark] class TaskSchedulerImpl(
       val manager = new TaskSetManager(this, taskSet, maxTaskFailures)
       activeTaskSets(taskSet.id) = manager
       schedulableBuilder.addTaskSetManager(manager, manager.taskSet.properties)
-      taskSetTaskIds(taskSet.id) = new HashSet[Long]()
 
       if (!isLocal && !hasReceivedTask) {
         starvationTimer.scheduleAtFixedRate(new TimerTask() {
@@ -171,31 +169,25 @@ private[spark] class TaskSchedulerImpl(
       //    the stage.
       // 2. The task set manager has been created but no tasks has been scheduled. In this case,
       //    simply abort the stage.
-      val taskIds = taskSetTaskIds(tsm.taskSet.id)
-      if (taskIds.size > 0) {
-        taskIds.foreach { tid =>
-          val execId = taskIdToExecutorId(tid)
-          backend.killTask(tid, execId)
-        }
+      tsm.runningTasksSet.foreach { tid =>
+        val execId = taskIdToExecutorId(tid)
+        backend.killTask(tid, execId)
       }
+      tsm.abort("Stage %s cancelled".format(stageId))
       logInfo("Stage %d was cancelled".format(stageId))
-      tsm.removeAllRunningTasks()
-      taskSetFinished(tsm)
     }
   }
 
+  /**
+   * Called to indicate that all task attempts (including speculated tasks) associated with the
+   * given TaskSetManager have completed, so state associated with the TaskSetManager should be
+   * cleaned up.
+   */
   def taskSetFinished(manager: TaskSetManager): Unit = synchronized {
-    // Check to see if the given task set has been removed. This is possible in the case of
-    // multiple unrecoverable task failures (e.g. if the entire task set is killed when it has
-    // more than one running tasks).
-    if (activeTaskSets.contains(manager.taskSet.id)) {
-      activeTaskSets -= manager.taskSet.id
-      manager.parent.removeSchedulable(manager)
-      logInfo("Remove TaskSet %s from pool %s".format(manager.taskSet.id, manager.parent.name))
-      taskIdToTaskSetId --= taskSetTaskIds(manager.taskSet.id)
-      taskIdToExecutorId --= taskSetTaskIds(manager.taskSet.id)
-      taskSetTaskIds.remove(manager.taskSet.id)
-    }
+    activeTaskSets -= manager.taskSet.id
+    manager.parent.removeSchedulable(manager)
+    logInfo("Removed TaskSet %s, whose tasks have all completed, from pool %s"
+      .format(manager.taskSet.id, manager.parent.name))
   }
 
   /**
@@ -237,7 +229,6 @@ private[spark] class TaskSchedulerImpl(
             tasks(i) += task
             val tid = task.taskId
             taskIdToTaskSetId(tid) = taskSet.taskSet.id
-            taskSetTaskIds(taskSet.taskSet.id) += tid
             taskIdToExecutorId(tid) = execId
             activeExecutorIds += execId
             executorsByHost(host) += execId
@@ -270,9 +261,6 @@ private[spark] class TaskSchedulerImpl(
           case Some(taskSetId) =>
             if (TaskState.isFinished(state)) {
               taskIdToTaskSetId.remove(tid)
-              if (taskSetTaskIds.contains(taskSetId)) {
-                taskSetTaskIds(taskSetId) -= tid
-              }
               taskIdToExecutorId.remove(tid)
             }
             activeTaskSets.get(taskSetId).foreach { taskSet =>
@@ -285,7 +273,9 @@ private[spark] class TaskSchedulerImpl(
               }
             }
           case None =>
-            logInfo("Ignoring update with state %s from TID %s because its task set is gone"
+            logError(
+              ("Ignoring update with state %s for TID %s because its task set is gone (this is " +
+               "likely the result of receiving duplicate task finished status updates)")
               .format(state, tid))
         }
       } catch {
@@ -314,9 +304,9 @@ private[spark] class TaskSchedulerImpl(
     taskSetManager: TaskSetManager,
     tid: Long,
     taskState: TaskState,
-    reason: Option[TaskEndReason]) = synchronized {
+    reason: TaskEndReason) = synchronized {
     taskSetManager.handleFailedTask(tid, taskState, reason)
-    if (taskState != TaskState.KILLED) {
+    if (!taskSetManager.isZombie && taskState != TaskState.KILLED) {
       // Need to revive offers again now that the task set manager state has been updated to
       // reflect failed tasks that need to be re-run.
       backend.reviveOffers()

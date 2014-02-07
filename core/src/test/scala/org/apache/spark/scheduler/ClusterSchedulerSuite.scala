@@ -36,22 +36,24 @@ class FakeTaskSetManager(
   parent = null
   weight = 1
   minShare = 2
-  runningTasks = 0
   priority = initPriority
   stageId = initStageId
   name = "TaskSet_"+stageId
   override val numTasks = initNumTasks
   tasksSuccessful = 0
 
+  var numRunningTasks = 0
+  override def runningTasks = numRunningTasks
+
   def increaseRunningTasks(taskNum: Int) {
-    runningTasks += taskNum
+    numRunningTasks += taskNum
     if (parent != null) {
       parent.increaseRunningTasks(taskNum)
     }
   }
 
   def decreaseRunningTasks(taskNum: Int) {
-    runningTasks -= taskNum
+    numRunningTasks -= taskNum
     if (parent != null) {
       parent.decreaseRunningTasks(taskNum)
     }
@@ -77,7 +79,7 @@ class FakeTaskSetManager(
       maxLocality: TaskLocality.TaskLocality)
     : Option[TaskDescription] =
   {
-    if (tasksSuccessful + runningTasks < numTasks) {
+    if (tasksSuccessful + numRunningTasks < numTasks) {
       increaseRunningTasks(1)
       Some(new TaskDescription(0, execId, "task 0:0", 0, null))
     } else {
@@ -98,7 +100,7 @@ class FakeTaskSetManager(
   }
 
   def abort() {
-    decreaseRunningTasks(runningTasks)
+    decreaseRunningTasks(numRunningTasks)
     parent.removeSchedulable(this)
   }
 }
