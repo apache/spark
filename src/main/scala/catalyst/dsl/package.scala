@@ -130,6 +130,13 @@ package object dsl {
         seed: Int = (math.random * 1000).toInt) =
       Sample(fraction, withReplacement, seed, plan)
 
+    def generate(
+        generator: Generator,
+        join: Boolean = false,
+        outer: Boolean = false,
+        alias: Option[String] = None) =
+      Generate(generator, join, outer, None, plan)
+
     def analyze = analysis.SimpleAnalyzer(plan)
   }
 }

@@ -3,8 +3,6 @@ package expressions
 
 import catalyst.types._
 
-import dsl._
-
 /**
  * An expression that produces zero or more rows given a single input row.
  *
@@ -39,7 +37,7 @@ abstract class Generator extends Expression with (Row => TraversableOnce[Row]) {
   private var _output: Seq[Attribute] = null
 
   def output: Seq[Attribute] = {
-    if (output == null) {
+    if (_output == null) {
       _output = makeOutput()
     }
     _output
@@ -77,29 +75,4 @@ case class Explode(attributeName: String, child: Expression)
   }
 
   override def toString() = s"explode($child)"
-}
-
-/**
- * This is an example TGF that uses UnresolvedAttributes 'name and 'age to access specific columns
- * from the input data.  These will be replaced during analysis with specific input attributes and
- * then bound to specific ordinals during query planning. While TGFs could also access specific
- * columns using hand-coded ordinals, doing so violates data independence.
- *
- * Note: this is only a rough example of how TGFs can be expressed, the final version will likely
- * involve a lot more sugar for cleaner use in Scala/Java/etc.
- */
-case class ExampleTGF(input: Seq[Attribute] = Seq('name, 'age)) extends Generator {
-  def children = input
-  protected def makeOutput() = 'nameAndAge.string :: Nil
-
-  val Seq(nameAttr, ageAttr) = input
-
-  def apply(input: Row): TraversableOnce[Row] = {
-    val name = Evaluate(nameAttr, Vector(input))
-    val age = Evaluate(ageAttr, Vector(input)).asInstanceOf[Int]
-
-    Iterator(
-      new GenericRow(Vector(s"$name is $age years old")),
-      new GenericRow(Vector(s"Next year, $name will be ${age + 1} years old")))
-  }
 }
