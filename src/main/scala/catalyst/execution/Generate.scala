@@ -7,10 +7,12 @@ import catalyst.types._
 /**
  * Applies a [[catalyst.expressions.Generator Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
- * programming with one important additional feature.  When `join` is true, each output row is
- * implicitly joined with the input tuple that produced it.  Additionally, when `outer` is true,
- * each input row will be output at least once, even if the output of the given `generator` is
- * empty.
+ * programming with one important additional feature, which allows the input rows to be joined with
+ * their output.
+ * @param join  when true, each output row is implicitly joined with the input tuple that produced
+ *              it.
+ * @param outer when true, each input row will be output at least once, even if the output of the
+ *              given `generator` is empty. `outer` has no effect when `join` is false.
  */
 case class Generate(
     generator: Generator,
@@ -20,9 +22,9 @@ case class Generate(
   extends UnaryNode {
 
   def output =
-    if(join) child.output ++ generator.output else generator.output
+    if (join) child.output ++ generator.output else generator.output
 
-  def execute() =
+  def execute() = {
     if (join) {
       val outerNulls = Seq.fill(generator.output.size)(null)
       child.execute().mapPartitions { iter =>
@@ -38,10 +40,5 @@ case class Generate(
     } else {
       child.execute().mapPartitions(iter => iter.flatMap(generator))
     }
-
+  }
 }
-
-
-
-
-

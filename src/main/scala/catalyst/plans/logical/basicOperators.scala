@@ -12,17 +12,22 @@ case class Project(projectList: Seq[NamedExpression], child: LogicalPlan) extend
 /**
  * Applies a [[catalyst.expressions.Generator Generator]] to a stream of input rows, combining the
  * output of each into a new stream of rows.  This operation is similar to a `flatMap` in functional
- * programming with one important additional feature.  When `join` is true, each output row is
- * implicitly joined with the input tuple that produced it.  Additionally, when `outer` is true,
- * each input row will be output at least once, even if the output of the given `generator` is
- * empty.  The schema of the transformation is optionally given a qualifier of `alias`.
+ * programming with one important additional feature, which allows the input rows to be joined with
+ * their output.
+ * @param join  when true, each output row is implicitly joined with the input tuple that produced
+ *              it.
+ * @param outer when true, each input row will be output at least once, even if the output of the
+ *              given `generator` is empty. `outer` has no effect when `join` is false.
+ * @param alias when set, this string is applied to the schema of the output of the transformation
+ *              as a qualifier.
  */
 case class Generate(
     generator: Generator,
     join: Boolean,
     outer: Boolean,
     alias: Option[String],
-    child: LogicalPlan) extends UnaryNode {
+    child: LogicalPlan)
+  extends UnaryNode {
 
   protected def generatorOutput =
     alias
@@ -30,7 +35,7 @@ case class Generate(
       .getOrElse(generator.output)
 
   def output =
-    if(join) child.output ++ generatorOutput else generatorOutput
+    if (join) child.output ++ generatorOutput else generatorOutput
 
   def references =
     if (join) child.outputSet else generator.references

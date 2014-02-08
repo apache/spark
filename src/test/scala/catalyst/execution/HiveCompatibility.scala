@@ -385,7 +385,6 @@ class HiveCompatibility extends HiveQueryFileTest {
     "join_star",
     "join_view",
     "lateral_view_cp",
-    "lateral_view_outer",
     "lateral_view_ppd",
     "lineage1",
     "literal_double",

@@ -57,21 +57,39 @@ abstract class Generator extends Expression with (Row => TraversableOnce[Row]) {
 /**
  * Given an input array produces a sequence of rows for each value in the array.
  */
-case class Explode(attributeName: String, child: Expression)
+case class Explode(attributeNames: Seq[String], child: Expression)
   extends Generator with trees.UnaryNode[Expression] {
 
-  override lazy val resolved = child.resolved && child.dataType.isInstanceOf[ArrayType]
+  override lazy val resolved =
+    child.resolved &&
+    (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
 
-  lazy val elementType = child.dataType match {
-    case ArrayType(et) => et
+  lazy val elementTypes = child.dataType match {
+    case ArrayType(et) => et :: Nil
+    case MapType(kt,vt) => kt :: vt :: Nil
   }
 
+  // TODO: Move this pattern into Generator.
   protected def makeOutput() =
-    AttributeReference(attributeName, elementType, nullable = true)() :: Nil
+    if(attributeNames.size == elementTypes.size) {
+      attributeNames.zip(elementTypes).map {
+        case (n, t) => AttributeReference(n, t, nullable = true)()
+      }
+    } else {
+      elementTypes.zipWithIndex.map {
+        case (t, i) => AttributeReference(s"c_$i", t, nullable = true)()
+      }
+    }
 
   def apply(input: Row): TraversableOnce[Row] = {
-    val inputArray = Evaluate(child, Vector(input)).asInstanceOf[Seq[Any]]
-    if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Vector(v)))
+    child.dataType match {
+      case ArrayType(_) =>
+        val inputArray = Evaluate(child, Vector(input)).asInstanceOf[Seq[Any]]
+        if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Vector(v)))
+      case MapType(_, _) =>
+        val inputMap = Evaluate(child, Vector(input)).asInstanceOf[Map[Any,Any]]
+        if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Vector(k,v)) }
+    }
   }
 
   override def toString() = s"explode($child)"

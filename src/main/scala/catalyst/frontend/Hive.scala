@@ -874,7 +874,7 @@ object HiveQl {
 
     function match {
       case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
-        Explode(attributes.headOption.getOrElse("c0"), nodeToExpr(child))
+        Explode(attributes, nodeToExpr(child))
 
       case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
         HiveGenericUdtf(functionName, attributes, children.map(nodeToExpr))

@@ -104,7 +104,8 @@ case class Sum(child: Expression) extends PartialAggregate with trees.UnaryNode[
 }
 
 case class SumDistinct(child: Expression)
-    extends AggregateExpression with trees.UnaryNode[Expression] {
+  extends AggregateExpression with trees.UnaryNode[Expression] {
+
   def references = child.references
   def nullable = false
   def dataType = child.dataType
