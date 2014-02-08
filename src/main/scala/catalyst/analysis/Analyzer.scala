@@ -44,7 +44,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case UnresolvedRelation(name, alias) => catalog.lookupRelation(name, alias)
+      case UnresolvedRelation(databaseName, name, alias) =>
+        catalog.lookupRelation(databaseName, name, alias)
     }
   }
 
@@ -53,7 +54,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object LowercaseAttributeReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case UnresolvedRelation(name, alias) => UnresolvedRelation(name, alias.map(_.toLowerCase))
+      case UnresolvedRelation(databaseName, name, alias) =>
+        UnresolvedRelation(databaseName, name, alias.map(_.toLowerCase))
       case Subquery(alias, child) => Subquery(alias.toLowerCase, child)
       case q: LogicalPlan => q transformExpressions {
         case s: Star => s.copy(table = s.table.map(_.toLowerCase))

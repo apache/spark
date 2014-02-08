@@ -7,7 +7,10 @@ import plans.logical.LogicalPlan
  * An interface for looking up relations by name.  Used by an [[Analyzer]].
  */
 trait Catalog {
-  def lookupRelation(name: String, alias: Option[String] = None): LogicalPlan
+  def lookupRelation(
+    databaseName: Option[String],
+    tableName: String,
+    alias: Option[String] = None): LogicalPlan
 }
 
 /**
@@ -15,7 +18,10 @@ trait Catalog {
  * relations are already filled in and the analyser needs only to resolve attribute references.
  */
 object EmptyCatalog extends Catalog {
-  def lookupRelation(name: String, alias: Option[String] = None) = {
+  def lookupRelation(
+    databaseName: Option[String],
+    tableName: String,
+    alias: Option[String] = None) = {
     throw new UnsupportedOperationException
   }
 }

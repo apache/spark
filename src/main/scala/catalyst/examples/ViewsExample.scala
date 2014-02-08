@@ -25,15 +25,15 @@ object ViewsExample {
 
     // Construct a plan that has UnresolvedRelations in it using the DSL.
     val unresolvedPlan =
-      UnresolvedRelation("view1")
-        .join(UnresolvedRelation("view2"), Inner, Some('a === 'c))
+      UnresolvedRelation(None, "view1")
+        .join(UnresolvedRelation(None, "view2"), Inner, Some('a === 'c))
         .where('c < 1)
         .select('a, 'c)
     println(s"Unresolved Plan:\n$unresolvedPlan")
 
     // Replace UnresolvedRelations with logical plans from the views map.
     val withRelations = unresolvedPlan transform {
-      case UnresolvedRelation(name, _) => views(name)
+      case UnresolvedRelation(_, name, _) => views(name)
     }
 
     println(s"With relations:\n$withRelations ")

@@ -353,12 +353,15 @@ object HiveQl {
 
     case Token("TOK_CREATETABLE", children)
         if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
-      val (Some(Token("TOK_TABNAME", Token(tableName, Nil) :: Nil)) ::
-          _ /* likeTable */ ::
-          Some(query) :: Nil) = {
+      val (Some(tableNameParts) :: _ /* likeTable */ :: Some(query) :: Nil) =
         getClauses(Seq("TOK_TABNAME", "TOK_LIKETABLE", "TOK_QUERY"), children)
-      }
-      InsertIntoCreatedTable(tableName, nodeToPlan(query))
+
+      val (db, tableName) =
+        tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
+          case Seq(tableOnly) => (None, tableOnly)
+          case Seq(databaseName, table) => (Some(databaseName), table)
+        }
+      InsertIntoCreatedTable(db, tableName, nodeToPlan(query))
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
@@ -515,11 +518,13 @@ object HiveQl {
           nonAliasClauses)
       }
 
-      val tableName = tableNameParts.getChildren.map { case Token(part, Nil) =>
-        cleanIdentifier(part)
-      }.mkString(".")
+      val (db, tableName) =
+        tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
+          case Seq(tableOnly) => (None, tableOnly)
+          case Seq(databaseName, table) => (Some(databaseName), table)
+      }
       val alias = aliasClause.map { case Token(a, Nil) => cleanIdentifier(a) }
-      val relation = UnresolvedRelation(tableName, alias)
+      val relation = UnresolvedRelation(db, tableName, alias)
 
       // Apply sampling if requested.
       (bucketSampleClause orElse splitSampleClause).map {
@@ -619,16 +624,22 @@ object HiveQl {
     case Token(destinationToken(),
            Token("TOK_TAB",
               tableArgs) :: Nil) =>
-      val Some(nameClause) :: partitionClause :: Nil =
+      val Some(tableNameParts) :: partitionClause :: Nil =
         getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
-      val Token("TOK_TABNAME", Token(tableName, Nil) :: Nil) = nameClause
+
+      val (db, tableName) =
+        tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
+          case Seq(tableOnly) => (None, tableOnly)
+          case Seq(databaseName, table) => (Some(databaseName), table)
+        }
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
-        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) => key -> Some(value)
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) =>
+          key -> Some(value)
         case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => key -> None
       }.toMap).getOrElse(Map.empty)
 
-      InsertIntoTable(UnresolvedRelation(tableName, None), partitionKeys, query)
+      InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
@@ -692,6 +703,8 @@ object HiveQl {
 
     /* Stars (*) */
     case Token("TOK_ALLCOLREF", Nil) => Star(None)
+    // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
+    // has a single child which is tableName.
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) =>
       Star(Some(name))
 

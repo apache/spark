@@ -50,7 +50,10 @@ case class InsertIntoTable(
   }
 }
 
-case class InsertIntoCreatedTable(tableName: String, child: LogicalPlan) extends UnaryNode {
+case class InsertIntoCreatedTable(
+    databaseName: Option[String],
+    tableName: String,
+    child: LogicalPlan) extends UnaryNode {
   def references = Set.empty
   def output = child.output
 }

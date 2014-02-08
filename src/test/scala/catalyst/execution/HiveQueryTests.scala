@@ -51,6 +51,23 @@ class HiveQueryTests extends HiveComparisonTest {
       |SELECT * FROM createdtable
     """.stripMargin)
 
+  createQueryTest("create table as with db name",
+    """
+      |CREATE DATABASE IF NOT EXISTS testdb;
+      |CREATE TABLE testdb.createdtable AS SELECT * FROM default.src;
+      |SELECT * FROM testdb.createdtable;
+      |DROP DATABASE IF EXISTS testdb CASCADE
+    """.stripMargin)
+
+  createQueryTest("insert table with db name",
+    """
+      |CREATE DATABASE IF NOT EXISTS testdb;
+      |CREATE TABLE testdb.createdtable like default.src;
+      |INSERT INTO TABLE testdb.createdtable SELECT * FROM default.src;
+      |SELECT * FROM testdb.createdtable;
+      |DROP DATABASE IF EXISTS testdb CASCADE
+    """.stripMargin)
+
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 
