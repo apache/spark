@@ -22,11 +22,11 @@ import scala.util.parsing.combinator.RegexParsers
 class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
   val client = new HiveMetaStoreClient(hiveConf)
 
-  def lookupRelation(name: String, alias: Option[String]): BaseRelation = {
-    val (databaseName, tableName) = name.split("\\.") match {
-      case Array(tableOnly) => (SessionState.get.getCurrentDatabase(), tableOnly)
-      case Array(db, table) => (db, table)
-    }
+  def lookupRelation(
+      db: Option[String],
+      tableName: String,
+      alias: Option[String]): BaseRelation = {
+    val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase())
     val table = client.getTable(databaseName, tableName)
     val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
     val partitions =
@@ -48,10 +48,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case InsertIntoCreatedTable(db, tableName, child) =>
-        val databaseName = db match {
-          case None => SessionState.get.getCurrentDatabase()
-          case Some(databaseName) => databaseName
-        }
+        val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase())
 
         val table = new Table()
         val schema = child.output.map(attr => new FieldSchema(attr.name, "string", ""))
@@ -74,7 +71,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
         sd.setSerdeInfo(serDeInfo)
         client.createTable(table)
 
-        InsertIntoTable(lookupRelation(tableName, None), Map.empty, child)
+        InsertIntoTable(lookupRelation(Some(databaseName), tableName, None), Map.empty, child)
     }
   }
 }
