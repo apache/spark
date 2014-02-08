@@ -114,8 +114,9 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
-   * When a SELECT clause has only a single expression and that expression is a [[Generator]]
-   * we convert the [[Project]] to a [[Generate]].
+   * When a SELECT clause has only a single expression and that expression is a
+   * [[catalyst.expressions.Generator Generator]] we convert the
+   * [[catalyst.plans.logical.Project Project]] to a [[catalyst.plans.logical.Generate Generate]].
    */
   object ImplicitGenerate extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
