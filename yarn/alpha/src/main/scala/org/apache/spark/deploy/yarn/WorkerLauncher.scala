@@ -210,7 +210,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     // Wait until all containers have finished
     // TODO: This is a bit ugly. Can we make it nicer?
     // TODO: Handle container failure
-    while(yarnAllocator.getNumWorkersRunning < args.numWorkers) {
+    while ((yarnAllocator.getNumWorkersRunning < args.numWorkers) && (!driverClosed)) {
       yarnAllocator.allocateContainers(math.max(args.numWorkers - yarnAllocator.getNumWorkersRunning, 0))
       Thread.sleep(100)
     }

@@ -74,7 +74,7 @@ class JsonProtocolSuite extends FunSuite {
 
   def createAppDesc(): ApplicationDescription = {
     val cmd = new Command("mainClass", List("arg1", "arg2"), Map())
-    new ApplicationDescription("name", Some(4), 1234, cmd, "sparkHome", "appUiUrl")
+    new ApplicationDescription("name", Some(4), 1234, cmd, Some("sparkHome"), "appUiUrl")
   }
 
   def createAppInfo() : ApplicationInfo = {

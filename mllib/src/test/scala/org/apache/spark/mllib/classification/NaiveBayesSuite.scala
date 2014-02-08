@@ -23,7 +23,7 @@ import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.regression.LabeledPoint
-import org.apache.spark.SparkContext
+import org.apache.spark.mllib.util.LocalSparkContext
 
 object NaiveBayesSuite {
 
@@ -59,17 +59,7 @@ object NaiveBayesSuite {
   }
 }
 
-class NaiveBayesSuite extends FunSuite with BeforeAndAfterAll {
-  @transient private var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-  }
-
-  override def afterAll() {
-    sc.stop()
-    System.clearProperty("spark.driver.port")
-  }
+class NaiveBayesSuite extends FunSuite with LocalSparkContext {
 
   def validatePrediction(predictions: Seq[Double], input: Seq[LabeledPoint]) {
     val numOfPredictions = predictions.zip(input).count {

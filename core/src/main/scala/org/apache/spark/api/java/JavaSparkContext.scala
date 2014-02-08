@@ -137,7 +137,13 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    */
   def textFile(path: String, minSplits: Int): JavaRDD[String] = sc.textFile(path, minSplits)
 
-  /** Get an RDD for a Hadoop SequenceFile with given key and value types. */
+  /** Get an RDD for a Hadoop SequenceFile with given key and value types.
+    *
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * record, directly caching the returned RDD will create many references to the same object.
+    * If you plan to directly cache Hadoop writable objects, you should first copy them using
+    * a `map` function.
+    * */
   def sequenceFile[K, V](path: String,
     keyClass: Class[K],
     valueClass: Class[V],
@@ -148,33 +154,18 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minSplits))
   }
 
-  /** Get an RDD for a Hadoop SequenceFile with given key and value types. */
-  def sequenceFile[K, V](path: String,
-    keyClass: Class[K],
-    valueClass: Class[V],
-    minSplits: Int,
-    cloneRecords: Boolean
-    ): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, minSplits, cloneRecords))
-  }
-
-  /** Get an RDD for a Hadoop SequenceFile. */
+  /** Get an RDD for a Hadoop SequenceFile.
+    *
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * record, directly caching the returned RDD will create many references to the same object.
+    * If you plan to directly cache Hadoop writable objects, you should first copy them using
+    * a `map` function.
+    */
   def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V]):
   JavaPairRDD[K, V] = {
     implicit val kcm: ClassTag[K] = ClassTag(keyClass)
     implicit val vcm: ClassTag[V] = ClassTag(valueClass)
     new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass))
-  }
-
-  /** Get an RDD for a Hadoop SequenceFile. */
-  def sequenceFile[K, V](path: String, keyClass: Class[K], valueClass: Class[V], 
-    cloneRecords: Boolean):
-  JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.sequenceFile(path, keyClass, valueClass, cloneRecords))
   }
 
   /**
@@ -205,6 +196,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
    * etc).
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
    */
   def hadoopRDD[K, V, F <: InputFormat[K, V]](
     conf: JobConf,
@@ -218,41 +214,14 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass, minSplits))
   }
 
-
-  /**
-   * Get an RDD for a Hadoop-readable dataset from a Hadoop JobConf given its InputFormat and other
-   * necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable),
-   * using the older MapReduce API (`org.apache.hadoop.mapred`).
-   *
-   * @param conf JobConf for setting up the dataset
-   * @param inputFormatClass Class of the [[InputFormat]]
-   * @param keyClass Class of the keys
-   * @param valueClass Class of the values
-   * @param minSplits Minimum number of Hadoop Splits to generate.
-   * @param cloneRecords If true, Spark will clone the records produced by Hadoop RecordReader.
-   *                     Most RecordReader implementations reuse wrapper objects across multiple
-   *                     records, and can cause problems in RDD collect or aggregation operations.
-   *                     By default the records are cloned in Spark. However, application
-   *                     programmers can explicitly disable the cloning for better performance.
-   */
-  def hadoopRDD[K, V, F <: InputFormat[K, V]](
-    conf: JobConf,
-    inputFormatClass: Class[F],
-    keyClass: Class[K],
-    valueClass: Class[V],
-    minSplits: Int,
-    cloneRecords: Boolean
-    ): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass, minSplits,
-      cloneRecords))
-  }
-
   /**
    * Get an RDD for a Hadoop-readable dataset from a Hadooop JobConf giving its InputFormat and any
    * other necessary info (e.g. file name for a filesystem-based dataset, table name for HyperTable,
-   * etc).
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
    */
   def hadoopRDD[K, V, F <: InputFormat[K, V]](
     conf: JobConf,
@@ -265,7 +234,13 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.hadoopRDD(conf, inputFormatClass, keyClass, valueClass))
   }
 
-  /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
+  /** Get an RDD for a Hadoop file with an arbitrary InputFormat.
+    *
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * record, directly caching the returned RDD will create many references to the same object.
+    * If you plan to directly cache Hadoop writable objects, you should first copy them using
+    * a `map` function.
+    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
     path: String,
     inputFormatClass: Class[F],
@@ -278,22 +253,13 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     new JavaPairRDD(sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, minSplits))
   }
 
-  /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
-  def hadoopFile[K, V, F <: InputFormat[K, V]](
-    path: String,
-    inputFormatClass: Class[F],
-    keyClass: Class[K],
-    valueClass: Class[V],
-    minSplits: Int,
-    cloneRecords: Boolean
-    ): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.hadoopFile(path, inputFormatClass, keyClass, valueClass, 
-      minSplits, cloneRecords))
-  }
-
-  /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
+  /** Get an RDD for a Hadoop file with an arbitrary InputFormat
+    *
+    * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+    * record, directly caching the returned RDD will create many references to the same object.
+    * If you plan to directly cache Hadoop writable objects, you should first copy them using
+    * a `map` function.
+    */
   def hadoopFile[K, V, F <: InputFormat[K, V]](
     path: String,
     inputFormatClass: Class[F],
@@ -306,23 +272,14 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
       inputFormatClass, keyClass, valueClass))
   }
 
-  /** Get an RDD for a Hadoop file with an arbitrary InputFormat */
-  def hadoopFile[K, V, F <: InputFormat[K, V]](
-    path: String,
-    inputFormatClass: Class[F],
-    keyClass: Class[K],
-    valueClass: Class[V],
-    cloneRecords: Boolean
-    ): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(keyClass)
-    implicit val vcm: ClassTag[V] = ClassTag(valueClass)
-    new JavaPairRDD(sc.hadoopFile(path,
-      inputFormatClass, keyClass, valueClass, cloneRecords = cloneRecords))
-  }
-
   /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
    */
   def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
     path: String,
@@ -338,22 +295,11 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   /**
    * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
    * and extra configuration options to pass to the input format.
-   */
-  def newAPIHadoopFile[K, V, F <: NewInputFormat[K, V]](
-    path: String,
-    fClass: Class[F],
-    kClass: Class[K],
-    vClass: Class[V],
-    conf: Configuration,
-    cloneRecords: Boolean): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(kClass)
-    implicit val vcm: ClassTag[V] = ClassTag(vClass)
-    new JavaPairRDD(sc.newAPIHadoopFile(path, fClass, kClass, vClass, conf, cloneRecords))
-  }
-
-  /**
-   * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
-   * and extra configuration options to pass to the input format.
+   *
+   * '''Note:''' Because Hadoop's RecordReader class re-uses the same Writable object for each
+   * record, directly caching the returned RDD will create many references to the same object.
+   * If you plan to directly cache Hadoop writable objects, you should first copy them using
+   * a `map` function.
    */
   def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
     conf: Configuration,
@@ -363,21 +309,6 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
     implicit val kcm: ClassTag[K] = ClassTag(kClass)
     implicit val vcm: ClassTag[V] = ClassTag(vClass)
     new JavaPairRDD(sc.newAPIHadoopRDD(conf, fClass, kClass, vClass))
-  }
-
-  /**
-   * Get an RDD for a given Hadoop file with an arbitrary new API InputFormat
-   * and extra configuration options to pass to the input format.
-   */
-  def newAPIHadoopRDD[K, V, F <: NewInputFormat[K, V]](
-    conf: Configuration,
-    fClass: Class[F],
-    kClass: Class[K],
-    vClass: Class[V],
-    cloneRecords: Boolean): JavaPairRDD[K, V] = {
-    implicit val kcm: ClassTag[K] = ClassTag(kClass)
-    implicit val vcm: ClassTag[V] = ClassTag(vClass)
-    new JavaPairRDD(sc.newAPIHadoopRDD(conf, fClass, kClass, vClass, cloneRecords))
   }
 
   /** Build the union of two or more RDDs. */

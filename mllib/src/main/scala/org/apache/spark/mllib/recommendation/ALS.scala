@@ -18,6 +18,7 @@
 package org.apache.spark.mllib.recommendation
 
 import scala.collection.mutable.{ArrayBuffer, BitSet}
+import scala.math.{abs, sqrt}
 import scala.util.Random
 import scala.util.Sorting
 
@@ -301,7 +302,14 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
    * Make a random factor vector with the given random.
    */
   private def randomFactor(rank: Int, rand: Random): Array[Double] = {
-    Array.fill(rank)(rand.nextDouble)
+    // Choose a unit vector uniformly at random from the unit sphere, but from the
+    // "first quadrant" where all elements are nonnegative. This can be done by choosing
+    // elements distributed as Normal(0,1) and taking the absolute value, and then normalizing.
+    // This appears to create factorizations that have a slightly better reconstruction
+    // (<1%) compared picking elements uniformly at random in [0,1].
+    val factor = Array.fill(rank)(abs(rand.nextGaussian()))
+    val norm = sqrt(factor.map(x => x * x).sum)
+    factor.map(x => x / norm)
   }
 
   /**

@@ -38,10 +38,14 @@
       <version>${project.version}</version>
     </dependency>
     <dependency>
+      <groupId>org.jblas</groupId>
+      <artifactId>jblas</artifactId>
+      <version>1.2.3</version>
+    </dependency>
+    <dependency>
       <groupId>org.eclipse.jetty</groupId>
       <artifactId>jetty-server</artifactId>
     </dependency>
-
     <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.binary.version}</artifactId>

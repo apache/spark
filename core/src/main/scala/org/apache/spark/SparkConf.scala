@@ -192,7 +192,15 @@ class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
   }
 
   /** Get all akka conf variables set on this SparkConf */
-  def getAkkaConf: Seq[(String, String)] =  getAll.filter {case (k, v) => k.startsWith("akka.")}
+  def getAkkaConf: Seq[(String, String)] =
+    /* This is currently undocumented. If we want to make this public we should consider
+     * nesting options under the spark namespace to avoid conflicts with user akka options.
+     * Otherwise users configuring their own akka code via system properties could mess up
+     * spark's akka options.
+     *
+     *   E.g. spark.akka.option.x.y.x = "value"
+     */
+    getAll.filter {case (k, v) => k.startsWith("akka.")}
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)

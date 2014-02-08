@@ -110,5 +110,6 @@ object TwitterAlgebirdCMS {
     })
 
     ssc.start()
+    ssc.awaitTermination()
   }
 }

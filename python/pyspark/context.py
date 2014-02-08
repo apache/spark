@@ -27,7 +27,7 @@ from pyspark.broadcast import Broadcast
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
-from pyspark.serializers import PickleSerializer, BatchedSerializer, MUTF8Deserializer, PairMUTF8Deserializer, MsgPackDeserializer
+from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer, MsgPackDeserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 
@@ -234,7 +234,7 @@ class SparkContext(object):
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minSplits), self,
-                   MUTF8Deserializer())
+                   UTF8Deserializer())
 
     ###
     def sequenceFile(self, name, key_class="org.apache.hadoop.io.Text", value_class="org.apache.hadoop.io.Text",
@@ -465,12 +465,10 @@ class SparkContext(object):
         return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
             storageLevel.deserialized, storageLevel.replication)
 
-
 def _test():
     import atexit
     import doctest
     import tempfile
-
     globs = globals().copy()
     globs['sc'] = SparkContext('local[4]', 'PythonTest', batchSize=2)
     globs['tempdir'] = tempfile.mkdtemp()

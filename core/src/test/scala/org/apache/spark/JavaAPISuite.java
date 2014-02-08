@@ -387,18 +387,21 @@ public class JavaAPISuite implements Serializable {
         return 1.0 * x;
       }
     }).cache();
+    doubles.collect();
     JavaPairRDD<Integer, Integer> pairs = rdd.map(new PairFunction<Integer, Integer, Integer>() {
       @Override
       public Tuple2<Integer, Integer> call(Integer x) {
         return new Tuple2<Integer, Integer>(x, x);
       }
     }).cache();
+    pairs.collect();
     JavaRDD<String> strings = rdd.map(new Function<Integer, String>() {
       @Override
       public String call(Integer x) {
         return x.toString();
       }
     }).cache();
+    strings.collect();
   }
 
   @Test
@@ -961,5 +964,19 @@ public class JavaAPISuite implements Serializable {
       Assert.assertTrue(error < relativeSD);
     }
 
+  }
+
+  @Test
+  public void collectAsMapWithIntArrayValues() {
+    // Regression test for SPARK-1040
+    JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(new Integer[] { 1 }));
+    JavaPairRDD<Integer, int[]> pairRDD = rdd.map(new PairFunction<Integer, Integer, int[]>() {
+      @Override
+      public Tuple2<Integer, int[]> call(Integer x) throws Exception {
+        return new Tuple2<Integer, int[]>(x, new int[] { x });
+      }
+    });
+    pairRDD.collect();  // Works fine
+    Map<Integer, int[]> map = pairRDD.collectAsMap();  // Used to crash with ClassCastException
   }
 }

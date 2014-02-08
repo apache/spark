@@ -32,7 +32,7 @@ import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util.Utils
 
 /**
- * Spark executor used with Mesos and the standalone scheduler.
+ * Spark executor used with Mesos, YARN, and the standalone scheduler.
  */
 private[spark] class Executor(
     executorId: String,

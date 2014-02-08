@@ -45,6 +45,7 @@ import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableHyperLogL
 
 import org.apache.spark.SparkContext._
 import org.apache.spark._
+import org.apache.spark.util.random.{PoissonSampler, BernoulliSampler}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -319,8 +320,29 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
-    new SampledRDD(this, withReplacement, fraction, seed)
+  def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] = {
+    if (withReplacement) {
+      new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), seed)
+    } else {
+      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), seed)
+    }
+  }
+
+  /**
+   * Randomly splits this RDD with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1
+   * @param seed random seed, default to System.nanoTime
+   *
+   * @return split RDDs in an array
+   */
+  def randomSplit(weights: Array[Double], seed: Long = System.nanoTime): Array[RDD[T]] = {
+    val sum = weights.sum
+    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+    normalizedCumWeights.sliding(2).map { x =>
+      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](x(0), x(1)), seed)
+    }.toArray
+  }
 
   def takeSample(withReplacement: Boolean, num: Int, seed: Int): Array[T] = {
     var fraction = 0.0
@@ -370,6 +392,43 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def ++(other: RDD[T]): RDD[T] = this.union(other)
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   */
+  def intersection(other: RDD[T]): RDD[T] =
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)))
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
+        .keys
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   *
+   * @param partitioner Partitioner to use for the resulting RDD
+   */
+  def intersection(other: RDD[T], partitioner: Partitioner): RDD[T] =
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)), partitioner)
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
+        .keys
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.  Performs a hash partition across the cluster
+   *
+   * Note that this method performs a shuffle internally.
+   *
+   * @param numPartitions How many partitions to use in the resulting RDD
+   */
+  def intersection(other: RDD[T], numPartitions: Int): RDD[T] =
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)), new HashPartitioner(numPartitions))
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
+        .keys
 
   /**
    * Return an RDD created by coalescing all elements within each partition into an array.
@@ -666,7 +725,7 @@ abstract class RDD[T: ClassTag](
     }
     var jobResult: Option[T] = None
     val mergeResult = (index: Int, taskResult: Option[T]) => {
-      if (taskResult != None) {
+      if (taskResult.isDefined) {
         jobResult = jobResult match {
           case Some(value) => Some(f(value, taskResult.get))
           case None => taskResult

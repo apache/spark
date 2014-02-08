@@ -76,7 +76,7 @@ private[spark] class Worker(
   @volatile var registered = false
   @volatile var connected = false
   val workerId = generateWorkerId()
-  var sparkHome: File = null
+  val sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
   var workDir: File = null
   val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]
@@ -120,7 +120,6 @@ private[spark] class Worker(
     assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
-    sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
@@ -204,22 +203,34 @@ private[spark] class Worker(
         System.exit(1)
       }
 
-    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
+    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
       } else {
-        logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
-        // TODO (pwendell): We shuld make sparkHome an Option[String] in
-        // ApplicationDescription to be more explicit about this.
-        val effectiveSparkHome = Option(execSparkHome_).getOrElse(sparkHome.getAbsolutePath)
-        val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-          self, workerId, host, new File(effectiveSparkHome), workDir, akkaUrl, ExecutorState.RUNNING)
-        executors(appId + "/" + execId) = manager
-        manager.start()
-        coresUsed += cores_
-        memoryUsed += memory_
-        masterLock.synchronized {
-          master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
+        try {
+          logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
+          val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
+            self, workerId, host,
+            appDesc.sparkHome.map(userSparkHome => new File(userSparkHome)).getOrElse(sparkHome),
+            workDir, akkaUrl, ExecutorState.RUNNING)
+          executors(appId + "/" + execId) = manager
+          manager.start()
+          coresUsed += cores_
+          memoryUsed += memory_
+          masterLock.synchronized {
+            master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
+          }
+        } catch {
+          case e: Exception => {
+            logError("Failed to launch exector %s/%d for %s".format(appId, execId, appDesc.name))
+            if (executors.contains(appId + "/" + execId)) {
+              executors(appId + "/" + execId).kill()
+              executors -= appId + "/" + execId
+            }
+            masterLock.synchronized {
+              master ! ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None)
+            }
+          }
         }
       }
 

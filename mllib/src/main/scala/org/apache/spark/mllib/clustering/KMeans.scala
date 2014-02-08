@@ -26,8 +26,7 @@ import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.Logging
 import org.apache.spark.mllib.util.MLUtils
-import org.apache.spark.util.XORShiftRandom
-
+import org.apache.spark.util.random.XORShiftRandom
 
 
 /**

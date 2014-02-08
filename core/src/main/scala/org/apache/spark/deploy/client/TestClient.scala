@@ -49,7 +49,7 @@ private[spark] object TestClient {
       conf = new SparkConf)
     val desc = new ApplicationDescription(
       "TestClient", Some(1), 512, Command("spark.deploy.client.TestExecutor", Seq(), Map()),
-      "dummy-spark-home", "ignored")
+      Some("dummy-spark-home"), "ignored")
     val listener = new TestListener
     val client = new AppClient(actorSystem, Array(url), desc, listener, new SparkConf)
     client.start()

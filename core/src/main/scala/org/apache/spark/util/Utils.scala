@@ -26,7 +26,7 @@ import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
-import scala.reflect.{classTag, ClassTag}
+import scala.reflect.ClassTag
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
@@ -45,27 +45,6 @@ import org.apache.spark.{SparkConf, SparkException, Logging}
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
-
-  /**
-   *  We try to clone for most common types of writables and we call WritableUtils.clone otherwise
-   *  intention is to optimize, for example for NullWritable there is no need and for Long, int and
-   *  String creating a new object with value set would be faster.
-   */
-  def cloneWritables[T: ClassTag](conf: Configuration): Writable => T = {
-    val cloneFunc = classTag[T] match {
-      case ClassTag(_: Text) => 
-        (w: Writable) => new Text(w.asInstanceOf[Text].getBytes).asInstanceOf[T]
-      case ClassTag(_: LongWritable) => 
-        (w: Writable) => new LongWritable(w.asInstanceOf[LongWritable].get).asInstanceOf[T]
-      case ClassTag(_: IntWritable) => 
-        (w: Writable) => new IntWritable(w.asInstanceOf[IntWritable].get).asInstanceOf[T]
-      case ClassTag(_: NullWritable) => 
-        (w: Writable) => w.asInstanceOf[T] // TODO: should we clone this ?
-      case _ => 
-        (w: Writable) => WritableUtils.clone(w, conf).asInstanceOf[T] // slower way of cloning.
-    }
-    cloneFunc
-  }
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -268,6 +247,7 @@ private[spark] object Utils extends Logging {
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
+    val fileOverwrite = conf.getBoolean("spark.files.overwrite", false)
     uri.getScheme match {
       case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
@@ -275,47 +255,65 @@ private[spark] object Utils extends Logging {
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          tempFile.delete()
-          throw new SparkException(
-            "File " + targetFile + " exists and does not match contents of" + " " + url)
-        } else {
-          Files.move(tempFile, targetFile)
+          if (fileOverwrite) {
+            targetFile.delete()
+            logInfo(("File %s exists and does not match contents of %s, " +
+              "replacing it with %s").format(targetFile, url, url))
+          } else {
+            tempFile.delete()
+            throw new SparkException(
+              "File " + targetFile + " exists and does not match contents of" + " " + url)
+          }
         }
+        Files.move(tempFile, targetFile)
       case "file" | null =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
+        var shouldCopy = true
         if (targetFile.exists) {
-          // If the target file already exists, warn the user if
           if (!Files.equal(sourceFile, targetFile)) {
-            throw new SparkException(
-              "File " + targetFile + " exists and does not match contents of" + " " + url)
+            if (fileOverwrite) {
+              targetFile.delete()
+              logInfo(("File %s exists and does not match contents of %s, " +
+                "replacing it with %s").format(targetFile, url, url))
+            } else {
+              throw new SparkException(
+                "File " + targetFile + " exists and does not match contents of" + " " + url)
+            }
           } else {
             // Do nothing if the file contents are the same, i.e. this file has been copied
             // previously.
             logInfo(sourceFile.getAbsolutePath + " has been previously copied to "
               + targetFile.getAbsolutePath)
+            shouldCopy = false
           }
-        } else {
+        }
+
+        if (shouldCopy) {
           // The file does not exist in the target directory. Copy it there.
           logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
           Files.copy(sourceFile, targetFile)
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-        val uri = new URI(url)
         val conf = SparkHadoopUtil.get.newConfiguration()
         val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          tempFile.delete()
-          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
-            " " + url)
-        } else {
-          Files.move(tempFile, targetFile)
+          if (fileOverwrite) {
+            targetFile.delete()
+            logInfo(("File %s exists and does not match contents of %s, " +
+              "replacing it with %s").format(targetFile, url, url))
+          } else {
+            tempFile.delete()
+            throw new SparkException(
+              "File " + targetFile + " exists and does not match contents of" + " " + url)
+          }
         }
+        Files.move(tempFile, targetFile)
     }
     // Decompress the file if it's a .tar or .tar.gz
     if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
@@ -673,7 +671,7 @@ private[spark] object Utils extends Logging {
 
     for (el <- trace) {
       if (!finished) {
-        if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName) != None) {
+        if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)

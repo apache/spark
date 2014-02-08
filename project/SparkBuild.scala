@@ -205,12 +205,13 @@ object SparkBuild extends Build {
         "org.eclipse.jetty.orbit" % "javax.servlet" % "2.5.0.v201103041518" artifacts Artifact("javax.servlet", "jar", "jar"),
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
         "org.scalacheck"   %% "scalacheck"      % "1.10.0" % "test",
-        "com.novocode"      % "junit-interface" % "0.9"    % "test",
+        "com.novocode"      % "junit-interface" % "0.10"   % "test",
         "org.easymock"      % "easymock"        % "3.1"    % "test",
         "org.mockito"       % "mockito-all"     % "1.8.5"  % "test",
         "commons-io"        % "commons-io"      % "2.4"    % "test"
     ),
 
+    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a"),
     parallelExecution := true,
     /* Workaround for issue #206 (fixed after SBT 0.11.0) */
     watchTransitiveSources <<= Defaults.inDependencies[Task[Seq[File]]](watchSources.task,
@@ -310,7 +311,10 @@ object SparkBuild extends Build {
   ) ++ assemblySettings ++ extraAssemblySettings
 
   def graphxSettings = sharedSettings ++ Seq(
-    name := "spark-graphx"
+    name := "spark-graphx",
+    libraryDependencies ++= Seq(
+      "org.jblas" % "jblas" % "1.2.3"
+    )
   )
 
   def bagelSettings = sharedSettings ++ Seq(
