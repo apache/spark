@@ -142,7 +142,7 @@ object GradientDescent extends Logging {
     var regVal = 0.0
 
     for (i <- 1 to numIterations) {
-      val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42+i).map {
+      val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42 + i).map {
         case (y, features) =>
           val featuresCol = new DoubleMatrix(features.length, 1, features:_*)
           val (grad, loss) = gradient.compute(featuresCol, y, weights)

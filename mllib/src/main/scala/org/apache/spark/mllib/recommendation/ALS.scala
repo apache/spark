@@ -84,8 +84,9 @@ case class Rating(val user: Int, val product: Int, val rating: Double)
  * [[http://research.yahoo.com/pub/2433]], adapted for the blocked approach used here.
  *
  * Essentially instead of finding the low-rank approximations to the rating matrix `R`,
- * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if r > 0
- * and 0 if r = 0. The ratings then act as 'confidence' values related to strength of indicated user
+ * this finds the approximations for a preference matrix `P` where the elements of `P` are 1 if
+ * r > 0 and 0 if r = 0. The ratings then act as 'confidence' values related to strength of
+ * indicated user
  * preferences rather than explicit ratings given to items.
  */
 class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var lambda: Double,
@@ -152,8 +153,8 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     val (userInLinks, userOutLinks) = makeLinkRDDs(numBlocks, ratingsByUserBlock)
     val (productInLinks, productOutLinks) = makeLinkRDDs(numBlocks, ratingsByProductBlock)
 
-    // Initialize user and product factors randomly, but use a deterministic seed for each partition
-    // so that fault recovery works
+    // Initialize user and product factors randomly, but use a deterministic seed for each
+    // partition so that fault recovery works
     val seedGen = new Random()
     val seed1 = seedGen.nextInt()
     val seed2 = seedGen.nextInt()
@@ -268,7 +269,8 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
       val groupedRatings = blockRatings(productBlock).groupBy(_.product).toArray
       // Sort them by product ID
       val ordering = new Ordering[(Int, ArrayBuffer[Rating])] {
-        def compare(a: (Int, ArrayBuffer[Rating]), b: (Int, ArrayBuffer[Rating])): Int = a._1 - b._1
+        def compare(a: (Int, ArrayBuffer[Rating]), b: (Int, ArrayBuffer[Rating])): Int =
+            a._1 - b._1
       }
       Sorting.quickSort(groupedRatings)(ordering)
       // Translate the user IDs to indices based on userIdToPos
@@ -369,7 +371,8 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
     val tempXtX = DoubleMatrix.zeros(triangleSize)
     val fullXtX = DoubleMatrix.zeros(rank, rank)
 
-    // Compute the XtX and Xy values for each user by adding products it rated in each product block
+    // Compute the XtX and Xy values for each user by adding products it rated in each product
+    // block
     for (productBlock <- 0 until numBlocks) {
       for (p <- 0 until blockFactors(productBlock).length) {
         val x = new DoubleMatrix(blockFactors(productBlock)(p))
@@ -544,9 +547,8 @@ object ALS {
    * @param iterations number of iterations of ALS (recommended: 10-20)
    * @param lambda     regularization factor (recommended: 0.01)
    */
-  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double, alpha: Double)
-  : MatrixFactorizationModel =
-  {
+  def trainImplicit(ratings: RDD[Rating], rank: Int, iterations: Int, lambda: Double,
+      alpha: Double): MatrixFactorizationModel = {
     trainImplicit(ratings, rank, iterations, lambda, -1, alpha)
   }
 

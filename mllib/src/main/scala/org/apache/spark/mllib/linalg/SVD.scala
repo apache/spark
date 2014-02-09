@@ -105,7 +105,7 @@ object SVD {
       cols.flatMap{ case (colind1, mval1) =>
                     cols.map{ case (colind2, mval2) =>
                             ((colind1, colind2), mval1*mval2) } }
-    }.reduceByKey(_+_)
+    }.reduceByKey(_ + _)
 
     // Construct jblas A^T A locally
     val ata = DoubleMatrix.zeros(n, n)
@@ -145,10 +145,10 @@ object SVD {
     // Multiply A by VS^-1
     val aCols = data.map(entry => (entry.j, (entry.i, entry.mval)))
     val bRows = vsirdd.map(entry => (entry._1._1, (entry._1._2, entry._2)))
-    val retUdata = aCols.join(bRows).map( {case (key, ( (rowInd, rowVal), (colInd, colVal)) )
-        => ((rowInd, colInd), rowVal*colVal)}).reduceByKey(_+_)
+    val retUdata = aCols.join(bRows).map( {case (key, ( (rowInd, rowVal), (colInd, colVal)))
+        => ((rowInd, colInd), rowVal*colVal)}).reduceByKey(_ + _)
           .map{ case ((row, col), mval) => MatrixEntry(row, col, mval)}
-    val retU = SparseMatrix(retUdata, m, sigma.length) 
+    val retU = SparseMatrix(retUdata, m, sigma.length)
    
     MatrixSVD(retU, retS, retV)  
   }

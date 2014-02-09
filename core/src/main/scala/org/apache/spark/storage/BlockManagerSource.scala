@@ -57,9 +57,9 @@ private[spark] class BlockManagerSource(val blockManager: BlockManager, sc: Spar
     override def getValue: Long = {
       val storageStatusList = blockManager.master.getStorageStatus
       val diskSpaceUsed = storageStatusList
-      	.flatMap(_.blocks.values.map(_.diskSize))
-      	.reduceOption(_ + _)
-      	.getOrElse(0L)
+        .flatMap(_.blocks.values.map(_.diskSize))
+        .reduceOption(_ + _)
+        .getOrElse(0L)
 
       diskSpaceUsed / 1024 / 1024
     }

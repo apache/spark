@@ -280,7 +280,7 @@ private[spark] class ExternalAppendOnlyMap[K, V, C](
 
     /**
      * Select a key with the minimum hash, then combine all values with the same key from all
-     * input streams
+     * input streams.
      */
     override def next(): (K, C) = {
       // Select a key from the StreamBuffer that holds the lowest key hash

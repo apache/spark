@@ -29,7 +29,8 @@ import org.apache.spark.executor.TaskMetrics
  */
 class StageInfo(
     stage: Stage,
-    val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] = mutable.Buffer[(TaskInfo, TaskMetrics)]()
+    val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] =
+    mutable.Buffer[(TaskInfo, TaskMetrics)]()
 ) {
   val stageId = stage.id
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
