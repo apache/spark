@@ -45,7 +45,7 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
 
   def start() {
     try {
-      val (srv, bPort) = JettyUtils.startJettyServer("0.0.0.0", port, handlers)
+      val (srv, bPort) = JettyUtils.startJettyServer(host, port, handlers)
       server = Some(srv)
       boundPort = Some(bPort)
       logInfo("Started Master web UI at http://%s:%d".format(host, boundPort.get))
