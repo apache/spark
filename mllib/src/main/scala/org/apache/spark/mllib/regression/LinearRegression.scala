@@ -44,6 +44,12 @@ class LinearRegressionModel(
 
 /**
  * Train a linear regression model with no regularization using Stochastic Gradient Descent.
+ * This solves the least squares regression formulation
+ *              f(weights) = 1/n ||A weights-y||^2
+ * (which is the mean squared error).
+ * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
+ * its corresponding right hand side label y.
+ * See also the documentation for the precise formulation.
  */
 class LinearRegressionWithSGD private (
     var stepSize: Double,
@@ -52,7 +58,7 @@ class LinearRegressionWithSGD private (
   extends GeneralizedLinearAlgorithm[LinearRegressionModel]
   with Serializable {
 
-  val gradient = new SquaredGradient()
+  val gradient = new LeastSquaresGradient()
   val updater = new SimpleUpdater()
   val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
     .setNumIterations(numIterations)
@@ -76,10 +82,11 @@ object LinearRegressionWithSGD {
   /**
    * Train a Linear Regression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
-   * gradient descent are initialized using the initial weights provided.
+   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient. The weights used
+   * in gradient descent are initialized using the initial weights provided.
    *
-   * @param input RDD of (label, array of features) pairs.
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param miniBatchFraction Fraction of data to be used per iteration.
@@ -101,9 +108,10 @@ object LinearRegressionWithSGD {
   /**
    * Train a LinearRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate the gradient.
+   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient.
    *
-   * @param input RDD of (label, array of features) pairs.
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
    * @param numIterations Number of iterations of gradient descent to run.
    * @param stepSize Step size to be used for each iteration of gradient descent.
    * @param miniBatchFraction Fraction of data to be used per iteration.
@@ -121,9 +129,10 @@ object LinearRegressionWithSGD {
   /**
    * Train a LinearRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. We use the entire data set to
-   * update the gradient in each iteration.
+   * compute the true gradient in each iteration.
    *
-   * @param input RDD of (label, array of features) pairs.
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LinearRegressionModel which has the weights and offset from training.
@@ -140,9 +149,10 @@ object LinearRegressionWithSGD {
   /**
    * Train a LinearRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
-   * update the gradient in each iteration.
+   * compute the true gradient in each iteration.
    *
-   * @param input RDD of (label, array of features) pairs.
+   * @param input RDD of (label, array of features) pairs. Each pair describes a row of the data
+   *              matrix A as well as the corresponding right hand side label y
    * @param numIterations Number of iterations of gradient descent to run.
    * @return a LinearRegressionModel which has the weights and offset from training.
    */
