@@ -77,12 +77,13 @@ private[spark] object ConnectionManagerTest extends Logging{
         buffer.flip
         
         val startTime = System.currentTimeMillis  
-        val futures = slaveConnManagerIds.filter(_ != thisConnManagerId).map(slaveConnManagerId =>
-        {
-          val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-          logInfo("Sending [" + bufferMessage + "] to [" + slaveConnManagerId + "]")
-          connManager.sendMessageReliably(slaveConnManagerId, bufferMessage)
-        })
+        val futures = slaveConnManagerIds.filter(_ != thisConnManagerId).map{ slaveConnManagerId =>
+          {
+            val bufferMessage = Message.createBufferMessage(buffer.duplicate)
+            logInfo("Sending [" + bufferMessage + "] to [" + slaveConnManagerId + "]")
+            connManager.sendMessageReliably(slaveConnManagerId, bufferMessage)
+          }
+        }
         val results = futures.map(f => Await.result(f, awaitTime))
         val finishTime = System.currentTimeMillis
         Thread.sleep(5000)

@@ -53,11 +53,13 @@ object SimpleZeroMQPublisher {
   }
 }
 
+// scalastyle:off
 /**
  * A sample wordcount with ZeroMQStream stream
  *
  * To work with zeroMQ, some native libraries have to be installed.
- * Install zeroMQ (release 2.1) core libraries. [ZeroMQ Install guide](http://www.zeromq.org/intro:get-the-software)
+ * Install zeroMQ (release 2.1) core libraries. [ZeroMQ Install guide]
+ * (http://www.zeromq.org/intro:get-the-software)
  * 
  * Usage: ZeroMQWordCount <master> <zeroMQurl> <topic>
  * In local mode, <master> should be 'local[n]' with n > 1
@@ -68,6 +70,7 @@ object SimpleZeroMQPublisher {
  * and run the example as
  *    `$ ./bin/run-example org.apache.spark.streaming.examples.ZeroMQWordCount local[2] tcp://127.0.1.1:1234 foo`
  */
+// scalastyle:on
 object ZeroMQWordCount {
   def main(args: Array[String]) {
     if (args.length < 3) {

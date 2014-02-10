@@ -123,7 +123,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         </div>
 
         <div>
-          {if (hasDrivers) {
+          {
+            if (hasDrivers) {
               <div class="row-fluid">
                 <div class="span12">
                   <h4> Completed Drivers </h4>

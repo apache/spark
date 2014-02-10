@@ -71,8 +71,12 @@ class RateLimitedOutputStream(out: OutputStream, bytesPerSec: Int) extends Outpu
       }
     } else {
       // Calculate how much time we should sleep to bring ourselves to the desired rate.
-      // Based on throttler in Kafka (https://github.com/kafka-dev/kafka/blob/master/core/src/main/scala/kafka/utils/Throttler.scala)
-      val sleepTime = MILLISECONDS.convert((bytesWrittenSinceSync / bytesPerSec - elapsedSecs), SECONDS)
+      // Based on throttler in Kafka
+      // scalastyle:off
+      // (https://github.com/kafka-dev/kafka/blob/master/core/src/main/scala/kafka/utils/Throttler.scala)
+      // scalastyle:on
+      val sleepTime = MILLISECONDS.convert((bytesWrittenSinceSync / bytesPerSec - elapsedSecs),
+        SECONDS)
       if (sleepTime > 0) Thread.sleep(sleepTime)
       waitToWrite(numBytes)
     }

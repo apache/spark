@@ -100,13 +100,13 @@ class StatsReportListener extends SparkListener with Logging {
 
     //shuffle write
     showBytesDistribution("shuffle bytes written:",
-      (_,metric) => metric.shuffleWriteMetrics.map{_.shuffleBytesWritten})
+      (_,metric) => metric.shuffleWriteMetrics.map(_.shuffleBytesWritten))
 
     //fetch & io
     showMillisDistribution("fetch wait time:",
-      (_, metric) => metric.shuffleReadMetrics.map{_.fetchWaitTime})
+      (_, metric) => metric.shuffleReadMetrics.map(_.fetchWaitTime))
     showBytesDistribution("remote bytes read:",
-      (_, metric) => metric.shuffleReadMetrics.map{_.remoteBytesRead})
+      (_, metric) => metric.shuffleReadMetrics.map(_.remoteBytesRead))
     showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
     //runtime breakdown
@@ -152,8 +152,8 @@ private[spark] object StatsReportListener extends Logging {
     logInfo("\t" + quantiles.mkString("\t"))
   }
 
-  def showDistribution(heading: String,
-      dOpt: Option[Distribution], formatNumber: Double => String) {
+  def showDistribution(heading: String, dOpt: Option[Distribution], formatNumber: Double => String)
+  {
     dOpt.foreach { d => showDistribution(heading, d, formatNumber)}
   }
 
@@ -162,9 +162,11 @@ private[spark] object StatsReportListener extends Logging {
     showDistribution(heading, dOpt, f _)
   }
 
-  def showDistribution(heading:String, format: String,
-      getMetric: (TaskInfo,TaskMetrics) => Option[Double])
-    (implicit stage: SparkListenerStageCompleted) {
+  def showDistribution(
+      heading: String,
+      format: String,
+      getMetric: (TaskInfo, TaskMetrics) => Option[Double])
+      (implicit stage: SparkListenerStageCompleted) {
     showDistribution(heading, extractDoubleDistribution(stage, getMetric), format)
   }
 

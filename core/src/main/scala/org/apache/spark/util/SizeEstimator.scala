@@ -241,7 +241,7 @@ private[spark] object SizeEstimator extends Logging {
     } else if (cls == classOf[Double]) {
       DOUBLE_SIZE
     } else {
-        throw new IllegalArgumentException(
+      throw new IllegalArgumentException(
       "Non-primitive class " + cls + " passed to primitiveSize()")
     }
   }
