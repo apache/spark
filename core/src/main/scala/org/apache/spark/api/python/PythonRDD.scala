@@ -91,8 +91,9 @@ private[spark] class PythonRDD[T: ClassTag](
             // Kill the Python worker process:
             worker.shutdownOutput()
           case e: IOException =>
-            // This can happen for legitimate reasons if the Python code stops returning data before we are done
-            // passing elements through, e.g., for take(). Just log a message to say it happened.
+            // This can happen for legitimate reasons if the Python code stops returning data
+            // before we are done passing elements through, e.g., for take(). Just log a message
+            // to say it happened.
             logInfo("stdin writer to Python finished early")
             logDebug("stdin writer to Python finished early", e)
         }
@@ -132,7 +133,8 @@ private[spark] class PythonRDD[T: ClassTag](
               val init = initTime - bootTime
               val finish = finishTime - initTime
               val total = finishTime - startTime
-              logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot, init, finish))
+              logInfo("Times: total = %s, boot = %s, init = %s, finish = %s".format(total, boot,
+                init, finish))
               read
             case SpecialLengths.PYTHON_EXCEPTION_THROWN =>
               // Signals that an exception has been thrown in python
@@ -184,7 +186,7 @@ private class PairwiseRDD(prev: RDD[Array[Byte]]) extends
   override def compute(split: Partition, context: TaskContext) =
     prev.iterator(split, context).grouped(2).map {
       case Seq(a, b) => (Utils.deserializeLongValue(a), b)
-      case x          => throw new SparkException("PairwiseRDD: unexpected value: " + x)
+      case x => throw new SparkException("PairwiseRDD: unexpected value: " + x)
     }
   val asJavaPairRDD : JavaPairRDD[Long, Array[Byte]] = JavaPairRDD.fromRDD(this)
 }
@@ -274,7 +276,8 @@ private[spark] object PythonRDD {
 
 }
 
-private class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
+private
+class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
   override def call(arr: Array[Byte]) : String = new String(arr, "UTF-8")
 }
 

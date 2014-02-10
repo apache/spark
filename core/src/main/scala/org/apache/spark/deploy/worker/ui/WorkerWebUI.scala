@@ -187,7 +187,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
     val logPageLength = math.min(byteLength, maxBytes)
 
-    val endByte = math.min(startByte+logPageLength, logLength)
+    val endByte = math.min(startByte + logPageLength, logLength)
 
     (startByte, endByte)
   }

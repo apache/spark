@@ -60,7 +60,8 @@ class KryoSerializer(conf: SparkConf) extends org.apache.spark.serializer.Serial
     try {
       for (regCls <- conf.getOption("spark.kryo.registrator")) {
         logDebug("Running user registrator: " + regCls)
-        val reg = Class.forName(regCls, true, classLoader).newInstance().asInstanceOf[KryoRegistrator]
+        val reg = Class.forName(regCls, true, classLoader).newInstance()
+          .asInstanceOf[KryoRegistrator]
         reg.registerClasses(kryo)
       }
     } catch {

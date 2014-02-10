@@ -101,16 +101,16 @@ private[spark] class ClientArguments(args: Array[String]) {
     // TODO: It wouldn't be too hard to allow users to submit their app and dependency jars
     //       separately similar to in the YARN client.
     val usage =
-      s"""
-        |Usage: DriverClient [options] launch <active-master> <jar-url> <main-class> [driver options]
-        |Usage: DriverClient kill <active-master> <driver-id>
-        |
-        |Options:
-        |   -c CORES, --cores CORES        Number of cores to request (default: $defaultCores)
-        |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $defaultMemory)
-        |   -s, --supervise                Whether to restart the driver on failure
-        |   -v, --verbose                  Print more debugging output
-      """.stripMargin
+     s"""
+      |Usage: DriverClient [options] launch <active-master> <jar-url> <main-class> [driver options]
+      |Usage: DriverClient kill <active-master> <driver-id>
+      |
+      |Options:
+      |   -c CORES, --cores CORES        Number of cores to request (default: $defaultCores)
+      |   -m MEMORY, --memory MEMORY     Megabytes of memory to request (default: $defaultMemory)
+      |   -s, --supervise                Whether to restart the driver on failure
+      |   -v, --verbose                  Print more debugging output
+     """.stripMargin
     System.err.println(usage)
     System.exit(exitCode)
   }

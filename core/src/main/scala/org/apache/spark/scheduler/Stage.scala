@@ -63,8 +63,9 @@ private[spark] class Stage(
   def addOutputLoc(partition: Int, status: MapStatus) {
     val prevList = outputLocs(partition)
     outputLocs(partition) = status :: prevList
-    if (prevList == Nil)
+    if (prevList == Nil) {
       numAvailableOutputs += 1
+    }
   }
 
   def removeOutputLoc(partition: Int, bmAddress: BlockManagerId) {

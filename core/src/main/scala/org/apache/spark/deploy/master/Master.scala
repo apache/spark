@@ -149,10 +149,11 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   override def receive = {
     case ElectedLeader => {
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData()
-      state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty)
+      state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
         RecoveryState.ALIVE
-      else
+      } else {
         RecoveryState.RECOVERING
+      }
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedDrivers, storedWorkers)
@@ -165,7 +166,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       System.exit(0)
     }
 
-    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerWebUiPort, publicAddress) => {
+    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerWebUiPort, publicAddress)
+    => {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         host, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -181,9 +183,10 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
           schedule()
         } else {
           val workerAddress = worker.actor.path.address
-          logWarning("Worker registration failed. Attempted to re-register worker at same address: " +
-            workerAddress)
-          sender ! RegisterWorkerFailed("Attempted to re-register worker at same address: " + workerAddress)
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          sender ! RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress)
         }
       }
     }
@@ -641,8 +644,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
           worker.id, WORKER_TIMEOUT/1000))
         removeWorker(worker)
       } else {
-        if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT))
+        if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT)) {
           workers -= worker // we've seen this DEAD worker in the UI, etc. for long enough; cull it
+        }
       }
     }
   }

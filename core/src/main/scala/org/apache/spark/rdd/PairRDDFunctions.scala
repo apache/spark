@@ -705,7 +705,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     }
 
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
-      valueClass.getSimpleName+ ")")
+      valueClass.getSimpleName + ")")
 
     val writer = new SparkHadoopWriter(conf)
     writer.preSetup()

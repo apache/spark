@@ -33,7 +33,8 @@ import scala.collection.mutable.ArrayBuffer
  * fault recovery without spinning up a lot of processes.
  */
 private[spark]
-class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: Int) extends Logging {
+class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: Int)
+  extends Logging {
 
   private val localHostname = Utils.localHostName()
   private val masterActorSystems = ArrayBuffer[ActorSystem]()
