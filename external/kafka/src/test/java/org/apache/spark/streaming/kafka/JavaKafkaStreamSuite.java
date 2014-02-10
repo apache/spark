@@ -34,9 +34,9 @@ import org.apache.spark.streaming.LocalJavaStreamingContext;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
-import org.apache.spark.streaming.kafka.KafkaStreamSuite;
 
 import org.junit.Test;
+import org.junit.Ignore;
 import org.junit.After;
 import org.junit.Before;
 
@@ -61,7 +61,7 @@ public class JavaKafkaStreamSuite extends LocalJavaStreamingContext implements S
     testSuite.afterFunction();
   }
 
-  @Test
+  @Ignore @Test
   public void testKafkaStream() {
     String topic = "topic1";
     HashMap<String, Integer> topics = new HashMap<String, Integer>();
