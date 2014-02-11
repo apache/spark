@@ -24,6 +24,7 @@ import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 
 import org.apache.spark.{Partition, TaskContext}
+import org.apache.spark.util.random.BernoulliSampler
 
 private[spark]
 class FoldedRDDPartition(val prev: Partition, val seed: Int) extends Partition with Serializable {
@@ -32,24 +33,10 @@ class FoldedRDDPartition(val prev: Partition, val seed: Int) extends Partition w
 
 class FoldedRDD[T: ClassTag](
     prev: RDD[T],
-    fold: Int,
-    folds: Int,
+    fold: Float,
+    folds: Float,
     seed: Int)
-  extends RDD[T](prev) {
-
-  override def getPartitions: Array[Partition] = {
-    val rg = new Random(seed)
-    firstParent[T].partitions.map(x => new FoldedRDDPartition(x, rg.nextInt))
-  }
-
-  override def getPreferredLocations(split: Partition): Seq[String] =
-    firstParent[T].preferredLocations(split.asInstanceOf[FoldedRDDPartition].prev)
-
-  override def compute(splitIn: Partition, context: TaskContext): Iterator[T] = {
-    val split = splitIn.asInstanceOf[FoldedRDDPartition]
-    val rand = new Random(split.seed)
-    firstParent[T].iterator(split.prev, context).filter(x => (rand.nextInt(folds) == fold-1))
-  }
+  extends PartitionwiseSampledRDD[T, T](prev, new BernoulliSampler((fold-1)/folds,fold/folds, false), seed) {
 }
 
 /**
@@ -58,14 +45,8 @@ class FoldedRDD[T: ClassTag](
  */
 class CompositeFoldedRDD[T: ClassTag](
     prev: RDD[T],
-    fold: Int,
-    folds: Int,
+    fold: Float,
+    folds: Float,
     seed: Int)
-  extends FoldedRDD[T](prev, fold, folds, seed) {
-
-  override def compute(splitIn: Partition, context: TaskContext): Iterator[T] = {
-    val split = splitIn.asInstanceOf[FoldedRDDPartition]
-    val rand = new Random(split.seed)
-    firstParent[T].iterator(split.prev, context).filter(x => (rand.nextInt(folds) != fold-1))
-  }
+  extends PartitionwiseSampledRDD[T, T](prev, new BernoulliSampler((fold-1)/folds, fold/folds, true), seed) {
 }
