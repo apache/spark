@@ -48,8 +48,8 @@ private[spark] object UIUtils {
       case _ => <li><a href={prependBaseUri("/environment")}>Environment</a></li>
     }
     val executors = page match {
-      case Executors => <li class="active"><a href={prependBaseUri("/executors")}>Executors</a>
-      </li>
+      case Executors =>
+        <li class="active"><a href={prependBaseUri("/executors")}>Executors</a></li>
       case _ => <li><a href={prependBaseUri("/executors")}>Executors</a></li>
     }
 
@@ -66,7 +66,8 @@ private[spark] object UIUtils {
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
             <a href={prependBaseUri("/")} class="brand">
-                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}  /></a>
+              <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+            </a>
             <ul class="nav">
               {jobs}
               {storage}

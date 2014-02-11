@@ -74,8 +74,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
     new LinkedBlockingDeque[Runnable]())
 
   private val serverChannel = ServerSocketChannel.open()
-  private val connectionsByKey = new HashMap[SelectionKey, Connection]
-    with SynchronizedMap[SelectionKey, Connection]
+  private val connectionsByKey =
+    new HashMap[SelectionKey, Connection] with SynchronizedMap[SelectionKey, Connection]
   private val connectionsById = new HashMap[ConnectionManagerId, SendingConnection]
     with SynchronizedMap[ConnectionManagerId, SendingConnection]
   private val messageStatuses = new HashMap[Int, MessageStatus]
@@ -445,10 +445,9 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
         assert (sendingConnectionManagerId == remoteConnectionManagerId)
 
         messageStatuses.synchronized {
-          for (s <- messageStatuses.values if
-            s.connectionManagerId == sendingConnectionManagerId) {
-              logInfo("Notifying " + s)
-              s.synchronized {
+          for (s <- messageStatuses.values if s.connectionManagerId == sendingConnectionManagerId) {
+            logInfo("Notifying " + s)
+            s.synchronized {
               s.attempted = true
               s.acked = false
               s.markDone()
@@ -574,7 +573,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
     val promise = Promise[Option[Message]]
     val status = new MessageStatus(
       message, connectionManagerId, s => promise.success(s.ackMessage))
-      messageStatuses.synchronized {
+    messageStatuses.synchronized {
       messageStatuses += ((message.id, status))
     }
     sendMessage(connectionManagerId, message)
@@ -684,8 +683,11 @@ private[spark] object ConnectionManager {
     println("--------------------------")
     val size = 10 * 1024 * 1024
     val count = 10
-    val buffers = Array.tabulate(count)(i => ByteBuffer.allocate(size * (i + 1)).put(
-      Array.tabulate[Byte](size * (i + 1))(x => x.toByte)))
+    val buffers = Array.tabulate(count) { i =>
+      val bufferLen = size * (i + 1)
+      val bufferContent = Array.tabulate[Byte](bufferLen)(x => x.toByte)
+      ByteBuffer.allocate(bufferLen).put(bufferContent)
+    }
     buffers.foreach(_.flip)
     val mb = buffers.map(_.remaining).reduceLeft(_ + _) / 1024.0 / 1024.0
 

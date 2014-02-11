@@ -20,5 +20,7 @@ import sbt._
 object SparkPluginDef extends Build {
   lazy val root = Project("plugins", file(".")) dependsOn(junitXmlListener)
   /* This is not published in a Maven repository, so we get it from GitHub directly */
-  lazy val junitXmlListener = uri("git://github.com/chenkelmann/junit_xml_listener.git#3f8029fbfda54dc7a68b1afd2f885935e1090016")
+  lazy val junitXmlListener = uri(
+    "https://github.com/chenkelmann/junit_xml_listener.git#3f8029fbfda54dc7a68b1afd2f885935e1090016"
+  )
 }

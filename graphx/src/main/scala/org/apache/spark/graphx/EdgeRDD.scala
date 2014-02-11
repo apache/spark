@@ -67,8 +67,7 @@ class EdgeRDD[@specialized ED: ClassTag](
   }
 
   private[graphx] def mapEdgePartitions[ED2: ClassTag](
-    f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2])
-    : EdgeRDD[ED2] = {
+      f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2]): EdgeRDD[ED2] = {
     new EdgeRDD[ED2](partitionsRDD.mapPartitions({ iter =>
       val (pid, ep) = iter.next()
       Iterator(Tuple2(pid, f(pid, ep)))

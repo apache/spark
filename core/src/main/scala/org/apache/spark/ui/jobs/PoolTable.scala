@@ -61,9 +61,8 @@ private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressLis
     }
     <tr>
       <td>
-          <a href=
-             {"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),p.name)}>
-              {p.name}</a></td>
+        <a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),p.name)}>{p.name}</a>
+      </td>
       <td>{p.minShare}</td>
       <td>{p.weight}</td>
       <td>{activeStages}</td>

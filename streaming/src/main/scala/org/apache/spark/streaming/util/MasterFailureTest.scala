@@ -407,10 +407,11 @@ class FileGeneratingThread(input: Seq[String], testDir: Path, interval: Long)
             }
           }
         }
-    if (!done)
+        if (!done) {
           logError("Could not generate file " + hadoopFile)
-        else
+        } else {
           logInfo("Generated file " + hadoopFile + " at " + System.currentTimeMillis)
+        }
         Thread.sleep(interval)
         localFile.delete()
       }

@@ -291,7 +291,7 @@ private[spark] class BlockManager(
           throw new Exception("Block " + blockId + " not found on disk, though it should be")
       }
     } else {
-        doGetLocal(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
+      doGetLocal(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
     }
   }
 

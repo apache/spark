@@ -26,7 +26,7 @@ import org.apache.spark.network._
 
 private[spark]
 class BlockMessageArray(var blockMessages: Seq[BlockMessage])
-    extends Seq[BlockMessage] with Logging {
+  extends Seq[BlockMessage] with Logging {
   
   def this(bm: BlockMessage) = this(Array(bm))
 

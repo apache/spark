@@ -29,8 +29,7 @@ import org.apache.spark.streaming.twitter._
  * a windowed and global estimate of the unique user IDs occurring in a Twitter stream.
  * <p>
  * <p>
- *   This <a href= "http://highlyscalable.wordpress.com/2012/05/01/probabilistic-structures-web-analytics-data
- * -mining/">
+ *   This <a href="http://highlyscalable.wordpress.com/2012/05/01/probabilistic-structures-web-analytics-data-mining/">
  *   blog post</a> and this
  *   <a href= "http://highscalability.com/blog/2012/4/5/big-data-counting-how-to-count-a-billion-distinct-objects-us.html">
  *     blog post</a>

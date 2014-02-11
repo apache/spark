@@ -94,12 +94,14 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /**
-   * Attempts to start a Jetty server at the supplied hostName:port which uses the supplied handlers.
+   * Attempts to start a Jetty server at the supplied hostName:port which uses the supplied
+   * handlers.
    *
    * If the desired port number is contented, continues incrementing ports until a free port is
    * found. Returns the chosen port and the jetty Server object.
    */
-  def startJettyServer(hostName: String, port: Int, handlers: Seq[(String, Handler)]): (Server, Int) = {
+  def startJettyServer(hostName: String, port: Int, handlers: Seq[(String, Handler)]): (Server, Int)
+  = {
 
     val handlersToRegister = handlers.map { case(path, handler) =>
       val contextHandler = new ContextHandler(path)

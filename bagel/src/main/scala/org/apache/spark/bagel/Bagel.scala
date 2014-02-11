@@ -33,7 +33,8 @@ object Bagel extends Logging {
    * @param messages initial set of messages represented as an RDD of (Key, Message) pairs. Often
    *                 this will be an empty array, i.e. sc.parallelize(Array[K, Message]()).
    * @param combiner [[org.apache.spark.bagel.Combiner]] combines multiple individual messages to a
-   *                 given vertex into one message before sending (which often involves network I/O).
+   *                 given vertex into one message before sending (which often involves network
+   *                 I/O).
    * @param aggregator [[org.apache.spark.bagel.Aggregator]] performs a reduce across all vertices
    *                  after each superstep and provides the result to each vertex in the next
    *                  superstep.

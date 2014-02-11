@@ -180,8 +180,8 @@ private[spark] object ClosureCleaner extends Logging {
   }
 }
 
-private[spark] class FieldAccessFinder(output: Map[Class[_], Set[String]])
-    extends ClassVisitor(ASM4) {
+private[spark]
+class FieldAccessFinder(output: Map[Class[_], Set[String]]) extends ClassVisitor(ASM4) {
   override def visitMethod(access: Int, name: String, desc: String,
       sig: String, exceptions: Array[String]): MethodVisitor = {
     new MethodVisitor(ASM4) {
