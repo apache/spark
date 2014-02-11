@@ -203,7 +203,7 @@ trait PlanningStrategies {
         // This sort is a global sort. Its requiredDistribution will be an OrderedDistribution.
         execution.Sort(sortExprs, global = true, planLater(child)):: Nil
       case logical.SortPartitions(sortExprs, child) =>
-        // This sort only sort tuples within a partition. Its requiredDistribution will be
+        // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
         execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
       case logical.Project(projectList, child) =>
@@ -220,8 +220,12 @@ trait PlanningStrategies {
         execution.StopAfter(Evaluate(limit, Nil).asInstanceOf[Int], planLater(child))(sc) :: Nil
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater))(sc) :: Nil
-      case logical.Transform(input, script, output, child) =>
-        execution.Transform(input, script, output, planLater(child))(sc) :: Nil
+      case logical.Generate(generator, join, outer, _, child) =>
+        execution.Generate(generator, join = join, outer = outer, planLater(child)) :: Nil
+      case logical.ScriptTransformation(input, script, output, child) =>
+        execution.ScriptTransformation(input, script, output, planLater(child))(sc) :: Nil
+      case logical.NoRelation =>
+        execution.LocalRelation(Nil, Seq(IndexedSeq()))(sc) :: Nil
       case _ => Nil
     }
   }

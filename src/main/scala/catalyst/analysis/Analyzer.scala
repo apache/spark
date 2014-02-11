@@ -32,6 +32,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
       ResolveRelations ::
+      ImplicitGenerate ::
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
@@ -115,6 +116,18 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
+   * When a SELECT clause has only a single expression and that expression is a
+   * [[catalyst.expressions.Generator Generator]] we convert the
+   * [[catalyst.plans.logical.Project Project]] to a [[catalyst.plans.logical.Generate Generate]].
+   */
+  object ImplicitGenerate extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Project(Seq(Alias(g: Generator, _)), child) =>
+        Generate(g, join = false, outer = false, None, child)
+    }
+  }
+
+  /**
    * Expands any references to [[Star]] (*) in project operators.
    */
   object StarExpansion extends Rule[LogicalPlan] {
@@ -129,7 +142,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             case o => o :: Nil
           },
           child)
-      case t: Transform if containsStar(t.input) =>
+      case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(
           input = t.input.flatMap {
             case s: Star => s.expand(t.child.output)
