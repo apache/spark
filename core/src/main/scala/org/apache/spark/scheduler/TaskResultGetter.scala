@@ -57,7 +57,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
                  * between when the task ended and when we tried to fetch the result, or if the
                  * block manager had to flush the result. */
                 scheduler.handleFailedTask(
-                  taskSetManager, tid, TaskState.FINISHED, Some(TaskResultLost))
+                  taskSetManager, tid, TaskState.FINISHED, TaskResultLost)
                 return
               }
               val deserializedResult = serializer.get().deserialize[DirectTaskResult[_]](
@@ -80,13 +80,13 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
 
   def enqueueFailedTask(taskSetManager: TaskSetManager, tid: Long, taskState: TaskState,
     serializedData: ByteBuffer) {
-    var reason: Option[TaskEndReason] = None
+    var reason : TaskEndReason = UnknownReason
     getTaskResultExecutor.execute(new Runnable {
       override def run() {
         try {
           if (serializedData != null && serializedData.limit() > 0) {
-            reason = Some(serializer.get().deserialize[TaskEndReason](
-              serializedData, getClass.getClassLoader))
+            reason = serializer.get().deserialize[TaskEndReason](
+              serializedData, getClass.getClassLoader)
           }
         } catch {
           case cnd: ClassNotFoundException =>

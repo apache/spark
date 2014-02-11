@@ -206,8 +206,9 @@ private[spark] class BlockManager(
    * message reflecting the current status, *not* the desired storage level in its block info.
    * For example, a block with MEMORY_AND_DISK set might have fallen out to be only on disk.
    *
-   * droppedMemorySize exists to account for when block is dropped from memory to disk (so it is still valid).
-   * This ensures that update in master will compensate for the increase in memory on slave.
+   * droppedMemorySize exists to account for when block is dropped from memory to disk (so it
+   * is still valid). This ensures that update in master will compensate for the increase in
+   * memory on slave.
    */
   def reportBlockStatus(blockId: BlockId, info: BlockInfo, droppedMemorySize: Long = 0L) {
     val needReregister = !tryToReportBlockStatus(blockId, info, droppedMemorySize)
@@ -224,7 +225,8 @@ private[spark] class BlockManager(
    * which will be true if the block was successfully recorded and false if
    * the slave needs to re-register.
    */
-  private def tryToReportBlockStatus(blockId: BlockId, info: BlockInfo, droppedMemorySize: Long = 0L): Boolean = {
+  private def tryToReportBlockStatus(blockId: BlockId, info: BlockInfo,
+      droppedMemorySize: Long = 0L): Boolean = {
     val (curLevel, inMemSize, onDiskSize, tellMaster) = info.synchronized {
       info.level match {
         case null =>
@@ -282,14 +284,15 @@ private[spark] class BlockManager(
     // As an optimization for map output fetches, if the block is for a shuffle, return it
     // without acquiring a lock; the disk store never deletes (recent) items so this should work
     if (blockId.isShuffle) {
-      return diskStore.getBytes(blockId) match {
+      diskStore.getBytes(blockId) match {
         case Some(bytes) =>
           Some(bytes)
         case None =>
           throw new Exception("Block " + blockId + " not found on disk, though it should be")
       }
+    } else {
+      doGetLocal(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
     }
-    doGetLocal(blockId, asValues = false).asInstanceOf[Option[ByteBuffer]]
   }
 
   private def doGetLocal(blockId: BlockId, asValues: Boolean): Option[Any] = {
@@ -701,7 +704,8 @@ private[spark] class BlockManager(
               diskStore.putBytes(blockId, bytes, level)
           }
         }
-        val droppedMemorySize = if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
+        val droppedMemorySize =
+          if (memoryStore.contains(blockId)) memoryStore.getSize(blockId) else 0L
         val blockWasRemoved = memoryStore.remove(blockId)
         if (!blockWasRemoved) {
           logWarning("Block " + blockId + " could not be dropped from memory as it does not exist")

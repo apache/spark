@@ -56,7 +56,8 @@ import org.apache.spark.metrics.source.Source
  * wild card "*" can be used to replace instance name, which means all the instances will have
  * this property.
  *
- * [sink|source] means this property belongs to source or sink. This field can only be source or sink.
+ * [sink|source] means this property belongs to source or sink. This field can only be
+ * source or sink.
  *
  * [name] specify the name of sink or source, it is custom defined.
  *

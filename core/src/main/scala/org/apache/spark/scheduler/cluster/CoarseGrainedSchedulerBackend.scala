@@ -120,7 +120,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         sender ! true
 
       case DisassociatedEvent(_, address, _) =>
-        addressToExecutorId.get(address).foreach(removeExecutor(_, "remote Akka client disassociated"))
+        addressToExecutorId.get(address).foreach(removeExecutor(_,
+          "remote Akka client disassociated"))
 
     }
 

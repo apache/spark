@@ -41,7 +41,7 @@ object Partitioner {
    * spark.default.parallelism is set, then we'll use the value from SparkContext
    * defaultParallelism, otherwise we'll use the max number of upstream partitions.
    *
-   * Unless spark.default.parallelism is set, He number of partitions will be the
+   * Unless spark.default.parallelism is set, the number of partitions will be the
    * same as the number of partitions in the largest upstream RDD, as this should
    * be least likely to cause out-of-memory errors.
    *

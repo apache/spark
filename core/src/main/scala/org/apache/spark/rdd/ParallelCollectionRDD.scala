@@ -39,7 +39,8 @@ private[spark] class ParallelCollectionPartition[T: ClassTag](
   override def hashCode(): Int = (41 * (41 + rddId) + slice).toInt
 
   override def equals(other: Any): Boolean = other match {
-    case that: ParallelCollectionPartition[_] => (this.rddId == that.rddId && this.slice == that.slice)
+    case that: ParallelCollectionPartition[_] =>
+      this.rddId == that.rddId && this.slice == that.slice
     case _ => false
   }
 

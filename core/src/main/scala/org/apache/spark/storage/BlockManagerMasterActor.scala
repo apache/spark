@@ -61,8 +61,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
   override def preStart() {
     if (!BlockManager.getDisableHeartBeatsForTesting(conf)) {
       import context.dispatcher
-      timeoutCheckingTask = context.system.scheduler.schedule(
-        0.seconds, checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
+      timeoutCheckingTask = context.system.scheduler.schedule(0.seconds,
+        checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
     }
     super.preStart()
   }
@@ -169,8 +169,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
     val toRemove = new mutable.HashSet[BlockManagerId]
     for (info <- blockManagerInfo.values) {
       if (info.lastSeenMs < minSeenTime) {
-        logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: " +
-          (now - info.lastSeenMs) + "ms exceeds " + slaveTimeout + "ms")
+        logWarning("Removing BlockManager " + info.blockManagerId + " with no recent heart beats: "
+          + (now - info.lastSeenMs) + "ms exceeds " + slaveTimeout + "ms")
         toRemove += info.blockManagerId
       }
     }

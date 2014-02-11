@@ -50,10 +50,11 @@ object ExecutorExitCode {
         "Failed to create local directory (bad spark.local.dir?)"
       case _ => 
         "Unknown executor exit code (" + exitCode + ")" + (
-          if (exitCode > 128)
+          if (exitCode > 128) {
             " (died from signal " + (exitCode - 128) + "?)"
-          else
+          } else {
             ""
+          }
         )
     }
   }

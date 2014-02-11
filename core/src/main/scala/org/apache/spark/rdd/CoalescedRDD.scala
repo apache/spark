@@ -197,9 +197,9 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
 
     // return the next preferredLocation of some partition of the RDD
     def next(): (String, Partition) = {
-      if (it.hasNext)
+      if (it.hasNext) {
         it.next()
-      else {
+      } else {
         it = resetIterator() // ran out of preferred locations, reset and rotate to the beginning
         it.next()
       }
@@ -290,8 +290,10 @@ private[spark] class PartitionCoalescer(maxPartitions: Int, prev: RDD[_], balanc
     val r1 = rnd.nextInt(groupArr.size)
     val r2 = rnd.nextInt(groupArr.size)
     val minPowerOfTwo = if (groupArr(r1).size < groupArr(r2).size) groupArr(r1) else groupArr(r2)
-    if (prefPart== None) // if no preferred locations, just use basic power of two
+    if (prefPart.isEmpty) {
+      // if no preferred locations, just use basic power of two
       return minPowerOfTwo
+    }
 
     val prefPartActual = prefPart.get
 

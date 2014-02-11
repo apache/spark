@@ -23,8 +23,8 @@ import org.apache.spark.{TaskContext, OneToOneDependency, SparkContext, Partitio
 
 
 /**
- * Class representing partitions of PartitionerAwareUnionRDD, which maintains the list of corresponding partitions
- * of parent RDDs.
+ * Class representing partitions of PartitionerAwareUnionRDD, which maintains the list of
+ * corresponding partitions of parent RDDs.
  */
 private[spark]
 class PartitionerAwareUnionRDDPartition(

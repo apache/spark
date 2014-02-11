@@ -59,7 +59,8 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
     </table>
   }
 
-  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] = {
+  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
+  {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 

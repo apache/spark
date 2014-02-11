@@ -34,9 +34,12 @@ import org.apache.spark.streaming.{Time, StreamingContext}
 import org.apache.spark.util.AkkaUtils
 
 private[streaming] sealed trait NetworkInputTrackerMessage
-private[streaming] case class RegisterReceiver(streamId: Int, receiverActor: ActorRef) extends NetworkInputTrackerMessage
-private[streaming] case class AddBlocks(streamId: Int, blockIds: Seq[BlockId], metadata: Any) extends NetworkInputTrackerMessage
-private[streaming] case class DeregisterReceiver(streamId: Int, msg: String) extends NetworkInputTrackerMessage
+private[streaming] case class RegisterReceiver(streamId: Int, receiverActor: ActorRef)
+  extends NetworkInputTrackerMessage
+private[streaming] case class AddBlocks(streamId: Int, blockIds: Seq[BlockId], metadata: Any)
+  extends NetworkInputTrackerMessage
+private[streaming] case class DeregisterReceiver(streamId: Int, msg: String)
+  extends NetworkInputTrackerMessage
 
 /**
  * This class manages the execution of the receivers of NetworkInputDStreams. Instance of
@@ -66,7 +69,8 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
     }
 
     if (!networkInputStreams.isEmpty) {
-      actor = ssc.env.actorSystem.actorOf(Props(new NetworkInputTrackerActor), "NetworkInputTracker")
+      actor = ssc.env.actorSystem.actorOf(Props(new NetworkInputTrackerActor),
+        "NetworkInputTracker")
       receiverExecutor.start()
       logInfo("NetworkInputTracker started")
     }
@@ -102,7 +106,8 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
           throw new Exception("Register received for unexpected id " + streamId)
         }
         receiverInfo += ((streamId, receiverActor))
-        logInfo("Registered receiver for network stream " + streamId + " from " + sender.path.address)
+        logInfo("Registered receiver for network stream " + streamId + " from "
+          + sender.path.address)
         sender ! true
       }
       case AddBlocks(streamId, blockIds, metadata) => {
@@ -153,12 +158,14 @@ class NetworkInputTracker(ssc: StreamingContext) extends Logging {
       })
 
       // Right now, we only honor preferences if all receivers have them
-      val hasLocationPreferences = receivers.map(_.getLocationPreference().isDefined).reduce(_ && _)
+      val hasLocationPreferences = receivers.map(_.getLocationPreference().isDefined)
+        .reduce(_ && _)
 
       // Create the parallel collection of receivers to distributed them on the worker nodes
       val tempRDD =
         if (hasLocationPreferences) {
-          val receiversWithPreferences = receivers.map(r => (r, Seq(r.getLocationPreference().toString)))
+          val receiversWithPreferences =
+            receivers.map(r => (r, Seq(r.getLocationPreference().toString)))
           ssc.sc.makeRDD[NetworkReceiver[_]](receiversWithPreferences)
         }
         else {

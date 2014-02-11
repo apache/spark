@@ -21,6 +21,7 @@ import org.apache.spark.streaming.{Seconds, StreamingContext}
 import org.apache.spark.streaming.StreamingContext._
 import org.apache.spark.storage.StorageLevel
 
+// scalastyle:off
 /**
  * Counts words in text encoded with UTF8 received from the network every second.
  *
@@ -33,6 +34,7 @@ import org.apache.spark.storage.StorageLevel
  * and then run the example
  *    `$ ./bin/run-example org.apache.spark.streaming.examples.NetworkWordCount local[2] localhost 9999`
  */
+// scalastyle:on
 object NetworkWordCount {
   def main(args: Array[String]) {
     if (args.length < 3) {

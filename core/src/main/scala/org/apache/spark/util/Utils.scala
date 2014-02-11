@@ -86,7 +86,8 @@ private[spark] object Utils extends Logging {
   }
 
   /** Serialize via nested stream using specific serializer */
-  def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(f: SerializationStream => Unit) = {
+  def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(
+      f: SerializationStream => Unit) = {
     val osWrapper = ser.serializeStream(new OutputStream {
       def write(b: Int) = os.write(b)
 
@@ -100,7 +101,8 @@ private[spark] object Utils extends Logging {
   }
 
   /** Deserialize via nested stream using specific serializer */
-  def deserializeViaNestedStream(is: InputStream, ser: SerializerInstance)(f: DeserializationStream => Unit) = {
+  def deserializeViaNestedStream(is: InputStream, ser: SerializerInstance)(
+      f: DeserializationStream => Unit) = {
     val isWrapper = ser.deserializeStream(new InputStream {
       def read(): Int = is.read()
 
