@@ -59,7 +59,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
       .map(name => new File(targetDir, s"$suiteName.$name"))
 
   /** The local directory with cached golden answer will be stored. */
-  protected val answerCache = new File(targetDir, "comparison-test-cache")
+  protected val answerCache = new File("src/test/hive/golden")
   if (!answerCache.exists)
     answerCache.mkdir()
 
@@ -213,12 +213,6 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
           logger.debug(s"Looking for cached answer file $cachedAnswerFile.")
           if (cachedAnswerFile.exists) {
             Some(fileToString(cachedAnswerFile))
-          } else if (
-              getClass.getClassLoader.getResourceAsStream(cachedAnswerFile.toString) != null &&
-              !recomputeCache) {
-            val answer = resourceToString(cachedAnswerFile.toString, classLoader = testClassLoader)
-            stringToFile(cachedAnswerFile, answer)
-            Some(answer)
           } else {
             logger.debug(s"File $cachedAnswerFile not found")
             None
