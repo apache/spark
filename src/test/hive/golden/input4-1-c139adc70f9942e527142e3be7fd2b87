@@ -1,0 +1,27 @@
+ABSTRACT SYNTAX TREE:
+  (TOK_LOAD '/Users/marmbrus/workspace/hive/data/files/kv1.txt' (TOK_TAB (TOK_TABNAME INPUT4)) LOCAL)
+
+STAGE DEPENDENCIES:
+  Stage-0 is a root stage
+  Stage-1 depends on stages: Stage-0
+  Stage-2 depends on stages: Stage-1
+
+STAGE PLANS:
+  Stage: Stage-0
+    Copy
+      source: file:/Users/marmbrus/workspace/hive/data/files/kv1.txt
+      destination: file:/tmp/hive-marmbrus/hive_2014-01-14_12-16-46_262_527870677085258278-1/-ext-10000
+
+  Stage: Stage-1
+    Move Operator
+      tables:
+          replace: false
+          table:
+              input format: org.apache.hadoop.mapred.TextInputFormat
+              output format: org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat
+              serde: org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe
+              name: default.input4
+
+  Stage: Stage-2
+    Stats-Aggr Operator
+
