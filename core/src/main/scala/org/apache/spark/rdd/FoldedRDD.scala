@@ -36,7 +36,8 @@ class FoldedRDD[T: ClassTag](
     fold: Float,
     folds: Float,
     seed: Int)
-  extends PartitionwiseSampledRDD[T, T](prev, new BernoulliSampler((fold-1)/folds,fold/folds, false), seed) {
+  extends PartitionwiseSampledRDD[T, T](prev,
+    new BernoulliSampler((fold-1)/folds,fold/folds, false), seed) {
 }
 
 /**
@@ -48,5 +49,6 @@ class CompositeFoldedRDD[T: ClassTag](
     fold: Float,
     folds: Float,
     seed: Int)
-  extends PartitionwiseSampledRDD[T, T](prev, new BernoulliSampler((fold-1)/folds, fold/folds, true), seed) {
+  extends PartitionwiseSampledRDD[T, T](prev,
+    new BernoulliSampler((fold-1)/folds, fold/folds, true), seed) {
 }
