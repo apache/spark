@@ -48,6 +48,20 @@ class RandomSamplerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar
     }
   }
 
+  test("BernoulliSamplerWithRangeInverse") {
+    expecting {
+      for(x <- Seq(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)) {
+        random.nextDouble().andReturn(x)
+      }
+    }
+    whenExecuting(random)
+    {
+      val sampler = new BernoulliSampler[Int](0.25, 0.55, true)(random)
+      assert(sampler.sample(a.iterator).toList === List(1, 2, 6, 7, 8, 9))
+    }
+  }
+
+
   test("BernoulliSamplerWithRatio") {
     expecting {
       for(x <- Seq(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9)) {
