@@ -20,13 +20,13 @@ package org.apache.spark
 import scala.math.abs
 import scala.collection.mutable.ArrayBuffer
 
-import org.scalatest.FunSuite
+import org.scalatest.{FunSuite, PrivateMethodTester}
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.util.StatCounter
 import org.apache.spark.rdd.RDD
 
-class PartitioningSuite extends FunSuite with SharedSparkContext {
+class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMethodTester {
 
   test("HashPartitioner equality") {
     val p2 = new HashPartitioner(2)
@@ -65,6 +65,31 @@ class PartitioningSuite extends FunSuite with SharedSparkContext {
     assert(p4 != descendingP4)
     assert(descendingP2 != p2)
     assert(descendingP4 != p4)
+  }
+
+  test("RangePartitioner getPartition") {
+    val rdd = sc.parallelize(1.to(2000)).map(x => (x, x))
+    // We have different behaviour of getPartition for partitions with less than 1000 and more than
+    // 1000 partitions.
+    val partitionSizes = List(1, 2, 10, 100, 500, 1000, 1500)
+    val partitioners = partitionSizes.map(p => (p, new RangePartitioner(p, rdd)))
+    val decoratedRangeBounds = PrivateMethod[Array[Int]]('rangeBounds)
+    partitioners.map { case (numPartitions, partitioner) =>
+      val rangeBounds = partitioner.invokePrivate(decoratedRangeBounds())
+      1.to(1000).map { element => {
+        val partition = partitioner.getPartition(element)
+        if (numPartitions > 1) {
+          if (partition < rangeBounds.size) {
+            assert(element <= rangeBounds(partition))
+          }
+          if (partition > 0) {
+            assert(element > rangeBounds(partition - 1))
+          }
+        } else {
+          assert(partition === 0)
+        }
+      }}
+    }
   }
 
   test("HashPartitioner not equal to RangePartitioner") {
