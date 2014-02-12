@@ -19,24 +19,27 @@ package org.apache.spark.ui.exec
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable.{HashMap, HashSet}
+import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.{ExceptionFailure, Logging, SparkContext}
-import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.{SparkListenerTaskStart, SparkListenerTaskEnd, SparkListener}
-import org.apache.spark.scheduler.TaskInfo
+import org.apache.spark.scheduler.{SparkListenerJobEnd, SparkListenerTaskStart, SparkListenerTaskEnd, SparkListener}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Executors
 import org.apache.spark.ui.UIUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils, FileLogger}
 
+import net.liftweb.json.DefaultFormats
+import net.liftweb.json.JsonAST._
+import net.liftweb.json.JsonDSL._
 
 private[spark] class ExecutorsUI(val sc: SparkContext) {
 
   private var _listener: Option[ExecutorsListener] = None
+  private implicit val format = DefaultFormats
+
   def listener = _listener.get
 
   def start() {
@@ -111,13 +114,13 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     val memUsed = status.memUsed().toString
     val maxMem = status.maxMem.toString
     val diskUsed = status.diskUsed().toString
-    val activeTasks = listener.executorToTasksActive.getOrElse(execId, HashSet.empty[Long]).size
-    val failedTasks = listener.executorToTasksFailed.getOrElse(execId, 0)
-    val completedTasks = listener.executorToTasksComplete.getOrElse(execId, 0)
-    val totalTasks = activeTasks + failedTasks + completedTasks
-    val totalDuration = listener.executorToDuration.getOrElse(execId, 0)
-    val totalShuffleRead = listener.executorToShuffleRead.getOrElse(execId, 0)
-    val totalShuffleWrite = listener.executorToShuffleWrite.getOrElse(execId, 0)
+    val activeTasks = listener.getJson(execId, "Active Tasks").extract[Int]
+    val failedTasks = listener.getJson(execId, "Failed Tasks").extract[Int]
+    val completeTasks = listener.getJson(execId, "Complete Tasks").extract[Int]
+    val totalTasks = activeTasks + failedTasks + completeTasks
+    val totalDuration = listener.getJson(execId, "Task Time").extract[Long]
+    val totalShuffleRead = listener.getJson(execId, "Shuffle Read").extract[Long]
+    val totalShuffleWrite = listener.getJson(execId, "Shuffle Write").extract[Long]
 
     Seq(
       execId,
@@ -128,7 +131,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       diskUsed,
       activeTasks.toString,
       failedTasks.toString,
-      completedTasks.toString,
+      completeTasks.toString,
       totalTasks.toString,
       totalDuration.toString,
       totalShuffleRead.toString,
@@ -137,46 +140,65 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
   }
 
   private[spark] class ExecutorsListener extends SparkListener with Logging {
-    val executorToTasksActive = HashMap[String, HashSet[TaskInfo]]()
-    val executorToTasksComplete = HashMap[String, Int]()
-    val executorToTasksFailed = HashMap[String, Int]()
-    val executorToDuration = HashMap[String, Long]()
-    val executorToShuffleRead = HashMap[String, Long]()
-    val executorToShuffleWrite = HashMap[String, Long]()
+    val executorIdToJson = HashMap[String, JValue]()
+    val logger = new FileLogger("executors-ui")
 
-    override def onTaskStart(taskStart: SparkListenerTaskStart) {
-      val eid = taskStart.taskInfo.executorId
-      val activeTasks = executorToTasksActive.getOrElseUpdate(eid, new HashSet[TaskInfo]())
-      activeTasks += taskStart.taskInfo
+    def newJson(execId: String): JValue = {
+      ("Executor ID" -> execId) ~
+      ("Active Tasks" -> 0) ~
+      ("Failed Tasks" -> 0) ~
+      ("Complete Tasks" -> 0) ~
+      ("Task Time" -> 0L) ~
+      ("Shuffle Read" -> 0L) ~
+      ("Shuffle Write" -> 0L)
     }
 
-    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-      val eid = taskEnd.taskInfo.executorId
-      val activeTasks = executorToTasksActive.getOrElseUpdate(eid, new HashSet[TaskInfo]())
-      val newDuration = executorToDuration.getOrElse(eid, 0L) + taskEnd.taskInfo.duration
-      executorToDuration.put(eid, newDuration)
-
-      activeTasks -= taskEnd.taskInfo
-      val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
-        taskEnd.reason match {
-          case e: ExceptionFailure =>
-            executorToTasksFailed(eid) = executorToTasksFailed.getOrElse(eid, 0) + 1
-            (Some(e), e.metrics)
-          case _ =>
-            executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
-            (None, Option(taskEnd.taskMetrics))
-        }
-
-      // update shuffle read/write
-      if (null != taskEnd.taskMetrics) {
-        taskEnd.taskMetrics.shuffleReadMetrics.foreach(shuffleRead =>
-          executorToShuffleRead.put(eid, executorToShuffleRead.getOrElse(eid, 0L) +
-            shuffleRead.remoteBytesRead))
-
-        taskEnd.taskMetrics.shuffleWriteMetrics.foreach(shuffleWrite =>
-          executorToShuffleWrite.put(eid, executorToShuffleWrite.getOrElse(eid, 0L) +
-            shuffleWrite.shuffleBytesWritten))
+    def getJson(execId: String, field: String): JValue = {
+      executorIdToJson.get(execId) match {
+        case Some(json) => (json \ field)
+        case None => JNothing
       }
     }
+
+    def logJson(json: JValue) = logger.logLine(compactRender(json))
+
+    override def onTaskStart(taskStart: SparkListenerTaskStart) = {
+      val eid = taskStart.taskInfo.executorId
+      var json = executorIdToJson.getOrElseUpdate(eid, newJson(eid))
+      json = json.transform {
+        case JField("Active Tasks", JInt(s)) => JField("Active Tasks", JInt(s + 1))
+      }
+      executorIdToJson(eid) = json
+      logJson(json)
+    }
+
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = {
+      val eid = taskEnd.taskInfo.executorId
+      val exception = taskEnd.reason match {
+        case _: ExceptionFailure => true
+        case _ => false
+      }
+      val newDuration = taskEnd.taskInfo.duration
+      var newShuffleRead = 0
+      var newShuffleWrite = 0
+      if (taskEnd.taskMetrics != null) {
+        taskEnd.taskMetrics.shuffleReadMetrics.foreach(newShuffleRead += _.remoteBytesRead)
+        taskEnd.taskMetrics.shuffleWriteMetrics.foreach(newShuffleWrite += _.shuffleBytesWritten)
+      }
+      var json = executorIdToJson.getOrElseUpdate(eid, newJson(eid))
+      json = json.transform {
+        case JField("Active Tasks", JInt(s)) if s > 0 => JField("Active Tasks", JInt(s - 1))
+        case JField("Failed Tasks", JInt(s)) if exception => JField("Failed Tasks", JInt(s + 1))
+        case JField("Complete Tasks", JInt(s)) if !exception =>
+          JField("Complete Tasks", JInt(s + 1))
+        case JField("Task Time", JInt(s)) => JField("Task Time", JInt(s + newDuration))
+        case JField("Shuffle Read", JInt(s)) => JField("Shuffle Read", JInt(s + newShuffleRead))
+        case JField("Shuffle Write", JInt(s)) => JField("Shuffle Write", JInt(s + newShuffleWrite))
+      }
+      executorIdToJson(eid) = json
+      logJson(json)
+    }
+
+    override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.close()
   }
 }
