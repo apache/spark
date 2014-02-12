@@ -20,12 +20,14 @@
 # - SPARK_WORKER_INSTANCES, to set the number of worker processes per node
 # - SPARK_WORKER_DIR, to set the working directory of worker processes
 echoerr() { echo "$@" 1>&2; }
+FWDIR="$(cd `dirname $0`/..; pwd)"
 
 if [[ -z "$MASTER" ]]; then
   echoerr "Sparkify: Connecting to chicago spark cluster ..."
   export MASTER=spark://dn05.chi.shopify.com:7077
   export REMOTE_SPARK_HOME=/u/apps/spark/current
   export SPARK_JAVA_OPTS="-Dspark.cores.max=10"
+  export SPARK_CLASSPATH="$FWDIR/conf/chicago_hadoop:$SPARK_CLASSPATH"
 
   # Figure out the local IP to bind spark to for shell <-> master communication
   vpn_interface=tap0;
