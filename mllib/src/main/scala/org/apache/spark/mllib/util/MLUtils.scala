@@ -199,35 +199,6 @@ object MLUtils {
     ))).toList
   }
 
-
-  /**
-   * Function to perform cross validation on a single learner.
-   *
-   * @param data - input data set
-   * @param folds - the number of folds (must be > 1)
-   * @param learner - function to produce a model
-   * @param errorFunction - function to compute the error of a given point
-   *
-   * @return the average error on the cross validated data.
-   */
-   def crossValidate(data: RDD[LabeledPoint], folds: Int, seed: Int,
-     learner: (RDD[LabeledPoint] => RegressionModel),
-     errorFunction: ((Double,Double) => Double) = meanSquaredError): Double = {
-     if (folds <= 1) {
-       throw new IllegalArgumentException("Cross validation requires more than one fold")
-     }
-     val rdds = kFoldRdds(data, folds, seed)
-     val errorRates = rdds.map{case (testData, trainingData) =>
-       val model = learner(trainingData)
-       val predictions = testData.map(data => (data.label, model.predict(data.features)))
-       val errors = predictions.map{case (x, y) => errorFunction(x, y)}
-       errors.sum()
-     }
-     val averageError = errorRates.sum / data.count.toFloat
-     averageError
-  }
-
-
   /**
    * Utility function to compute mean and standard deviation on a given dataset.
    *

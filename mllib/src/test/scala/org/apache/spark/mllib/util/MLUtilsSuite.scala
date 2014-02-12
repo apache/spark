@@ -136,28 +136,6 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     new LinearRegressionModel(Array(1.0), 0)
   }
 
-  test("Test cross validation with a reasonable learner") {
-    val data = sc.parallelize(1.to(100).zip(1.to(100))).map(
-      x => LabeledPoint(x._1, Array(x._2)))
-    val features = data.map(_.features)
-    val labels = data.map(_.label)
-    for (seed <- 1 to 5) {
-      for (folds <- 2 to 5) {
-        val avgError = MLUtils.crossValidate(data, folds, seed, exactLearner)
-        avgError should equal (0)
-      }
-    }
-  }
-
-  test("Cross validation requires more than one fold") {
-    val data = sc.parallelize(1.to(100).zip(1.to(100))).map(
-      x => LabeledPoint(x._1, Array(x._2)))
-    val thrown = intercept[java.lang.IllegalArgumentException] {
-      val avgError = MLUtils.crossValidate(data, 1, 1, exactLearner)
-    }
-    assert(thrown.getClass === classOf[IllegalArgumentException])
-  }
-
   test("kfoldRdd") {
     val data = sc.parallelize(1 to 100, 2)
     val collectedData = data.collect().sorted
