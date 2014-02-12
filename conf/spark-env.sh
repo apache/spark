@@ -26,7 +26,6 @@ if [[ -z "$MASTER" ]]; then
   export MASTER=spark://dn05.chi.shopify.com:7077
   export REMOTE_SPARK_HOME=/u/apps/spark/current
   export SPARK_JAVA_OPTS="-Dspark.cores.max=10"
-  export HADOOP_CONF_DIR=/etc/hadoop/conf
 
   # Figure out the local IP to bind spark to for shell <-> master communication
   vpn_interface=tap0;
