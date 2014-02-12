@@ -513,37 +513,6 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
-  test("FoldedRDD") {
-    val data = sc.parallelize(1 to 100, 2)
-    val lowerFoldedRdd = new FoldedRDD(data, 1, 2, 1)
-    val upperFoldedRdd = new FoldedRDD(data, 2, 2, 1)
-    val lowerCompositeFoldedRdd = new CompositeFoldedRDD(data, 1, 2, 1)
-    assert(lowerFoldedRdd.collect().sorted.size == 50)
-    assert(lowerCompositeFoldedRdd.collect().sorted.size == 50)
-    assert(lowerFoldedRdd.subtract(lowerCompositeFoldedRdd).collect().sorted ===
-      lowerFoldedRdd.collect().sorted)
-    assert(upperFoldedRdd.collect().sorted.size == 50)
-  }
-
-  test("kfoldRdd") {
-    val data = sc.parallelize(1 to 100, 2)
-    val collectedData = data.collect().sorted
-    for (folds <- 2 to 10) {
-      for (seed <- 1 to 5) {
-        val foldedRdds = data.kFoldRdds(folds, seed)
-        assert(foldedRdds.size === folds)
-        foldedRdds.map{case (test, train) =>
-          val result = test.union(train).collect().sorted
-          assert(result ===  collectedData,
-            "Each training+test set combined contains all of the data")
-        }
-        // K fold cross validation should only have each element in the test set exactly once
-        assert(foldedRdds.map(_._1).reduce((x,y) => x.union(y)).collect().sorted ===
-          data.collect().sorted)
-      }
-    }
-  }
-
   test("runJob on an invalid partition") {
     intercept[IllegalArgumentException] {
       sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)

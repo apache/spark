@@ -43,7 +43,6 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     System.clearProperty("spark.driver.port")
   }
 
-
   test("epsilon computation") {
     assert(1.0 + EPSILON > 1.0, s"EPSILON is too small: $EPSILON.")
     assert(1.0 + EPSILON / 2.0 === 1.0, s"EPSILON is too big: $EPSILON.")
@@ -137,20 +136,11 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     new LinearRegressionModel(Array(1.0), 0)
   }
 
-  test("Test cross validation with a terrible learner") {
-    val data = sc.parallelize(1.to(100).zip(1.to(100))).map(
-      x => LabeledPoint(x._1, Array(x._2)))
-    val expectedError = 1.to(100).map(x => x*x).sum / 100.0
-    for (seed <- 1 to 5) {
-      for (folds <- 2 to 5) {
-        val avgError = MLUtils.crossValidate(data, folds, seed, terribleLearner)
-        avgError should equal (expectedError)
-      }
-    }
-  }
   test("Test cross validation with a reasonable learner") {
     val data = sc.parallelize(1.to(100).zip(1.to(100))).map(
       x => LabeledPoint(x._1, Array(x._2)))
+    val features = data.map(_.features)
+    val labels = data.map(_.label)
     for (seed <- 1 to 5) {
       for (folds <- 2 to 5) {
         val avgError = MLUtils.crossValidate(data, folds, seed, exactLearner)
@@ -163,8 +153,33 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     val data = sc.parallelize(1.to(100).zip(1.to(100))).map(
       x => LabeledPoint(x._1, Array(x._2)))
     val thrown = intercept[java.lang.IllegalArgumentException] {
-      val avgError = MLUtils.crossValidate(data, 1, 1, terribleLearner)
+      val avgError = MLUtils.crossValidate(data, 1, 1, exactLearner)
     }
     assert(thrown.getClass === classOf[IllegalArgumentException])
   }
+
+  test("kfoldRdd") {
+    val data = sc.parallelize(1 to 100, 2)
+    val collectedData = data.collect().sorted
+    val twoFoldedRdd = MLUtils.kFoldRdds(data, 2, 1)
+    assert(twoFoldedRdd(0)._1.collect().sorted === twoFoldedRdd(1)._2.collect().sorted)
+    assert(twoFoldedRdd(0)._2.collect().sorted === twoFoldedRdd(1)._1.collect().sorted)
+    for (folds <- 2 to 10) {
+      for (seed <- 1 to 5) {
+        val foldedRdds = MLUtils.kFoldRdds(data, folds, seed)
+        assert(foldedRdds.size === folds)
+        foldedRdds.map{case (test, train) =>
+          val result = test.union(train).collect().sorted
+          assert(test.collect().size > 0, "Non empty test data")
+          assert(train.collect().size > 0, "Non empty training data")
+          assert(result ===  collectedData,
+            "Each training+test set combined contains all of the data")
+        }
+        // K fold cross validation should only have each element in the test set exactly once
+        assert(foldedRdds.map(_._1).reduce((x,y) => x.union(y)).collect().sorted ===
+          data.collect().sorted)
+      }
+    }
+  }
+
 }

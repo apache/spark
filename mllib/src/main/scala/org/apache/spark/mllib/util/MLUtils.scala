@@ -22,6 +22,15 @@ import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import scala.reflect._
+
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
+import org.apache.spark.rdd.PartitionwiseSampledRDD
+import org.apache.spark.SparkContext._
+import org.apache.spark.util.random.BernoulliSampler
+
+import org.jblas.DoubleMatrix
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.linalg.{Vector, Vectors}
 import org.apache.spark.mllib.regression.RegressionModel
@@ -177,6 +186,21 @@ object MLUtils {
   }
 
   /**
+   * Return a k element list of pairs of RDDs with the first element of each pair
+   * containing a unique 1/Kth of the data and the second element contain the composite of that.
+   */
+  def kFoldRdds[T : ClassTag](rdd: RDD[T], folds: Int, seed: Int): List[Pair[RDD[T], RDD[T]]] = {
+    val foldsF = folds.toFloat
+    1.to(folds).map(fold => ((
+      new PartitionwiseSampledRDD(rdd, new BernoulliSampler[T]((fold-1)/foldsF,fold/foldsF, false),
+        seed),
+      new PartitionwiseSampledRDD(rdd, new BernoulliSampler[T]((fold-1)/foldsF,fold/foldsF, true),
+        seed)
+    ))).toList
+  }
+
+
+  /**
    * Function to perform cross validation on a single learner.
    *
    * @param data - input data set
@@ -192,14 +216,14 @@ object MLUtils {
      if (folds <= 1) {
        throw new IllegalArgumentException("Cross validation requires more than one fold")
      }
-     val rdds = data.kFoldRdds(folds, seed)
+     val rdds = kFoldRdds(data, folds, seed)
      val errorRates = rdds.map{case (testData, trainingData) =>
        val model = learner(trainingData)
-       val predictions = model.predict(testData.map(_.features))
-       val errors = predictions.zip(testData.map(_.label)).map{case (x,y) => errorFunction(x,y)}
+       val predictions = testData.map(data => (data.label, model.predict(data.features)))
+       val errors = predictions.map{case (x, y) => errorFunction(x, y)}
        errors.sum()
      }
-     val averageError = errorRates.sum / data.count
+     val averageError = errorRates.sum / data.count.toFloat
      averageError
   }
 
