@@ -47,6 +47,7 @@ object HiveFunctionRegistry extends analysis.FunctionRegistry {
     case c: Class[_] if c == classOf[org.apache.hadoop.io.IntWritable] => IntegerType
     case c: Class[_] if c == classOf[org.apache.hadoop.io.LongWritable] => LongType
     case c: Class[_] if c == classOf[org.apache.hadoop.io.FloatWritable] => FloatType
+    case c: Class[_] if c == classOf[org.apache.hadoop.io.BooleanWritable] => BooleanType
     case c: Class[_] if c == classOf[java.lang.String] => StringType
     case c: Class[_] if c == java.lang.Short.TYPE => ShortType
     case c: Class[_] if c == java.lang.Integer.TYPE => ShortType
