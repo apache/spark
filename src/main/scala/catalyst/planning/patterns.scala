@@ -35,8 +35,10 @@ object FilteredOperation extends PredicateHelper {
 object PhysicalOperation extends PredicateHelper {
   type ReturnType = (Seq[NamedExpression], Seq[Expression], LogicalPlan)
 
-  def unapply(plan: LogicalPlan): Option[ReturnType] =
-    Some(collectProjectsAndFilters(None, Nil, plan, Map.empty))
+  def unapply(plan: LogicalPlan): Option[ReturnType] = {
+    val (fields, filters, child, _) = collectProjectsAndFilters(plan)
+    Some((fields.getOrElse(child.output), filters, child))
+  }
 
   /**
    * Collects projects and filters, in-lining/substituting aliases if necessary.  Here are two
@@ -51,25 +53,22 @@ object PhysicalOperation extends PredicateHelper {
    *   SELECT key AS c2 FROM t1 WHERE key > 10
    * }}}
    */
-  def collectProjectsAndFilters(
-      topFields: Option[Seq[Expression]],
-      filters: Seq[Expression],
-      plan: LogicalPlan,
-      aliases: Map[Attribute, Expression]): ReturnType = {
+  def collectProjectsAndFilters(plan: LogicalPlan):
+      (Option[Seq[NamedExpression]], Seq[Expression], LogicalPlan, Map[Attribute, Expression]) =
     plan match {
       case Project(fields, child) =>
-        val moreAliases = aliases ++ collectAliases(fields)
-        val updatedTopFields = topFields.map(_.map(substitute(moreAliases))).getOrElse(fields)
-        collectProjectsAndFilters(Some(updatedTopFields), filters, child, moreAliases)
+        val (_, filters, other, aliases) = collectProjectsAndFilters(child)
+        val substitutedFields = fields.map(substitute(aliases)).asInstanceOf[Seq[NamedExpression]]
+        (Some(substitutedFields), filters, other, collectAliases(substitutedFields))
 
       case Filter(condition, child) =>
-        val moreFilters = filters ++ splitConjunctivePredicates(condition)
-        collectProjectsAndFilters(topFields, moreFilters.map(substitute(aliases)), child, aliases)
+        val (fields, filters, other, aliases) = collectProjectsAndFilters(child)
+        val substitutedCondition = substitute(aliases)(condition)
+        (fields, filters ++ splitConjunctivePredicates(substitutedCondition), other, aliases)
 
       case other =>
-        (topFields.getOrElse(other.output).asInstanceOf[Seq[NamedExpression]], filters, other)
+        (None, Nil, other, Map.empty)
     }
-  }
 
   def collectAliases(fields: Seq[Expression]) = fields.collect {
     case a @ Alias(child, _) => a.toAttribute.asInstanceOf[Attribute] -> child

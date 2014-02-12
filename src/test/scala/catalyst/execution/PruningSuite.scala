@@ -1,24 +1,80 @@
 package catalyst.execution
 
+import scala.collection.JavaConversions._
+
 import TestShark._
 
 /**
  * A set of test cases that validate partition and column pruning.
  */
 class PruningSuite extends HiveComparisonTest {
-  createPruningTest("Non-partitioned, non-simple project",
+  // Column pruning tests
+
+  createPruningTest("Column pruning: with partitioned table",
+    "SELECT key FROM srcpart WHERE ds = '2008-04-08' LIMIT 3",
+    Seq("key"),
+    Seq("key", "ds"),
+    Seq(
+      Seq("2008-04-08", "11"),
+      Seq("2008-04-08", "12")))
+
+  createPruningTest("Column pruning: with non-partitioned table",
+    "SELECT key FROM src WHERE key > 10 LIMIT 3",
+    Seq("key"),
+    Seq("key"),
+    Seq.empty)
+
+  createPruningTest("Column pruning: with multiple projects",
+    "SELECT c1 FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
+    Seq("c1"),
+    Seq("key"),
+    Seq.empty)
+
+  createPruningTest("Column pruning: projects alias substituting",
+    "SELECT c1 AS c2 FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
+    Seq("c2"),
+    Seq("key"),
+    Seq.empty)
+
+  createPruningTest("Column pruning: filter alias in-lining",
+    "SELECT c1 FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 WHERE c1 < 100 LIMIT 3",
+    Seq("c1"),
+    Seq("key"),
+    Seq.empty)
+
+  createPruningTest("Column pruning: without filters",
+    "SELECT c1 FROM (SELECT key AS c1 FROM src) t1 LIMIT 3",
+    Seq("c1"),
+    Seq("key"),
+    Seq.empty)
+
+  createPruningTest("Column pruning: simple top project without aliases",
+    "SELECT key FROM (SELECT key FROM src WHERE key > 10) t1 WHERE key < 100 LIMIT 3",
+    Seq("key"),
+    Seq("key"),
+    Seq.empty)
+
+  createPruningTest("Column pruning: non-trivial top project with aliases",
+    "SELECT c1 * 2 AS double FROM (SELECT key AS c1 FROM src WHERE key > 10) t1 LIMIT 3",
+    Seq("double"),
+    Seq("key"),
+    Seq.empty)
+
+  // Partition pruning tests
+
+  createPruningTest("Partition pruning: non-partitioned, non-trivial project",
     "SELECT key * 2 AS double FROM src WHERE value IS NOT NULL",
     Seq("double"),
     Seq("key", "value"),
     Seq.empty)
 
-  createPruningTest("Pruning non-partitioned table",
+  createPruningTest("Partiton pruning: non-partitioned table",
     "SELECT value FROM src WHERE key IS NOT NULL",
     Seq("value"),
     Seq("value", "key"),
     Seq.empty)
 
-  createPruningTest("Pruning with predicate on STRING partition key",
+  createPruningTest("Partition pruning: with filter on string partition key",
     "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08'",
     Seq("value", "hr"),
     Seq("value", "hr", "ds"),
@@ -26,7 +82,7 @@ class PruningSuite extends HiveComparisonTest {
       Seq("2008-04-08", "11"),
       Seq("2008-04-08", "12")))
 
-  createPruningTest("Pruning with predicate on INT partition key",
+  createPruningTest("Partition pruning: with filter on int partition key",
     "SELECT value, hr FROM srcpart1 WHERE hr < 12",
     Seq("value", "hr"),
     Seq("value", "hr"),
@@ -34,20 +90,20 @@ class PruningSuite extends HiveComparisonTest {
       Seq("2008-04-08", "11"),
       Seq("2008-04-09", "11")))
 
-  createPruningTest("Select only 1 partition",
+  createPruningTest("Partition pruning: left only 1 partition",
     "SELECT value, hr FROM srcpart1 WHERE ds = '2008-04-08' AND hr < 12",
     Seq("value", "hr"),
     Seq("value", "hr", "ds"),
     Seq(
       Seq("2008-04-08", "11")))
 
-  createPruningTest("All partitions pruned",
+  createPruningTest("Partition pruning: all partitions pruned",
     "SELECT value, hr FROM srcpart1 WHERE ds = '2014-01-27' AND hr = 11",
     Seq("value", "hr"),
     Seq("value", "hr", "ds"),
     Seq.empty)
 
-  createPruningTest("Pruning with both column key and partition key",
+  createPruningTest("Partition pruning: pruning with both column key and partition key",
     "SELECT value, hr FROM srcpart1 WHERE value IS NOT NULL AND hr < 12",
     Seq("value", "hr"),
     Seq("value", "hr"),
@@ -71,23 +127,15 @@ class PruningSuite extends HiveComparisonTest {
           (columnNames, partValues)
       }.head
 
-      assert(
-        actualOutputColumns === expectedOutputColumns,
-        s"Output columns sould be $expectedOutputColumns, but are actually $actualOutputColumns")
-
-      assert(
-        actualScannedColumns === expectedScannedColumns,
-        s"Scanned columns should be $expectedOutputColumns, but are actually $actualScannedColumns")
+      assert(actualOutputColumns sameElements expectedOutputColumns, "Output columns mismatch")
+      assert(actualScannedColumns sameElements expectedScannedColumns, "Scanned columns mismatch")
 
       assert(
         actualPartValues.length === expectedPartValues.length,
-        s"There should be ${expectedPartValues.length} partition values, " +
-        s"but only ${actualPartValues.length} are found.")
+        "Partition value count mismatches")
 
       for ((actual, expected) <- actualPartValues.zip(expectedPartValues)) {
-        assert(
-          actual === expected,
-          s"Partition values should be $expected, but are actually $actual")
+        assert(actual sameElements expected, "Partition values mismatch")
       }
     }
 
