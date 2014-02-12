@@ -44,8 +44,8 @@ object PhysicalOperation extends PredicateHelper {
    * Collects projects and filters, in-lining/substituting aliases if necessary.  Here are two
    * examples for alias in-lining/substitution.  Before:
    * {{{
-   *   SELECT c1 FROM (SELECT key AS c1 FROM t1 WHERE c1 > 10) t2
-   *   SELECT c1 AS c2 FROM (SELECT key AS c1 FROM t1 WHERE c1 > 10) t2
+   *   SELECT c1 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
+   *   SELECT c1 AS c2 FROM (SELECT key AS c1 FROM t1) t2 WHERE c1 > 10
    * }}}
    * After:
    * {{{
