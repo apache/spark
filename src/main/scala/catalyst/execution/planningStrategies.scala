@@ -64,37 +64,42 @@ trait PlanningStrategies {
   }
 
   /**
-   * A strategy that detects projection over filtered operation and applies column pruning if
-   * possible.
+   * A strategy that detects projects and filters over some relation and applies column pruning if
+   * possible.  Partition pruning is applied first if the relation is partitioned.
    */
   object ColumnPrunings extends Strategy {
     def apply(plan: LogicalPlan): Seq[SharkPlan] = plan match {
-      case logical.Project(projectList, child @ FilteredOperation(predicates, m: MetastoreRelation))
-          if isSimpleProject(projectList) =>
+      case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
+        val predicateOpt = predicates.reduceOption(And)
+        val predicateRefs = predicateOpt.map(_.references).getOrElse(Set.empty)
+        val projectRefs = projectList.flatMap(_.references)
 
-        val projectAttributes = projectList.asInstanceOf[Seq[Attribute]]
-        val predicatesReferences = predicates.flatMap(_.references).toSet
-        val prunedAttributes = projectAttributes ++ (predicatesReferences -- projectAttributes)
+        // To figure out what columns to preserve after column pruning, we need to consider:
+        //
+        // 1. Columns referenced by the project list (order preserved)
+        // 2. Columns referenced by filtering predicates but not by project list
+        // 3. Relation output
+        //
+        // Then the final result is ((1 union 2) intersect 3)
+        val prunedCols = (projectRefs ++ (predicateRefs -- projectRefs)).intersect(relation.output)
 
-        if (m.hiveQlTable.isPartitioned) {
-          // Applies partition pruning first for partitioned table
-          PartitionPrunings(child).view.map { sharkPlan =>
-            execution.Project(
-              projectList,
-              sharkPlan.transform {
-                case scan@execution.HiveTableScan(attributes, _, _) =>
-                  scan.copy(attributes = prunedAttributes)
-              })
+        val filteredScans =
+          if (relation.hiveQlTable.isPartitioned) {
+            // Applies partition pruning first for partitioned table
+            val filteredRelation = predicateOpt.map(logical.Filter(_, relation)).getOrElse(relation)
+            PartitionPrunings(filteredRelation).view.map(_.transform {
+              case scan: execution.HiveTableScan =>
+                scan.copy(attributes = prunedCols)
+            })
+          } else {
+            val scan = execution.HiveTableScan(prunedCols, relation, None)
+            predicateOpt.map(execution.Filter(_, scan)).getOrElse(scan) :: Nil
           }
-        } else {
-          val scan = execution.HiveTableScan(prunedAttributes, m, None)
-          val conjunctionOpt = predicates.reduceOption(And)
 
-          execution.Project(
-            projectList,
-            conjunctionOpt
-              .map(execution.Filter(_, scan))
-              .getOrElse(scan)) :: Nil
+        if (isSimpleProject(projectList) && prunedCols == projectRefs) {
+          filteredScans
+        } else {
+          filteredScans.view.map(execution.Project(projectList, _))
         }
 
       case _ =>
