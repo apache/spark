@@ -541,13 +541,14 @@ class DAGScheduler(
         logInfo("Missing parents: " + getMissingParentStages(finalStage))
         if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
           // Compute very short actions like first() or take() with no parent stages locally.
-          listenerBus.post(SparkListenerJobStart(job, Array(), properties))
+          listenerBus.post(SparkListenerJobStart(job.jobId, Seq(), properties))
           runLocally(job)
         } else {
           idToActiveJob(jobId) = job
           activeJobs += job
           resultStageToJob(finalStage) = job
-          listenerBus.post(SparkListenerJobStart(job, jobIdToStageIds(jobId).toArray, properties))
+          listenerBus.post(
+            SparkListenerJobStart(job.jobId, jobIdToStageIds(jobId).toSeq, properties))
           submitStage(finalStage)
         }
 
@@ -588,13 +589,15 @@ class DAGScheduler(
               task.stageId, stageInfo.name, taskInfo.serializedSize / 1024, TASK_SIZE_TO_WARN))
           }
         }
-        listenerBus.post(SparkListenerTaskStart(task, taskInfo))
+        listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
 
       case GettingResultEvent(task, taskInfo) =>
-        listenerBus.post(SparkListenerTaskGettingResult(task, taskInfo))
+        listenerBus.post(SparkListenerTaskGettingResult(taskInfo))
 
       case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
-        listenerBus.post(SparkListenerTaskEnd(task, reason, taskInfo, taskMetrics))
+        val stageId = task.stageId
+        val taskType = task.getClass.getSimpleName
+        listenerBus.post(SparkListenerTaskEnd(stageId, taskType, reason, taskInfo, taskMetrics))
         handleTaskCompletion(completion)
 
       case TaskSetFailed(taskSet, reason) =>
@@ -612,7 +615,7 @@ class DAGScheduler(
         for (job <- activeJobs) {
           val error = new SparkException("Job cancelled because SparkContext was shut down")
           job.listener.jobFailed(error)
-          listenerBus.post(SparkListenerJobEnd(job, JobFailed(error, None)))
+          listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, -1)))
         }
         return true
     }
@@ -682,7 +685,7 @@ class DAGScheduler(
       }
     } catch {
       case e: Exception =>
-        jobResult = JobFailed(e, Some(job.finalStage))
+        jobResult = JobFailed(e, job.finalStage.id)
         job.listener.jobFailed(e)
     } finally {
       val s = job.finalStage
@@ -690,7 +693,7 @@ class DAGScheduler(
       stageIdToStage -= s.id     // but that won't get cleaned up via the normal paths through
       stageToInfos -= s          // completion events or stage abort
       jobIdToStageIds -= job.jobId
-      listenerBus.post(SparkListenerJobEnd(job, jobResult))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, jobResult))
     }
   }
 
@@ -838,7 +841,7 @@ class DAGScheduler(
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
                     jobIdToStageIdsRemove(job.jobId)
-                    listenerBus.post(SparkListenerJobEnd(job, JobSucceeded))
+                    listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
                   }
                   job.listener.taskSucceeded(rt.outputId, event.result)
                 }
@@ -997,7 +1000,7 @@ class DAGScheduler(
       jobIdToStageIds -= jobId
       activeJobs -= job
       idToActiveJob -= jobId
-      listenerBus.post(SparkListenerJobEnd(job, JobFailed(error, Some(job.finalStage))))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, job.finalStage.id)))
     }
   }
 
@@ -1020,7 +1023,7 @@ class DAGScheduler(
       idToActiveJob -= resultStage.jobId
       activeJobs -= job
       resultStageToJob -= resultStage
-      listenerBus.post(SparkListenerJobEnd(job, JobFailed(error, Some(failedStage))))
+      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, failedStage.id)))
     }
     if (dependentStages.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")

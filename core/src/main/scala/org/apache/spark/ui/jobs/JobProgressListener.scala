@@ -63,7 +63,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   override def onJobStart(jobStart: SparkListenerJobStart) {}
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
-    val stage = stageCompleted.stage
+    val stage = stageCompleted.stageInfo
     poolToActiveStages(stageIdToPool(stage.stageId)) -= stage
     activeStages -= stage
     completedStages += stage
@@ -93,7 +93,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
 
   /** For FIFO, all stages are contained by "default" pool but "default" pool here is meaningless */
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = synchronized {
-    val stage = stageSubmitted.stage
+    val stage = stageSubmitted.stageInfo
     activeStages += stage
 
     val poolName = Option(stageSubmitted.properties).map {
@@ -111,7 +111,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
-    val sid = taskStart.task.stageId
+    val sid = taskStart.stageId
     val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashSet[TaskInfo]())
     tasksActive += taskStart.taskInfo
     val taskList = stageIdToTaskInfos.getOrElse(
@@ -127,7 +127,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
-    val sid = taskEnd.task.stageId
+    val sid = taskEnd.stageId
 
     // create executor summary map if necessary
     val executorSummaryMap = stageIdToExecutorSummaries.getOrElseUpdate(key = sid,
@@ -205,20 +205,16 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
-    jobEnd match {
-      case end: SparkListenerJobEnd =>
-        end.jobResult match {
-          case JobFailed(ex, Some(stage)) =>
-            /* If two jobs share a stage we could get this failure message twice. So we first
-            *  check whether we've already retired this stage. */
-            val stageInfo = activeStages.filter(s => s.stageId == stage.id).headOption
-            stageInfo.foreach {s =>
-              activeStages -= s
-              poolToActiveStages(stageIdToPool(stage.id)) -= s
-              failedStages += s
-              trimIfNecessary(failedStages)
-            }
-          case _ =>
+    jobEnd.jobResult match {
+      case JobFailed(_, stageId) =>
+        // If two jobs share a stage we could get this failure message twice.
+        // So we first check whether we've already retired this stage.
+        val stageInfo = activeStages.filter(s => s.stageId == stageId).headOption
+        stageInfo.foreach {s =>
+          activeStages -= s
+          poolToActiveStages(stageIdToPool(stageId)) -= s
+          failedStages += s
+          trimIfNecessary(failedStages)
         }
       case _ =>
     }

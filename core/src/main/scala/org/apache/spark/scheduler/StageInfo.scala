@@ -21,18 +21,18 @@ import scala.collection._
 
 import org.apache.spark.executor.TaskMetrics
 
+import net.liftweb.json.JsonAST._
+import net.liftweb.json.JsonDSL._
+
 /**
  * Stores information about a stage to pass from the scheduler to SparkListeners.
  *
  * taskInfos stores the metrics for all tasks that have completed, including redundant, speculated
  * tasks.
  */
-class StageInfo(
-    stage: Stage,
-    val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] =
-    mutable.Buffer[(TaskInfo, TaskMetrics)]()
-) {
+class StageInfo(stage: Stage) {
   val stageId = stage.id
+  val taskInfos = mutable.Buffer[(TaskInfo, TaskMetrics)]()
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   var completionTime: Option[Long] = None
@@ -41,4 +41,19 @@ class StageInfo(
   val numPartitions = stage.numPartitions
   val numTasks = stage.numTasks
   var emittedTaskSizeWarning = false
+
+  def toJson: JValue = {
+    val (taskInfoList, taskMetricsList) = taskInfos.toList.unzip
+    val taskInfoJson = JArray(taskInfoList.map(_.toJson))
+    val taskMetricsJson = JArray(taskMetricsList.map(_.toJson))
+    ("Stage ID" -> stage.id) ~
+    ("Submission Time" -> submissionTime.getOrElse(0L)) ~
+    ("Completion Time" -> completionTime.getOrElse(0L)) ~
+    ("RDD Name" -> rddName) ~
+    ("Stage Name" -> name) ~
+    ("Number of Partitions" -> numPartitions) ~
+    ("Number of Tasks" -> numTasks) ~
+    ("Task Info" -> taskInfoJson) ~
+    ("Task Metrics" -> taskMetricsJson)
+  }
 }

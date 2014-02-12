@@ -19,10 +19,12 @@ package org.apache.spark.util
 
 import java.io._
 import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address}
-import java.util.{Locale, Random, UUID}
+import java.nio.ByteBuffer
+import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
 import scala.collection.JavaConversions._
+import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
@@ -31,15 +33,13 @@ import scala.reflect.ClassTag
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
 
-import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
-import org.apache.hadoop.io._
 
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.deploy.SparkHadoopUtil
-import java.nio.ByteBuffer
 import org.apache.spark.{SparkConf, SparkException, Logging}
 
+import net.liftweb.json.JsonAST._
 
 /**
  * Various utility methods used by Spark.
@@ -867,5 +867,20 @@ private[spark] object Utils extends Logging {
       iterator.next()
     }
     count
+  }
+
+  /** Convert a (String, String) map to a json object */
+  def mapToJson(m: Map[String, String]): JValue = {
+    val jsonFields = m.map { case (k, v) =>
+      JField(k, JString(v))
+    }
+    JObject(jsonFields.toList)
+  }
+
+  /** Convert a java Properties to a json object */
+  def propertiesToJson(properties: Properties): JValue = {
+    Option(properties).map { p =>
+      Utils.mapToJson(p.asScala)
+    }.getOrElse(JNothing)
   }
 }

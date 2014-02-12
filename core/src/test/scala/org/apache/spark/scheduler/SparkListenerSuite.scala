@@ -208,7 +208,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   class SaveStageInfo extends SparkListener {
     val stageInfos = Buffer[StageInfo]()
     override def onStageCompleted(stage: SparkListenerStageCompleted) {
-      stageInfos += stage.stage
+      stageInfos += stage.stageInfo
     }
   }
 

@@ -23,14 +23,14 @@ import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 
 import org.apache.spark.Logging
 
-/** Asynchronously passes SparkListenerEvents to registered SparkListeners. */
+/** Asynchronously passes SparkListenerEvent's to registered SparkListeners. */
 private[spark] class SparkListenerBus extends Logging {
   private val sparkListeners = new ArrayBuffer[SparkListener] with SynchronizedBuffer[SparkListener]
 
   /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
   private val EVENT_QUEUE_CAPACITY = 10000
-  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvents](EVENT_QUEUE_CAPACITY)
+  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
   private var queueFullErrorMessageLogged = false
 
   // Create a new daemon thread to listen for events. This thread is stopped when it receives
@@ -68,7 +68,7 @@ private[spark] class SparkListenerBus extends Logging {
     sparkListeners += listener
   }
 
-  def post(event: SparkListenerEvents) {
+  def post(event: SparkListenerEvent) {
     val eventAdded = eventQueue.offer(event)
     if (!eventAdded && !queueFullErrorMessageLogged) {
       logError("Dropping SparkListenerEvent because no remaining room in event queue. " +

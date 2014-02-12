@@ -18,51 +18,105 @@
 package org.apache.spark.scheduler
 
 import java.util.Properties
+
 import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
 
-sealed trait SparkListenerEvents
+import net.liftweb.json.JsonDSL._
+import net.liftweb.json.JsonAST._
 
-case class SparkListenerStageSubmitted(stage: StageInfo, properties: Properties)
-     extends SparkListenerEvents
+sealed trait SparkListenerEvent {
+  def toJson: JValue
+}
 
-case class SparkListenerStageCompleted(stage: StageInfo) extends SparkListenerEvents
+case class SparkListenerStageSubmitted(
+    stageInfo: StageInfo,
+    properties: Properties)
+  extends SparkListenerEvent {
+  def toJson = {
+    ("Event" -> "Stage Submitted") ~
+    ("Stage Info" -> stageInfo.toJson) ~
+    ("Properties" -> Utils.propertiesToJson(properties))
+  }
+}
 
-case class SparkListenerTaskStart(task: Task[_], taskInfo: TaskInfo) extends SparkListenerEvents
+case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent {
+  def toJson = {
+    ("Event" -> "Stage Completed") ~
+    ("Stage Info" -> stageInfo.toJson)
+  }
+}
 
-case class SparkListenerTaskGettingResult(
-  task: Task[_], taskInfo: TaskInfo) extends SparkListenerEvents
+case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent {
+  def toJson = {
+    ("Event" -> "Task Start") ~
+    ("Stage ID" -> stageId) ~
+    ("Task Info" -> taskInfo.toJson)
+  }
+}
 
-case class SparkListenerTaskEnd(task: Task[_], reason: TaskEndReason, taskInfo: TaskInfo,
-     taskMetrics: TaskMetrics) extends SparkListenerEvents
+case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent {
+  def toJson = {
+    ("Event" -> "Task Getting Result") ~
+    ("Task Info" -> taskInfo.toJson)
+  }
+}
 
-case class SparkListenerJobStart(job: ActiveJob, stageIds: Array[Int],
-    properties: Properties = null) extends SparkListenerEvents
+case class SparkListenerTaskEnd(
+    stageId: Int,
+    taskType: String,
+    reason: TaskEndReason,
+    taskInfo: TaskInfo,
+    taskMetrics: TaskMetrics)
+  extends SparkListenerEvent {
+  def toJson = {
+    ("Event" -> "Task End") ~
+    ("Stage ID" -> stageId) ~
+    ("Task Type" -> taskType) ~
+    ("Task End Reason" -> reason.toString) ~
+    ("Task Info" -> taskInfo.toJson) ~
+    ("Task Metrics" -> taskMetrics.toJson)
+  }
+}
 
-case class SparkListenerJobEnd(job: ActiveJob, jobResult: JobResult)
-     extends SparkListenerEvents
+case class SparkListenerJobStart(
+    jobId: Int,
+    stageIds: Seq[Int],
+    properties: Properties)
+  extends SparkListenerEvent {
+  def toJson = {
+    ("Event" -> "Job Start") ~
+    ("Job ID" -> jobId) ~
+    ("Stage IDs" -> JArray(stageIds.map(JInt(_)).toList)) ~
+    ("Properties" -> Utils.propertiesToJson(properties))
+  }
+}
+
+case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent {
+  def toJson = {
+    ("Event" -> "Job End") ~
+    ("Job ID" -> jobId) ~
+    ("Job Result" -> jobResult.toJson)
+  }
+}
 
 /** An event used in the listener to shutdown the listener daemon thread. */
-private[scheduler] case object SparkListenerShutdown extends SparkListenerEvents
+private[scheduler] case object SparkListenerShutdown extends SparkListenerEvent {
+  def toJson = ("Event" -> "Shutdown")
+}
 
 /**
  * Interface for listening to events from the Spark scheduler.
  */
 trait SparkListener {
-  /**
-   * Called when a stage is completed, with information on the completed stage
-   */
+  /** Called when a stage is completed, with information on the completed stage */
   def onStageCompleted(stageCompleted: SparkListenerStageCompleted) { }
 
-  /**
-   * Called when a stage is submitted
-   */
+  /** Called when a stage is submitted */
   def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) { }
 
-  /**
-   * Called when a task starts
-   */
+  /** Called when a task starts */
   def onTaskStart(taskStart: SparkListenerTaskStart) { }
 
   /**
@@ -71,21 +125,14 @@ trait SparkListener {
    */
   def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult) { }
 
-  /**
-   * Called when a task ends
-   */
+  /** Called when a task ends */
   def onTaskEnd(taskEnd: SparkListenerTaskEnd) { }
 
-  /**
-   * Called when a job starts
-   */
+  /** Called when a job starts */
   def onJobStart(jobStart: SparkListenerJobStart) { }
 
-  /**
-   * Called when a job ends
-   */
+  /** Called when a job ends */
   def onJobEnd(jobEnd: SparkListenerJobEnd) { }
-
 }
 
 /**
@@ -95,7 +142,7 @@ class StatsReportListener extends SparkListener with Logging {
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     import org.apache.spark.scheduler.StatsReportListener._
     implicit val sc = stageCompleted
-    this.logInfo("Finished stage: " + stageCompleted.stage)
+    this.logInfo("Finished stage: " + stageCompleted.stageInfo)
     showMillisDistribution("task runtime:", (info, _) => Some(info.duration))
 
     //shuffle write
@@ -111,7 +158,7 @@ class StatsReportListener extends SparkListener with Logging {
 
     //runtime breakdown
 
-    val runtimePcts = stageCompleted.stage.taskInfos.map{
+    val runtimePcts = stageCompleted.stageInfo.taskInfos.map{
       case (info, metrics) => RuntimePercentage(info.duration, metrics)
     }
     showDistribution("executor (non-fetch) time pct: ",
@@ -131,15 +178,15 @@ private[spark] object StatsReportListener extends Logging {
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
 
   def extractDoubleDistribution(stage: SparkListenerStageCompleted,
-      getMetric: (TaskInfo,TaskMetrics) => Option[Double])
+      getMetric: (TaskInfo, TaskMetrics) => Option[Double])
     : Option[Distribution] = {
-    Distribution(stage.stage.taskInfos.flatMap {
+    Distribution(stage.stageInfo.taskInfos.flatMap {
       case ((info,metric)) => getMetric(info, metric)})
   }
 
   //is there some way to setup the types that I can get rid of this completely?
   def extractLongDistribution(stage: SparkListenerStageCompleted,
-      getMetric: (TaskInfo,TaskMetrics) => Option[Long])
+      getMetric: (TaskInfo, TaskMetrics) => Option[Long])
     : Option[Distribution] = {
     extractDoubleDistribution(stage, (info, metric) => getMetric(info,metric).map{_.toDouble})
   }
@@ -170,7 +217,7 @@ private[spark] object StatsReportListener extends Logging {
     showDistribution(heading, extractDoubleDistribution(stage, getMetric), format)
   }
 
-  def showBytesDistribution(heading:String, getMetric: (TaskInfo,TaskMetrics) => Option[Long])
+  def showBytesDistribution(heading:String, getMetric: (TaskInfo, TaskMetrics) => Option[Long])
     (implicit stage: SparkListenerStageCompleted) {
     showBytesDistribution(heading, extractLongDistribution(stage, getMetric))
   }

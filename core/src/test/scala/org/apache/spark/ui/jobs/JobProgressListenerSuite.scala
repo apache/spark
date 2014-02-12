@@ -20,7 +20,6 @@ package org.apache.spark.ui.jobs
 import org.scalatest.FunSuite
 import org.apache.spark.scheduler._
 import org.apache.spark.{LocalSparkContext, SparkContext, Success}
-import org.apache.spark.scheduler.SparkListenerTaskStart
 import org.apache.spark.executor.{ShuffleReadMetrics, TaskMetrics}
 
 class JobProgressListenerSuite extends FunSuite with LocalSparkContext {

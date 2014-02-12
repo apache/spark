@@ -17,83 +17,75 @@
 
 package org.apache.spark.executor
 
+import net.liftweb.json.JsonDSL._
+import net.liftweb.json.JsonAST._
+
 class TaskMetrics extends Serializable {
-  /**
-   * Host's name the task runs on 
-   */
+  /** Host's name the task runs on */
   var hostname: String = _
 
-  /**
-   * Time taken on the executor to deserialize this task
-   */
+  /** Time taken on the executor to deserialize this task */
   var executorDeserializeTime: Int = _
 
-  /**
-   * Time the executor spends actually running the task (including fetching shuffle data)
-   */
+  /** Time the executor spends actually running the task (including fetching shuffle data) */
   var executorRunTime: Int = _
 
-  /**
-   * The number of bytes this task transmitted back to the driver as the TaskResult
-   */
+  /** The number of bytes this task transmitted back to the driver as the TaskResult */
   var resultSize: Long = _
 
-  /**
-   * Amount of time the JVM spent in garbage collection while executing this task
-   */
+  /** Amount of time the JVM spent in garbage collection while executing this task */
   var jvmGCTime: Long = _
 
-  /**
-   * Amount of time spent serializing the task result
-   */
+  /** Amount of time spent serializing the task result */
   var resultSerializationTime: Long = _
 
-  /**
-   * The number of in-memory bytes spilled by this task
-   */
+  /** The number of in-memory bytes spilled by this task */
   var memoryBytesSpilled: Long = _
 
-  /**
-   * The number of on-disk bytes spilled by this task
-   */
+  /** The number of on-disk bytes spilled by this task */
   var diskBytesSpilled: Long = _
 
   /**
-   * If this task reads from shuffle output, metrics on getting shuffle data will be collected here
+   * If this task reads from shuffle output, metrics on getting shuffle data will be
+   * collected here
    */
   var shuffleReadMetrics: Option[ShuffleReadMetrics] = None
 
   /**
-   * If this task writes to shuffle output, metrics on the written shuffle data will be collected
-   * here
+   * If this task writes to shuffle output, metrics on the written shuffle data will be
+   * collected here
    */
   var shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
+
+  def toJson: JValue = {
+    ("Host Name" -> hostname) ~
+    ("Executor Deserialize Time" -> executorDeserializeTime) ~
+    ("Executor Run Time" -> executorRunTime) ~
+    ("Result Size" -> resultSize) ~
+    ("JVM GC Time" -> jvmGCTime) ~
+    ("Result Serialization Time" -> resultSerializationTime) ~
+    ("Memory Bytes Spilled" -> memoryBytesSpilled) ~
+    ("Disk Bytes Spilled" -> diskBytesSpilled) ~
+    ("Shuffle Read Metrics" -> shuffleReadMetrics.map(_.toJson).getOrElse(JNothing)) ~
+    ("Shuffle Write Metrics" -> shuffleWriteMetrics.map(_.toJson).getOrElse(JNothing))
+  }
 }
 
 object TaskMetrics {
   private[spark] def empty(): TaskMetrics = new TaskMetrics
 }
 
-
 class ShuffleReadMetrics extends Serializable {
-  /**
-   * Absolute time when this task finished reading shuffle data
-   */
+  /** Absolute time when this task finished reading shuffle data */
   var shuffleFinishTime: Long = _
 
-  /**
-   * Number of blocks fetched in this shuffle by this task (remote or local)
-   */
+  /** Number of blocks fetched in this shuffle by this task (remote or local) */
   var totalBlocksFetched: Int = _
 
-  /**
-   * Number of remote blocks fetched in this shuffle by this task
-   */
+  /** Number of remote blocks fetched in this shuffle by this task */
   var remoteBlocksFetched: Int = _
 
-  /**
-   * Number of local blocks fetched in this shuffle by this task
-   */
+  /** Number of local blocks fetched in this shuffle by this task */
   var localBlocksFetched: Int = _
 
   /**
@@ -110,20 +102,29 @@ class ShuffleReadMetrics extends Serializable {
    */
   var remoteFetchTime: Long = _
 
-  /**
-   * Total number of remote bytes read from the shuffle by this task
-   */
+  /** Total number of remote bytes read from the shuffle by this task */
   var remoteBytesRead: Long = _
+
+  def toJson: JValue = {
+    ("Shuffle Finish Time" -> shuffleFinishTime) ~
+    ("Total Blocks Fetched" -> totalBlocksFetched) ~
+    ("Remote Blocks Fetched" -> remoteBlocksFetched) ~
+    ("Local Blocks Fetched" -> localBlocksFetched) ~
+    ("Fetch Wait Time" -> fetchWaitTime) ~
+    ("Remote Fetch Time" -> remoteFetchTime) ~
+    ("Remote Bytes Read" -> remoteBytesRead)
+  }
 }
 
 class ShuffleWriteMetrics extends Serializable {
-  /**
-   * Number of bytes written for the shuffle by this task
-   */
+  /** Number of bytes written for the shuffle by this task */
   var shuffleBytesWritten: Long = _
 
-  /**
-   * Time the task spent blocking on writes to disk or buffer cache, in nanoseconds
-   */
+  /** Time the task spent blocking on writes to disk or buffer cache, in nanoseconds */
   var shuffleWriteTime: Long = _
+
+  def toJson: JValue = {
+    ("Shuffle Bytes Written" -> shuffleBytesWritten) ~
+    ("Shuffle Write Time" -> shuffleWriteTime)
+  }
 }

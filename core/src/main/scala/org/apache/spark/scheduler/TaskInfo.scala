@@ -17,6 +17,9 @@
 
 package org.apache.spark.scheduler
 
+import net.liftweb.json.JsonDSL._
+import net.liftweb.json.JsonAST._
+
 /**
  * Information about a running task attempt inside a TaskSet.
  */
@@ -90,4 +93,17 @@ class TaskInfo(
   }
 
   def timeRunning(currentTime: Long): Long = currentTime - launchTime
+
+  def toJson: JValue = {
+    ("Task ID" -> taskId) ~
+    ("Index" -> index) ~
+    ("Launch Time" -> launchTime) ~
+    ("Executor ID" -> executorId) ~
+    ("Host" -> host) ~
+    ("Locality" -> taskLocality.toString) ~
+    ("Status" -> status) ~
+    ("Getting Result Time" -> gettingResultTime) ~
+    ("Finish Time" -> finishTime) ~
+    ("Failed" -> failed)
+  }
 }
