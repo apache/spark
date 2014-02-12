@@ -65,6 +65,12 @@ object SparkBuild extends Build {
 
   lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
 
+  // A dummy command so we can run the Jenkins pull request builder for older versions of Spark.
+  lazy val scalastyle = TaskKey[Unit]("scalastyle", "Dummy scalastyle check")
+  val scalastyleTask = scalastyle := {
+    println("scalastyle is not configured for this version of Spark project.")
+  }
+
   // A configuration to set an alternative publishLocalConfiguration
   lazy val MavenCompile = config("m2r") extend(Compile)
   lazy val publishLocalBoth = TaskKey[Unit]("publish-local", "publish local for m2 and ivy")
@@ -381,6 +387,7 @@ object SparkBuild extends Build {
   def assemblyProjSettings = sharedSettings ++ Seq(
     libraryDependencies += "net.sf.py4j" % "py4j" % "0.8.1",
     name := "spark-assembly",
+    scalastyleTask,
     assembleDeps in Compile <<= (packageProjects.map(packageBin in Compile in _) ++ Seq(packageDependency in Compile)).dependOn,
     jarName in assembly <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
     jarName in packageDependency <<= version map { v => "spark-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" }
