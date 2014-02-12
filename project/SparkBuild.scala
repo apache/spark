@@ -22,6 +22,7 @@ import sbtassembly.Plugin._
 import AssemblyKeys._
 import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
+import com.typesafe.tools.mima.plugin.MimaKeys.previousArtifact
 
 // For Sonatype publishing
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
@@ -121,7 +122,7 @@ object SparkBuild extends Build {
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++ Seq[ProjectReference](examples, tools, assemblyProj)
 
-  def sharedSettings = Defaults.defaultSettings ++ Seq(
+  def sharedSettings = Defaults.defaultSettings ++ MimaBuild.mimaSettings ++ Seq(
     organization       := "org.apache.spark",
     version            := "1.0.0-incubating-SNAPSHOT",
     scalaVersion       := "2.10.3",
@@ -244,13 +245,19 @@ object SparkBuild extends Build {
   val excludeAsm = ExclusionRule(organization = "asm")
   val excludeSnappy = ExclusionRule(organization = "org.xerial.snappy")
 
+  def sparkPreviousArtifact(id: String, organization: String = "org.apache.spark", 
+      version: String = "0.9.0-incubating", crossVersion: String = "2.10"): Option[sbt.ModuleID] = {
+    val fullId = if (crossVersion.isEmpty) id else id + "_" + crossVersion
+    Some(organization % fullId % version) // the artifact to compare binary compatibility with
+  }
+
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
     resolvers ++= Seq(
        "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
        "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/"
     ),
-
+    previousArtifact := sparkPreviousArtifact("spark-core"),
     libraryDependencies ++= Seq(
         "com.google.guava"         % "guava"            % "14.0.1",
         "com.google.code.findbugs" % "jsr305"           % "1.3.9",
@@ -289,7 +296,7 @@ object SparkBuild extends Build {
     publish := {}
   )
 
- def replSettings = sharedSettings ++ Seq(
+  def replSettings = sharedSettings ++ Seq(
     name := "spark-repl",
    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "scala-compiler" % v ),
    libraryDependencies <+= scalaVersion(v => "org.scala-lang"  % "jline"          % v ),
@@ -298,6 +305,7 @@ object SparkBuild extends Build {
 
   def examplesSettings = sharedSettings ++ Seq(
     name := "spark-examples",
+    previousArtifact := sparkPreviousArtifact("spark-examples"),
     libraryDependencies ++= Seq(
       "com.twitter"          %% "algebird-core"   % "0.1.11",
       "org.apache.hbase"     %  "hbase"           % "0.94.6" excludeAll(excludeNetty, excludeAsm),
@@ -321,17 +329,20 @@ object SparkBuild extends Build {
 
   def graphxSettings = sharedSettings ++ Seq(
     name := "spark-graphx",
+    previousArtifact := sparkPreviousArtifact("spark-graphx"),
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % "1.2.3"
     )
   )
 
   def bagelSettings = sharedSettings ++ Seq(
-    name := "spark-bagel"
+    name := "spark-bagel",
+    previousArtifact := sparkPreviousArtifact("spark-bagel")
   )
 
   def mllibSettings = sharedSettings ++ Seq(
     name := "spark-mllib",
+    previousArtifact := sparkPreviousArtifact("spark-mllib"),
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % "1.2.3"
     )
@@ -339,6 +350,7 @@ object SparkBuild extends Build {
 
   def streamingSettings = sharedSettings ++ Seq(
     name := "spark-streaming",
+    previousArtifact := sparkPreviousArtifact("spark-streaming"),
     libraryDependencies ++= Seq(
       "commons-io" % "commons-io" % "2.4"
     )
@@ -403,6 +415,7 @@ object SparkBuild extends Build {
 
   def twitterSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-twitter",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-twitter"),
     libraryDependencies ++= Seq(
       "org.twitter4j" % "twitter4j-stream" % "3.0.3" excludeAll(excludeNetty)
     )
@@ -410,6 +423,7 @@ object SparkBuild extends Build {
 
   def kafkaSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-kafka",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-kafka"),
     libraryDependencies ++= Seq(
       "com.github.sgroschupf"    % "zkclient"   % "0.1"          excludeAll(excludeNetty),
       "org.apache.kafka"        %% "kafka"      % "0.8.0"
@@ -422,6 +436,7 @@ object SparkBuild extends Build {
 
   def flumeSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-flume",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-flume"),
     libraryDependencies ++= Seq(
       "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty, excludeSnappy)
     )
@@ -429,6 +444,7 @@ object SparkBuild extends Build {
 
   def zeromqSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-zeromq",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-zeromq"),
     libraryDependencies ++= Seq(
       "org.spark-project.akka" %% "akka-zeromq" % "2.2.3-shaded-protobuf" excludeAll(excludeNetty)
     )
@@ -436,6 +452,7 @@ object SparkBuild extends Build {
 
   def mqttSettings() = streamingSettings ++ Seq(
     name := "spark-streaming-mqtt",
+    previousArtifact := sparkPreviousArtifact("spark-streaming-mqtt"),
     resolvers ++= Seq("Eclipse Repo" at "https://repo.eclipse.org/content/repositories/paho-releases/"),
     libraryDependencies ++= Seq("org.eclipse.paho" % "mqtt-client" % "0.4.0")
   )

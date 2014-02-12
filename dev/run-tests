@@ -33,6 +33,12 @@ echo "========================================================================="
 sbt/sbt clean scalastyle
 
 echo "========================================================================="
+echo "Running MiMa for detecting binary incompatibilites."
+echo "Please see MimaBuild.scala for details."
+echo "========================================================================="
+sbt/sbt mima-report-binary-issues
+
+echo "========================================================================="
 echo "Running Spark unit tests"
 echo "========================================================================="
 sbt/sbt assembly test
