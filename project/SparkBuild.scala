@@ -86,6 +86,7 @@ object SparkBuild extends Build {
     case None => DEFAULT_YARN
     case Some(v) => v.toBoolean
   }
+  lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client" 
 
   // Conditionally include the yarn sub-project
   lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
@@ -269,7 +270,7 @@ object SparkBuild extends Build {
         "org.apache.mesos"         % "mesos"            % "0.13.0",
         "net.java.dev.jets3t"      % "jets3t"           % "0.7.1",
         "org.apache.derby"         % "derby"            % "10.4.2.0"                     % "test",
-        "org.apache.hadoop"        % "hadoop-client"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+        "org.apache.hadoop"        % hadoopClient       % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
         "org.apache.avro"          % "avro"             % "1.7.4",
         "org.apache.avro"          % "avro-ipc"         % "1.7.4" excludeAll(excludeNetty),
         "org.apache.zookeeper"     % "zookeeper"        % "3.4.5" excludeAll(excludeNetty),
@@ -373,7 +374,7 @@ object SparkBuild extends Build {
   def yarnEnabledSettings = Seq(
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
-      "org.apache.hadoop" % "hadoop-client"      % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+      "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
       "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
       "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
       "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
