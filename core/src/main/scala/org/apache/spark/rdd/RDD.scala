@@ -775,18 +775,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return the number of elements in the RDD.
    */
-  def count(): Long = {
-    sc.runJob(this, (iter: Iterator[T]) => {
-      // Use a while loop to count the number of elements rather than iter.size because
-      // iter.size uses a for loop, which is slightly slower in current version of Scala.
-      var result = 0L
-      while (iter.hasNext) {
-        result += 1L
-        iter.next()
-      }
-      result
-    }).sum
-  }
+  def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
    * (Experimental) Approximate version of count() that returns a potentially incomplete result
@@ -867,6 +856,29 @@ abstract class RDD[T: ClassTag](
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
     val zeroCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
     aggregate(zeroCounter)(_.add(_), _.merge(_)).value.cardinality()
+  }
+
+  /**
+   * Zips this RDD with its element indices. The ordering is first based on the partition index
+   * and then the ordering of items within each partition. So the first item in the first
+   * partition gets index 0, and the last item in the last partition receives the largest index.
+   * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
+   * This method needs to trigger a spark job when this RDD contains more than one partitions.
+   */
+  def zipWithIndex(): RDD[(T, Long)] = new ZippedWithIndexRDD(this)
+
+  /**
+   * Zips this RDD with generated unique Long ids. Items in the kth partition will get ids k, n+k,
+   * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
+   * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
+   */
+  def zipWithUniqueId(): RDD[(T, Long)] = {
+    val n = this.partitions.size.toLong
+    this.mapPartitionsWithIndex { case (k, iter) =>
+      iter.zipWithIndex.map { case (item, i) =>
+        (item, i * n + k)
+      }
+    }
   }
 
   /**
