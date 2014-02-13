@@ -96,19 +96,20 @@ def merge_pr(pr_num, target_ref):
   commits = run_cmd(['git', 'log', 'HEAD..%s' % pr_branch_name, 
     '--pretty=format:%h [%an] %s']).split("\n\n")
 
-  merge_message = "Merge pull request #%s from %s.\n\n%s\n\n%s" % (
-    pr_num, pr_repo_desc, title, body)
-  merge_message_parts = merge_message.split("\n\n")
   merge_message_flags = []
 
-  for p in merge_message_parts:
-    merge_message_flags = merge_message_flags + ["-m", p]
+  for p in [title, body]:
+    merge_message_flags += ["-m", p]
+
   authors = "\n".join(["Author: %s" % a for a in distinct_authors])
-  merge_message_flags = merge_message_flags + ["-m", authors]
-  merge_message_flags = merge_message_flags + [
-    "-m", "Closes #%s and squashes the following commits:" % pr_num]
+
+  merge_message_flags += ["-m", authors]
+
+  # The string "Closes #%s" string is required for GitHub to correctly close the PR
+  merge_message_flags += ["-m",
+    "Closes #%s from %s and squashes the following commits:" % (pr_num, pr_repo_desc)]
   for c in commits:
-    merge_message_flags = merge_message_flags + ["-m", c]
+    merge_message_flags += ["-m", c]
 
   run_cmd(['git', 'commit', '--author="%s"' % primary_author] + merge_message_flags)
 
