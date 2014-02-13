@@ -17,20 +17,22 @@
 
 package org.apache.spark.util
 
-import java.io.{IOException, File, PrintWriter}
+import java.io._
 import java.text.SimpleDateFormat
 import java.util.Date
 
-import org.apache.spark._
-
 /**
  * A generic class for logging information to file
+ * @param user User identifier if SPARK_LOG_DIR is not set, in which case log directory
+ *             defaults to /tmp/spark-[user]
+ * @param name Name of logger, also the name of the log file
+ * @param flushFrequency How many writes until the results are flushed to disk
  */
-
-class FileLogger(user: String, name: String, flushFrequency: Int = 1) extends Logging {
+class FileLogger(user: String, name: String, flushFrequency: Int = 100) {
 
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private var logCount = 0
+  private var fileIndex = 0
 
   private val logDir =
     if (System.getenv("SPARK_LOG_DIR") != null) {
@@ -39,11 +41,11 @@ class FileLogger(user: String, name: String, flushFrequency: Int = 1) extends Lo
       "/tmp/spark-%s".format(user)
     }
 
-  private val logFile = logDir + "/" + name
+  private val logFileBase = logDir + "/" + name
 
-  private val writer: PrintWriter = {
+  private var writer: Option[PrintWriter] = {
     createLogDir()
-    new PrintWriter(logFile)
+    Some(createWriter()) // Overwrite any existing file
   }
 
   def this() = this(System.getProperty("user.name", "<Unknown>"),
@@ -52,38 +54,63 @@ class FileLogger(user: String, name: String, flushFrequency: Int = 1) extends Lo
   def this(_name: String) = this(System.getProperty("user.name", "<Unknown>"), _name)
 
   /** Create a logging directory with the given path */
-  private def createLogDir() {
+  private def createLogDir() = {
     val dir = new File(logDir)
     if (!dir.exists && !dir.mkdirs()) {
       // Logger should throw a exception rather than continue to construct this object
       throw new IOException("create log directory error:" + logDir)
     }
-    val file = new File(logFile)
-    if (file.exists) {
-      logWarning("Overwriting existing log file at %s".format(logFile))
-    }
   }
 
-  /** Log the message to the given writer if it exists, optionally including the time */
+  /** Create a new writer to the file identified with the given path */
+  private def createWriter() = {
+    val fileWriter = new FileWriter(logFileBase + "-" + fileIndex)
+    val bufferedWriter = new BufferedWriter(fileWriter)
+    new PrintWriter(bufferedWriter)
+  }
+
+  /**
+   * Log the message to the given writer
+   * @param msg The message to be logged
+   * @param withTime Whether to prepend message with a timestamp
+   */
   def log(msg: String, withTime: Boolean = false) = {
     var writeInfo = msg
     if (withTime) {
       val date = new Date(System.currentTimeMillis())
       writeInfo = DATE_FORMAT.format(date) + ": " + msg
     }
-    writer.print(writeInfo)
+    writer.foreach(_.print(writeInfo))
     logCount += 1
     if (logCount % flushFrequency == 0) {
-      writer.flush()
+      flush()
       logCount = 0
     }
   }
 
   /**
-   * Log the message as a new line to the given writer if it exists, optionally including the time
+   * Log the message to the given writer as a new line
+   * @param msg The message to be logged
+   * @param withTime Whether to prepend message with a timestamp
    */
   def logLine(msg: String, withTime: Boolean = false) = log(msg + "\n", withTime)
 
-  /** Close the writer, if it exists */
-  def close() = writer.close()
+  /** Flush the writer to disk manually */
+  def flush() = writer.foreach(_.flush())
+
+  /** Close the writer. Any subsequent calls to log or flush will have no effect. */
+  def close() = {
+    writer.foreach(_.close())
+    writer = None
+  }
+
+  /** Start a new writer (for a new file) if there does not already exist one */
+  def start() = {
+    writer match {
+      case Some(w) =>
+      case None =>
+        fileIndex += 1
+        writer = Some(createWriter())
+    }
+  }
 }

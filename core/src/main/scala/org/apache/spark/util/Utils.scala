@@ -40,11 +40,15 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkConf, SparkException, Logging}
 
 import net.liftweb.json.JsonAST._
+import net.liftweb.json.DefaultFormats
 
 /**
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
+
+  /** For extracting fields from JSON objects */
+  implicit val format = DefaultFormats
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -869,7 +873,7 @@ private[spark] object Utils extends Logging {
     count
   }
 
-  /** Convert a (String, String) map to a json object */
+  /** Convert a (String, String) map to a JSON object */
   def mapToJson(m: Map[String, String]): JValue = {
     val jsonFields = m.map { case (k, v) =>
       JField(k, JString(v))
@@ -877,10 +881,43 @@ private[spark] object Utils extends Logging {
     JObject(jsonFields.toList)
   }
 
-  /** Convert a java Properties to a json object */
+  /** Convert a java Properties to a JSON object */
   def propertiesToJson(properties: Properties): JValue = {
     Option(properties).map { p =>
       Utils.mapToJson(p.asScala)
     }.getOrElse(JNothing)
+  }
+
+  /** Extract a field from the given JSON AST as a scala option */
+  def extractFromJson(json: JValue, field: String): Option[JValue] = {
+    (json \ field) match {
+      case JNothing => None
+      case value => Some(value)
+    }
+  }
+
+  /** Extracts a string from the given JSON AST */
+  def extractStringFromJson(json: JValue, field: String): Option[String] = {
+    extractFromJson(json, field).map(_.extract[String])
+  }
+
+  /** Extracts a double from the given JSON AST */
+  def extractDoubleFromJson(json: JValue, field: String): Option[Double] = {
+    extractFromJson(json, field).map(_.extract[Double])
+  }
+
+  /** Extracts a long from the given JSON AST */
+  def extractLongFromJson(json: JValue, field: String): Option[Long] = {
+    extractFromJson(json, field).map(_.extract[Long])
+  }
+
+  /** Extracts an int from the given JSON AST */
+  def extractIntFromJson(json: JValue, field: String): Option[Int] = {
+    extractFromJson(json, field).map(_.extract[Int])
+  }
+
+  /** Extracts a boolean from the given JSON AST */
+  def extractBooleanFromJson(json: JValue, field: String): Option[Boolean] = {
+    extractFromJson(json, field).map(_.extract[Boolean])
   }
 }

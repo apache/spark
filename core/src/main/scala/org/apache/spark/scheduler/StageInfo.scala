@@ -26,12 +26,10 @@ import net.liftweb.json.JsonDSL._
 
 /**
  * Stores information about a stage to pass from the scheduler to SparkListeners.
- *
- * taskInfos stores the metrics for all tasks that have completed, including redundant, speculated
- * tasks.
  */
 class StageInfo(stage: Stage) {
   val stageId = stage.id
+  /** Store the metrics for all tasks that have completed, including redundant, speculated tasks. */
   val taskInfos = mutable.Buffer[(TaskInfo, TaskMetrics)]()
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None

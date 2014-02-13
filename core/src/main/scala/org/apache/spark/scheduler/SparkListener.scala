@@ -145,21 +145,20 @@ class StatsReportListener extends SparkListener with Logging {
     this.logInfo("Finished stage: " + stageCompleted.stageInfo)
     showMillisDistribution("task runtime:", (info, _) => Some(info.duration))
 
-    //shuffle write
+    // Shuffle write
     showBytesDistribution("shuffle bytes written:",
       (_,metric) => metric.shuffleWriteMetrics.map(_.shuffleBytesWritten))
 
-    //fetch & io
+    // Fetch & I/O
     showMillisDistribution("fetch wait time:",
       (_, metric) => metric.shuffleReadMetrics.map(_.fetchWaitTime))
     showBytesDistribution("remote bytes read:",
       (_, metric) => metric.shuffleReadMetrics.map(_.remoteBytesRead))
     showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
-    //runtime breakdown
-
-    val runtimePcts = stageCompleted.stageInfo.taskInfos.map{
-      case (info, metrics) => RuntimePercentage(info.duration, metrics)
+    // Runtime breakdown
+    val runtimePcts = stageCompleted.stageInfo.taskInfos.map{ case (info, metrics) =>
+      RuntimePercentage(info.duration, metrics)
     }
     showDistribution("executor (non-fetch) time pct: ",
       Distribution(runtimePcts.map{_.executorPct * 100}), "%2.0f %%")
@@ -172,7 +171,7 @@ class StatsReportListener extends SparkListener with Logging {
 
 private[spark] object StatsReportListener extends Logging {
 
-  //for profiling, the extremes are more interesting
+  // For profiling, the extremes are more interesting
   val percentiles = Array[Int](0,5,10,25,50,75,90,95,100)
   val probabilities = percentiles.map{_ / 100.0}
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
@@ -184,7 +183,7 @@ private[spark] object StatsReportListener extends Logging {
       case ((info,metric)) => getMetric(info, metric)})
   }
 
-  //is there some way to setup the types that I can get rid of this completely?
+  // Is there some way to setup the types that I can get rid of this completely?
   def extractLongDistribution(stage: SparkListenerStageCompleted,
       getMetric: (TaskInfo, TaskMetrics) => Option[Long])
     : Option[Distribution] = {
@@ -244,9 +243,7 @@ private[spark] object StatsReportListener extends Logging {
   val minutes = seconds * 60
   val hours = minutes * 60
 
-  /**
-   * reformat a time interval in milliseconds to a prettier format for output
-   */
+  /** Reformat a time interval in milliseconds to a prettier format for output */
   def millisToString(ms: Long) = {
     val (size, units) =
       if (ms > hours) {
