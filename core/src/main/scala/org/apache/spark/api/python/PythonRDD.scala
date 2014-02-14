@@ -255,6 +255,9 @@ private[spark] object PythonRDD extends Logging {
         case other =>
           throw new SparkException("Unexpected element type " + first.getClass)
       }
+    }
+  }
+
   // PySpark / Hadoop InputFormat//
 
   /** Create and RDD from a path using [[org.apache.hadoop.mapred.SequenceFileInputFormat]] */
@@ -396,23 +399,6 @@ private[spark] object PythonRDD extends Logging {
     rdd
   }
 
-  def writeToStream(elem: Any, dataOut: DataOutputStream) {
-    elem match {
-      case bytes: Array[Byte] =>
-        dataOut.writeInt(bytes.length)
-        dataOut.write(bytes)
-      case (a: Array[Byte], b: Array[Byte]) =>
-        dataOut.writeInt(a.length)
-        dataOut.write(a)
-        dataOut.writeInt(b.length)
-        dataOut.write(b)
-      case str: String =>
-        dataOut.writeUTF(str)
-      case other =>
-        throw new SparkException("Unexpected element type " + other.getClass)
-    }
-  }
-
   def writeUTF(str: String, dataOut: DataOutputStream) {
     val bytes = str.getBytes("UTF-8")
     dataOut.writeInt(bytes.length)
@@ -429,7 +415,6 @@ private[spark] object PythonRDD extends Logging {
     writeIteratorToStream(items, file)
     file.close()
   }
-
 }
 
 private class BytesToString extends org.apache.spark.api.java.function.Function[Array[Byte], String] {
