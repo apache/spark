@@ -52,6 +52,12 @@ class ShuffleDependency[K, V](
   extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
 
   val shuffleId: Int = rdd.context.newShuffleId()
+
+  override def finalize() {
+    if (rdd != null) {
+      rdd.sparkContext.cleaner.cleanShuffle(shuffleId)
+    }
+  }
 }
 
 

@@ -90,6 +90,11 @@ private[spark] class DiskBlockManager(shuffleManager: ShuffleBlockManager, rootD
 
   def getFile(blockId: BlockId): File = getFile(blockId.name)
 
+  /** Check if disk block manager has a block */
+  def contains(blockId: BlockId): Boolean = {
+    getBlockLocation(blockId).file.exists()
+  }
+
   /** Produces a unique block id and File suitable for intermediate results. */
   def createTempBlock(): (TempBlockId, File) = {
     var blockId = new TempBlockId(UUID.randomUUID())

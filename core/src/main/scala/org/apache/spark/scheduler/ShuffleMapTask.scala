@@ -17,29 +17,24 @@
 
 package org.apache.spark.scheduler
 
+import scala.collection.mutable.HashMap
+
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
+import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.storage._
-import org.apache.spark.util.{MetadataCleanerType, TimeStampedHashMap, MetadataCleaner}
-import org.apache.spark.rdd.RDD
-import org.apache.spark.rdd.RDDCheckpointData
-
+import org.apache.spark.util.BoundedHashMap
 
 private[spark] object ShuffleMapTask {
 
   // A simple map between the stage id to the serialized byte array of a task.
   // Served as a cache for task serialization because serialization can be
   // expensive on the master node if it needs to launch thousands of tasks.
-  val serializedInfoCache = new TimeStampedHashMap[Int, Array[Byte]]
-
-  // TODO: This object shouldn't have global variables
-  val metadataCleaner = new MetadataCleaner(
-    MetadataCleanerType.SHUFFLE_MAP_TASK, serializedInfoCache.clearOldValues, new SparkConf)
+  val MAX_CACHE_SIZE = 100
+  val serializedInfoCache = new BoundedHashMap[Int, Array[Byte]](MAX_CACHE_SIZE, true)
 
   def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_]): Array[Byte] = {
     synchronized {

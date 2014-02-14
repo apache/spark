@@ -17,19 +17,19 @@
 
 package org.apache.spark
 
+import scala.Some
+import scala.collection.mutable.{HashSet, Map}
+import scala.concurrent.Await
+
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
-
-import scala.collection.mutable.HashSet
-import scala.concurrent.Await
-import scala.concurrent.duration._
 
 import akka.actor._
 import akka.pattern.ask
 
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AkkaUtils, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
+import org.apache.spark.util._
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
@@ -51,22 +51,20 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
   }
 }
 
-private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
+private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging {
 
   private val timeout = AkkaUtils.askTimeout(conf)
 
   // Set to the MapOutputTrackerActor living on the driver
   var trackerActor: ActorRef = _
 
-  protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]
+  /** This HashMap needs to have different storage behavior for driver and worker */
+  protected val mapStatuses: Map[Int, Array[MapStatus]]
 
   // Incremented every time a fetch fails so that client nodes know to clear
   // their cache of map output locations if this happens.
   protected var epoch: Long = 0
   protected val epochLock = new java.lang.Object
-
-  private val metadataCleaner =
-    new MetadataCleaner(MetadataCleanerType.MAP_OUTPUT_TRACKER, this.cleanup, conf)
 
   // Send a message to the trackerActor and get its result within a default timeout, or
   // throw a SparkException if this fails.
@@ -138,8 +136,7 @@ private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
         fetchedStatuses.synchronized {
           return MapOutputTracker.convertMapStatuses(shuffleId, reduceId, fetchedStatuses)
         }
-      }
-      else {
+      } else {
         throw new FetchFailedException(null, shuffleId, -1, reduceId,
           new Exception("Missing all output locations for shuffle " + shuffleId))
       }
@@ -151,13 +148,12 @@ private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
   }
 
   protected def cleanup(cleanupTime: Long) {
-    mapStatuses.clearOldValues(cleanupTime)
+    mapStatuses.asInstanceOf[TimeStampedHashMap[_, _]].clearOldValues(cleanupTime)
   }
 
   def stop() {
     communicate(StopMapOutputTracker)
     mapStatuses.clear()
-    metadataCleaner.cancel()
     trackerActor = null
   }
 
@@ -182,15 +178,42 @@ private[spark] class MapOutputTracker(conf: SparkConf) extends Logging {
   }
 }
 
+private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
+
+  /**
+   * Bounded HashMap for storing serialized statuses in the worker. This allows
+   * the HashMap stay bounded in memory-usage. Things dropped from this HashMap will be
+   * automatically repopulated by fetching them again from the driver.
+   */
+  protected val MAX_MAP_STATUSES = 100
+  protected val mapStatuses = new BoundedHashMap[Int, Array[MapStatus]](MAX_MAP_STATUSES, true)
+}
+
+
 private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   extends MapOutputTracker(conf) {
 
   // Cache a serialized version of the output statuses for each shuffle to send them out faster
   private var cacheEpoch = epoch
-  private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]
+
+  /**
+   * Timestamp based HashMap for storing mapStatuses in the master, so that statuses are dropped
+   * only by explicit deregistering or by ttl-based cleaning (if set). Other than these two
+   * scenarios, nothing should be dropped from this HashMap.
+   */
+  protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
+
+  /**
+   * Bounded HashMap for storing serialized statuses in the master. This allows
+   * the HashMap stay bounded in memory-usage. Things dropped from this HashMap will be
+   * automatically repopulated by serializing the lost statuses again .
+   */
+  protected val MAX_SERIALIZED_STATUSES = 100
+  private val cachedSerializedStatuses =
+    new BoundedHashMap[Int, Array[Byte]](MAX_SERIALIZED_STATUSES, true)
 
   def registerShuffle(shuffleId: Int, numMaps: Int) {
-    if (mapStatuses.putIfAbsent(shuffleId, new Array[MapStatus](numMaps)).isDefined) {
+    if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {
       throw new IllegalArgumentException("Shuffle ID " + shuffleId + " registered twice")
     }
   }
@@ -222,6 +245,10 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     } else {
       throw new SparkException("unregisterMapOutput called for nonexistent shuffle ID")
     }
+  }
+
+  def unregisterShuffle(shuffleId: Int) {
+    mapStatuses.remove(shuffleId)
   }
 
   def incrementEpoch() {
@@ -260,9 +287,8 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     bytes
   }
 
-  protected override def cleanup(cleanupTime: Long) {
-    super.cleanup(cleanupTime)
-    cachedSerializedStatuses.clearOldValues(cleanupTime)
+  def contains(shuffleId: Int): Boolean = {
+    mapStatuses.contains(shuffleId)
   }
 
   override def stop() {

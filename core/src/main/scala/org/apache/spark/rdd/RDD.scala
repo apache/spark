@@ -1012,6 +1012,13 @@ abstract class RDD[T: ClassTag](
     checkpointData.flatMap(_.getCheckpointFile)
   }
 
+  def cleanup() {
+    sc.cleaner.cleanRDD(this)
+    dependencies.filter(_.isInstanceOf[ShuffleDependency[_, _]])
+                .map(_.asInstanceOf[ShuffleDependency[_, _]].shuffleId)
+                .foreach(sc.cleaner.cleanShuffle)
+  }
+
   // =======================================================================
   // Other internal methods and fields
   // =======================================================================
@@ -1091,4 +1098,7 @@ abstract class RDD[T: ClassTag](
     new JavaRDD(this)(elementClassTag)
   }
 
+  override def finalize() {
+    cleanup()
+  }
 }

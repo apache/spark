@@ -82,6 +82,14 @@ class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Lo
     askDriverWithReply[Seq[Seq[BlockManagerId]]](GetLocationsMultipleBlockIds(blockIds))
   }
 
+  /**
+   * Check if block manager master has a block. Note that this can be used to check for only
+   * those blocks that are expected to be reported to block manager master.
+   */
+  def contains(blockId: BlockId) = {
+    !getLocations(blockId).isEmpty
+  }
+
   /** Get ids of other nodes in the cluster from the driver */
   def getPeers(blockManagerId: BlockManagerId, numPeers: Int): Seq[BlockManagerId] = {
     val result = askDriverWithReply[Seq[BlockManagerId]](GetPeers(blockManagerId, numPeers))
@@ -111,6 +119,13 @@ class BlockManagerMaster(var driverActor : ActorRef, conf: SparkConf) extends Lo
     if (blocking) {
       Await.result(future, timeout)
     }
+  }
+
+  /**
+   * Remove all blocks belonging to the given shuffle.
+   */
+  def removeShuffle(shuffleId: Int) {
+    askDriverWithReply(RemoveShuffle(shuffleId))
   }
 
   /**

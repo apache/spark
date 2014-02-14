@@ -95,6 +95,10 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
     case RemoveRdd(rddId) =>
       sender ! removeRdd(rddId)
 
+    case RemoveShuffle(shuffleId) =>
+      removeShuffle(shuffleId)
+      sender ! true
+
     case RemoveBlock(blockId) =>
       removeBlockFromWorkers(blockId)
       sender ! true
@@ -141,6 +145,14 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
     Future.sequence(blockManagerInfo.values.map { bm =>
       bm.slaveActor.ask(removeMsg)(akkaTimeout).mapTo[Int]
     }.toSeq)
+  }
+
+  private def removeShuffle(shuffleId: Int) {
+    // Nothing to do in the BlockManagerMasterActor data structures
+    val removeMsg = RemoveShuffle(shuffleId)
+    blockManagerInfo.values.map { bm =>
+      bm.slaveActor ! removeMsg
+    }
   }
 
   private def removeBlockManager(blockManagerId: BlockManagerId) {

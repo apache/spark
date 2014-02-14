@@ -181,7 +181,7 @@ object SparkEnv extends Logging {
     val mapOutputTracker =  if (isDriver) {
       new MapOutputTrackerMaster(conf)
     } else {
-      new MapOutputTracker(conf)
+      new MapOutputTrackerWorker(conf)
     }
     mapOutputTracker.trackerActor = registerOrLookup(
       "MapOutputTracker",

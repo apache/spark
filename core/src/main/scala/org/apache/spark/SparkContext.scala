@@ -48,8 +48,10 @@ import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, Me
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{Utils, TimeStampedHashMap, MetadataCleaner, MetadataCleanerType,
-  ClosureCleaner}
+import org.apache.spark.util._
+import scala.Some
+import org.apache.spark.storage.RDDInfo
+import org.apache.spark.storage.StorageStatus
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -150,7 +152,7 @@ class SparkContext(
   private[spark] val addedJars = HashMap[String, Long]()
 
   // Keeps track of all persisted RDDs
-  private[spark] val persistentRdds = new TimeStampedHashMap[Int, RDD[_]]
+  private[spark] val persistentRdds = new TimeStampedWeakValueHashMap[Int, RDD[_]]
   private[spark] val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
@@ -201,6 +203,9 @@ class SparkContext(
 
   @volatile private[spark] var dagScheduler = new DAGScheduler(taskScheduler)
   dagScheduler.start()
+
+  private[spark] val cleaner = new ContextCleaner(env)
+  cleaner.start()
 
   ui.start()
 
@@ -784,6 +789,7 @@ class SparkContext(
     dagScheduler = null
     if (dagSchedulerCopy != null) {
       metadataCleaner.cancel()
+      cleaner.stop()
       dagSchedulerCopy.stop()
       taskScheduler = null
       // TODO: Cache.stop()?
