@@ -13,13 +13,15 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-addSbtPlugin("org.ensime" % "ensime-sbt-cmd" % "0.1.1")
+//addSbtPlugin("org.ensime" % "ensime-sbt-cmd" % "0.1.1")
 
-addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.2.0")
+//addSbtPlugin("com.typesafe.sbteclipse" % "sbteclipse-plugin" % "2.2.0")
 
-addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "1.4.0")
+addSbtPlugin("com.github.mpeltonen" % "sbt-idea" % "1.5.2" extra("sbtVersion" -> "0.13", "scalaVersion" -> "2.10"))
 
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.9.2")
+addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.10.1")
+
+addSbtPlugin("net.virtual-void" % "sbt-dependency-graph" % "0.7.4")
 
 resolvers += Resolver.url(
   "sbt-plugin-releases",
@@ -27,12 +29,11 @@ resolvers += Resolver.url(
 
 resolvers += "jgit-repo" at "http://download.eclipse.org/jgit/maven"
 
+addSbtPlugin("com.typesafe.sbt" % "sbt-git" % "0.6.2")
+
 addSbtPlugin("com.typesafe.sbt" % "sbt-ghpages" % "0.5.2")
 
 addSbtPlugin("com.typesafe.sbt" % "sbt-site" % "0.7.1")
-
-addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.9.2")
-
 
 addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "0.3.2")
 
