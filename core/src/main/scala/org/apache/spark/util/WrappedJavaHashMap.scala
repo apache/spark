@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.util
 
 import scala.collection.mutable.Map
@@ -8,8 +25,8 @@ import scala.reflect.ClassTag
 
 /**
  * Convenient wrapper class for exposing Java HashMaps as Scala Maps even if the
- * exposed key-value type is different from the internal type. This allows Scala HashMaps to be
- * hot replaceable with these Java HashMaps.
+ * exposed key-value type is different from the internal type. This allows these
+ * implementations of WrappedJavaHashMap to be drop-in replacements for Scala HashMaps.
  *
  * While Java <-> Scala conversion methods exists, its hard to understand the performance
  * implications and thread safety of the Scala wrapper. This class allows you to convert
@@ -62,7 +79,7 @@ private[spark] abstract class WrappedJavaHashMap[K, V, IK, IV] extends Map[K, V]
     (internalKeyToExternalKey(ip.getKey), internalValueToExternalValue(ip.getValue) )
   }
 
-  /* Implicit functions to convert the types. */
+  /* Implicit methods to convert the types. */
 
   @inline implicit private def convExtKeyToIntKey(k: K) = externalKeyToInternalKey(k)
 
@@ -76,6 +93,8 @@ private[spark] abstract class WrappedJavaHashMap[K, V, IK, IV] extends Map[K, V]
     internalPairToExternalPair(ip)
   }
 
+  /* Methods that must be implemented for a scala.collection.mutable.Map */
+
   def get(key: K): Option[V] = {
     Option(internalJavaMap.get(key))
   }
@@ -84,6 +103,8 @@ private[spark] abstract class WrappedJavaHashMap[K, V, IK, IV] extends Map[K, V]
     val jIterator = internalJavaMap.entrySet().iterator()
     JavaConversions.asScalaIterator(jIterator).map(kv => convIntPairToExtPair(kv))
   }
+
+  /* Other methods that are implemented to ensure performance. */
 
   def +=(kv: (K, V)): this.type = {
     internalJavaMap.put(kv._1, kv._2)
@@ -109,8 +130,9 @@ private[spark] abstract class WrappedJavaHashMap[K, V, IK, IV] extends Map[K, V]
   }
 
   override def foreach[U](f: ((K, V)) => U) {
-    while(iterator.hasNext) {
-      f(iterator.next())
+    val jIterator = internalJavaMap.entrySet().iterator()
+    while(jIterator.hasNext) {
+      f(jIterator.next())
     }
   }
 

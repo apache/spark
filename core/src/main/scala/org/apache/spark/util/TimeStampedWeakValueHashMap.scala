@@ -1,3 +1,20 @@
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
 package org.apache.spark.util
 
 import scala.collection.{JavaConversions, immutable}
@@ -12,8 +29,19 @@ private[util] case class TimeStampedWeakValue[T](timestamp: Long, weakValue: Wea
   def this(timestamp: Long, value: T) = this(timestamp, new WeakReference[T](value))
 }
 
+/**
+ * A map that stores the timestamp of when a key was inserted along with the value,
+ * while ensuring that the values are weakly referenced. If the value is garbage collected and
+ * the weak reference is null, get() operation returns the key be non-existent. However,
+ * the key is actually not remmoved in the current implementation. Key-value pairs whose
+ * timestamps are older than a particular threshold time can then be removed using the
+ * clearOldValues method. It exposes a scala.collection.mutable.Map interface to allow it to be a
+ * drop-in replacement for Scala HashMaps.
+ *
+ * Internally, it uses a Java ConcurrentHashMap, so all operations on this HashMap are thread-safe.
+ */
 
-private[spark] class TimeStampedWeakValueHashMap[A, B]
+private[spark] class TimeStampedWeakValueHashMap[A, B]()
   extends WrappedJavaHashMap[A, B, A, TimeStampedWeakValue[B]] with Logging {
 
   protected[util] val internalJavaMap: util.Map[A, TimeStampedWeakValue[B]] = {
