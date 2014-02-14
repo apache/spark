@@ -399,7 +399,7 @@ abstract class RDD[T: ClassTag](
   def sortBy[K: Ordering: ClassTag](
       f: (T) ⇒ K,
       ascending: Boolean = true,
-      numPartitions: Int = self.partitions.size): RDD[T] =
+      numPartitions: Int = this.partitions.size): RDD[T] =
     this.keyBy[K](f)
         .sortByKey()
         .values
