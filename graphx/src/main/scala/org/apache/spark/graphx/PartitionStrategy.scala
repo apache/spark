@@ -57,8 +57,9 @@ object PartitionStrategy {
    * </pre>
    *
    * The edge denoted by `E` connects `v11` with `v1` and is assigned to processor `P6`. To get the
-   * processor number we divide the matrix into `sqrt(numParts)` by `sqrt(numParts)` blocks.  Notice
-   * that edges adjacent to `v11` can only be in the first column of blocks `(P0, P3, P6)` or the last
+   * processor number we divide the matrix into `sqrt(numParts)` by `sqrt(numParts)` blocks. Notice
+   * that edges adjacent to `v11` can only be in the first column of blocks `(P0, P3,
+   * P6)` or the last
    * row of blocks `(P6, P7, P8)`.  As a consequence we can guarantee that `v11` will need to be
    * replicated to at most `2 * sqrt(numParts)` machines.
    *
@@ -66,11 +67,12 @@ object PartitionStrategy {
    * balance.  To improve balance we first multiply each vertex id by a large prime to shuffle the
    * vertex locations.
    *
-   * One of the limitations of this approach is that the number of machines must either be a perfect
-   * square. We partially address this limitation by computing the machine assignment to the next
+   * One of the limitations of this approach is that the number of machines must either be a
+   * perfect square. We partially address this limitation by computing the machine assignment to
+   * the next
    * largest perfect square and then mapping back down to the actual number of machines.
-   * Unfortunately, this can also lead to work imbalance and so it is suggested that a perfect square
-   * is used.
+   * Unfortunately, this can also lead to work imbalance and so it is suggested that a perfect
+   * square is used.
    */
   case object EdgePartition2D extends PartitionStrategy {
     override def getPartition(src: VertexId, dst: VertexId, numParts: PartitionID): PartitionID = {

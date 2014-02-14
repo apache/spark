@@ -158,9 +158,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.shuffle.spill.compress</td>
   <td>true</td>
   <td>
-    Whether to compress data spilled during shuffles. If enabled, spill compression
-    always uses the `org.apache.spark.io.LZFCompressionCodec` codec, 
-    regardless of the value of `spark.io.compression.codec`.
+    Whether to compress data spilled during shuffles.
   </td>
 </tr>
 <tr>
@@ -362,7 +360,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.streaming.blockInterval</td>
   <td>200</td>
   <td>
-    Duration (milliseconds) of how long to batch new objects coming from network receivers.
+    Duration (milliseconds) of how long to batch new objects coming from network receivers used
+    in Spark Streaming.
+  </td>
+</tr>
+<tr>
+  <td>spark.streaming.unpersist</td>
+  <td>false</td>
+  <td>
+    Force RDDs generated and persisted by Spark Streaming to be automatically unpersisted from
+    Spark's memory. Setting this to true is likely to reduce Spark's RDD memory usage.
   </td>
 </tr>
 <tr>
@@ -387,6 +394,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.file.buffer.kb</td>
+  <td>100</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
+    reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
   </td>
 </tr>
 <tr>
@@ -454,6 +469,13 @@ Apart from these, the following properties are also available, and may be useful
     the whole cluster by default. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
     applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
+</td>
+</tr>
+<tr>
+  <td>spark.files.overwrite</td>
+  <td>false</td>
+  <td>
+    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
   </td>
 </tr>
 </table>

@@ -70,16 +70,17 @@ class TaskInfo(
   def running: Boolean = !finished
 
   def status: String = {
-    if (running)
+    if (running) {
       "RUNNING"
-    else if (gettingResult)
+    } else if (gettingResult) {
       "GET RESULT"
-    else if (failed)
+    } else if (failed) {
       "FAILED"
-    else if (successful)
+    } else if (successful) {
       "SUCCESS"
-    else
+    } else {
       "UNKNOWN"
+    }
   }
 
   def duration: Long = {

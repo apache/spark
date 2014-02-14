@@ -80,7 +80,11 @@ object LocalKMeans {
 
       var mappings = closest.groupBy[Int] (x => x._1)
 
-      var pointStats = mappings.map(pair => pair._2.reduceLeft [(Int, (Vector, Int))] {case ((id1, (x1, y1)), (id2, (x2, y2))) => (id1, (x1 + x2, y1+y2))})
+      var pointStats = mappings.map { pair =>
+        pair._2.reduceLeft [(Int, (Vector, Int))] {
+          case ((id1, (x1, y1)), (id2, (x2, y2))) => (id1, (x1 + x2, y1 + y2))
+        }
+      }
 
       var newPoints = pointStats.map {mapping => (mapping._1, mapping._2._1/mapping._2._2)}
 

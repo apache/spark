@@ -46,8 +46,9 @@ class JobGenerator(jobScheduler: JobScheduler) extends Logging {
   }
   private val timer = new RecurringTimer(clock, ssc.graph.batchDuration.milliseconds,
     longTime => eventActor ! GenerateJobs(new Time(longTime)))
-  private lazy val checkpointWriter = if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
-    new CheckpointWriter(this, ssc.conf, ssc.checkpointDir, ssc.sparkContext.hadoopConfiguration)
+  private lazy val checkpointWriter =
+    if (ssc.checkpointDuration != null && ssc.checkpointDir != null) {
+      new CheckpointWriter(this, ssc.conf, ssc.checkpointDir, ssc.sparkContext.hadoopConfiguration)
   } else {
     null
   }

@@ -86,7 +86,8 @@ private[spark] object Utils extends Logging {
   }
 
   /** Serialize via nested stream using specific serializer */
-  def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(f: SerializationStream => Unit) = {
+  def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(
+      f: SerializationStream => Unit) = {
     val osWrapper = ser.serializeStream(new OutputStream {
       def write(b: Int) = os.write(b)
 
@@ -100,7 +101,8 @@ private[spark] object Utils extends Logging {
   }
 
   /** Deserialize via nested stream using specific serializer */
-  def deserializeViaNestedStream(is: InputStream, ser: SerializerInstance)(f: DeserializationStream => Unit) = {
+  def deserializeViaNestedStream(is: InputStream, ser: SerializerInstance)(
+      f: DeserializationStream => Unit) = {
     val isWrapper = ser.deserializeStream(new InputStream {
       def read(): Int = is.read()
 
@@ -247,6 +249,7 @@ private[spark] object Utils extends Logging {
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
     val targetFile = new File(targetDir, filename)
     val uri = new URI(url)
+    val fileOverwrite = conf.getBoolean("spark.files.overwrite", false)
     uri.getScheme match {
       case "http" | "https" | "ftp" =>
         logInfo("Fetching " + url + " to " + tempFile)
@@ -254,47 +257,65 @@ private[spark] object Utils extends Logging {
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          tempFile.delete()
-          throw new SparkException(
-            "File " + targetFile + " exists and does not match contents of" + " " + url)
-        } else {
-          Files.move(tempFile, targetFile)
+          if (fileOverwrite) {
+            targetFile.delete()
+            logInfo(("File %s exists and does not match contents of %s, " +
+              "replacing it with %s").format(targetFile, url, url))
+          } else {
+            tempFile.delete()
+            throw new SparkException(
+              "File " + targetFile + " exists and does not match contents of" + " " + url)
+          }
         }
+        Files.move(tempFile, targetFile)
       case "file" | null =>
         // In the case of a local file, copy the local file to the target directory.
         // Note the difference between uri vs url.
         val sourceFile = if (uri.isAbsolute) new File(uri) else new File(url)
+        var shouldCopy = true
         if (targetFile.exists) {
-          // If the target file already exists, warn the user if
           if (!Files.equal(sourceFile, targetFile)) {
-            throw new SparkException(
-              "File " + targetFile + " exists and does not match contents of" + " " + url)
+            if (fileOverwrite) {
+              targetFile.delete()
+              logInfo(("File %s exists and does not match contents of %s, " +
+                "replacing it with %s").format(targetFile, url, url))
+            } else {
+              throw new SparkException(
+                "File " + targetFile + " exists and does not match contents of" + " " + url)
+            }
           } else {
             // Do nothing if the file contents are the same, i.e. this file has been copied
             // previously.
             logInfo(sourceFile.getAbsolutePath + " has been previously copied to "
               + targetFile.getAbsolutePath)
+            shouldCopy = false
           }
-        } else {
+        }
+
+        if (shouldCopy) {
           // The file does not exist in the target directory. Copy it there.
           logInfo("Copying " + sourceFile.getAbsolutePath + " to " + targetFile.getAbsolutePath)
           Files.copy(sourceFile, targetFile)
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-        val uri = new URI(url)
         val conf = SparkHadoopUtil.get.newConfiguration()
         val fs = FileSystem.get(uri, conf)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
-          tempFile.delete()
-          throw new SparkException("File " + targetFile + " exists and does not match contents of" +
-            " " + url)
-        } else {
-          Files.move(tempFile, targetFile)
+          if (fileOverwrite) {
+            targetFile.delete()
+            logInfo(("File %s exists and does not match contents of %s, " +
+              "replacing it with %s").format(targetFile, url, url))
+          } else {
+            tempFile.delete()
+            throw new SparkException(
+              "File " + targetFile + " exists and does not match contents of" + " " + url)
+          }
         }
+        Files.move(tempFile, targetFile)
     }
     // Decompress the file if it's a .tar or .tar.gz
     if (filename.endsWith(".tar.gz") || filename.endsWith(".tgz")) {
@@ -652,7 +673,7 @@ private[spark] object Utils extends Logging {
 
     for (el <- trace) {
       if (!finished) {
-        if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName) != None) {
+        if (SPARK_CLASS_REGEX.findFirstIn(el.getClassName).isDefined) {
           lastSparkMethod = if (el.getMethodName == "<init>") {
             // Spark method is a constructor; get its class name
             el.getClassName.substring(el.getClassName.lastIndexOf('.') + 1)
@@ -834,4 +855,17 @@ private[spark] object Utils extends Logging {
     System.currentTimeMillis - start
   }
 
+  /**
+   * Counts the number of elements of an iterator using a while loop rather than calling
+   * [[scala.collection.Iterator#size]] because it uses a for loop, which is slightly slower
+   * in the current version of Scala.
+   */
+  def getIteratorSize[T](iterator: Iterator[T]): Long = {
+    var count = 0L
+    while (iterator.hasNext) {
+      count += 1L
+      iterator.next()
+    }
+    count
+  }
 }

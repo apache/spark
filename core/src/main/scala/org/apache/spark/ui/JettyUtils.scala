@@ -30,12 +30,14 @@ import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHa
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 import org.apache.spark.Logging
+import java.net.InetSocketAddress
 
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
 private[spark] object JettyUtils extends Logging {
   // Base type for a function that returns something based on an HTTP request. Allows for
   // implicit conversion from many types of functions to jetty Handlers.
+
   type Responder[T] = HttpServletRequest => T
 
   // Conversions from various types of Responder's to jetty Handlers
@@ -92,12 +94,15 @@ private[spark] object JettyUtils extends Logging {
   }
 
   /**
-   * Attempts to start a Jetty server at the supplied ip:port which uses the supplied handlers.
+   * Attempts to start a Jetty server at the supplied hostName:port which uses the supplied
+   * handlers.
    *
    * If the desired port number is contented, continues incrementing ports until a free port is
    * found. Returns the chosen port and the jetty Server object.
    */
-  def startJettyServer(ip: String, port: Int, handlers: Seq[(String, Handler)]): (Server, Int) = {
+  def startJettyServer(hostName: String, port: Int, handlers: Seq[(String, Handler)]): (Server, Int)
+  = {
+
     val handlersToRegister = handlers.map { case(path, handler) =>
       val contextHandler = new ContextHandler(path)
       contextHandler.setHandler(handler)
@@ -109,7 +114,7 @@ private[spark] object JettyUtils extends Logging {
 
     @tailrec
     def connect(currentPort: Int): (Server, Int) = {
-      val server = new Server(currentPort)
+      val server = new Server(new InetSocketAddress(hostName, currentPort))
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)

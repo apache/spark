@@ -152,7 +152,8 @@ object JavaAPICompletenessChecker {
               if (parameters(0).name == classOf[Tuple2[_, _]].getName) {
                 val tupleParams =
                   parameters(0).asInstanceOf[ParameterizedType].parameters.map(applySubs)
-                ParameterizedType("org.apache.spark.streaming.api.java.JavaPairDStream", tupleParams)
+                ParameterizedType("org.apache.spark.streaming.api.java.JavaPairDStream",
+                  tupleParams)
               } else {
                 ParameterizedType("org.apache.spark.streaming.api.java.JavaDStream",
                   parameters.map(applySubs))
@@ -175,7 +176,8 @@ object JavaAPICompletenessChecker {
                 ParameterizedType("org.apache.spark.api.java.function.VoidFunction",
                   parameters.dropRight(1).map(applySubs))
               } else {
-                ParameterizedType("org.apache.spark.api.java.function.Function", parameters.map(applySubs))
+                ParameterizedType("org.apache.spark.api.java.function.Function",
+                  parameters.map(applySubs))
               }
             case _ =>
               ParameterizedType(renameSubstitutions.getOrElse(name, name),

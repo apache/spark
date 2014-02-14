@@ -20,7 +20,10 @@ include FileUtils
 
 if not (ENV['SKIP_API'] == '1' or ENV['SKIP_SCALADOC'] == '1')
   # Build Scaladoc for Java/Scala
-  projects = ["core", "examples", "repl", "bagel", "graphx", "streaming", "mllib"]
+  core_projects = ["core", "examples", "repl", "bagel", "graphx", "streaming", "mllib"]
+  external_projects = ["flume", "kafka", "mqtt", "twitter", "zeromq"]
+
+  projects = core_projects + external_projects.map { |project_name| "external/" + project_name }
 
   puts "Moving to project root and building scaladoc."
   curr_dir = pwd

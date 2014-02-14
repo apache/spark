@@ -30,11 +30,11 @@ from pyspark.broadcast import Broadcast, _broadcastRegistry
 from pyspark.cloudpickle import CloudPickler
 from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
-    write_long, read_int, SpecialLengths, MUTF8Deserializer, PickleSerializer
+    write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer
 
 
 pickleSer = PickleSerializer()
-mutf8_deserializer = MUTF8Deserializer()
+utf8_deserializer = UTF8Deserializer()
 
 
 def report_times(outfile, boot, init, finish):
@@ -51,7 +51,7 @@ def main(infile, outfile):
         return
 
     # fetch name of workdir
-    spark_files_dir = mutf8_deserializer.loads(infile)
+    spark_files_dir = utf8_deserializer.loads(infile)
     SparkFiles._root_directory = spark_files_dir
     SparkFiles._is_running_on_worker = True
 
@@ -66,7 +66,7 @@ def main(infile, outfile):
     sys.path.append(spark_files_dir) # *.py files that were added will be copied here
     num_python_includes =  read_int(infile)
     for _ in range(num_python_includes):
-        filename = mutf8_deserializer.loads(infile)
+        filename = utf8_deserializer.loads(infile)
         sys.path.append(os.path.join(spark_files_dir, filename))
 
     command = pickleSer._read_with_length(infile)

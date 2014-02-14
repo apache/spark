@@ -49,7 +49,8 @@ object CommandUtils extends Logging {
     val libraryOpts = getEnv("SPARK_LIBRARY_PATH", command)
       .map(p => List("-Djava.library.path=" + p))
       .getOrElse(Nil)
-    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS")).map(Utils.splitCommandString).getOrElse(Nil)
+    val workerLocalOpts = Option(getenv("SPARK_JAVA_OPTS"))
+      .map(Utils.splitCommandString).getOrElse(Nil)
     val userOpts = getEnv("SPARK_JAVA_OPTS", command).map(Utils.splitCommandString).getOrElse(Nil)
     val memoryOpts = Seq(s"-Xms${memory}M", s"-Xmx${memory}M")
 

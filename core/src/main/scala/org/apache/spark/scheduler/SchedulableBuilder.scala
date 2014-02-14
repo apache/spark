@@ -148,6 +148,6 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       }
     }
     parentPool.addSchedulable(manager)
-    logInfo("Added task set " + manager.name + " tasks to pool "+poolName)
+    logInfo("Added task set " + manager.name + " tasks to pool " + poolName)
   }
 }

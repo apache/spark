@@ -458,8 +458,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other), partitioner)
-    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classTag[K], ClassTags.seqSeqClassTag)
-    prfs.mapValues { case Seq(vs, ws) =>
+    cg.mapValues { case Seq(vs, ws) =>
       (vs.asInstanceOf[Seq[V]], ws.asInstanceOf[Seq[W]])
     }
   }
@@ -474,8 +473,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       throw new SparkException("Default partitioner cannot partition array keys.")
     }
     val cg = new CoGroupedRDD[K](Seq(self, other1, other2), partitioner)
-    val prfs = new PairRDDFunctions[K, Seq[Seq[_]]](cg)(classTag[K], ClassTags.seqSeqClassTag)
-    prfs.mapValues { case Seq(vs, w1s, w2s) =>
+    cg.mapValues { case Seq(vs, w1s, w2s) =>
       (vs.asInstanceOf[Seq[V]], w1s.asInstanceOf[Seq[W1]], w2s.asInstanceOf[Seq[W2]])
     }
   }
@@ -707,7 +705,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     }
 
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
-      valueClass.getSimpleName+ ")")
+      valueClass.getSimpleName + ")")
 
     val writer = new SparkHadoopWriter(conf)
     writer.preSetup()
@@ -748,8 +746,4 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   private[spark] def getKeyClass() = implicitly[ClassTag[K]].runtimeClass
 
   private[spark] def getValueClass() = implicitly[ClassTag[V]].runtimeClass
-}
-
-private[spark] object ClassTags {
-  val seqSeqClassTag = classTag[Seq[Seq[_]]]
 }

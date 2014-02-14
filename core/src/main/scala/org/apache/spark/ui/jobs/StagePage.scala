@@ -64,7 +64,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
       listener.stageIdToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
 
       val finishedTasks = listener.stageIdToTaskInfos(stageId).filter(_._1.finished)
-
+      // scalastyle:off
       val summary =
         <div>
           <ul class="unstyled">
@@ -96,7 +96,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
             }
           </ul>
         </div>
-
+        // scalastyle:on
       val taskHeaders: Seq[String] =
         Seq("Task Index", "Task ID", "Status", "Locality Level", "Executor", "Launch Time") ++
         Seq("Duration", "GC Time", "Result Ser Time") ++
@@ -105,7 +105,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
         {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
         Seq("Errors")
 
-      val taskTable = listingTable(taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
+      val taskTable = listingTable(
+        taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
 
       // Excludes tasks which failed and have incomplete metrics
       val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && (t._2.isDefined))
@@ -117,8 +118,9 @@ private[spark] class StagePage(parent: JobProgressUI) {
         else {
           val serializationTimes = validTasks.map{case (info, metrics, exception) =>
             metrics.get.resultSerializationTime.toDouble}
-          val serializationQuantiles = "Result serialization time" +: Distribution(serializationTimes).get.getQuantiles().map(
-            ms => parent.formatDuration(ms.toLong))
+          val serializationQuantiles =
+            "Result serialization time" +: Distribution(serializationTimes).
+              get.getQuantiles().map(ms => parent.formatDuration(ms.toLong))
 
           val serviceTimes = validTasks.map{case (info, metrics, exception) =>
             metrics.get.executorRunTime.toDouble}
@@ -221,26 +223,27 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)
     val serializationTime = metrics.map(m => m.resultSerializationTime).getOrElse(0L)
 
-    val maybeShuffleRead = metrics.flatMap{m => m.shuffleReadMetrics}.map{s => s.remoteBytesRead}
+    val maybeShuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s => s.remoteBytesRead)
     val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
-    val shuffleReadReadable = maybeShuffleRead.map{Utils.bytesToString(_)}.getOrElse("")
+    val shuffleReadReadable = maybeShuffleRead.map(Utils.bytesToString).getOrElse("")
 
-    val maybeShuffleWrite = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleBytesWritten}
+    val maybeShuffleWrite =
+      metrics.flatMap{m => m.shuffleWriteMetrics}.map(s => s.shuffleBytesWritten)
     val shuffleWriteSortable = maybeShuffleWrite.map(_.toString).getOrElse("")
-    val shuffleWriteReadable = maybeShuffleWrite.map{Utils.bytesToString(_)}.getOrElse("")
+    val shuffleWriteReadable = maybeShuffleWrite.map(Utils.bytesToString).getOrElse("")
 
-    val maybeWriteTime = metrics.flatMap{m => m.shuffleWriteMetrics}.map{s => s.shuffleWriteTime}
+    val maybeWriteTime = metrics.flatMap(m => m.shuffleWriteMetrics).map(s => s.shuffleWriteTime)
     val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
-    val writeTimeReadable = maybeWriteTime.map{ t => t / (1000 * 1000)}.map{ ms =>
+    val writeTimeReadable = maybeWriteTime.map( t => t / (1000 * 1000)).map{ ms =>
       if (ms == 0) "" else parent.formatDuration(ms)}.getOrElse("")
 
-    val maybeMemoryBytesSpilled = metrics.map{m => m.memoryBytesSpilled}
+    val maybeMemoryBytesSpilled = metrics.map(m => m.memoryBytesSpilled)
     val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.map(_.toString).getOrElse("")
-    val memoryBytesSpilledReadable = maybeMemoryBytesSpilled.map{Utils.bytesToString(_)}.getOrElse("")
+    val memoryBytesSpilledReadable = maybeMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
     val maybeDiskBytesSpilled = metrics.map{m => m.diskBytesSpilled}
     val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
-    val diskBytesSpilledReadable = maybeDiskBytesSpilled.map{Utils.bytesToString(_)}.getOrElse("")
+    val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
     <tr>
       <td>{info.index}</td>

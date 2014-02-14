@@ -20,7 +20,7 @@ package org.apache.spark.deploy
 import net.liftweb.json.JsonDSL._
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
-import org.apache.spark.deploy.master.{ApplicationInfo, WorkerInfo}
+import org.apache.spark.deploy.master.{ApplicationInfo, WorkerInfo, DriverInfo}
 import org.apache.spark.deploy.worker.ExecutorRunner
 
 
@@ -32,9 +32,12 @@ private[spark] object JsonProtocol {
    ("webuiaddress" -> obj.webUiAddress) ~
    ("cores" -> obj.cores) ~
    ("coresused" -> obj.coresUsed) ~
+   ("coresfree" -> obj.coresFree) ~
    ("memory" -> obj.memory) ~
    ("memoryused" -> obj.memoryUsed) ~
-   ("state" -> obj.state.toString)
+   ("memoryfree" -> obj.memoryFree) ~
+   ("state" -> obj.state.toString) ~
+   ("lastheartbeat" -> obj.lastHeartbeat)
  }
 
   def writeApplicationInfo(obj: ApplicationInfo) = {
@@ -54,7 +57,9 @@ private[spark] object JsonProtocol {
     ("name" -> obj.name) ~
     ("cores" -> obj.maxCores) ~
     ("memoryperslave" -> obj.memoryPerSlave) ~
-    ("user" -> obj.user)
+    ("user" -> obj.user) ~
+    ("sparkhome" -> obj.sparkHome) ~
+    ("command" -> obj.command.toString)
   }
 
   def writeExecutorRunner(obj: ExecutorRunner) = {
@@ -62,6 +67,14 @@ private[spark] object JsonProtocol {
     ("memory" -> obj.memory) ~
     ("appid" -> obj.appId) ~
     ("appdesc" -> writeApplicationDescription(obj.appDesc))
+  }
+
+  def writeDriverInfo(obj: DriverInfo) = {
+    ("id" -> obj.id) ~
+    ("starttime" -> obj.startTime.toString) ~
+    ("state" -> obj.state.toString) ~
+    ("cores" -> obj.desc.cores) ~
+    ("memory" -> obj.desc.mem)
   }
 
   def writeMasterState(obj: MasterStateResponse) = {
@@ -73,6 +86,7 @@ private[spark] object JsonProtocol {
     ("memoryused" -> obj.workers.map(_.memoryUsed).sum) ~
     ("activeapps" -> obj.activeApps.toList.map(writeApplicationInfo)) ~
     ("completedapps" -> obj.completedApps.toList.map(writeApplicationInfo)) ~
+    ("activedrivers" -> obj.activeDrivers.toList.map(writeDriverInfo)) ~
     ("status" -> obj.status.toString)
   }
 

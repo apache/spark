@@ -30,14 +30,14 @@ import scala.concurrent.duration._
 
 private[spark] object ConnectionManagerTest extends Logging{
   def main(args: Array[String]) {
-    //<mesos cluster> - the master URL
-    //<slaves file> - a list slaves to run connectionTest on
-    //[num of tasks] - the number of parallel tasks to be initiated default is number of slave hosts
-    //[size of msg in MB (integer)] - the size of messages to be sent in each task, default is 10
-    //[count] - how many times to run, default is 3
-    //[await time in seconds] : await time (in seconds), default is 600
+    // <mesos cluster> - the master URL <slaves file> - a list slaves to run connectionTest on
+    // [num of tasks] - the number of parallel tasks to be initiated default is number of slave
+    // hosts [size of msg in MB (integer)] - the size of messages to be sent in each task,
+    // default is 10 [count] - how many times to run, default is 3 [await time in seconds] :
+    // await time (in seconds), default is 600
     if (args.length < 2) {
-      println("Usage: ConnectionManagerTest <mesos cluster> <slaves file> [num of tasks] [size of msg in MB (integer)] [count] [await time in seconds)] ")
+      println("Usage: ConnectionManagerTest <mesos cluster> <slaves file> [num of tasks] " +
+        "[size of msg in MB (integer)] [count] [await time in seconds)] ")
       System.exit(1)
     }
     
@@ -56,7 +56,8 @@ private[spark] object ConnectionManagerTest extends Logging{
     val size = ( if (args.length > 3) (args(3).toInt) else 10 ) * 1024 * 1024 
     val count = if (args.length > 4) args(4).toInt else 3
     val awaitTime = (if (args.length > 5) args(5).toInt else 600 ).second
-    println("Running "+count+" rounds of test: " + "parallel tasks = " + tasknum + ", msg size = " + size/1024/1024 + " MB, awaitTime = " + awaitTime)
+    println("Running " + count + " rounds of test: " + "parallel tasks = " + tasknum + ", " +
+      "msg size = " + size/1024/1024 + " MB, awaitTime = " + awaitTime)
     val slaveConnManagerIds = sc.parallelize(0 until tasknum, tasknum).map(
         i => SparkEnv.get.connectionManager.id).collect()
     println("\nSlave ConnectionManagerIds")
@@ -76,18 +77,21 @@ private[spark] object ConnectionManagerTest extends Logging{
         buffer.flip
         
         val startTime = System.currentTimeMillis  
-        val futures = slaveConnManagerIds.filter(_ != thisConnManagerId).map(slaveConnManagerId => {
-          val bufferMessage = Message.createBufferMessage(buffer.duplicate)
-          logInfo("Sending [" + bufferMessage + "] to [" + slaveConnManagerId + "]")
-          connManager.sendMessageReliably(slaveConnManagerId, bufferMessage)
-        })
+        val futures = slaveConnManagerIds.filter(_ != thisConnManagerId).map{ slaveConnManagerId =>
+          {
+            val bufferMessage = Message.createBufferMessage(buffer.duplicate)
+            logInfo("Sending [" + bufferMessage + "] to [" + slaveConnManagerId + "]")
+            connManager.sendMessageReliably(slaveConnManagerId, bufferMessage)
+          }
+        }
         val results = futures.map(f => Await.result(f, awaitTime))
         val finishTime = System.currentTimeMillis
         Thread.sleep(5000)
         
         val mb = size * results.size / 1024.0 / 1024.0
         val ms = finishTime - startTime
-        val resultStr = thisConnManagerId + " Sent " + mb + " MB in " + ms + " ms at " + (mb / ms * 1000.0) + " MB/s"
+        val resultStr = thisConnManagerId + " Sent " + mb + " MB in " + ms + " ms at " + (mb / ms *
+          1000.0) + " MB/s"
         logInfo(resultStr)
         resultStr
       }).collect()

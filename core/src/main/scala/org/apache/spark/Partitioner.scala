@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.reflect.ClassTag
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.util.CollectionsUtils
 import org.apache.spark.util.Utils
 
 /**
@@ -41,7 +42,7 @@ object Partitioner {
    * spark.default.parallelism is set, then we'll use the value from SparkContext
    * defaultParallelism, otherwise we'll use the max number of upstream partitions.
    *
-   * Unless spark.default.parallelism is set, He number of partitions will be the
+   * Unless spark.default.parallelism is set, the number of partitions will be the
    * same as the number of partitions in the largest upstream RDD, as this should
    * be least likely to cause out-of-memory errors.
    *
@@ -49,7 +50,7 @@ object Partitioner {
    */
   def defaultPartitioner(rdd: RDD[_], others: RDD[_]*): Partitioner = {
     val bySize = (Seq(rdd) ++ others).sortBy(_.partitions.size).reverse
-    for (r <- bySize if r.partitioner != None) {
+    for (r <- bySize if r.partitioner.isDefined) {
       return r.partitioner.get
     }
     if (rdd.context.conf.contains("spark.default.parallelism")) {
@@ -118,12 +119,26 @@ class RangePartitioner[K <% Ordered[K]: ClassTag, V](
 
   def numPartitions = partitions
 
+  private val binarySearch: ((Array[K], K) => Int) = CollectionsUtils.makeBinarySearch[K]
+
   def getPartition(key: Any): Int = {
-    // TODO: Use a binary search here if number of partitions is large
     val k = key.asInstanceOf[K]
     var partition = 0
-    while (partition < rangeBounds.length && k > rangeBounds(partition)) {
-      partition += 1
+    if (rangeBounds.length < 1000) {
+      // If we have less than 100 partitions naive search
+      while (partition < rangeBounds.length && k > rangeBounds(partition)) {
+        partition += 1
+      }
+    } else {
+      // Determine which binary search method to use only once.
+      partition = binarySearch(rangeBounds, k)
+      // binarySearch either returns the match location or -[insertion point]-1
+      if (partition < 0) {
+        partition = -partition-1
+      }
+      if (partition > rangeBounds.length) {
+        partition = rangeBounds.length
+      }
     }
     if (ascending) {
       partition

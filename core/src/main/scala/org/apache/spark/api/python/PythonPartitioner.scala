@@ -23,7 +23,8 @@ import org.apache.spark.Partitioner
 import org.apache.spark.util.Utils
 
 /**
- * A [[org.apache.spark.Partitioner]] that performs handling of long-valued keys, for use by the Python API.
+ * A [[org.apache.spark.Partitioner]] that performs handling of long-valued keys, for use by the
+ * Python API.
  *
  * Stores the unique id() of the Python-side partitioning function so that it is incorporated into
  * equality comparisons.  Correctness requires that the id is a unique identifier for the

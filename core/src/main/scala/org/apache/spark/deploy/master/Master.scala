@@ -54,7 +54,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
-  val actorToWorker = new HashMap[ActorRef, WorkerInfo]
   val addressToWorker = new HashMap[Address, WorkerInfo]
 
   val apps = new HashSet[ApplicationInfo]
@@ -150,10 +149,11 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   override def receive = {
     case ElectedLeader => {
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData()
-      state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty)
+      state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
         RecoveryState.ALIVE
-      else
+      } else {
         RecoveryState.RECOVERING
+      }
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedDrivers, storedWorkers)
@@ -166,7 +166,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       System.exit(0)
     }
 
-    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerWebUiPort, publicAddress) => {
+    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerUiPort, publicAddress) =>
+    {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
         host, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
@@ -175,11 +176,18 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          sender, workerWebUiPort, publicAddress)
-        registerWorker(worker)
-        persistenceEngine.addWorker(worker)
-        sender ! RegisteredWorker(masterUrl, masterWebUiUrl)
-        schedule()
+          sender, workerUiPort, publicAddress)
+        if (registerWorker(worker)) {
+          persistenceEngine.addWorker(worker)
+          sender ! RegisteredWorker(masterUrl, masterWebUiUrl)
+          schedule()
+        } else {
+          val workerAddress = worker.actor.path.address
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          sender ! RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress)
+        }
       }
     }
 
@@ -511,7 +519,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       exec.id, worker.id, worker.hostPort, exec.cores, exec.memory)
   }
 
-  def registerWorker(worker: WorkerInfo): Unit = {
+  def registerWorker(worker: WorkerInfo): Boolean = {
     // There may be one or more refs to dead workers on this same node (w/ different ID's),
     // remove them.
     workers.filter { w =>
@@ -523,20 +531,19 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     val workerAddress = worker.actor.path.address
     if (addressToWorker.contains(workerAddress)) {
       logInfo("Attempted to re-register worker at same address: " + workerAddress)
-      return
+      return false
     }
 
     workers += worker
     idToWorker(worker.id) = worker
-    actorToWorker(worker.actor) = worker
     addressToWorker(workerAddress) = worker
+    true
   }
 
   def removeWorker(worker: WorkerInfo) {
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
-    actorToWorker -= worker.actor
     addressToWorker -= worker.actor.path.address
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
@@ -637,8 +644,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
           worker.id, WORKER_TIMEOUT/1000))
         removeWorker(worker)
       } else {
-        if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT))
+        if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT)) {
           workers -= worker // we've seen this DEAD worker in the UI, etc. for long enough; cull it
+        }
       }
     }
   }

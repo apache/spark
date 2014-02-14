@@ -37,8 +37,8 @@ object ReceiverSupervisorStrategy {
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
     15 millis) {
-    case _: RuntimeException ⇒ Restart
-    case _: Exception ⇒ Escalate
+    case _: RuntimeException => Restart
+    case _: Exception => Escalate
   }
 }
 
@@ -66,7 +66,7 @@ object ReceiverSupervisorStrategy {
  */
 trait Receiver {
 
-  self: Actor ⇒ // to ensure that this can be added to Actor classes only
+  self: Actor => // to ensure that this can be added to Actor classes only
 
   /**
    * Push an iterator received data into Spark Streaming for processing
@@ -139,25 +139,25 @@ private[streaming] class ActorReceiver[T: ClassTag](
 
     def receive = {
 
-      case Data(iter: Iterator[_]) ⇒ pushBlock(iter.asInstanceOf[Iterator[T]])
+      case Data(iter: Iterator[_]) => pushBlock(iter.asInstanceOf[Iterator[T]])
 
-      case Data(msg) ⇒
+      case Data(msg) =>
         blocksGenerator += msg.asInstanceOf[T]
         n.incrementAndGet
 
-      case props: Props ⇒
+      case props: Props =>
         val worker = context.actorOf(props)
         logInfo("Started receiver worker at:" + worker.path)
         sender ! worker
 
-      case (props: Props, name: String) ⇒
+      case (props: Props, name: String) =>
         val worker = context.actorOf(props, name)
         logInfo("Started receiver worker at:" + worker.path)
         sender ! worker
 
       case _: PossiblyHarmful => hiccups.incrementAndGet()
 
-      case _: Statistics ⇒
+      case _: Statistics =>
         val workers = context.children
         sender ! Statistics(n.get, workers.size, hiccups.get, workers.mkString("\n"))
 

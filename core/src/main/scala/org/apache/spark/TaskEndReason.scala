@@ -53,3 +53,16 @@ private[spark] case class ExceptionFailure(
 private[spark] case object TaskResultLost extends TaskEndReason
 
 private[spark] case object TaskKilled extends TaskEndReason
+
+/**
+ * The task failed because the executor that it was running on was lost. This may happen because
+ * the task crashed the JVM.
+ */
+private[spark] case object ExecutorLostFailure extends TaskEndReason
+
+/**
+ * We don't know why the task ended -- for example, because of a ClassNotFound exception when
+ * deserializing the task result.
+ */
+private[spark] case object UnknownReason extends TaskEndReason
+

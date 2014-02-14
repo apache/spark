@@ -82,6 +82,17 @@
                                 <li><a href="api/mllib/index.html#org.apache.spark.mllib.package">MLlib (Machine Learning)</a></li>
                                 <li><a href="api/bagel/index.html#org.apache.spark.bagel.package">Bagel (Pregel on Spark)</a></li>
                                 <li><a href="api/graphx/index.html#org.apache.spark.graphx.package">GraphX (Graph Processing)</a></li>
+                                <li class="divider"></li>
+                                <li class="dropdown-submenu">
+                                    <a tabindex="-1" href="#">External Data Sources</a>
+                                    <ul class="dropdown-menu">
+                                        <li><a href="api/external/kafka/index.html#org.apache.spark.streaming.kafka.KafkaUtils$">Kafka</a></li>
+                                        <li><a href="api/external/flume/index.html#org.apache.spark.streaming.flume.FlumeUtils$">Flume</a></li>
+                                        <li><a href="api/external/twitter/index.html#org.apache.spark.streaming.twitter.TwitterUtils$">Twitter</a></li>
+                                        <li><a href="api/external/zeromq/index.html#org.apache.spark.streaming.zeromq.ZeroMQUtils$">ZeroMQ</a></li>
+                                        <li><a href="api/external/mqtt/index.html#org.apache.spark.streaming.mqtt.MQTTUtils$">MQTT</a></li>
+                                    </ul>
+                                </li>
                             </ul>
                         </li>
 
@@ -184,4 +195,22 @@
         </script>
 
     </body>
+    <!-- MathJax Section -->
+    <script type="text/x-mathjax-config">
+	  MathJax.Hub.Config({
+	    TeX: { equationNumbers: { autoNumber: "AMS" } }
+	  });
+	</script>
+    <script type="text/javascript"
+     src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script>
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
+          displayMath: [ ["$$","$$"], ["\\[", "\\]"] ], 
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+        }
+      });
+    </script>
 </html>

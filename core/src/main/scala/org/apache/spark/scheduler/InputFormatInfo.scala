@@ -33,7 +33,7 @@ import scala.collection.JavaConversions._
  * Parses and holds information about inputFormat (and files) specified as a parameter.
  */
 class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Class[_],
-                      val path: String) extends Logging {
+    val path: String) extends Logging {
 
   var mapreduceInputFormat: Boolean = false
   var mapredInputFormat: Boolean = false
@@ -41,7 +41,8 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
   validate()
 
   override def toString: String = {
-    "InputFormatInfo " + super.toString + " .. inputFormatClazz " + inputFormatClazz + ", path : " + path
+    "InputFormatInfo " + super.toString + " .. inputFormatClazz " + inputFormatClazz + ", " +
+      "path : " + path
   }
 
   override def hashCode(): Int = {
@@ -50,8 +51,8 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     hashCode
   }
 
-  // Since we are not doing canonicalization of path, this can be wrong : like relative vs absolute path
-  // .. which is fine, this is best case effort to remove duplicates - right ?
+  // Since we are not doing canonicalization of path, this can be wrong : like relative vs
+  // absolute path .. which is fine, this is best case effort to remove duplicates - right ?
   override def equals(other: Any): Boolean = other match {
     case that: InputFormatInfo => {
       // not checking config - that should be fine, right ?
@@ -65,22 +66,26 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
     logDebug("validate InputFormatInfo : " + inputFormatClazz + ", path  " + path)
 
     try {
-      if (classOf[org.apache.hadoop.mapreduce.InputFormat[_, _]].isAssignableFrom(inputFormatClazz)) {
+      if (classOf[org.apache.hadoop.mapreduce.InputFormat[_, _]].isAssignableFrom(
+        inputFormatClazz)) {
         logDebug("inputformat is from mapreduce package")
         mapreduceInputFormat = true
       }
-      else if (classOf[org.apache.hadoop.mapred.InputFormat[_, _]].isAssignableFrom(inputFormatClazz)) {
+      else if (classOf[org.apache.hadoop.mapred.InputFormat[_, _]].isAssignableFrom(
+        inputFormatClazz)) {
         logDebug("inputformat is from mapred package")
         mapredInputFormat = true
       }
       else {
         throw new IllegalArgumentException("Specified inputformat " + inputFormatClazz +
-          " is NOT a supported input format ? does not implement either of the supported hadoop api's")
+          " is NOT a supported input format ? does not implement either of the supported hadoop " +
+            "api's")
       }
     }
     catch {
       case e: ClassNotFoundException => {
-        throw new IllegalArgumentException("Specified inputformat " + inputFormatClazz + " cannot be found ?", e)
+        throw new IllegalArgumentException("Specified inputformat " + inputFormatClazz +
+          " cannot be found ?", e)
       }
     }
   }
@@ -125,8 +130,8 @@ class InputFormatInfo(val configuration: Configuration, val inputFormatClazz: Cl
    }
 
   private def findPreferredLocations(): Set[SplitInfo] = {
-    logDebug("mapreduceInputFormat : " + mapreduceInputFormat + ", mapredInputFormat : " + mapredInputFormat +
-      ", inputFormatClazz : " + inputFormatClazz)
+    logDebug("mapreduceInputFormat : " + mapreduceInputFormat + ", mapredInputFormat : " +
+      mapredInputFormat + ", inputFormatClazz : " + inputFormatClazz)
     if (mapreduceInputFormat) {
       prefLocsFromMapreduceInputFormat()
     }
@@ -150,8 +155,8 @@ object InputFormatInfo {
     c) Compute rack info for each host and update rack -> count map based on (b).
     d) Allocate nodes based on (c)
     e) On the allocation result, ensure that we dont allocate "too many" jobs on a single node
-       (even if data locality on that is very high) : this is to prevent fragility of job if a single
-       (or small set of) hosts go down.
+       (even if data locality on that is very high) : this is to prevent fragility of job if a
+       single (or small set of) hosts go down.
 
     go to (a) until required nodes are allocated.
 
@@ -159,7 +164,8 @@ object InputFormatInfo {
 
     PS: I know the wording here is weird, hopefully it makes some sense !
   */
-  def computePreferredLocations(formats: Seq[InputFormatInfo]): HashMap[String, HashSet[SplitInfo]] = {
+  def computePreferredLocations(formats: Seq[InputFormatInfo]): HashMap[String, HashSet[SplitInfo]]
+  = {
 
     val nodeToSplit = new HashMap[String, HashSet[SplitInfo]]
     for (inputSplit <- formats) {
