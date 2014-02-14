@@ -12,6 +12,7 @@ import expressions._
 import plans._
 import plans.logical._
 import types._
+import catalyst.execution.HiveGenericUdtf
 
 /**
  * A logical node that represents a non-query command to be executed by the system.  For example,
@@ -353,12 +354,15 @@ object HiveQl {
 
     case Token("TOK_CREATETABLE", children)
         if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
-      val (Some(Token("TOK_TABNAME", Token(tableName, Nil) :: Nil)) ::
-          _ /* likeTable */ ::
-          Some(query) :: Nil) = {
+      val (Some(tableNameParts) :: _ /* likeTable */ :: Some(query) :: Nil) =
         getClauses(Seq("TOK_TABNAME", "TOK_LIKETABLE", "TOK_QUERY"), children)
-      }
-      InsertIntoCreatedTable(tableName, nodeToPlan(query))
+
+      val (db, tableName) =
+        tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
+          case Seq(tableOnly) => (None, tableOnly)
+          case Seq(databaseName, table) => (Some(databaseName), table)
+        }
+      InsertIntoCreatedTable(db, tableName, nodeToPlan(query))
 
     // If its not a "CREATE TABLE AS" like above then just pass it back to hive as a native command.
     case Token("TOK_CREATETABLE", _) => NativePlaceholder
@@ -380,7 +384,8 @@ object HiveQl {
             sortByClause ::
             clusterByClause ::
             distributeByClause ::
-            limitClause :: Nil) = {
+            limitClause ::
+            lateralViewClause :: Nil) = {
           getClauses(
             Seq(
               "TOK_INSERT_INTO",
@@ -393,7 +398,8 @@ object HiveQl {
               "TOK_SORTBY",
               "TOK_CLUSTERBY",
               "TOK_DISTRIBUTEBY",
-              "TOK_LIMIT"),
+              "TOK_LIMIT",
+              "TOK_LATERAL_VIEW"),
             singleInsert)
         }
 
@@ -429,9 +435,26 @@ object HiveQl {
             }
             val unescapedScript = BaseSemanticAnalyzer.unescapeSQLString(script)
 
-            Some(Transform(inputExprs.map(nodeToExpr), unescapedScript, output, withWhere))
+            Some(
+              ScriptTransformation(inputExprs.map(nodeToExpr), unescapedScript, output, withWhere))
           case _ => None
         }
+
+        val withLateralView = lateralViewClause.map { lv =>
+          val Token("TOK_SELECT",
+          Token("TOK_SELEXPR", clauses) :: Nil) = lv.getChildren.head
+
+          val alias =
+            getClause("TOK_TABALIAS", clauses).getChildren.head.asInstanceOf[ASTNode].getText
+
+          Generate(
+            nodesToGenerator(clauses),
+            join = true,
+            outer = false,
+            Some(alias.toLowerCase),
+            withWhere)
+        }.getOrElse(withWhere)
+
 
         // The projection of the query can either be a normal projection, an aggregation
         // (if there is a group by) or a script transformation.
@@ -441,9 +464,9 @@ object HiveQl {
 
           groupByClause match {
             case Some(groupBy) =>
-              Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withWhere)
+              Aggregate(groupBy.getChildren.map(nodeToExpr), selectExpressions, withLateralView)
             case None =>
-              Project(selectExpressions, withWhere)
+              Project(selectExpressions, withLateralView)
           }
         }
 
@@ -493,10 +516,24 @@ object HiveQl {
   }
 
   val allJoinTokens = "(TOK_.*JOIN)".r
+  val laterViewToken = "TOK_LATERAL_VIEW(.*)".r
   def nodeToRelation(node: Node): LogicalPlan = node match {
     case Token("TOK_SUBQUERY",
            query :: Token(alias, Nil) :: Nil) =>
       Subquery(alias, nodeToPlan(query))
+
+    case Token(laterViewToken(isOuter), selectClause :: relationClause :: Nil) =>
+      val Token("TOK_SELECT",
+            Token("TOK_SELEXPR", clauses) :: Nil) = selectClause
+
+      val alias = getClause("TOK_TABALIAS", clauses).getChildren.head.asInstanceOf[ASTNode].getText
+
+      Generate(
+        nodesToGenerator(clauses),
+        join = true,
+        outer = isOuter.nonEmpty,
+        Some(alias.toLowerCase),
+        nodeToRelation(relationClause))
 
     /* All relations, possibly with aliases or sampling clauses. */
     case Token("TOK_TABREF", clauses) =>
@@ -515,11 +552,13 @@ object HiveQl {
           nonAliasClauses)
       }
 
-      val tableName = tableNameParts.getChildren.map { case Token(part, Nil) =>
-        cleanIdentifier(part)
-      }.mkString(".")
+      val (db, tableName) =
+        tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
+          case Seq(tableOnly) => (None, tableOnly)
+          case Seq(databaseName, table) => (Some(databaseName), table)
+      }
       val alias = aliasClause.map { case Token(a, Nil) => cleanIdentifier(a) }
-      val relation = UnresolvedRelation(tableName, alias)
+      val relation = UnresolvedRelation(db, tableName, alias)
 
       // Apply sampling if requested.
       (bucketSampleClause orElse splitSampleClause).map {
@@ -619,16 +658,22 @@ object HiveQl {
     case Token(destinationToken(),
            Token("TOK_TAB",
               tableArgs) :: Nil) =>
-      val Some(nameClause) :: partitionClause :: Nil =
+      val Some(tableNameParts) :: partitionClause :: Nil =
         getClauses(Seq("TOK_TABNAME", "TOK_PARTSPEC"), tableArgs)
-      val Token("TOK_TABNAME", Token(tableName, Nil) :: Nil) = nameClause
+
+      val (db, tableName) =
+        tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
+          case Seq(tableOnly) => (None, tableOnly)
+          case Seq(databaseName, table) => (Some(databaseName), table)
+        }
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
-        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) => key -> Some(value)
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) =>
+          key -> Some(value)
         case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => key -> None
       }.toMap).getOrElse(Map.empty)
 
-      InsertIntoTable(UnresolvedRelation(tableName, None), partitionKeys, query)
+      InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")
@@ -692,6 +737,8 @@ object HiveQl {
 
     /* Stars (*) */
     case Token("TOK_ALLCOLREF", Nil) => Star(None)
+    // The format of dbName.tableName.* cannot be parsed by HiveParser. TOK_TABNAME will only
+    // has a single child which is tableName.
     case Token("TOK_ALLCOLREF", Token("TOK_TABNAME", Token(name, Nil) :: Nil) :: Nil) =>
       Star(Some(name))
 
@@ -701,6 +748,7 @@ object HiveQl {
     case Token("TOK_FUNCTIONSTAR", Token(COUNT(), Nil) :: Nil) => Count(Literal(1))
     case Token("TOK_FUNCTIONDI", Token(COUNT(), Nil) :: args) => CountDistinct(args.map(nodeToExpr))
     case Token("TOK_FUNCTION", Token(SUM(), Nil) :: arg :: Nil) => Sum(nodeToExpr(arg))
+    case Token("TOK_FUNCTIONDI", Token(SUM(), Nil) :: arg :: Nil) => SumDistinct(nodeToExpr(arg))
 
     /* Casts */
     case Token("TOK_FUNCTION", Token("TOK_STRING", Nil) :: arg :: Nil) =>
@@ -822,6 +870,31 @@ object HiveQl {
         s"""No parse rules for ASTNode type: ${a.getType}, text: ${a.getText} :
            |${dumpTree(a).toString}" +
          """.stripMargin)
+  }
+
+
+  val explode = "(?i)explode".r
+  def nodesToGenerator(nodes: Seq[Node]): Generator = {
+    val function = nodes.head
+
+    val attributes = nodes.flatMap {
+      case Token(a, Nil) => a.toLowerCase :: Nil
+      case _ => Nil
+    }
+
+    function match {
+      case Token("TOK_FUNCTION", Token(explode(), Nil) :: child :: Nil) =>
+        Explode(attributes, nodeToExpr(child))
+
+      case Token("TOK_FUNCTION", Token(functionName, Nil) :: children) =>
+        HiveGenericUdtf(functionName, attributes, children.map(nodeToExpr))
+
+      case a: ASTNode =>
+        throw new NotImplementedError(
+          s"""No parse rules for ASTNode type: ${a.getType}, text: ${a.getText}, tree:
+             |${dumpTree(a).toString}
+           """.stripMargin)
+    }
   }
 
   def dumpTree(node: Node, builder: StringBuilder = new StringBuilder, indent: Int = 0)

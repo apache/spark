@@ -84,8 +84,9 @@ class HiveCompatibility extends HiveQueryFileTest {
     // http://stackoverflow.com/a/1573715
     "ops_comparison",
 
-    // The skewjoin test seems to never complete on hive...
+    // Tests that seems to never complete on hive...
     "skewjoin",
+    "database",
 
     // These tests fail and and exit the JVM.
     "auto_join18_multi_distinct",
@@ -125,9 +126,6 @@ class HiveCompatibility extends HiveQueryFileTest {
     // No window support yet
     ".*window.*",
 
-    // Views are not supported
-    ".*view.*",
-
     // Fails in hive with authorization errors.
     "alter_rename_partition_authorization",
     "authorization.*",
@@ -158,6 +156,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "alter_partition_with_whitelist",
     "alter_table_serde",
     "alter_varchar2",
+    "alter_view_as_select",
     "ambiguous_col",
     "auto_join0",
     "auto_join1",
@@ -220,6 +219,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "correlationoptimizer7",
     "correlationoptimizer8",
     "count",
+    "create_like_view",
     "create_nested_type",
     "create_skewed_table1",
     "create_struct_table",
@@ -245,6 +245,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "drop_partitions_ignore_protection",
     "drop_table",
     "drop_table2",
+    "drop_view",
     "escape_clusterby1",
     "escape_distributeby1",
     "escape_orderby1",
@@ -278,6 +279,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "groupby8_map",
     "groupby8_map_skew",
     "groupby8_noskew",
+    "groupby_distinct_samekey",
     "groupby_multi_single_reducer2",
     "groupby_mutli_insert_common_distinct",
     "groupby_neg_float",
@@ -381,6 +383,9 @@ class HiveCompatibility extends HiveQueryFileTest {
     "join_reorder3",
     "join_reorder4",
     "join_star",
+    "join_view",
+    "lateral_view_cp",
+    "lateral_view_ppd",
     "lineage1",
     "literal_double",
     "literal_ints",
@@ -652,6 +657,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "union22",
     "union23",
     "union24",
+    "union26",
     "union27",
     "union28",
     "union29",
@@ -664,6 +670,7 @@ class HiveCompatibility extends HiveQueryFileTest {
     "union7",
     "union8",
     "union9",
+    "union_lateralview",
     "union_ppr",
     "union_remove_3",
     "union_remove_6",

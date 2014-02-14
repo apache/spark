@@ -2,8 +2,9 @@ package catalyst
 package rules
 
 import trees._
+import util._
 
-abstract class RuleExecutor[TreeType <: TreeNode[_]] {
+abstract class RuleExecutor[TreeType <: TreeNode[_]] extends Logging {
 
   /**
    * An execution strategy for rules that indicates the maximum number of executions. If the
@@ -38,7 +39,19 @@ abstract class RuleExecutor[TreeType <: TreeNode[_]] {
       // Run until fix point (or the max number of iterations as specified in the strategy.
       while (iteration < batch.strategy.maxIterations && !curPlan.fastEquals(lastPlan)) {
         lastPlan = curPlan
-        curPlan = batch.rules.foldLeft(curPlan) { case (curPlan, rule) => rule(curPlan) }
+        curPlan = batch.rules.foldLeft(curPlan) {
+          case (curPlan, rule) =>
+            val result = rule(curPlan)
+            if(!result.fastEquals(curPlan)) {
+              logger.debug(
+                s"""
+                  |=== Applying Rule ${rule.ruleName} ===
+                  |${sideBySide(curPlan.treeString, result.treeString).mkString("\n")}
+                """.stripMargin)
+            }
+
+            result
+        }
         iteration += 1
       }
     }

@@ -122,7 +122,7 @@ class TestSharkInstance extends SharkInstance {
       // Make sure any test tables referenced are loaded.
       val referencedTables =
         describedTables ++
-        parsed.collect { case UnresolvedRelation(name, _) => name.split("\\.").last }
+        parsed.collect { case UnresolvedRelation(databaseName, name, _) => name }
       val referencedTestTables = referencedTables.filter(testTables.contains)
       logger.debug(s"Query references test tables: ${referencedTestTables.mkString(", ")}")
       referencedTestTables.foreach(loadTestTable)

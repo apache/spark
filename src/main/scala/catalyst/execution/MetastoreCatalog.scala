@@ -1,6 +1,8 @@
 package catalyst
 package execution
 
+import scala.util.parsing.combinator.RegexParsers
+
 import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table}
@@ -14,19 +16,18 @@ import analysis.Catalog
 import expressions._
 import plans.logical._
 import rules._
-import types._
+import catalyst.types._
 
-import collection.JavaConversions._
-import scala.util.parsing.combinator.RegexParsers
+import scala.collection.JavaConversions._
 
 class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
   val client = new HiveMetaStoreClient(hiveConf)
 
-  def lookupRelation(name: String, alias: Option[String]): BaseRelation = {
-    val (databaseName, tableName) = name.split("\\.") match {
-      case Array(tableOnly) => (SessionState.get.getCurrentDatabase(), tableOnly)
-      case Array(db, table) => (db, table)
-    }
+  def lookupRelation(
+      db: Option[String],
+      tableName: String,
+      alias: Option[String]): BaseRelation = {
+    val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase())
     val table = client.getTable(databaseName, tableName)
     val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
     val partitions =
@@ -46,15 +47,15 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
    * For example, because of a CREATE TABLE X AS statement.
    */
   object CreateTables extends Rule[LogicalPlan] {
+    import HiveMetastoreTypes._
+
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case InsertIntoCreatedTable(name, child) =>
-        val (databaseName, tableName) = name.split("\\.") match {
-          case Array(tableOnly) => (SessionState.get.getCurrentDatabase(), tableOnly)
-          case Array(db, table) => (db, table)
-        }
+      case InsertIntoCreatedTable(db, tableName, child) =>
+        val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase())
 
         val table = new Table()
-        val schema = child.output.map(attr => new FieldSchema(attr.name, "string", ""))
+        val schema =
+          child.output.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
 
         table.setDbName(databaseName)
         table.setTableName(tableName)
@@ -74,7 +75,7 @@ class HiveMetastoreCatalog(hiveConf: HiveConf) extends Catalog {
         sd.setSerdeInfo(serDeInfo)
         client.createTable(table)
 
-        InsertIntoTable(lookupRelation(tableName, None), Map.empty, child)
+        InsertIntoTable(lookupRelation(Some(databaseName), tableName, None), Map.empty, child)
     }
   }
 }
@@ -117,6 +118,23 @@ object HiveMetastoreTypes extends RegexParsers {
   def toDataType(metastoreType: String): DataType = parseAll(dataType, metastoreType) match {
     case Success(result, _) => result
     case failure: NoSuccess => sys.error(s"Unsupported dataType: $metastoreType")
+  }
+
+  def toMetastoreType(dt: DataType): String = dt match {
+    case ArrayType(elementType) => s"array<${toMetastoreType(elementType)}>"
+    case StructType(fields) =>
+      s"struct<${fields.map(f => s"${f.name}:${toMetastoreType(f.dataType)}").mkString(",")}>"
+    case MapType(keyType, valueType) =>
+      s"map<${toMetastoreType(keyType)},${toMetastoreType(valueType)}>"
+    case StringType => "string"
+    case FloatType => "float"
+    case IntegerType => "int"
+    case ShortType =>"tinyint"
+    case DoubleType => "double"
+    case LongType => "bigint"
+    case BinaryType => "binary"
+    case BooleanType => "boolean"
+    case DecimalType => "decimal"
   }
 }
 

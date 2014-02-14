@@ -32,6 +32,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
     Batch("Resolution", fixedPoint,
       ResolveReferences ::
       ResolveRelations ::
+      ImplicitGenerate ::
       StarExpansion ::
       ResolveFunctions ::
       GlobalAggregates ::
@@ -44,7 +45,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object ResolveRelations extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case UnresolvedRelation(name, alias) => catalog.lookupRelation(name, alias)
+      case UnresolvedRelation(databaseName, name, alias) =>
+        catalog.lookupRelation(databaseName, name, alias)
     }
   }
 
@@ -53,7 +55,8 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
    */
   object LowercaseAttributeReferences extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-      case UnresolvedRelation(name, alias) => UnresolvedRelation(name, alias.map(_.toLowerCase))
+      case UnresolvedRelation(databaseName, name, alias) =>
+        UnresolvedRelation(databaseName, name, alias.map(_.toLowerCase))
       case Subquery(alias, child) => Subquery(alias.toLowerCase, child)
       case q: LogicalPlan => q transformExpressions {
         case s: Star => s.copy(table = s.table.map(_.toLowerCase))
@@ -113,6 +116,18 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
   }
 
   /**
+   * When a SELECT clause has only a single expression and that expression is a
+   * [[catalyst.expressions.Generator Generator]] we convert the
+   * [[catalyst.plans.logical.Project Project]] to a [[catalyst.plans.logical.Generate Generate]].
+   */
+  object ImplicitGenerate extends Rule[LogicalPlan] {
+    def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      case Project(Seq(Alias(g: Generator, _)), child) =>
+        Generate(g, join = false, outer = false, None, child)
+    }
+  }
+
+  /**
    * Expands any references to [[Star]] (*) in project operators.
    */
   object StarExpansion extends Rule[LogicalPlan] {
@@ -127,7 +142,7 @@ class Analyzer(catalog: Catalog, registry: FunctionRegistry, caseSensitive: Bool
             case o => o :: Nil
           },
           child)
-      case t: Transform if containsStar(t.input) =>
+      case t: ScriptTransformation if containsStar(t.input) =>
         t.copy(
           input = t.input.flatMap {
             case s: Star => s.expand(t.child.output)

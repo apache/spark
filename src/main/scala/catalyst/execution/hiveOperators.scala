@@ -256,7 +256,8 @@ case class InsertIntoHiveTable(
       }
 
     val inpath = tempDir.getCanonicalPath + "/*"
-    sc.runHive(s"LOAD DATA LOCAL INPATH '$inpath' INTO TABLE ${table.tableName}$partitionSpec")
+    sc.runHive(s"""LOAD DATA LOCAL INPATH '$inpath' INTO TABLE
+      ${table.databaseName}.${table.tableName}$partitionSpec""")
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

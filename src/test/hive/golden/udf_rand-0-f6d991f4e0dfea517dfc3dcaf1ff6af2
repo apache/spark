@@ -1,0 +1,1 @@
+rand([seed]) - Returns a pseudorandom number between 0 and 1
