@@ -354,6 +354,7 @@ object HiveQl {
 
     case Token("TOK_CREATETABLE", children)
         if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
+      // TODO: Parse other properties.
       val (Some(tableNameParts) :: _ /* likeTable */ :: Some(query) :: Nil) =
         getClauses(Seq("TOK_TABNAME", "TOK_LIKETABLE", "TOK_QUERY"), children)
 
@@ -498,6 +499,9 @@ object HiveQl {
 
         // There are two tokens for specifying where to sent the result that seem to be used almost
         // interchangeably.
+        // TOK_INSERT_INTO means to add files to the table.
+        // TOK_DESTINATION means to overwrite the table.
+        // TODO: We need to distinguish TOK_INSERT_INTO and TOK_DESTINATION.
         val resultDestination =
           (intoClause orElse destClause).getOrElse(sys.error("No destination found."))
 

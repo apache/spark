@@ -12,6 +12,7 @@ import org.apache.hadoop.hive.metastore.api.{SerDeInfo, StorageDescriptor}
 import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.exec.FunctionRegistry
 import org.apache.hadoop.hive.ql.io.avro.{AvroContainerOutputFormat, AvroContainerInputFormat}
+import org.apache.hadoop.hive.ql.metadata.Table
 import org.apache.hadoop.hive.serde2.avro.AvroSerDe
 import org.apache.hadoop.hive.serde2.`lazy`.LazySimpleSerDe
 import org.apache.hadoop.hive.serde2.RegexSerDe
@@ -205,19 +206,14 @@ class TestSharkInstance extends SharkInstance {
       import org.apache.hadoop.mapred.SequenceFileInputFormat
       import org.apache.hadoop.mapred.SequenceFileOutputFormat
 
-      val srcThrift = new org.apache.hadoop.hive.metastore.api.Table()
-      srcThrift.setTableName("src_thrift")
-      srcThrift.setDbName("default")
-      srcThrift.setSd(new StorageDescriptor)
-      srcThrift.getSd.setCols(Nil)
-      srcThrift.getSd.setInputFormat(classOf[SequenceFileInputFormat[_,_]].getName)
-      srcThrift.getSd.setOutputFormat(classOf[SequenceFileOutputFormat[_,_]].getName)
-      srcThrift.getSd.setSerdeInfo(new SerDeInfo)
-      srcThrift.getSd.getSerdeInfo.setSerializationLib(classOf[ThriftDeserializer].getName)
-      srcThrift.getSd.getSerdeInfo.setParameters(Map(
-        "serialization.class" -> classOf[Complex].getName,
-        "serialization.format" -> classOf[TBinaryProtocol].getName))
-
+      val srcThrift = new Table("default", "src_thrift")
+      srcThrift.setFields(Nil)
+      srcThrift.setInputFormatClass(classOf[SequenceFileInputFormat[_,_]].getName)
+      // In Hive, SequenceFileOutputFormat will be substituted by HiveSequenceFileOutputFormat.
+      srcThrift.setOutputFormatClass(classOf[SequenceFileOutputFormat[_,_]].getName)
+      srcThrift.setSerializationLib(classOf[ThriftDeserializer].getName)
+      srcThrift.setSerdeParam("serialization.class", classOf[Complex].getName)
+      srcThrift.setSerdeParam("serialization.format", classOf[TBinaryProtocol].getName)
       catalog.client.createTable(srcThrift)
 
 
@@ -317,11 +313,11 @@ class TestSharkInstance extends SharkInstance {
         logger.debug(s"Deleting table $t")
         val table = catalog.client.getTable("default", t)
 
-        catalog.client.listIndexes("default", t, 255).foreach { index =>
+        catalog.client.getIndexes("default", t, 255).foreach { index =>
           catalog.client.dropIndex("default", t, index.getIndexName, true)
         }
 
-        if (!MetaStoreUtils.isIndexTable(table)) {
+        if (!table.isIndexTable) {
           catalog.client.dropTable("default", t)
         }
       }
