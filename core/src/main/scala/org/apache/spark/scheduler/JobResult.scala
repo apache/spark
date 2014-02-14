@@ -17,23 +17,20 @@
 
 package org.apache.spark.scheduler
 
-import net.liftweb.json.JsonAST._
 import net.liftweb.json.JsonDSL._
 
 /**
  * A result of a job in the DAGScheduler.
  */
-private[spark] sealed trait JobResult {
-  def toJson: JValue
-}
+private[spark] sealed trait JobResult extends JsonSerializable
 
 private[spark] case object JobSucceeded extends JobResult {
-  def toJson = ("Status" -> "Success")
+  override def toJson = ("Status" -> "Success")
 }
 
 private[spark] case class JobFailed(exception: Exception, failedStageId: Int)
   extends JobResult {
-  def toJson = {
+  override def toJson = {
     ("Status" -> "Failed") ~
     ("Exception" -> exception.getMessage) ~
     ("Failed Stage ID" -> failedStageId)

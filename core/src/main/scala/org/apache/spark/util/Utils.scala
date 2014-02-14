@@ -873,6 +873,11 @@ private[spark] object Utils extends Logging {
     count
   }
 
+  /** Return the class name of the given object, removing all dollar signs */
+  def getFormattedClassName(obj: AnyRef) = {
+    obj.getClass.getSimpleName.replace("$", "")
+  }
+
   /** Convert a (String, String) map to a JSON object */
   def mapToJson(m: Map[String, String]): JValue = {
     val jsonFields = m.map { case (k, v) =>
@@ -888,36 +893,28 @@ private[spark] object Utils extends Logging {
     }.getOrElse(JNothing)
   }
 
-  /** Extract a field from the given JSON AST as a scala option */
-  def extractFromJson(json: JValue, field: String): Option[JValue] = {
-    (json \ field) match {
-      case JNothing => None
-      case value => Some(value)
-    }
+  /** Extract a list from the given JSON AST */
+  def extractListFromJson(json: JValue, default: List[JValue] = List()): List[JValue] = {
+    if (json == JNothing) default else json.extract[List[JValue]]
   }
 
-  /** Extracts a string from the given JSON AST */
-  def extractStringFromJson(json: JValue, field: String): Option[String] = {
-    extractFromJson(json, field).map(_.extract[String])
+  /** Extract a string from the given JSON AST */
+  def extractStringFromJson(json: JValue, default: String = ""): String = {
+    if (json == JNothing) default else json.extract[String]
   }
 
-  /** Extracts a double from the given JSON AST */
-  def extractDoubleFromJson(json: JValue, field: String): Option[Double] = {
-    extractFromJson(json, field).map(_.extract[Double])
+  /** Extract a double from the given JSON AST */
+  def extractDoubleFromJson(json: JValue, default: Double = 0.0): Double = {
+    if (json == JNothing) default else json.extract[Double]
   }
 
   /** Extracts a long from the given JSON AST */
-  def extractLongFromJson(json: JValue, field: String): Option[Long] = {
-    extractFromJson(json, field).map(_.extract[Long])
+  def extractLongFromJson(json: JValue, default: Long = 0L): Long = {
+    if (json == JNothing) default else json.extract[Long]
   }
 
-  /** Extracts an int from the given JSON AST */
-  def extractIntFromJson(json: JValue, field: String): Option[Int] = {
-    extractFromJson(json, field).map(_.extract[Int])
-  }
-
-  /** Extracts a boolean from the given JSON AST */
-  def extractBooleanFromJson(json: JValue, field: String): Option[Boolean] = {
-    extractFromJson(json, field).map(_.extract[Boolean])
+  /** Extract an int from the given JSON AST */
+  def extractIntFromJson(json: JValue, default: Int = 0): Int = {
+    if (json == JNothing) default else json.extract[Int]
   }
 }

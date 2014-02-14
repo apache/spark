@@ -17,13 +17,17 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.{SparkContext}
+import org.apache.spark.SparkContext
 import BlockManagerMasterActor.BlockStatus
 import org.apache.spark.util.Utils
+import org.apache.spark.scheduler.JsonSerializable
+
+import net.liftweb.json.JsonDSL._
+import net.liftweb.json.JsonAST._
 
 private[spark]
 case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
-  blocks: Map[BlockId, BlockStatus]) {
+  blocks: Map[BlockId, BlockStatus]) extends JsonSerializable {
 
   def memUsed() = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
 
@@ -40,6 +44,20 @@ case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
   def rddBlocks = blocks.flatMap {
     case (rdd: RDDBlockId, status) => Some(rdd, status)
     case _ => None
+  }
+
+  override def toJson = {
+    val blocksJson = JArray(
+      blocks.toList.map { case (id, status) =>
+        ("Block ID" -> id.toJson) ~
+        ("Status" -> status.toJson)
+      })
+    ("Block Manager ID" -> blockManagerId.toJson) ~
+    ("Maximum Memory" -> maxMem) ~
+    ("Memory Used" -> memUsed) ~
+    ("Memory Remaining" -> memRemaining) ~
+    ("Disk Used" -> diskUsed) ~
+    ("Blocks" -> blocksJson)
   }
 }
 

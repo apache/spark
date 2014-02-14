@@ -20,6 +20,9 @@ package org.apache.spark.storage
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark.util.Utils
+import org.apache.spark.scheduler.JsonSerializable
+
+import net.liftweb.json.JsonDSL._
 
 /**
  * This class represent an unique identifier for a BlockManager.
@@ -34,7 +37,7 @@ private[spark] class BlockManagerId private (
     private var host_ : String,
     private var port_ : Int,
     private var nettyPort_ : Int
-  ) extends Externalizable {
+  ) extends Externalizable with JsonSerializable {
 
   private def this() = this(null, null, 0, 0)  // For deserialization only
 
@@ -49,7 +52,6 @@ private[spark] class BlockManagerId private (
     // DEBUG code
     Utils.checkHost(host)
     assert (port > 0)
-
     host + ":" + port
   }
 
@@ -86,13 +88,20 @@ private[spark] class BlockManagerId private (
     case _ =>
       false
   }
+
+  override def toJson = {
+    ("Executor ID" -> executorId) ~
+    ("Host Port" -> hostPort) ~
+    ("Host" -> host) ~
+    ("Port" -> port)
+  }
 }
 
 
 private[spark] object BlockManagerId {
 
   /**
-   * Returns a [[org.apache.spark.storage.BlockManagerId]] for the given configuraiton.
+   * Returns a [[org.apache.spark.storage.BlockManagerId]] for the given configuration.
    *
    * @param execId ID of the executor.
    * @param host Host name of the block manager.

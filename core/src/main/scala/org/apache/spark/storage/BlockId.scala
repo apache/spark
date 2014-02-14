@@ -18,6 +18,9 @@
 package org.apache.spark.storage
 
 import java.util.UUID
+import org.apache.spark.scheduler.JsonSerializable
+
+import net.liftweb.json.JsonDSL._
 
 /**
  * Identifies a particular Block of data, usually associated with a single file.
@@ -26,7 +29,7 @@ import java.util.UUID
  *
  * If your BlockId should be serializable, be sure to add it to the BlockId.apply() method.
  */
-private[spark] sealed abstract class BlockId {
+private[spark] sealed abstract class BlockId extends JsonSerializable {
   /** A globally unique identifier for this Block. Can be used for ser/de. */
   def name: String
 
@@ -42,6 +45,8 @@ private[spark] sealed abstract class BlockId {
     case o: BlockId => getClass == o.getClass && name.equals(o.name)
     case _ => false
   }
+
+  override def toJson = ("Name" -> name)
 }
 
 private[spark] case class RDDBlockId(rddId: Int, splitIndex: Int) extends BlockId {

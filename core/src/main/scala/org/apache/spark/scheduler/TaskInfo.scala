@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import net.liftweb.json.JsonDSL._
-import net.liftweb.json.JsonAST._
 
 /**
  * Information about a running task attempt inside a TaskSet.
@@ -30,7 +29,8 @@ class TaskInfo(
     val launchTime: Long,
     val executorId: String,
     val host: String,
-    val taskLocality: TaskLocality.TaskLocality) {
+    val taskLocality: TaskLocality.TaskLocality)
+  extends JsonSerializable {
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the
@@ -94,7 +94,8 @@ class TaskInfo(
 
   def timeRunning(currentTime: Long): Long = currentTime - launchTime
 
-  def toJson: JValue = {
+  override def toJson = {
+    val _duration = if (finished) duration else 0L
     ("Task ID" -> taskId) ~
     ("Index" -> index) ~
     ("Launch Time" -> launchTime) ~
@@ -103,6 +104,7 @@ class TaskInfo(
     ("Locality" -> taskLocality.toString) ~
     ("Status" -> status) ~
     ("Getting Result Time" -> gettingResultTime) ~
+    ("Duration" -> _duration) ~
     ("Finish Time" -> finishTime) ~
     ("Failed" -> failed)
   }

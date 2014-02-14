@@ -36,11 +36,12 @@ import net.liftweb.json.JsonDSL._
 
 private[spark] class ExecutorsUI(val sc: SparkContext) {
 
+  private val data = new ExecutorsData
   private var _listener: Option[ExecutorsListener] = None
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new ExecutorsListener(sc))
+    _listener = Some(new ExecutorsListener(this))
     sc.addSparkListener(listener)
   }
 
@@ -48,19 +49,23 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     ("/executors", (request: HttpServletRequest) => render(request))
   )
 
-  /** Render an HTML page that encodes executor information */
+  /**
+   * Render an HTML page that encodes executor information
+   */
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.updateStorageStatusFromEnv()
-    val summaryJson = listener.summaryJson
-    val executorsJson = listener.executorIdToJson.values.toSeq
+    listener.getExecutorStorageStatus()
+    val summaryJson = data.summaryJson
+    val executorsJson = data.executorIdToJson.values.toSeq
     renderFromJson(summaryJson, executorsJson)
   }
 
-  /** Render an HTML page that encodes executor information from the given JSON representations */
+  /**
+   * Render an HTML page that encodes executor information from the given JSON representations
+   */
   def renderFromJson(summaryJson: JValue, executorsJson: Seq[JValue]): Seq[Node] = {
-    val memoryAvailable = Utils.extractLongFromJson(summaryJson, "Memory Available").getOrElse(0L)
-    val memoryUsed = Utils.extractLongFromJson(summaryJson, "Memory Used").getOrElse(0L)
-    val diskSpaceUsed = Utils.extractLongFromJson(summaryJson, "Disk Space Used").getOrElse(0L)
+    val maximumMemory = Utils.extractLongFromJson(summaryJson \ "Maximum Memory")
+    val memoryUsed = Utils.extractLongFromJson(summaryJson \ "Memory Used")
+    val diskSpaceUsed = Utils.extractLongFromJson(summaryJson \ "Disk Space Used")
     val execTable = UIUtils.listingTable[JValue](execHeader, execRow, executorsJson)
     val content =
       <div class="row-fluid">
@@ -68,8 +73,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
           <ul class="unstyled">
             <li>
               <strong>Memory:</strong>
-              {Utils.bytesToString(memoryAvailable)} Used
-              ({Utils.bytesToString(memoryUsed)} Total)
+              {Utils.bytesToString(memoryUsed)} Used
+              ({Utils.bytesToString(maximumMemory)} Total)
             </li>
             <li><strong>Disk:</strong> {Utils.bytesToString(diskSpaceUsed)} Used</li>
           </ul>
@@ -99,13 +104,16 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     "Shuffle Read",
     "Shuffle Write")
 
-  /** Render an HTML table row representing an executor from the given JSON representation */
+  /**
+   * Render an HTML table row representing an executor from the given JSON representation
+   */
   private def execRow(executorJson: JValue): Seq[Node] = {
-    def getString(field: String) = Utils.extractStringFromJson(executorJson, field).getOrElse("")
-    def getLong(field: String) = Utils.extractLongFromJson(executorJson, field).getOrElse(0L)
-    def getInt(field: String) = Utils.extractIntFromJson(executorJson, field).getOrElse(0)
+    def getString(field: String) = Utils.extractStringFromJson(executorJson \ field)
+    def getLong(field: String) = Utils.extractLongFromJson(executorJson \ field)
+    def getInt(field: String) = Utils.extractIntFromJson(executorJson \ field)
+
+    val maximumMemory = getLong("Maximum Memory")
     val memoryUsed = getLong("Memory Used")
-    val memoryAvailable = getLong("Memory Available")
     val diskUsed = getLong("Disk Used")
     val activeTasks = getInt("Active Tasks")
     val failedTasks = getInt("Failed Tasks")
@@ -118,7 +126,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       <td>{getString("RDD Blocks")}</td>
       <td sorttable_customkey={memoryUsed.toString}>
         {Utils.bytesToString(memoryUsed)} /
-        {Utils.bytesToString(memoryAvailable)}
+        {Utils.bytesToString(maximumMemory)}
       </td>
       <td sorttable_customkey={diskUsed.toString}>
         {Utils.bytesToString(diskUsed)}
@@ -134,23 +142,24 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
   }
 
   /**
-   * A SparkListener that maintains and logs information to be displayed on the Executors UI.
+   * A vessel for storing executors information in JSON format.
    *
-   * Both intermediate data that resides in memory and persisted data that resides on disk are
-   * in JSON format.
+   * The source of data can come from two sources: (1) If the job is live, ExecutorsListener
+   * invokes ExecutorsData to update its data on certain Spark events. (2) If we are rendering
+   * the UI for a job from the past, ExecutorsData parses from these log files the necessary
+   * states to reconstruct the UI.
    */
-  private[spark] class ExecutorsListener(sc: SparkContext) extends SparkListener with Logging {
+  private[spark] class ExecutorsData extends Logging {
     var summaryJson: JValue = JNothing
     val executorIdToJson = HashMap[String, JValue]()
-    private val logger = new FileLogger("executors-ui")
 
-    /** Return the JSON representation of a newly discovered executor */
+    /** JSON representation of a newly discovered executor */
     private def newExecutorJson(execId: String): JValue = {
       ("Executor ID" -> execId) ~
       ("Address" -> "") ~
       ("RDD Blocks" -> "") ~
+      ("Maximum Memory" -> 0L) ~
       ("Memory Used" -> 0L) ~
-      ("Memory Available" -> 0L) ~
       ("Disk Used" -> 0L) ~
       ("Active Tasks" -> 0) ~
       ("Failed Tasks" -> 0) ~
@@ -161,64 +170,58 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     }
 
     /**
-     * Update the summary and per-executor storage status from SparkEnv. This involves querying
-     * the driver and waiting for a reply, and so should be called sparingly.
+     * Update the summary and per-executor storage status from JSON
      */
-    def updateStorageStatusFromEnv() {
+    def storageStatusFetch(storageStatusFetchJson: JValue) {
+      val storageStatusList =
+        Utils.extractListFromJson(storageStatusFetchJson \ "Storage Status List")
 
       // Update summary storage information
-      val storageStatusList = sc.getExecutorStorageStatus
-      val memoryAvailable = storageStatusList.map(_.maxMem).fold(0L)(_+_)
-      val memoryUsed = storageStatusList.map(_.memUsed).fold(0L)(_+_)
-      val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize)).fold(0L)(_+_)
+      val maximumMemory = storageStatusList.map { status =>
+        Utils.extractLongFromJson(status \ "Maximum Memory")
+      }.fold(0L)(_+_)
+      val memoryUsed = storageStatusList.map { status =>
+        Utils.extractLongFromJson(status \ "Memory Used")
+      }.fold(0L)(_+_)
+      val diskSpaceUsed = storageStatusList.flatMap { status =>
+        Utils.extractListFromJson(status \ "Blocks").map { block =>
+          Utils.extractLongFromJson(block \ "Status" \ "Disk Size")
+        }
+      }.fold(0L)(_+_)
 
       summaryJson =
-        ("Memory Available" -> memoryAvailable) ~
+        ("Maximum Memory" -> maximumMemory) ~
         ("Memory Used" -> memoryUsed) ~
         ("Disk Space Used" -> diskSpaceUsed)
 
       // Update storage status for each executor
       storageStatusList.foreach { status =>
-        val execId = status.blockManagerId.executorId
-        val address = status.blockManagerId.hostPort
-        val rddBlocks = status.blocks.size
-        val memoryUsed = status.memUsed
-        val memoryAvailable = status.maxMem
-        val diskUsed = status.diskUsed
-        val json = executorIdToJson.getOrElse(execId, newExecutorJson(execId))
-        executorIdToJson(execId) = json.transform {
-          case JField("Address", _) => JField("Address", JString(address))
-          case JField("RDD Blocks", _) => JField("RDD Blocks", JInt(rddBlocks))
-          case JField("Memory Used", _) => JField("Memory Used", JInt(memoryUsed))
-          case JField("Memory Available", _) => JField("Memory Available", JInt(memoryAvailable))
-          case JField("Disk Used", _) => JField("Disk Used", JInt(diskUsed))
+        val execId = formatExecutorId(
+          Utils.extractStringFromJson(status \ "Block Manager ID" \ "Executor ID"))
+        if (execId != "") {
+          val address = Utils.extractStringFromJson(status \ "Block Manager ID" \ "Host Port")
+          val rddBlocks = Utils.extractListFromJson(status \ "Blocks").size
+          val maximumMemory = Utils.extractLongFromJson(status \ "Maximum Memory")
+          val memoryUsed = Utils.extractLongFromJson(status \ "Memory Used")
+          val diskUsed = Utils.extractLongFromJson(status \ "Disk Used")
+          val json = executorIdToJson.getOrElse(execId, newExecutorJson(execId))
+          executorIdToJson(execId) = json.transform {
+            case JField("Address", _) => JField("Address", JString(address))
+            case JField("RDD Blocks", _) => JField("RDD Blocks", JInt(rddBlocks))
+            case JField("Maximum Memory", _) => JField("Maximum Memory", JInt(maximumMemory))
+            case JField("Memory Used", _) => JField("Memory Used", JInt(memoryUsed))
+            case JField("Disk Used", _) => JField("Disk Used", JInt(diskUsed))
+          }
         }
-        logJson(executorIdToJson(execId))
       }
     }
 
-    override def onJobStart(jobStart: SparkListenerJobStart) = logger.start()
-
-    override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.close()
-
-    override def onStageSubmitted(stageStart: SparkListenerStageSubmitted) = {
-      updateStorageStatusFromEnv()
-      logger.flush()
-    }
-
-    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = {
-      updateStorageStatusFromEnv()
-      logger.flush()
-    }
-
-    override def onTaskStart(taskStart: SparkListenerTaskStart) = {
-      /**
-       * In the local mode, there is a discrepancy between the executor ID according to the
-       * task ("localhost") and that according to SparkEnv ("<driver>"). This results in
-       * duplicate rows for the same executor. Thus, in this mode, we aggregate these two
-       * rows and use the executor ID of "<driver>" to be consistent.
-       */
-      val execId = if (sc.isLocal) "<driver>" else taskStart.taskInfo.executorId
+    /**
+     * Update executor information in response to a task start event
+     */
+    def taskStart(taskStartJson: JValue) {
+      val execId = formatExecutorId(
+        Utils.extractStringFromJson(taskStartJson \ "Task Info" \ "Executor ID"))
       val json = executorIdToJson.getOrElse(execId, {
         // The executor ID according to the task is different from that according to SparkEnv
         // This should never happen under normal circumstances...
@@ -228,22 +231,22 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       executorIdToJson(execId) = json.transform {
         case JField("Active Tasks", JInt(s)) => JField("Active Tasks", JInt(s + 1))
       }
-      logJson(executorIdToJson(execId))
     }
 
-    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = {
-      val execId = if (sc.isLocal) "<driver>" else taskEnd.taskInfo.executorId
-      val newDuration = taskEnd.taskInfo.duration
-      var newShuffleRead = 0L
-      var newShuffleWrite = 0L
-      if (taskEnd.taskMetrics != null) {
-        taskEnd.taskMetrics.shuffleReadMetrics.foreach(newShuffleRead += _.remoteBytesRead)
-        taskEnd.taskMetrics.shuffleWriteMetrics.foreach(newShuffleWrite += _.shuffleBytesWritten)
-      }
-      val success = taskEnd.reason match {
-        case _: ExceptionFailure => false
-        case _ => true
-      }
+    /**
+     * Update executor information in response to a task end event
+     */
+    def taskEnd(taskEndJson: JValue) {
+      val execId = formatExecutorId(
+        Utils.extractStringFromJson(taskEndJson \ "Task Info" \ "Executor ID"))
+      val duration = Utils.extractLongFromJson(taskEndJson \ "Task Info" \ "Duration")
+      val taskEndReason = Utils.extractStringFromJson(taskEndJson \ "Task End Reason")
+      val failed = taskEndReason == ExceptionFailure.getClass.getSimpleName
+      val shuffleRead = Utils.extractLongFromJson(
+        taskEndJson \ "Task Metrics" \ "Shuffle Read Metrics" \ "Remote Bytes Read")
+      val shuffleWrite = Utils.extractLongFromJson(
+        taskEndJson \ "Task Metrics" \ "Shuffle Write Metrics" \ "Shuffle Bytes Written")
+
       val json = executorIdToJson.getOrElse(execId, {
         // Information for this executor has vanished over the course of the task execution
         // This should never happen under normal circumstances...
@@ -252,24 +255,82 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       })
       executorIdToJson(execId) = json.transform {
         case JField("Active Tasks", JInt(t)) if t > 0 => JField("Active Tasks", JInt(t - 1))
-        case JField("Failed Tasks", JInt(t)) if !success => JField("Failed Tasks", JInt(t + 1))
-        case JField("Complete Tasks", JInt(t)) if success => JField("Complete Tasks", JInt(t + 1))
-        case JField("Task Time", JInt(s)) => JField("Task Time", JInt(s + newDuration))
-        case JField("Shuffle Read", JInt(s)) => JField("Shuffle Read", JInt(s + newShuffleRead))
-        case JField("Shuffle Write", JInt(s)) => JField("Shuffle Write", JInt(s + newShuffleWrite))
+        case JField("Failed Tasks", JInt(t)) if failed => JField("Failed Tasks", JInt(t + 1))
+        case JField("Complete Tasks", JInt(t)) if !failed => JField("Complete Tasks", JInt(t + 1))
+        case JField("Task Time", JInt(s)) => JField("Task Time", JInt(s + duration))
+        case JField("Shuffle Read", JInt(s)) => JField("Shuffle Read", JInt(s + shuffleRead))
+        case JField("Shuffle Write", JInt(s)) => JField("Shuffle Write", JInt(s + shuffleWrite))
       }
-      logJson(executorIdToJson(execId))
     }
 
-    /** Log summary storage status **/
-    def logSummary() = logJson(summaryJson)
+    /**
+     * In the local mode, there is a discrepancy between the executor ID according to the
+     * task ("localhost") and that according to SparkEnv ("<driver>"). This results in
+     * duplicate rows for the same executor. Thus, in this mode, we aggregate these two
+     * rows and use the executor ID of "<driver>" to be consistent.
+     */
+    private def formatExecutorId(execId: String): String = {
+      if (execId == "localhost") "<driver>" else execId
+    }
+  }
 
-    /** Log storage status for the executor with the given ID */
-    def logExecutor(execId: String) = logJson(executorIdToJson.getOrElse(execId, JNothing))
+  /**
+   * A SparkListener that logs information to be displayed on the Executors UI.
+   *
+   * Currently, ExecutorsListener only fetches executor storage information from the driver
+   * on stage submit and completion. However, this is arbitrary and needs not be true. More
+   * specifically, each stage could be very long, in which case it would take a while before
+   * this information is updated and persisted to disk. An alternative approach would be to
+   * fetch every constant number of task events.
+   */
+  private[spark] class ExecutorsListener(ui: ExecutorsUI) extends SparkListener with Logging {
+    private val logger = new FileLogger("executors-ui")
 
-    private def logJson(json: JValue) = {
-      if (json != JNothing) {
-        logger.logLine(compactRender(json))
+    /**
+     * Invoke SparkEnv to ask the driver for executor storage status. This should be
+     * called sparingly.
+     */
+    def getExecutorStorageStatus() = {
+      val storageStatusList = ui.sc.getExecutorStorageStatus
+      val event = SparkListenerStorageStatusFetch(storageStatusList)
+      onStorageStatusFetch(event)
+    }
+
+    override def onJobStart(jobStart: SparkListenerJobStart) = logger.start()
+
+    override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.close()
+
+    override def onStageSubmitted(stageStart: SparkListenerStageSubmitted) = {
+      getExecutorStorageStatus()
+      logger.flush()
+    }
+
+    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = {
+      getExecutorStorageStatus()
+      logger.flush()
+    }
+
+    override def onTaskStart(taskStart: SparkListenerTaskStart) = {
+      val eventJson = taskStart.toJson
+      ui.data.taskStart(eventJson)
+      logEvent(eventJson)
+    }
+
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = {
+      val eventJson = taskEnd.toJson
+      ui.data.taskEnd(eventJson)
+      logEvent(eventJson)
+    }
+
+    def onStorageStatusFetch(storageStatusFetch: SparkListenerStorageStatusFetch) = {
+      val eventJson = storageStatusFetch.toJson
+      ui.data.storageStatusFetch(eventJson)
+      logEvent(eventJson)
+    }
+
+    private def logEvent(event: JValue) = {
+      if (event != JNothing) {
+        logger.logLine(compactRender(event))
       }
     }
   }

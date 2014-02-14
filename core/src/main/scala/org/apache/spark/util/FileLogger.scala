@@ -25,7 +25,7 @@ import java.util.Date
  * A generic class for logging information to file
  * @param user User identifier if SPARK_LOG_DIR is not set, in which case log directory
  *             defaults to /tmp/spark-[user]
- * @param name Name of logger, also the name of the log file
+ * @param name Name of logger, also the base name of the log files
  * @param flushFrequency How many writes until the results are flushed to disk
  */
 class FileLogger(user: String, name: String, flushFrequency: Int = 100) {

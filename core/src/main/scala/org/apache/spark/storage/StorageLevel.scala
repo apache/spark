@@ -19,6 +19,9 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 
+import net.liftweb.json.JsonDSL._
+import org.apache.spark.scheduler.JsonSerializable
+
 /**
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
  * whether to drop the RDD to disk if it falls out of memory, whether to keep the data in memory
@@ -32,7 +35,7 @@ class StorageLevel private(
     private var useMemory_ : Boolean,
     private var deserialized_ : Boolean,
     private var replication_ : Int = 1)
-  extends Externalizable {
+  extends Externalizable with JsonSerializable {
 
   // TODO: Also add fields for caching priority, dataset ID, and flushing.
   private def this(flags: Int, replication: Int) {
@@ -104,6 +107,13 @@ class StorageLevel private(
     result += (if (deserialized) "Deserialized " else "Serialized ")
     result += "%sx Replicated".format(replication)
     result
+  }
+
+  override def toJson = {
+    ("Use Disk" -> useDisk) ~
+    ("Use Memory" -> useMemory) ~
+    ("Deserialized" -> deserialized) ~
+    ("Replication" -> replication)
   }
 }
 

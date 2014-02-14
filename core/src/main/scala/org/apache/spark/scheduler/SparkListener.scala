@@ -25,31 +25,33 @@ import org.apache.spark.executor.TaskMetrics
 
 import net.liftweb.json.JsonDSL._
 import net.liftweb.json.JsonAST._
+import org.apache.spark.storage.StorageStatus
 
-sealed trait SparkListenerEvent {
-  def toJson: JValue
-}
+trait JsonSerializable { def toJson: JValue }
+
+sealed trait SparkListenerEvent extends JsonSerializable
 
 case class SparkListenerStageSubmitted(
     stageInfo: StageInfo,
     properties: Properties)
   extends SparkListenerEvent {
-  def toJson = {
+  override def toJson = {
+    val propertiesJson = Utils.propertiesToJson(properties)
     ("Event" -> "Stage Submitted") ~
     ("Stage Info" -> stageInfo.toJson) ~
-    ("Properties" -> Utils.propertiesToJson(properties))
+    ("Properties" -> propertiesJson)
   }
 }
 
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent {
-  def toJson = {
+  override def toJson = {
     ("Event" -> "Stage Completed") ~
     ("Stage Info" -> stageInfo.toJson)
   }
 }
 
 case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent {
-  def toJson = {
+  override def toJson = {
     ("Event" -> "Task Start") ~
     ("Stage ID" -> stageId) ~
     ("Task Info" -> taskInfo.toJson)
@@ -57,7 +59,7 @@ case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends Spar
 }
 
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent {
-  def toJson = {
+  override def toJson = {
     ("Event" -> "Task Getting Result") ~
     ("Task Info" -> taskInfo.toJson)
   }
@@ -70,11 +72,12 @@ case class SparkListenerTaskEnd(
     taskInfo: TaskInfo,
     taskMetrics: TaskMetrics)
   extends SparkListenerEvent {
-  def toJson = {
+  override def toJson = {
+    val _reason = Utils.getFormattedClassName(reason)
     ("Event" -> "Task End") ~
     ("Stage ID" -> stageId) ~
     ("Task Type" -> taskType) ~
-    ("Task End Reason" -> reason.toString) ~
+    ("Task End Reason" -> _reason) ~
     ("Task Info" -> taskInfo.toJson) ~
     ("Task Metrics" -> taskMetrics.toJson)
   }
@@ -85,16 +88,18 @@ case class SparkListenerJobStart(
     stageIds: Seq[Int],
     properties: Properties)
   extends SparkListenerEvent {
-  def toJson = {
+  override def toJson = {
+    val stageIdsJson = JArray(stageIds.map(JInt(_)).toList)
+    val propertiesJson = Utils.propertiesToJson(properties)
     ("Event" -> "Job Start") ~
     ("Job ID" -> jobId) ~
-    ("Stage IDs" -> JArray(stageIds.map(JInt(_)).toList)) ~
-    ("Properties" -> Utils.propertiesToJson(properties))
+    ("Stage IDs" -> stageIdsJson) ~
+    ("Properties" -> propertiesJson)
   }
 }
 
 case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent {
-  def toJson = {
+  override def toJson = {
     ("Event" -> "Job End") ~
     ("Job ID" -> jobId) ~
     ("Job Result" -> jobResult.toJson)
@@ -103,20 +108,36 @@ case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkLi
 
 /** An event used in the listener to shutdown the listener daemon thread. */
 private[scheduler] case object SparkListenerShutdown extends SparkListenerEvent {
-  def toJson = ("Event" -> "Shutdown")
+  override def toJson = ("Event" -> "Shutdown")
+}
+
+/** An event used in the ExecutorUI to fetch storage status from SparkEnv */
+private[spark] case class SparkListenerStorageStatusFetch(storageStatusList: Seq[StorageStatus])
+  extends SparkListenerEvent {
+  override def toJson = {
+    val storageStatusListJson = JArray(storageStatusList.map(_.toJson).toList)
+    ("Event" -> "Storage Status Fetch") ~
+    ("Storage Status List" -> storageStatusListJson)
+  }
 }
 
 /**
  * Interface for listening to events from the Spark scheduler.
  */
 trait SparkListener {
-  /** Called when a stage is completed, with information on the completed stage */
+  /**
+   * Called when a stage is completed, with information on the completed stage
+   */
   def onStageCompleted(stageCompleted: SparkListenerStageCompleted) { }
 
-  /** Called when a stage is submitted */
+  /**
+   * Called when a stage is submitted
+   */
   def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) { }
 
-  /** Called when a task starts */
+  /**
+   * Called when a task starts
+   */
   def onTaskStart(taskStart: SparkListenerTaskStart) { }
 
   /**
@@ -125,13 +146,19 @@ trait SparkListener {
    */
   def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult) { }
 
-  /** Called when a task ends */
+  /**
+   * Called when a task ends
+   */
   def onTaskEnd(taskEnd: SparkListenerTaskEnd) { }
 
-  /** Called when a job starts */
+  /**
+   * Called when a job starts
+   */
   def onJobStart(jobStart: SparkListenerJobStart) { }
 
-  /** Called when a job ends */
+  /**
+   * Called when a job ends
+   */
   def onJobEnd(jobEnd: SparkListenerJobEnd) { }
 }
 
@@ -243,7 +270,9 @@ private[spark] object StatsReportListener extends Logging {
   val minutes = seconds * 60
   val hours = minutes * 60
 
-  /** Reformat a time interval in milliseconds to a prettier format for output */
+  /**
+   * Reformat a time interval in milliseconds to a prettier format for output
+   */
   def millisToString(ms: Long) = {
     val (size, units) =
       if (ms > hours) {

@@ -27,12 +27,19 @@ import net.liftweb.json.JsonDSL._
 /**
  * Stores information about a stage to pass from the scheduler to SparkListeners.
  */
-class StageInfo(stage: Stage) {
+class StageInfo(stage: Stage) extends JsonSerializable {
   val stageId = stage.id
-  /** Store the metrics for all tasks that have completed, including redundant, speculated tasks. */
+
+  /**
+   * Store the metrics for all tasks that have completed, including redundant, speculated tasks.
+   */
   val taskInfos = mutable.Buffer[(TaskInfo, TaskMetrics)]()
-  /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
+
+  /**
+   * When this stage was submitted from the DAGScheduler to a TaskScheduler.
+   */
   var submissionTime: Option[Long] = None
+
   var completionTime: Option[Long] = None
   val rddName = stage.rdd.name
   val name = stage.name
@@ -40,7 +47,7 @@ class StageInfo(stage: Stage) {
   val numTasks = stage.numTasks
   var emittedTaskSizeWarning = false
 
-  def toJson: JValue = {
+  override def toJson = {
     val (taskInfoList, taskMetricsList) = taskInfos.toList.unzip
     val taskInfoJson = JArray(taskInfoList.map(_.toJson))
     val taskMetricsJson = JArray(taskMetricsList.map(_.toJson))
