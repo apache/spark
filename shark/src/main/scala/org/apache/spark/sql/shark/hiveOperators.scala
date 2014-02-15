@@ -255,7 +255,7 @@ case class InsertIntoHiveTable(
       writer.commit()
     }
 
-    sc.runJob(rdd, writeToFile _)
+    sc.sparkContext.runJob(rdd, writeToFile _)
     writer.commitJob()
   }
 
