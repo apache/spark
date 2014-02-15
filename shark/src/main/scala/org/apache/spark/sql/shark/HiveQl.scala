@@ -550,11 +550,20 @@ object HiveQl {
                Token("TOK_ROWCOUNT", Nil) ::
                Token(count, Nil) :: Nil) =>
           StopAfter(Literal(count.toInt), relation)
+        case Token("TOK_TABLESPLITSAMPLE",
+               Token("TOK_PERCENT", Nil) ::
+               Token(fraction, Nil) :: Nil) =>
+          Sample(fraction.toDouble, withReplacement = false, (math.random * 1000).toInt, relation)
         case Token("TOK_TABLEBUCKETSAMPLE",
                Token(numerator, Nil) ::
                Token(denominator, Nil) :: Nil) =>
           val fraction = numerator.toDouble / denominator.toDouble
           Sample(fraction, withReplacement = false, (math.random * 1000).toInt, relation)
+        case a: ASTNode =>
+          throw new NotImplementedError(
+            s"""No parse rules for sampling clause: ${a.getType}, text: ${a.getText} :
+           |${dumpTree(a).toString}" +
+         """.stripMargin)
       }.getOrElse(relation)
 
     case Token("TOK_UNIQUEJOIN", joinArgs) =>
