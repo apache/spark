@@ -295,6 +295,7 @@ case class InsertIntoHiveTable(
       new JobConf(sc.hiveconf))
 
     // TODO: Correctly set replace and holdDDLTime.
+    // TODO: Handle loading into partitioned tables.
     db.loadTable(
       new Path(fileSinkConf.getDirName),
       // Have to construct the format of dbname.tablename.
