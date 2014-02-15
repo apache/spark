@@ -203,12 +203,7 @@ class HadoopTableReader(@transient _tableDesc: TableDesc, @transient sc: SharkCo
       inputFormatClass,
       classOf[Writable],
       classOf[Writable],
-      _minSplitsPerRDD,
-      // Have to set cloneRecords to false. When reading a table stored by ORC, the type of
-      // a row is OrcStruct which does not have a no-argument constructor. OrcStruct will
-      // cause an error when cloning a row.
-      // TODO: Will setting cloneRecords to false cause any problem?
-      false)
+      _minSplitsPerRDD)
 
     // Only take the value (skip the key) because Hive works only with values.
     rdd.map(_._2)
