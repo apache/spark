@@ -147,7 +147,6 @@ object SparkListenerEvent {
 
   /**
    * Deserialize a SparkListenerEvent from JSON
-   * TODO: include newly added events!
    */
   def fromJson(json: JValue): SparkListenerEvent = {
     implicit val format = DefaultFormats
@@ -159,6 +158,8 @@ object SparkListenerEvent {
     val jobStart =  Utils.getFormattedClassName(SparkListenerJobStart)
     val jobEnd =  Utils.getFormattedClassName(SparkListenerJobEnd)
     val shutdown =  Utils.getFormattedClassName(SparkListenerShutdown)
+    val loadEnvironment = Utils.getFormattedClassName(SparkListenerLoadEnvironment)
+    val storageStatusFetch =  Utils.getFormattedClassName(SparkListenerStorageStatusFetch)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -169,6 +170,8 @@ object SparkListenerEvent {
       case `jobStart` => jobStartFromJson(json)
       case `jobEnd` => jobEndFromJson(json)
       case `shutdown` => SparkListenerShutdown
+      case `loadEnvironment` => loadEnvironmentFromJson(json)
+      case `storageStatusFetch` => storageStatusFetchFromJson(json)
     }
   }
 
@@ -218,6 +221,22 @@ object SparkListenerEvent {
     new SparkListenerJobEnd(
       (json \ "Job ID").extract[Int],
       JobResult.fromJson(json \ "Job Result"))
+  }
+
+  private def loadEnvironmentFromJson(json: JValue) = {
+    implicit val format = DefaultFormats
+    new SparkListenerLoadEnvironment(
+      Utils.mapFromJson(json \ "JVM Information").toSeq,
+      Utils.mapFromJson(json \ "Spark Properties").toSeq,
+      Utils.mapFromJson(json \ "System Properties").toSeq,
+      Utils.mapFromJson(json \ "Classpath Entries").toSeq)
+  }
+
+  private def storageStatusFetchFromJson(json: JValue) = {
+    implicit val format = DefaultFormats
+    val storageStatusList =
+      (json \ "Storage Status List").extract[List[JValue]].map(StorageStatus.fromJson)
+    new SparkListenerStorageStatusFetch(storageStatusList)
   }
 }
 
@@ -320,7 +339,7 @@ private[spark] object StatsReportListener extends Logging {
 
   def showDistribution(heading: String, d: Distribution, formatNumber: Double => String) {
     val stats = d.statCounter
-    val quantiles = d.getQuantiles(probabilities).map{formatNumber}
+    val quantiles = d.getQuantiles(probabilities).map(formatNumber)
     logInfo(heading + stats)
     logInfo(percentilesHeader)
     logInfo("\t" + quantiles.mkString("\t"))

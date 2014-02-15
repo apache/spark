@@ -896,7 +896,7 @@ private[spark] object Utils extends Logging {
     }.getOrElse(JNothing)
   }
 
-  /** Convert a Json object to a java Properties */
+  /** Convert a JSON object to a java Properties */
   def propertiesFromJson(json: JValue): Properties = {
     val properties = new Properties()
     mapFromJson(json).map { case (k, v) =>
@@ -905,7 +905,21 @@ private[spark] object Utils extends Logging {
     properties
   }
 
-  /** Convert a java stack trace to a Json object */
+  /** Convert a java UUID to a JSON object */
+  def UUIDToJson(id: UUID): JValue = {
+    ("Least Significant Bits" -> id.getLeastSignificantBits) ~
+    ("Most Significant Bits" -> id.getMostSignificantBits)
+  }
+
+  /** Convert a JSON object to a java UUID */
+  def UUIDFromJson(json: JValue): UUID = {
+    implicit val format = DefaultFormats
+    new UUID(
+      (json \ "Least Significant Bits").extract[Long],
+      (json \ "Most Significant Bits").extract[Long])
+  }
+
+  /** Convert a java stack trace to a JSON object */
   def stackTraceToJson(stackTrace: Array[StackTraceElement]): JValue = {
     JArray(stackTrace.map { case line =>
       ("Declaring Class" -> line.getClassName) ~
@@ -927,13 +941,13 @@ private[spark] object Utils extends Logging {
     }.toArray
   }
 
-  /** Convert an Exception to a Json object */
+  /** Convert an Exception to a JSON object */
   def exceptionToJson(exception: Exception): JValue = {
     ("Message" -> exception.toString) ~
     ("Stack Trace" -> stackTraceToJson(exception.getStackTrace))
   }
 
-  /** Convert a Json object to an Exception */
+  /** Convert a JSON object to an Exception */
   def exceptionFromJson(json: JValue): Exception = {
     implicit val format = DefaultFormats
     val e = new Exception((json \ "Message").extract[String])

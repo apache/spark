@@ -21,6 +21,8 @@ import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 
 import net.liftweb.json.JsonDSL._
 import org.apache.spark.scheduler.JsonSerializable
+import net.liftweb.json.JsonAST.JValue
+import net.liftweb.json.DefaultFormats
 
 /**
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
@@ -156,5 +158,14 @@ object StorageLevel {
   private[spark] def getCachedStorageLevel(level: StorageLevel): StorageLevel = {
     storageLevelCache.putIfAbsent(level, level)
     storageLevelCache.get(level)
+  }
+
+  def fromJson(json: JValue): StorageLevel = {
+    implicit val format = DefaultFormats
+    new StorageLevel(
+      (json \ "Use Disk").extract[Boolean],
+      (json \ "Use Memory").extract[Boolean],
+      (json \ "Deserialize").extract[Boolean],
+      (json \ "Replication").extract[Int])
   }
 }

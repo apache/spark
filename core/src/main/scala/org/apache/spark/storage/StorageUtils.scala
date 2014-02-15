@@ -24,6 +24,7 @@ import org.apache.spark.scheduler.JsonSerializable
 
 import net.liftweb.json.JsonDSL._
 import net.liftweb.json.JsonAST._
+import net.liftweb.json.DefaultFormats
 
 private[spark]
 case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
@@ -54,10 +55,24 @@ case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
       })
     ("Block Manager ID" -> blockManagerId.toJson) ~
     ("Maximum Memory" -> maxMem) ~
-    ("Memory Used" -> memUsed) ~
-    ("Memory Remaining" -> memRemaining) ~
-    ("Disk Used" -> diskUsed) ~
     ("Blocks" -> blocksJson)
+  }
+}
+
+private[spark]
+case object StorageStatus {
+  def fromJson(json: JValue): StorageStatus = {
+    implicit val format = DefaultFormats
+    val blocks = (json \ "Blocks").extract[List[JValue]].map { block =>
+      val id = BlockId.fromJson(block \ "Block ID")
+      val status = BlockStatus.fromJson(block \ "Status")
+      (id, status)
+    }.toMap
+    new StorageStatus(
+      BlockManagerId.fromJson(json \ "Block Manager ID"),
+      (json \ "Maximum Memory").extract[Long],
+      blocks
+    )
   }
 }
 
