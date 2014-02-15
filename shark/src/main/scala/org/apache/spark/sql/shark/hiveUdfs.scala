@@ -408,9 +408,9 @@ case class HiveGenericUdtf(
 }
 
 case class HiveUdafFunction(
-   functionName: String,
-   exprs: Seq[Expression],
-   base: AggregateExpression)
+    functionName: String,
+    exprs: Seq[Expression],
+    base: AggregateExpression)
   extends AggregateFunction
   with HiveInspectors
   with HiveFunctionFactory {
