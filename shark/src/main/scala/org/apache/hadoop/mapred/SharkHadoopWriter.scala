@@ -12,7 +12,7 @@ import org.apache.spark.SerializableWritable
 
 import org.apache.hadoop.hive.ql.exec.FileSinkOperator
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
-import org.apache.hadoop.hive.ql.plan.{FileSinkDesc, TableDesc}
+import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 
 /**
  * Internal helper class that saves an RDD using a Hive OutputFormat.

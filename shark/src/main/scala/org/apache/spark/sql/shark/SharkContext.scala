@@ -18,7 +18,7 @@ import catalyst.expressions.GenericRow
 import catalyst.plans.logical.{BaseRelation, LogicalPlan, NativeCommand, ExplainCommand}
 import catalyst.types._
 
-import execution._
+import org.apache.spark.sql.execution._
 
 import scala.collection.JavaConversions._
 

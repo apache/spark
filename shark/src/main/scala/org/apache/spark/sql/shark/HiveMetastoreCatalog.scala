@@ -3,14 +3,12 @@ package shark
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.hadoop.hive.conf.HiveConf
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, StorageDescriptor, SerDeInfo}
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
-import org.apache.hadoop.mapred.InputFormat
 
 import catalyst.analysis.Catalog
 import catalyst.expressions._
@@ -18,7 +16,6 @@ import catalyst.plans.logical
 import catalyst.plans.logical._
 import catalyst.rules._
 import catalyst.types._
-import execution._
 
 import scala.collection.JavaConversions._
 

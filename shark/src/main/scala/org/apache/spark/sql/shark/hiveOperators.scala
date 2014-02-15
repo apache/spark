@@ -1,8 +1,6 @@
 package org.apache.spark.sql
 package shark
 
-import java.io.File
-
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Hive}
@@ -25,8 +23,7 @@ import org.apache.hadoop.io.SequenceFile.CompressionType
 import scala.Some
 import catalyst.expressions.Cast
 import org.apache.spark.rdd.RDD
-
-import execution._
+import org.apache.spark.sql.execution._
 
 /* Implicits */
 import scala.collection.JavaConversions._
