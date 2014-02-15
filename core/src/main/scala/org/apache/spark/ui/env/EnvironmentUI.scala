@@ -32,7 +32,6 @@ import org.apache.spark.ui.{UISparkListener, UIUtils}
 import org.apache.spark.ui.Page.Environment
 
 private[spark] class EnvironmentUI(sc: SparkContext) {
-
   private var _listener: Option[EnvironmentListener] = None
   def listener = _listener.get
 
@@ -45,9 +44,6 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
     ("/environment", (request: HttpServletRequest) => render(request))
   )
 
-  /**
-   * Render an HTML page that encodes environment information
-   */
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.loadEnvironment()
     val runtimeInformationTable = UIUtils.listingTable(
@@ -76,7 +72,7 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
   private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
 
   /**
-   * A SparkListener that logs information to be displayed on the Environment UI.
+   * A SparkListener that prepares and logs information to be displayed on the Environment UI
    */
   private[spark] class EnvironmentListener extends UISparkListener("environment-ui") {
     var jvmInformation: Seq[(String, String)] = Seq()
@@ -84,9 +80,7 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
     var systemProperties: Seq[(String, String)] = Seq()
     var classpathEntries: Seq[(String, String)] = Seq()
 
-    /**
-     * Gather JVM, spark, system and classpath properties
-     */
+    /** Gather JVM, spark, system and classpath properties */
     def loadEnvironment() = {
       val jvmInformation = Seq(
         ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
@@ -116,9 +110,7 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
       onLoadEnvironment(loadEnvironment)
     }
 
-    /**
-     * Prepare environment information for UI to render, and log the corresponding event
-     */
+    /** Prepare environment information for UI to render, and log the corresponding event */
     def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) = {
       jvmInformation = loadEnvironment.jvmInformation
       sparkProperties = loadEnvironment.sparkProperties
@@ -128,8 +120,9 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
       logger.flush()
     }
 
-    override def onJobStart(jobStart: SparkListenerJobStart) = logger.start()
-
-    override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.close()
+    override def onJobStart(jobStart: SparkListenerJobStart) = {
+      super.onJobStart(jobStart)
+      loadEnvironment()
+    }
   }
 }

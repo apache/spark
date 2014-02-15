@@ -17,19 +17,26 @@
 
 package org.apache.spark.ui.storage
 
-import scala.concurrent.duration._
-
 import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.ui.StorageStatusFetchSparkListener
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
-  val indexPage = new IndexPage(this)
-  val rddPage = new RDDPage(this)
+  private var _listener: Option[StorageStatusFetchSparkListener] = None
+  private val indexPage = new IndexPage(this)
+  private val rddPage = new RDDPage(this)
+
+  def listener = _listener.get
+
+  def start() {
+    _listener = Some(new StorageStatusFetchSparkListener("block-manager-ui", sc))
+    sc.addSparkListener(listener)
+  }
 
   def getHandlers = Seq[(String, Handler)](
     ("/storage/rdd", (request: HttpServletRequest) => rddPage.render(request)),

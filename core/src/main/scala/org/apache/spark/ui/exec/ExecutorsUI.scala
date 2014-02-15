@@ -25,17 +25,14 @@ import scala.xml.Node
 import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.{Logging, SparkContext, ExceptionFailure}
-import org.apache.spark.scheduler._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Executors
-import org.apache.spark.ui.{UISparkListener, UIUtils}
+import org.apache.spark.ui.{StorageStatusFetchSparkListener, UIUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.SparkListenerTaskEnd
 import org.apache.spark.scheduler.SparkListenerTaskStart
-import org.apache.spark.storage.StorageStatus
 
 private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
-
   private var _listener: Option[ExecutorsListener] = None
   def listener = _listener.get
 
@@ -48,9 +45,6 @@ private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
     ("/executors", (request: HttpServletRequest) => render(request))
   )
 
-  /**
-   * Render an HTML page that encodes executor information
-   */
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.fetchStorageStatus()
     val storageStatusList = listener.storageStatusList
@@ -80,9 +74,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
     UIUtils.headerSparkPage(content, sc, "Executors (" + execInfo.size + ")", Executors)
   }
 
-  /**
-   * Header fields in the executors table
-   */
+  /** Header fields for the executors table */
   private def execHeader = Seq(
     "Executor ID",
     "Address",
@@ -97,14 +89,11 @@ private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
     "Shuffle Read",
     "Shuffle Write")
 
-  /**
-   * Render an HTML table row representing an executor
-   */
+  /** Render an HTML row representing an executor */
   private def execRow(values: Map[String, String]): Seq[Node] = {
     val maximumMemory = values("Maximum Memory")
     val memoryUsed = values("Memory Used")
     val diskUsed = values("Disk Used")
-
     <tr>
       <td>{values("Executor ID")}</td>
       <td>{values("Address")}</td>
@@ -126,9 +115,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
     </tr>
   }
 
-  /**
-   * Represent an executor's info as a map given a storage status index
-   */
+  /** Represent an executor's info as a map given a storage status index */
   private def getExecInfo(statusId: Int): Map[String, String] = {
     val status = listener.storageStatusList(statusId)
     val execId = status.blockManagerId.executorId
@@ -169,40 +156,16 @@ private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
   }
 
   /**
-   * A SparkListener that logs information to be displayed on the Executors UI
+   * A SparkListener that prepares and logs information to be displayed on the Executors UI
    */
-  private[spark] class ExecutorsListener extends UISparkListener("executors-ui") {
+  private[spark]
+  class ExecutorsListener extends StorageStatusFetchSparkListener("executors-ui", sc) {
     val executorToTasksActive = mutable.HashMap[String, Int]()
     val executorToTasksComplete = mutable.HashMap[String, Int]()
     val executorToTasksFailed = mutable.HashMap[String, Int]()
     val executorToDuration = mutable.HashMap[String, Long]()
     val executorToShuffleRead = mutable.HashMap[String, Long]()
     val executorToShuffleWrite = mutable.HashMap[String, Long]()
-    var storageStatusList: Seq[StorageStatus] = sc.getExecutorStorageStatus
-
-    def fetchStorageStatus() {
-      val event = new SparkListenerStorageStatusFetch(sc.getExecutorStorageStatus)
-      onStorageStatusFetch(event)
-    }
-
-    def onStorageStatusFetch(storageStatusFetch: SparkListenerStorageStatusFetch) {
-      storageStatusList = storageStatusFetch.storageStatusList
-      logEvent(storageStatusFetch)
-    }
-
-    override def onJobStart(jobStart: SparkListenerJobStart) = logger.start()
-
-    override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.close()
-
-    override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
-      fetchStorageStatus()
-      logger.flush()
-    }
-
-    override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
-      fetchStorageStatus()
-      logger.flush()
-    }
 
     override def onTaskStart(taskStart: SparkListenerTaskStart) {
       val eid = formatExecutorId(taskStart.taskInfo.executorId)

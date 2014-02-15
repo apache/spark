@@ -28,26 +28,30 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[spark] class IndexPage(parent: BlockManagerUI) {
-  val sc = parent.sc
+  private val sc = parent.sc
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    val storageStatusList = sc.getExecutorStorageStatus
+    parent.listener.fetchStorageStatus()
+    val storageStatusList = parent.listener.storageStatusList
+
     // Calculate macro-level statistics
-
-    val rddHeaders = Seq(
-      "RDD Name",
-      "Storage Level",
-      "Cached Partitions",
-      "Fraction Cached",
-      "Size in Memory",
-      "Size on Disk")
     val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
-    val content = listingTable(rddHeaders, rddRow, rdds)
+    val content = listingTable(rddHeader, rddRow, rdds)
 
-    headerSparkPage(content, parent.sc, "Storage ", Storage)
+    headerSparkPage(content, sc, "Storage ", Storage)
   }
 
-  def rddRow(rdd: RDDInfo): Seq[Node] = {
+  /** Header fields for the RDD table */
+  private def rddHeader = Seq(
+    "RDD Name",
+    "Storage Level",
+    "Cached Partitions",
+    "Fraction Cached",
+    "Size in Memory",
+    "Size on Disk")
+
+  /** Render an HTML row representing an RDD */
+  private def rddRow(rdd: RDDInfo): Seq[Node] = {
     <tr>
       <td>
         <a href={"%s/storage/rdd?id=%s".format(prependBaseUri(),rdd.id)}>

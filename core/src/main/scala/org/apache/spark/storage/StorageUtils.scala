@@ -137,8 +137,8 @@ object StorageUtils {
   }
 
   /* Filters storage status by a given RDD id. */
-  def filterStorageStatusByRDD(storageStatusList: Array[StorageStatus], rddId: Int)
-    : Array[StorageStatus] = {
+  def filterStorageStatusByRDD(storageStatusList: Seq[StorageStatus], rddId: Int)
+    : Seq[StorageStatus] = {
 
     storageStatusList.map { status =>
       val newBlocks = status.rddBlocks.filterKeys(_.rddId == rddId).toMap[BlockId, BlockStatus]

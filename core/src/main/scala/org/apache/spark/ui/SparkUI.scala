@@ -26,9 +26,17 @@ import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.ui.jobs.JobProgressUI
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{FileLogger, Utils}
-import org.apache.spark.scheduler.{SparkListenerEvent, SparkListener}
+import org.apache.spark.scheduler._
 
 import net.liftweb.json.JsonAST._
+import org.apache.spark.storage.StorageStatus
+import scala.Some
+import scala.Some
+import org.apache.spark.scheduler.SparkListenerStorageStatusFetch
+import scala.Some
+import org.apache.spark.scheduler.SparkListenerJobEnd
+import org.apache.spark.scheduler.SparkListenerStageSubmitted
+import org.apache.spark.scheduler.SparkListenerJobStart
 
 /** Top level user interface for Spark */
 private[spark] class SparkUI(sc: SparkContext) extends Logging {
@@ -72,6 +80,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
     //  DAGScheduler() requires that the port of this server is known
     //  This server must register all handlers, including JobProgressUI, before binding
     //  JobProgressUI registers a listener with SparkContext, which requires sc to initialize
+    storage.start()
     jobs.start()
     env.start()
     exec.start()
@@ -90,9 +99,57 @@ private[spark] object SparkUI {
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 }
 
+/** A SparkListener for logging events, one file per job */
 private[spark] class UISparkListener(name: String) extends SparkListener {
   protected val logger = new FileLogger(name)
+
   protected def logEvent(event: SparkListenerEvent) = {
     logger.logLine(compactRender(event.toJson))
+  }
+
+  override def onJobStart(jobStart: SparkListenerJobStart) = logger.start()
+
+  override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.close()
+}
+
+/**
+ * A SparkListener that fetches storage information from SparkEnv and logs it as an event.
+ *
+ * The frequency at which this occurs is by default every time a stage event is triggered.
+ * This needs not necessarily be the case; a stage can be arbitrarily long, so any failure
+ * in the middle of a stage causes the storage status for that stage to be lost.
+ */
+private[spark] class StorageStatusFetchSparkListener(
+    name: String,
+    sc: SparkContext)
+  extends UISparkListener(name) {
+  var storageStatusList: Seq[StorageStatus] = sc.getExecutorStorageStatus
+
+  /**
+   * Fetch storage information from SparkEnv, which involves a query to the driver. This is
+   * expensive and should be invoked sparingly.
+   */
+  def fetchStorageStatus() {
+    val storageStatus = sc.getExecutorStorageStatus
+    val event = new SparkListenerStorageStatusFetch(storageStatus)
+    onStorageStatusFetch(event)
+  }
+
+  /**
+   * Update local state with fetch result, and log the appropriate event
+   */
+  protected def onStorageStatusFetch(storageStatusFetch: SparkListenerStorageStatusFetch) {
+    storageStatusList = storageStatusFetch.storageStatusList
+    logEvent(storageStatusFetch)
+  }
+
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
+    fetchStorageStatus()
+    logger.flush()
+  }
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
+    fetchStorageStatus()
+    logger.flush()
   }
 }
