@@ -204,6 +204,26 @@ case class HiveGenericUdf(
 }
 
 trait HiveInspectors {
+
+  def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
+    case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
+    case li: ListObjectInspector =>
+      Option(li.getList(data))
+        .map(_.map(unwrapData(_, li.getListElementObjectInspector)).toSeq)
+        .orNull
+    case mi: MapObjectInspector =>
+      Option(mi.getMap(data)).map(
+        _.map {
+          case (k,v) =>
+            (unwrapData(k, mi.getMapKeyObjectInspector),
+              unwrapData(v, mi.getMapValueObjectInspector))
+        }.toMap).orNull
+    case si: StructObjectInspector =>
+      val allRefs = si.getAllStructFieldRefs
+      new GenericRow(
+        allRefs.map(r => unwrapData(si.getStructFieldData(data,r), r.getFieldObjectInspector)))
+  }
+
   /** Converts native catalyst types to the types expected by Hive */
   def wrap(a: Any): AnyRef = a match {
     case s: String => new hadoopIo.Text(s)
@@ -399,17 +419,15 @@ case class HiveUdafFunction(
 
   private val inspectors = exprs.map(_.dataType).map(toInspector).toArray
 
-  private val function = {
-    val evaluator = resolver.getEvaluator(exprs.map(_.dataType.toTypeInfo).toArray)
-    evaluator.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
-    evaluator
-  }
+  private val function = resolver.getEvaluator(exprs.map(_.dataType.toTypeInfo).toArray)
+
+  private val returnInspector = function.init(GenericUDAFEvaluator.Mode.COMPLETE, inspectors)
 
   // Cast required to avoid type inference selecting a deprecated Hive API.
   private val buffer =
     function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
 
-  def result: Any = unwrap(function.evaluate(buffer))
+  def result: Any = unwrapData(function.evaluate(buffer), returnInspector)
 
   def apply(input: Seq[Row]): Unit = {
     val inputs = exprs.map(Evaluate(_, input).asInstanceOf[AnyRef]).toArray
