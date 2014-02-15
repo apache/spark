@@ -17,8 +17,6 @@
 
 package org.apache.spark.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import org.eclipse.jetty.server.{Handler, Server}
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
@@ -27,7 +25,10 @@ import org.apache.spark.ui.exec.ExecutorsUI
 import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.ui.jobs.JobProgressUI
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{FileLogger, Utils}
+import org.apache.spark.scheduler.{SparkListenerEvent, SparkListener}
+
+import net.liftweb.json.JsonAST._
 
 /** Top level user interface for Spark */
 private[spark] class SparkUI(sc: SparkContext) extends Logging {
@@ -72,6 +73,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
     //  This server must register all handlers, including JobProgressUI, before binding
     //  JobProgressUI registers a listener with SparkContext, which requires sc to initialize
     jobs.start()
+    env.start()
     exec.start()
   }
 
@@ -86,4 +88,11 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
 private[spark] object SparkUI {
   val DEFAULT_PORT = "4040"
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+}
+
+private[spark] class UISparkListener(name: String) extends SparkListener {
+  protected val logger = new FileLogger(name)
+  protected def logEvent(event: SparkListenerEvent) = {
+    logger.logLine(compactRender(event.toJson))
+  }
 }

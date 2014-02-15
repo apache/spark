@@ -17,14 +17,31 @@
 
 package org.apache.spark.scheduler
 
+import net.liftweb.json.JsonAST.JValue
+import net.liftweb.json.DefaultFormats
 
 private[spark] object TaskLocality extends Enumeration {
-  // process local is expected to be used ONLY within tasksetmanager for now.
+  // Process local is expected to be used ONLY within TaskSetManager for now.
   val PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY = Value
 
   type TaskLocality = Value
 
   def isAllowed(constraint: TaskLocality, condition: TaskLocality): Boolean = {
     condition <= constraint
+  }
+
+  def fromJson(json: JValue): TaskLocality = {
+    implicit val format = DefaultFormats
+    val processLocal = PROCESS_LOCAL.toString
+    val nodeLocal = NODE_LOCAL.toString
+    val rackLocal = RACK_LOCAL.toString
+    val any = ANY.toString
+
+    json.extract[String] match {
+      case `processLocal` => PROCESS_LOCAL
+      case `nodeLocal` => NODE_LOCAL
+      case `rackLocal` => RACK_LOCAL
+      case `any` => ANY
+    }
   }
 }

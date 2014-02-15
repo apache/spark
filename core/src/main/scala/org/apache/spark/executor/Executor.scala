@@ -225,10 +225,10 @@ private[spark] class Executor(
 
         for (m <- task.metrics) {
           m.hostname = Utils.localHostName()
-          m.executorDeserializeTime = (taskStart - startTime).toInt
-          m.executorRunTime = (taskFinish - taskStart).toInt
+          m.executorDeserializeTime = taskStart - startTime
+          m.executorRunTime = taskFinish - taskStart
           m.jvmGCTime = gcTime - startGCTime
-          m.resultSerializationTime = (afterSerialization - beforeSerialization).toInt
+          m.resultSerializationTime = afterSerialization - beforeSerialization
         }
 
         val accumUpdates = Accumulators.values
@@ -264,7 +264,7 @@ private[spark] class Executor(
         }
 
         case t: Throwable => {
-          val serviceTime = (System.currentTimeMillis() - taskStart).toInt
+          val serviceTime = System.currentTimeMillis() - taskStart
           val metrics = attemptedTask.flatMap(t => t.metrics)
           for (m <- metrics) {
             m.executorRunTime = serviceTime

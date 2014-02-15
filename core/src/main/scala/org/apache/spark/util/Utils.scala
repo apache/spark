@@ -22,6 +22,7 @@ import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address}
 import java.nio.ByteBuffer
 import java.util.{Properties, Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
+import java.lang.StackTraceElement
 
 import scala.collection.JavaConversions._
 import scala.collection.JavaConverters._
@@ -40,15 +41,13 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkConf, SparkException, Logging}
 
 import net.liftweb.json.JsonAST._
+import net.liftweb.json.JsonDSL._
 import net.liftweb.json.DefaultFormats
 
 /**
  * Various utility methods used by Spark.
  */
 private[spark] object Utils extends Logging {
-
-  /** For extracting fields from JSON objects */
-  implicit val format = DefaultFormats
 
   /** Serialize an object using Java serialization */
   def serialize[T](o: T): Array[Byte] = {
@@ -880,41 +879,65 @@ private[spark] object Utils extends Logging {
 
   /** Convert a (String, String) map to a JSON object */
   def mapToJson(m: Map[String, String]): JValue = {
-    val jsonFields = m.map { case (k, v) =>
-      JField(k, JString(v))
-    }
+    val jsonFields = m.map { case (k, v) => JField(k, JString(v)) }
     JObject(jsonFields.toList)
+  }
+
+  /** Convert a JSON object to a (String, String) map */
+  def mapFromJson(json: JValue): Map[String, String] = {
+    val jsonFields = json.asInstanceOf[JObject].obj
+    jsonFields.map { case JField(k, JString(v)) => (k, v) }.toMap
   }
 
   /** Convert a java Properties to a JSON object */
   def propertiesToJson(properties: Properties): JValue = {
     Option(properties).map { p =>
-      Utils.mapToJson(p.asScala)
+      mapToJson(p.asScala)
     }.getOrElse(JNothing)
   }
 
-  /** Extract a list from the given JSON AST */
-  def extractListFromJson(json: JValue, default: List[JValue] = List()): List[JValue] = {
-    if (json == JNothing) default else json.extract[List[JValue]]
+  /** Convert a Json object to a java Properties */
+  def propertiesFromJson(json: JValue): Properties = {
+    val properties = new Properties()
+    mapFromJson(json).map { case (k, v) =>
+      properties.setProperty(k, v)
+    }
+    properties
   }
 
-  /** Extract a string from the given JSON AST */
-  def extractStringFromJson(json: JValue, default: String = ""): String = {
-    if (json == JNothing) default else json.extract[String]
+  /** Convert a java stack trace to a Json object */
+  def stackTraceToJson(stackTrace: Array[StackTraceElement]): JValue = {
+    JArray(stackTrace.map { case line =>
+      ("Declaring Class" -> line.getClassName) ~
+      ("Method Name" -> line.getMethodName) ~
+      ("File Name" -> line.getFileName) ~
+      ("Line Number" -> line.getLineNumber)
+    }.toList)
   }
 
-  /** Extract a double from the given JSON AST */
-  def extractDoubleFromJson(json: JValue, default: Double = 0.0): Double = {
-    if (json == JNothing) default else json.extract[Double]
+  /** Convert a JSON object to a java stack trace */
+  def stackTraceFromJson(json: JValue): Array[StackTraceElement] = {
+    implicit val format = DefaultFormats
+    json.extract[List[JValue]].map { line =>
+      new StackTraceElement(
+        (line \ "Declaring Class").extract[String],
+        (line \ "Method Name").extract[String],
+        (line \ "File Name").extract[String],
+        (line \ "Line Number").extract[Int])
+    }.toArray
   }
 
-  /** Extracts a long from the given JSON AST */
-  def extractLongFromJson(json: JValue, default: Long = 0L): Long = {
-    if (json == JNothing) default else json.extract[Long]
+  /** Convert an Exception to a Json object */
+  def exceptionToJson(exception: Exception): JValue = {
+    ("Message" -> exception.toString) ~
+    ("Stack Trace" -> stackTraceToJson(exception.getStackTrace))
   }
 
-  /** Extract an int from the given JSON AST */
-  def extractIntFromJson(json: JValue, default: Int = 0): Int = {
-    if (json == JNothing) default else json.extract[Int]
+  /** Convert a Json object to an Exception */
+  def exceptionFromJson(json: JValue): Exception = {
+    implicit val format = DefaultFormats
+    val e = new Exception((json \ "Message").extract[String])
+    e.setStackTrace(stackTraceFromJson(json \ "Stack Trace"))
+    e
   }
 }

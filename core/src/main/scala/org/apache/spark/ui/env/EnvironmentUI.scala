@@ -25,70 +25,105 @@ import scala.xml.Node
 
 import org.eclipse.jetty.server.Handler
 
-import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.UIUtils
-import org.apache.spark.ui.Page.Environment
 import org.apache.spark.SparkContext
-
+import org.apache.spark.scheduler._
+import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.ui.{UISparkListener, UIUtils}
+import org.apache.spark.ui.Page.Environment
 
 private[spark] class EnvironmentUI(sc: SparkContext) {
 
+  private var _listener: Option[EnvironmentListener] = None
+  def listener = _listener.get
+
+  def start() {
+    _listener = Some(new EnvironmentListener)
+    sc.addSparkListener(listener)
+  }
+
   def getHandlers = Seq[(String, Handler)](
-    ("/environment", (request: HttpServletRequest) => envDetails(request))
+    ("/environment", (request: HttpServletRequest) => render(request))
   )
 
-  def envDetails(request: HttpServletRequest): Seq[Node] = {
-    val jvmInformation = Seq(
-      ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
-      ("Java Home", Properties.javaHome),
-      ("Scala Version", Properties.versionString),
-      ("Scala Home", Properties.scalaHome)
-    ).sorted
-    def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
-    def jvmTable =
-      UIUtils.listingTable(Seq("Name", "Value"), jvmRow, jvmInformation, fixedWidth = true)
-
-    val sparkProperties = sc.conf.getAll.sorted
-
-    val systemProperties = System.getProperties.iterator.toSeq
-    val classPathProperty = systemProperties.find { case (k, v) =>
-      k == "java.class.path"
-    }.getOrElse(("", ""))
-    val otherProperties = systemProperties.filter { case (k, v) =>
-      k != "java.class.path" && !k.startsWith("spark.")
-    }.sorted
-
-    val propertyHeaders = Seq("Name", "Value")
-    def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
-    val sparkPropertyTable =
-      UIUtils.listingTable(propertyHeaders, propertyRow, sparkProperties, fixedWidth = true)
-    val otherPropertyTable =
-      UIUtils.listingTable(propertyHeaders, propertyRow, otherProperties, fixedWidth = true)
-
-    val classPathEntries = classPathProperty._2
-        .split(sc.conf.get("path.separator", ":"))
-        .filterNot(e => e.isEmpty)
-        .map(e => (e, "System Classpath"))
-    val addedJars = sc.addedJars.iterator.toSeq.map{case (path, time) => (path, "Added By User")}
-    val addedFiles = sc.addedFiles.iterator.toSeq.map{case (path, time) => (path, "Added By User")}
-    val classPath = (addedJars ++ addedFiles ++ classPathEntries).sorted
-
-    val classPathHeaders = Seq("Resource", "Source")
-    def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
-    val classPathTable =
-      UIUtils.listingTable(classPathHeaders, classPathRow, classPath, fixedWidth = true)
-
+  /**
+   * Render an HTML page that encodes environment information
+   */
+  def render(request: HttpServletRequest): Seq[Node] = {
+    val runtimeInformationTable = UIUtils.listingTable(
+      propertyHeader, jvmRow, listener.jvmInformation, fixedWidth = true)
+    val sparkPropertiesTable = UIUtils.listingTable(
+      propertyHeader, propertyRow, listener.sparkProperties, fixedWidth = true)
+    val systemPropertiesTable = UIUtils.listingTable(
+      propertyHeader, propertyRow, listener.systemProperties, fixedWidth = true)
+    val classpathEntriesTable = UIUtils.listingTable(
+      classPathHeaders, classPathRow, listener.classpathEntries, fixedWidth = true)
     val content =
       <span>
-        <h4>Runtime Information</h4> {jvmTable}
-        <h4>Spark Properties</h4>
-        {sparkPropertyTable}
-        <h4>System Properties</h4>
-        {otherPropertyTable}
-        <h4>Classpath Entries</h4>
-        {classPathTable}
+        <h4>Runtime Information</h4> {runtimeInformationTable}
+        <h4>Spark Properties</h4> {sparkPropertiesTable}
+        <h4>System Properties</h4> {systemPropertiesTable}
+        <h4>Classpath Entries</h4> {classpathEntriesTable}
       </span>
 
     UIUtils.headerSparkPage(content, sc, "Environment", Environment)
+  }
+
+  private def propertyHeader = Seq("Name", "Value")
+  private def classPathHeaders = Seq("Resource", "Source")
+  private def jvmRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
+  private def propertyRow(kv: (String, String)) = <tr><td>{kv._1}</td><td>{kv._2}</td></tr>
+  private def classPathRow(data: (String, String)) = <tr><td>{data._1}</td><td>{data._2}</td></tr>
+
+  /**
+   * A SparkListener that logs information to be displayed on the Environment UI.
+   */
+  private[spark] class EnvironmentListener extends UISparkListener("environment-ui") {
+    var jvmInformation: Seq[(String, String)] = Seq()
+    var sparkProperties: Seq[(String, String)] = Seq()
+    var systemProperties: Seq[(String, String)] = Seq()
+    var classpathEntries: Seq[(String, String)] = Seq()
+
+    def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) = {
+      jvmInformation = loadEnvironment.jvmInformation
+      sparkProperties = loadEnvironment.sparkProperties
+      systemProperties = loadEnvironment.systemProperties
+      classpathEntries = loadEnvironment.classpathEntries
+      logEvent(loadEnvironment)
+      logger.flush()
+    }
+
+    override def onJobStart(jobStart: SparkListenerJobStart) = {
+      logger.start()
+
+      // Gather properties
+      val jvmInformation = Seq(
+        ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
+        ("Java Home", Properties.javaHome),
+        ("Scala Version", Properties.versionString),
+        ("Scala Home", Properties.scalaHome)
+      ).sorted
+      val sparkProperties = sc.conf.getAll.sorted
+      val systemProperties = System.getProperties.iterator.toSeq
+      val classPathProperty = systemProperties.find { case (k, v) =>
+        k == "java.class.path"
+      }.getOrElse(("", ""))
+      val otherProperties = systemProperties.filter { case (k, v) =>
+        k != "java.class.path" && !k.startsWith("spark.")
+      }.sorted
+      val classPathEntries = classPathProperty._2
+        .split(sc.conf.get("path.separator", ":"))
+        .filterNot(e => e.isEmpty)
+        .map(e => (e, "System Classpath"))
+      val addedJars = sc.addedJars.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
+      val addedFiles = sc.addedFiles.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
+      val classPaths = (addedJars ++ addedFiles ++ classPathEntries).sorted
+
+      // Trigger SparkListenerLoadEnvironment
+      val loadEnvironment = new SparkListenerLoadEnvironment(
+        jvmInformation, sparkProperties, otherProperties, classPaths)
+      onLoadEnvironment(loadEnvironment)
+    }
+
+    override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.close()
   }
 }

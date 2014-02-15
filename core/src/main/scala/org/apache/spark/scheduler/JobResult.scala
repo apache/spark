@@ -18,21 +18,46 @@
 package org.apache.spark.scheduler
 
 import net.liftweb.json.JsonDSL._
+import org.apache.spark.util.Utils
+import net.liftweb.json.JsonAST.JValue
+import net.liftweb.json.DefaultFormats
 
 /**
  * A result of a job in the DAGScheduler.
  */
-private[spark] sealed trait JobResult extends JsonSerializable
-
-private[spark] case object JobSucceeded extends JobResult {
-  override def toJson = ("Status" -> "Success")
+private[spark] sealed trait JobResult extends JsonSerializable {
+  override def toJson = "Result" -> Utils.getFormattedClassName(this)
 }
+
+private[spark] object JobResult {
+  def fromJson(json: JValue): JobResult = {
+    implicit val format = DefaultFormats
+    val jobSucceededString = Utils.getFormattedClassName(JobSucceeded)
+    val jobFailedString = Utils.getFormattedClassName(JobFailed)
+
+    (json \ "Result").extract[String] match {
+      case `jobSucceededString` => JobSucceeded
+      case `jobFailedString` => jobFailedFromJson(json)
+    }
+  }
+
+  private def jobFailedFromJson(json: JValue): JobResult = {
+    implicit val format = DefaultFormats
+    new JobFailed(
+      Utils.exceptionFromJson(json \ "Exception"),
+      (json \ "Failed Stage ID").extract[Int])
+  }
+}
+
+private[spark] case object JobSucceeded extends JobResult
 
 private[spark] case class JobFailed(exception: Exception, failedStageId: Int)
   extends JobResult {
   override def toJson = {
-    ("Status" -> "Failed") ~
-    ("Exception" -> exception.getMessage) ~
+    val exceptionJson = Utils.exceptionToJson(exception)
+
+    super.toJson ~
+    ("Exception" -> exceptionJson) ~
     ("Failed Stage ID" -> failedStageId)
   }
 }

@@ -23,6 +23,8 @@ import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.JsonSerializable
 
 import net.liftweb.json.JsonDSL._
+import net.liftweb.json.JsonAST.JValue
+import net.liftweb.json.DefaultFormats
 
 /**
  * This class represent an unique identifier for a BlockManager.
@@ -90,10 +92,10 @@ private[spark] class BlockManagerId private (
   }
 
   override def toJson = {
-    ("Executor ID" -> executorId) ~
-    ("Host Port" -> hostPort) ~
-    ("Host" -> host) ~
-    ("Port" -> port)
+    ("Executor ID" -> executorId_) ~
+    ("Host" -> host_) ~
+    ("Port" -> port_) ~
+    ("Netty Port" -> nettyPort_)
   }
 }
 
@@ -123,5 +125,14 @@ private[spark] object BlockManagerId {
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
     blockManagerIdCache.putIfAbsent(id, id)
     blockManagerIdCache.get(id)
+  }
+
+  def fromJson(json: JValue): BlockManagerId = {
+    implicit val format = DefaultFormats
+    new BlockManagerId(
+      (json \ "Executor ID").extract[String],
+      (json \ "Host").extract[String],
+      (json \ "Port").extract[Int],
+      (json \ "Netty Port").extract[Int])
   }
 }

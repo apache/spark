@@ -217,7 +217,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
     val (info, metrics, exception) = taskData
 
     val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
-      else metrics.map(m => m.executorRunTime).getOrElse(1)
+      else metrics.map(m => m.executorRunTime).getOrElse(1L)
     val formatDuration = if (info.status == "RUNNING") parent.formatDuration(duration)
       else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
     val gcTime = metrics.map(m => m.jvmGCTime).getOrElse(0L)

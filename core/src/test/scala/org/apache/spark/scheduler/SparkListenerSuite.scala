@@ -55,7 +55,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     first.numPartitions should be {4}
     first.submissionTime should be ('defined)
     first.completionTime should be ('defined)
-    first.taskInfos.length should be {4}
+    first.taskInfo.length should be {4}
   }
 
   test("StageInfo with fewer tasks than partitions") {
@@ -103,20 +103,20 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     listener.stageInfos.foreach { stageInfo =>
       /* small test, so some tasks might take less than 1 millisecond, but average should be greater
        * than 0 ms. */
-      checkNonZeroAvg(stageInfo.taskInfos.map{_._1.duration}, stageInfo + " duration")
+      checkNonZeroAvg(stageInfo.taskInfo.map{_._1.duration}, stageInfo + " duration")
       checkNonZeroAvg(
-        stageInfo.taskInfos.map{_._2.executorRunTime.toLong},
+        stageInfo.taskInfo.map{_._2.executorRunTime},
         stageInfo + " executorRunTime")
       checkNonZeroAvg(
-        stageInfo.taskInfos.map{_._2.executorDeserializeTime.toLong},
+        stageInfo.taskInfo.map{_._2.executorDeserializeTime},
         stageInfo + " executorDeserializeTime")
       if (stageInfo.rddName == d4.name) {
         checkNonZeroAvg(
-          stageInfo.taskInfos.map{_._2.shuffleReadMetrics.get.fetchWaitTime},
+          stageInfo.taskInfo.map{_._2.shuffleReadMetrics.get.fetchWaitTime},
           stageInfo + " fetchWaitTime")
       }
 
-      stageInfo.taskInfos.foreach { case (taskInfo, taskMetrics) =>
+      stageInfo.taskInfo.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
         if (stageInfo.rddName == d2.name || stageInfo.rddName == d3.name) {
           taskMetrics.shuffleWriteMetrics should be ('defined)

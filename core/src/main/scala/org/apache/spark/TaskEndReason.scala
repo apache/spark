@@ -19,50 +19,124 @@ package org.apache.spark
 
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.scheduler.JsonSerializable
+import org.apache.spark.util.Utils
+
+import net.liftweb.json.JsonDSL._
+import net.liftweb.json.JsonAST._
+import net.liftweb.json.DefaultFormats
 
 /**
  * Various possible reasons why a task ended. The low-level TaskScheduler is supposed to retry
  * tasks several times for "ephemeral" failures, and only report back failures that require some
  * old stages to be resubmitted, such as shuffle map fetch failures.
  */
-private[spark] sealed trait TaskEndReason
+sealed trait TaskEndReason extends JsonSerializable {
+  override def toJson = "Reason" -> Utils.getFormattedClassName(this)
+}
 
-private[spark] case object Success extends TaskEndReason
+case object TaskEndReason {
+  def fromJson(json: JValue): TaskEndReason = {
+    implicit val format = DefaultFormats
+    val success = Utils.getFormattedClassName(Success)
+    val resubmitted = Utils.getFormattedClassName(Resubmitted)
+    val fetchFailed = Utils.getFormattedClassName(FetchFailed)
+    val exceptionFailure = Utils.getFormattedClassName(ExceptionFailure)
+    val taskResultLost = Utils.getFormattedClassName(TaskResultLost)
+    val taskKilled = Utils.getFormattedClassName(TaskKilled)
+    val executorLostFailure = Utils.getFormattedClassName(ExecutorLostFailure)
+    val unknownReason = Utils.getFormattedClassName(UnknownReason)
 
-private[spark] 
-case object Resubmitted extends TaskEndReason // Task was finished earlier but we've now lost it
+    (json \ "Reason").extract[String] match {
+      case `success` => Success
+      case `resubmitted` => Resubmitted
+      case `fetchFailed` => fetchFailedFromJson(json)
+      case `exceptionFailure` => exceptionFailureFromJson(json)
+      case `taskResultLost` => TaskResultLost
+      case `taskKilled` => TaskKilled
+      case `executorLostFailure` => ExecutorLostFailure
+      case `unknownReason` => UnknownReason
+    }
+  }
 
-private[spark] case class FetchFailed(
+  private def fetchFailedFromJson(json: JValue): TaskEndReason = {
+    implicit val format = DefaultFormats
+    new FetchFailed(
+      BlockManagerId.fromJson(json \ "Block Manager Address"),
+      (json \ "Shuffle ID").extract[Int],
+      (json \ "Map ID").extract[Int],
+      (json \ "Reduce ID").extract[Int])
+  }
+
+  private def exceptionFailureFromJson(json: JValue): TaskEndReason = {
+    implicit val format = DefaultFormats
+    val metrics = (json \ "Metrics") match {
+      case JNothing => None
+      case value: JValue => Some(TaskMetrics.fromJson(value))
+    }
+    val stackTrace = Utils.stackTraceFromJson(json \ "Stack Trace")
+    new ExceptionFailure(
+      (json \ "Class Name").extract[String],
+      (json \ "Description").extract[String],
+      stackTrace,
+      metrics
+    )
+  }
+}
+
+case object Success extends TaskEndReason
+
+// Task was finished earlier but we've now lost it
+case object Resubmitted extends TaskEndReason
+
+case class FetchFailed(
     bmAddress: BlockManagerId,
     shuffleId: Int,
     mapId: Int,
     reduceId: Int)
-  extends TaskEndReason
+  extends TaskEndReason {
+  override def toJson = {
+    super.toJson ~
+    ("Block Manager Address" -> bmAddress.toJson) ~
+    ("Shuffle ID" -> shuffleId) ~
+    ("Map ID" -> mapId) ~
+    ("Reduce ID" -> reduceId)
+  }
+}
 
-private[spark] case class ExceptionFailure(
+case class ExceptionFailure(
     className: String,
     description: String,
     stackTrace: Array[StackTraceElement],
     metrics: Option[TaskMetrics])
-  extends TaskEndReason
+  extends TaskEndReason {
+  override def toJson = {
+    val stackTraceJson = Utils.stackTraceToJson(stackTrace)
+    val metricsJson = metrics.map(_.toJson).getOrElse(JNothing)
+    super.toJson ~
+    ("Class Name" -> className) ~
+    ("Description" -> description) ~
+    ("Stack Trace" -> stackTraceJson) ~
+    ("Metrics" -> metricsJson)
+  }
+}
 
 /**
  * The task finished successfully, but the result was lost from the executor's block manager before
  * it was fetched.
  */
-private[spark] case object TaskResultLost extends TaskEndReason
+case object TaskResultLost extends TaskEndReason
 
-private[spark] case object TaskKilled extends TaskEndReason
+case object TaskKilled extends TaskEndReason
 
 /**
  * The task failed because the executor that it was running on was lost. This may happen because
  * the task crashed the JVM.
  */
-private[spark] case object ExecutorLostFailure extends TaskEndReason
+case object ExecutorLostFailure extends TaskEndReason
 
 /**
  * We don't know why the task ended -- for example, because of a ClassNotFound exception when
  * deserializing the task result.
  */
-private[spark] case object UnknownReason extends TaskEndReason
-
+case object UnknownReason extends TaskEndReason

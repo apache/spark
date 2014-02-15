@@ -26,10 +26,13 @@ import org.apache.spark.executor.TaskMetrics
 import net.liftweb.json.JsonDSL._
 import net.liftweb.json.JsonAST._
 import org.apache.spark.storage.StorageStatus
+import net.liftweb.json.DefaultFormats
 
 trait JsonSerializable { def toJson: JValue }
 
-sealed trait SparkListenerEvent extends JsonSerializable
+sealed trait SparkListenerEvent extends JsonSerializable {
+  override def toJson = "Event" -> Utils.getFormattedClassName(this)
+}
 
 case class SparkListenerStageSubmitted(
     stageInfo: StageInfo,
@@ -37,7 +40,7 @@ case class SparkListenerStageSubmitted(
   extends SparkListenerEvent {
   override def toJson = {
     val propertiesJson = Utils.propertiesToJson(properties)
-    ("Event" -> "Stage Submitted") ~
+    super.toJson ~
     ("Stage Info" -> stageInfo.toJson) ~
     ("Properties" -> propertiesJson)
   }
@@ -45,14 +48,14 @@ case class SparkListenerStageSubmitted(
 
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent {
   override def toJson = {
-    ("Event" -> "Stage Completed") ~
+    super.toJson ~
     ("Stage Info" -> stageInfo.toJson)
   }
 }
 
 case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent {
   override def toJson = {
-    ("Event" -> "Task Start") ~
+    super.toJson ~
     ("Stage ID" -> stageId) ~
     ("Task Info" -> taskInfo.toJson)
   }
@@ -60,7 +63,7 @@ case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends Spar
 
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent {
   override def toJson = {
-    ("Event" -> "Task Getting Result") ~
+    super.toJson ~
     ("Task Info" -> taskInfo.toJson)
   }
 }
@@ -74,7 +77,7 @@ case class SparkListenerTaskEnd(
   extends SparkListenerEvent {
   override def toJson = {
     val _reason = Utils.getFormattedClassName(reason)
-    ("Event" -> "Task End") ~
+    super.toJson ~
     ("Stage ID" -> stageId) ~
     ("Task Type" -> taskType) ~
     ("Task End Reason" -> _reason) ~
@@ -91,7 +94,7 @@ case class SparkListenerJobStart(
   override def toJson = {
     val stageIdsJson = JArray(stageIds.map(JInt(_)).toList)
     val propertiesJson = Utils.propertiesToJson(properties)
-    ("Event" -> "Job Start") ~
+    super.toJson ~
     ("Job ID" -> jobId) ~
     ("Stage IDs" -> stageIdsJson) ~
     ("Properties" -> propertiesJson)
@@ -100,15 +103,34 @@ case class SparkListenerJobStart(
 
 case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent {
   override def toJson = {
-    ("Event" -> "Job End") ~
+    super.toJson ~
     ("Job ID" -> jobId) ~
     ("Job Result" -> jobResult.toJson)
   }
 }
 
 /** An event used in the listener to shutdown the listener daemon thread. */
-private[scheduler] case object SparkListenerShutdown extends SparkListenerEvent {
-  override def toJson = ("Event" -> "Shutdown")
+private[scheduler] case object SparkListenerShutdown extends SparkListenerEvent
+
+/** An event used in the EnvironmentUI */
+private[spark] case class SparkListenerLoadEnvironment(
+    jvmInformation: Seq[(String, String)],
+    sparkProperties: Seq[(String, String)],
+    systemProperties: Seq[(String, String)],
+    classpathEntries: Seq[(String, String)])
+  extends SparkListenerEvent {
+
+  override def toJson = {
+    val jvmInformationJson = Utils.mapToJson(jvmInformation.toMap)
+    val sparkPropertiesJson = Utils.mapToJson(sparkProperties.toMap)
+    val systemPropertiesJson = Utils.mapToJson(systemProperties.toMap)
+    val classpathEntriesJson = Utils.mapToJson(classpathEntries.toMap)
+    super.toJson ~
+    ("JVM Information" -> jvmInformationJson) ~
+    ("Spark Properties" -> sparkPropertiesJson) ~
+    ("System Properties" -> systemPropertiesJson) ~
+    ("Classpath Entries" -> classpathEntriesJson)
+  }
 }
 
 /** An event used in the ExecutorUI to fetch storage status from SparkEnv */
@@ -116,10 +138,89 @@ private[spark] case class SparkListenerStorageStatusFetch(storageStatusList: Seq
   extends SparkListenerEvent {
   override def toJson = {
     val storageStatusListJson = JArray(storageStatusList.map(_.toJson).toList)
-    ("Event" -> "Storage Status Fetch") ~
+    super.toJson ~
     ("Storage Status List" -> storageStatusListJson)
   }
 }
+
+object SparkListenerEvent {
+
+  /**
+   * Deserialize a SparkListenerEvent from JSON
+   * TODO: include newly added events!
+   */
+  def fromJson(json: JValue): SparkListenerEvent = {
+    implicit val format = DefaultFormats
+    val stageSubmitted =  Utils.getFormattedClassName(SparkListenerStageSubmitted)
+    val stageCompleted =  Utils.getFormattedClassName(SparkListenerStageCompleted)
+    val taskStart =  Utils.getFormattedClassName(SparkListenerTaskStart)
+    val taskGettingResult =  Utils.getFormattedClassName(SparkListenerTaskGettingResult)
+    val taskEnd =  Utils.getFormattedClassName(SparkListenerTaskEnd)
+    val jobStart =  Utils.getFormattedClassName(SparkListenerJobStart)
+    val jobEnd =  Utils.getFormattedClassName(SparkListenerJobEnd)
+    val shutdown =  Utils.getFormattedClassName(SparkListenerShutdown)
+
+    (json \ "Event").extract[String] match {
+      case `stageSubmitted` => stageSubmittedFromJson(json)
+      case `stageCompleted` => stageCompletedFromJson(json)
+      case `taskStart` => taskStartFromJson(json)
+      case `taskGettingResult` => taskGettingResultFromJson(json)
+      case `taskEnd` => taskEndFromJson(json)
+      case `jobStart` => jobStartFromJson(json)
+      case `jobEnd` => jobEndFromJson(json)
+      case `shutdown` => SparkListenerShutdown
+    }
+  }
+
+  private def stageSubmittedFromJson(json: JValue) = {
+    new SparkListenerStageSubmitted(
+      StageInfo.fromJson(json \ "Stage Info"),
+      Utils.propertiesFromJson(json \ "Properties"))
+  }
+
+  private def stageCompletedFromJson(json: JValue) = {
+    new SparkListenerStageCompleted(StageInfo.fromJson(json \ "Stage Info"))
+  }
+
+  private def taskStartFromJson(json: JValue) = {
+    implicit val format = DefaultFormats
+    new SparkListenerTaskStart(
+      (json \ "Stage ID").extract[Int],
+      TaskInfo.fromJson(json \ "Task Info"))
+  }
+
+  private def taskGettingResultFromJson(json: JValue) = {
+    new SparkListenerTaskGettingResult(TaskInfo.fromJson(json \ "Task Info"))
+  }
+
+  private def taskEndFromJson(json: JValue) = {
+    implicit val format = DefaultFormats
+    new SparkListenerTaskEnd(
+      (json \ "Stage ID").extract[Int],
+      (json \ "Task Type").extract[String],
+      TaskEndReason.fromJson(json \ "Task End Reason"),
+      TaskInfo.fromJson(json \ "Task Info"),
+      TaskMetrics.fromJson(json \ "Task Metrics"))
+  }
+
+  private def jobStartFromJson(json: JValue) = {
+    implicit val format = DefaultFormats
+    val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
+    new SparkListenerJobStart(
+      (json \ "Job ID").extract[Int],
+      stageIds,
+      Utils.propertiesFromJson(json \ "Properties")
+    )
+  }
+
+  private def jobEndFromJson(json: JValue) = {
+    implicit val format = DefaultFormats
+    new SparkListenerJobEnd(
+      (json \ "Job ID").extract[Int],
+      JobResult.fromJson(json \ "Job Result"))
+  }
+}
+
 
 /**
  * Interface for listening to events from the Spark scheduler.
@@ -184,7 +285,7 @@ class StatsReportListener extends SparkListener with Logging {
     showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
     // Runtime breakdown
-    val runtimePcts = stageCompleted.stageInfo.taskInfos.map{ case (info, metrics) =>
+    val runtimePcts = stageCompleted.stageInfo.taskInfo.map{ case (info, metrics) =>
       RuntimePercentage(info.duration, metrics)
     }
     showDistribution("executor (non-fetch) time pct: ",
@@ -206,7 +307,7 @@ private[spark] object StatsReportListener extends Logging {
   def extractDoubleDistribution(stage: SparkListenerStageCompleted,
       getMetric: (TaskInfo, TaskMetrics) => Option[Double])
     : Option[Distribution] = {
-    Distribution(stage.stageInfo.taskInfos.flatMap {
+    Distribution(stage.stageInfo.taskInfo.flatMap {
       case ((info,metric)) => getMetric(info, metric)})
   }
 

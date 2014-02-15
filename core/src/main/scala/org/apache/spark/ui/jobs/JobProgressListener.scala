@@ -173,7 +173,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
       }
 
     stageIdToTime.getOrElseUpdate(sid, 0L)
-    val time = metrics.map(m => m.executorRunTime).getOrElse(0)
+    val time = metrics.map(m => m.executorRunTime).getOrElse(0L)
     stageIdToTime(sid) += time
     totalTime += time
 

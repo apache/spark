@@ -250,7 +250,7 @@ class DAGScheduler(
       new Stage(id, rdd, numTasks, shuffleDep, getParentStages(rdd, jobId), jobId, callSite)
     stageIdToStage(id) = stage
     updateJobIdStageIdMaps(jobId, stage)
-    stageToInfos(stage) = new StageInfo(stage)
+    stageToInfos(stage) = StageInfo.fromStage(stage)
     stage
   }
 
@@ -826,7 +826,7 @@ class DAGScheduler(
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
         }
         pendingTasks(stage) -= task
-        stageToInfos(stage).taskInfos += event.taskInfo -> event.taskMetrics
+        stageToInfos(stage).taskInfo += event.taskInfo -> event.taskMetrics
         task match {
           case rt: ResultTask[_, _] =>
             resultStageToJob.get(stage) match {
