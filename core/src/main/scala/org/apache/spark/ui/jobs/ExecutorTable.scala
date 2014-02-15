@@ -24,13 +24,10 @@ import org.apache.spark.util.Utils
 import scala.collection.mutable
 
 /** Page showing executor summary */
-private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) {
+private[spark] class ExecutorTable(stageId: Int, parent: JobProgressUI) {
+  private def listener = parent.listener
 
-  val listener = parent.listener
-  val dateFmt = parent.dateFmt
-  val isFairScheduler = listener.sc.getSchedulingMode == SchedulingMode.FAIR
-
-  def toNodeSeq(): Seq[Node] = {
+  def toNodeSeq: Seq[Node] = {
     listener.synchronized {
       executorTable()
     }

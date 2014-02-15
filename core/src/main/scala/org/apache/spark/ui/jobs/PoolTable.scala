@@ -25,11 +25,11 @@ import org.apache.spark.scheduler.{Schedulable, StageInfo}
 import org.apache.spark.ui.UIUtils
 
 /** Table showing list of pools */
-private[spark] class PoolTable(pools: Seq[Schedulable], listener: JobProgressListener) {
+private[spark] class PoolTable(pools: Seq[Schedulable], parent: JobProgressUI) {
+  private val poolToActiveStages = listener.poolToActiveStages
+  private def listener = parent.listener
 
-  var poolToActiveStages: HashMap[String, HashSet[StageInfo]] = listener.poolToActiveStages
-
-  def toNodeSeq(): Seq[Node] = {
+  def toNodeSeq: Seq[Node] = {
     listener.synchronized {
       poolTable(poolRow, pools)
     }

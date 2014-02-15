@@ -25,10 +25,10 @@ import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils._
 
-
 /** Page showing list of all ongoing and recently finished stages and pools*/
 private[spark] class IndexPage(parent: JobProgressUI) {
-  def listener = parent.listener
+  private val sc = parent.sc
+  private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -47,16 +47,16 @@ private[spark] class IndexPage(parent: JobProgressUI) {
         parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
-      val pools = listener.sc.getAllPools
-      val poolTable = new PoolTable(pools, listener)
+      val pools = sc.getAllPools
+      val poolTable = new PoolTable(pools, parent)
       val summary: NodeSeq =
        <div>
          <ul class="unstyled">
            <li>
              <strong>Total Duration: </strong>
-             {parent.formatDuration(now - listener.sc.startTime)}
+             {parent.formatDuration(now - sc.startTime)}
            </li>
-           <li><strong>Scheduling Mode:</strong> {parent.sc.getSchedulingMode}</li>
+           <li><strong>Scheduling Mode:</strong> {sc.getSchedulingMode}</li>
            <li>
              <a href="#active"><strong>Active Stages:</strong></a>
              {activeStages.size}
@@ -73,7 +73,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
        </div>
 
       val content = summary ++
-        {if (listener.sc.getSchedulingMode == SchedulingMode.FAIR) {
+        {if (sc.getSchedulingMode == SchedulingMode.FAIR) {
            <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
         } else {
           Seq()
@@ -85,7 +85,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      headerSparkPage(content, parent.sc, "Spark Stages", Stages)
+      headerSparkPage(content, sc, "Spark Stages", Stages)
     }
   }
 }

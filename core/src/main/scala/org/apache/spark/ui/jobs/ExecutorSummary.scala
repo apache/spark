@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-/** class for reporting aggregated metrics for each executors in stageUI */
+/** Class for reporting aggregated metrics for each executors in the stage UI */
 private[spark] class ExecutorSummary {
   var taskTime : Long = 0
   var failedTasks : Int = 0

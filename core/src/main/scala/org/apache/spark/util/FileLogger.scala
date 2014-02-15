@@ -36,12 +36,10 @@ class FileLogger(user: String, name: String, flushFrequency: Int = 100) {
 
   private val logDir =
     if (System.getenv("SPARK_LOG_DIR") != null) {
-      System.getenv("SPARK_LOG_DIR")
+      "%s/%s/".format(System.getenv("SPARK_LOG_DIR"), name)
     } else {
-      "/tmp/spark-%s".format(user)
+      "/tmp/spark-%s/%s/".format(user, name)
     }
-
-  private val logFileBase = logDir + "/" + name
 
   private var writer: Option[PrintWriter] = {
     createLogDir()
@@ -64,7 +62,7 @@ class FileLogger(user: String, name: String, flushFrequency: Int = 100) {
 
   /** Create a new writer to the file identified with the given path */
   private def createWriter() = {
-    val fileWriter = new FileWriter(logFileBase + "-" + fileIndex)
+    val fileWriter = new FileWriter(logDir + fileIndex)
     val bufferedWriter = new BufferedWriter(fileWriter)
     new PrintWriter(bufferedWriter)
   }

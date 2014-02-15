@@ -26,21 +26,20 @@ import org.apache.spark.scheduler.{SchedulingMode, StageInfo, TaskInfo}
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
-
 /** Page showing list of all ongoing and recently finished stages */
-private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgressUI) {
+private[spark] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
+  private val sc = parent.sc
+  private val dateFmt = parent.dateFmt
+  private val isFairScheduler = sc.getSchedulingMode == SchedulingMode.FAIR
+  private def listener = parent.listener
 
-  val listener = parent.listener
-  val dateFmt = parent.dateFmt
-  val isFairScheduler = listener.sc.getSchedulingMode == SchedulingMode.FAIR
-
-  def toNodeSeq(): Seq[Node] = {
+  def toNodeSeq: Seq[Node] = {
     listener.synchronized {
       stageTable(stageRow, stages)
     }
   }
 
-  /** Special table which merges two header cells. */
+  /** Render a special table that merges two header cells. */
   private def stageTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable">
       <thead>
@@ -59,21 +58,7 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
     </table>
   }
 
-  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
-  {
-    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
-
-    <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;">
-        {completed}/{total} {failed}
-      </span>
-      <div class="bar bar-completed" style={completeWidth}></div>
-      <div class="bar bar-running" style={startWidth}></div>
-    </div>
-  }
-
-
+  /** Render an HTML row that represents a stage */
   private def stageRow(s: StageInfo): Seq[Node] = {
     val submissionTime = s.submissionTime match {
       case Some(t) => dateFmt.format(new Date(t))
@@ -126,5 +111,19 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
       <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
       <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
     </tr>
+  }
+
+  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
+  {
+    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+
+    <div class="progress">
+      <span style="text-align:center; position:absolute; width:100%;">
+        {completed}/{total} {failed}
+      </span>
+      <div class="bar bar-completed" style={completeWidth}></div>
+      <div class="bar bar-running" style={startWidth}></div>
+    </div>
   }
 }

@@ -22,6 +22,7 @@ import scala.collection.mutable.{ListBuffer, HashMap, HashSet}
 import org.apache.spark.{ExceptionFailure, SparkContext, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
+import org.apache.spark.ui.UISparkListener
 
 /**
  * Tracks task-level information to be displayed in the UI.
@@ -30,7 +31,9 @@ import org.apache.spark.scheduler._
  * class, since the UI thread and the DAGScheduler event loop may otherwise
  * be reading/updating the internal data structures concurrently.
  */
-private[spark] class JobProgressListener(val sc: SparkContext) extends SparkListener {
+private[spark] class JobProgressListener(sc: SparkContext)
+  extends UISparkListener("job-progress-ui") {
+
   // How many stages to remember
   val RETAINED_STAGES = sc.conf.getInt("spark.ui.retainedStages", 1000)
   val DEFAULT_POOL_NAME = "default"
@@ -60,18 +63,17 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     HashMap[Int, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]]()
   val stageIdToExecutorSummaries = HashMap[Int, HashMap[String, ExecutorSummary]]()
 
-  override def onJobStart(jobStart: SparkListenerJobStart) {}
-
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stageInfo
     poolToActiveStages(stageIdToPool(stage.stageId)) -= stage
     activeStages -= stage
     completedStages += stage
     trimIfNecessary(completedStages)
+    logEvent(stageCompleted)
   }
 
   /** If stages is too large, remove and garbage collect old stages */
-  def trimIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
+  private def trimIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
     if (stages.size > RETAINED_STAGES) {
       val toRemove = RETAINED_STAGES / 10
       stages.takeRight(toRemove).foreach( s => {
@@ -108,6 +110,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
 
     val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashSet[StageInfo]())
     stages += stage
+    logEvent(stageSubmitted)
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
@@ -118,6 +121,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
       sid, HashSet[(TaskInfo, Option[TaskMetrics], Option[ExceptionFailure])]())
     taskList += ((taskStart.taskInfo, None, None))
     stageIdToTaskInfos(sid) = taskList
+    logEvent(taskStart)
   }
 
   override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult)
@@ -202,6 +206,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
     taskList -= ((taskEnd.taskInfo, None, None))
     taskList += ((taskEnd.taskInfo, metrics, failureInfo))
     stageIdToTaskInfos(sid) = taskList
+    logEvent(taskEnd)
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
@@ -218,5 +223,7 @@ private[spark] class JobProgressListener(val sc: SparkContext) extends SparkList
         }
       case _ =>
     }
+    logEvent(jobEnd)
+    super.onJobEnd(jobEnd)
   }
 }

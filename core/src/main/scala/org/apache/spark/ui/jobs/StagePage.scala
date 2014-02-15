@@ -23,7 +23,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.{ExceptionFailure}
+import org.apache.spark.ExceptionFailure
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
@@ -32,8 +32,9 @@ import org.apache.spark.scheduler.TaskInfo
 
 /** Page showing statistics and task list for a given stage */
 private[spark] class StagePage(parent: JobProgressUI) {
-  def listener = parent.listener
-  val dateFmt = parent.dateFmt
+  private val sc = parent.sc
+  private def dateFmt = parent.dateFmt
+  private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -46,7 +47,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return headerSparkPage(content, parent.sc, "Details for Stage %s".format(stageId), Stages)
+        return headerSparkPage(content, sc, "Details for Stage %s".format(stageId), Stages)
       }
 
       val tasks = listener.stageIdToTaskInfos(stageId).toSeq.sortBy(_._1.launchTime)
@@ -58,12 +59,11 @@ private[spark] class StagePage(parent: JobProgressUI) {
       val hasShuffleWrite = shuffleWriteBytes > 0
       val memoryBytesSpilled = listener.stageIdToMemoryBytesSpilled.getOrElse(stageId, 0L)
       val diskBytesSpilled = listener.stageIdToDiskBytesSpilled.getOrElse(stageId, 0L)
-      val hasBytesSpilled = (memoryBytesSpilled > 0 && diskBytesSpilled > 0)
+      val hasBytesSpilled = memoryBytesSpilled > 0 && diskBytesSpilled > 0
 
       var activeTime = 0L
       listener.stageIdToTasksActive(stageId).foreach(activeTime += _.timeRunning(now))
 
-      val finishedTasks = listener.stageIdToTaskInfos(stageId).filter(_._1.finished)
       // scalastyle:off
       val summary =
         <div>
@@ -109,7 +109,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
 
       // Excludes tasks which failed and have incomplete metrics
-      val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && (t._2.isDefined))
+      val validTasks = tasks.filter(t => t._1.status == "SUCCESS" && t._2.isDefined)
 
       val summaryTable: Option[Seq[Node]] =
         if (validTasks.size == 0) {
@@ -134,9 +134,9 @@ private[spark] class StagePage(parent: JobProgressUI) {
               0.0
             }
           }
-          val gettingResultQuantiles = ("Time spent fetching task results" +:
+          val gettingResultQuantiles = "Time spent fetching task results" +:
             Distribution(gettingResultTimes).get.getQuantiles().map(
-              millis => parent.formatDuration(millis.toLong)))
+              millis => parent.formatDuration(millis.toLong))
           // The scheduler delay includes the network delay to send the task to the worker
           // machine and to send back the result (but not the time to fetch the task result,
           // if it needed to be fetched from the block manager on the worker).
@@ -150,9 +150,9 @@ private[spark] class StagePage(parent: JobProgressUI) {
             }
             totalExecutionTime - metrics.get.executorRunTime
           }
-          val schedulerDelayQuantiles = ("Scheduler delay" +:
+          val schedulerDelayQuantiles = "Scheduler delay" +:
             Distribution(schedulerDelays).get.getQuantiles().map(
-              millis => parent.formatDuration(millis.toLong)))
+              millis => parent.formatDuration(millis.toLong))
 
           def getQuantileCols(data: Seq[Double]) =
             Distribution(data).get.getQuantiles().map(d => Utils.bytesToString(d.toLong))
@@ -198,15 +198,15 @@ private[spark] class StagePage(parent: JobProgressUI) {
           def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
           Some(listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
-      val executorTable = new ExecutorTable(parent, stageId)
+      val executorTable = new ExecutorTable(stageId, parent)
       val content =
         summary ++
         <h4>Summary Metrics for {numCompleted} Completed Tasks</h4> ++
         <div>{summaryTable.getOrElse("No tasks have reported metrics yet.")}</div> ++
-        <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq() ++
+        <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         <h4>Tasks</h4> ++ taskTable
 
-      headerSparkPage(content, parent.sc, "Details for Stage %d".format(stageId), Stages)
+      headerSparkPage(content, sc, "Details for Stage %d".format(stageId), Stages)
     }
   }
 

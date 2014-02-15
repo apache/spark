@@ -30,12 +30,13 @@ import org.apache.spark.util.Utils
 /** Web UI showing progress status of all jobs in the given SparkContext. */
 private[spark] class JobProgressUI(val sc: SparkContext) {
   private var _listener: Option[JobProgressListener] = None
-  def listener = _listener.get
-  val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-
   private val indexPage = new IndexPage(this)
   private val stagePage = new StagePage(this)
   private val poolPage = new PoolPage(this)
+
+  val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+
+  def listener = _listener.get
 
   def start() {
     _listener = Some(new JobProgressListener(sc))
