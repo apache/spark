@@ -49,6 +49,7 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
    * Render an HTML page that encodes environment information
    */
   def render(request: HttpServletRequest): Seq[Node] = {
+    listener.loadEnvironment()
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, listener.jvmInformation, fixedWidth = true)
     val sparkPropertiesTable = UIUtils.listingTable(
@@ -83,19 +84,10 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
     var systemProperties: Seq[(String, String)] = Seq()
     var classpathEntries: Seq[(String, String)] = Seq()
 
-    def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) = {
-      jvmInformation = loadEnvironment.jvmInformation
-      sparkProperties = loadEnvironment.sparkProperties
-      systemProperties = loadEnvironment.systemProperties
-      classpathEntries = loadEnvironment.classpathEntries
-      logEvent(loadEnvironment)
-      logger.flush()
-    }
-
-    override def onJobStart(jobStart: SparkListenerJobStart) = {
-      logger.start()
-
-      // Gather properties
+    /**
+     * Gather JVM, spark, system and classpath properties
+     */
+    def loadEnvironment() = {
       val jvmInformation = Seq(
         ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
         ("Java Home", Properties.javaHome),
@@ -123,6 +115,20 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
         jvmInformation, sparkProperties, otherProperties, classPaths)
       onLoadEnvironment(loadEnvironment)
     }
+
+    /**
+     * Prepare environment information for UI to render, and log the corresponding event
+     */
+    def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) = {
+      jvmInformation = loadEnvironment.jvmInformation
+      sparkProperties = loadEnvironment.sparkProperties
+      systemProperties = loadEnvironment.systemProperties
+      classpathEntries = loadEnvironment.classpathEntries
+      logEvent(loadEnvironment)
+      logger.flush()
+    }
+
+    override def onJobStart(jobStart: SparkListenerJobStart) = logger.start()
 
     override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.close()
   }

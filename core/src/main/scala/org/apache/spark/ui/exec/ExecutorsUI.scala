@@ -24,18 +24,17 @@ import scala.xml.Node
 
 import org.eclipse.jetty.server.Handler
 
-import org.apache.spark.SparkContext
+import org.apache.spark.{Logging, SparkContext, ExceptionFailure}
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Executors
 import org.apache.spark.ui.{UISparkListener, UIUtils}
 import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.SparkListenerTaskEnd
-import org.apache.spark.ExceptionFailure
 import org.apache.spark.scheduler.SparkListenerTaskStart
 import org.apache.spark.storage.StorageStatus
 
-private[spark] class ExecutorsUI(val sc: SparkContext) {
+private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
 
   private var _listener: Option[ExecutorsListener] = None
   def listener = _listener.get
@@ -105,10 +104,6 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
     val maximumMemory = values("Maximum Memory")
     val memoryUsed = values("Memory Used")
     val diskUsed = values("Disk Used")
-    val activeTasks = values("Active Tasks")
-    val failedTasks = values("Failed Tasks")
-    val completeTasks = values("Complete Tasks")
-    val totalTasks = activeTasks + failedTasks + completeTasks
 
     <tr>
       <td>{values("Executor ID")}</td>
@@ -121,10 +116,10 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
       <td sorttable_customkey={diskUsed}>
         {Utils.bytesToString(diskUsed.toLong)}
       </td>
-      <td>{activeTasks}</td>
-      <td>{failedTasks}</td>
-      <td>{completeTasks}</td>
-      <td>{totalTasks}</td>
+      <td>{values("Active Tasks")}</td>
+      <td>{values("Failed Tasks")}</td>
+      <td>{values("Complete Tasks")}</td>
+      <td>{values("Total Tasks")}</td>
       <td>{Utils.msDurationToString(values("Task Time").toLong)}</td>
       <td>{Utils.bytesToString(values("Shuffle Read").toLong)}</td>
       <td>{Utils.bytesToString(values("Shuffle Write").toLong)}</td>
