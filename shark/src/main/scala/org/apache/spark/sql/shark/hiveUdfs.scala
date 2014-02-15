@@ -253,6 +253,7 @@ trait HiveInspectors {
     case ShortType => PrimitiveObjectInspectorFactory.javaShortObjectInspector
     case ByteType => PrimitiveObjectInspectorFactory.javaByteObjectInspector
     case NullType => PrimitiveObjectInspectorFactory.javaVoidObjectInspector
+    case BinaryType => PrimitiveObjectInspectorFactory.javaByteArrayObjectInspector
   }
 
   def inspectorToDataType(inspector: ObjectInspector): DataType = inspector match {
@@ -287,6 +288,7 @@ trait HiveInspectors {
     import TypeInfoFactory._
 
     def toTypeInfo: TypeInfo = dt match {
+      case BinaryType => binaryTypeInfo
       case BooleanType => booleanTypeInfo
       case ByteType => byteTypeInfo
       case DoubleType => doubleTypeInfo
