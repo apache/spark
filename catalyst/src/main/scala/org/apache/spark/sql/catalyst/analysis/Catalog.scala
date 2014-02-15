@@ -15,6 +15,12 @@ trait Catalog {
     alias: Option[String] = None): LogicalPlan
 }
 
+/**
+ * A trait that can be mixed in with other Catalogs allowing specific tables to be overridden with
+ * new logical plans.  This can be used to bind query result to virtual tables, or replace tables
+ * with in-memory cached versions.  Note that the set of overrides is stored in memory and thus
+ * lost when the JVM exits.
+ */
 trait OverrideCatalog extends Catalog {
 
   // TODO: This doesn't work when the database changes...

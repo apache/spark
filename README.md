@@ -24,7 +24,7 @@ $ sbt/sbt
 > test:compile
 [info] Compiling 10 Scala sources to catalyst/target/scala-2.10/test-classes...
 [success] Total time: 15 s, completed Dec 20, 2013 12:00:06 PM
-> test-only catalyst.execution.DslQueryTests
+> core/test-only catalyst.execution.BasicQuerySuite
 ```
 
 Any command that is prefixed with a `~` (e.g. `~compile`) will be run automatically in a loop each time any dependent files have changed.
@@ -41,27 +41,28 @@ export HADOOP_HOME="<path to>/hadoop-1.0.4"
 
 Using the console
 =================
-An interactive scala console can be invoked by running `sbt/sbt console`.  From here you can execute queries and inspect the various stages of query optimization.
+An interactive scala console can be invoked by running `sbt/sbt shark/console`.  From here you can execute queries and inspect the various stages of query optimization.
 
 ```scala
-catalyst$ sbt/sbt console
+catalyst$ sbt/sbt shark/console
 
 [info] Starting scala interpreter...
-import catalyst.analysis._
-import catalyst.dsl._
-import catalyst.errors._
-import catalyst.expressions._
-import catalyst.frontend._
-import catalyst.plans.logical._
-import catalyst.rules._
-import catalyst.types._
-import catalyst.util._
-import catalyst.execution.TestShark._
+import org.apache.spark.sql.catalyst.analysis._
+import org.apache.spark.sql.catalyst.dsl._
+import org.apache.spark.sql.catalyst.errors._
+import org.apache.spark.sql.catalyst.expressions._
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.rules._
+import org.apache.spark.sql.catalyst.types._
+import org.apache.spark.sql.catalyst.util._
+import org.apache.spark.sql.execution
+import org.apache.spark.sql.shark._
+import org.apache.spark.sql.shark.TestShark._
 Welcome to Scala version 2.10.3 (Java HotSpot(TM) 64-Bit Server VM, Java 1.7.0_45).
 Type in expressions to have them evaluated.
 Type :help for more information.
 
-scala> scala> val query = sql("SELECT * FROM (SELECT * FROM src) a")
+scala> val query = sql("SELECT * FROM (SELECT * FROM src) a")
 query: org.apache.spark.sql.ExecutedQuery =
 SELECT * FROM (SELECT * FROM src) a
 === Query Plan ===

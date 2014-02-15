@@ -63,31 +63,36 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
 
   /** The local directory with cached golden answer will be stored. */
   protected val answerCache = new File("shark/src/test/hive/golden")
-  if (!answerCache.exists)
+  if (!answerCache.exists) {
     answerCache.mkdir()
+  }
 
   /** The [[ClassLoader]] that contains test dependencies.  Used to look for golden answers. */
   protected val testClassLoader = this.getClass.getClassLoader
 
   /** Directory containing a file for each test case that passes. */
   val passedDirectory = new File(targetDir, s"$suiteName.passed")
-  if (!passedDirectory.exists())
+  if (!passedDirectory.exists()) {
     passedDirectory.mkdir() // Not atomic!
+  }
 
   /** Directory containing output of tests that fail to execute with Catalyst. */
   val failedDirectory = new File(targetDir, s"$suiteName.failed")
-  if (!failedDirectory.exists())
+  if (!failedDirectory.exists()) {
     failedDirectory.mkdir() // Not atomic!
+  }
 
   /** Directory containing output of tests where catalyst produces the wrong answer. */
   val wrongDirectory = new File(targetDir, s"$suiteName.wrong")
-  if (!wrongDirectory.exists())
+  if (!wrongDirectory.exists()) {
     wrongDirectory.mkdir() // Not atomic!
+  }
 
   /** Directory containing output of tests where we fail to generate golden output with Hive. */
   val hiveFailedDirectory = new File(targetDir, s"$suiteName.hiveFailed")
-  if (!hiveFailedDirectory.exists())
+  if (!hiveFailedDirectory.exists()) {
     hiveFailedDirectory.mkdir() // Not atomic!
+  }
 
   /** All directories that contain per-query output files */
   val outputDirectories = Seq(
