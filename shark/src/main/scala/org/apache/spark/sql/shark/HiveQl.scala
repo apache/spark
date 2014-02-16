@@ -485,13 +485,13 @@ object HiveQl {
         // interchangeably.
         // TOK_INSERT_INTO means to add files to the table.
         // TOK_DESTINATION means to overwrite the table.
-        // TODO: We need to distinguish TOK_INSERT_INTO and TOK_DESTINATION.
         val resultDestination =
           (intoClause orElse destClause).getOrElse(sys.error("No destination found."))
-
+        val overwrite = if (intoClause.isEmpty) true else false
         nodeToDest(
           resultDestination,
-          withLimit)
+          withLimit,
+          overwrite)
       }
 
       // If there are multiple INSERTS just UNION them together into on query.
@@ -646,7 +646,10 @@ object HiveQl {
   }
 
   val destinationToken = "TOK_DESTINATION|TOK_INSERT_INTO".r
-  protected def nodeToDest(node: Node, query: LogicalPlan): LogicalPlan = node match {
+  protected def nodeToDest(
+      node: Node,
+      query: LogicalPlan,
+      overwrite: Boolean): LogicalPlan = node match {
     case Token(destinationToken(),
            Token("TOK_DIR",
              Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
@@ -670,7 +673,7 @@ object HiveQl {
         case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => key -> None
       }.toMap).getOrElse(Map.empty)
 
-      InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query)
+      InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query, overwrite)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")

@@ -70,6 +70,16 @@ class HiveQuerySuite extends HiveComparisonTest {
       |DROP DATABASE IF EXISTS testdb CASCADE
     """.stripMargin)
 
+  createQueryTest("insert into and insert overwrite",
+    """
+      |CREATE TABLE createdtable like src;
+      |INSERT INTO TABLE createdtable SELECT * FROM src;
+      |INSERT INTO TABLE createdtable SELECT * FROM src1;
+      |SELECT * FROM createdtable;
+      |INSERT OVERWRITE TABLE createdtable SELECT * FROM src WHERE key = 86;
+      |SELECT * FROM createdtable;
+    """.stripMargin)
+
   createQueryTest("transform",
     "SELECT TRANSFORM (key) USING 'cat' AS (tKey) FROM src")
 

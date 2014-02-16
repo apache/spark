@@ -77,7 +77,8 @@ class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
         InsertIntoTable(
           lookupRelation(Some(databaseName), tableName, None).asInstanceOf[BaseRelation],
           Map.empty,
-          child)
+          child,
+          false)
     }
   }
 
@@ -90,7 +91,7 @@ class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
       // Wait until children are resolved
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case p @ InsertIntoTable(table: MetastoreRelation, _, child) =>
+      case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         val childOutputDataTypes = child.output.map(_.dataType)
         // Only check attributes, not partitionKeys since they are always strings.
         // TODO: Fully support inserting into partitioned tables.

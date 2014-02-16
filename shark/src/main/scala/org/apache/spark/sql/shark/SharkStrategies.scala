@@ -24,8 +24,8 @@ trait SharkStrategies {
 
   object DataSinks extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.InsertIntoTable(table: MetastoreRelation, partition, child) =>
-        InsertIntoHiveTable(table, partition, planLater(child))(sharkContext) :: Nil
+      case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
+        InsertIntoHiveTable(table, partition, planLater(child), overwrite)(sharkContext) :: Nil
       case _ => Nil
     }
   }

@@ -150,7 +150,10 @@ case class HiveTableScan(
 }
 
 case class InsertIntoHiveTable(
-    table: MetastoreRelation, partition: Map[String, Option[String]], child: SparkPlan)
+    table: MetastoreRelation,
+    partition: Map[String, Option[String]],
+    child: SparkPlan,
+    overwrite: Boolean)
     (@transient sc: SharkContext)
   extends UnaryNode {
 
@@ -281,13 +284,13 @@ case class InsertIntoHiveTable(
       new JobConf(sc.hiveconf),
       sc.hiveconf.getBoolean("hive.exec.compress.output", false))
 
-    // TODO: Correctly set replace and holdDDLTime.
+    // TODO: Correctly set holdDDLTime.
     // TODO: Handle loading into partitioned tables.
     db.loadTable(
       new Path(fileSinkConf.getDirName),
       // Have to construct the format of dbname.tablename.
       s"${table.databaseName}.${table.tableName}",
-      false,
+      overwrite,
       false)
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
