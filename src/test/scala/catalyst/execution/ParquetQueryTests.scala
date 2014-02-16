@@ -31,6 +31,9 @@ object ParquetTestData {
                       required boolean myboolean;
                       required int32 myint;
                       required binary mystring;
+                      required int64 mylong;
+                      required float myfloat;
+                      required double mydouble;
                       }"""
 
   val testFile = new File("/tmp/testParquetFile").getAbsoluteFile
@@ -49,16 +52,12 @@ object ParquetTestData {
     val c2: ColumnDescriptor = schema.getColumnDescription(path2)
     val path3: Array[String] = Array("mystring")
     val c3: ColumnDescriptor = schema.getColumnDescription(path3)
-
-    val bytes1: Array[Byte] = Array(1, 0, 0).map(_.toByte)
-    val bytes2: Array[Byte] = Array(5, 0, 0, 0).map(_.toByte)
-
-    // apparently strings are encoded as their length as int followed by the string
-    val bb = java.nio.ByteBuffer.allocate(4)
-    bb.order(java.nio.ByteOrder.LITTLE_ENDIAN)
-    val tmpbytes3: Array[Byte] = "abc".getBytes("UTF-8")
-    bb.putInt(tmpbytes3.length)
-    val bytes3: Array[Byte] = (bb.array().toList ::: tmpbytes3.toList).toArray
+    val path4: Array[String] = Array("mylong")
+    val c4: ColumnDescriptor = schema.getColumnDescription(path4)
+    val path5: Array[String] = Array("myfloat")
+    val c5: ColumnDescriptor = schema.getColumnDescription(path5)
+    val path6: Array[String] = Array("mydouble")
+    val c6: ColumnDescriptor = schema.getColumnDescription(path6)
 
     val codec: CompressionCodecName = CompressionCodecName.UNCOMPRESSED
     val w: ParquetFileWriter = new ParquetFileWriter(configuration, schema, path)
@@ -67,32 +66,80 @@ object ParquetTestData {
     w.startBlock(3)
     w.startColumn(c1, 3, codec)
     // note to myself: repetition levels cannot be PLAIN encoded
-    w.writeDataPage(3, 3, BytesInput.from(bytes1), RLE, RLE, PLAIN)
+    // boolean
+    w.writeDataPage(3, 3, BytesInput.from(
+      concat(serializeValue(true), serializeValue(false), serializeValue(false))
+    ), RLE, RLE, PLAIN)
     w.endColumn
     w.startColumn(c2, 3, codec)
-    w.writeDataPage(1, 4, BytesInput.from(bytes2), RLE, RLE, PLAIN)
-    w.writeDataPage(1, 4, BytesInput.from(bytes2), RLE, RLE, PLAIN)
-    w.writeDataPage(1, 4, BytesInput.from(bytes2), RLE, RLE, PLAIN)
+    // int
+    w.writeDataPage(3, 12, BytesInput.from(
+      concat(serializeValue(5), serializeValue(5), serializeValue(5))
+    ), RLE, RLE, PLAIN)
     w.endColumn
     w.startColumn(c3, 3, codec)
-    w.writeDataPage(1, bytes3.length, BytesInput.from(bytes3), RLE, RLE, PLAIN)
-    w.writeDataPage(1, bytes3.length, BytesInput.from(bytes3), RLE, RLE, PLAIN)
-    w.writeDataPage(1, bytes3.length, BytesInput.from(bytes3), RLE, RLE, PLAIN)
+    // string
+    val bytes = serializeValue("abc".asInstanceOf[AnyVal])
+    w.writeDataPage(3, 3*bytes.length, BytesInput.from(
+      concat(bytes, bytes, bytes)
+    ), RLE, RLE, PLAIN)
+    w.endColumn()
+    w.startColumn(c4, 3, codec)
+    // long
+    w.writeDataPage(3, 24, BytesInput.from(
+      concat(serializeValue(1L<<33), serializeValue(1L<<33), serializeValue(1L<<33))
+    ), RLE, RLE, PLAIN)
+    w.endColumn()
+    w.startColumn(c5, 3, codec)
+    // float
+    w.writeDataPage(3, 12, BytesInput.from(
+      concat(serializeValue(2.5F), serializeValue(2.5F), serializeValue(2.5F))
+    ), RLE, RLE, PLAIN)
+    w.endColumn()
+    w.startColumn(c6, 3, codec)
+    // double
+    w.writeDataPage(3, 24, BytesInput.from(
+      concat(serializeValue(4.5D), serializeValue(4.5D), serializeValue(4.5D))
+    ), RLE, RLE, PLAIN)
     w.endColumn()
     w.endBlock
     w.startBlock(3)
     w.startColumn(c1, 3, codec)
-    w.writeDataPage(3, 3, BytesInput.from(bytes1), RLE, RLE, PLAIN)
+    // note to myself: repetition levels cannot be PLAIN encoded
+    // boolean
+    w.writeDataPage(3, 3, BytesInput.from(
+      concat(serializeValue(true), serializeValue(false), serializeValue(false))
+    ), RLE, RLE, PLAIN)
     w.endColumn
     w.startColumn(c2, 3, codec)
-    w.writeDataPage(1, 4, BytesInput.from(bytes2), RLE, RLE, PLAIN)
-    w.writeDataPage(1, 4, BytesInput.from(bytes2), RLE, RLE, PLAIN)
-    w.writeDataPage(1, 4, BytesInput.from(bytes2), RLE, RLE, PLAIN)
+    // int
+    w.writeDataPage(3, 12, BytesInput.from(
+      concat(serializeValue(5), serializeValue(5), serializeValue(5))
+    ), RLE, RLE, PLAIN)
     w.endColumn
     w.startColumn(c3, 3, codec)
-    w.writeDataPage(1, bytes3.length, BytesInput.from(bytes3), RLE, RLE, PLAIN)
-    w.writeDataPage(1, bytes3.length, BytesInput.from(bytes3), RLE, RLE, PLAIN)
-    w.writeDataPage(1, bytes3.length, BytesInput.from(bytes3), RLE, RLE, PLAIN)
+    // string
+    w.writeDataPage(3, 3*bytes.length, BytesInput.from(
+      concat(bytes, bytes, bytes)
+    ), RLE, RLE, PLAIN)
+    w.endColumn()
+    w.startColumn(c4, 3, codec)
+    // long
+    w.writeDataPage(3, 24, BytesInput.from(
+      concat(serializeValue(1L<<33), serializeValue(1L<<33), serializeValue(1L<<33))
+    ), RLE, RLE, PLAIN)
+    w.endColumn()
+    w.startColumn(c5, 3, codec)
+    // float
+    w.writeDataPage(3, 12, BytesInput.from(
+      concat(serializeValue(2.5F), serializeValue(2.5F), serializeValue(2.5F))
+    ), RLE, RLE, PLAIN)
+    w.endColumn()
+    w.startColumn(c6, 3, codec)
+    // double
+    w.writeDataPage(3, 24, BytesInput.from(
+      concat(serializeValue(4.5D), serializeValue(4.5D), serializeValue(4.5D))
+    ), RLE, RLE, PLAIN)
     w.endColumn()
     w.endBlock
     w.end(new java.util.HashMap[String, String])
@@ -169,6 +216,43 @@ object ParquetTestData {
     w.endBlock
     w.end(new java.util.HashMap[String, String])
   }
+
+  private def serializeValue(value: Any) : Array[Byte] = {
+    value match {
+      case i: Int => {
+        val bb = java.nio.ByteBuffer.allocate(4)
+        bb.order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        bb.putInt(i)
+        bb.array()
+      }
+      case l: Long => {
+        val bb = java.nio.ByteBuffer.allocate(8)
+        bb.order(java.nio.ByteOrder.LITTLE_ENDIAN)
+        bb.putLong(l)
+        bb.array()
+      }
+      case f: Float => serializeValue(java.lang.Float.floatToIntBits(f))
+      case d: Double => serializeValue(java.lang.Double.doubleToLongBits(d))
+      case s: String => {
+        // apparently strings are encoded as their length as int followed by the string
+        val bytes: Array[Byte] = s.getBytes("UTF-8")
+        (serializeValue(bytes.length).toList ::: bytes.toList).toArray
+      }
+      case b: Boolean => {
+        if(b)
+          Array(1.toByte)
+        else
+          Array(0.toByte)
+      }
+    }
+  }
+
+  private def concat(values: Array[Byte]*) : Array[Byte] = {
+    var retval = List[Byte]()
+    for(value <- values)
+      retval = retval ::: value.toList
+    retval.toArray
+  }
 }
 
 class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
@@ -194,7 +278,10 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
             (row(0) == false)
         val checkInt = (row(1) == 5)
         val checkString = (row(2) == "abc")
-        checkBoolean && checkInt && checkString
+        val checkLong = (row(3) == (1L<<33))
+        val checkFloat = (row(4) == 2.5F)
+        val checkDouble = (row(5) == 4.5D)
+        checkBoolean && checkInt && checkString && checkLong && checkFloat && checkDouble
       }
     }
     assert(allChecks)
