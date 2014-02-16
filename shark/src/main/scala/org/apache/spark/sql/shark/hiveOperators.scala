@@ -222,6 +222,9 @@ case class InsertIntoHiveTable(
       conf.setMapOutputCompressorClass(c)
       conf.set("mapred.output.compression.codec", c.getCanonicalName)
       conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
+      fileSinkConf.setCompressed(true)
+      fileSinkConf.setCompressCodec(c.getCanonicalName)
+      fileSinkConf.setCompressType(CompressionType.BLOCK.toString)
     }
     conf.setOutputCommitter(classOf[FileOutputCommitter])
     FileOutputFormat.setOutputPath(
@@ -288,11 +291,16 @@ case class InsertIntoHiveTable(
       }
     }
 
+    // TODO: Correctly set codec.
+    // ORC stores compression information in table properties.
+    // While, there are other formats (e.g. RCFile) that rely on
+    // hive configurations to store compression information.
     saveAsHiveFile(
       rdd,
       outputClass,
       fileSinkConf,
-      new JobConf(sc.hiveconf))
+      new JobConf(sc.hiveconf),
+      codec = None)
 
     // TODO: Correctly set replace and holdDDLTime.
     // TODO: Handle loading into partitioned tables.
