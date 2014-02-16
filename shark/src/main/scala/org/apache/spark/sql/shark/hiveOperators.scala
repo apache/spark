@@ -41,7 +41,8 @@ case class HiveTableScan(
     relation: MetastoreRelation,
     partitionPruningPred: Option[Expression])(
     @transient val sc: SharkContext)
-  extends LeafNode {
+  extends LeafNode
+  with HiveInspectors {
 
   require(partitionPruningPred.isEmpty || relation.hiveQlTable.isPartitioned,
     "Partition pruning predicates only supported for partitioned tables.")
@@ -91,25 +92,6 @@ case class HiveTableScan(
         }
       }
     }
-  }
-
-  def unwrapData(data: Any, oi: ObjectInspector): Any = oi match {
-    case pi: PrimitiveObjectInspector => pi.getPrimitiveJavaObject(data)
-    case li: ListObjectInspector =>
-      Option(li.getList(data))
-        .map(_.map(unwrapData(_, li.getListElementObjectInspector)).toSeq)
-        .orNull
-    case mi: MapObjectInspector =>
-      Option(mi.getMap(data)).map(
-        _.map {
-          case (k,v) =>
-            (unwrapData(k, mi.getMapKeyObjectInspector),
-             unwrapData(v, mi.getMapValueObjectInspector))
-      }.toMap).orNull
-    case si: StructObjectInspector =>
-      val allRefs = si.getAllStructFieldRefs
-      new GenericRow(
-        allRefs.map(r => unwrapData(si.getStructFieldData(data,r), r.getFieldObjectInspector)))
   }
 
   private def castFromString(value: String, dataType: DataType) = {
