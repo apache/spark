@@ -26,6 +26,9 @@ import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
+import org.apache.hadoop.hive.serde2.AbstractDeserializer
+import org.apache.hadoop.mapred.InputFormat
+import org.apache.hadoop.fs.Path
 
 import catalyst.analysis.Catalog
 import catalyst.expressions._
@@ -35,6 +38,11 @@ import catalyst.rules._
 import catalyst.types._
 
 import scala.collection.JavaConversions._
+
+import parquet.schema.MessageType
+import parquet.schema.MessageTypeParser
+import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
+
 
 class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
   import HiveMetastoreTypes._
@@ -234,4 +242,68 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
   val attributes = table.getSd.getCols.map(_.toAttribute)
 
   val output = attributes ++ partitionKeys
+}
+
+case class ParquetRelation(databaseName: String, tableName: String, alias: Option[String])
+                          (val parquetSchema: MessageType, val path: Path)
+  extends BaseRelation {
+
+  // For now we do not allow partitioning.
+  val partitionKeys = List()
+
+  /** Non-partitionKey attributes */
+  val attributes = ParquetTypesConverter.convertToAttributes(parquetSchema)
+
+  val output = attributes ++ partitionKeys
+
+  /* TODO: implement low-level Parquet metadata store access */
+  // val metaData: ParquetMetadata
+  // def getBlocks: java.util.List[BlockMetaData] = metaData.getBlocks
+  // def getColumns: java.util.List[ColumnDescriptor] = metaData.getFileMetaData.getSchema.getColumns
+
+  val numberOfBlocks = 1 // TODO: see comment above
+}
+
+object ParquetRelation {
+  def apply(schemaString : String, path: Path) =
+    new ParquetRelation("test", "test", Some("") )(ParquetTypesConverter.getSchema(schemaString), path)
+}
+
+object ParquetTypesConverter {
+  def toDataType(parquetType : ParquetPrimitiveTypeName) : DataType = parquetType match {
+    // for now map binary to string type
+    // TODO: figure out how Parquet uses strings or why we can't use them in a MessageType schema
+    case ParquetPrimitiveTypeName.BINARY => StringType
+    case ParquetPrimitiveTypeName.BOOLEAN => BooleanType
+    case ParquetPrimitiveTypeName.DOUBLE => DoubleType
+    case ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY => ArrayType(ByteType)
+    case ParquetPrimitiveTypeName.FLOAT => FloatType
+    case ParquetPrimitiveTypeName.INT32 => IntegerType
+    case ParquetPrimitiveTypeName.INT64 => LongType
+    case ParquetPrimitiveTypeName.INT96 => LongType // TODO: is there an equivalent?
+    case _ => sys.error(s"Unsupported parquet datatype")
+  }
+
+  def getSchema(schemaString : String) : MessageType = MessageTypeParser.parseMessageType(schemaString)
+
+  def convertToHiveSchema(schemaString : String) : List[FieldSchema] = {
+    val columns = getSchema(schemaString).getColumns
+    columns.map {
+      case (desc) => {
+        val ctype = toDataType(desc.getType)
+        val name = desc.getPath.toString
+        new FieldSchema(name, desc.getType.javaType.toString, "catalyst type: ctype.toString")
+      }
+    }.toList
+  }
+
+  def convertToAttributes(parquetSchema: MessageType) : List[Attribute] = {
+    parquetSchema.getColumns.map {
+      case (desc) => {
+        val ctype = toDataType(desc.getType)
+        val name = desc.getPath.toString
+        new AttributeReference(name, ctype, false)()
+      }
+    }.toList
+  }
 }
