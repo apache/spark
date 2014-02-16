@@ -42,6 +42,21 @@ Spark master you can launch R and then run
     library(SparkR)
     sc <- sparkR.init(master="local")
 
+To increase the memory used by the driver you can export the SPARK\_MEM
+environment variable. For example to use 1g, you can run
+
+    SPARK_MEM=1g ./sparkR
+
+In a cluster settting to set the amount of memory used by the executors you can
+pass the variable `spark.executor.memory` to the SparkContext constructor.
+
+    library(SparkR)
+    sc <- sparkR.init(master="spark://<master>:7077",
+                      sparkEnvir=list(spark.executor.memory="1g"))
+
+
+## Examples, Unit tests
+
 SparkR comes with several sample programs in the `examples` directory.
 To run one of them, use `./sparkR <filename> <args>`. For example:
 

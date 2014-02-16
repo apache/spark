@@ -1,12 +1,13 @@
 package edu.berkeley.cs.amplab.sparkr
 
 import java.io._
+import java.util.{Map => JMap}
 
 import scala.collection.JavaConversions._
 import scala.io.Source
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkEnv, Partition, SparkException, TaskContext}
+import org.apache.spark.{SparkEnv, Partition, SparkException, TaskContext, SparkConf}
 import org.apache.spark.api.java.{JavaSparkContext, JavaRDD, JavaPairRDD}
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -155,6 +156,23 @@ class RRDD[T: ClassTag](
 
 
 object RRDD {
+
+  def createSparkContext(
+      master: String,
+      appName: String,
+      sparkHome: String,
+      jars: Array[String],
+      vars: JMap[Object, Object]): JavaSparkContext = {
+
+    val sparkConf = new SparkConf().setMaster(master)
+                                   .setAppName(appName)
+                                   .setSparkHome(sparkHome)
+                                   .setJars(jars)
+    for ( (name, value) <- vars) {
+      sparkConf.set(name.asInstanceOf[String], value.asInstanceOf[String])
+    }
+    new JavaSparkContext(sparkConf)
+  }
 
   /**
    * Create an RRDD given a sequence of byte arrays. Used to create RRDD when `parallelize` is
