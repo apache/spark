@@ -44,7 +44,7 @@ sparkR.init <- function(
 
   hm <- .jnew("java/util/HashMap")
   for ( varname in names(sparkEnvir)) {
-    .jrcall(hm, "put", varname, sparkEnvir[[varname]])
+    hm$put(varname, sparkEnvir[[varname]])
   }
 
   assign(
