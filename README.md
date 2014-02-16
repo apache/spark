@@ -2,7 +2,7 @@ catalyst
 ========
 Catalyst is a functional framework for optimizing relational query plans.
 
-[![Build Status](https://databricks.ci.cloudbees.com/buildStatus/icon?job=Catalyst-Master)](https://databricks.ci.cloudbees.com/job/Catalyst-Master/)
+[![Build Status](https://magnum.travis-ci.com/databricks/catalyst.png?token=sNeje9KkkWMHYrVqko4t&branch=master)](https://magnum.travis-ci.com/databricks/catalyst)
 
 More documentation can be found in the project's [scaladoc](http://databricks.github.io/catalyst/latest/api/#catalyst.package)
 
@@ -61,30 +61,36 @@ Welcome to Scala version 2.10.3 (Java HotSpot(TM) 64-Bit Server VM, Java 1.7.0_4
 Type in expressions to have them evaluated.
 Type :help for more information.
 
-scala> val query = "SELECT * FROM (SELECT * FROM src) a".q
-query: catalyst.execution.TestShark.SharkSqlQuery =
+scala> scala> val query = sql("SELECT * FROM (SELECT * FROM src) a")
+query: org.apache.spark.sql.ExecutedQuery =
 SELECT * FROM (SELECT * FROM src) a
-== Logical Plan ==
-Project {key#0,value#1}
- Subquery a
-  Project {key#0,value#1}
-   MetastoreRelation default, src, None
+=== Query Plan ===
+Project [key#6:0.0,value#7:0.1]
+ HiveTableScan [key#6,value#7], (MetastoreRelation default, src, None), None
+```
 
-== Physical Plan ==
-Project {key#0,value#1}
- HiveTableScan {key#0,value#1}, (MetastoreRelation default, src, None)
+Query results are RDDs and can be operated as such.
+```
+scala> query.collect()
+res8: Array[org.apache.spark.sql.execution.Row] = Array([238,val_238], [86,val_86], [311,val_311]...
+```
+
+You can also build further queries on top of these RDDs using the query DSL.
+```
+scala> query.where('key === 100).toRdd.collect()
+res11: Array[org.apache.spark.sql.execution.Row] = Array([100,val_100], [100,val_100])
 ```
 
 From the console you can even write rules that transform query plans.  For example, the above query has redundant project operators that aren't doing anything.  This redundancy can be eliminated using the `transform` function that is available on all [`TreeNode`](http://databricks.github.io/catalyst/latest/api/#catalyst.trees.TreeNode) objects.
 ```scala
-scala> query.optimizedPlan
+scala> query.logicalPlan
 res1: catalyst.plans.logical.LogicalPlan = 
 Project {key#0,value#1}
  Project {key#0,value#1}
   MetastoreRelation default, src, None
 
 
-scala> res0.optimizedPlan transform {
+scala> query.logicalPlan transform {
      |   case Project(projectList, child) if projectList == child.output => child
      | }
 res2: catalyst.plans.logical.LogicalPlan = 

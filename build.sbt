@@ -1,82 +1,52 @@
-import AssemblyKeys._ // put this at the top of the file
 
-name := "catalyst"
+lazy val catalyst = Project("catalyst", file("catalyst"), settings = catalystSettings)
+lazy val core = Project("core", file("core"), settings = coreSettings).dependsOn(catalyst)
+lazy val shark = Project("shark", file("shark"), settings = sharkSettings).dependsOn(core)
 
-organization := "com.databricks"
+def sharedSettings = Defaults.defaultSettings ++ Seq(
+  organization := "org.apache.spark.sql",
+  version := "0.1-SNAPSHOT",
+  scalaVersion := "2.10.3",
+  scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
+  // Common Dependencies.
+  libraryDependencies ++= Seq(
+    "org.scalatest" %% "scalatest" % "1.9.1" % "test",
+    "com.typesafe" %% "scalalogging-slf4j" % "1.0.1")
+) ++ org.scalastyle.sbt.ScalastylePlugin.Settings
 
-version := "0.1-SNAPSHOT"
+def catalystSettings = sharedSettings ++ Seq(
+  name := "catalyst",
+  // The mechanics of rewriting expression ids to compare trees in some test cases makes
+  // assumptions about the the expression ids being contiguious.  Running tests in parallel breaks
+  // this non-deterministically.  TODO: FIX THIS.
+  parallelExecution in Test := false
+)
 
-scalaVersion := "2.10.3"
+def coreSettings = sharedSettings ++ Seq(
+  name := "core",
+  libraryDependencies += "org.apache.spark" %% "spark-core" % "0.9.0-incubating"
+)
 
-scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked")
-
-resolvers += "Local Maven Repository" at "file://"+Path.userHome.absolutePath+"/.m2/repository"
-
-// TODO: Remove when Spark 0.9.0 is released for real.
-resolvers += "SparkStaging" at "https://repository.apache.org/content/repositories/orgapachespark-1006/"
-
-libraryDependencies += "org.apache.spark" %% "spark-core" % "0.9.0-incubating"
-
-libraryDependencies += "catalyst" % "hive-golden" % "5" % "test" from "http://repository-databricks.forge.cloudbees.com/snapshot/catalystGolden5.jar"
-
-// Hive 0.10.0 relies on a weird version of jdo that is not published anywhere... Remove when we upgrade to 0.11.0
-libraryDependencies += "javax.jdo" % "jdo2-api" % "2.3-ec" from "http://www.datanucleus.org/downloads/maven2/javax/jdo/jdo2-api/2.3-ec/jdo2-api-2.3-ec.jar"
-
-libraryDependencies ++= Seq(
- "org.apache.hadoop" % "hadoop-client" % "1.0.4",
- "org.scalatest" %% "scalatest" % "1.9.1" % "test",
- //"net.hydromatic" % "optiq-core" % "0.4.16-SNAPSHOT",
- "org.apache.hive" % "hive-metastore" % "0.12.0",
- "org.apache.hive" % "hive-exec" % "0.12.0",
- "org.apache.hive" % "hive-serde" % "0.12.0",
-  "com.typesafe" %% "scalalogging-slf4j" % "1.0.1")
-
-// Multiple queries rely on the TestShark singleton.  See comments there for more details.
-parallelExecution in Test := false
-
-resolvers ++= Seq(
-    // For Optiq
-    "Conjars Repository" at "http://conjars.org/repo/",
-    // For jdo-2 required by Hive < 0.12.0
-    "Datanucleus Repository" at "http://www.datanucleus.org/downloads/maven2")
-
-resolvers += "Databees" at "http://repository-databricks.forge.cloudbees.com/snapshot/"
-
-initialCommands in console := """
-import catalyst.analysis._
-import catalyst.dsl._
-import catalyst.errors._
-import catalyst.expressions._
-import catalyst.frontend._
-import catalyst.plans.logical._
-import catalyst.rules._
-import catalyst.types._
-import catalyst.util._
-import catalyst.execution.TestShark._"""
-
-site.settings
-
-ghpages.settings
-
-git.remoteRepo := "git@github.com:databricks/catalyst.git"
-
-site.settings
-
-site.includeScaladoc()
-
-assemblySettings
-
-test in assembly := {}
-
-mergeStrategy in assembly := {
-  case m if m.toLowerCase.endsWith("manifest.mf") => MergeStrategy.discard
-  case m if m.toLowerCase.matches("meta-inf.*\\.sf$") => MergeStrategy.discard
-  case "log4j.properties" => MergeStrategy.discard
-  case m if m.toLowerCase.startsWith("meta-inf/services/") => MergeStrategy.filterDistinctLines
-  case "reference.conf" => MergeStrategy.concat
-  case _ => MergeStrategy.first
-}
-
-scalacOptions in (Compile, doc)  <++= (baseDirectory) map {
-  bd => Seq("-sourcepath", bd.getAbsolutePath, "-doc-source-url","https://github.com/databricks/catalyst/blob/master/€{FILE_PATH}.scala")
-}
+def sharkSettings = sharedSettings ++ Seq(
+  name := "shark",
+  libraryDependencies ++= Seq(
+    "org.apache.hadoop" % "hadoop-client" % "1.0.4",
+    "org.apache.hive" % "hive-metastore" % "0.12.0",
+    "org.apache.hive" % "hive-exec" % "0.12.0",
+    "org.apache.hive" % "hive-serde" % "0.12.0"),
+  // Multiple queries rely on the TestShark singleton.  See comments there for more details.
+  parallelExecution in Test := false,
+  initialCommands in console :=
+    """
+      |import org.apache.spark.sql.catalyst.analysis._
+      |import org.apache.spark.sql.catalyst.dsl._
+      |import org.apache.spark.sql.catalyst.errors._
+      |import org.apache.spark.sql.catalyst.expressions._
+      |import org.apache.spark.sql.catalyst.plans.logical._
+      |import org.apache.spark.sql.catalyst.rules._
+      |import org.apache.spark.sql.catalyst.types._
+      |import org.apache.spark.sql.catalyst.util._
+      |import org.apache.spark.sql.execution
+      |import org.apache.spark.sql.shark._
+      |import org.apache.spark.sql.shark.TestShark._""".stripMargin
+)

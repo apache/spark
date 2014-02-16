@@ -3,3 +3,10 @@
    - "2.10.3"
  jdk:
    - oraclejdk7
+ cache:
+   directories:
+     - $HOME/.m2
+     - $HOME/.ivy2
+     - $HOME/.sbt
+ script:
+   - "GIT_AUTHOR_NAME=\"Michael Armbrust\" GIT_AUTHOR_EMAIL=\"michael@databricks.com\" GIT_COMMITTER_NAME=\"Michael Armbrust\" GIT_COMMITTER_EMAIL=\"michael@databricks.com\" sbt ++$TRAVIS_SCALA_VERSION 'set scalacOptions += \"-Xfatal-warnings\"' test:compile test scalastyle"
