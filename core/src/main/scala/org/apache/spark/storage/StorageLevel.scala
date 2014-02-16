@@ -165,7 +165,7 @@ object StorageLevel {
     new StorageLevel(
       (json \ "Use Disk").extract[Boolean],
       (json \ "Use Memory").extract[Boolean],
-      (json \ "Deserialize").extract[Boolean],
+      (json \ "Deserialized").extract[Boolean],
       (json \ "Replication").extract[Int])
   }
 }

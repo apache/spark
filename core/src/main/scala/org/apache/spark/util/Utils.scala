@@ -899,8 +899,10 @@ private[spark] object Utils extends Logging {
   /** Convert a JSON object to a java Properties */
   def propertiesFromJson(json: JValue): Properties = {
     val properties = new Properties()
-    mapFromJson(json).map { case (k, v) =>
-      properties.setProperty(k, v)
+    if (json != JNothing) {
+      mapFromJson(json).map { case (k, v) =>
+        properties.setProperty(k, v)
+      }
     }
     properties
   }

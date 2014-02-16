@@ -40,29 +40,41 @@ private[spark] class SparkListenerBus extends Logging {
     override def run() {
       while (true) {
         val event = eventQueue.take
-        event match {
-          case stageSubmitted: SparkListenerStageSubmitted =>
-            sparkListeners.foreach(_.onStageSubmitted(stageSubmitted))
-          case stageCompleted: SparkListenerStageCompleted =>
-            sparkListeners.foreach(_.onStageCompleted(stageCompleted))
-          case jobStart: SparkListenerJobStart =>
-            sparkListeners.foreach(_.onJobStart(jobStart))
-          case jobEnd: SparkListenerJobEnd =>
-            sparkListeners.foreach(_.onJobEnd(jobEnd))
-          case taskStart: SparkListenerTaskStart =>
-            sparkListeners.foreach(_.onTaskStart(taskStart))
-          case taskGettingResult: SparkListenerTaskGettingResult =>
-            sparkListeners.foreach(_.onTaskGettingResult(taskGettingResult))
-          case taskEnd: SparkListenerTaskEnd =>
-            sparkListeners.foreach(_.onTaskEnd(taskEnd))
-          case SparkListenerShutdown =>
-            // Get out of the while loop and shutdown the daemon thread
-            return
-          case _ =>
+        val shutdown = postToListeners(event, sparkListeners)
+        if (shutdown) {
+          return
         }
       }
     }
   }.start()
+
+  /**
+   * Post an event to a given list of listeners. Return true if the shutdown event is posted.
+   */
+  private[spark] def postToListeners(event: SparkListenerEvent, listeners: Seq[SparkListener])
+    : Boolean = {
+    event match {
+      case stageSubmitted: SparkListenerStageSubmitted =>
+        listeners.foreach(_.onStageSubmitted(stageSubmitted))
+      case stageCompleted: SparkListenerStageCompleted =>
+        listeners.foreach(_.onStageCompleted(stageCompleted))
+      case jobStart: SparkListenerJobStart =>
+        listeners.foreach(_.onJobStart(jobStart))
+      case jobEnd: SparkListenerJobEnd =>
+        listeners.foreach(_.onJobEnd(jobEnd))
+      case taskStart: SparkListenerTaskStart =>
+        listeners.foreach(_.onTaskStart(taskStart))
+      case taskGettingResult: SparkListenerTaskGettingResult =>
+        listeners.foreach(_.onTaskGettingResult(taskGettingResult))
+      case taskEnd: SparkListenerTaskEnd =>
+        listeners.foreach(_.onTaskEnd(taskEnd))
+      case SparkListenerShutdown =>
+        // Get out of the while loop and shutdown the daemon thread
+        return true
+      case _ =>
+    }
+    false
+  }
 
   def addListener(listener: SparkListener) {
     sparkListeners += listener

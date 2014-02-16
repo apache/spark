@@ -17,6 +17,10 @@
 
 package org.apache.spark.ui
 
+import java.io.{FileInputStream, File}
+
+import scala.io.Source
+
 import org.eclipse.jetty.server.{Handler, Server}
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
@@ -27,21 +31,26 @@ import org.apache.spark.ui.jobs.JobProgressUI
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{FileLogger, Utils}
 import org.apache.spark.scheduler._
-
-import net.liftweb.json.JsonAST._
 import org.apache.spark.storage.StorageStatus
-import scala.Some
-import scala.Some
-import org.apache.spark.scheduler.SparkListenerStorageStatusFetch
-import scala.Some
-import org.apache.spark.scheduler.SparkListenerJobEnd
-import org.apache.spark.scheduler.SparkListenerStageSubmitted
-import org.apache.spark.scheduler.SparkListenerJobStart
+
+import net.liftweb.json._
+import net.liftweb.json.JsonAST.compactRender
+
+import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 /** Top level user interface for Spark */
-private[spark] class SparkUI(sc: SparkContext) extends Logging {
+private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extends Logging {
   val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
-  val port = sc.conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
+  val port = if (!fromDisk) {
+      sc.conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
+    } else {
+      // While each context has only one live SparkUI, it can have many persisted ones
+      // For persisted UI's, climb upwards from the configured / default port
+      val p = SparkUI.lastPersistedPort.map(_ + 1)
+        .getOrElse(sc.conf.get("spark.ui.persisted.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt)
+      SparkUI.lastPersistedPort = Some(p)
+      p
+    }
   var boundPort: Option[Int] = None
   var server: Option[Server] = None
 
@@ -88,6 +97,65 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
 
   def stop() {
     server.foreach(_.stop())
+    logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
+  }
+
+  /**
+   * Reconstruct a SparkUI previously persisted from disk from the given path.
+   * Return true if all required log files are found.
+   */
+  private[spark] def renderFromDisk(dirPath: String): Boolean = {
+    var success = true
+    if (fromDisk) {
+      val logDir = new File(dirPath)
+      if (!logDir.exists || !logDir.isDirectory) {
+        logWarning("Given invalid directory %s when rendering persisted Spark Web UI!"
+          .format(dirPath))
+        return false
+      }
+      val nameToListenerMap = Map[String, SparkListener](
+        "job-progress-ui" -> jobs.listener,
+        "block-manager-ui" -> storage.listener,
+        "environment-ui" -> env.listener,
+        "executors-ui" -> exec.listener
+      )
+      nameToListenerMap.map { case (name, listener) =>
+        val path = "%s/%s/".format(dirPath.stripSuffix("/"), name)
+        val dir = new File(path)
+        if (dir.exists && dir.isDirectory) {
+          val files = dir.listFiles
+          Option(files).foreach { files => files.foreach(processPersistedEventLog(_, listener)) }
+        } else {
+          logWarning("%s not found when rendering persisted Spark Web UI!".format(path))
+          success = false
+        }
+      }
+    }
+    success
+  }
+
+  /**
+   * Register each event logged in the given file with the corresponding listener in order
+   */
+  private def processPersistedEventLog(file: File, listener: SparkListener) = {
+    val fileStream = new FileInputStream(file)
+    val bufferedStream = new FastBufferedInputStream(fileStream)
+    var currentLine = ""
+    try {
+      val lines = Source.fromInputStream(bufferedStream).getLines()
+      lines.foreach { line =>
+        currentLine = line
+        val listeners = Seq(listener)
+        val event = SparkListenerEvent.fromJson(parse(line))
+        sc.dagScheduler.listenerBus.postToListeners(event, listeners)
+      }
+    } catch {
+      case e: Exception =>
+        logWarning("Exception in parsing UI logs for %s".format(file.getAbsolutePath))
+        logWarning(currentLine + "\n")
+        logDebug(e.getMessage + e.getStackTraceString)
+    }
+    bufferedStream.close()
   }
 
   private[spark] def appUIAddress = host + ":" + boundPort.getOrElse("-1")
@@ -96,7 +164,11 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
 
 private[spark] object SparkUI {
   val DEFAULT_PORT = "4040"
+  val DEFAULT_PERSISTED_PORT = "14040"
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+
+  // Keep track of the port of the last persisted UI
+  var lastPersistedPort: Option[Int] = None
 }
 
 /** A SparkListener for logging events, one file per job */

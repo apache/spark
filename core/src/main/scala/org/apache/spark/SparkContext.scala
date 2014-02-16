@@ -24,9 +24,9 @@ import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
-
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.reflect.{ClassTag, classTag}
+import scala.io.Source
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -157,6 +157,9 @@ class SparkContext(
   // Initialize the Spark UI
   private[spark] val ui = new SparkUI(this)
   ui.bind()
+
+  // Keeps track of all previously persisted UI rendered by this SparkContext
+  private[spark] val persistedUIs = HashMap[Int, SparkUI]()
 
   val startTime = System.currentTimeMillis()
 
@@ -566,11 +569,43 @@ class SparkContext(
       .flatMap(x => Utils.deserialize[Array[T]](x._2.getBytes))
   }
 
-
   protected[spark] def checkpointFile[T: ClassTag](
       path: String
     ): RDD[T] = {
     new CheckpointRDD[T](this, path)
+  }
+
+  /**
+   * Render a previously persisted SparkUI from a set of event logs
+   * @param dirPath Path of directory containing the event logs
+   */
+  def renderPersistedUI(dirPath: String) = {
+    val oldUI = new SparkUI(this, fromDisk = true)
+    oldUI.start()
+    val success = oldUI.renderFromDisk(dirPath)
+    if (success) {
+      oldUI.bind()
+      persistedUIs(oldUI.boundPort.get) = oldUI
+    }
+  }
+
+  /**
+   * Return a list of ports bound by persisted UI's
+   */
+  def getPersistedUIPorts = persistedUIs.keys.toSeq
+
+  /**
+   * Stop the persisted UI bound to the given port, if any
+   */
+  def stopPersistedUI(port: Int) = {
+    persistedUIs.remove(port).foreach(_.stop())
+  }
+
+  /**
+   * Stop all persisted UI's rendered in this context
+   */
+  def stopAllPersistedUIs() = {
+    persistedUIs.foreach { case (port, _) => stopPersistedUI(port) }
   }
 
   /** Build the union of a list of RDDs. */
@@ -779,6 +814,7 @@ class SparkContext(
   /** Shut down the SparkContext. */
   def stop() {
     ui.stop()
+    stopAllPersistedUIs()
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler

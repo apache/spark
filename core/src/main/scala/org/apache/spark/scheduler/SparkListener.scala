@@ -76,11 +76,10 @@ case class SparkListenerTaskEnd(
     taskMetrics: TaskMetrics)
   extends SparkListenerEvent {
   override def toJson = {
-    val _reason = Utils.getFormattedClassName(reason)
     super.toJson ~
     ("Stage ID" -> stageId) ~
     ("Task Type" -> taskType) ~
-    ("Task End Reason" -> _reason) ~
+    ("Task End Reason" -> reason.toJson) ~
     ("Task Info" -> taskInfo.toJson) ~
     ("Task Metrics" -> taskMetrics.toJson)
   }
