@@ -70,7 +70,7 @@ def parse_args():
            "slaves across multiple (an additional $0.01/Gb for bandwidth" +
            "between zones applies)")
   parser.add_option("-a", "--ami", help="Amazon Machine Image ID to use")
-  parser.add_option("-v", "--spark-version", default="0.8.0",
+  parser.add_option("-v", "--spark-version", default="0.9.0",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
   parser.add_option("--spark-git-repo",
       default="https://github.com/apache/incubator-spark",
@@ -157,7 +157,7 @@ def is_active(instance):
 
 # Return correct versions of Spark and Shark, given the supplied Spark version
 def get_spark_shark_version(opts):
-  spark_shark_map = {"0.7.3": "0.7.1", "0.8.0": "0.8.0"}
+  spark_shark_map = {"0.7.3": "0.7.1", "0.8.0": "0.8.0", "0.8.1": "0.8.1", "0.9.0": "0.9.0"}
   version = opts.spark_version.replace("v", "")
   if version not in spark_shark_map:
     print >> stderr, "Don't know about Spark version: %s" % version
@@ -189,7 +189,12 @@ def get_spark_ami(opts):
     "i2.xlarge":   "hvm",
     "i2.2xlarge":  "hvm",
     "i2.4xlarge":  "hvm",
-    "i2.8xlarge":  "hvm"
+    "i2.8xlarge":  "hvm",
+    "c3.large":    "pvm",
+    "c3.xlarge":   "pvm",
+    "c3.2xlarge":  "pvm",
+    "c3.4xlarge":  "pvm",
+    "c3.8xlarge":  "pvm"
   }
   if opts.instance_type in instance_types:
     instance_type = instance_types[opts.instance_type]
@@ -486,7 +491,12 @@ def get_num_disks(instance_type):
     "i2.xlarge":   1,
     "i2.2xlarge":  2,
     "i2.4xlarge":  4,
-    "i2.8xlarge":  8
+    "i2.8xlarge":  8,
+    "c3.large":    2,
+    "c3.xlarge":   2,
+    "c3.2xlarge":  2,
+    "c3.4xlarge":  2,
+    "c3.8xlarge":  2
   }
   if instance_type in disks_by_instance:
     return disks_by_instance[instance_type]
