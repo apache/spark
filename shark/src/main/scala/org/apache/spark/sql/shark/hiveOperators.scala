@@ -186,7 +186,7 @@ case class InsertIntoHiveTable(
       valueClass: Class[_],
       fileSinkConf: FileSinkDesc,
       conf: JobConf,
-      codec: Option[Class[_ <: CompressionCodec]] = None) {
+      isCompressed: Boolean) {
     if (valueClass == null) {
       throw new SparkException("Output value class not set")
     }
@@ -198,15 +198,14 @@ case class InsertIntoHiveTable(
     // TODO: Should we uncomment this for Scala 2.10?
     // conf.setOutputFormat(outputFormatClass)
     conf.set("mapred.output.format.class", fileSinkConf.getTableInfo.getOutputFileFormatClassName)
-    for (c <- codec) {
-      conf.setCompressMapOutput(true)
+    if (isCompressed) {
+      // Please note that isCompressed, "mapred.output.compress", "mapred.output.compression.codec",
+      // and "mapred.output.compression.type" have no impact on ORC because it uses table properties
+      // to store compression information.
       conf.set("mapred.output.compress", "true")
-      conf.setMapOutputCompressorClass(c)
-      conf.set("mapred.output.compression.codec", c.getCanonicalName)
-      conf.set("mapred.output.compression.type", CompressionType.BLOCK.toString)
       fileSinkConf.setCompressed(true)
-      fileSinkConf.setCompressCodec(c.getCanonicalName)
-      fileSinkConf.setCompressType(CompressionType.BLOCK.toString)
+      fileSinkConf.setCompressCodec(conf.get("mapred.output.compression.codec"))
+      fileSinkConf.setCompressType(conf.get("mapred.output.compression.type"))
     }
     conf.setOutputCommitter(classOf[FileOutputCommitter])
     FileOutputFormat.setOutputPath(
@@ -273,16 +272,14 @@ case class InsertIntoHiveTable(
       }
     }
 
-    // TODO: Correctly set codec.
-    // ORC stores compression information in table properties.
-    // While, there are other formats (e.g. RCFile) that rely on
-    // hive configurations to store compression information.
+    // ORC stores compression information in table properties. While, there are other formats
+    // (e.g. RCFile) that rely on hadoop configurations to store compression information.
     saveAsHiveFile(
       rdd,
       outputClass,
       fileSinkConf,
       new JobConf(sc.hiveconf),
-      codec = None)
+      sc.hiveconf.getBoolean("hive.exec.compress.output", false))
 
     // TODO: Correctly set replace and holdDDLTime.
     // TODO: Handle loading into partitioned tables.
