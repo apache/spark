@@ -18,9 +18,10 @@ import org.apache.hadoop.hive.ql.plan.FileSinkDesc
  * Internal helper class that saves an RDD using a Hive OutputFormat.
  * It is based on [[SparkHadoopWriter]].
  */
+protected
 class SharkHadoopWriter(
-  @transient jobConf: JobConf,
-  fileSinkConf: FileSinkDesc)
+    @transient jobConf: JobConf,
+    fileSinkConf: FileSinkDesc)
   extends Logging
   with SparkHadoopMapRedUtil
   with Serializable {
