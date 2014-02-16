@@ -5,6 +5,7 @@ import scala.collection.JavaConversions._
 
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
+import org.apache.hadoop.hive.ql.plan.PlanUtils
 
 import catalyst.analysis._
 import catalyst.expressions._
@@ -669,9 +670,14 @@ object HiveQl {
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
         case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) =>
-          key -> Some(value)
+          key -> Some(PlanUtils.stripQuotes(value))
         case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => key -> None
       }.toMap).getOrElse(Map.empty)
+
+      if (partitionKeys.values.exists(p => p.isEmpty)) {
+        throw new NotImplementedError(s"Do not support INSERT INTO/OVERWRITE with" +
+          s"dynamic partitioning.")
+      }
 
       InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query, overwrite)
 

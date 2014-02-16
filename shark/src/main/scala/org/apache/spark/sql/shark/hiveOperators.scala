@@ -2,6 +2,7 @@ package org.apache.spark.sql
 package shark
 
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
+import org.apache.hadoop.hive.metastore.MetaStoreUtils
 import org.apache.hadoop.hive.ql.Context
 import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Hive}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
@@ -17,13 +18,13 @@ import org.apache.hadoop.mapred._
 
 import catalyst.expressions._
 import catalyst.types.{BooleanType, DataType}
-import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.spark.{TaskContext, SparkException}
-import org.apache.hadoop.io.SequenceFile.CompressionType
-import scala.Some
 import catalyst.expressions.Cast
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution._
+
+import scala.Some
+import scala.collection.immutable.ListMap
 
 /* Implicits */
 import scala.collection.JavaConversions._
@@ -277,21 +278,43 @@ case class InsertIntoHiveTable(
 
     // ORC stores compression information in table properties. While, there are other formats
     // (e.g. RCFile) that rely on hadoop configurations to store compression information.
+    val jobConf = new JobConf(sc.hiveconf)
     saveAsHiveFile(
       rdd,
       outputClass,
       fileSinkConf,
-      new JobConf(sc.hiveconf),
+      jobConf,
       sc.hiveconf.getBoolean("hive.exec.compress.output", false))
 
-    // TODO: Correctly set holdDDLTime.
-    // TODO: Handle loading into partitioned tables.
-    db.loadTable(
-      new Path(fileSinkConf.getDirName),
-      // Have to construct the format of dbname.tablename.
-      s"${table.databaseName}.${table.tableName}",
-      overwrite,
-      false)
+    // TODO: Handle dynamic partitioning.
+    val outputPath = FileOutputFormat.getOutputPath(jobConf)
+    // Have to construct the format of dbname.tablename.
+    val qualifiedTableName = s"${table.databaseName}.${table.tableName}"
+    if (partition.nonEmpty) {
+      val partitionSpec = ListMap(partition.toSeq.sortBy(_._1):_*).map {
+        case (key, Some(value)) => key -> value
+        case (key, None) => key -> "" // Should not reach here right now.
+      }
+      val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols(), partitionSpec)
+      db.validatePartitionNameCharacters(partVals)
+      // TODO: Correctly set holdDDLTime, inheritTableSpecs, and isSkewedStoreAsSubdir
+      // (the last three parameters).
+      db.loadPartition(
+        outputPath,
+        qualifiedTableName,
+        partitionSpec,
+        overwrite,
+        false,
+        true,
+        false)
+    } else {
+      // TODO: Correctly set holdDDLTime (the last parameter).
+      db.loadTable(
+        outputPath,
+        qualifiedTableName,
+        overwrite,
+        false)
+    }
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which
