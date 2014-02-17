@@ -16,13 +16,12 @@
  */
 package org.apache.spark.mllib.tree.model
 
-class InformationGainStats(val gain : Double,
-                           val impurity: Double,
-                           val leftImpurity : Double,
-                           //val leftSamples : Long,
-                           val rightImpurity : Double,
-                           //val rightSamples : Long
-                           val predict : Double) extends Serializable {
+class InformationGainStats(
+    val gain : Double,
+    val impurity: Double,
+    val leftImpurity : Double,
+    val rightImpurity : Double,
+    val predict : Double) extends Serializable {
 
   override def toString = {
     "gain = %f, impurity = %f, left impurity = %f, right impurity = %f, predict = %f"

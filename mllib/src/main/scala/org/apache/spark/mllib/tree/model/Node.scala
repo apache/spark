@@ -29,11 +29,13 @@ class Node ( val id : Int,
              val stats : Option[InformationGainStats]
              ) extends Serializable with Logging{
 
-  override def toString = "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", split = " + split + ", stats = " + stats
+  override def toString = "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
+    "split = " + split + ", stats = " + stats
 
   def build(nodes : Array[Node]) : Unit = {
 
-    logDebug("building node " + id + " at level " + (scala.math.log(id + 1)/scala.math.log(2)).toInt )
+    logDebug("building node " + id + " at level " +
+      (scala.math.log(id + 1)/scala.math.log(2)).toInt )
     logDebug("id = " + id + ", split = " + split)
     logDebug("stats = " + stats)
     logDebug("predict = " + predict)

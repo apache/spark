@@ -31,5 +31,7 @@ object Gini extends Impurity {
     }
   }
 
-  def calculate(count: Double, sum: Double, sumSquares: Double): Double = throw new OperationNotSupportedException("Gini.calculate")
+  def calculate(count: Double, sum: Double, sumSquares: Double): Double =
+    throw new OperationNotSupportedException("Gini.calculate")
+
 }

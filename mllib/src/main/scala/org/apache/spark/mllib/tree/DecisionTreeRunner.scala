@@ -29,7 +29,7 @@ import org.apache.spark.mllib.tree.configuration.Algo._
 object DecisionTreeRunner extends Logging {
 
   val usage = """
-    Usage: DecisionTreeRunner <master>[slices] --algo <Classification,Regression> --trainDataDir path --testDataDir path --maxDepth num [--impurity <Gini,Entropy,Variance>] [--maxBins num]
+    Usage: DecisionTreeRunner<master>[slices] --algo <Classification,Regression> --trainDataDir path --testDataDir path --maxDepth num [--impurity <Gini,Entropy,Variance>] [--maxBins num]
               """
 
 
@@ -132,7 +132,8 @@ object DecisionTreeRunner extends Logging {
 
   //TODO: Make these generic MLTable metrics
   def meanSquaredError(tree : DecisionTreeModel, data : RDD[LabeledPoint]) : Double = {
-    val meanSumOfSquares = data.map(y => (tree.predict(y.features) - y.label)*(tree.predict(y.features) - y.label)).mean()
+    val meanSumOfSquares =
+      data.map(y => (tree.predict(y.features) - y.label)*(tree.predict(y.features) - y.label)).mean()
     meanSumOfSquares
   }
 

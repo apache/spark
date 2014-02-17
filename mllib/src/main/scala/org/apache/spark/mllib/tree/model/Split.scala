@@ -18,14 +18,23 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 
-case class Split(feature: Int, threshold : Double, featureType : FeatureType, categories : List[Double]){
+case class Split(
+    feature: Int,
+    threshold : Double,
+    featureType : FeatureType,
+    categories : List[Double]){
+
   override def toString =
-    "Feature = " + feature + ", threshold = " + threshold + ", featureType =  " + featureType + ", categories = " + categories
+    "Feature = " + feature + ", threshold = " + threshold + ", featureType =  " + featureType +
+      ", categories = " + categories
 }
 
-class DummyLowSplit(feature: Int, kind : FeatureType) extends Split(feature, Double.MinValue, kind, List())
+class DummyLowSplit(feature: Int, kind : FeatureType)
+  extends Split(feature, Double.MinValue, kind, List())
 
-class DummyHighSplit(feature: Int, kind : FeatureType) extends Split(feature, Double.MaxValue, kind, List())
+class DummyHighSplit(feature: Int, kind : FeatureType)
+  extends Split(feature, Double.MaxValue, kind, List())
 
-class DummyCategoricalSplit(feature: Int, kind : FeatureType) extends Split(feature, Double.MaxValue, kind, List())
+class DummyCategoricalSplit(feature: Int, kind : FeatureType)
+  extends Split(feature, Double.MaxValue, kind, List())
 
