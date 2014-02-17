@@ -670,8 +670,8 @@ object HiveQl {
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
         case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) =>
-          key -> Some(PlanUtils.stripQuotes(value))
-        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => key -> None
+          cleanIdentifier(key) -> Some(PlanUtils.stripQuotes(value))
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => cleanIdentifier(key) -> None
       }.toMap).getOrElse(Map.empty)
 
       if (partitionKeys.values.exists(p => p.isEmpty)) {
