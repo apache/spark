@@ -169,7 +169,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     case RegisterWorker(id, workerHost, workerPort, cores, memory, workerUiPort, publicAddress) =>
     {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
-        host, workerPort, cores, Utils.megabytesToString(memory)))
+        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
       } else if (idToWorker.contains(id)) {
