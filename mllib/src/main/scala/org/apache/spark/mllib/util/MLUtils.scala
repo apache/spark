@@ -22,7 +22,7 @@ import breeze.linalg.{Vector => BV, DenseVector => BDV, SparseVector => BSV,
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import scala.reflect._
+import scala.reflect.ClassTag
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
@@ -181,21 +181,17 @@ object MLUtils {
     dataStr.saveAsTextFile(dir)
   }
 
-  def meanSquaredError(a: Double, b: Double): Double = {
-    (a-b)*(a-b)
-  }
-
   /**
    * Return a k element list of pairs of RDDs with the first element of each pair
-   * containing a unique 1/Kth of the data and the second element contain the composite of that.
+   * containing a unique 1/Kth of the data and the second element contain the compliment of that.
    */
-  def kFoldRdds[T : ClassTag](rdd: RDD[T], folds: Int, seed: Int): List[Pair[RDD[T], RDD[T]]] = {
+  def kFold[T : ClassTag](rdd: RDD[T], folds: Int, seed: Int): List[Pair[RDD[T], RDD[T]]] = {
     val foldsF = folds.toFloat
     1.to(folds).map(fold => ((
-      new PartitionwiseSampledRDD(rdd, new BernoulliSampler[T]((fold-1)/foldsF,fold/foldsF, false),
-        seed),
-      new PartitionwiseSampledRDD(rdd, new BernoulliSampler[T]((fold-1)/foldsF,fold/foldsF, true),
-        seed)
+      new PartitionwiseSampledRDD(rdd, new BernoulliSampler[T]((fold-1)/foldsF,fold/foldsF,
+        complement = false), seed),
+      new PartitionwiseSampledRDD(rdd, new BernoulliSampler[T]((fold-1)/foldsF,fold/foldsF,
+        complement = true), seed)
     ))).toList
   }
 

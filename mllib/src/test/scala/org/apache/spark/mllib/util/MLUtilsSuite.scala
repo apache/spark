@@ -18,6 +18,8 @@
 package org.apache.spark.mllib.util
 
 import java.io.File
+import scala.math
+import scala.util.Random
 
 import org.scalatest.FunSuite
 
@@ -136,19 +138,30 @@ class MLUtilsSuite extends FunSuite with LocalSparkContext {
     new LinearRegressionModel(Array(1.0), 0)
   }
 
-  test("kfoldRdd") {
+  test("kFold") {
     val data = sc.parallelize(1 to 100, 2)
     val collectedData = data.collect().sorted
-    val twoFoldedRdd = MLUtils.kFoldRdds(data, 2, 1)
+    val twoFoldedRdd = MLUtils.kFold(data, 2, 1)
     assert(twoFoldedRdd(0)._1.collect().sorted === twoFoldedRdd(1)._2.collect().sorted)
     assert(twoFoldedRdd(0)._2.collect().sorted === twoFoldedRdd(1)._1.collect().sorted)
     for (folds <- 2 to 10) {
       for (seed <- 1 to 5) {
-        val foldedRdds = MLUtils.kFoldRdds(data, folds, seed)
+        val foldedRdds = MLUtils.kFold(data, folds, seed)
         assert(foldedRdds.size === folds)
         foldedRdds.map{case (test, train) =>
           val result = test.union(train).collect().sorted
-          assert(test.collect().size > 0, "Non empty test data")
+          val testSize = test.collect().size.toFloat
+          assert(testSize > 0, "Non empty test data")
+          val p = 1 / folds.toFloat
+          // Within 3 standard deviations of the mean
+          val range = 3 * math.sqrt(100 * p * (1-p))
+          val expected = 100 * p
+          val lowerBound = expected - range
+          val upperBound = expected + range
+          assert(testSize > lowerBound,
+            "Test data (" + testSize + ") smaller than expected (" + lowerBound +")" )
+          assert(testSize < upperBound,
+            "Test data (" + testSize + ") larger than expected (" + upperBound +")" )
           assert(train.collect().size > 0, "Non empty training data")
           assert(result ===  collectedData,
             "Each training+test set combined contains all of the data")
