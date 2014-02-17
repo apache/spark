@@ -506,7 +506,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "sort_merge_join_desc_6",
     "sort_merge_join_desc_7",
     "stats0",
-    "stats20",
     "stats_empty_partition",
     "subq2",
     "tablename_with_select",
