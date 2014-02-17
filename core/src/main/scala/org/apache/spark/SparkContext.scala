@@ -173,6 +173,11 @@ class SparkContext(
     .map(Utils.memoryStringToMb)
     .getOrElse(512)
 
+  if (!conf.contains("spark.executor.memory") && sys.env.contains("SPARK_MEM")) {
+    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
+      "deprecated, instead use spark.executor.memory")
+  }
+
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
   // Note: SPARK_MEM is included for Mesos, but overwritten for standalone mode in ExecutorRunner

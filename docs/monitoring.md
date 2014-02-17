@@ -19,7 +19,7 @@ You can access this interface by simply opening `http://<driver-node>:4040` in a
 If multiple SparkContexts are running on the same host, they will bind to succesive ports
 beginning with 4040 (4041, 4042, etc).
 
-Spark's Standlone Mode cluster manager also has its own 
+Spark's Standalone Mode cluster manager also has its own
 [web UI](spark-standalone.html#monitoring-and-logging). 
 
 Note that in both of these UIs, the tables are sortable by clicking their headers,
@@ -31,7 +31,7 @@ Spark has a configurable metrics system based on the
 [Coda Hale Metrics Library](http://metrics.codahale.com/). 
 This allows users to report Spark metrics to a variety of sinks including HTTP, JMX, and CSV 
 files. The metrics system is configured via a configuration file that Spark expects to be present 
-at `$SPARK_HOME/conf/metrics.conf`. A custom file location can be specified via the 
+at `$SPARK_HOME/conf/metrics.properties`. A custom file location can be specified via the 
 `spark.metrics.conf` [configuration property](configuration.html#spark-properties).
 Spark's metrics are decoupled into different 
 _instances_ corresponding to Spark components. Within each instance, you can configure a 
@@ -54,7 +54,7 @@ Each instance can report to zero or more _sinks_. Sinks are contained in the
 * `GraphiteSink`: Sends metrics to a Graphite node.
 
 The syntax of the metrics configuration file is defined in an example configuration file, 
-`$SPARK_HOME/conf/metrics.conf.template`.
+`$SPARK_HOME/conf/metrics.properties.template`.
 
 # Advanced Instrumentation
 

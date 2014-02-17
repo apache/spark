@@ -873,7 +873,7 @@ abstract class RDD[T: ClassTag](
    * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
    */
   def zipWithUniqueId(): RDD[(T, Long)] = {
-    val n = this.partitions.size
+    val n = this.partitions.size.toLong
     this.mapPartitionsWithIndex { case (k, iter) =>
       iter.zipWithIndex.map { case (item, i) =>
         (item, i * n + k)
