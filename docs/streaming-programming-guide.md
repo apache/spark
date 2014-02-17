@@ -428,9 +428,9 @@ KafkaUtils.createStream(javaStreamingContext, kafkaParams, ...);
 </div>
 </div>
 
-For more details on these additional sources, see the corresponding [API documentation]
-(#where-to-go-from-here). Furthermore, you can also implement your own custom receiver
-for your sources. See the [Custom Receiver Guide](streaming-custom-receivers.html).
+For more details on these additional sources, see the corresponding [API documentation](#where-to-go-from-here).
+Furthermore, you can also implement your own custom receiver for your sources. See the
+[Custom Receiver Guide](streaming-custom-receivers.html).
 
 ## Operations
 There are two kinds of DStream operations - _transformations_ and _output operations_. Similar to
@@ -520,9 +520,8 @@ The last two transformations are worth highlighting again.
 
 <h4>UpdateStateByKey Operation</h4>
 
-The `updateStateByKey` operation allows
-you to main arbitrary stateful computation, where you want to maintain some state data and
-continuously update it with new information. To use this, you will have to do two steps.
+The `updateStateByKey` operation allows you to maintain arbitrary state while continuously updating
+it with new information. To use this, you will have to do two steps.
 
 1. Define the state - The state can be of arbitrary data type.
 1. Define the state update function - Specify with a function how to update the state using the
@@ -925,7 +924,7 @@ exception saying so.
 ## Monitoring
 Besides Spark's in-built [monitoring capabilities](monitoring.html),
 the progress of a Spark Streaming program can also be monitored using the [StreamingListener]
-(streaming/index.html#org.apache.spark.scheduler.StreamingListener) interface,
+(api/streaming/index.html#org.apache.spark.scheduler.StreamingListener) interface,
 which allows you to get statistics of batch processing times, queueing delays,
 and total end-to-end delays. Note that this is still an experimental API and it is likely to be
 improved upon (i.e., more information reported) in the future.
@@ -1000,11 +999,11 @@ Since all data is modeled as RDDs with their lineage of deterministic operations
  for output operations.
 
 ## Failure of the Driver Node
-To allows a streaming application to operate 24/7, Spark Streaming allows a streaming computation
+For a streaming application to operate 24/7, Spark Streaming allows a streaming computation
 to be resumed even after the failure of the driver node. Spark Streaming periodically writes the
 metadata information of the DStreams setup through the `StreamingContext` to a
 HDFS directory (can be any Hadoop-compatible filesystem). This periodic
-*checkpointing* can be enabled by setting a the checkpoint
+*checkpointing* can be enabled by setting the checkpoint
 directory using `ssc.checkpoint(<checkpoint directory>)` as described
 [earlier](#rdd-checkpointing). On failure of the driver node,
 the lost `StreamingContext` can be recovered from this information, and restarted.
@@ -1105,8 +1104,8 @@ classes. So, if you are using `getOrCreate`, then make sure that the checkpoint 
 explicitly deleted every time recompiled code needs to be launched.
 
 This failure recovery can be done automatically using Spark's
-[standalone cluster mode](spark-standalone.html), which allows any Spark
-application's driver to be as well as, ensures automatic restart of the driver on failure (see
+[standalone cluster mode](spark-standalone.html), which allows the driver of any Spark application
+to be launched within the cluster and be restarted on failure (see
 [supervise mode](spark-standalone.html#launching-applications-inside-the-cluster)). This can be
 tested locally by launching the above example using the supervise mode in a
 local standalone cluster and killing the java process running the driver (will be shown as
@@ -1123,7 +1122,7 @@ There are two different failure behaviors based on which input sources are used.
 1. _Using HDFS files as input source_ - Since the data is reliably stored on HDFS, all data can
 re-computed and therefore no data will be lost due to any failure.
 1. _Using any input source that receives data through a network_ - The received input data is
-replicated in memory to multiple nodes. Since, all the data in the Spark worker's memory is lost
+replicated in memory to multiple nodes. Since all the data in the Spark worker's memory is lost
 when the Spark driver fails, the past input data will not be accessible and driver recovers.
 Hence, if stateful and window-based operations are used
 (like `updateStateByKey`, `window`, `countByValueAndWindow`, etc.), then the intermediate state
@@ -1133,11 +1132,11 @@ In future releases, we will support full recoverability for all input sources. N
 non-stateful transformations like `map`, `count`, and `reduceByKey`, with _all_ input streams,
 the system, upon restarting, will continue to receive and process new data.
 
-To better understand the behavior of the system under driver failure with a HDFS source, lets
+To better understand the behavior of the system under driver failure with a HDFS source, let's
 consider what will happen with a file input stream. Specifically, in the case of the file input
 stream, it will correctly identify new files that were created while the driver was down and
 process them in the same way as it would have if the driver had not failed. To explain further
-in the case of file input stream, we shall use an example. Lets say, files are being generated
+in the case of file input stream, we shall use an example. Let's say, files are being generated
 every second, and a Spark Streaming program reads every new file and output the number of lines
 in the file. This is what the sequence of outputs would be with and without a driver failure.
 
