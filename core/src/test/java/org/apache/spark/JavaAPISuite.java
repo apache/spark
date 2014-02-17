@@ -431,6 +431,8 @@ public class JavaAPISuite implements Serializable {
       }
     }, false);
     Assert.assertEquals(0, rddByIndex.first().intValue());
+    Integer[] values = {0, 2, 6, 12, 20};
+    Assert.assertEquals(Arrays.asList(values), rddByIndex.collect());
   }
 
 
