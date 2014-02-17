@@ -54,20 +54,23 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
   var boundPort: Option[Int] = None
   var server: Option[Server] = None
 
-  val handlers = Seq[(String, Handler)](
+  private val handlers = Seq[(String, Handler)](
     ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
     ("/", createRedirectHandler("/stages"))
   )
-  val storage = new BlockManagerUI(sc)
-  val jobs = new JobProgressUI(sc)
-  val env = new EnvironmentUI(sc)
-  val exec = new ExecutorsUI(sc)
+  private val storage = new BlockManagerUI(sc)
+  private val jobs = new JobProgressUI(sc)
+  private val env = new EnvironmentUI(sc)
+  private val exec = new ExecutorsUI(sc)
 
   // Add MetricsServlet handlers by default
-  val metricsServletHandlers = SparkEnv.get.metricsSystem.getServletHandlers
+  private val metricsServletHandlers = SparkEnv.get.metricsSystem.getServletHandlers
 
-  val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
+  private val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
     exec.getHandlers ++ metricsServletHandlers ++ handlers
+
+  // Listeners are not ready until SparkUI has started
+  private def listeners = Seq(storage.listener, jobs.listener, env.listener, exec.listener)
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {
@@ -104,7 +107,7 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
    * Reconstruct a SparkUI previously persisted from disk from the given path.
    * Return true if all required log files are found.
    */
-  private[spark] def renderFromDisk(dirPath: String): Boolean = {
+  def renderFromDisk(dirPath: String): Boolean = {
     var success = true
     if (fromDisk) {
       val logDir = new File(dirPath)
@@ -113,14 +116,8 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
           .format(dirPath))
         return false
       }
-      val nameToListenerMap = Map[String, SparkListener](
-        "job-progress-ui" -> jobs.listener,
-        "block-manager-ui" -> storage.listener,
-        "environment-ui" -> env.listener,
-        "executors-ui" -> exec.listener
-      )
-      nameToListenerMap.map { case (name, listener) =>
-        val path = "%s/%s/".format(dirPath.stripSuffix("/"), name)
+      listeners.map { listener =>
+        val path = "%s/%s/".format(dirPath.stripSuffix("/"), listener.name)
         val dir = new File(path)
         if (dir.exists && dir.isDirectory) {
           val files = dir.listFiles
@@ -172,7 +169,7 @@ private[spark] object SparkUI {
 }
 
 /** A SparkListener for logging events, one file per job */
-private[spark] class UISparkListener(name: String) extends SparkListener {
+private[spark] class UISparkListener(val name: String) extends SparkListener {
   protected val logger = new FileLogger(name)
 
   protected def logEvent(event: SparkListenerEvent) = {

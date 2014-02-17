@@ -34,9 +34,7 @@ sealed trait SparkListenerEvent extends JsonSerializable {
   override def toJson = "Event" -> Utils.getFormattedClassName(this)
 }
 
-case class SparkListenerStageSubmitted(
-    stageInfo: StageInfo,
-    properties: Properties)
+case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties)
   extends SparkListenerEvent {
   override def toJson = {
     val propertiesJson = Utils.propertiesToJson(properties)
@@ -85,10 +83,7 @@ case class SparkListenerTaskEnd(
   }
 }
 
-case class SparkListenerJobStart(
-    jobId: Int,
-    stageIds: Seq[Int],
-    properties: Properties)
+case class SparkListenerJobStart(jobId: Int, stageIds: Seq[Int], properties: Properties = null)
   extends SparkListenerEvent {
   override def toJson = {
     val stageIdsJson = JArray(stageIds.map(JInt(_)).toList)
@@ -143,7 +138,6 @@ private[spark] case class SparkListenerStorageStatusFetch(storageStatusList: Seq
 }
 
 object SparkListenerEvent {
-
   /**
    * Deserialize a SparkListenerEvent from JSON
    */
@@ -279,6 +273,7 @@ trait SparkListener {
    * Called when a job ends
    */
   def onJobEnd(jobEnd: SparkListenerJobEnd) { }
+
 }
 
 /**
@@ -303,7 +298,7 @@ class StatsReportListener extends SparkListener with Logging {
     showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
     // Runtime breakdown
-    val runtimePcts = stageCompleted.stageInfo.taskInfo.map{ case (info, metrics) =>
+    val runtimePcts = stageCompleted.stageInfo.taskInfos.map{ case (info, metrics) =>
       RuntimePercentage(info.duration, metrics)
     }
     showDistribution("executor (non-fetch) time pct: ",
@@ -325,7 +320,7 @@ private[spark] object StatsReportListener extends Logging {
   def extractDoubleDistribution(stage: SparkListenerStageCompleted,
       getMetric: (TaskInfo, TaskMetrics) => Option[Double])
     : Option[Distribution] = {
-    Distribution(stage.stageInfo.taskInfo.flatMap {
+    Distribution(stage.stageInfo.taskInfos.flatMap {
       case ((info,metric)) => getMetric(info, metric)})
   }
 

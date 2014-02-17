@@ -30,14 +30,13 @@ import net.liftweb.json.DefaultFormats
  * Stores information about a stage to pass from the scheduler to SparkListeners. Also stores the
  * metrics for all tasks that have completed, including redundant, speculated tasks.
  */
-private[spark]
 class StageInfo(
     val stageId: Int,
     val name: String,
     val rddName: String,
     val numPartitions: Int,
     val numTasks: Int,
-    val taskInfo: mutable.Buffer[(TaskInfo, TaskMetrics)] =
+    val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] =
       mutable.Buffer[(TaskInfo, TaskMetrics)]()
   ) extends JsonSerializable {
 
@@ -49,7 +48,7 @@ class StageInfo(
   var emittedTaskSizeWarning = false
 
   override def toJson = {
-    val (taskInfoList, taskMetricsList) = taskInfo.toList.unzip
+    val (taskInfoList, taskMetricsList) = taskInfos.toList.unzip
     val taskInfoListJson = JArray(taskInfoList.map(_.toJson))
     val taskMetricsListJson = JArray(taskMetricsList.map(_.toJson))
     val submissionTimeJson = submissionTime.map(JInt(_)).getOrElse(JNothing)
@@ -67,7 +66,6 @@ class StageInfo(
   }
 }
 
-private[spark]
 object StageInfo {
   def fromStage(stage: Stage): StageInfo = {
     new StageInfo(

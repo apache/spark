@@ -32,7 +32,7 @@ import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
-import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
+import org.apache.spark.util.{Utils, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -596,7 +596,7 @@ class DAGScheduler(
 
       case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
         val stageId = task.stageId
-        val taskType = task.getClass.getSimpleName
+        val taskType = Utils.getFormattedClassName(task)
         listenerBus.post(SparkListenerTaskEnd(stageId, taskType, reason, taskInfo, taskMetrics))
         handleTaskCompletion(completion)
 
@@ -826,7 +826,7 @@ class DAGScheduler(
           Accumulators.add(event.accumUpdates) // TODO: do this only if task wasn't resubmitted
         }
         pendingTasks(stage) -= task
-        stageToInfos(stage).taskInfo += event.taskInfo -> event.taskMetrics
+        stageToInfos(stage).taskInfos += event.taskInfo -> event.taskMetrics
         task match {
           case rt: ResultTask[_, _] =>
             resultStageToJob.get(stage) match {

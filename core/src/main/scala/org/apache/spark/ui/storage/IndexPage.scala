@@ -26,6 +26,7 @@ import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
 import org.apache.spark.util.Utils
 
+
 /** Page showing list of RDD's currently stored in the cluster */
 private[spark] class IndexPage(parent: BlockManagerUI) {
   private val sc = parent.sc
@@ -61,7 +62,7 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
       <td>{rdd.storageLevel.description}
       </td>
       <td>{rdd.numCachedPartitions}</td>
-      <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
+      <td>{"%.0f".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td>{Utils.bytesToString(rdd.memSize)}</td>
       <td>{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>

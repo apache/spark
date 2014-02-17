@@ -56,21 +56,21 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
 
     joblogger.onStageSubmitted(SparkListenerStageSubmitted(rootStageInfo, null))
     joblogger.createLogWriterTest(jobID)
-    joblogger.getJobIdToPrintWriter.size should be (1)
-    joblogger.getJobIdToStageIds.get(jobID).get.size should be (2)
-    joblogger.getStageIdToJobId.get(0) should be (Some(jobID))
-    joblogger.getStageIdToJobId.get(1) should be (Some(jobID))
+    joblogger.getJobIDToPrintWriter.size should be (1)
+    joblogger.getJobIDToStageIDs.get(jobID).get.size should be (2)
+    joblogger.getStageIDToJobID.get(0) should be (Some(jobID))
+    joblogger.getStageIDToJobID.get(1) should be (Some(jobID))
     joblogger.closeLogWriterTest(jobID)
-    joblogger.getStageIdToJobId.size should be (0)
-    joblogger.getJobIdToStageIds.size should be (0)
-    joblogger.getJobIdToPrintWriter.size should be (0)
+    joblogger.getStageIDToJobID.size should be (0)
+    joblogger.getJobIDToStageIDs.size should be (0)
+    joblogger.getJobIDToPrintWriter.size should be (0)
   }
   
   test("inner variables") {
     sc = new SparkContext("local[4]", "joblogger")
     val joblogger = new JobLogger {
       override protected def closeLogWriter(jobID: Int) = 
-        getJobIdToPrintWriter.get(jobID).foreach { fileWriter =>
+        getJobIDToPrintWriter.get(jobID).foreach { fileWriter =>
           fileWriter.close()
         }
     }
@@ -83,11 +83,11 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     val user = System.getProperty("user.name",  SparkContext.SPARK_UNKNOWN_USER)
     
     joblogger.getLogDir should be ("/tmp/spark-%s".format(user))
-    joblogger.getJobIdToPrintWriter.size should be (1)
-    joblogger.getStageIdToJobId.size should be (2)
-    joblogger.getStageIdToJobId.get(0) should be (Some(0))
-    joblogger.getStageIdToJobId.get(1) should be (Some(0))
-    joblogger.getJobIdToStageIds.size should be (1)
+    joblogger.getJobIDToPrintWriter.size should be (1)
+    joblogger.getStageIDToJobID.size should be (2)
+    joblogger.getStageIDToJobID.get(0) should be (Some(0))
+    joblogger.getStageIDToJobID.get(1) should be (Some(0))
+    joblogger.getJobIDToStageIDs.size should be (1)
   }
   
   

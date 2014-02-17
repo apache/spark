@@ -26,10 +26,10 @@ import java.util.Date
  * @param user User identifier if SPARK_LOG_DIR is not set, in which case log directory
  *             defaults to /tmp/spark-[user]
  * @param name Name of logger, also the base name of the log files
- * @param flushFrequency How many writes until the results are flushed to disk
+ * @param flushPeriod How many writes until the results are flushed to disk. By default,
+ *                    only flush manually
  */
-class FileLogger(user: String, name: String, flushFrequency: Int = 100) {
-
+class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALUE) {
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private var logCount = 0
   private var fileIndex = 0
@@ -56,7 +56,7 @@ class FileLogger(user: String, name: String, flushFrequency: Int = 100) {
     val dir = new File(logDir)
     if (!dir.exists && !dir.mkdirs()) {
       // Logger should throw a exception rather than continue to construct this object
-      throw new IOException("create log directory error:" + logDir)
+      throw new IOException("Error in creating log directory:" + logDir)
     }
   }
 
@@ -80,7 +80,7 @@ class FileLogger(user: String, name: String, flushFrequency: Int = 100) {
     }
     writer.foreach(_.print(writeInfo))
     logCount += 1
-    if (logCount % flushFrequency == 0) {
+    if (logCount % flushPeriod == 0) {
       flush()
       logCount = 0
     }

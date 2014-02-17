@@ -58,6 +58,20 @@ private[spark] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
     </table>
   }
 
+  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
+  {
+    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
+    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
+
+    <div class="progress">
+      <span style="text-align:center; position:absolute; width:100%;">
+        {completed}/{total} {failed}
+      </span>
+      <div class="bar bar-completed" style={completeWidth}></div>
+      <div class="bar bar-running" style={startWidth}></div>
+    </div>
+  }
+
   /** Render an HTML row that represents a stage */
   private def stageRow(s: StageInfo): Seq[Node] = {
     val submissionTime = s.submissionTime match {
@@ -111,19 +125,5 @@ private[spark] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
       <td sorttable_customekey={shuffleReadSortable.toString}>{shuffleRead}</td>
       <td sorttable_customekey={shuffleWriteSortable.toString}>{shuffleWrite}</td>
     </tr>
-  }
-
-  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
-  {
-    val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
-    val startWidth = "width: %s%%".format((started.toDouble/total)*100)
-
-    <div class="progress">
-      <span style="text-align:center; position:absolute; width:100%;">
-        {completed}/{total} {failed}
-      </span>
-      <div class="bar bar-completed" style={completeWidth}></div>
-      <div class="bar bar-running" style={startWidth}></div>
-    </div>
   }
 }

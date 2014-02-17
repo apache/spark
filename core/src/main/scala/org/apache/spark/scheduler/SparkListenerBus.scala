@@ -23,7 +23,7 @@ import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 
 import org.apache.spark.Logging
 
-/** Asynchronously passes SparkListenerEvent's to registered SparkListeners. */
+/** Asynchronously passes SparkListenerEvents to registered SparkListeners. */
 private[spark] class SparkListenerBus extends Logging {
   private val sparkListeners = new ArrayBuffer[SparkListener] with SynchronizedBuffer[SparkListener]
 

@@ -27,14 +27,14 @@ import org.apache.spark.ui.StorageStatusFetchSparkListener
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
-  private var _listener: Option[StorageStatusFetchSparkListener] = None
+  private var _listener: Option[BlockManagerListener] = None
   private val indexPage = new IndexPage(this)
   private val rddPage = new RDDPage(this)
 
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new StorageStatusFetchSparkListener("block-manager-ui", sc))
+    _listener = Some(new BlockManagerListener(sc))
     sc.addSparkListener(listener)
   }
 
@@ -43,3 +43,6 @@ private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
     ("/storage", (request: HttpServletRequest) => indexPage.render(request))
   )
 }
+
+private[spark] class BlockManagerListener(sc: SparkContext)
+  extends StorageStatusFetchSparkListener("block-manager-ui", sc)

@@ -27,6 +27,7 @@ import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
 import org.apache.spark.util.Utils
 
+
 /** Page showing storage details for a given RDD */
 private[spark] class RDDPage(parent: BlockManagerUI) {
   private val sc = parent.sc
@@ -36,7 +37,8 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
     listener.fetchStorageStatus()
     val storageStatusList = listener.storageStatusList
     val id = request.getParameter("id").toInt
-    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, id)
+    val filteredStorageStatusList =
+      StorageUtils.filterStorageStatusByRDD(storageStatusList.toArray, id)
     val rddInfo = StorageUtils.rddInfoFromStorageStatus(filteredStorageStatusList, sc).head
 
     // Worker table

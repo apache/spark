@@ -31,11 +31,11 @@ import net.liftweb.json.DefaultFormats
  * tasks several times for "ephemeral" failures, and only report back failures that require some
  * old stages to be resubmitted, such as shuffle map fetch failures.
  */
-sealed trait TaskEndReason extends JsonSerializable {
+private[spark] sealed trait TaskEndReason extends JsonSerializable {
   override def toJson = "Reason" -> Utils.getFormattedClassName(this)
 }
 
-case object TaskEndReason {
+private[spark] case object TaskEndReason {
   def fromJson(json: JValue): TaskEndReason = {
     implicit val format = DefaultFormats
     val success = Utils.getFormattedClassName(Success)
@@ -84,12 +84,12 @@ case object TaskEndReason {
   }
 }
 
-case object Success extends TaskEndReason
+private[spark] case object Success extends TaskEndReason
 
 // Task was finished earlier but we've now lost it
-case object Resubmitted extends TaskEndReason
+private[spark] case object Resubmitted extends TaskEndReason
 
-case class FetchFailed(
+private[spark] case class FetchFailed(
     bmAddress: BlockManagerId,
     shuffleId: Int,
     mapId: Int,
@@ -104,7 +104,7 @@ case class FetchFailed(
   }
 }
 
-case class ExceptionFailure(
+private[spark] case class ExceptionFailure(
     className: String,
     description: String,
     stackTrace: Array[StackTraceElement],
@@ -125,18 +125,18 @@ case class ExceptionFailure(
  * The task finished successfully, but the result was lost from the executor's block manager before
  * it was fetched.
  */
-case object TaskResultLost extends TaskEndReason
+private[spark] case object TaskResultLost extends TaskEndReason
 
-case object TaskKilled extends TaskEndReason
+private[spark] case object TaskKilled extends TaskEndReason
 
 /**
  * The task failed because the executor that it was running on was lost. This may happen because
  * the task crashed the JVM.
  */
-case object ExecutorLostFailure extends TaskEndReason
+private[spark] case object ExecutorLostFailure extends TaskEndReason
 
 /**
  * We don't know why the task ended -- for example, because of a ClassNotFound exception when
  * deserializing the task result.
  */
-case object UnknownReason extends TaskEndReason
+private[spark] case object UnknownReason extends TaskEndReason

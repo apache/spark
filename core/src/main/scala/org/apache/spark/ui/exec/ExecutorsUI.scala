@@ -19,7 +19,7 @@ package org.apache.spark.ui.exec
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.collection.mutable
+import scala.collection.mutable.HashMap
 import scala.xml.Node
 
 import org.eclipse.jetty.server.Handler
@@ -37,7 +37,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new ExecutorsListener)
+    _listener = Some(new ExecutorsListener(sc))
     sc.addSparkListener(listener)
   }
 
@@ -154,59 +154,59 @@ private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
 
     execFields.zip(execValuesString).toMap
   }
+}
+
+/**
+ * A SparkListener that prepares and logs information to be displayed on the Executors UI
+ */
+private[spark] class ExecutorsListener(sc: SparkContext)
+  extends StorageStatusFetchSparkListener("executors-ui", sc) {
+  val executorToTasksActive = HashMap[String, Int]()
+  val executorToTasksComplete = HashMap[String, Int]()
+  val executorToTasksFailed = HashMap[String, Int]()
+  val executorToDuration = HashMap[String, Long]()
+  val executorToShuffleRead = HashMap[String, Long]()
+  val executorToShuffleWrite = HashMap[String, Long]()
+
+  override def onTaskStart(taskStart: SparkListenerTaskStart) {
+    val eid = formatExecutorId(taskStart.taskInfo.executorId)
+    executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 0) + 1
+    logEvent(taskStart)
+  }
+
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+    val eid = formatExecutorId(taskEnd.taskInfo.executorId)
+    executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 1) - 1
+    executorToDuration(eid) = executorToDuration.getOrElse(eid, 0L) + taskEnd.taskInfo.duration
+    taskEnd.reason match {
+      case e: ExceptionFailure =>
+        executorToTasksFailed(eid) = executorToTasksFailed.getOrElse(eid, 0) + 1
+      case _ =>
+        executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
+    }
+
+    // Update shuffle read/write
+    if (taskEnd.taskMetrics != null) {
+      taskEnd.taskMetrics.shuffleReadMetrics.foreach { shuffleRead =>
+        executorToShuffleRead(eid) =
+          executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead
+      }
+
+      taskEnd.taskMetrics.shuffleWriteMetrics.foreach { shuffleWrite =>
+        executorToShuffleWrite(eid) =
+          executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
+      }
+    }
+    logEvent(taskEnd)
+  }
 
   /**
-   * A SparkListener that prepares and logs information to be displayed on the Executors UI
+   * In the local mode, there is a discrepancy between the executor ID according to the
+   * task ("localhost") and that according to SparkEnv ("<driver>"). This results in
+   * duplicate rows for the same executor. Thus, in this mode, we aggregate these two
+   * rows and use the executor ID of "<driver>" to be consistent.
    */
-  private[spark]
-  class ExecutorsListener extends StorageStatusFetchSparkListener("executors-ui", sc) {
-    val executorToTasksActive = mutable.HashMap[String, Int]()
-    val executorToTasksComplete = mutable.HashMap[String, Int]()
-    val executorToTasksFailed = mutable.HashMap[String, Int]()
-    val executorToDuration = mutable.HashMap[String, Long]()
-    val executorToShuffleRead = mutable.HashMap[String, Long]()
-    val executorToShuffleWrite = mutable.HashMap[String, Long]()
-
-    override def onTaskStart(taskStart: SparkListenerTaskStart) {
-      val eid = formatExecutorId(taskStart.taskInfo.executorId)
-      executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 0) + 1
-      logEvent(taskStart)
-    }
-
-    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-      val eid = formatExecutorId(taskEnd.taskInfo.executorId)
-      executorToTasksActive(eid) = executorToTasksActive.getOrElseUpdate(eid, 1) - 1
-      executorToDuration(eid) = executorToDuration.getOrElse(eid, 0L) + taskEnd.taskInfo.duration
-      taskEnd.reason match {
-        case e: ExceptionFailure =>
-          executorToTasksFailed(eid) = executorToTasksFailed.getOrElse(eid, 0) + 1
-        case _ =>
-          executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
-      }
-
-      // Update shuffle read/write
-      if (taskEnd.taskMetrics != null) {
-        taskEnd.taskMetrics.shuffleReadMetrics.foreach { shuffleRead =>
-          executorToShuffleRead(eid) =
-            executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead
-        }
-
-        taskEnd.taskMetrics.shuffleWriteMetrics.foreach { shuffleWrite =>
-          executorToShuffleWrite(eid) =
-            executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
-        }
-      }
-      logEvent(taskEnd)
-    }
-
-    /**
-     * In the local mode, there is a discrepancy between the executor ID according to the
-     * task ("localhost") and that according to SparkEnv ("<driver>"). This results in
-     * duplicate rows for the same executor. Thus, in this mode, we aggregate these two
-     * rows and use the executor ID of "<driver>" to be consistent.
-     */
-    private def formatExecutorId(execId: String): String = {
-      if (execId == "localhost") "<driver>" else execId
-    }
+  private def formatExecutorId(execId: String): String = {
+    if (execId == "localhost") "<driver>" else execId
   }
 }

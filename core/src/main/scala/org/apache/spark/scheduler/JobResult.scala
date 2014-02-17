@@ -51,8 +51,7 @@ private[spark] object JobResult {
 
 private[spark] case object JobSucceeded extends JobResult
 
-private[spark] case class JobFailed(exception: Exception, failedStageId: Int)
-  extends JobResult {
+private[spark] case class JobFailed(exception: Exception, failedStageId: Int) extends JobResult {
   override def toJson = {
     val exceptionJson = Utils.exceptionToJson(exception)
 
