@@ -290,7 +290,7 @@ case class InsertIntoHiveTable(
     val outputPath = FileOutputFormat.getOutputPath(jobConf)
     // Have to construct the format of dbname.tablename.
     val qualifiedTableName = s"${table.databaseName}.${table.tableName}"
-    // TODO: Correctly set holdDDLTime (the last parameter).
+    // TODO: Correctly set holdDDLTime.
     // In most of the time, we should have holdDDLTime = false.
     // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
     val holdDDLTime = false
@@ -310,7 +310,7 @@ case class InsertIntoHiveTable(
         overwrite,
         holdDDLTime,
         // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
-        // which is currently considered as a Hive natime native command.
+        // which is currently considered as a Hive native command.
         true,
         false)
     } else {
