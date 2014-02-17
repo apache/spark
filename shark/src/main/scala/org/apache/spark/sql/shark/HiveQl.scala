@@ -669,9 +669,10 @@ object HiveQl {
         }
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
+        // Parse partitions. We also make keys case insensitive.
         case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) =>
-          cleanIdentifier(key) -> Some(PlanUtils.stripQuotes(value))
-        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => cleanIdentifier(key) -> None
+          cleanIdentifier(key.toLowerCase) -> Some(PlanUtils.stripQuotes(value))
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => cleanIdentifier(key.toLowerCase) -> None
       }.toMap).getOrElse(Map.empty)
 
       if (partitionKeys.values.exists(p => p.isEmpty)) {

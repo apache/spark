@@ -290,30 +290,35 @@ case class InsertIntoHiveTable(
     val outputPath = FileOutputFormat.getOutputPath(jobConf)
     // Have to construct the format of dbname.tablename.
     val qualifiedTableName = s"${table.databaseName}.${table.tableName}"
+    // TODO: Correctly set holdDDLTime (the last parameter).
+    // In most of the time, we should have holdDDLTime = false.
+    // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
+    val holdDDLTime = false
     if (partition.nonEmpty) {
-      val partitionSpec = ListMap(partition.toSeq.sortBy(_._1):_*).map {
+      val partitionSpec = partition.map {
         case (key, Some(value)) => key -> value
         case (key, None) => key -> "" // Should not reach here right now.
       }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols(), partitionSpec)
       db.validatePartitionNameCharacters(partVals)
-      // TODO: Correctly set holdDDLTime, inheritTableSpecs, and isSkewedStoreAsSubdir
+      // TODO: Correctly set isSkewedStoreAsSubdir (the last parameter).
       // (the last three parameters).
       db.loadPartition(
         outputPath,
         qualifiedTableName,
         partitionSpec,
         overwrite,
-        false,
+        holdDDLTime,
+        // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
+        // which is currently considered as a Hive natime native command.
         true,
         false)
     } else {
-      // TODO: Correctly set holdDDLTime (the last parameter).
       db.loadTable(
         outputPath,
         qualifiedTableName,
         overwrite,
-        false)
+        holdDDLTime)
     }
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
