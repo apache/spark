@@ -10,7 +10,7 @@ import org.apache.hadoop.io.Writable
 import org.apache.spark.Logging
 import org.apache.spark.SerializableWritable
 
-import org.apache.hadoop.hive.ql.exec.FileSinkOperator
+import org.apache.hadoop.hive.ql.exec.{Utilities, FileSinkOperator}
 import org.apache.hadoop.hive.ql.io.{HiveFileFormatUtils, HiveOutputFormat}
 import org.apache.hadoop.hive.ql.plan.FileSinkDesc
 
@@ -60,8 +60,13 @@ class SharkHadoopWriter(
     numfmt.setMinimumIntegerDigits(5)
     numfmt.setGroupingUsed(false)
 
-    val outputName = "part-"  + numfmt.format(splitID)
-    val path = FileOutputFormat.getOutputPath(conf.value)
+    val extension = Utilities.getFileExtension(
+      conf.value,
+      fileSinkConf.getCompressed,
+      getOutputFormat())
+
+    val outputName = "part-"  + numfmt.format(splitID) + extension
+    val path = FileOutputFormat.getTaskOutputPath(conf.value, outputName)
 
     getOutputCommitter().setupTask(getTaskContext())
     writer = HiveFileFormatUtils.getHiveRecordWriter(
@@ -69,7 +74,7 @@ class SharkHadoopWriter(
       fileSinkConf.getTableInfo,
       conf.value.getOutputValueClass.asInstanceOf[Class[Writable]],
       fileSinkConf,
-      new Path(path, outputName),
+      path,
       null)
   }
 
