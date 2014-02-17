@@ -1,4 +1,5 @@
-package catalyst.execution
+package org.apache.spark.sql
+package shark
 
 import org.apache.spark.SerializableWritable
 import org.apache.spark.rdd.RDD
@@ -10,15 +11,14 @@ import parquet.hadoop.api.ReadSupport
 import org.apache.hadoop.conf.Configuration
 import parquet.hadoop.api.ReadSupport.ReadContext
 
-import catalyst.expressions._
+import catalyst.expressions.{Attribute, GenericRow, Row, Expression}
+import catalyst.plans.logical.LeafNode
 import catalyst.types._
-import catalyst.types.BinaryType
-import catalyst.Logging
 
 import org.apache.hadoop.mapreduce.Job
-
 /**
- * Parquet table scan operator. Only a stub currently.
+ * Parquet table scan operator. Imports the file that backs the given [[org.apache.spark.sql.shark.ParquetRelation]]
+ * as a RDD[Row]. Only a stub currently.
  */
 case class ParquetTableScan(
                              attributes: Seq[Attribute],
@@ -28,7 +28,8 @@ case class ParquetTableScan(
                              @transient val sc: SharkContext)
   extends LeafNode {
 
-  private val _broadcastedHiveConf = SharkEnv.sc.broadcast(new SerializableWritable(sc.hiveconf))
+  private val _broadcastedHiveConf =
+    sc.sparkContext.broadcast(new SerializableWritable(sc.hiveconf))
 
   def broadcastedHiveConf = _broadcastedHiveConf
 
@@ -36,21 +37,21 @@ case class ParquetTableScan(
 
   // TODO: currently this is not used
   private val _minSplitsPerRDD = math.min(
-    math.max(sc.hiveconf.getInt("mapred.map.tasks", 1), SharkEnv.sc.defaultMinSplits),
+    math.max(sc.hiveconf.getInt("mapred.map.tasks", 1), sc. sparkContext.defaultMinSplits),
     relation.numberOfBlocks // we don't want to have more splits than blocks
   )
 
   /**
    * Runs this query returning the result as an RDD.
-   */
-  override def execute(): RDD[Row] = {
+  */
+  def execute(): RDD[Row] = {
     // TODO: for now we do not check whether the relation's schema matches the one of the
     // underlying Parquet file
 
     val job = new Job(sc.hiveconf)
-    ParquetInputFormat.setReadSupportClass(job, classOf[catalyst.execution.RowReadSupport])
-
-    sc.newAPIHadoopFile(
+    ParquetInputFormat.setReadSupportClass(job, classOf[org.apache.spark.sql.shark.RowReadSupport])
+    // TODO: add record filters, etc.
+    sc.sparkContext.newAPIHadoopFile(
       relation.path.toUri.toString,
       classOf[ParquetInputFormat[Row]],
       classOf[Void], classOf[Row],
@@ -61,6 +62,11 @@ case class ParquetTableScan(
   override def output: Seq[Attribute] = attributes // right now we pass everything through, always
 }
 
+/**
+ * A [[parquet.io.api.RecordMaterializer]] for Rows.
+ *
+ * @param root The root group converter for the record.
+ */
 class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterializer[Row] {
 
   def this(parquetSchema: MessageType) = this(new CatalystGroupConverter(ParquetTypesConverter.convertToAttributes(parquetSchema)))
@@ -70,6 +76,9 @@ class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterial
   override def getRootConverter: GroupConverter = root
 }
 
+/**
+ * A [[parquet.hadoop.api.ReadSupport]] for Row objects.
+ */
 class RowReadSupport extends ReadSupport[Row] with Logging {
   override def prepareForRead(
                                conf: Configuration,
@@ -91,6 +100,12 @@ class RowReadSupport extends ReadSupport[Row] with Logging {
   }
 }
 
+/**
+ * A [[parquet.io.api.GroupConverter]] that is able to convert a Parquet record
+ * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object.
+ *
+ * @param schema The corresponding Shark schema in the form of a list of attributes.
+ */
 class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
   var current: GenericRow = new GenericRow(Seq())
   // initialization may not strictly be required
@@ -121,6 +136,12 @@ class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
   }
 }
 
+/**
+ * A [[parquet.io.api.PrimitiveConverter]] that converts Parquet types to Catalyst types.
+ *
+ * @param parent The parent group converter.
+ * @param fieldIndex The index inside the record.
+ */
 class CatalystPrimitiveConverter(parent: CatalystGroupConverter, fieldIndex: Int) extends PrimitiveConverter {
   // TODO: consider refactoring these together with ParquetTypesConverter
   override def addBinary(value: Binary): Unit = parent.currentData.update(fieldIndex, value.getBytes.asInstanceOf[BinaryType.JvmType])
@@ -136,6 +157,12 @@ class CatalystPrimitiveConverter(parent: CatalystGroupConverter, fieldIndex: Int
   override def addLong(value: Long): Unit = parent.currentData.update(fieldIndex, value.asInstanceOf[LongType.JvmType])
 }
 
+/**
+ * A [[parquet.io.api.PrimitiveConverter]] that converts Parquet strings (fixed-length byte arrays) into Catalyst Strings.
+ *
+ * @param parent The parent group converter.
+ * @param fieldIndex The index inside the record.
+ */
 class CatalystPrimitiveStringConverter(parent: CatalystGroupConverter, fieldIndex: Int) extends CatalystPrimitiveConverter(parent, fieldIndex) {
   override def addBinary(value: Binary): Unit = parent.currentData.update(fieldIndex, value.toStringUsingUTF8.asInstanceOf[StringType.JvmType])
 }

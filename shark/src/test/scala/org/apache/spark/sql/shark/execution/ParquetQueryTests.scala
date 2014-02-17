@@ -1,4 +1,5 @@
-package catalyst
+package org.apache.spark.sql
+package shark
 package execution
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
@@ -19,10 +20,8 @@ import parquet.bytes.BytesInput
 import parquet.column.Encoding._
 import parquet.column.page.PageReadStore
 
-import expressions._
-
-/* Implicits */
-import dsl._
+import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import shark.TestShark
 
 object ParquetTestData {
 
@@ -217,6 +216,12 @@ object ParquetTestData {
     w.end(new java.util.HashMap[String, String])
   }
 
+  /**
+   * Serializes a given value so that it conforms to Parquet's uncompressed primitive value encoding.
+   *
+   * @param value The value to serialize.
+   * @return A byte array that contains the serialized value.
+   */
   private def serializeValue(value: Any) : Array[Byte] = {
     value match {
       case i: Int => {
@@ -287,10 +292,15 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
     assert(allChecks)
   }
 
+  /**
+   * Computes the given [[org.apache.spark.sql.shark.ParquetRelation]] and returns its RDD.
+   *
+   * @param parquetRelation The Parquet relation.
+   * @return An RDD of Rows.
+   */
   private def getRDD(parquetRelation: ParquetRelation): RDD[Row] = {
-    val sharkInstance = new TestSharkInstance
     val catalystSchema: List[Attribute] = ParquetTypesConverter.convertToAttributes(parquetRelation.parquetSchema)
-    val scanner = new ParquetTableScan(catalystSchema, parquetRelation, Option(""))(sharkInstance.sc)
-    scanner.execute()
+    val scanner = new ParquetTableScan(catalystSchema, parquetRelation, None)(TestShark)
+    scanner.execute
   }
 }
