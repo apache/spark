@@ -17,6 +17,7 @@
 
 package org.apache.spark.api.java
 
+import java.util
 import java.util.{Map => JMap}
 
 import scala.collection.JavaConversions
@@ -92,23 +93,23 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
 
   private[spark] val env = sc.env
 
-  def isLocal = sc.isLocal
+  def isLocal: java.lang.Boolean = sc.isLocal
 
-  def sparkUser = sc.sparkUser
+  def sparkUser: String = sc.sparkUser
 
-  def master = sc.master
+  def master: String = sc.master
 
-  def appName = sc.appName
+  def appName: String = sc.appName
 
-  def jars = JavaConversions.seqAsJavaList(sc.jars)
+  def jars: util.List[String] = sc.jars
 
-  def startTime = sc.startTime
+  def startTime: java.lang.Long = sc.startTime
 
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
-  def defaultParallelism = sc.defaultParallelism
+  def defaultParallelism: Integer = sc.defaultParallelism
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
-  def defaultMinSplits = sc.defaultMinSplits
+  def defaultMinSplits: Integer = sc.defaultMinSplits
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {

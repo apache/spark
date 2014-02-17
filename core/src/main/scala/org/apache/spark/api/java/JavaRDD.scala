@@ -126,7 +126,7 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
 
-  def generator = rdd.generator
+  def generator: String = rdd.generator
 
   override def toString = rdd.toString
 
