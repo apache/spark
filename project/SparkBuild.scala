@@ -86,7 +86,7 @@ object SparkBuild extends Build {
     case None => DEFAULT_YARN
     case Some(v) => v.toBoolean
   }
-  lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client" 
+  lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
 
   // Conditionally include the yarn sub-project
   lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
@@ -322,7 +322,8 @@ object SparkBuild extends Build {
   def graphxSettings = sharedSettings ++ Seq(
     name := "spark-graphx",
     libraryDependencies ++= Seq(
-      "org.jblas" % "jblas" % "1.2.3"
+      "org.jblas" % "jblas" % "1.2.3",
+      "com.twitter" %% "algebird-core" % "0.3.0"
     )
   )
 
