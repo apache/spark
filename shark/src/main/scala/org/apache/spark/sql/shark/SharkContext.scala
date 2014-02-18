@@ -154,15 +154,12 @@ abstract class SharkContext(sc: SparkContext) extends SparkSqlContext(sc) {
       }
     } catch {
       case e: Exception =>
-        println(
-          """
+        logger.error(
+          s"""
             |======================
             |HIVE FAILURE OUTPUT
             |======================
-          """.stripMargin)
-        println(outputBuffer.toString)
-        println(
-          """
+            |${outputBuffer.toString}
             |======================
             |END HIVE FAILURE OUTPUT
             |======================
