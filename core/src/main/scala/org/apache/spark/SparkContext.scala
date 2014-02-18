@@ -26,7 +26,6 @@ import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.reflect.{ClassTag, classTag}
-import scala.io.Source
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
@@ -582,13 +581,15 @@ class SparkContext(
 
   /**
    * Render a previously persisted SparkUI from a set of event logs
-   * @param dirPath Path of directory containing the event logs
+   * @param logPath Path of directory containing the event logs
    */
-  def renderPersistedUI(dirPath: String) = {
+  def renderPersistedUI(logPath: String) = {
     val oldUI = new SparkUI(this, fromDisk = true)
     oldUI.start()
-    val success = oldUI.renderFromDisk(dirPath)
-    if (success) {
+    val success = oldUI.renderFromDisk(logPath)
+    if (!success) {
+      oldUI.stop()
+    } else {
       oldUI.bind()
       persistedUIs(oldUI.boundPort.get) = oldUI
     }
@@ -610,7 +611,7 @@ class SparkContext(
    * Stop all persisted UI's rendered in this context
    */
   def stopAllPersistedUIs() = {
-    persistedUIs.foreach { case (port, _) => stopPersistedUI(port) }
+    persistedUIs.keys.foreach(stopPersistedUI)
   }
 
   /** Build the union of a list of RDDs. */

@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{ListBuffer, HashMap, HashSet}
+import scala.collection.mutable.{ListBuffer, HashMap}
 
 import org.apache.spark.{ExceptionFailure, SparkContext, Success}
 import org.apache.spark.executor.TaskMetrics
@@ -65,7 +65,7 @@ private[spark] class JobProgressListener(sc: SparkContext, fromDisk: Boolean = f
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stageInfo
     val stageId = stage.stageId
-    // Remove by stageId, rather than by StageInfo, in case the StageInfo is persisted
+    // Remove by stageId, rather than by StageInfo, in case the StageInfo is from disk
     poolToActiveStages(stageIdToPool(stageId)).remove(stageId)
     activeStages.remove(stageId)
     completedStages += stage
@@ -165,7 +165,7 @@ private[spark] class JobProgressListener(sc: SparkContext, fromDisk: Boolean = f
     }
 
     val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashMap[Long, TaskInfo]())
-    // Remove by taskId, rather than by TaskInfo, in case the TaskInfo is persisted
+    // Remove by taskId, rather than by TaskInfo, in case the TaskInfo is from disk
     tasksActive.remove(taskEnd.taskInfo.taskId)
 
     val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
@@ -214,7 +214,7 @@ private[spark] class JobProgressListener(sc: SparkContext, fromDisk: Boolean = f
     jobEnd.jobResult match {
       case JobFailed(_, stageId) =>
         activeStages.get(stageId).foreach { s =>
-          // Remove by stageId, rather than by StageInfo, in case the StageInfo is persisted
+          // Remove by stageId, rather than by StageInfo, in case the StageInfo is from disk
           activeStages.remove(s.stageId)
           poolToActiveStages(stageIdToPool(stageId)).remove(s.stageId)
           failedStages += s

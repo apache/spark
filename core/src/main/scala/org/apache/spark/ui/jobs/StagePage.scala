@@ -23,12 +23,9 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ExceptionFailure
-import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
 import org.apache.spark.util.{Utils, Distribution}
-import org.apache.spark.scheduler.TaskInfo
 
 /** Page showing statistics and task list for a given stage */
 private[spark] class StagePage(parent: JobProgressUI, fromDisk: Boolean = false) {
@@ -214,81 +211,85 @@ private[spark] class StagePage(parent: JobProgressUI, fromDisk: Boolean = false)
     def fmtStackTrace(trace: Seq[StackTraceElement]): Seq[Node] =
       trace.map(e => <span style="display:block;">{e.toString}</span>)
 
-    taskData match { case TaskUIData(info, metrics, exception) =>
-      val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
-        else metrics.map(_.executorRunTime).getOrElse(1L)
-      val formatDuration = if (info.status == "RUNNING") parent.formatDuration(duration)
-        else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
-      val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
-      val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
+    val info = taskData.taskInfo
+    val metrics = taskData.taskMetrics
+    val exception = taskData.exception
 
-      val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
-      val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
-      val shuffleReadReadable = maybeShuffleRead.map(Utils.bytesToString).getOrElse("")
+    val duration = if (info.status == "RUNNING") info.timeRunning(System.currentTimeMillis())
+      else metrics.map(_.executorRunTime).getOrElse(1L)
+    val formatDuration = if (info.status == "RUNNING") parent.formatDuration(duration)
+      else metrics.map(m => parent.formatDuration(m.executorRunTime)).getOrElse("")
+    val gcTime = metrics.map(_.jvmGCTime).getOrElse(0L)
+    val serializationTime = metrics.map(_.resultSerializationTime).getOrElse(0L)
 
-      val maybeShuffleWrite =
-        metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten)
-      val shuffleWriteSortable = maybeShuffleWrite.map(_.toString).getOrElse("")
-      val shuffleWriteReadable = maybeShuffleWrite.map(Utils.bytesToString).getOrElse("")
+    val maybeShuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead)
+    val shuffleReadSortable = maybeShuffleRead.map(_.toString).getOrElse("")
+    val shuffleReadReadable = maybeShuffleRead.map(Utils.bytesToString).getOrElse("")
 
-      val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
-      val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
-      val writeTimeReadable = maybeWriteTime.map( t => t / (1000 * 1000)).map { ms =>
-        if (ms == 0) "" else parent.formatDuration(ms)
-      }.getOrElse("")
+    val maybeShuffleWrite =
+      metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten)
+    val shuffleWriteSortable = maybeShuffleWrite.map(_.toString).getOrElse("")
+    val shuffleWriteReadable = maybeShuffleWrite.map(Utils.bytesToString).getOrElse("")
 
-      val maybeMemoryBytesSpilled = metrics.map(_.memoryBytesSpilled)
-      val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.map(_.toString).getOrElse("")
-      val memoryBytesSpilledReadable = maybeMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
+    val maybeWriteTime = metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleWriteTime)
+    val writeTimeSortable = maybeWriteTime.map(_.toString).getOrElse("")
+    val writeTimeReadable = maybeWriteTime.map( t => t / (1000 * 1000)).map { ms =>
+      if (ms == 0) "" else parent.formatDuration(ms)
+    }.getOrElse("")
 
-      val maybeDiskBytesSpilled = metrics.map(_.diskBytesSpilled)
-      val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
-      val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
+    val maybeMemoryBytesSpilled = metrics.map(_.memoryBytesSpilled)
+    val memoryBytesSpilledSortable = maybeMemoryBytesSpilled.map(_.toString).getOrElse("")
+    val memoryBytesSpilledReadable = maybeMemoryBytesSpilled.map(Utils.bytesToString).getOrElse("")
 
-      <tr>
-        <td>{info.index}</td>
-        <td>{info.taskId}</td>
-        <td>{info.status}</td>
-        <td>{info.taskLocality}</td>
-        <td>{info.host}</td>
-        <td>{dateFmt.format(new Date(info.launchTime))}</td>
-        <td sorttable_customkey={duration.toString}>
-          {formatDuration}
+    val maybeDiskBytesSpilled = metrics.map(_.diskBytesSpilled)
+    val diskBytesSpilledSortable = maybeDiskBytesSpilled.map(_.toString).getOrElse("")
+    val diskBytesSpilledReadable = maybeDiskBytesSpilled.map(Utils.bytesToString).getOrElse("")
+
+    <tr>
+      <td>{info.index}</td>
+      <td>{info.taskId}</td>
+      <td>{info.status}</td>
+      <td>{info.taskLocality}</td>
+      <td>{info.host}</td>
+      <td>{dateFmt.format(new Date(info.launchTime))}</td>
+      <td sorttable_customkey={duration.toString}>
+        {formatDuration}
+      </td>
+      <td sorttable_customkey={gcTime.toString}>
+        {if (gcTime > 0) parent.formatDuration(gcTime) else ""}
+      </td>
+      <td sorttable_customkey={serializationTime.toString}>
+        {if (serializationTime > 0) parent.formatDuration(serializationTime) else ""}
+      </td>
+      {if (shuffleRead) {
+         <td sorttable_customkey={shuffleReadSortable}>
+           {shuffleReadReadable}
+         </td>
+      }}
+      {if (shuffleWrite) {
+         <td sorttable_customkey={writeTimeSortable}>
+           {writeTimeReadable}
+         </td>
+         <td sorttable_customkey={shuffleWriteSortable}>
+           {shuffleWriteReadable}
+         </td>
+      }}
+      {if (bytesSpilled) {
+        <td sorttable_customkey={memoryBytesSpilledSortable}>
+          {memoryBytesSpilledReadable}
         </td>
-        <td sorttable_customkey={gcTime.toString}>
-          {if (gcTime > 0) parent.formatDuration(gcTime) else ""}
+        <td sorttable_customkey={diskBytesSpilledSortable}>
+          {diskBytesSpilledReadable}
         </td>
-        <td sorttable_customkey={serializationTime.toString}>
-          {if (serializationTime > 0) parent.formatDuration(serializationTime) else ""}
-        </td>
-        {if (shuffleRead) {
-           <td sorttable_customkey={shuffleReadSortable}>
-             {shuffleReadReadable}
-           </td>
-        }}
-        {if (shuffleWrite) {
-           <td sorttable_customkey={writeTimeSortable}>
-             {writeTimeReadable}
-           </td>
-           <td sorttable_customkey={shuffleWriteSortable}>
-             {shuffleWriteReadable}
-           </td>
-        }}
-        {if (bytesSpilled) {
-          <td sorttable_customkey={memoryBytesSpilledSortable}>
-            {memoryBytesSpilledReadable}
-          </td>
-          <td sorttable_customkey={diskBytesSpilledSortable}>
-            {diskBytesSpilledReadable}
-          </td>
-        }}
-        <td>{exception.map(e =>
+      }}
+      <td>
+        {exception.map { e =>
           <span>
             {e.className} ({e.description})<br/>
             {fmtStackTrace(e.stackTrace)}
-          </span>).getOrElse("")}
-        </td>
-      </tr>
-    }
+          </span>
+        }.getOrElse("")}
+      </td>
+    </tr>
   }
 }

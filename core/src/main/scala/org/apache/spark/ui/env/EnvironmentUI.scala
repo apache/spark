@@ -38,6 +38,7 @@ private[spark] class EnvironmentUI(sc: SparkContext, fromDisk: Boolean = false) 
   def start() {
     _listener = Some(new EnvironmentListener(sc, fromDisk))
     if (!fromDisk) {
+      // Register for callbacks from this context only if this UI is live
       sc.addSparkListener(listener)
     }
   }

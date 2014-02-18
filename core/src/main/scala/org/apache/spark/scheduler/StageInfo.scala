@@ -39,9 +39,7 @@ class StageInfo(
       mutable.Buffer[(TaskInfo, TaskMetrics)]()
   ) extends JsonSerializable {
 
-  /**
-   * When this stage was submitted from the DAGScheduler to a TaskScheduler.
-   */
+  /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None
   var completionTime: Option[Long] = None
   var emittedTaskSizeWarning = false
@@ -83,7 +81,7 @@ object StageInfo {
       (TaskInfo.fromJson(info), TaskMetrics.fromJson(metrics))
     }.toBuffer
 
-    val metrics = new StageInfo(
+    val stageInfo = new StageInfo(
       (json \ "Stage ID").extract[Int],
       (json \ "Stage Name").extract[String],
       (json \ "RDD Name").extract[String],
@@ -91,17 +89,17 @@ object StageInfo {
       (json \ "Number of Tasks").extract[Int],
       taskInfo)
 
-    metrics.submissionTime =
+    stageInfo.submissionTime =
       json \ "Submission Time" match {
         case JNothing => None
         case value: JValue => Some(value.extract[Long])
       }
-    metrics.completionTime =
+    stageInfo.completionTime =
       json \ "Completion Time" match {
         case JNothing => None
         case value: JValue => Some(value.extract[Long])
       }
-    metrics.emittedTaskSizeWarning = (json \ "Emitted Task Size Warning").extract[Boolean]
-    metrics
+    stageInfo.emittedTaskSizeWarning = (json \ "Emitted Task Size Warning").extract[Boolean]
+    stageInfo
   }
 }

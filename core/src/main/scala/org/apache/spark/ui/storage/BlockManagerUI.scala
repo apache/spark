@@ -36,6 +36,7 @@ private[spark] class BlockManagerUI(val sc: SparkContext, fromDisk: Boolean = fa
   def start() {
     _listener = Some(new BlockManagerListener(sc, fromDisk))
     if (!fromDisk) {
+      // Register for callbacks from this context only if this UI is live
       sc.addSparkListener(listener)
     }
   }

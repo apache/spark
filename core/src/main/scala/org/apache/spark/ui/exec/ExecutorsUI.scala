@@ -39,6 +39,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext, fromDisk: Boolean = false
   def start() {
     _listener = Some(new ExecutorsListener(sc, fromDisk))
     if (!fromDisk) {
+      // Register for callbacks from this context only if this UI is live
       sc.addSparkListener(listener)
     }
   }
@@ -155,7 +156,6 @@ private[spark] class ExecutorsUI(val sc: SparkContext, fromDisk: Boolean = false
     ) ++ Seq(maxMem)
 
     val execValuesString = execValues.map(_.toString)
-
     execFields.zip(execValuesString).toMap
   }
 }
@@ -195,7 +195,6 @@ private[spark] class ExecutorsListener(sc: SparkContext, fromDisk: Boolean = fal
         executorToShuffleRead(eid) =
           executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead
       }
-
       taskEnd.taskMetrics.shuffleWriteMetrics.foreach { shuffleWrite =>
         executorToShuffleWrite(eid) =
           executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten

@@ -46,10 +46,12 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
     } else {
       // While each context has only one live SparkUI, it can have many persisted ones
       // For persisted UI's, climb upwards from the configured / default port
-      val p = SparkUI.lastPersistedPort.map(_ + 1)
-        .getOrElse(sc.conf.get("spark.ui.persisted.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt)
-      SparkUI.lastPersistedPort = Some(p)
-      p
+      val nextPort = SparkUI.lastPersistedUIPort match {
+        case Some(p) => p + 1
+        case None => sc.conf.get("spark.ui.persisted.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt
+      }
+      SparkUI.lastPersistedUIPort = Some(nextPort)
+      nextPort
     }
   var boundPort: Option[Int] = None
   var server: Option[Server] = None
@@ -104,7 +106,7 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
   }
 
   /**
-   * Reconstruct a SparkUI previously persisted from disk from the given path.
+   * Reconstruct a previously persisted SparkUI from logs residing in the given directory.
    * Return true if all required log files are found.
    */
   def renderFromDisk(dirPath: String): Boolean = {
@@ -164,12 +166,14 @@ private[spark] object SparkUI {
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 
   // Keep track of the port of the last persisted UI
-  var lastPersistedPort: Option[Int] = None
+  var lastPersistedUIPort: Option[Int] = None
 }
 
 /** A SparkListener for logging events, one file per job */
 private[spark] class UISparkListener(val name: String, fromDisk: Boolean = false)
   extends SparkListener with Logging {
+
+  // Log events only if the corresponding UI is not rendered from disk
   protected val logger: Option[FileLogger] = if (!fromDisk) {
     Some(new FileLogger(name))
   } else {
@@ -177,11 +181,7 @@ private[spark] class UISparkListener(val name: String, fromDisk: Boolean = false
   }
 
   protected def logEvent(event: SparkListenerEvent) = {
-    // Log events only if the corresponding UI is not rendered from disk
-    if (!fromDisk) {
-      logWarning("Logging %s".format(Utils.getFormattedClassName(event)))
-      logger.foreach(_.logLine(compactRender(event.toJson)))
-    }
+    logger.foreach(_.logLine(compactRender(event.toJson)))
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart) = logger.foreach(_.start())
@@ -190,7 +190,7 @@ private[spark] class UISparkListener(val name: String, fromDisk: Boolean = false
 }
 
 /**
- * A SparkListener that fetches storage information from SparkEnv and logs it as an event.
+ * A SparkListener that fetches storage information from SparkEnv and logs the corresponding event.
  *
  * The frequency at which this occurs is by default every time a stage event is triggered.
  * This needs not necessarily be the case; a stage can be arbitrarily long, so any failure

@@ -79,8 +79,7 @@ private[spark] case object TaskEndReason {
       (json \ "Class Name").extract[String],
       (json \ "Description").extract[String],
       stackTrace,
-      metrics
-    )
+      metrics)
   }
 }
 

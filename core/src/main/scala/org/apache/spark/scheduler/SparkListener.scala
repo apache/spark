@@ -22,10 +22,10 @@ import java.util.Properties
 import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.storage.StorageStatus
 
 import net.liftweb.json.JsonDSL._
 import net.liftweb.json.JsonAST._
-import org.apache.spark.storage.StorageStatus
 import net.liftweb.json.DefaultFormats
 
 trait JsonSerializable { def toJson: JValue }
@@ -103,9 +103,6 @@ case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkLi
   }
 }
 
-/** An event used in the listener to shutdown the listener daemon thread. */
-private[scheduler] case object SparkListenerShutdown extends SparkListenerEvent
-
 /** An event used in the EnvironmentUI */
 private[spark] case class SparkListenerLoadEnvironment(
     jvmInformation: Seq[(String, String)],
@@ -113,7 +110,6 @@ private[spark] case class SparkListenerLoadEnvironment(
     systemProperties: Seq[(String, String)],
     classpathEntries: Seq[(String, String)])
   extends SparkListenerEvent {
-
   override def toJson = {
     val jvmInformationJson = Utils.mapToJson(jvmInformation.toMap)
     val sparkPropertiesJson = Utils.mapToJson(sparkProperties.toMap)
@@ -137,6 +133,9 @@ private[spark] case class SparkListenerStorageStatusFetch(storageStatusList: Seq
   }
 }
 
+/** An event used in the listener to shutdown the listener daemon thread. */
+private[scheduler] case object SparkListenerShutdown extends SparkListenerEvent
+
 object SparkListenerEvent {
   /**
    * Deserialize a SparkListenerEvent from JSON
@@ -150,9 +149,9 @@ object SparkListenerEvent {
     val taskEnd =  Utils.getFormattedClassName(SparkListenerTaskEnd)
     val jobStart =  Utils.getFormattedClassName(SparkListenerJobStart)
     val jobEnd =  Utils.getFormattedClassName(SparkListenerJobEnd)
-    val shutdown =  Utils.getFormattedClassName(SparkListenerShutdown)
     val loadEnvironment = Utils.getFormattedClassName(SparkListenerLoadEnvironment)
     val storageStatusFetch =  Utils.getFormattedClassName(SparkListenerStorageStatusFetch)
+    val shutdown =  Utils.getFormattedClassName(SparkListenerShutdown)
 
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
@@ -162,9 +161,9 @@ object SparkListenerEvent {
       case `taskEnd` => taskEndFromJson(json)
       case `jobStart` => jobStartFromJson(json)
       case `jobEnd` => jobEndFromJson(json)
-      case `shutdown` => SparkListenerShutdown
       case `loadEnvironment` => loadEnvironmentFromJson(json)
       case `storageStatusFetch` => storageStatusFetchFromJson(json)
+      case `shutdown` => SparkListenerShutdown
     }
   }
 
@@ -205,8 +204,7 @@ object SparkListenerEvent {
     new SparkListenerJobStart(
       (json \ "Job ID").extract[Int],
       stageIds,
-      Utils.propertiesFromJson(json \ "Properties")
-    )
+      Utils.propertiesFromJson(json \ "Properties"))
   }
 
   private def jobEndFromJson(json: JValue) = {
@@ -308,14 +306,14 @@ class StatsReportListener extends SparkListener with Logging {
     showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
     // Runtime breakdown
-    val runtimePcts = stageCompleted.stageInfo.taskInfos.map{ case (info, metrics) =>
+    val runtimePcts = stageCompleted.stageInfo.taskInfos.map { case (info, metrics) =>
       RuntimePercentage(info.duration, metrics)
     }
     showDistribution("executor (non-fetch) time pct: ",
-      Distribution(runtimePcts.map{_.executorPct * 100}), "%2.0f %%")
+      Distribution(runtimePcts.map(_.executorPct * 100)), "%2.0f %%")
     showDistribution("fetch wait time pct: ",
-      Distribution(runtimePcts.flatMap{_.fetchPct.map{_ * 100}}), "%2.0f %%")
-    showDistribution("other time pct: ", Distribution(runtimePcts.map{_.other * 100}), "%2.0f %%")
+      Distribution(runtimePcts.flatMap(_.fetchPct.map(_ * 100))), "%2.0f %%")
+    showDistribution("other time pct: ", Distribution(runtimePcts.map(_.other * 100)), "%2.0f %%")
   }
 
 }
@@ -324,7 +322,7 @@ private[spark] object StatsReportListener extends Logging {
 
   // For profiling, the extremes are more interesting
   val percentiles = Array[Int](0,5,10,25,50,75,90,95,100)
-  val probabilities = percentiles.map{_ / 100.0}
+  val probabilities = percentiles.map(_ / 100.0)
   val percentilesHeader = "\t" + percentiles.mkString("%\t") + "%"
 
   def extractDoubleDistribution(stage: SparkListenerStageCompleted,
@@ -338,7 +336,7 @@ private[spark] object StatsReportListener extends Logging {
   def extractLongDistribution(stage: SparkListenerStageCompleted,
       getMetric: (TaskInfo, TaskMetrics) => Option[Long])
     : Option[Distribution] = {
-    extractDoubleDistribution(stage, (info, metric) => getMetric(info,metric).map{_.toDouble})
+    extractDoubleDistribution(stage, (info, metric) => getMetric(info,metric).map(_.toDouble))
   }
 
   def showDistribution(heading: String, d: Distribution, formatNumber: Double => String) {
@@ -417,8 +415,8 @@ private case class RuntimePercentage(executorPct: Double, fetchPct: Option[Doubl
 private object RuntimePercentage {
   def apply(totalTime: Long, metrics: TaskMetrics): RuntimePercentage = {
     val denom = totalTime.toDouble
-    val fetchTime = metrics.shuffleReadMetrics.map{_.fetchWaitTime}
-    val fetch = fetchTime.map{_ / denom}
+    val fetchTime = metrics.shuffleReadMetrics.map(_.fetchWaitTime)
+    val fetch = fetchTime.map(_ / denom)
     val exec = (metrics.executorRunTime - fetchTime.getOrElse(0L)) / denom
     val other = 1.0 - (exec + fetch.getOrElse(0d))
     RuntimePercentage(exec, fetch, other)

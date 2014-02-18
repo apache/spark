@@ -17,8 +17,9 @@
 
 package org.apache.spark.scheduler
 
-import net.liftweb.json.JsonDSL._
 import org.apache.spark.util.Utils
+
+import net.liftweb.json.JsonDSL._
 import net.liftweb.json.JsonAST.JValue
 import net.liftweb.json.DefaultFormats
 
@@ -32,12 +33,12 @@ private[spark] sealed trait JobResult extends JsonSerializable {
 private[spark] object JobResult {
   def fromJson(json: JValue): JobResult = {
     implicit val format = DefaultFormats
-    val jobSucceededString = Utils.getFormattedClassName(JobSucceeded)
-    val jobFailedString = Utils.getFormattedClassName(JobFailed)
+    val jobSucceeded = Utils.getFormattedClassName(JobSucceeded)
+    val jobFailed = Utils.getFormattedClassName(JobFailed)
 
     (json \ "Result").extract[String] match {
-      case `jobSucceededString` => JobSucceeded
-      case `jobFailedString` => jobFailedFromJson(json)
+      case `jobSucceeded` => JobSucceeded
+      case `jobFailed` => jobFailedFromJson(json)
     }
   }
 
@@ -51,10 +52,10 @@ private[spark] object JobResult {
 
 private[spark] case object JobSucceeded extends JobResult
 
+// A failed stage ID of -1 means there is not a particular stage that caused the failure
 private[spark] case class JobFailed(exception: Exception, failedStageId: Int) extends JobResult {
   override def toJson = {
     val exceptionJson = Utils.exceptionToJson(exception)
-
     super.toJson ~
     ("Exception" -> exceptionJson) ~
     ("Failed Stage ID" -> failedStageId)

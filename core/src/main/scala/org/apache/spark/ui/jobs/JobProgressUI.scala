@@ -23,8 +23,8 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.Handler
 
-import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.SparkContext
+import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
@@ -32,7 +32,7 @@ private[spark] class JobProgressUI(val sc: SparkContext, fromDisk: Boolean = fal
   private var _listener: Option[JobProgressListener] = None
   private val indexPage = new IndexPage(this, fromDisk)
   private val stagePage = new StagePage(this, fromDisk)
-  private val poolPage = new PoolPage(this)
+  private val poolPage = new PoolPage(this, fromDisk)
 
   val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
 
@@ -41,6 +41,7 @@ private[spark] class JobProgressUI(val sc: SparkContext, fromDisk: Boolean = fal
   def start() {
     _listener = Some(new JobProgressListener(sc, fromDisk))
     if (!fromDisk) {
+      // Register for callbacks from this context only if this UI is live
       sc.addSparkListener(listener)
     }
   }

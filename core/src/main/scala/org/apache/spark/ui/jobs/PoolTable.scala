@@ -18,7 +18,6 @@
 package org.apache.spark.ui.jobs
 
 import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
 import scala.xml.Node
 
 import org.apache.spark.scheduler.{Schedulable, StageInfo}

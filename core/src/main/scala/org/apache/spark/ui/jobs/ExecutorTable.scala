@@ -17,11 +17,10 @@
 
 package org.apache.spark.ui.jobs
 
+import scala.collection.mutable
 import scala.xml.Node
 
-import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.util.Utils
-import scala.collection.mutable
 
 /** Page showing executor summary */
 private[spark] class ExecutorTable(stageId: Int, parent: JobProgressUI) {
@@ -55,7 +54,7 @@ private[spark] class ExecutorTable(stageId: Int, parent: JobProgressUI) {
   }
 
   private def createExecutorTable() : Seq[Node] = {
-    // make a executor-id -> address map
+    // Make an executor-id -> address map
     val executorIdToAddress = mutable.HashMap[String, String]()
     val storageStatusList = parent.sc.getExecutorStorageStatus
     for (statusId <- 0 until storageStatusList.size) {
@@ -67,9 +66,8 @@ private[spark] class ExecutorTable(stageId: Int, parent: JobProgressUI) {
 
     val executorIdToSummary = listener.stageIdToExecutorSummaries.get(stageId)
     executorIdToSummary match {
-      case Some(x) => {
-        x.toSeq.sortBy(_._1).map{
-          case (k,v) => {
+      case Some(x) =>
+        x.toSeq.sortBy(_._1).map { case (k, v) => {
             <tr>
               <td>{k}</td>
               <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
@@ -84,8 +82,7 @@ private[spark] class ExecutorTable(stageId: Int, parent: JobProgressUI) {
             </tr>
           }
         }
-      }
-      case _ => { Seq[Node]() }
+      case _ => Seq[Node]()
     }
   }
 }

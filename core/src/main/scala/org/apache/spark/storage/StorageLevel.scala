@@ -19,8 +19,9 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 
-import net.liftweb.json.JsonDSL._
 import org.apache.spark.scheduler.JsonSerializable
+
+import net.liftweb.json.JsonDSL._
 import net.liftweb.json.JsonAST.JValue
 import net.liftweb.json.DefaultFormats
 

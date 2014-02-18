@@ -18,13 +18,14 @@
 package org.apache.spark.storage
 
 import org.apache.spark.SparkContext
-import BlockManagerMasterActor.BlockStatus
 import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.JsonSerializable
 
 import net.liftweb.json.JsonDSL._
 import net.liftweb.json.JsonAST._
 import net.liftweb.json.DefaultFormats
+
+import BlockManagerMasterActor.BlockStatus
 
 private[spark]
 case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
@@ -71,8 +72,7 @@ case object StorageStatus {
     new StorageStatus(
       BlockManagerId.fromJson(json \ "Block Manager ID"),
       (json \ "Maximum Memory").extract[Long],
-      blocks
-    )
+      blocks)
   }
 }
 

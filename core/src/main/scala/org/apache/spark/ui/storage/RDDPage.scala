@@ -50,7 +50,7 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
       sortWith(_._1.name < _._1.name)
     val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
     val blocks = blockStatuses.map {
-      case(id, status) => (id, status, blockLocations.get(id).getOrElse(Seq("UNKNOWN")))
+      case(id, status) => (id, status, blockLocations.get(id).getOrElse(Seq("Unknown")))
     }
     val blockTable = listingTable(blockHeader, blockRow, blocks)
 

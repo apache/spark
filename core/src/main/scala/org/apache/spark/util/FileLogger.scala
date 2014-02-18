@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io._
 import java.text.SimpleDateFormat
 import java.util.Date
+
 import org.apache.spark.Logging
 
 /**
@@ -44,7 +45,7 @@ class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALU
 
   private var writer: Option[PrintWriter] = {
     createLogDir()
-    Some(createWriter()) // Overwrite any existing file
+    Some(createWriter())
   }
 
   def this() = this(System.getProperty("user.name", "<Unknown>"),
@@ -66,6 +67,7 @@ class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALU
 
   /** Create a new writer to the file identified with the given path */
   private def createWriter() = {
+    // Overwrite any existing file
     val fileWriter = new FileWriter(logDir + fileIndex)
     val bufferedWriter = new BufferedWriter(fileWriter)
     new PrintWriter(bufferedWriter)
@@ -108,11 +110,9 @@ class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALU
 
   /** Start a new writer (for a new file) if there does not already exist one */
   def start() = {
-    writer match {
-      case Some(w) =>
-      case None =>
-        fileIndex += 1
-        writer = Some(createWriter())
+    writer.getOrElse {
+      fileIndex += 1
+      Some(createWriter())
     }
   }
 }

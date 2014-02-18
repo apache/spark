@@ -42,6 +42,7 @@ private[spark] class SparkListenerBus extends Logging {
         val event = eventQueue.take
         val shutdown = postToListeners(event, sparkListeners)
         if (shutdown) {
+          // Get out of the while loop and shutdown the daemon thread
           return
         }
       }
@@ -69,7 +70,6 @@ private[spark] class SparkListenerBus extends Logging {
       case taskEnd: SparkListenerTaskEnd =>
         listeners.foreach(_.onTaskEnd(taskEnd))
       case SparkListenerShutdown =>
-        // Get out of the while loop and shutdown the daemon thread
         return true
       case _ =>
     }

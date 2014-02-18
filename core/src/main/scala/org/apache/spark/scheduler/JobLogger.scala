@@ -95,7 +95,7 @@ class JobLogger(val user: String, val logDirName: String)
   protected def closeLogWriter(jobID: Int) {
     jobIDToPrintWriter.get(jobID).foreach { fileWriter =>
       fileWriter.close()
-      jobIDToStageIDs.get(jobID).foreach(_.foreach{ stageID =>
+      jobIDToStageIDs.get(jobID).foreach(_.foreach { stageID =>
         stageIDToJobID -= stageID
       })
       jobIDToPrintWriter -= jobID
@@ -139,19 +139,7 @@ class JobLogger(val user: String, val logDirName: String)
   }
 
   /**
-   * Log job properties into job log file
-   * @param jobID ID of the job
-   * @param properties Properties of the job
-   */
-  protected def recordJobProperties(jobID: Int, properties: Properties) {
-    if (properties != null) {
-      val description = properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION, "")
-      jobLogInfo(jobID, description, false)
-    }
-  }
-
-  /**
-   * Log task metrics into job log files, including execution info and shuffle metrics
+   * Record task metrics into job log files, including execution info and shuffle metrics
    * @param stageID Stage ID of the task
    * @param status Status info of the task
    * @param taskInfo Task description info
@@ -206,7 +194,7 @@ class JobLogger(val user: String, val logDirName: String)
    */
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val taskInfo = taskEnd.taskInfo
-    var taskStatus = taskEnd.taskType
+    var taskStatus = "TASK_TYPE=%s".format(taskEnd.taskType)
     taskEnd.reason match {
       case Success => taskStatus += " STATUS=SUCCESS"
         recordTaskMetrics(taskEnd.stageId, taskStatus, taskInfo, taskEnd.taskMetrics)
@@ -242,6 +230,18 @@ class JobLogger(val user: String, val logDirName: String)
   }
 
   /**
+   * Record job properties into job log file
+   * @param jobID ID of the job
+   * @param properties Properties of the job
+   */
+  protected def recordJobProperties(jobID: Int, properties: Properties) {
+    if (properties != null) {
+      val description = properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION, "")
+      jobLogInfo(jobID, description, false)
+    }
+  }
+
+  /**
    * When job starts, record job property and stage graph
    * @param jobStart Job start event
    */
@@ -249,8 +249,8 @@ class JobLogger(val user: String, val logDirName: String)
     val jobID = jobStart.jobId
     val properties = jobStart.properties
     createLogWriter(jobID)
-    buildJobStageDependencies(jobID, jobStart.stageIds)
     recordJobProperties(jobID, properties)
+    buildJobStageDependencies(jobID, jobStart.stageIds)
     jobLogInfo(jobID, "JOB_ID=" + jobID + " STATUS=STARTED")
   }
 }

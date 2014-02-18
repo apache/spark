@@ -39,7 +39,7 @@ private[spark] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
     }
   }
 
-  /** Render a special table that merges two header cells. */
+  /** Special table that merges two header cells. */
   private def stageTable[T](makeRow: T => Seq[Node], rows: Seq[T]): Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable">
       <thead>
@@ -80,7 +80,7 @@ private[spark] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
     val description = listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val submissionTime = s.submissionTime match {
-      case Some(d) => dateFmt.format(new Date(d))
+      case Some(t) => dateFmt.format(new Date(t))
       case None => "Unknown"
     }
     val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
