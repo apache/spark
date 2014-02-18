@@ -24,7 +24,7 @@ import scala.xml.Node
 
 import org.eclipse.jetty.server.Handler
 
-import org.apache.spark.{Logging, SparkContext, ExceptionFailure}
+import org.apache.spark.{SparkContext, ExceptionFailure}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Executors
 import org.apache.spark.ui.{StorageStatusFetchSparkListener, UIUtils}
@@ -32,13 +32,15 @@ import org.apache.spark.util.Utils
 import org.apache.spark.scheduler.SparkListenerTaskEnd
 import org.apache.spark.scheduler.SparkListenerTaskStart
 
-private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
+private[spark] class ExecutorsUI(val sc: SparkContext, fromDisk: Boolean = false) {
   private var _listener: Option[ExecutorsListener] = None
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new ExecutorsListener(sc))
-    sc.addSparkListener(listener)
+    _listener = Some(new ExecutorsListener(sc, fromDisk))
+    if (!fromDisk) {
+      sc.addSparkListener(listener)
+    }
   }
 
   def getHandlers = Seq[(String, Handler)](
@@ -46,7 +48,9 @@ private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
   )
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.fetchStorageStatus()
+    if (!fromDisk) {
+      listener.fetchStorageStatus()
+    }
     val storageStatusList = listener.storageStatusList
     val maxMem = storageStatusList.map(_.maxMem).fold(0L)(_ + _)
     val memUsed = storageStatusList.map(_.memUsed()).fold(0L)(_ + _)
@@ -159,8 +163,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) extends Logging {
 /**
  * A SparkListener that prepares and logs information to be displayed on the Executors UI
  */
-private[spark] class ExecutorsListener(sc: SparkContext)
-  extends StorageStatusFetchSparkListener("executors-ui", sc) {
+private[spark] class ExecutorsListener(sc: SparkContext, fromDisk: Boolean = false)
+  extends StorageStatusFetchSparkListener("executors-ui", sc, fromDisk) {
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()

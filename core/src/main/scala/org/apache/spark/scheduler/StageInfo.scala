@@ -23,7 +23,6 @@ import org.apache.spark.executor.TaskMetrics
 
 import net.liftweb.json.JsonAST._
 import net.liftweb.json.JsonDSL._
-import org.apache.spark.util.Utils
 import net.liftweb.json.DefaultFormats
 
 /**

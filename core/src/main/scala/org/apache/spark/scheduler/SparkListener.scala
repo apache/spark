@@ -274,6 +274,16 @@ trait SparkListener {
    */
   def onJobEnd(jobEnd: SparkListenerJobEnd) { }
 
+  /**
+   * Called when the Spark environment is loaded
+   */
+  def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) { }
+
+  /**
+   * Called when Spark fetches storage statuses from the driver
+   */
+  def onStorageStatusFetch(storageStatusFetch: SparkListenerStorageStatusFetch) { }
+
 }
 
 /**

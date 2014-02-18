@@ -62,7 +62,7 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
       <td>{rdd.storageLevel.description}
       </td>
       <td>{rdd.numCachedPartitions}</td>
-      <td>{"%.0f".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
+      <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td>{Utils.bytesToString(rdd.memSize)}</td>
       <td>{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>

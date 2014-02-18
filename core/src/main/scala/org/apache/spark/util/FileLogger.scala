@@ -20,6 +20,7 @@ package org.apache.spark.util
 import java.io._
 import java.text.SimpleDateFormat
 import java.util.Date
+import org.apache.spark.Logging
 
 /**
  * A generic class for logging information to file
@@ -29,7 +30,7 @@ import java.util.Date
  * @param flushPeriod How many writes until the results are flushed to disk. By default,
  *                    only flush manually
  */
-class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALUE) {
+class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALUE) extends Logging {
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private var logCount = 0
   private var fileIndex = 0
@@ -54,6 +55,9 @@ class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALU
   /** Create a logging directory with the given path */
   private def createLogDir() = {
     val dir = new File(logDir)
+    if (dir.exists) {
+      logWarning("Logging directory already exists: " + logDir)
+    }
     if (!dir.exists && !dir.mkdirs()) {
       // Logger should throw a exception rather than continue to construct this object
       throw new IOException("Error in creating log directory:" + logDir)

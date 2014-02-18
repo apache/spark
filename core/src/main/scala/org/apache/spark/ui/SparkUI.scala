@@ -58,10 +58,10 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
     ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
     ("/", createRedirectHandler("/stages"))
   )
-  private val storage = new BlockManagerUI(sc)
-  private val jobs = new JobProgressUI(sc)
-  private val env = new EnvironmentUI(sc)
-  private val exec = new ExecutorsUI(sc)
+  private val storage = new BlockManagerUI(sc, fromDisk)
+  private val jobs = new JobProgressUI(sc, fromDisk)
+  private val env = new EnvironmentUI(sc, fromDisk)
+  private val exec = new ExecutorsUI(sc, fromDisk)
 
   // Add MetricsServlet handlers by default
   private val metricsServletHandlers = SparkEnv.get.metricsSystem.getServletHandlers
@@ -142,9 +142,8 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
       val lines = Source.fromInputStream(bufferedStream).getLines()
       lines.foreach { line =>
         currentLine = line
-        val listeners = Seq(listener)
         val event = SparkListenerEvent.fromJson(parse(line))
-        sc.dagScheduler.listenerBus.postToListeners(event, listeners)
+        sc.dagScheduler.listenerBus.postToListeners(event, Seq(listener))
       }
     } catch {
       case e: Exception =>
@@ -169,16 +168,25 @@ private[spark] object SparkUI {
 }
 
 /** A SparkListener for logging events, one file per job */
-private[spark] class UISparkListener(val name: String) extends SparkListener {
-  protected val logger = new FileLogger(name)
-
-  protected def logEvent(event: SparkListenerEvent) = {
-    logger.logLine(compactRender(event.toJson))
+private[spark] class UISparkListener(val name: String, fromDisk: Boolean = false)
+  extends SparkListener with Logging {
+  protected val logger: Option[FileLogger] = if (!fromDisk) {
+    Some(new FileLogger(name))
+  } else {
+    None
   }
 
-  override def onJobStart(jobStart: SparkListenerJobStart) = logger.start()
+  protected def logEvent(event: SparkListenerEvent) = {
+    // Log events only if the corresponding UI is not rendered from disk
+    if (!fromDisk) {
+      logWarning("Logging %s".format(Utils.getFormattedClassName(event)))
+      logger.foreach(_.logLine(compactRender(event.toJson)))
+    }
+  }
 
-  override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.close()
+  override def onJobStart(jobStart: SparkListenerJobStart) = logger.foreach(_.start())
+
+  override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.foreach(_.close())
 }
 
 /**
@@ -190,8 +198,9 @@ private[spark] class UISparkListener(val name: String) extends SparkListener {
  */
 private[spark] class StorageStatusFetchSparkListener(
     name: String,
-    sc: SparkContext)
-  extends UISparkListener(name) {
+    sc: SparkContext,
+    fromDisk: Boolean = false)
+  extends UISparkListener(name, fromDisk) {
   var storageStatusList: Seq[StorageStatus] = sc.getExecutorStorageStatus
 
   /**
@@ -207,18 +216,13 @@ private[spark] class StorageStatusFetchSparkListener(
   /**
    * Update local state with fetch result, and log the appropriate event
    */
-  protected def onStorageStatusFetch(storageStatusFetch: SparkListenerStorageStatusFetch) {
+  override def onStorageStatusFetch(storageStatusFetch: SparkListenerStorageStatusFetch) {
     storageStatusList = storageStatusFetch.storageStatusList
     logEvent(storageStatusFetch)
+    logger.foreach(_.flush())
   }
 
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
-    fetchStorageStatus()
-    logger.flush()
-  }
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = fetchStorageStatus()
 
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
-    fetchStorageStatus()
-    logger.flush()
-  }
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = fetchStorageStatus()
 }

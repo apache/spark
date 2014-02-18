@@ -21,12 +21,12 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.Handler
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.SparkContext
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.StorageStatusFetchSparkListener
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
-private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
+private[spark] class BlockManagerUI(val sc: SparkContext, fromDisk: Boolean = false) {
   private var _listener: Option[BlockManagerListener] = None
   private val indexPage = new IndexPage(this)
   private val rddPage = new RDDPage(this)
@@ -34,8 +34,10 @@ private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new BlockManagerListener(sc))
-    sc.addSparkListener(listener)
+    _listener = Some(new BlockManagerListener(sc, fromDisk))
+    if (!fromDisk) {
+      sc.addSparkListener(listener)
+    }
   }
 
   def getHandlers = Seq[(String, Handler)](
@@ -44,5 +46,5 @@ private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
   )
 }
 
-private[spark] class BlockManagerListener(sc: SparkContext)
-  extends StorageStatusFetchSparkListener("block-manager-ui", sc)
+private[spark] class BlockManagerListener(sc: SparkContext, fromDisk: Boolean = false)
+  extends StorageStatusFetchSparkListener("block-manager-ui", sc, fromDisk)

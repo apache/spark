@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import java.util.Date
 
 import scala.xml.Node
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.HashMap
 
 import org.apache.spark.scheduler.{SchedulingMode, StageInfo, TaskInfo}
 import org.apache.spark.ui.UIUtils
@@ -74,51 +74,48 @@ private[spark] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
 
   /** Render an HTML row that represents a stage */
   private def stageRow(s: StageInfo): Seq[Node] = {
+    val poolName = listener.stageIdToPool.get(s.stageId)
+    val nameLink =
+      <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(),s.stageId)}>{s.name}</a>
+    val description = listener.stageIdToDescription.get(s.stageId)
+      .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val submissionTime = s.submissionTime match {
-      case Some(t) => dateFmt.format(new Date(t))
+      case Some(d) => dateFmt.format(new Date(d))
       case None => "Unknown"
     }
-
+    val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
+    val duration =  s.submissionTime.map(t => finishTime - t)
+    val formattedDuration = duration.map(d => parent.formatDuration(d)).getOrElse("Unknown")
+    val startedTasks =
+      listener.stageIdToTasksActive.getOrElse(s.stageId, HashMap[Long, TaskInfo]()).size
+    val completedTasks = listener.stageIdToTasksComplete.getOrElse(s.stageId, 0)
+    val failedTasks = listener.stageIdToTasksFailed.getOrElse(s.stageId, 0) match {
+      case f if f > 0 => "(%s failed)".format(f)
+      case _ => ""
+    }
+    val totalTasks = s.numTasks
     val shuffleReadSortable = listener.stageIdToShuffleRead.getOrElse(s.stageId, 0L)
     val shuffleRead = shuffleReadSortable match {
       case 0 => ""
       case b => Utils.bytesToString(b)
     }
-
     val shuffleWriteSortable = listener.stageIdToShuffleWrite.getOrElse(s.stageId, 0L)
     val shuffleWrite = shuffleWriteSortable match {
       case 0 => ""
       case b => Utils.bytesToString(b)
     }
-
-    val startedTasks = listener.stageIdToTasksActive.getOrElse(s.stageId, HashSet[TaskInfo]()).size
-    val completedTasks = listener.stageIdToTasksComplete.getOrElse(s.stageId, 0)
-    val failedTasks = listener.stageIdToTasksFailed.getOrElse(s.stageId, 0) match {
-        case f if f > 0 => "(%s failed)".format(f)
-        case _ => ""
-    }
-    val totalTasks = s.numTasks
-
-    val poolName = listener.stageIdToPool.get(s.stageId)
-
-    val nameLink =
-      <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(),s.stageId)}>{s.name}</a>
-    val description = listener.stageIdToDescription.get(s.stageId)
-      .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
-    val finishTime = s.completionTime.getOrElse(System.currentTimeMillis())
-    val duration =  s.submissionTime.map(t => finishTime - t)
-
     <tr>
       <td>{s.stageId}</td>
       {if (isFairScheduler) {
-        <td><a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),poolName.get)}>
-          {poolName.get}</a></td>}
-      }
+        <td>
+          <a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),poolName.get)}>
+            {poolName.get}
+          </a>
+        </td>
+      }}
       <td>{description}</td>
       <td valign="middle">{submissionTime}</td>
-      <td sorttable_customkey={duration.getOrElse(-1).toString}>
-        {duration.map(d => parent.formatDuration(d)).getOrElse("Unknown")}
-      </td>
+      <td sorttable_customkey={duration.getOrElse(-1).toString}>{formattedDuration}</td>
       <td class="progress-cell">
         {makeProgressBar(startedTasks, completedTasks, failedTasks, totalTasks)}
       </td>

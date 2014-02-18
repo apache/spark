@@ -31,13 +31,15 @@ import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.{UISparkListener, UIUtils}
 import org.apache.spark.ui.Page.Environment
 
-private[spark] class EnvironmentUI(sc: SparkContext) {
+private[spark] class EnvironmentUI(sc: SparkContext, fromDisk: Boolean = false) {
   private var _listener: Option[EnvironmentListener] = None
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new EnvironmentListener(sc))
-    sc.addSparkListener(listener)
+    _listener = Some(new EnvironmentListener(sc, fromDisk))
+    if (!fromDisk) {
+      sc.addSparkListener(listener)
+    }
   }
 
   def getHandlers = Seq[(String, Handler)](
@@ -75,8 +77,8 @@ private[spark] class EnvironmentUI(sc: SparkContext) {
 /**
  * A SparkListener that prepares and logs information to be displayed on the Environment UI
  */
-private[spark] class EnvironmentListener(sc: SparkContext)
-  extends UISparkListener("environment-ui") {
+private[spark] class EnvironmentListener(sc: SparkContext, fromDisk: Boolean = false)
+  extends UISparkListener("environment-ui", fromDisk) {
   var jvmInformation: Seq[(String, String)] = Seq()
   var sparkProperties: Seq[(String, String)] = Seq()
   var systemProperties: Seq[(String, String)] = Seq()
@@ -113,17 +115,16 @@ private[spark] class EnvironmentListener(sc: SparkContext)
   }
 
   /** Prepare environment information for UI to render, and log the corresponding event */
-  def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) = {
+  override def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) = {
     jvmInformation = loadEnvironment.jvmInformation
     sparkProperties = loadEnvironment.sparkProperties
     systemProperties = loadEnvironment.systemProperties
     classpathEntries = loadEnvironment.classpathEntries
     logEvent(loadEnvironment)
-    logger.flush()
+    logger.foreach(_.flush())
   }
 
   override def onJobStart(jobStart: SparkListenerJobStart) = {
-    super.onJobStart(jobStart)
     loadEnvironment()
   }
 }

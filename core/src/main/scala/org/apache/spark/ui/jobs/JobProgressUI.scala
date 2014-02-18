@@ -28,10 +28,10 @@ import org.apache.spark.SparkContext
 import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[spark] class JobProgressUI(val sc: SparkContext) {
+private[spark] class JobProgressUI(val sc: SparkContext, fromDisk: Boolean = false) {
   private var _listener: Option[JobProgressListener] = None
-  private val indexPage = new IndexPage(this)
-  private val stagePage = new StagePage(this)
+  private val indexPage = new IndexPage(this, fromDisk)
+  private val stagePage = new StagePage(this, fromDisk)
   private val poolPage = new PoolPage(this)
 
   val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
@@ -39,8 +39,10 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new JobProgressListener(sc))
-    sc.addSparkListener(listener)
+    _listener = Some(new JobProgressListener(sc, fromDisk))
+    if (!fromDisk) {
+      sc.addSparkListener(listener)
+    }
   }
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)

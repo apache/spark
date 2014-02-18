@@ -26,21 +26,16 @@ import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils._
 
 /** Page showing list of all ongoing and recently finished stages and pools*/
-private[spark] class IndexPage(parent: JobProgressUI) {
+private[spark] class IndexPage(parent: JobProgressUI, fromDisk: Boolean = false) {
   private val sc = parent.sc
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
-      val activeStages = listener.activeStages.toSeq
+      val activeStages = listener.activeStages.values.toSeq
       val completedStages = listener.completedStages.reverse.toSeq
       val failedStages = listener.failedStages.reverse.toSeq
       val now = System.currentTimeMillis()
-
-      var activeTime = 0L
-      for (tasks <- listener.stageIdToTasksActive.values; t <- tasks) {
-        activeTime += t.timeRunning(now)
-      }
 
       val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
       val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse,
@@ -79,9 +74,9 @@ private[spark] class IndexPage(parent: JobProgressUI) {
           Seq()
         }} ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
-        activeStagesTable.toNodeSeq++
+        activeStagesTable.toNodeSeq ++
         <h4 id="completed">Completed Stages ({completedStages.size})</h4> ++
-        completedStagesTable.toNodeSeq++
+        completedStagesTable.toNodeSeq ++
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 

@@ -27,7 +27,7 @@ import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
 
 /** Page showing specific pool details */
-private[spark] class PoolPage(parent: JobProgressUI) {
+private[spark] class PoolPage(parent: JobProgressUI, fromDisk: Boolean = false) {
   private val sc = parent.sc
   private def listener = parent.listener
 
@@ -35,7 +35,10 @@ private[spark] class PoolPage(parent: JobProgressUI) {
     listener.synchronized {
       val poolName = request.getParameter("poolname")
       val poolToActiveStages = listener.poolToActiveStages
-      val activeStages = poolToActiveStages.get(poolName).toSeq.flatten
+      val activeStages = poolToActiveStages.get(poolName) match {
+        case Some(s) => s.values.toSeq
+        case None => Seq()
+      }
       val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
 
       val pool = sc.getPoolForName(poolName).get
