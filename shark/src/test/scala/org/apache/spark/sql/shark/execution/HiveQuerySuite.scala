@@ -27,10 +27,10 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("IgnoreExplain",
     """EXPLAIN SELECT key FROM src""")
 
-  createQueryTest("trival join where clause",
+  createQueryTest("trivial join where clause",
     "SELECT * FROM src a JOIN src b WHERE a.key = b.key")
 
-  createQueryTest("trival join ON clause",
+  createQueryTest("trivial join ON clause",
     "SELECT * FROM src a JOIN src b ON a.key = b.key")
 
   createQueryTest("small.cartesian",
@@ -39,11 +39,11 @@ class HiveQuerySuite extends HiveComparisonTest {
   createQueryTest("length.udf",
     "SELECT length(\"test\") FROM src LIMIT 1")
 
-
   ignore("partitioned table scan") {
     createQueryTest("partitioned table scan",
       "SELECT ds, hr, key, value FROM srcpart")
   }
+
   createQueryTest("hash",
     "SELECT hash('test') FROM src LIMIT 1")
 

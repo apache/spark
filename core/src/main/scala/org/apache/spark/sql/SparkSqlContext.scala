@@ -102,6 +102,8 @@ class SparkSqlContext(val sparkContext: SparkContext) extends Logging {
     override def toString: String =
       s"""== Logical Plan ==
          |${stringOrError(analyzed)}
+         |== Optimized Logical Plan
+         |${stringOrError(optimizedPlan)}
          |== Physical Plan ==
          |${stringOrError(executedPlan)}
       """.stripMargin.trim
