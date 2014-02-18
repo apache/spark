@@ -78,7 +78,7 @@ class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
           lookupRelation(Some(databaseName), tableName, None).asInstanceOf[BaseRelation],
           Map.empty,
           child,
-          false)
+          overwrite = false)
     }
   }
 

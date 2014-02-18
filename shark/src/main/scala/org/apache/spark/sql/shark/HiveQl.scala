@@ -482,8 +482,6 @@ object HiveQl {
             .map(StopAfter(_, withSort))
             .getOrElse(withSort)
 
-        // There are two tokens for specifying where to sent the result that seem to be used almost
-        // interchangeably.
         // TOK_INSERT_INTO means to add files to the table.
         // TOK_DESTINATION means to overwrite the table.
         val resultDestination =

@@ -301,18 +301,19 @@ case class InsertIntoHiveTable(
       }
       val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols(), partitionSpec)
       db.validatePartitionNameCharacters(partVals)
-      // TODO: Correctly set isSkewedStoreAsSubdir (the last parameter).
-      // (the last three parameters).
+      // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
+      // which is currently considered as a Hive native command.
+      val inheritTableSpecs = true
+      // TODO: Correctly set isSkewedStoreAsSubdir.
+      val isSkewedStoreAsSubdir = false
       db.loadPartition(
         outputPath,
         qualifiedTableName,
         partitionSpec,
         overwrite,
         holdDDLTime,
-        // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
-        // which is currently considered as a Hive native command.
-        true,
-        false)
+        inheritTableSpecs,
+        isSkewedStoreAsSubdir)
     } else {
       db.loadTable(
         outputPath,
