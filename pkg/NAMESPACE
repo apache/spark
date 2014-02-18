@@ -1,8 +1,10 @@
 #exportPattern("^[[:alpha:]]+")
 exportClasses("RDD")
+exportClasses("PipelinedRDD")
 exportClasses("Broadcast")
 exportMethods(
               "cache",
+              "checkpoint",
               "collect",
               "collectPartition",
               "combineByKey",
@@ -20,9 +22,18 @@ exportMethods(
               "sampleRDD",
               "take",
               "takeSample",
+              "unpersist",
               "value"
              )
 
 # S3 methods exported
-export("textFile", "parallelize", "hashCode", "includePackage", "broadcast", "setBroadcastValue")
+export(
+       "textFile",
+       "parallelize",
+       "hashCode",
+       "includePackage",
+       "broadcast",
+       "setBroadcastValue",
+       "setCheckpointDir"
+      )
 export("sparkR.init")

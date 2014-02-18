@@ -24,6 +24,49 @@ test_that("lapplyPartition on RDD", {
   expect_equal(actual, list(15, 40))
 })
 
+test_that("several transformations on RDD (a benchmark on PipelinedRDD)", {
+  rdd2 <- rdd
+  for (i in 1:12)
+    rdd2 <- lapplyPartitionsWithIndex(
+              rdd2, function(split, part) {
+                part <- as.list(unlist(part) * split + i)
+              })
+  rdd2 <- lapply(rdd2, function(x) x + x)
+  collect(rdd2)
+})
+
+test_that("PipelinedRDD support actions: cache(), unpersist(), checkpoint()", {
+  # RDD
+  rdd2 <- rdd
+  # PipelinedRDD
+  rdd2 <- lapplyPartitionsWithIndex(
+            rdd2,
+            function(split, part) {
+              part <- as.list(unlist(part) * split)
+            })
+
+  cache(rdd2)
+  expect_true(rdd2@env$isCached)
+  rdd2 <- lapply(rdd2, function(x) x)
+  expect_false(rdd2@env$isCached)
+
+  unpersist(rdd2)
+  expect_false(rdd2@env$isCached)
+
+  setCheckpointDir(sc, "checkpoints")
+  checkpoint(rdd2)
+  expect_true(rdd2@env$isCheckpointed)
+
+  rdd2 <- lapply(rdd2, function(x) x)
+  expect_false(rdd2@env$isCached)
+  expect_false(rdd2@env$isCheckpointed)
+
+  # make sure the data is collectable
+  collect(rdd2)
+
+  unlink("checkpoints")
+})
+
 test_that("reduce on RDD", {
   sum <- reduce(rdd, "+")
   expect_equal(sum, 55)
