@@ -7,7 +7,8 @@ def sharedSettings = Defaults.defaultSettings ++ Seq(
   organization := "org.apache.spark.sql",
   version := "0.1-SNAPSHOT",
   scalaVersion := "2.10.3",
-  scalacOptions ++= Seq("-deprecation", "-feature", "-unchecked"),
+  // TODO: Re-enable -deprecation
+  scalacOptions ++= Seq("-feature", "-unchecked"),
   // Common Dependencies.
   libraryDependencies ++= Seq(
     "org.scalatest" %% "scalatest" % "1.9.1" % "test",

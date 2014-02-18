@@ -6,7 +6,7 @@ import catalyst.planning._
 import catalyst.plans._
 import catalyst.plans.logical.LogicalPlan
 
-import execution.SparkPlan
+import org.apache.spark.sql.execution._
 
 trait SharkStrategies {
   // Possibly being too clever with types here... or not clever enough.
@@ -24,8 +24,8 @@ trait SharkStrategies {
 
   object DataSinks extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.InsertIntoTable(table: MetastoreRelation, partition, child) =>
-        InsertIntoHiveTable(table, partition, planLater(child))(sharkContext) :: Nil
+      case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
+        InsertIntoHiveTable(table, partition, planLater(child), overwrite)(sharkContext) :: Nil
       case _ => Nil
     }
   }
@@ -75,7 +75,7 @@ trait SharkStrategies {
 
         otherPredicates
           .reduceLeftOption(And)
-          .map(execution.Filter(_, scan))
+          .map(Filter(_, scan))
           .getOrElse(scan) :: Nil
 
       case _ =>

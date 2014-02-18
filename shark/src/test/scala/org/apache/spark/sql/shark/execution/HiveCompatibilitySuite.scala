@@ -80,6 +80,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "index_bitmap_auto_partitioned",
     "ql_rewrite_gbtoidx",
     "stats1.*",
+    "stats20",
     "alter_merge_stats",
 
     // Hive seems to think 1.0 > NaN = true && 1.0 < NaN = false... which is wrong.
@@ -506,7 +507,6 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "sort_merge_join_desc_6",
     "sort_merge_join_desc_7",
     "stats0",
-    "stats20",
     "stats_empty_partition",
     "subq2",
     "tablename_with_select",

@@ -1,27 +1,30 @@
 package org.apache.spark.sql
 package shark
 
-import java.io.{File, IOException}
-import java.util.UUID
-
-import org.apache.hadoop.fs.Path
 import org.apache.hadoop.hive.common.`type`.{HiveDecimal, HiveVarchar}
-import org.apache.hadoop.hive.ql.io.HiveFileFormatUtils
-import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition}
+import org.apache.hadoop.hive.metastore.MetaStoreUtils
+import org.apache.hadoop.hive.ql.Context
+import org.apache.hadoop.hive.ql.metadata.{Partition => HivePartition, Hive}
 import org.apache.hadoop.hive.ql.plan.{TableDesc, FileSinkDesc}
-import org.apache.hadoop.hive.serde2.AbstractSerDe
+import org.apache.hadoop.hive.serde2.Serializer
 import org.apache.hadoop.hive.serde2.objectinspector._
 import org.apache.hadoop.hive.serde2.objectinspector.ObjectInspectorUtils.ObjectInspectorCopyOption
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveDecimalObjectInspector
 import org.apache.hadoop.hive.serde2.objectinspector.primitive.JavaHiveVarcharObjectInspector
-import org.apache.hadoop.io.NullWritable
-import org.apache.hadoop.mapred.JobConf
-import org.apache.spark.SparkContext._
+
+import org.apache.hadoop.fs.Path
+import org.apache.hadoop.io.Writable
+import org.apache.hadoop.mapred._
 
 import catalyst.expressions._
 import catalyst.types.{BooleanType, DataType}
+import org.apache.spark.{TaskContext, SparkException}
+import catalyst.expressions.Cast
+import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution._
 
-import execution._
+import scala.Some
+import scala.collection.immutable.ListMap
 
 /* Implicits */
 import scala.collection.JavaConversions._
@@ -148,30 +151,19 @@ case class HiveTableScan(
 }
 
 case class InsertIntoHiveTable(
-    table: MetastoreRelation, partition: Map[String, Option[String]], child: SparkPlan)
+    table: MetastoreRelation,
+    partition: Map[String, Option[String]],
+    child: SparkPlan,
+    overwrite: Boolean)
     (@transient sc: SharkContext)
   extends UnaryNode {
 
-  /**
-   * This file sink / record writer code is only the first step towards implementing this operator
-   * correctly and is not actually used yet.
-   */
-  val desc = new FileSinkDesc("./", table.tableDesc, false)
-
   val outputClass = newSerializer(table.tableDesc).getSerializedClass
+  @transient private val hiveContext = new Context(sc.hiveconf)
+  @transient private val db = Hive.get(sc.hiveconf)
 
-  lazy val conf = new JobConf()
-
-  lazy val writer = HiveFileFormatUtils.getHiveRecordWriter(
-    conf,
-    table.tableDesc,
-    outputClass,
-    desc,
-    new Path((new org.apache.hadoop.fs.RawLocalFileSystem).getWorkingDirectory, "test.out"),
-    null)
-
-  private def newSerializer(tableDesc: TableDesc) = {
-    val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[AbstractSerDe]
+  private def newSerializer(tableDesc: TableDesc): Serializer = {
+    val serializer = tableDesc.getDeserializerClass.newInstance().asInstanceOf[Serializer]
     serializer.initialize(null, tableDesc.getProperties)
     serializer
   }
@@ -193,6 +185,65 @@ case class InsertIntoHiveTable(
     case (obj, _) => obj
   }
 
+  def saveAsHiveFile(
+      rdd: RDD[Writable],
+      valueClass: Class[_],
+      fileSinkConf: FileSinkDesc,
+      conf: JobConf,
+      isCompressed: Boolean) {
+    if (valueClass == null) {
+      throw new SparkException("Output value class not set")
+    }
+    conf.setOutputValueClass(valueClass)
+    if (fileSinkConf.getTableInfo.getOutputFileFormatClassName == null) {
+      throw new SparkException("Output format class not set")
+    }
+    // Doesn't work in Scala 2.9 due to what may be a generics bug
+    // TODO: Should we uncomment this for Scala 2.10?
+    // conf.setOutputFormat(outputFormatClass)
+    conf.set("mapred.output.format.class", fileSinkConf.getTableInfo.getOutputFileFormatClassName)
+    if (isCompressed) {
+      // Please note that isCompressed, "mapred.output.compress", "mapred.output.compression.codec",
+      // and "mapred.output.compression.type" have no impact on ORC because it uses table properties
+      // to store compression information.
+      conf.set("mapred.output.compress", "true")
+      fileSinkConf.setCompressed(true)
+      fileSinkConf.setCompressCodec(conf.get("mapred.output.compression.codec"))
+      fileSinkConf.setCompressType(conf.get("mapred.output.compression.type"))
+    }
+    conf.setOutputCommitter(classOf[FileOutputCommitter])
+    FileOutputFormat.setOutputPath(
+      conf,
+      SharkHadoopWriter.createPathFromString(fileSinkConf.getDirName, conf))
+
+    logger.debug("Saving as hadoop file of type " + valueClass.getSimpleName)
+
+    val writer = new SharkHadoopWriter(conf, fileSinkConf)
+    writer.preSetup()
+
+    def writeToFile(context: TaskContext, iter: Iterator[Writable]) {
+      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
+      // around by taking a mod. We expect that no task will be attempted 2 billion times.
+      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+
+      writer.setup(context.stageId, context.partitionId, attemptNumber)
+      writer.open()
+
+      var count = 0
+      while(iter.hasNext) {
+        val record = iter.next()
+        count += 1
+        writer.write(record)
+      }
+
+      writer.close()
+      writer.commit()
+    }
+
+    sc.sparkContext.runJob(rdd, writeToFile _)
+    writer.commitJob()
+  }
+
   /**
    * Inserts all the rows in the table into Hive.  Row objects are properly serialized with the
    * `org.apache.hadoop.hive.serde2.SerDe` and the
@@ -202,46 +253,74 @@ case class InsertIntoHiveTable(
     val childRdd = child.execute()
     assert(childRdd != null)
 
-    // TODO write directly to Hive
-    val tempDir = File.createTempFile("catalysthiveout", "")
-    tempDir.delete()
-    tempDir.mkdir()
-
-
     // Have to pass the TableDesc object to RDD.mapPartitions and then instantiate new serializer
-    // instances within the closure, since AbstractSerDe is not serializable while TableDesc is.
+    // instances within the closure, since Serializer is not serializable while TableDesc is.
     val tableDesc = table.tableDesc
-    childRdd.mapPartitions { iter =>
-      val serializer = newSerializer(tableDesc)
+    val tableLocation = table.hiveQlTable.getDataLocation
+    val tmpLocation = hiveContext.getExternalTmpFileURI(tableLocation)
+    val fileSinkConf = new FileSinkDesc(tmpLocation.toString, tableDesc, false)
+    val rdd = childRdd.mapPartitions { iter =>
+      val serializer = newSerializer(fileSinkConf.getTableInfo)
       val standardOI = ObjectInspectorUtils
-        .getStandardObjectInspector(serializer.getObjectInspector, ObjectInspectorCopyOption.JAVA)
+        .getStandardObjectInspector(
+          fileSinkConf.getTableInfo.getDeserializer.getObjectInspector,
+          ObjectInspectorCopyOption.JAVA)
         .asInstanceOf[StructObjectInspector]
 
       iter.map { row =>
         // Casts Strings to HiveVarchars when necessary.
         val fieldOIs = standardOI.getAllStructFieldRefs.map(_.getFieldObjectInspector)
         val mappedRow = row.zip(fieldOIs).map(wrap)
-        (null, serializer.serialize(mappedRow.toArray, standardOI))
-      }
-    }.saveAsHadoopFile(
-        tempDir.getCanonicalPath,
-        classOf[NullWritable],
-        outputClass,
-        tableDesc.getOutputFileFormatClass)
 
-    val partitionSpec = if (partition.nonEmpty) {
-        partition.map {
-          case (k, Some(v)) => s"$k=$v"
-          // Dynamic partition inserts
-          case (k, None) => s"$k"
-        }.mkString(" PARTITION (", ", ", ")")
-      } else {
-        ""
+        serializer.serialize(mappedRow.toArray, standardOI)
       }
+    }
 
-    val inpath = tempDir.getCanonicalPath + "/*"
-    sc.runHive(s"""LOAD DATA LOCAL INPATH '$inpath' INTO TABLE
-      ${table.databaseName}.${table.tableName}$partitionSpec""")
+    // ORC stores compression information in table properties. While, there are other formats
+    // (e.g. RCFile) that rely on hadoop configurations to store compression information.
+    val jobConf = new JobConf(sc.hiveconf)
+    saveAsHiveFile(
+      rdd,
+      outputClass,
+      fileSinkConf,
+      jobConf,
+      sc.hiveconf.getBoolean("hive.exec.compress.output", false))
+
+    // TODO: Handle dynamic partitioning.
+    val outputPath = FileOutputFormat.getOutputPath(jobConf)
+    // Have to construct the format of dbname.tablename.
+    val qualifiedTableName = s"${table.databaseName}.${table.tableName}"
+    // TODO: Correctly set holdDDLTime.
+    // In most of the time, we should have holdDDLTime = false.
+    // holdDDLTime will be true when TOK_HOLD_DDLTIME presents in the query as a hint.
+    val holdDDLTime = false
+    if (partition.nonEmpty) {
+      val partitionSpec = partition.map {
+        case (key, Some(value)) => key -> value
+        case (key, None) => key -> "" // Should not reach here right now.
+      }
+      val partVals = MetaStoreUtils.getPvals(table.hiveQlTable.getPartCols(), partitionSpec)
+      db.validatePartitionNameCharacters(partVals)
+      // inheritTableSpecs is set to true. It should be set to false for a IMPORT query
+      // which is currently considered as a Hive native command.
+      val inheritTableSpecs = true
+      // TODO: Correctly set isSkewedStoreAsSubdir.
+      val isSkewedStoreAsSubdir = false
+      db.loadPartition(
+        outputPath,
+        qualifiedTableName,
+        partitionSpec,
+        overwrite,
+        holdDDLTime,
+        inheritTableSpecs,
+        isSkewedStoreAsSubdir)
+    } else {
+      db.loadTable(
+        outputPath,
+        qualifiedTableName,
+        overwrite,
+        holdDDLTime)
+    }
 
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which

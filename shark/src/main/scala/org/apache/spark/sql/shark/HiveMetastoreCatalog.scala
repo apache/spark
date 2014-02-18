@@ -3,14 +3,12 @@ package shark
 
 import scala.util.parsing.combinator.RegexParsers
 
-import org.apache.hadoop.hive.conf.HiveConf
-import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table}
-import org.apache.hadoop.hive.metastore.api.{StorageDescriptor, SerDeInfo}
+import org.apache.hadoop.hive.metastore.api.{FieldSchema, StorageDescriptor, SerDeInfo}
+import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
+import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.session.SessionState
-import org.apache.hadoop.hive.serde2.AbstractDeserializer
-import org.apache.hadoop.mapred.InputFormat
+import org.apache.hadoop.hive.serde2.Deserializer
 
 import catalyst.analysis.Catalog
 import catalyst.expressions._
@@ -18,12 +16,11 @@ import catalyst.plans.logical
 import catalyst.plans.logical._
 import catalyst.rules._
 import catalyst.types._
-import execution._
 
 import scala.collection.JavaConversions._
 
 class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
-  val client = new HiveMetaStoreClient(shark.hiveconf)
+  val client = Hive.get(shark.hiveconf)
 
   def lookupRelation(
       db: Option[String],
@@ -31,17 +28,18 @@ class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
       alias: Option[String]): LogicalPlan = {
     val databaseName = db.getOrElse(shark.sessionState.getCurrentDatabase())
     val table = client.getTable(databaseName, tableName)
-    val hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
-    val partitions =
-      if (hiveQlTable.isPartitioned) {
-        // TODO: Is 255 the right number to pick?
-        client.listPartitions(databaseName, tableName, 255).toSeq
+    val partitions: Seq[Partition] =
+      if (table.isPartitioned) {
+        client.getPartitions(table)
       } else {
         Nil
       }
 
     // Since HiveQL is case insensitive for table names we make them all lowercase.
-    MetastoreRelation(databaseName.toLowerCase, tableName.toLowerCase, alias)(table, partitions)
+    MetastoreRelation(
+      databaseName.toLowerCase,
+      tableName.toLowerCase,
+      alias)(table.getTTable, partitions.map(part => part.getTPartition))
   }
 
   /**
@@ -55,14 +53,13 @@ class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
       case InsertIntoCreatedTable(db, tableName, child) =>
         val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase())
 
-        val table = new Table()
+        val table = new Table(databaseName, tableName)
         val schema =
           child.output.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
+        table.setFields(schema)
 
-        table.setDbName(databaseName)
-        table.setTableName(tableName)
         val sd = new StorageDescriptor()
-        table.setSd(sd)
+        table.getTTable.setSd(sd)
         sd.setCols(schema)
 
         // TODO: THESE ARE ALL DEFAULTS, WE NEED TO PARSE / UNDERSTAND the output specs.
@@ -80,7 +77,8 @@ class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
         InsertIntoTable(
           lookupRelation(Some(databaseName), tableName, None).asInstanceOf[BaseRelation],
           Map.empty,
-          child)
+          child,
+          overwrite = false)
     }
   }
 
@@ -93,7 +91,7 @@ class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
       // Wait until children are resolved
       case p: LogicalPlan if !p.childrenResolved => p
 
-      case p @ InsertIntoTable(table: MetastoreRelation, _, child) =>
+      case p @ InsertIntoTable(table: MetastoreRelation, _, child, _) =>
         val childOutputDataTypes = child.output.map(_.dataType)
         // Only check attributes, not partitionKeys since they are always strings.
         // TODO: Fully support inserting into partitioned tables.
@@ -174,20 +172,28 @@ object HiveMetastoreTypes extends RegexParsers {
 }
 
 case class MetastoreRelation(databaseName: String, tableName: String, alias: Option[String])
-    (val table: Table, val partitions: Seq[Partition])
+    (val table: TTable, val partitions: Seq[TPartition])
   extends BaseRelation {
+  // TODO: Can we use org.apache.hadoop.hive.ql.metadata.Table as the type of table and
+  // use org.apache.hadoop.hive.ql.metadata.Partition as the type of elements of partitions.
+  // Right now, using org.apache.hadoop.hive.ql.metadata.Table and
+  // org.apache.hadoop.hive.ql.metadata.Partition will cause a NotSerializableException
+  // which indicates the SerDe we used is not Serializable.
 
-  def hiveQlTable = new org.apache.hadoop.hive.ql.metadata.Table(table)
+  def hiveQlTable = new Table(table)
 
   def hiveQlPartitions = partitions.map { p =>
-    new org.apache.hadoop.hive.ql.metadata.Partition(hiveQlTable, p)
+    new Partition(hiveQlTable, p)
   }
 
   val tableDesc = new TableDesc(
-    Class.forName(table.getSd.getSerdeInfo.getSerializationLib)
-      .asInstanceOf[Class[AbstractDeserializer]],
-    Class.forName(table.getSd.getInputFormat).asInstanceOf[Class[InputFormat[_,_]]],
-    Class.forName(table.getSd.getOutputFormat),
+    Class.forName(hiveQlTable.getSerializationLib).asInstanceOf[Class[Deserializer]],
+    hiveQlTable.getInputFormatClass,
+    // The class of table should be org.apache.hadoop.hive.ql.metadata.Table because
+    // getOutputFormatClass will use HiveFileFormatUtils.getOutputFormatSubstitute to
+    // substitute some output formats, e.g. substituting SequenceFileOutputFormat to
+    // HiveSequenceFileOutputFormat.
+    hiveQlTable.getOutputFormatClass,
     hiveQlTable.getMetadata
   )
 

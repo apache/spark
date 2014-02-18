@@ -5,6 +5,7 @@ import scala.collection.JavaConversions._
 
 import org.apache.hadoop.hive.ql.lib.Node
 import org.apache.hadoop.hive.ql.parse._
+import org.apache.hadoop.hive.ql.plan.PlanUtils
 
 import catalyst.analysis._
 import catalyst.expressions._
@@ -334,8 +335,40 @@ object HiveQl {
 
     case Token("TOK_CREATETABLE", children)
         if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
-      val (Some(tableNameParts) :: _ /* likeTable */ :: Some(query) :: Nil) =
-        getClauses(Seq("TOK_TABNAME", "TOK_LIKETABLE", "TOK_QUERY"), children)
+      // TODO: Parse other clauses.
+      // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
+      val (
+          Some(tableNameParts) ::
+          _ /* likeTable */ ::
+          Some(query) +:
+          notImplemented) =
+        getClauses(
+          Seq(
+            "TOK_TABNAME",
+            "TOK_LIKETABLE",
+            "TOK_QUERY",
+            "TOK_IFNOTEXISTS",
+            "TOK_TABLECOMMENT",
+            "TOK_TABCOLLIST",
+            "TOK_TABLEPARTCOLS", // Partitioned by
+            "TOK_TABLEBUCKETS", // Clustered by
+            "TOK_TABLESKEWED", // Skewed by
+            "TOK_TABLEROWFORMAT",
+            "TOK_TABLESERIALIZER",
+            "TOK_FILEFORMAT_GENERIC", // For file formats not natively supported by Hive.
+            "TOK_TBLSEQUENCEFILE", // Stored as SequenceFile
+            "TOK_TBLTEXTFILE", // Stored as TextFile
+            "TOK_TBLRCFILE", // Stored as RCFile
+            "TOK_TBLORCFILE", // Stored as ORC File
+            "TOK_TABLEFILEFORMAT", // User-provided InputFormat and OutputFormat
+            "TOK_STORAGEHANDLER", // Storage handler
+            "TOK_TABLELOCATION",
+            "TOK_TABLEPROPERTIES"),
+          children)
+      if (notImplemented.exists(token => !token.isEmpty)) {
+        throw new NotImplementedError(
+          s"Unhandled clauses: ${notImplemented.flatten.map(dumpTree(_)).mkString("\n")}")
+      }
 
       val (db, tableName) =
         tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
@@ -480,14 +513,15 @@ object HiveQl {
             .map(StopAfter(_, withSort))
             .getOrElse(withSort)
 
-        // There are two tokens for specifying where to sent the result that seem to be used almost
-        // interchangeably.
+        // TOK_INSERT_INTO means to add files to the table.
+        // TOK_DESTINATION means to overwrite the table.
         val resultDestination =
           (intoClause orElse destClause).getOrElse(sys.error("No destination found."))
-
+        val overwrite = if (intoClause.isEmpty) true else false
         nodeToDest(
           resultDestination,
-          withLimit)
+          withLimit,
+          overwrite)
       }
 
       // If there are multiple INSERTS just UNION them together into on query.
@@ -642,7 +676,10 @@ object HiveQl {
   }
 
   val destinationToken = "TOK_DESTINATION|TOK_INSERT_INTO".r
-  protected def nodeToDest(node: Node, query: LogicalPlan): LogicalPlan = node match {
+  protected def nodeToDest(
+      node: Node,
+      query: LogicalPlan,
+      overwrite: Boolean): LogicalPlan = node match {
     case Token(destinationToken(),
            Token("TOK_DIR",
              Token("TOK_TMP_FILE", Nil) :: Nil) :: Nil) =>
@@ -661,12 +698,18 @@ object HiveQl {
         }
 
       val partitionKeys = partitionClause.map(_.getChildren.map {
+        // Parse partitions. We also make keys case insensitive.
         case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) =>
-          key -> Some(value)
-        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => key -> None
+          cleanIdentifier(key.toLowerCase) -> Some(PlanUtils.stripQuotes(value))
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => cleanIdentifier(key.toLowerCase) -> None
       }.toMap).getOrElse(Map.empty)
 
-      InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query)
+      if (partitionKeys.values.exists(p => p.isEmpty)) {
+        throw new NotImplementedError(s"Do not support INSERT INTO/OVERWRITE with" +
+          s"dynamic partitioning.")
+      }
+
+      InsertIntoTable(UnresolvedRelation(db, tableName, None), partitionKeys, query, overwrite)
 
     case a: ASTNode =>
       throw new NotImplementedError(s"No parse rules for:\n ${dumpTree(a).toString} ")

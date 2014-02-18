@@ -4,7 +4,7 @@ package shark
 import java.io.{InputStreamReader, BufferedReader}
 
 import catalyst.expressions._
-import execution._
+import org.apache.spark.sql.execution._
 
 import scala.collection.JavaConversions._
 
