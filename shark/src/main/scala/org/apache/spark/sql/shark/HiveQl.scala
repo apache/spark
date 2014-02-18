@@ -335,9 +335,40 @@ object HiveQl {
 
     case Token("TOK_CREATETABLE", children)
         if children.collect { case t@Token("TOK_QUERY", _) => t }.nonEmpty =>
-      // TODO: Parse other properties.
-      val (Some(tableNameParts) :: _ /* likeTable */ :: Some(query) :: Nil) =
-        getClauses(Seq("TOK_TABNAME", "TOK_LIKETABLE", "TOK_QUERY"), children)
+      // TODO: Parse other clauses.
+      // Reference: https://cwiki.apache.org/confluence/display/Hive/LanguageManual+DDL
+      val (
+          Some(tableNameParts) ::
+          _ /* likeTable */ ::
+          Some(query) +:
+          notImplemented) =
+        getClauses(
+          Seq(
+            "TOK_TABNAME",
+            "TOK_LIKETABLE",
+            "TOK_QUERY",
+            "TOK_IFNOTEXISTS",
+            "TOK_TABLECOMMENT",
+            "TOK_TABCOLLIST",
+            "TOK_TABLEPARTCOLS", // Partitioned by
+            "TOK_TABLEBUCKETS", // Clustered by
+            "TOK_TABLESKEWED", // Skewed by
+            "TOK_TABLEROWFORMAT",
+            "TOK_TABLESERIALIZER",
+            "TOK_FILEFORMAT_GENERIC", // For file formats not natively supported by Hive.
+            "TOK_TBLSEQUENCEFILE", // Stored as SequenceFile
+            "TOK_TBLTEXTFILE", // Stored as TextFile
+            "TOK_TBLRCFILE", // Stored as RCFile
+            "TOK_TBLORCFILE", // Stored as ORC File
+            "TOK_TABLEFILEFORMAT", // User-provided InputFormat and OutputFormat
+            "TOK_STORAGEHANDLER", // Storage handler
+            "TOK_TABLELOCATION",
+            "TOK_TABLEPROPERTIES"),
+          children)
+      if (notImplemented.exists(token => !token.isEmpty)) {
+        throw new NotImplementedError(
+          s"Unhandled clauses: ${notImplemented.flatten.map(dumpTree(_)).mkString("\n")}")
+      }
 
       val (db, tableName) =
         tableNameParts.getChildren.map{ case Token(part, Nil) => cleanIdentifier(part)} match {
