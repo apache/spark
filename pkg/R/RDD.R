@@ -10,7 +10,6 @@
 #'
 #' @param env An R environment that stores bookkeeping states of the RDD
 #' @param jrdd Java object reference to the backing JavaRDD
-#' @param serialized TRUE if the JavaRDD contains serialized R objects
 #' @export
 setClass("RDD",
          slots = list(env = "environment",
