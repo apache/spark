@@ -60,5 +60,6 @@ object FlumeEventCount {
     stream.count().map(cnt => "Received " + cnt + " flume events." ).print()
 
     ssc.start()
+    ssc.awaitTermination()
   }
 }

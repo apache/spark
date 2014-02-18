@@ -33,7 +33,7 @@ private[spark] trait AppClientListener {
   /** Dead means that we couldn't find any Masters to connect to, and have given up. */
   def dead(): Unit
 
-  def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int, memory: Int): Unit
+  def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int, memory: Int)
 
   def executorRemoved(fullId: String, message: String, exitStatus: Option[Int]): Unit
 }

@@ -27,6 +27,7 @@ import traceback
 from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
+import warnings
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, pack_long
@@ -179,7 +180,7 @@ class RDD(object):
         [(2, 2), (2, 2), (3, 3), (3, 3), (4, 4), (4, 4)]
         """
         def func(s, iterator): return chain.from_iterable(imap(f, iterator))
-        return self.mapPartitionsWithSplit(func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def mapPartitions(self, f, preservesPartitioning=False):
         """
@@ -191,10 +192,24 @@ class RDD(object):
         [3, 7]
         """
         def func(s, iterator): return f(iterator)
-        return self.mapPartitionsWithSplit(func)
+        return self.mapPartitionsWithIndex(func)
+
+    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+        """
+        Return a new RDD by applying a function to each partition of this RDD,
+        while tracking the index of the original partition.
+
+        >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
+        >>> def f(splitIndex, iterator): yield splitIndex
+        >>> rdd.mapPartitionsWithIndex(f).sum()
+        6
+        """
+        return PipelinedRDD(self, f, preservesPartitioning)
 
     def mapPartitionsWithSplit(self, f, preservesPartitioning=False):
         """
+        Deprecated: use mapPartitionsWithIndex instead.
+
         Return a new RDD by applying a function to each partition of this RDD,
         while tracking the index of the original partition.
 
@@ -203,7 +218,9 @@ class RDD(object):
         >>> rdd.mapPartitionsWithSplit(f).sum()
         6
         """
-        return PipelinedRDD(self, f, preservesPartitioning)
+        warnings.warn("mapPartitionsWithSplit is deprecated; "
+            "use mapPartitionsWithIndex instead", DeprecationWarning, stacklevel=2)
+        return self.mapPartitionsWithIndex(f, preservesPartitioning)
 
     def filter(self, f):
         """
@@ -235,7 +252,7 @@ class RDD(object):
         >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
         [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
         """
-        return self.mapPartitionsWithSplit(RDDSampler(withReplacement, fraction, seed).func, True)
+        return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
     def takeSample(self, withReplacement, num, seed):
@@ -438,6 +455,18 @@ class RDD(object):
             yield None
         self.mapPartitions(processPartition).collect()  # Force evaluation
 
+    def foreachPartition(self, f):
+        """
+        Applies a function to each partition of this RDD.
+
+        >>> def f(iterator): 
+        ...      for x in iterator: 
+        ...           print x 
+        ...      yield None
+        >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartition(f)
+        """
+        self.mapPartitions(f).collect()  # Force evaluation
+        
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
@@ -677,6 +706,24 @@ class RDD(object):
         4
         """
         return dict(self.collect())
+
+    def keys(self):
+        """
+        Return an RDD with the keys of each tuple.
+        >>> m = sc.parallelize([(1, 2), (3, 4)]).keys()
+        >>> m.collect()
+        [1, 3]
+        """
+        return self.map(lambda (k, v): k)
+
+    def values(self):
+        """
+        Return an RDD with the values of each tuple.
+        >>> m = sc.parallelize([(1, 2), (3, 4)]).values()
+        >>> m.collect()
+        [2, 4]
+        """
+        return self.map(lambda (k, v): v)
 
     def reduceByKey(self, func, numPartitions=None):
         """
@@ -969,6 +1016,36 @@ class RDD(object):
         [(0, ([0], [0])), (1, ([1], [1])), (2, ([], [2])), (3, ([], [3])), (4, ([2], [4]))]
         """
         return self.map(lambda x: (f(x), x))
+
+    def repartition(self, numPartitions):
+        """
+         Return a new RDD that has exactly numPartitions partitions.
+          
+         Can increase or decrease the level of parallelism in this RDD. Internally, this uses
+         a shuffle to redistribute data.
+         If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
+         which can avoid performing a shuffle.
+         >>> rdd = sc.parallelize([1,2,3,4,5,6,7], 4)
+         >>> sorted(rdd.glom().collect())
+         [[1], [2, 3], [4, 5], [6, 7]]
+         >>> len(rdd.repartition(2).glom().collect())
+         2
+         >>> len(rdd.repartition(10).glom().collect())
+         10
+        """
+        jrdd = self._jrdd.repartition(numPartitions)
+        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
+
+    def coalesce(self, numPartitions, shuffle=False):
+        """
+        Return a new RDD that is reduced into `numPartitions` partitions.
+        >>> sc.parallelize([1, 2, 3, 4, 5], 3).glom().collect()
+        [[1], [2, 3], [4, 5]]
+        >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
+        [[1, 2, 3, 4, 5]]
+        """
+        jrdd = self._jrdd.coalesce(numPartitions)
+        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
 
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the

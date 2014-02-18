@@ -14,7 +14,7 @@ This starts with implementing [NetworkReceiver](api/streaming/index.html#org.apa
 The following is a simple socket text-stream receiver.
 
 {% highlight scala %}
-       class SocketTextStreamReceiver(host: String, port: Int(
+       class SocketTextStreamReceiver(host: String, port: Int)
          extends NetworkReceiver[String]
        {
          protected lazy val blocksGenerator: BlockGenerator =

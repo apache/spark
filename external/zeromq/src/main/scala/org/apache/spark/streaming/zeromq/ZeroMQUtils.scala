@@ -46,7 +46,7 @@ object ZeroMQUtils {
       ssc: StreamingContext,
       publisherUrl: String,
       subscribe: Subscribe,
-      bytesToObjects: Seq[ByteString] ⇒ Iterator[T],
+      bytesToObjects: Seq[ByteString] => Iterator[T],
       storageLevel: StorageLevel = StorageLevel.MEMORY_AND_DISK_SER_2,
       supervisorStrategy: SupervisorStrategy = ReceiverSupervisorStrategy.defaultStrategy
     ): DStream[T] = {
@@ -59,10 +59,10 @@ object ZeroMQUtils {
    * @param jssc           JavaStreamingContext object
    * @param publisherUrl   Url of remote ZeroMQ publisher
    * @param subscribe      Topic to subscribe to
-   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
-   *                       of byte thus it needs the converter(which might be deserializer of bytes)
-   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
-   *                       and sub sequence refer to its payload.
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
+   *                       frame has sequence of byte thus it needs the converter(which might be
+   *                       deserializer of bytes) to translate from sequence of sequence of bytes,
+   *                       where sequence refer to a frame and sub sequence refer to its payload.
    * @param storageLevel  Storage level to use for storing the received objects
    */
   def createStream[T](
@@ -84,10 +84,10 @@ object ZeroMQUtils {
    * @param jssc           JavaStreamingContext object
    * @param publisherUrl   Url of remote zeromq publisher
    * @param subscribe      Topic to subscribe to
-   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
-   *                       of byte thus it needs the converter(which might be deserializer of bytes)
-   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
-   *                       and sub sequence refer to its payload.
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
+   *                       frame has sequence of byte thus it needs the converter(which might be
+   *                       deserializer of bytes) to translate from sequence of sequence of bytes,
+   *                       where sequence refer to a frame and sub sequence refer to its payload.
    * @param storageLevel   RDD storage level.
    */
   def createStream[T](
@@ -108,10 +108,11 @@ object ZeroMQUtils {
    * @param jssc           JavaStreamingContext object
    * @param publisherUrl   Url of remote zeromq publisher
    * @param subscribe      Topic to subscribe to
-   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each frame has sequence
-   *                       of byte thus it needs the converter(which might be deserializer of bytes)
-   *                       to translate from sequence of sequence of bytes, where sequence refer to a frame
-   *                       and sub sequence refer to its payload.
+   * @param bytesToObjects A zeroMQ stream publishes sequence of frames for each topic and each
+   *                       frame has sequence of byte thus it needs the converter(which might
+   *                       be deserializer of bytes) to translate from sequence of sequence of
+   *                       bytes, where sequence refer to a frame and sub sequence refer to its
+   *                       payload.
    */
   def createStream[T](
       jssc: JavaStreamingContext,

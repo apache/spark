@@ -37,8 +37,8 @@ case class SparkListenerTaskGettingResult(
 case class SparkListenerTaskEnd(task: Task[_], reason: TaskEndReason, taskInfo: TaskInfo,
      taskMetrics: TaskMetrics) extends SparkListenerEvents
 
-case class SparkListenerJobStart(job: ActiveJob, stageIds: Array[Int], properties: Properties = null)
-     extends SparkListenerEvents
+case class SparkListenerJobStart(job: ActiveJob, stageIds: Array[Int],
+    properties: Properties = null) extends SparkListenerEvents
 
 case class SparkListenerJobEnd(job: ActiveJob, jobResult: JobResult)
      extends SparkListenerEvents
@@ -99,11 +99,14 @@ class StatsReportListener extends SparkListener with Logging {
     showMillisDistribution("task runtime:", (info, _) => Some(info.duration))
 
     //shuffle write
-    showBytesDistribution("shuffle bytes written:",(_,metric) => metric.shuffleWriteMetrics.map{_.shuffleBytesWritten})
+    showBytesDistribution("shuffle bytes written:",
+      (_,metric) => metric.shuffleWriteMetrics.map(_.shuffleBytesWritten))
 
     //fetch & io
-    showMillisDistribution("fetch wait time:",(_, metric) => metric.shuffleReadMetrics.map{_.fetchWaitTime})
-    showBytesDistribution("remote bytes read:", (_, metric) => metric.shuffleReadMetrics.map{_.remoteBytesRead})
+    showMillisDistribution("fetch wait time:",
+      (_, metric) => metric.shuffleReadMetrics.map(_.fetchWaitTime))
+    showBytesDistribution("remote bytes read:",
+      (_, metric) => metric.shuffleReadMetrics.map(_.remoteBytesRead))
     showBytesDistribution("task result size:", (_, metric) => Some(metric.resultSize))
 
     //runtime breakdown
@@ -111,8 +114,10 @@ class StatsReportListener extends SparkListener with Logging {
     val runtimePcts = stageCompleted.stage.taskInfos.map{
       case (info, metrics) => RuntimePercentage(info.duration, metrics)
     }
-    showDistribution("executor (non-fetch) time pct: ", Distribution(runtimePcts.map{_.executorPct * 100}), "%2.0f %%")
-    showDistribution("fetch wait time pct: ", Distribution(runtimePcts.flatMap{_.fetchPct.map{_ * 100}}), "%2.0f %%")
+    showDistribution("executor (non-fetch) time pct: ",
+      Distribution(runtimePcts.map{_.executorPct * 100}), "%2.0f %%")
+    showDistribution("fetch wait time pct: ",
+      Distribution(runtimePcts.flatMap{_.fetchPct.map{_ * 100}}), "%2.0f %%")
     showDistribution("other time pct: ", Distribution(runtimePcts.map{_.other * 100}), "%2.0f %%")
   }
 
@@ -147,7 +152,8 @@ private[spark] object StatsReportListener extends Logging {
     logInfo("\t" + quantiles.mkString("\t"))
   }
 
-  def showDistribution(heading: String, dOpt: Option[Distribution], formatNumber: Double => String) {
+  def showDistribution(heading: String, dOpt: Option[Distribution], formatNumber: Double => String)
+  {
     dOpt.foreach { d => showDistribution(heading, d, formatNumber)}
   }
 
@@ -156,8 +162,11 @@ private[spark] object StatsReportListener extends Logging {
     showDistribution(heading, dOpt, f _)
   }
 
-  def showDistribution(heading:String, format: String, getMetric: (TaskInfo,TaskMetrics) => Option[Double])
-    (implicit stage: SparkListenerStageCompleted) {
+  def showDistribution(
+      heading: String,
+      format: String,
+      getMetric: (TaskInfo, TaskMetrics) => Option[Double])
+      (implicit stage: SparkListenerStageCompleted) {
     showDistribution(heading, extractDoubleDistribution(stage, getMetric), format)
   }
 
@@ -175,7 +184,8 @@ private[spark] object StatsReportListener extends Logging {
   }
 
   def showMillisDistribution(heading: String, dOpt: Option[Distribution]) {
-    showDistribution(heading, dOpt, (d => StatsReportListener.millisToString(d.toLong)): Double => String)
+    showDistribution(heading, dOpt,
+      (d => StatsReportListener.millisToString(d.toLong)): Double => String)
   }
 
   def showMillisDistribution(heading: String, getMetric: (TaskInfo, TaskMetrics) => Option[Long])
@@ -212,7 +222,7 @@ private object RuntimePercentage {
     val denom = totalTime.toDouble
     val fetchTime = metrics.shuffleReadMetrics.map{_.fetchWaitTime}
     val fetch = fetchTime.map{_ / denom}
-    val exec = (metrics.executorRunTime - fetchTime.getOrElse(0l)) / denom
+    val exec = (metrics.executorRunTime - fetchTime.getOrElse(0L)) / denom
     val other = 1.0 - (exec + fetch.getOrElse(0d))
     RuntimePercentage(exec, fetch, other)
   }

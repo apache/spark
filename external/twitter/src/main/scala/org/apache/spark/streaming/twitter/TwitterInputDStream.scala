@@ -17,14 +17,11 @@
 
 package org.apache.spark.streaming.twitter
 
-import java.util.prefs.Preferences
 import twitter4j._
 import twitter4j.auth.Authorization
 import twitter4j.conf.ConfigurationBuilder
-import twitter4j.conf.PropertyConfiguration
 import twitter4j.auth.OAuthAuthorization
-import twitter4j.auth.AccessToken
-import org.apache.spark._
+
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.dstream._
 import org.apache.spark.storage.StorageLevel

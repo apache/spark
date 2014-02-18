@@ -187,8 +187,9 @@ extends Logging {
     val bais = new ByteArrayInputStream(byteArray)
 
     var blockNum = (byteArray.length / BLOCK_SIZE)
-    if (byteArray.length % BLOCK_SIZE != 0)
+    if (byteArray.length % BLOCK_SIZE != 0) {
       blockNum += 1
+    }
 
     var retVal = new Array[TorrentBlock](blockNum)
     var blockID = 0

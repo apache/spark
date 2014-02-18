@@ -28,7 +28,7 @@ object LocalFileLR {
 
   def parsePoint(line: String): DataPoint = {
     val nums = line.split(' ').map(_.toDouble)
-    DataPoint(new Vector(nums.slice(1, D+1)), nums(0))
+    DataPoint(new Vector(nums.slice(1, D + 1)), nums(0))
   }
 
   def main(args: Array[String]) {

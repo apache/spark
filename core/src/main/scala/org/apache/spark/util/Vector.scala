@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import scala.util.Random
+import org.apache.spark.util.random.XORShiftRandom
 
 class Vector(val elements: Array[Double]) extends Serializable {
   def length = elements.length
@@ -25,24 +26,27 @@ class Vector(val elements: Array[Double]) extends Serializable {
   def apply(index: Int) = elements(index)
 
   def + (other: Vector): Vector = {
-    if (length != other.length)
+    if (length != other.length) {
       throw new IllegalArgumentException("Vectors of different length")
+    }
     Vector(length, i => this(i) + other(i))
   }
 
   def add(other: Vector) = this + other
 
   def - (other: Vector): Vector = {
-    if (length != other.length)
+    if (length != other.length) {
       throw new IllegalArgumentException("Vectors of different length")
+    }
     Vector(length, i => this(i) - other(i))
   }
 
   def subtract(other: Vector) = this - other
 
   def dot(other: Vector): Double = {
-    if (length != other.length)
+    if (length != other.length) {
       throw new IllegalArgumentException("Vectors of different length")
+    }
     var ans = 0.0
     var i = 0
     while (i < length) {
@@ -59,10 +63,12 @@ class Vector(val elements: Array[Double]) extends Serializable {
    * @return
    */
   def plusDot(plus: Vector, other: Vector): Double = {
-    if (length != other.length)
+    if (length != other.length) {
       throw new IllegalArgumentException("Vectors of different length")
-    if (length != plus.length)
+    }
+    if (length != plus.length) {
       throw new IllegalArgumentException("Vectors of different length")
+    }
     var ans = 0.0
     var i = 0
     while (i < length) {
@@ -73,8 +79,9 @@ class Vector(val elements: Array[Double]) extends Serializable {
   }
 
   def += (other: Vector): Vector = {
-    if (length != other.length)
+    if (length != other.length) {
       throw new IllegalArgumentException("Vectors of different length")
+    }
     var i = 0
     while (i < length) {
       elements(i) += other(i)
@@ -130,7 +137,8 @@ object Vector {
    * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers 
    * between 0.0 and 1.0. Optional [[scala.util.Random]] number generator can be provided.
    */
-  def random(length: Int, random: Random = new XORShiftRandom()) = Vector(length, _ => random.nextDouble())
+  def random(length: Int, random: Random = new XORShiftRandom()) =
+    Vector(length, _ => random.nextDouble())
 
   class Multiplier(num: Double) {
     def * (vec: Vector) = vec * num

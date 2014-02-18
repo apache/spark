@@ -27,7 +27,7 @@ from pyspark.broadcast import Broadcast
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
-from pyspark.serializers import PickleSerializer, BatchedSerializer, MUTF8Deserializer
+from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
 from pyspark.rdd import RDD
 
@@ -234,7 +234,7 @@ class SparkContext(object):
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minSplits), self,
-                   MUTF8Deserializer())
+                   UTF8Deserializer())
 
     def _checkpointFile(self, name, input_deserializer):
         jrdd = self._jsc.checkpointFile(name)

@@ -224,24 +224,26 @@ private[spark] object SizeEstimator extends Logging {
   }
 
   private def primitiveSize(cls: Class[_]): Long = {
-    if (cls == classOf[Byte])
+    if (cls == classOf[Byte]) {
       BYTE_SIZE
-    else if (cls == classOf[Boolean])
+    } else if (cls == classOf[Boolean]) {
       BOOLEAN_SIZE
-    else if (cls == classOf[Char])
+    } else if (cls == classOf[Char]) {
       CHAR_SIZE
-    else if (cls == classOf[Short])
+    } else if (cls == classOf[Short]) {
       SHORT_SIZE
-    else if (cls == classOf[Int])
+    } else if (cls == classOf[Int]) {
       INT_SIZE
-    else if (cls == classOf[Long])
+    } else if (cls == classOf[Long]) {
       LONG_SIZE
-    else if (cls == classOf[Float])
+    } else if (cls == classOf[Float]) {
       FLOAT_SIZE
-    else if (cls == classOf[Double])
+    } else if (cls == classOf[Double]) {
       DOUBLE_SIZE
-    else throw new IllegalArgumentException(
+    } else {
+      throw new IllegalArgumentException(
       "Non-primitive class " + cls + " passed to primitiveSize()")
+    }
   }
 
   /**

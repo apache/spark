@@ -21,16 +21,25 @@ import scala.math._
 import org.jblas.DoubleMatrix
 
 /**
- * Class used to update weights used in Gradient Descent.
+ * Class used to perform steps (weight update) using Gradient Descent methods.
+ *
+ * For general minimization problems, or for regularized problems of the form
+ *         min  L(w) + regParam * R(w),
+ * the compute function performs the actual update step, when given some
+ * (e.g. stochastic) gradient direction for the loss L(w),
+ * and a desired step-size (learning rate).
+ *
+ * The updater is responsible to also perform the update coming from the
+ * regularization term R(w) (if any regularization is used).
  */
 abstract class Updater extends Serializable {
   /**
    * Compute an updated value for weights given the gradient, stepSize, iteration number and
-   * regularization parameter. Also returns the regularization value computed using the
-   * *updated* weights.
+   * regularization parameter. Also returns the regularization value regParam * R(w)
+   * computed using the *updated* weights.
    *
-   * @param weightsOld - Column matrix of size nx1 where n is the number of features.
-   * @param gradient - Column matrix of size nx1 where n is the number of features.
+   * @param weightsOld - Column matrix of size dx1 where d is the number of features.
+   * @param gradient - Column matrix of size dx1 where d is the number of features.
    * @param stepSize - step size across iterations
    * @param iter - Iteration number
    * @param regParam - Regularization parameter
@@ -43,23 +52,29 @@ abstract class Updater extends Serializable {
 }
 
 /**
- * A simple updater that adaptively adjusts the learning rate the
- * square root of the number of iterations. Does not perform any regularization.
+ * A simple updater for gradient descent *without* any regularization.
+ * Uses a step-size decreasing with the square root of the number of iterations.
  */
 class SimpleUpdater extends Updater {
   override def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix,
       stepSize: Double, iter: Int, regParam: Double): (DoubleMatrix, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
-    val normGradient = gradient.mul(thisIterStepSize)
-    (weightsOld.sub(normGradient), 0)
+    val step = gradient.mul(thisIterStepSize)
+    (weightsOld.sub(step), 0)
   }
 }
 
 /**
- * Updater that adjusts learning rate and performs L1 regularization.
+ * Updater for L1 regularized problems.
+ *          R(w) = ||w||_1
+ * Uses a step-size decreasing with the square root of the number of iterations.
+
+ * Instead of subgradient of the regularizer, the proximal operator for the
+ * L1 regularization is applied after the gradient step. This is known to
+ * result in better sparsity of the intermediate solution.
  *
- * The corresponding proximal operator used is the soft-thresholding function.
- * That is, each weight component is shrunk towards 0 by shrinkageVal.
+ * The corresponding proximal operator for the L1 norm is the soft-thresholding
+ * function. That is, each weight component is shrunk towards 0 by shrinkageVal.
  *
  * If w >  shrinkageVal, set weight component to w-shrinkageVal.
  * If w < -shrinkageVal, set weight component to w+shrinkageVal.
@@ -71,10 +86,10 @@ class L1Updater extends Updater {
   override def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix,
       stepSize: Double, iter: Int, regParam: Double): (DoubleMatrix, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
-    val normGradient = gradient.mul(thisIterStepSize)
+    val step = gradient.mul(thisIterStepSize)
     // Take gradient step
-    val newWeights = weightsOld.sub(normGradient)
-    // Soft thresholding
+    val newWeights = weightsOld.sub(step)
+    // Apply proximal operator (soft thresholding)
     val shrinkageVal = regParam * thisIterStepSize
     (0 until newWeights.length).foreach { i =>
       val wi = newWeights.get(i)
@@ -85,19 +100,19 @@ class L1Updater extends Updater {
 }
 
 /**
- * Updater that adjusts the learning rate and performs L2 regularization
- *
- * See, for example, explanation of gradient and loss with L2 regularization on slide 21-22
- * of <a href="http://people.cs.umass.edu/~sheldon/teaching/2012fa/ml/files/lec7-annotated.pdf">
- * these slides</a>.
+ * Updater for L2 regularized problems.
+ *          R(w) = 1/2 ||w||^2
+ * Uses a step-size decreasing with the square root of the number of iterations.
  */
 class SquaredL2Updater extends Updater {
   override def compute(weightsOld: DoubleMatrix, gradient: DoubleMatrix,
       stepSize: Double, iter: Int, regParam: Double): (DoubleMatrix, Double) = {
     val thisIterStepSize = stepSize / math.sqrt(iter)
-    val normGradient = gradient.mul(thisIterStepSize)
-    val newWeights = weightsOld.mul(1.0 - 2.0 * thisIterStepSize * regParam).sub(normGradient)
-    (newWeights, pow(newWeights.norm2, 2.0) * regParam)
+    val step = gradient.mul(thisIterStepSize)
+    // add up both updates from the gradient of the loss (= step) as well as
+    // the gradient of the regularizer (= regParam * weightsOld)
+    val newWeights = weightsOld.mul(1.0 - thisIterStepSize * regParam).sub(step)
+    (newWeights, 0.5 * pow(newWeights.norm2, 2.0) * regParam)
   }
 }
 

@@ -17,9 +17,8 @@
 
 package org.apache.spark.mllib.optimization
 
-import org.apache.spark.{Logging, SparkContext}
+import org.apache.spark.Logging
 import org.apache.spark.rdd.RDD
-import org.apache.spark.SparkContext._
 
 import org.jblas.DoubleMatrix
 
@@ -39,7 +38,8 @@ class GradientDescent(var gradient: Gradient, var updater: Updater)
   private var miniBatchFraction: Double = 1.0
 
   /**
-   * Set the step size per-iteration of SGD. Default 1.0.
+   * Set the initial step size of SGD for the first step. Default 1.0.
+   * In subsequent steps, the step size will decrease with stepSize/sqrt(t)
    */
   def setStepSize(step: Double): this.type = {
     this.stepSize = step
@@ -47,7 +47,8 @@ class GradientDescent(var gradient: Gradient, var updater: Updater)
   }
 
   /**
-   * Set fraction of data to be used for each SGD iteration. Default 1.0.
+   * Set fraction of data to be used for each SGD iteration.
+   * Default 1.0 (corresponding to deterministic/classical gradient descent)
    */
   def setMiniBatchFraction(fraction: Double): this.type = {
     this.miniBatchFraction = fraction
@@ -63,7 +64,7 @@ class GradientDescent(var gradient: Gradient, var updater: Updater)
   }
 
   /**
-   * Set the regularization parameter used for SGD. Default 0.0.
+   * Set the regularization parameter. Default 0.0.
    */
   def setRegParam(regParam: Double): this.type = {
     this.regParam = regParam
@@ -71,7 +72,8 @@ class GradientDescent(var gradient: Gradient, var updater: Updater)
   }
 
   /**
-   * Set the gradient function to be used for SGD.
+   * Set the gradient function (of the loss function of one single data example)
+   * to be used for SGD.
    */
   def setGradient(gradient: Gradient): this.type = {
     this.gradient = gradient
@@ -80,7 +82,9 @@ class GradientDescent(var gradient: Gradient, var updater: Updater)
 
 
   /**
-   * Set the updater function to be used for SGD.
+   * Set the updater function to actually perform a gradient step in a given direction.
+   * The updater is responsible to perform the update from the regularization term as well,
+   * and therefore determines what kind or regularization is used, if any.
    */
   def setUpdater(updater: Updater): this.type = {
     this.updater = updater
@@ -107,20 +111,26 @@ class GradientDescent(var gradient: Gradient, var updater: Updater)
 // Top-level method to run gradient descent.
 object GradientDescent extends Logging {
   /**
-   * Run gradient descent in parallel using mini batches.
+   * Run stochastic gradient descent (SGD) in parallel using mini batches.
+   * In each iteration, we sample a subset (fraction miniBatchFraction) of the total data
+   * in order to compute a gradient estimate.
+   * Sampling, and averaging the subgradients over this subset is performed using one standard
+   * spark map-reduce in each iteration.
    *
-   * @param data - Input data for SGD. RDD of form (label, [feature values]).
-   * @param gradient - Gradient object that will be used to compute the gradient.
-   * @param updater - Updater object that will be used to update the model.
-   * @param stepSize - stepSize to be used during update.
+   * @param data - Input data for SGD. RDD of the set of data examples, each of
+   *               the form (label, [feature values]).
+   * @param gradient - Gradient object (used to compute the gradient of the loss function of
+   *                   one single data example)
+   * @param updater - Updater function to actually perform a gradient step in a given direction.
+   * @param stepSize - initial step size for the first step
    * @param numIterations - number of iterations that SGD should be run.
    * @param regParam - regularization parameter
    * @param miniBatchFraction - fraction of the input data set that should be used for
    *                            one iteration of SGD. Default value 1.0.
    *
    * @return A tuple containing two elements. The first element is a column matrix containing
-   *         weights for every feature, and the second element is an array containing the stochastic
-   *         loss computed for every iteration.
+   *         weights for every feature, and the second element is an array containing the
+   *         stochastic loss computed for every iteration.
    */
   def runMiniBatchSGD(
     data: RDD[(Double, Array[Double])],
@@ -142,7 +152,9 @@ object GradientDescent extends Logging {
     var regVal = 0.0
 
     for (i <- 1 to numIterations) {
-      val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42+i).map {
+      // Sample a subset (fraction miniBatchFraction) of the total data
+      // compute and sum up the subgradients on this subset (this is one map-reduce)
+      val (gradientSum, lossSum) = data.sample(false, miniBatchFraction, 42 + i).map {
         case (y, features) =>
           val featuresCol = new DoubleMatrix(features.length, 1, features:_*)
           val (grad, loss) = gradient.compute(featuresCol, y, weights)
@@ -160,7 +172,7 @@ object GradientDescent extends Logging {
       regVal = update._2
     }
 
-    logInfo("GradientDescent finished. Last 10 stochastic losses %s".format(
+    logInfo("GradientDescent.runMiniBatchSGD finished. Last 10 stochastic losses %s".format(
       stochasticLossHistory.takeRight(10).mkString(", ")))
 
     (weights.toArray, stochasticLossHistory.toArray)

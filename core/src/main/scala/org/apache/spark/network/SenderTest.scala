@@ -52,17 +52,19 @@ private[spark] object SenderTest {
       val dataMessage = Message.createBufferMessage(buffer.duplicate)
       val startTime = System.currentTimeMillis
       /*println("Started timer at " + startTime)*/
-      val responseStr = manager.sendMessageReliablySync(targetConnectionManagerId, dataMessage) match {
-        case Some(response) =>
+      val responseStr = manager.sendMessageReliablySync(targetConnectionManagerId, dataMessage)
+        .map { response =>
           val buffer = response.asInstanceOf[BufferMessage].buffers(0)
           new String(buffer.array)
-        case None => "none"
-      }
+        }.getOrElse("none")
+
       val finishTime = System.currentTimeMillis
       val mb = size / 1024.0 / 1024.0
       val ms = finishTime - startTime
-      /*val resultStr = "Sent " + mb + " MB " + targetServer + " in " + ms + " ms at " + (mb / ms * 1000.0) + " MB/s"*/
-      val resultStr = "Sent " + mb + " MB " + targetServer + " in " + ms + " ms (" +  (mb / ms * 1000.0).toInt + "MB/s) | Response = " + responseStr
+      // val resultStr = "Sent " + mb + " MB " + targetServer + " in " + ms + " ms at " + (mb / ms
+      //  * 1000.0) + " MB/s"
+      val resultStr = "Sent " + mb + " MB " + targetServer + " in " + ms + " ms (" +
+        (mb / ms * 1000.0).toInt + "MB/s) | Response = " + responseStr
       println(resultStr)
     })
   }

@@ -76,9 +76,9 @@ object BlockFetcherIterator {
 
     import blockManager._
 
-    private var _remoteBytesRead = 0l
-    private var _remoteFetchTime = 0l
-    private var _fetchWaitTime = 0l
+    private var _remoteBytesRead = 0L
+    private var _remoteFetchTime = 0L
+    private var _fetchWaitTime = 0L
 
     if (blocksByAddress == null) {
       throw new IllegalArgumentException("BlocksByAddress is null")

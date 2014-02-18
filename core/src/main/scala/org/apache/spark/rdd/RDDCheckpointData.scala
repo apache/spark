@@ -35,10 +35,10 @@ private[spark] object CheckpointState extends Enumeration {
 }
 
 /**
- * This class contains all the information related to RDD checkpointing. Each instance of this class
- * is associated with a RDD. It manages process of checkpointing of the associated RDD, as well as,
- * manages the post-checkpoint state by providing the updated partitions, iterator and preferred locations
- * of the checkpointed RDD.
+ * This class contains all the information related to RDD checkpointing. Each instance of this
+ * class is associated with a RDD. It manages process of checkpointing of the associated RDD,
+ * as well as, manages the post-checkpoint state by providing the updated partitions,
+ * iterator and preferred locations of the checkpointed RDD.
  */
 private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
   extends Logging with Serializable {
@@ -97,7 +97,7 @@ private[spark] class RDDCheckpointData[T: ClassTag](@transient rdd: RDD[T])
     val newRDD = new CheckpointRDD[T](rdd.context, path.toString)
     if (newRDD.partitions.size != rdd.partitions.size) {
       throw new SparkException(
-        "Checkpoint RDD " + newRDD + "("+ newRDD.partitions.size + ") has different " +
+        "Checkpoint RDD " + newRDD + "(" + newRDD.partitions.size + ") has different " +
           "number of partitions than original RDD " + rdd + "(" + rdd.partitions.size + ")")
     }
 

@@ -69,7 +69,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
     conf.getInt("spark.core.connection.io.threads.keepalive", 60), TimeUnit.SECONDS,
     new LinkedBlockingDeque[Runnable]())
 
-  // Use a different, yet smaller, thread pool - infrequently used with very short lived tasks : which should be executed asap
+  // Use a different, yet smaller, thread pool - infrequently used with very short lived tasks :
+  // which should be executed asap
   private val handleConnectExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.connect.threads.min", 1),
     conf.getInt("spark.core.connection.connect.threads.max", 8),
@@ -77,9 +78,12 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
     new LinkedBlockingDeque[Runnable]())
 
   private val serverChannel = ServerSocketChannel.open()
-  private val connectionsAwaitingSasl = new HashMap[ConnectionId, SendingConnection] with SynchronizedMap[ConnectionId, SendingConnection]
-  private val connectionsByKey = new HashMap[SelectionKey, Connection] with SynchronizedMap[SelectionKey, Connection]
-  private val connectionsById = new HashMap[ConnectionManagerId, SendingConnection] with SynchronizedMap[ConnectionManagerId, SendingConnection]
+  private val connectionsAwaitingSasl = new HashMap[ConnectionId, SendingConnection] 
+    with SynchronizedMap[ConnectionId, SendingConnection]
+  private val connectionsByKey =
+    new HashMap[SelectionKey, Connection] with SynchronizedMap[SelectionKey, Connection]
+  private val connectionsById = new HashMap[ConnectionManagerId, SendingConnection]
+    with SynchronizedMap[ConnectionManagerId, SendingConnection]
   private val messageStatuses = new HashMap[Int, MessageStatus]
   private val keyInterestChangeRequests = new SynchronizedQueue[(SelectionKey, Int)]
   private val registerRequests = new SynchronizedQueue[SendingConnection]
@@ -184,7 +188,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
     if (conn == null) return
 
     // prevent other events from being triggered
-    // Since we are still trying to connect, we do not need to do the additional steps in triggerWrite
+    // Since we are still trying to connect, we do not need to do the additional steps in
+    // triggerWrite
     conn.changeConnectionKeyInterest(0)
 
     handleConnectExecutor.execute(new Runnable {
@@ -199,8 +204,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
         }
 
         // fallback to previous behavior : we should not really come here since this method was
-        // triggered since channel became connectable : but at times, the first finishConnect need not
-        // succeed : hence the loop to retry a few 'times'.
+        // triggered since channel became connectable : but at times, the first finishConnect need
+        // not succeed : hence the loop to retry a few 'times'.
         conn.finishConnect(true)
       }
     } )
@@ -269,8 +274,9 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
                     if (opStrs.size > 0) opStrs.reduceLeft(_ + " | " + _) else " "
                   }
 
-                  logTrace("Changed key for connection to [" + connection.getRemoteConnectionManagerId()  +
-                    "] changed from [" + intToOpStr(lastOps) + "] to [" + intToOpStr(ops) + "]")
+                  logTrace("Changed key for connection to [" +
+                    connection.getRemoteConnectionManagerId()  + "] changed from [" +
+                      intToOpStr(lastOps) + "] to [" + intToOpStr(ops) + "]")
                 }
               }
             } else {
@@ -293,7 +299,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
           try {
             selector.select()
           } catch {
-            // Explicitly only dealing with CancelledKeyException here since other exceptions should be dealt with differently.
+            // Explicitly only dealing with CancelledKeyException here since other exceptions
+            // should be dealt with differently.
             case e: CancelledKeyException => {
               // Some keys within the selectors list are invalid/closed. clear them.
               val allKeys = selector.keys().iterator()
@@ -321,7 +328,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
           }
 
         if (selectedKeysCount == 0) {
-          logDebug("Selector selected " + selectedKeysCount + " of " + selector.keys.size + " keys")
+          logDebug("Selector selected " + selectedKeysCount + " of " + selector.keys.size +
+            " keys")
         }
         if (selectorThread.isInterrupted) {
           logInfo("Selector thread was interrupted!")
@@ -352,7 +360,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
                 throw new CancelledKeyException()
               }
             } catch {
-              // weird, but we saw this happening - even though key.isValid was true, key.isAcceptable would throw CancelledKeyException.
+              // weird, but we saw this happening - even though key.isValid was true,
+              // key.isAcceptable would throw CancelledKeyException.
               case e: CancelledKeyException => {
                 logInfo("key already cancelled ? " + key, e)
                 triggerForceCloseByException(key, e)
@@ -471,7 +480,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
   }
 
   def handleConnectionError(connection: Connection, e: Exception) {
-    logInfo("Handling connection error on connection to " + connection.getRemoteConnectionManagerId())
+    logInfo("Handling connection error on connection to " +
+      connection.getRemoteConnectionManagerId())
     removeConnection(connection)
   }
 
@@ -629,7 +639,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
                 status
               }
               case None => {
-                throw new Exception("Could not find reference for received ack message " + message.id)
+                throw new Exception("Could not find reference for received ack message " +
+                  message.id)
                 null
               }
             }
@@ -651,7 +662,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
 
           if (ackMessage.isDefined) {
             if (!ackMessage.get.isInstanceOf[BufferMessage]) {
-              logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type " + ackMessage.get.getClass())
+              logDebug("Response to " + bufferMessage + " is not a buffer message, it is of type "
+                + ackMessage.get.getClass())
             } else if (!ackMessage.get.asInstanceOf[BufferMessage].hasAckId) {
               logDebug("Response to " + bufferMessage + " does not have ack id set")
               ackMessage.get.asInstanceOf[BufferMessage].ackId = bufferMessage.id
@@ -722,16 +734,18 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
 
   private def sendMessage(connectionManagerId: ConnectionManagerId, message: Message) {
     def startNewConnection(): SendingConnection = {
-      val inetSocketAddress = new InetSocketAddress(connectionManagerId.host, connectionManagerId.port)
+      val inetSocketAddress = new InetSocketAddress(connectionManagerId.host,
+        connectionManagerId.port)
       val newConnectionId = ConnectionId.createConnectionId(id, idCount.getAndIncrement.intValue)
-      val newConnection = new SendingConnection(inetSocketAddress, selector, connectionManagerId, newConnectionId)
-      logInfo("creating new sending connection: " + newConnectionId)
+      val newConnection = new SendingConnection(inetSocketAddress, selector, connectionManagerId)
+      logDebug("creating new sending connection: " + newConnectionId)
       registerRequests.enqueue(newConnection)
 
       newConnection
     }
-    // I removed the lookupKey stuff as part of merge ... should I re-add it ? We did not find it useful in our test-env ...
-    // If we do re-add it, we should consistently use it everywhere I guess ?
+    // I removed the lookupKey stuff as part of merge ... should I re-add it ? We did not find it
+    // useful in our test-env ... If we do re-add it, we should consistently use it everywhere I
+    // guess ?
     val connection = connectionsById.getOrElseUpdate(connectionManagerId, startNewConnection())
     if (authEnabled) {
       checkSendAuthFirst(connectionManagerId, connection)
@@ -793,7 +807,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
   def sendMessageReliably(connectionManagerId: ConnectionManagerId, message: Message)
       : Future[Option[Message]] = {
     val promise = Promise[Option[Message]]
-    val status = new MessageStatus(message, connectionManagerId, s => promise.success(s.ackMessage))
+    val status = new MessageStatus(
+      message, connectionManagerId, s => promise.success(s.ackMessage))
     messageStatuses.synchronized {
       messageStatuses += ((message.id, status))
     }
@@ -801,7 +816,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
     promise.future
   }
 
-  def sendMessageReliablySync(connectionManagerId: ConnectionManagerId, message: Message): Option[Message] = {
+  def sendMessageReliablySync(connectionManagerId: ConnectionManagerId,
+      message: Message): Option[Message] = {
     Await.result(sendMessageReliably(connectionManagerId, message), Duration.Inf)
   }
 
@@ -891,7 +907,8 @@ private[spark] object ConnectionManager {
     val tput = mb * 1000.0 / ms
     println("--------------------------")
     println("Started at " + startTime + ", finished at " + finishTime)
-    println("Sent " + count + " messages of size " + size + " in " + ms + " ms (" + tput + " MB/s)")
+    println("Sent " + count + " messages of size " + size + " in " + ms + " ms " +
+      "(" + tput + " MB/s)")
     println("--------------------------")
     println()
   }
@@ -902,7 +919,11 @@ private[spark] object ConnectionManager {
     println("--------------------------")
     val size = 10 * 1024 * 1024
     val count = 10
-    val buffers = Array.tabulate(count)(i => ByteBuffer.allocate(size * (i + 1)).put(Array.tabulate[Byte](size * (i + 1))(x => x.toByte)))
+    val buffers = Array.tabulate(count) { i =>
+      val bufferLen = size * (i + 1)
+      val bufferContent = Array.tabulate[Byte](bufferLen)(x => x.toByte)
+      ByteBuffer.allocate(bufferLen).put(bufferContent)
+    }
     buffers.foreach(_.flip)
     val mb = buffers.map(_.remaining).reduceLeft(_ + _) / 1024.0 / 1024.0
 

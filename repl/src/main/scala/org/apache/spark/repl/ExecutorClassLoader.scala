@@ -43,17 +43,18 @@ extends ClassLoader(parent) {
 
   // Hadoop FileSystem object for our URI, if it isn't using HTTP
   var fileSystem: FileSystem = {
-    if (uri.getScheme() == "http")
+    if (uri.getScheme() == "http") {
       null
-    else
+    } else {
       FileSystem.get(uri, new Configuration())
+    }
   }
   
   override def findClass(name: String): Class[_] = {
     try {
       val pathInDirectory = name.replace('.', '/') + ".class"
       val inputStream = {
-        if (fileSystem != null)
+        if (fileSystem != null) {
           fileSystem.open(new Path(directory, pathInDirectory))
         else
           if (SparkEnv.get.securityManager.isAuthenticationEnabled()) {
@@ -113,10 +114,11 @@ extends ClassLoader(parent) {
       var done = false
       while (!done) {
         val num = in.read(bytes)
-        if (num >= 0)
+        if (num >= 0) {
           bos.write(bytes, 0, num)
-        else
+        } else {
           done = true
+        }
       }
       return bos.toByteArray
     }

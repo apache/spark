@@ -53,7 +53,8 @@ abstract class InputDStream[T: ClassTag] (@transient ssc_ : StreamingContext)
     } else {
       // Time is valid, but check it it is more than lastValidTime
       if (lastValidTime != null && time < lastValidTime) {
-        logWarning("isTimeValid called with " + time + " where as last valid time is " + lastValidTime)
+        logWarning("isTimeValid called with " + time + " where as last valid time is " +
+          lastValidTime)
       }
       lastValidTime = time
       true

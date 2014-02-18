@@ -45,10 +45,11 @@ class JobLogger(val user: String, val logDirName: String)
     String.valueOf(System.currentTimeMillis()))
 
   private val logDir =
-    if (System.getenv("SPARK_LOG_DIR") != null)
+    if (System.getenv("SPARK_LOG_DIR") != null) {
       System.getenv("SPARK_LOG_DIR")
-    else
+    } else {
       "/tmp/spark-%s".format(user)
+    }
 
   private val jobIDToPrintWriter = new HashMap[Int, PrintWriter]
   private val stageIDToJobID = new HashMap[Int, Int]
@@ -116,7 +117,7 @@ class JobLogger(val user: String, val logDirName: String)
     var writeInfo = info
     if (withTime) {
       val date = new Date(System.currentTimeMillis())
-      writeInfo = DATE_FORMAT.format(date) + ": " +info
+      writeInfo = DATE_FORMAT.format(date) + ": " + info
     }
     jobIDToPrintWriter.get(jobID).foreach(_.println(writeInfo))
   }
@@ -235,7 +236,8 @@ class JobLogger(val user: String, val logDirName: String)
    * @param stage Root stage of the job
    * @param indent Indent number before info, default is 0
    */
-  protected def recordStageDepGraph(jobID: Int, stage: Stage, idSet: HashSet[Int], indent: Int = 0) {
+  protected def recordStageDepGraph(jobID: Int, stage: Stage, idSet: HashSet[Int], indent: Int = 0)
+  {
     val stageInfo = if (stage.isShuffleMap) {
       "STAGE_ID=" + stage.id + " MAP_STAGE SHUFFLE_ID=" + stage.shuffleDep.get.shuffleId
     } else {

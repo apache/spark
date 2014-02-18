@@ -57,7 +57,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   def start() {
     try {
-      val (srv, bPort) = JettyUtils.startJettyServer("0.0.0.0", port, handlers)
+      val (srv, bPort) = JettyUtils.startJettyServer(host, port, handlers)
       server = Some(srv)
       boundPort = Some(bPort)
       logInfo("Started Worker web UI at http://%s:%d".format(host, bPort))
@@ -188,7 +188,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
     val logPageLength = math.min(byteLength, maxBytes)
 
-    val endByte = math.min(startByte+logPageLength, logLength)
+    val endByte = math.min(startByte + logPageLength, logLength)
 
     (startByte, endByte)
   }

@@ -88,7 +88,7 @@ extends Actor with Receiver {
   override def preStart = remotePublisher ! SubscribeReceiver(context.self)
 
   def receive = {
-    case msg ⇒ context.parent ! pushBlock(msg.asInstanceOf[T])
+    case msg => pushBlock(msg.asInstanceOf[T])
   }
 
   override def postStop() = remotePublisher ! UnsubscribeReceiver(context.self)
@@ -133,7 +133,7 @@ object FeederActor {
  * To run this example locally, you may run Feeder Actor as
  *    `$ ./bin/run-example org.apache.spark.streaming.examples.FeederActor 127.0.1.1 9999`
  * and then run the example
- *    `$ ./bin/run-example org.apache.spark.streaming.examples.ActorWordCount local[2] 127.0.1.1 9999`
+ *    `./bin/run-example org.apache.spark.streaming.examples.ActorWordCount local[2] 127.0.1.1 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {
@@ -172,5 +172,6 @@ object ActorWordCount {
     lines.flatMap(_.split("\\s+")).map(x => (x, 1)).reduceByKey(_ + _).print()
 
     ssc.start()
+    ssc.awaitTermination()
   }
 }

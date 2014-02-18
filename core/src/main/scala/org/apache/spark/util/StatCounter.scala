@@ -20,7 +20,8 @@ package org.apache.spark.util
 /**
  * A class for tracking the statistics of a set of numbers (count, mean and variance) in a
  * numerically robust way. Includes support for merging two StatCounters. Based on 
- * [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance Welford and Chan's algorithms for running variance]].
+ * [[http://en.wikipedia.org/wiki/Algorithms_for_calculating_variance
+ * Welford and Chan's algorithms for running variance]].
  *
  * @constructor Initialize the StatCounter with the given values.
  */
@@ -70,7 +71,7 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
         m2 += other.m2 + (delta * delta * n * other.n) / (n + other.n)
         n += other.n
       }
-      this	   
+      this
     }
   }
 
@@ -91,10 +92,11 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
 
   /** Return the variance of the values. */
   def variance: Double = {
-    if (n == 0)
+    if (n == 0) {
       Double.NaN
-    else
+    } else {
       m2 / n
+    }
   }
 
   /**
@@ -102,10 +104,11 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
    * by N-1 instead of N.
    */
   def sampleVariance: Double = {
-    if (n <= 1)
+    if (n <= 1) {
       Double.NaN
-    else
+    } else {
       m2 / (n - 1)
+    }
   }
 
   /** Return the standard deviation of the values. */

@@ -168,9 +168,9 @@ The following tables list the transformations and actions currently supported (s
     Iterator[T] => Iterator[U] when running on an RDD of type T. </td>
 </tr>
 <tr>
-  <td> <b>mapPartitionsWithSplit</b>(<i>func</i>) </td>
+  <td> <b>mapPartitionsWithIndex</b>(<i>func</i>) </td>
   <td> Similar to mapPartitions, but also provides <i>func</i> with an integer value representing the index of
-  the split, so <i>func</i> must be of type (Int, Iterator[T]) => Iterator[U] when running on an RDD of type T.
+  the partition, so <i>func</i> must be of type (Int, Iterator[T]) => Iterator[U] when running on an RDD of type T.
   </td>
 </tr>
 <tr>

@@ -168,6 +168,39 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     assert(listener.endedTasks.contains(TASK_INDEX))
   }
 
+  test("onTaskEnd() should be called for all started tasks, even after job has been killed") {
+    val WAIT_TIMEOUT_MILLIS = 10000
+    val listener = new SaveTaskEvents
+    sc.addSparkListener(listener)
+
+    val numTasks = 10
+    val f = sc.parallelize(1 to 10000, numTasks).map { i => Thread.sleep(10); i }.countAsync()
+    // Wait until one task has started (because we want to make sure that any tasks that are started
+    // have corresponding end events sent to the listener).
+    var finishTime = System.currentTimeMillis + WAIT_TIMEOUT_MILLIS
+    listener.synchronized {
+      var remainingWait = finishTime - System.currentTimeMillis
+      while (listener.startedTasks.isEmpty && remainingWait > 0) {
+        listener.wait(remainingWait)
+        remainingWait = finishTime - System.currentTimeMillis
+      }
+      assert(!listener.startedTasks.isEmpty)
+    }
+
+    f.cancel()
+
+    // Ensure that onTaskEnd is called for all started tasks.
+    finishTime = System.currentTimeMillis + WAIT_TIMEOUT_MILLIS
+    listener.synchronized {
+      var remainingWait = finishTime - System.currentTimeMillis
+      while (listener.endedTasks.size < listener.startedTasks.size && remainingWait > 0) {
+        listener.wait(finishTime - System.currentTimeMillis)
+        remainingWait = finishTime - System.currentTimeMillis
+      }
+      assert(listener.endedTasks.size === listener.startedTasks.size)
+    }
+  }
+
   def checkNonZeroAvg(m: Traversable[Long], msg: String) {
     assert(m.sum / m.size.toDouble > 0.0, msg)
   }
@@ -184,12 +217,14 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     val startedGettingResultTasks = new HashSet[Int]()
     val endedTasks = new HashSet[Int]()
 
-    override def onTaskStart(taskStart: SparkListenerTaskStart) {
+    override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
       startedTasks += taskStart.taskInfo.index
+      notify()
     }
 
-    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-        endedTasks += taskEnd.taskInfo.index
+    override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
+      endedTasks += taskEnd.taskInfo.index
+      notify()
     }
 
     override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult) {

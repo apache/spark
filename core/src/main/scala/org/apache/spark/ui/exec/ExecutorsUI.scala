@@ -51,9 +51,9 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = sc.getExecutorStorageStatus
 
-    val maxMem = storageStatusList.map(_.maxMem).fold(0L)(_+_)
-    val memUsed = storageStatusList.map(_.memUsed()).fold(0L)(_+_)
-    val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize)).fold(0L)(_+_)
+    val maxMem = storageStatusList.map(_.maxMem).fold(0L)(_ + _)
+    val memUsed = storageStatusList.map(_.memUsed()).fold(0L)(_ + _)
+    val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize)).fold(0L)(_ + _)
 
     val execHead = Seq("Executor ID", "Address", "RDD blocks", "Memory used", "Disk used",
       "Active tasks", "Failed tasks", "Complete tasks", "Total tasks", "Task Time", "Shuffle Read",

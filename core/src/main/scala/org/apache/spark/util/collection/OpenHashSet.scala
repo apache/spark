@@ -187,7 +187,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
     override def hasNext: Boolean = pos != INVALID_POS
     override def next(): T = {
       val tmp = getValue(pos)
-      pos = nextPos(pos+1)
+      pos = nextPos(pos + 1)
       tmp
     }
   }

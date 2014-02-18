@@ -97,7 +97,7 @@ object SparkEnv extends Logging {
   @volatile private var lastSetSparkEnv : SparkEnv = _
 
   def set(e: SparkEnv) {
-	  lastSetSparkEnv = e
+    lastSetSparkEnv = e
     env.set(e)
   }
 
@@ -113,7 +113,7 @@ object SparkEnv extends Logging {
    * Returns the ThreadLocal SparkEnv.
    */
   def getThreadLocal: SparkEnv = {
-	  env.get()
+    env.get()
   }
 
   private[spark] def create(
@@ -169,8 +169,8 @@ object SparkEnv extends Logging {
     val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf)), conf)
-    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, serializer, 
-      conf, securityManager)
+    val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, 
+      serializer, conf, securityManager)
 
     val connectionManager = blockManager.connectionManager
 
