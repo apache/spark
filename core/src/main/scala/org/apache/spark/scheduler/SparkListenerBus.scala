@@ -69,6 +69,10 @@ private[spark] class SparkListenerBus extends Logging {
         listeners.foreach(_.onTaskGettingResult(taskGettingResult))
       case taskEnd: SparkListenerTaskEnd =>
         listeners.foreach(_.onTaskEnd(taskEnd))
+      case loadEnvironment: SparkListenerLoadEnvironment =>
+        listeners.foreach(_.onLoadEnvironment(loadEnvironment))
+      case storageStatusFetch: SparkListenerStorageStatusFetch =>
+        listeners.foreach(_.onStorageStatusFetch(storageStatusFetch))
       case SparkListenerShutdown =>
         return true
       case _ =>

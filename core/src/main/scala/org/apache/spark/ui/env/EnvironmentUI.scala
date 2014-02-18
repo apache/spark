@@ -48,7 +48,9 @@ private[spark] class EnvironmentUI(sc: SparkContext, fromDisk: Boolean = false) 
   )
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.loadEnvironment()
+    if (!fromDisk) {
+      listener.loadEnvironment()
+    }
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, listener.jvmInformation, fixedWidth = true)
     val sparkPropertiesTable = UIUtils.listingTable(

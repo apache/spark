@@ -119,11 +119,15 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
         return false
       }
       listeners.map { listener =>
-        val path = "%s/%s/".format(dirPath.stripSuffix("/"), listener.name)
+        val name = listener.name
+        val path = "%s/%s/".format(dirPath.stripSuffix("/"), name)
         val dir = new File(path)
         if (dir.exists && dir.isDirectory) {
           val files = dir.listFiles
           Option(files).foreach { files => files.foreach(processPersistedEventLog(_, listener)) }
+          if (files.size == 0) {
+            logWarning("No logs found for %s; %s is empty".format(name, path))
+          }
         } else {
           logWarning("%s not found when rendering persisted Spark Web UI!".format(path))
           success = false

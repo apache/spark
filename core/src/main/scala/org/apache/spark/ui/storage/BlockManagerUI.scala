@@ -28,8 +28,8 @@ import org.apache.spark.ui.StorageStatusFetchSparkListener
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[spark] class BlockManagerUI(val sc: SparkContext, fromDisk: Boolean = false) {
   private var _listener: Option[BlockManagerListener] = None
-  private val indexPage = new IndexPage(this)
-  private val rddPage = new RDDPage(this)
+  private val indexPage = new IndexPage(this, fromDisk)
+  private val rddPage = new RDDPage(this, fromDisk)
 
   def listener = _listener.get
 
