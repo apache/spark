@@ -22,25 +22,23 @@ import javax.servlet.http.HttpServletRequest
 import scala.xml.Node
 
 import org.apache.spark.storage.{RDDInfo, StorageUtils}
-import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
-private[spark] class IndexPage(parent: BlockManagerUI, fromDisk: Boolean = false) {
+private[spark] class IndexPage(parent: BlockManagerUI) {
   private val sc = parent.sc
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    if (!fromDisk) {
-      listener.fetchStorageStatus()
-    }
+    listener.fetchStorageStatus()
     val storageStatusList = listener.storageStatusList
 
     // Calculate macro-level statistics
     val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
-    val content = listingTable(rddHeader, rddRow, rdds)
-    headerSparkPage(content, sc, "Storage ", Storage)
+    val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
+    UIUtils.headerSparkPage(content, sc, "Storage ", Storage)
   }
 
   /** Header fields for the RDD table */
@@ -56,7 +54,7 @@ private[spark] class IndexPage(parent: BlockManagerUI, fromDisk: Boolean = false
   private def rddRow(rdd: RDDInfo): Seq[Node] = {
     <tr>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(prependBaseUri(),rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(),rdd.id)}>
           {rdd.name}
         </a>
       </td>

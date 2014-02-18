@@ -28,19 +28,18 @@ import org.eclipse.jetty.server.Handler
 import org.apache.spark.SparkContext
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.{UISparkListener, UIUtils}
 import org.apache.spark.ui.Page.Environment
+import org.apache.spark.ui._
 
-private[spark] class EnvironmentUI(sc: SparkContext, fromDisk: Boolean = false) {
+private[spark] class EnvironmentUI(parent: SparkUI, live: Boolean) {
+  val sc = parent.sc
+
   private var _listener: Option[EnvironmentListener] = None
+
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new EnvironmentListener(sc, fromDisk))
-    if (!fromDisk) {
-      // Register for callbacks from this context only if this UI is live
-      sc.addSparkListener(listener)
-    }
+    _listener = Some(new EnvironmentListener(sc, parent.gatewayListener, live))
   }
 
   def getHandlers = Seq[(String, Handler)](
@@ -48,9 +47,7 @@ private[spark] class EnvironmentUI(sc: SparkContext, fromDisk: Boolean = false) 
   )
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    if (!fromDisk) {
-      listener.loadEnvironment()
-    }
+    listener.loadEnvironment()
     val runtimeInformationTable = UIUtils.listingTable(
       propertyHeader, jvmRow, listener.jvmInformation, fixedWidth = true)
     val sparkPropertiesTable = UIUtils.listingTable(
@@ -78,56 +75,58 @@ private[spark] class EnvironmentUI(sc: SparkContext, fromDisk: Boolean = false) 
 }
 
 /**
- * A SparkListener that prepares and logs information to be displayed on the Environment UI
+ * A SparkListener that prepares information to be displayed on the EnvironmentUI
  */
-private[spark] class EnvironmentListener(sc: SparkContext, fromDisk: Boolean = false)
-  extends UISparkListener("environment-ui", fromDisk) {
+private[spark] class EnvironmentListener(
+    sc: SparkContext,
+    gateway: GatewayUISparkListener,
+    live: Boolean)
+  extends UISparkListener(gateway) {
   var jvmInformation: Seq[(String, String)] = Seq()
   var sparkProperties: Seq[(String, String)] = Seq()
   var systemProperties: Seq[(String, String)] = Seq()
   var classpathEntries: Seq[(String, String)] = Seq()
 
   /** Gather JVM, spark, system and classpath properties */
-  def loadEnvironment() = {
-    val jvmInformation = Seq(
-      ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
-      ("Java Home", Properties.javaHome),
-      ("Scala Version", Properties.versionString),
-      ("Scala Home", Properties.scalaHome)
-    ).sorted
-    val sparkProperties = sc.conf.getAll.sorted
-    val systemProperties = System.getProperties.iterator.toSeq
-    val classPathProperty = systemProperties.find { case (k, v) =>
-      k == "java.class.path"
-    }.getOrElse(("", ""))
-    val otherProperties = systemProperties.filter { case (k, v) =>
-      k != "java.class.path" && !k.startsWith("spark.")
-    }.sorted
-    val classPathEntries = classPathProperty._2
-      .split(sc.conf.get("path.separator", ":"))
-      .filterNot(e => e.isEmpty)
-      .map(e => (e, "System Classpath"))
-    val addedJars = sc.addedJars.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
-    val addedFiles = sc.addedFiles.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
-    val classPaths = (addedJars ++ addedFiles ++ classPathEntries).sorted
+  def loadEnvironment() {
+    if (live) {
+      // Load environment only this is a live UI
+      val jvmInformation = Seq(
+        ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
+        ("Java Home", Properties.javaHome),
+        ("Scala Version", Properties.versionString),
+        ("Scala Home", Properties.scalaHome)
+      ).sorted
+      val sparkProperties = sc.conf.getAll.sorted
+      val systemProperties = System.getProperties.iterator.toSeq
+      val classPathProperty = systemProperties.find { case (k, v) =>
+        k == "java.class.path"
+      }.getOrElse(("", ""))
+      val otherProperties = systemProperties.filter { case (k, v) =>
+        k != "java.class.path" && !k.startsWith("spark.")
+      }.sorted
+      val classPathEntries = classPathProperty._2
+        .split(sc.conf.get("path.separator", ":"))
+        .filterNot(e => e.isEmpty)
+        .map(e => (e, "System Classpath"))
+      val addedJars = sc.addedJars.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
+      val addedFiles = sc.addedFiles.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
+      val classPaths = (addedJars ++ addedFiles ++ classPathEntries).sorted
 
-    // Trigger SparkListenerLoadEnvironment
-    val loadEnvironment = new SparkListenerLoadEnvironment(
-      jvmInformation, sparkProperties, otherProperties, classPaths)
-    onLoadEnvironment(loadEnvironment)
+      // Trigger SparkListenerLoadEnvironment
+      val loadEnvironment = new SparkListenerLoadEnvironment(
+        jvmInformation, sparkProperties, otherProperties, classPaths)
+      gateway.onLoadEnvironment(loadEnvironment)
+    }
   }
 
-  /** Prepare environment information for UI to render, and log the corresponding event */
-  override def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) = {
+  /** Prepare environment information for UI to render */
+  override def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) {
     jvmInformation = loadEnvironment.jvmInformation
     sparkProperties = loadEnvironment.sparkProperties
     systemProperties = loadEnvironment.systemProperties
     classpathEntries = loadEnvironment.classpathEntries
-    logEvent(loadEnvironment)
-    logger.foreach(_.flush())
   }
 
-  override def onJobStart(jobStart: SparkListenerJobStart) = {
-    loadEnvironment()
-  }
+  override def onJobStart(jobStart: SparkListenerJobStart) = loadEnvironment()
 }

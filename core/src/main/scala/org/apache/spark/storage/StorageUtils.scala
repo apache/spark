@@ -109,7 +109,7 @@ object StorageUtils {
     blockLocationPairs.groupBy(_._1).map{case (k, v) => (k, v.unzip._2)}.toMap
   }
 
-  /* Given a list of BlockStatus objets, returns information for each RDD */
+  /* Given a list of BlockStatus objects, returns information for each RDD */
   def rddInfoFromBlockStatusList(infos: Map[RDDBlockId, BlockStatus],
     sc: SparkContext) : Array[RDDInfo] = {
 

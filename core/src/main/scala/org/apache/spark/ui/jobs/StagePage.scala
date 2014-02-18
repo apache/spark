@@ -23,14 +23,14 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
-private[spark] class StagePage(parent: JobProgressUI, fromDisk: Boolean = false) {
+private[spark] class StagePage(parent: JobProgressUI) {
   private val sc = parent.sc
-  private def dateFmt = parent.dateFmt
+  private val dateFmt = parent.dateFmt
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -43,7 +43,7 @@ private[spark] class StagePage(parent: JobProgressUI, fromDisk: Boolean = false)
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return headerSparkPage(content, sc, "Details for Stage %s".format(stageId), Stages)
+        return UIUtils.headerSparkPage(content, sc, "Details for Stage %s".format(stageId), Stages)
       }
 
       val tasks = listener.stageIdToTaskInfos(stageId).values.toSeq.sortBy(_.taskInfo.launchTime)
@@ -103,7 +103,7 @@ private[spark] class StagePage(parent: JobProgressUI, fromDisk: Boolean = false)
         {if (hasBytesSpilled) Seq("Shuffle Spill (Memory)", "Shuffle Spill (Disk)") else Nil} ++
         Seq("Errors")
 
-      val taskTable = listingTable(
+      val taskTable = UIUtils.listingTable(
         taskHeaders, taskRow(hasShuffleRead, hasShuffleWrite, hasBytesSpilled), tasks)
 
       // Excludes tasks which failed and have incomplete metrics
@@ -192,7 +192,7 @@ private[spark] class StagePage(parent: JobProgressUI, fromDisk: Boolean = false)
           val quantileHeaders = Seq("Metric", "Min", "25th percentile",
             "Median", "75th percentile", "Max")
           def quantileRow(data: Seq[String]): Seq[Node] = <tr> {data.map(d => <td>{d}</td>)} </tr>
-          Some(listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
+          Some(UIUtils.listingTable(quantileHeaders, quantileRow, listings, fixedWidth = true))
         }
       val executorTable = new ExecutorTable(stageId, parent)
       val content =
@@ -202,7 +202,7 @@ private[spark] class StagePage(parent: JobProgressUI, fromDisk: Boolean = false)
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         <h4>Tasks</h4> ++ taskTable
 
-      headerSparkPage(content, sc, "Details for Stage %d".format(stageId), Stages)
+      UIUtils.headerSparkPage(content, sc, "Details for Stage %d".format(stageId), Stages)
     }
   }
 

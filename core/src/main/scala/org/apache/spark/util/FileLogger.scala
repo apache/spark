@@ -112,7 +112,7 @@ class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALU
   def start() = {
     writer.getOrElse {
       fileIndex += 1
-      Some(createWriter())
+      writer = Some(createWriter())
     }
   }
 }

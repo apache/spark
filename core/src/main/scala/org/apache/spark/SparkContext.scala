@@ -584,7 +584,7 @@ class SparkContext(
    * @param logPath Path of directory containing the event logs
    */
   def renderPersistedUI(logPath: String) = {
-    val oldUI = new SparkUI(this, fromDisk = true)
+    val oldUI = new SparkUI(this, live = false)
     oldUI.start()
     val success = oldUI.renderFromDisk(logPath)
     if (!success) {

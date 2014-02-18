@@ -25,23 +25,21 @@ import scala.xml.Node
 import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.{SparkContext, ExceptionFailure}
+import org.apache.spark.scheduler._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Executors
-import org.apache.spark.ui.{StorageStatusFetchSparkListener, UIUtils}
+import org.apache.spark.ui._
 import org.apache.spark.util.Utils
-import org.apache.spark.scheduler.SparkListenerTaskEnd
-import org.apache.spark.scheduler.SparkListenerTaskStart
 
-private[spark] class ExecutorsUI(val sc: SparkContext, fromDisk: Boolean = false) {
+private[spark] class ExecutorsUI(parent: SparkUI, live: Boolean) {
+  val sc = parent.sc
+
   private var _listener: Option[ExecutorsListener] = None
+
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new ExecutorsListener(sc, fromDisk))
-    if (!fromDisk) {
-      // Register for callbacks from this context only if this UI is live
-      sc.addSparkListener(listener)
-    }
+    _listener = Some(new ExecutorsListener(sc, parent.gatewayListener, live))
   }
 
   def getHandlers = Seq[(String, Handler)](
@@ -49,9 +47,7 @@ private[spark] class ExecutorsUI(val sc: SparkContext, fromDisk: Boolean = false
   )
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    if (!fromDisk) {
-      listener.fetchStorageStatus()
-    }
+    listener.fetchStorageStatus()
     val storageStatusList = listener.storageStatusList
     val maxMem = storageStatusList.map(_.maxMem).fold(0L)(_ + _)
     val memUsed = storageStatusList.map(_.memUsed()).fold(0L)(_ + _)
@@ -161,10 +157,13 @@ private[spark] class ExecutorsUI(val sc: SparkContext, fromDisk: Boolean = false
 }
 
 /**
- * A SparkListener that prepares and logs information to be displayed on the Executors UI
+ * A SparkListener that prepares information to be displayed on the ExecutorsUI
  */
-private[spark] class ExecutorsListener(sc: SparkContext, fromDisk: Boolean = false)
-  extends StorageStatusFetchSparkListener("executors-ui", sc, fromDisk) {
+private[spark] class ExecutorsListener(
+    sc: SparkContext,
+    gateway: GatewayUISparkListener,
+    live: Boolean)
+  extends StorageStatusFetchSparkListener(sc, gateway, live) {
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()
@@ -175,7 +174,6 @@ private[spark] class ExecutorsListener(sc: SparkContext, fromDisk: Boolean = fal
   override def onTaskStart(taskStart: SparkListenerTaskStart) {
     val eid = formatExecutorId(taskStart.taskInfo.executorId)
     executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 0) + 1
-    logEvent(taskStart)
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
@@ -200,7 +198,6 @@ private[spark] class ExecutorsListener(sc: SparkContext, fromDisk: Boolean = fal
           executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
       }
     }
-    logEvent(taskEnd)
   }
 
   /**

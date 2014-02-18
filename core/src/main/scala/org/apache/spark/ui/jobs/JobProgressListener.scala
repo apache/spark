@@ -22,7 +22,7 @@ import scala.collection.mutable.{ListBuffer, HashMap}
 import org.apache.spark.{ExceptionFailure, SparkContext, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.ui.UISparkListener
+import org.apache.spark.ui.{GatewayUISparkListener, UISparkListener}
 
 /**
  * Tracks task-level information to be displayed in the UI.
@@ -31,8 +31,10 @@ import org.apache.spark.ui.UISparkListener
  * class, since the UI thread and the DAGScheduler event loop may otherwise
  * be reading/updating the internal data structures concurrently.
  */
-private[spark] class JobProgressListener(sc: SparkContext, fromDisk: Boolean = false)
-  extends UISparkListener("job-progress-ui", fromDisk) {
+private[spark] class JobProgressListener(
+    sc: SparkContext,
+    gateway: GatewayUISparkListener)
+  extends UISparkListener(gateway) {
 
   // How many stages to remember
   val RETAINED_STAGES = sc.conf.getInt("spark.ui.retainedStages", 1000)
@@ -70,7 +72,6 @@ private[spark] class JobProgressListener(sc: SparkContext, fromDisk: Boolean = f
     activeStages.remove(stageId)
     completedStages += stage
     trimIfNecessary(completedStages)
-    logEvent(stageCompleted)
   }
 
   /** If stages is too large, remove and garbage collect old stages */
@@ -111,7 +112,6 @@ private[spark] class JobProgressListener(sc: SparkContext, fromDisk: Boolean = f
 
     val stages = poolToActiveStages.getOrElseUpdate(poolName, new HashMap[Int, StageInfo]())
     stages(stage.stageId) = stage
-    logEvent(stageSubmitted)
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
@@ -122,7 +122,6 @@ private[spark] class JobProgressListener(sc: SparkContext, fromDisk: Boolean = f
     val taskMap = stageIdToTaskInfos.getOrElse(sid, HashMap[Long, TaskUIData]())
     taskMap(taskInfo.taskId) = new TaskUIData(taskInfo)
     stageIdToTaskInfos(sid) = taskMap
-    logEvent(taskStart)
   }
 
   override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult)
@@ -207,7 +206,6 @@ private[spark] class JobProgressListener(sc: SparkContext, fromDisk: Boolean = f
     val taskInfo = taskEnd.taskInfo
     taskMap(taskInfo.taskId) = new TaskUIData(taskInfo, metrics, failureInfo)
     stageIdToTaskInfos(sid) = taskMap
-    logEvent(taskEnd)
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {
@@ -222,8 +220,6 @@ private[spark] class JobProgressListener(sc: SparkContext, fromDisk: Boolean = f
         }
       case _ =>
     }
-    logEvent(jobEnd)
-    logger.foreach(_.close())
   }
 }
 

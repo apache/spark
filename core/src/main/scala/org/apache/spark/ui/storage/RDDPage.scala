@@ -23,20 +23,18 @@ import scala.xml.Node
 
 import org.apache.spark.storage.{BlockId, StorageStatus, StorageUtils}
 import org.apache.spark.storage.BlockManagerMasterActor.BlockStatus
-import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
+import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 
 /** Page showing storage details for a given RDD */
-private[spark] class RDDPage(parent: BlockManagerUI, fromDisk: Boolean = false) {
+private[spark] class RDDPage(parent: BlockManagerUI) {
   private val sc = parent.sc
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    if (!fromDisk) {
-      listener.fetchStorageStatus()
-    }
+    listener.fetchStorageStatus()
     val storageStatusList = listener.storageStatusList
     val id = request.getParameter("id").toInt
     val filteredStorageStatusList =
@@ -45,16 +43,16 @@ private[spark] class RDDPage(parent: BlockManagerUI, fromDisk: Boolean = false) 
 
     // Worker table
     val workers = filteredStorageStatusList.map((id, _))
-    val workerTable = listingTable(workerHeader, workerRow, workers)
+    val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
 
     // Block table
     val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).toArray.
       sortWith(_._1.name < _._1.name)
     val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
-    val blocks = blockStatuses.map {
-      case(id, status) => (id, status, blockLocations.get(id).getOrElse(Seq("Unknown")))
+    val blocks = blockStatuses.map { case (id, status) =>
+      (id, status, blockLocations.get(id).getOrElse(Seq("Unknown")))
     }
-    val blockTable = listingTable(blockHeader, blockRow, blocks)
+    val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
 
     val content =
       <div class="row-fluid">
@@ -98,7 +96,7 @@ private[spark] class RDDPage(parent: BlockManagerUI, fromDisk: Boolean = false) 
         </div>
       </div>;
 
-    headerSparkPage(content, sc, "RDD Storage Info for " + rddInfo.name, Storage)
+    UIUtils.headerSparkPage(content, sc, "RDD Storage Info for " + rddInfo.name, Storage)
   }
 
   /** Header fields for the worker table */

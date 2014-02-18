@@ -24,24 +24,22 @@ import scala.io.Source
 import org.eclipse.jetty.server.{Handler, Server}
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
+import org.apache.spark.scheduler._
 import org.apache.spark.ui.env.EnvironmentUI
 import org.apache.spark.ui.exec.ExecutorsUI
 import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.ui.jobs.JobProgressUI
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.util.{FileLogger, Utils}
-import org.apache.spark.scheduler._
-import org.apache.spark.storage.StorageStatus
+import org.apache.spark.util.Utils
 
 import net.liftweb.json._
-import net.liftweb.json.JsonAST.compactRender
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 /** Top level user interface for Spark */
-private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extends Logging {
+private[spark] class SparkUI(val sc: SparkContext, live: Boolean = true) extends Logging {
   val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
-  val port = if (!fromDisk) {
+  val port = if (live) {
       sc.conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
     } else {
       // While each context has only one live SparkUI, it can have many persisted ones
@@ -60,10 +58,10 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
     ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
     ("/", createRedirectHandler("/stages"))
   )
-  private val storage = new BlockManagerUI(sc, fromDisk)
-  private val jobs = new JobProgressUI(sc, fromDisk)
-  private val env = new EnvironmentUI(sc, fromDisk)
-  private val exec = new ExecutorsUI(sc, fromDisk)
+  private val storage = new BlockManagerUI(this, live)
+  private val jobs = new JobProgressUI(this, live)
+  private val env = new EnvironmentUI(this, live)
+  private val exec = new ExecutorsUI(this, live)
 
   // Add MetricsServlet handlers by default
   private val metricsServletHandlers = SparkEnv.get.metricsSystem.getServletHandlers
@@ -71,8 +69,14 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
   private val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
     exec.getHandlers ++ metricsServletHandlers ++ handlers
 
-  // Listeners are not ready until SparkUI has started
-  private def listeners = Seq(storage.listener, jobs.listener, env.listener, exec.listener)
+  // Maintain a gateway listener for all events to simplify event logging
+  private var _gatewayListener: Option[GatewayUISparkListener] = None
+
+  def gatewayListener = _gatewayListener.getOrElse {
+    val gateway = new GatewayUISparkListener(live)
+    _gatewayListener = Some(gateway)
+    gateway
+  }
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {
@@ -94,6 +98,11 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
     //  DAGScheduler() requires that the port of this server is known
     //  This server must register all handlers, including JobProgressUI, before binding
     //  JobProgressUI registers a listener with SparkContext, which requires sc to initialize
+
+    if (live) {
+      // Listen for new events only if this UI is live
+      sc.addSparkListener(gatewayListener)
+    }
     storage.start()
     jobs.start()
     env.start()
@@ -107,40 +116,35 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
 
   /**
    * Reconstruct a previously persisted SparkUI from logs residing in the given directory.
-   * Return true if all required log files are found.
+   * Return true if log files are found and processed.
    */
   def renderFromDisk(dirPath: String): Boolean = {
-    var success = true
-    if (fromDisk) {
-      val logDir = new File(dirPath)
-      if (!logDir.exists || !logDir.isDirectory) {
-        logWarning("Given invalid directory %s when rendering persisted Spark Web UI!"
-          .format(dirPath))
-        return false
-      }
-      listeners.map { listener =>
-        val name = listener.name
-        val path = "%s/%s/".format(dirPath.stripSuffix("/"), name)
-        val dir = new File(path)
-        if (dir.exists && dir.isDirectory) {
-          val files = dir.listFiles
-          Option(files).foreach { files => files.foreach(processPersistedEventLog(_, listener)) }
-          if (files.size == 0) {
-            logWarning("No logs found for %s; %s is empty".format(name, path))
-          }
-        } else {
-          logWarning("%s not found when rendering persisted Spark Web UI!".format(path))
-          success = false
-        }
-      }
+    // Live UI's should never invoke this
+    assert(!live)
+
+    // Check validity of the given path
+    val logDir = new File(dirPath)
+    if (!logDir.exists || !logDir.isDirectory) {
+      logWarning("Given invalid log path %s when rendering persisted Spark Web UI!"
+        .format(dirPath))
+      return false
     }
-    success
+    val logFiles = logDir.listFiles.filter(_.isFile)
+    if (logFiles.size == 0) {
+      logWarning("No logs found in given directory %s when rendering persisted Spark Web UI!"
+        .format(dirPath))
+      return false
+    }
+
+    // Replay events in each event log
+    logFiles.foreach(processEventLog)
+    true
   }
 
   /**
-   * Register each event logged in the given file with the corresponding listener in order
+   * Replay each event in the order maintained in the given log to the gateway listener
    */
-  private def processPersistedEventLog(file: File, listener: SparkListener) = {
+  private def processEventLog(file: File) = {
     val fileStream = new FileInputStream(file)
     val bufferedStream = new FastBufferedInputStream(fileStream)
     var currentLine = ""
@@ -149,7 +153,7 @@ private[spark] class SparkUI(sc: SparkContext, fromDisk: Boolean = false) extend
       lines.foreach { line =>
         currentLine = line
         val event = SparkListenerEvent.fromJson(parse(line))
-        sc.dagScheduler.listenerBus.postToListeners(event, Seq(listener))
+        sc.dagScheduler.listenerBus.postToListeners(event, Seq(gatewayListener))
       }
     } catch {
       case e: Exception =>
@@ -171,62 +175,4 @@ private[spark] object SparkUI {
 
   // Keep track of the port of the last persisted UI
   var lastPersistedUIPort: Option[Int] = None
-}
-
-/** A SparkListener for logging events, one file per job */
-private[spark] class UISparkListener(val name: String, fromDisk: Boolean = false)
-  extends SparkListener with Logging {
-
-  // Log events only if the corresponding UI is not rendered from disk
-  protected val logger: Option[FileLogger] = if (!fromDisk) {
-    Some(new FileLogger(name))
-  } else {
-    None
-  }
-
-  protected def logEvent(event: SparkListenerEvent) = {
-    logger.foreach(_.logLine(compactRender(event.toJson)))
-  }
-
-  override def onJobStart(jobStart: SparkListenerJobStart) = logger.foreach(_.start())
-
-  override def onJobEnd(jobEnd: SparkListenerJobEnd) = logger.foreach(_.close())
-}
-
-/**
- * A SparkListener that fetches storage information from SparkEnv and logs the corresponding event.
- *
- * The frequency at which this occurs is by default every time a stage event is triggered.
- * This needs not necessarily be the case; a stage can be arbitrarily long, so any failure
- * in the middle of a stage causes the storage status for that stage to be lost.
- */
-private[spark] class StorageStatusFetchSparkListener(
-    name: String,
-    sc: SparkContext,
-    fromDisk: Boolean = false)
-  extends UISparkListener(name, fromDisk) {
-  var storageStatusList: Seq[StorageStatus] = sc.getExecutorStorageStatus
-
-  /**
-   * Fetch storage information from SparkEnv, which involves a query to the driver. This is
-   * expensive and should be invoked sparingly.
-   */
-  def fetchStorageStatus() {
-    val storageStatus = sc.getExecutorStorageStatus
-    val event = new SparkListenerStorageStatusFetch(storageStatus)
-    onStorageStatusFetch(event)
-  }
-
-  /**
-   * Update local state with fetch result, and log the appropriate event
-   */
-  override def onStorageStatusFetch(storageStatusFetch: SparkListenerStorageStatusFetch) {
-    storageStatusList = storageStatusFetch.storageStatusList
-    logEvent(storageStatusFetch)
-    logger.foreach(_.flush())
-  }
-
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = fetchStorageStatus()
-
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = fetchStorageStatus()
 }

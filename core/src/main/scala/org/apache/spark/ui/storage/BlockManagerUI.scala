@@ -23,22 +23,20 @@ import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.SparkContext
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.StorageStatusFetchSparkListener
+import org.apache.spark.ui.{GatewayUISparkListener, SparkUI, StorageStatusFetchSparkListener}
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
-private[spark] class BlockManagerUI(val sc: SparkContext, fromDisk: Boolean = false) {
+private[spark] class BlockManagerUI(parent: SparkUI, live: Boolean) {
+  val sc = parent.sc
+
+  private val indexPage = new IndexPage(this)
+  private val rddPage = new RDDPage(this)
   private var _listener: Option[BlockManagerListener] = None
-  private val indexPage = new IndexPage(this, fromDisk)
-  private val rddPage = new RDDPage(this, fromDisk)
 
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new BlockManagerListener(sc, fromDisk))
-    if (!fromDisk) {
-      // Register for callbacks from this context only if this UI is live
-      sc.addSparkListener(listener)
-    }
+    _listener = Some(new BlockManagerListener(sc, parent.gatewayListener, live))
   }
 
   def getHandlers = Seq[(String, Handler)](
@@ -47,5 +45,11 @@ private[spark] class BlockManagerUI(val sc: SparkContext, fromDisk: Boolean = fa
   )
 }
 
-private[spark] class BlockManagerListener(sc: SparkContext, fromDisk: Boolean = false)
-  extends StorageStatusFetchSparkListener("block-manager-ui", sc, fromDisk)
+/**
+ * A SparkListener that prepares information to be displayed on the BlockManagerUI
+ */
+private[spark] class BlockManagerListener(
+    sc: SparkContext,
+    gateway: GatewayUISparkListener,
+    live: Boolean)
+  extends StorageStatusFetchSparkListener(sc, gateway, live)

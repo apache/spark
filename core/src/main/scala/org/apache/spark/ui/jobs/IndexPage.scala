@@ -23,10 +23,10 @@ import scala.xml.{NodeSeq, Node}
 
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.ui.Page._
-import org.apache.spark.ui.UIUtils._
+import org.apache.spark.ui.UIUtils
 
 /** Page showing list of all ongoing and recently finished stages and pools*/
-private[spark] class IndexPage(parent: JobProgressUI, fromDisk: Boolean = false) {
+private[spark] class IndexPage(parent: JobProgressUI) {
   private val sc = parent.sc
   private def listener = parent.listener
 
@@ -80,7 +80,7 @@ private[spark] class IndexPage(parent: JobProgressUI, fromDisk: Boolean = false)
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      headerSparkPage(content, sc, "Spark Stages", Stages)
+      UIUtils.headerSparkPage(content, sc, "Spark Stages", Stages)
     }
   }
 }

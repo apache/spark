@@ -21,12 +21,11 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
-import org.apache.spark.Logging
+import org.apache.spark.ui.UIUtils
 
 /** Page showing specific pool details */
-private[spark] class PoolPage(parent: JobProgressUI, fromDisk: Boolean = false) extends Logging {
+private[spark] class PoolPage(parent: JobProgressUI) {
   private val sc = parent.sc
   private def listener = parent.listener
 
@@ -46,7 +45,7 @@ private[spark] class PoolPage(parent: JobProgressUI, fromDisk: Boolean = false) 
       val content = <h4>Summary </h4> ++ poolTable.toNodeSeq ++
                     <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq
 
-      headerSparkPage(content, sc, "Fair Scheduler Pool: " + poolName, Stages)
+      UIUtils.headerSparkPage(content, sc, "Fair Scheduler Pool: " + poolName, Stages)
     }
   }
 }
