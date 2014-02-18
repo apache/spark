@@ -36,7 +36,11 @@ sparkR.init <- function(
     sparkHome <- normalizePath(sparkHome)
   }
 
-  # TODO: support other constructors
+  hm <- .jnew("java/util/HashMap")
+  for (varname in names(sparkEnvir)) {
+    hm$put(varname, sparkEnvir[[varname]])
+  }
+
   assign(
     ".sparkRjsc",
      .jnew("org/apache/spark/api/java/JavaSparkContext", master, appName,

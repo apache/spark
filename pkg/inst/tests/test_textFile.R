@@ -32,9 +32,10 @@ test_that("several transformations on RDD created by textFile()", {
   writeLines(mockFile, fileName)
 
   rdd <- textFile(sc, fileName) # RDD
-  for (i in 1:10)
+  for (i in 1:10) {
     # PipelinedRDD initially created from RDD
     rdd <- lapply(rdd, function(x) paste(x, x))
+  }
   collect(rdd)
 
   unlink(fileName)

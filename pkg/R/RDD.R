@@ -30,6 +30,8 @@ setMethod("initialize", "RDD", function(.Object, jrdd, serialized,
   # i.e. one needs to make a copy of the RDD object and sets the new slot value
   # there.
 
+  # The slots are inheritable from superclass. Here, both `env' and `jrdd' are
+  # inherited from RDD, but only the former is used.
   .Object@env <- new.env()
   .Object@env$isCached <- isCached
   .Object@env$isCheckpointed <- isCheckpointed

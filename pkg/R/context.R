@@ -169,11 +169,11 @@ broadcast <- function(sc, object) {
 #' @examples
 #'\dontrun{
 #' sc <- sparkR.init()
-#' setCheckpointDir(sc, "checkpoints")
+#' setCheckpointDir(sc, "~/checkpoints")
 #' rdd <- parallelize(sc, 1:2, 2L)
 #' checkpoint(rdd)
 #'}
 setCheckpointDir <- function(sc, dirName) {
   ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
-  .jcall(ssc, "V", "setCheckpointDir", dirName)
+  .jcall(ssc, "V", "setCheckpointDir", suppressWarnings(normalizePath(dirName)))
 }
