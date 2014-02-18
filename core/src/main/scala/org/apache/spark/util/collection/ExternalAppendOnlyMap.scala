@@ -23,8 +23,8 @@ import java.util.Comparator
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import com.google.common.io.ByteStreams
+import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 import org.apache.spark.{Logging, SparkEnv}
 import org.apache.spark.serializer.Serializer

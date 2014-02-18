@@ -17,11 +17,10 @@
 
 package org.apache.spark.api.java.function;
 
+import java.io.Serializable;
+
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
-import scala.runtime.AbstractFunction2;
-
-import java.io.Serializable;
 
 /**
  * A three-argument function that takes arguments of type T1, T2 and T3 and returns an R.

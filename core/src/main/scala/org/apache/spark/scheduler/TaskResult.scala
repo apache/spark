@@ -18,13 +18,14 @@
 package org.apache.spark.scheduler
 
 import java.io._
+import java.nio.ByteBuffer
 
 import scala.collection.mutable.Map
+
+import org.apache.spark.SparkEnv
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.{SparkEnv}
-import java.nio.ByteBuffer
-import org.apache.spark.util.Utils
 import org.apache.spark.storage.BlockId
+import org.apache.spark.util.Utils
 
 // Task result. Also contains updates to accumulator variables.
 private[spark] sealed trait TaskResult[T]

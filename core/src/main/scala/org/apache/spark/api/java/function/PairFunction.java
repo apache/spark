@@ -17,11 +17,11 @@
 
 package org.apache.spark.api.java.function;
 
+import java.io.Serializable;
+
 import scala.Tuple2;
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
-
-import java.io.Serializable;
 
 /**
  * A function that returns key-value pairs (Tuple2<K, V>), and can be used to construct PairRDDs.

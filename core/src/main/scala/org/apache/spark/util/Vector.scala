@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import scala.util.Random
+
 import org.apache.spark.util.random.XORShiftRandom
 
 class Vector(val elements: Array[Double]) extends Serializable {

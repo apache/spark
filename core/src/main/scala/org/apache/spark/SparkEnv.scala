@@ -21,16 +21,15 @@ import scala.collection.mutable
 import scala.concurrent.Await
 
 import akka.actor._
+import com.google.common.collect.MapMaker
 
+import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.storage.{BlockManagerMasterActor, BlockManager, BlockManagerMaster}
+import org.apache.spark.storage.{BlockManager, BlockManagerMaster, BlockManagerMasterActor}
 import org.apache.spark.network.ConnectionManager
 import org.apache.spark.serializer.{Serializer, SerializerManager}
-import org.apache.spark.util.{Utils, AkkaUtils}
-import org.apache.spark.api.python.PythonWorkerFactory
-
-import com.google.common.collect.MapMaker
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),

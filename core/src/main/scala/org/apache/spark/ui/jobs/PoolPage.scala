@@ -19,12 +19,10 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{NodeSeq, Node}
-import scala.collection.mutable.HashSet
+import scala.xml.Node
 
-import org.apache.spark.scheduler.Stage
-import org.apache.spark.ui.UIUtils._
 import org.apache.spark.ui.Page._
+import org.apache.spark.ui.UIUtils._
 
 /** Page showing specific pool details */
 private[spark] class PoolPage(parent: JobProgressUI) {

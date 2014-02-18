@@ -17,17 +17,17 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.{Logging, SparkEnv}
-import org.apache.spark.deploy.SparkHadoopUtil
-import scala.collection.immutable.Set
-import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
-import org.apache.hadoop.security.UserGroupInformation
-import org.apache.hadoop.util.ReflectionUtils
-import org.apache.hadoop.mapreduce.Job
-import org.apache.hadoop.conf.Configuration
-import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 import scala.collection.JavaConversions._
+import scala.collection.immutable.Set
+import scala.collection.mutable.{ArrayBuffer, HashMap, HashSet}
 
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapred.{FileInputFormat, JobConf}
+import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.util.ReflectionUtils
+
+import org.apache.spark.Logging
+import org.apache.spark.deploy.SparkHadoopUtil
 
 /**
  * Parses and holds information about inputFormat (and files) specified as a parameter.

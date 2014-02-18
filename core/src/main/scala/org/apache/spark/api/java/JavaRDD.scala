@@ -20,8 +20,8 @@ package org.apache.spark.api.java
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])

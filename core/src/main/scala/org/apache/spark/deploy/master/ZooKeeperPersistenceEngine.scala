@@ -17,10 +17,10 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.{SparkConf, Logging}
+import akka.serialization.Serialization
 import org.apache.zookeeper._
 
-import akka.serialization.Serialization
+import org.apache.spark.{Logging, SparkConf}
 
 class ZooKeeperPersistenceEngine(serialization: Serialization, conf: SparkConf)
   extends PersistenceEngine

@@ -19,8 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{NarrowDependency, SparkEnv, Partition, TaskContext}
-
+import org.apache.spark.{NarrowDependency, Partition, TaskContext}
 
 class PartitionPruningRDDPartition(idx: Int, val parentSplit: Partition) extends Partition {
   override val index = idx

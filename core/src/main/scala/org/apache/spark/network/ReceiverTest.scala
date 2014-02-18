@@ -18,7 +18,7 @@
 package org.apache.spark.network
 
 import java.nio.ByteBuffer
-import java.net.InetAddress
+
 import org.apache.spark.SparkConf
 
 private[spark] object ReceiverTest {

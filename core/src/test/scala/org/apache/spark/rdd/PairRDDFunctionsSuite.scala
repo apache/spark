@@ -22,11 +22,10 @@ import scala.collection.mutable.HashSet
 import scala.util.Random
 
 import org.scalatest.FunSuite
-
 import com.google.common.io.Files
+
 import org.apache.spark.SparkContext._
 import org.apache.spark.{Partitioner, SharedSparkContext}
-
 
 class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
   test("groupByKey") {

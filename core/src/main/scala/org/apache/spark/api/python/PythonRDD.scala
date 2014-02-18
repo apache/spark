@@ -24,9 +24,9 @@ import java.util.{List => JList, ArrayList => JArrayList, Map => JMap, Collectio
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
+import org.apache.spark._
 import org.apache.spark.api.java.{JavaSparkContext, JavaPairRDD, JavaRDD}
 import org.apache.spark.broadcast.Broadcast
-import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.Utils
 

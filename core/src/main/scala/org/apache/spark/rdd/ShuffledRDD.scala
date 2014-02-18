@@ -19,8 +19,7 @@ package org.apache.spark.rdd
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{Dependency, Partition, Partitioner, ShuffleDependency,
-  SparkEnv, TaskContext}
+import org.apache.spark.{Dependency, Partition, Partitioner, ShuffleDependency, SparkEnv, TaskContext}
 
 private[spark] class ShuffledRDDPartition(val idx: Int) extends Partition {
   override val index = idx

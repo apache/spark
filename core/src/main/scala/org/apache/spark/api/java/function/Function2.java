@@ -17,10 +17,10 @@
 
 package org.apache.spark.api.java.function;
 
+import java.io.Serializable;
+
 import scala.reflect.ClassTag;
 import scala.reflect.ClassTag$;
-
-import java.io.Serializable;
 
 /**
  * A two-argument function that takes arguments of type T1 and T2 and returns an R.

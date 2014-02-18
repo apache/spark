@@ -19,7 +19,7 @@ package org.apache.spark.rdd
 
 import java.io.EOFException
 
-import org.apache.hadoop.conf.{Configuration, Configurable}
+import org.apache.hadoop.conf.{Configurable, Configuration}
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
@@ -31,7 +31,6 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.NextIterator
-
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
