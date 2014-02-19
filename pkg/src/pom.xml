@@ -220,14 +220,6 @@
               <transformer implementation="org.apache.maven.plugins.shade.resource.AppendingTransformer">
                 <resource>reference.conf</resource>
               </transformer>
-              <!-- transformer implementation="org.apache.maven.plugins.shade.resource.DontIncludeResourceTransformer">
-                <resource>log4j.properties</resource>
-              </transformer -->
-              <!-- transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer">
-                <manifestEntries>
-                  <Main-Class>akka.Main</Main-Class>
-                </manifestEntries>
-              </transformer -->
             </transformers>
           </configuration>
           <executions>
