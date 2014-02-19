@@ -17,12 +17,12 @@ This guide shows each of these features and walks through some samples. It assum
 
 # Linking with Spark
 
-Spark {{site.SPARK_VERSION}} uses Scala {{site.SCALA_VERSION}}. If you write applications in Scala, you'll need to use this same version of Scala in your program -- newer major versions may not work.
+Spark {{site.SPARK_VERSION}} uses Scala {{site.SCALA_BINARY_VERSION}}. If you write applications in Scala, you will need to use a compatible Scala version (e.g. {{site.SCALA_BINARY_VERSION}}.X) -- newer major versions may not work.
 
 To write a Spark application, you need to add a dependency on Spark. If you use SBT or Maven, Spark is available through Maven Central at:
 
     groupId = org.apache.spark
-    artifactId = spark-core_{{site.SCALA_VERSION}}
+    artifactId = spark-core_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION}} 
 
 In addition, if you wish to access an HDFS cluster, you need to add a dependency on `hadoop-client` for your version of HDFS:
@@ -31,7 +31,7 @@ In addition, if you wish to access an HDFS cluster, you need to add a dependency
     artifactId = hadoop-client
     version = <your-hdfs-version>
 
-For other build systems, you can run `sbt/sbt assembly` to pack Spark and its dependencies into one JAR (`assembly/target/scala-{{site.SCALA_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop*.jar`), then add this to your CLASSPATH. Set the HDFS version as described [here](index.html#a-note-about-hadoop-versions).
+For other build systems, you can run `sbt/sbt assembly` to pack Spark and its dependencies into one JAR (`assembly/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop*.jar`), then add this to your CLASSPATH. Set the HDFS version as described [here](index.html#a-note-about-hadoop-versions).
 
 Finally, you need to import some Spark classes and implicit conversions into your program. Add the following lines:
 

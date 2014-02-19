@@ -275,23 +275,23 @@ To write your own Spark Streaming program, you will have to add the following de
  SBT or Maven project:
 
     groupId = org.apache.spark
-    artifactId = spark-streaming_{{site.SCALA_VERSION}}
+    artifactId = spark-streaming_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION}}
 
 For ingesting data from sources like Kafka and Flume that are not present in the Spark
 Streaming core
  API, you will have to add the corresponding
-artifact `spark-streaming-xyz_{{site.SCALA_VERSION}}` to the dependencies. For example,
+artifact `spark-streaming-xyz_{{site.SCALA_BINARY_VERSION}}` to the dependencies. For example,
 some of the common ones are as follows.
 
 
 <table class="table">
 <tr><th>Source</th><th>Artifact</th></tr>
-<tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_VERSION}} </td></tr>
+<tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> </td><td></td></tr>
 </table>
 
@@ -410,7 +410,7 @@ Scala and [JavaStreamingContext](api/streaming/index.html#org.apache.spark.strea
 Additional functionality for creating DStreams from sources such as Kafka, Flume, and Twitter
 can be imported by adding the right dependencies as explained in an
 [earlier](#linking) section. To take the
-case of Kafka, after adding the artifact `spark-streaming-kafka_{{site.SCALA_VERSION}}` to the
+case of Kafka, after adding the artifact `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` to the
 project dependencies, you can create a DStream from Kafka as
 
 <div class="codetabs">
