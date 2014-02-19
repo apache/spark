@@ -43,7 +43,8 @@ private[spark] class StagePage(parent: JobProgressUI) {
             <h4>Summary Metrics</h4> No tasks have started yet
             <h4>Tasks</h4> No tasks have started yet
           </div>
-        return UIUtils.headerSparkPage(content, sc, "Details for Stage %s".format(stageId), Stages)
+        return UIUtils.headerSparkPage(
+          content, sc.appName, "Details for Stage %s".format(stageId), Stages)
       }
 
       val tasks = listener.stageIdToTaskInfos(stageId).values.toSeq.sortBy(_.taskInfo.launchTime)
@@ -202,7 +203,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         <h4>Tasks</h4> ++ taskTable
 
-      UIUtils.headerSparkPage(content, sc, "Details for Stage %d".format(stageId), Stages)
+      UIUtils.headerSparkPage(content, sc.appName, "Details for Stage %d".format(stageId), Stages)
     }
   }
 

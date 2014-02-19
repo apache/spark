@@ -76,18 +76,47 @@ case object StorageStatus {
   }
 }
 
-case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
-  numCachedPartitions: Int, numPartitions: Int, memSize: Long, diskSize: Long)
-  extends Ordered[RDDInfo] {
+case class RDDInfo(
+    id: Int,
+    name: String,
+    storageLevel: StorageLevel,
+    numCachedPartitions: Int,
+    numPartitions: Int,
+    memSize: Long,
+    diskSize: Long)
+  extends JsonSerializable with Ordered[RDDInfo] {
   override def toString = {
-    import Utils.bytesToString
     ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s; " +
        "DiskSize: %s").format(name, id, storageLevel.toString, numCachedPartitions,
-         numPartitions, bytesToString(memSize), bytesToString(diskSize))
+         numPartitions, Utils.bytesToString(memSize), Utils.bytesToString(diskSize))
   }
 
   override def compare(that: RDDInfo) = {
     this.id - that.id
+  }
+
+  override def toJson = {
+    ("RDD ID" -> id) ~
+    ("Name" -> name) ~
+    ("Storage Level" -> storageLevel.toJson) ~
+    ("Number of Cached Partitions" -> numCachedPartitions) ~
+    ("Number of Partitions" -> numPartitions) ~
+    ("Memory Size" -> memSize) ~
+    ("Disk Size" -> diskSize)
+  }
+}
+
+case object RDDInfo {
+  def fromJson(json: JValue): RDDInfo = {
+    implicit val format = DefaultFormats
+    new RDDInfo(
+      (json \ "RDD ID").extract[Int],
+      (json \ "Name").extract[String],
+      StorageLevel.fromJson(json \ "Storage Level"),
+      (json \ "Number of Cached Partitions").extract[Int],
+      (json \ "Number of Partitions").extract[Int],
+      (json \ "Memory Size").extract[Long],
+      (json \ "Disk Size").extract[Long])
   }
 }
 
@@ -114,7 +143,7 @@ object StorageUtils {
     sc: SparkContext) : Array[RDDInfo] = {
 
     // Group by rddId, ignore the partition name
-    val groupedRddBlocks = infos.groupBy { case(k, v) => k.rddId }.mapValues(_.values.toArray)
+    val groupedRddBlocks = infos.groupBy { case (k, v) => k.rddId }.mapValues(_.values.toArray)
 
     // For each RDD, generate an RDDInfo object
     val rddInfos = groupedRddBlocks.map { case (rddId, rddBlocks) =>

@@ -21,7 +21,6 @@ import java.util.concurrent.ConcurrentHashMap
 import scala.collection.JavaConversions
 import scala.collection.mutable.Map
 import scala.collection.immutable
-import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.Logging
 
 /**

@@ -32,7 +32,7 @@ private[spark] object UIUtils {
   def prependBaseUri(resource: String = "") = uiRoot + resource
 
   /** Returns a spark page with correctly formatted headers */
-  def headerSparkPage(content: => Seq[Node], sc: SparkContext, title: String, page: Page.Value)
+  def headerSparkPage(content: => Seq[Node], appName: String, title: String, page: Page.Value)
   : Seq[Node] = {
     val jobs = page match {
       case Stages => <li class="active"><a href={prependBaseUri("/stages")}>Stages</a></li>
@@ -60,7 +60,7 @@ private[spark] object UIUtils {
               type="text/css" />
         <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
         <script src={prependBaseUri("/static/sorttable.js")} ></script>
-        <title>{sc.appName} - {title}</title>
+        <title>{appName} - {title}</title>
       </head>
       <body>
         <div class="navbar navbar-static-top">
@@ -74,7 +74,7 @@ private[spark] object UIUtils {
               {environment}
               {executors}
             </ul>
-            <p class="navbar-text pull-right"><strong>{sc.appName}</strong> application UI</p>
+            <p class="navbar-text pull-right"><strong>{appName}</strong> application UI</p>
           </div>
         </div>
 

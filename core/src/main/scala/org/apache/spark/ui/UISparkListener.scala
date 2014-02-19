@@ -111,6 +111,12 @@ private[spark] class GatewayUISparkListener(live: Boolean) extends SparkListener
     logEvent(storageStatusFetch)
     logger.foreach(_.flush())
   }
+
+  override def onGetRDDInfo(getRDDInfo: SparkListenerGetRDDInfo) {
+    listeners.foreach(_.onGetRDDInfo(getRDDInfo))
+    logEvent(getRDDInfo)
+    logger.foreach(_.flush())
+  }
 }
 
 /**
@@ -140,9 +146,6 @@ private[spark] class StorageStatusFetchSparkListener(
     }
   }
 
-  /**
-   * Update local state with fetch result, and log the appropriate event
-   */
   override def onStorageStatusFetch(storageStatusFetch: SparkListenerStorageStatusFetch) {
     storageStatusList = storageStatusFetch.storageStatusList
   }

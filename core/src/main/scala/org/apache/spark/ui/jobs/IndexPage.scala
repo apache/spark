@@ -80,7 +80,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(content, sc, "Spark Stages", Stages)
+      UIUtils.headerSparkPage(content, sc.appName, "Spark Stages", Stages)
     }
   }
 }

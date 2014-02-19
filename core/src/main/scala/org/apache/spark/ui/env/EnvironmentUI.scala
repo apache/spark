@@ -64,7 +64,7 @@ private[spark] class EnvironmentUI(parent: SparkUI, live: Boolean) {
         <h4>Classpath Entries</h4> {classpathEntriesTable}
       </span>
 
-    UIUtils.headerSparkPage(content, sc, "Environment", Environment)
+    UIUtils.headerSparkPage(content, sc.appName, "Environment", Environment)
   }
 
   private def propertyHeader = Seq("Name", "Value")
@@ -120,7 +120,6 @@ private[spark] class EnvironmentListener(
     }
   }
 
-  /** Prepare environment information for UI to render */
   override def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) {
     jvmInformation = loadEnvironment.jvmInformation
     sparkProperties = loadEnvironment.sparkProperties

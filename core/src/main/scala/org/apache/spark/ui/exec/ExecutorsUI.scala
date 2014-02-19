@@ -72,7 +72,7 @@ private[spark] class ExecutorsUI(parent: SparkUI, live: Boolean) {
           </div>
         </div>;
 
-    UIUtils.headerSparkPage(content, sc, "Executors (" + execInfo.size + ")", Executors)
+    UIUtils.headerSparkPage(content, sc.appName, "Executors (" + execInfo.size + ")", Executors)
   }
 
   /** Header fields for the executors table */

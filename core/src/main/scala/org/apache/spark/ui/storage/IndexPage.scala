@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.{RDDInfo, StorageUtils}
+import org.apache.spark.storage.RDDInfo
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
@@ -32,13 +32,12 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.fetchStorageStatus()
-    val storageStatusList = listener.storageStatusList
-
     // Calculate macro-level statistics
-    val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
+    listener.fetchStorageStatus()
+    listener.getRDDInfo()
+    val rdds = listener.rddInfoList
     val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    UIUtils.headerSparkPage(content, sc, "Storage ", Storage)
+    UIUtils.headerSparkPage(content, sc.appName, "Storage ", Storage)
   }
 
   /** Header fields for the RDD table */

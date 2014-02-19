@@ -22,6 +22,8 @@ import javax.servlet.http.HttpServletRequest
 import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.SparkContext
+import org.apache.spark.scheduler._
+import org.apache.spark.storage.{StorageUtils, RDDInfo}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.{GatewayUISparkListener, SparkUI, StorageStatusFetchSparkListener}
 
@@ -52,4 +54,28 @@ private[spark] class BlockManagerListener(
     sc: SparkContext,
     gateway: GatewayUISparkListener,
     live: Boolean)
-  extends StorageStatusFetchSparkListener(sc, gateway, live)
+  extends StorageStatusFetchSparkListener(sc, gateway, live) {
+  var rddInfoList: Seq[RDDInfo] = Seq()
+
+  def getRDDInfo() {
+    if (live) {
+      val rddInfo = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
+      val getRDDInfo = new SparkListenerGetRDDInfo(rddInfo)
+      gateway.onGetRDDInfo(getRDDInfo)
+    }
+  }
+
+  override def onGetRDDInfo(getRDDInfo: SparkListenerGetRDDInfo) {
+    rddInfoList = getRDDInfo.rddInfoList
+  }
+
+  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) = {
+    super.onStageSubmitted(stageSubmitted)
+    getRDDInfo()
+  }
+
+  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = {
+    super.onStageCompleted(stageCompleted)
+    getRDDInfo()
+  }
+}

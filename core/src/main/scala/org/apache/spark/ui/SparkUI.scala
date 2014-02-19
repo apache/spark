@@ -129,7 +129,9 @@ private[spark] class SparkUI(val sc: SparkContext, live: Boolean = true) extends
         .format(dirPath))
       return false
     }
-    val logFiles = logDir.listFiles.filter(_.isFile)
+    // Maintaining the order of log files is important because information of one job is
+    // dependent on that of another
+    val logFiles = logDir.listFiles.filter(_.isFile).sortBy(_.getName)
     if (logFiles.size == 0) {
       logWarning("No logs found in given directory %s when rendering persisted Spark Web UI!"
         .format(dirPath))
