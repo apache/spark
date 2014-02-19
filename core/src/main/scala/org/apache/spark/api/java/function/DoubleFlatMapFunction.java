@@ -17,7 +17,6 @@
 
 package org.apache.spark.api.java.function;
 
-
 import java.io.Serializable;
 
 /**

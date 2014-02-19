@@ -21,10 +21,10 @@ import java.io._
 import java.net.URL
 import java.util.concurrent.TimeoutException
 
-import scala.concurrent.{Await, future, promise}
-import scala.concurrent.duration._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.collection.mutable.ListBuffer
+import scala.concurrent.{Await, future, promise}
+import scala.concurrent.ExecutionContext.Implicits.global
+import scala.concurrent.duration._
 import scala.sys.process._
 
 import net.liftweb.json.JsonParser

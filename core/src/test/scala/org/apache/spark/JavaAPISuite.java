@@ -22,14 +22,14 @@ import java.io.IOException;
 import java.io.Serializable;
 import java.util.*;
 
-import com.google.common.base.Optional;
 import scala.Tuple2;
 
+import com.google.common.base.Optional;
 import com.google.common.base.Charsets;
-import org.apache.hadoop.io.compress.DefaultCodec;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
+import org.apache.hadoop.io.compress.DefaultCodec;
 import org.apache.hadoop.mapred.SequenceFileInputFormat;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
 import org.apache.hadoop.mapreduce.Job;
@@ -47,7 +47,6 @@ import org.apache.spark.partial.BoundedDouble;
 import org.apache.spark.partial.PartialResult;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.util.StatCounter;
-
 
 // The test suite itself is Serializable so that anonymous Function implementations can be
 // serialized, as an alternative to converting these anonymous classes to static inner classes;

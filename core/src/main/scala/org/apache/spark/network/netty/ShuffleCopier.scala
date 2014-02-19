@@ -19,16 +19,15 @@ package org.apache.spark.network.netty
 
 import java.util.concurrent.Executors
 
+import scala.collection.JavaConverters._
+
 import io.netty.buffer.ByteBuf
 import io.netty.channel.ChannelHandlerContext
 import io.netty.util.CharsetUtil
 
-import org.apache.spark.{SparkContext, SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.network.ConnectionManagerId
-
-import scala.collection.JavaConverters._
 import org.apache.spark.storage.BlockId
-
 
 private[spark] class ShuffleCopier(conf: SparkConf) extends Logging {
 

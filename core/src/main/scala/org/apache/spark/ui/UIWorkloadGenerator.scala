@@ -23,7 +23,6 @@ import org.apache.spark.{SparkConf, SparkContext}
 import org.apache.spark.SparkContext._
 import org.apache.spark.scheduler.SchedulingMode
 
-
 /**
  * Continuously generates jobs that expose various features of the WebUI (internal testing tool).
  *

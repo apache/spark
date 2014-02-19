@@ -17,24 +17,21 @@
 
 package org.apache.spark.network
 
-import org.apache.spark._
-
+import java.net._
 import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
-import java.net._
 import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
 
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
+import scala.collection.mutable.HashSet
 import scala.collection.mutable.SynchronizedMap
 import scala.collection.mutable.SynchronizedQueue
-import scala.collection.mutable.ArrayBuffer
-
-import scala.concurrent.{Await, Promise, ExecutionContext, Future}
-import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 
+import org.apache.spark._
 import org.apache.spark.util.Utils
 
 private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Logging {

@@ -17,16 +17,13 @@
 
 package org.apache.spark.network
 
-import org.apache.spark._
-
-import scala.collection.mutable.{HashMap, Queue, ArrayBuffer}
-
-import java.io._
+import java.net._
 import java.nio._
 import java.nio.channels._
-import java.nio.channels.spi._
-import java.net._
 
+import scala.collection.mutable.{ArrayBuffer, HashMap, Queue}
+
+import org.apache.spark._
 
 private[spark]
 abstract class Connection(val channel: SocketChannel, val selector: Selector,

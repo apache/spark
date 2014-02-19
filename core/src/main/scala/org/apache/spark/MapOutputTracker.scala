@@ -22,7 +22,6 @@ import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
 import scala.collection.mutable.HashSet
 import scala.concurrent.Await
-import scala.concurrent.duration._
 
 import akka.actor._
 import akka.pattern.ask

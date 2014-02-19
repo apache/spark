@@ -17,16 +17,13 @@
 
 package org.apache.spark.network
 
-import org.apache.spark._
-import org.apache.spark.SparkContext._
-
-import scala.io.Source
-
 import java.nio.ByteBuffer
-import java.net.InetAddress
 
 import scala.concurrent.Await
 import scala.concurrent.duration._
+import scala.io.Source
+
+import org.apache.spark._
 
 private[spark] object ConnectionManagerTest extends Logging{
   def main(args: Array[String]) {

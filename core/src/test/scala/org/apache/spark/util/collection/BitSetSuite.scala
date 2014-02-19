@@ -19,7 +19,6 @@ package org.apache.spark.util.collection
 
 import org.scalatest.FunSuite
 
-
 class BitSetSuite extends FunSuite {
 
   test("basic set and get") {

@@ -18,6 +18,7 @@
 package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
+
 import org.eclipse.jetty.server.{Handler, Server}
 
 import org.apache.spark.Logging

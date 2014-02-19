@@ -22,8 +22,8 @@ import scala.concurrent.duration.{Duration, FiniteDuration}
 
 import akka.actor.{ActorSystem, ExtendedActorSystem, IndestructibleActorSystem}
 import com.typesafe.config.ConfigFactory
-
 import org.apache.log4j.{Level, Logger}
+
 import org.apache.spark.SparkConf
 
 /**

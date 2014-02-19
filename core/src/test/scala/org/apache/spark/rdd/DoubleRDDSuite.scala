@@ -17,14 +17,10 @@
 
 package org.apache.spark.rdd
 
-import scala.math.abs
-import scala.collection.mutable.ArrayBuffer
-
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext._
-import org.apache.spark.rdd._
 import org.apache.spark._
+import org.apache.spark.SparkContext._
 
 class DoubleRDDSuite extends FunSuite with SharedSparkContext {
   // Verify tests on the histogram functionality. We test with both evenly

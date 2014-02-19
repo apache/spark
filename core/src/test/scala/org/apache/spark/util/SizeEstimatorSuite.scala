@@ -17,10 +17,9 @@
 
 package org.apache.spark.util
 
-import org.scalatest.FunSuite
 import org.scalatest.BeforeAndAfterAll
+import org.scalatest.FunSuite
 import org.scalatest.PrivateMethodTester
-import org.apache.spark.SparkContext
 
 class DummyClass1 {}
 

@@ -17,21 +17,19 @@
 
 package org.apache.spark.ui
 
+import java.net.InetSocketAddress
 import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
 
 import scala.annotation.tailrec
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
 import net.liftweb.json.{JValue, pretty, render}
-
-import org.eclipse.jetty.server.{Server, Request, Handler}
-import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHandler, AbstractHandler}
+import org.eclipse.jetty.server.{Handler, Request, Server}
+import org.eclipse.jetty.server.handler.{AbstractHandler, ContextHandler, HandlerList, ResourceHandler}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 import org.apache.spark.Logging
-import java.net.InetSocketAddress
-
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
 private[spark] object JettyUtils extends Logging {

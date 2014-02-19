@@ -17,14 +17,14 @@
 
 package org.apache.spark.util
 
-import java.lang.reflect.Field
+import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.Map
 import scala.collection.mutable.Set
 
 import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor, Type}
 import org.objectweb.asm.Opcodes._
-import java.io.{ByteArrayOutputStream, ByteArrayInputStream}
+
 import org.apache.spark.Logging
 
 private[spark] object ClosureCleaner extends Logging {

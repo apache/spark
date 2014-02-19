@@ -22,30 +22,27 @@ import java.util.Random
 import scala.collection.Map
 import scala.collection.JavaConversions.mapAsScalaMap
 import scala.collection.mutable.ArrayBuffer
-
 import scala.reflect.{classTag, ClassTag}
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
+import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.TextOutputFormat
 
-import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
-import com.clearspring.analytics.stream.cardinality.HyperLogLog
-
+import org.apache.spark._
 import org.apache.spark.Partitioner._
+import org.apache.spark.SparkContext._
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableHyperLogLog}
-
-import org.apache.spark.SparkContext._
-import org.apache.spark._
-import org.apache.spark.util.random.{PoissonSampler, BernoulliSampler}
+import org.apache.spark.util.{BoundedPriorityQueue, SerializableHyperLogLog, Utils}
+import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,

@@ -17,10 +17,12 @@
 
 package org.apache.spark.util
 
+import java.util.NoSuchElementException
+
+import scala.collection.mutable.Buffer
+
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
-import scala.collection.mutable.Buffer
-import java.util.NoSuchElementException
 
 class NextIteratorSuite extends FunSuite with ShouldMatchers {
   test("one iteration") {

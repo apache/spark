@@ -21,7 +21,7 @@ import akka.actor.ActorRef
 import org.apache.zookeeper._
 import org.apache.zookeeper.Watcher.Event.EventType
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.master.MasterMessages._
 
 private[spark] class ZooKeeperLeaderElectionAgent(val masterActor: ActorRef,

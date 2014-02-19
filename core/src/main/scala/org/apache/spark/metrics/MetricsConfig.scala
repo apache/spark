@@ -17,8 +17,8 @@
 
 package org.apache.spark.metrics
 
+import java.io.{FileInputStream, InputStream}
 import java.util.Properties
-import java.io.{File, FileInputStream, InputStream, IOException}
 
 import scala.collection.mutable
 import scala.util.matching.Regex

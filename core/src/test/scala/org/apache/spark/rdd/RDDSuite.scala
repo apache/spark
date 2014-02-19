@@ -18,13 +18,15 @@
 package org.apache.spark.rdd
 
 import scala.collection.mutable.HashMap
+import scala.collection.parallel.mutable
+
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.{Span, Millis}
+import org.scalatest.time.{Millis, Span}
+
+import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
-import scala.collection.parallel.mutable
-import org.apache.spark._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 

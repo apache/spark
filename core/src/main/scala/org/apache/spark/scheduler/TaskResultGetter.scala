@@ -18,7 +18,6 @@
 package org.apache.spark.scheduler
 
 import java.nio.ByteBuffer
-import java.util.concurrent.{LinkedBlockingDeque, ThreadFactory, ThreadPoolExecutor, TimeUnit}
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState

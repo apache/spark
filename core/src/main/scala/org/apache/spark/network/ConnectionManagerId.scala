@@ -21,7 +21,6 @@ import java.net.InetSocketAddress
 
 import org.apache.spark.util.Utils
 
-
 private[spark] case class ConnectionManagerId(host: String, port: Int) {
   // DEBUG code
   Utils.checkHost(host)
