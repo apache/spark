@@ -38,7 +38,9 @@ private[spark] class BlockManagerUI(parent: SparkUI, live: Boolean) {
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new BlockManagerListener(sc, parent.gatewayListener, live))
+    val gateway = parent.gatewayListener
+    _listener = Some(new BlockManagerListener(sc, gateway, live))
+    gateway.registerSparkListener(listener)
   }
 
   def getHandlers = Seq[(String, Handler)](

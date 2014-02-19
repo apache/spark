@@ -40,7 +40,9 @@ private[spark] class JobProgressUI(parent: SparkUI, live: Boolean) {
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new JobProgressListener(sc, parent.gatewayListener))
+    val gateway = parent.gatewayListener
+    _listener = Some(new JobProgressListener(sc))
+    gateway.registerSparkListener(listener)
   }
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)

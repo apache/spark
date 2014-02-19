@@ -31,10 +31,7 @@ import org.apache.spark.ui.{GatewayUISparkListener, UISparkListener}
  * class, since the UI thread and the DAGScheduler event loop may otherwise
  * be reading/updating the internal data structures concurrently.
  */
-private[spark] class JobProgressListener(
-    sc: SparkContext,
-    gateway: GatewayUISparkListener)
-  extends UISparkListener(gateway) {
+private[spark] class JobProgressListener(sc: SparkContext) extends UISparkListener {
 
   // How many stages to remember
   val RETAINED_STAGES = sc.conf.getInt("spark.ui.retainedStages", 1000)

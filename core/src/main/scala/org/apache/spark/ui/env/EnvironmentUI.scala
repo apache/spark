@@ -39,7 +39,9 @@ private[spark] class EnvironmentUI(parent: SparkUI, live: Boolean) {
   def listener = _listener.get
 
   def start() {
-    _listener = Some(new EnvironmentListener(sc, parent.gatewayListener, live))
+    val gateway = parent.gatewayListener
+    _listener = Some(new EnvironmentListener(sc, gateway, live))
+    gateway.registerSparkListener(listener)
   }
 
   def getHandlers = Seq[(String, Handler)](
@@ -81,7 +83,7 @@ private[spark] class EnvironmentListener(
     sc: SparkContext,
     gateway: GatewayUISparkListener,
     live: Boolean)
-  extends UISparkListener(gateway) {
+  extends UISparkListener {
   var jvmInformation: Seq[(String, String)] = Seq()
   var sparkProperties: Seq[(String, String)] = Seq()
   var systemProperties: Seq[(String, String)] = Seq()

@@ -20,21 +20,16 @@ package org.apache.spark.ui
 import scala.collection.mutable.ArrayBuffer
 
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.SparkListenerLoadEnvironment
-import org.apache.spark.scheduler.SparkListenerJobStart
 import org.apache.spark.SparkContext
 import org.apache.spark.storage.StorageStatus
 import org.apache.spark.util.FileLogger
 
 import net.liftweb.json.JsonAST._
 
-private[spark] case class UISparkListener(gateway: GatewayUISparkListener) extends SparkListener {
-  // Register with gateway listener
-  gateway.registerSparkListener(this)
-}
+private[spark] trait UISparkListener extends SparkListener
 
 /**
- * A SparkListener that serves as a gateway for all events posted to the UI.
+ * A SparkListener that serves as an entry point for all events posted to the UI.
  *
  * GatewayUISparkListener achieves two functions:
  *
@@ -130,7 +125,7 @@ private[spark] class StorageStatusFetchSparkListener(
     sc: SparkContext,
     gateway: GatewayUISparkListener,
     live: Boolean)
-  extends UISparkListener(gateway) {
+  extends UISparkListener {
   var storageStatusList: Seq[StorageStatus] = sc.getExecutorStorageStatus
 
   /**
