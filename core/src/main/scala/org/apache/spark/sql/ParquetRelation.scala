@@ -5,12 +5,13 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.expressions.{AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Row, AttributeReference, Attribute}
 
 import parquet.schema.{MessageTypeParser, MessageType}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 
 import scala.collection.JavaConversions._
+import parquet.io.api.{Binary, RecordConsumer}
 
 /**
  * Relation formed by underlying Parquet file that contains data stored in columnar form.
@@ -53,6 +54,23 @@ object ParquetTypesConverter {
     case ParquetPrimitiveTypeName.INT64 => LongType
     case ParquetPrimitiveTypeName.INT96 => LongType // TODO: is there an equivalent?
     case _ => sys.error(s"Unsupported parquet datatype")
+  }
+
+  def consumeType(consumer: RecordConsumer, ctype: DataType, record: Row, index: Int): Unit = {
+    ctype match {
+      case StringType => consumer.addBinary(
+        Binary.fromByteArray(
+          record(index).asInstanceOf[String].getBytes("utf-8")
+        )
+      )
+      case IntegerType => consumer.addInteger(record.getInt(index))
+      case LongType => consumer.addLong(record.getLong(index))
+      case DoubleType => consumer.addDouble(record.getDouble(index))
+      // TODO: where is getFloat in Row?!
+      case FloatType => consumer.addFloat(record(index).asInstanceOf[Float])
+      case BooleanType => consumer.addBoolean(record.getBoolean(index))
+      case _ => sys.error(s"Unsupported datatype, cannot write to consumer")
+    }
   }
 
   def getSchema(schemaString : String) : MessageType = MessageTypeParser.parseMessageType(schemaString)

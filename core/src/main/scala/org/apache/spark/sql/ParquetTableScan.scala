@@ -1,9 +1,9 @@
 package org.apache.spark.sql
 
 import parquet.io.api._
-import parquet.schema.MessageType
+import parquet.schema.{MessageTypeParser, MessageType}
 import parquet.hadoop.ParquetInputFormat
-import parquet.hadoop.api.ReadSupport
+import parquet.hadoop.api.{WriteSupport, ReadSupport}
 import parquet.hadoop.api.ReadSupport.ReadContext
 
 import catalyst.expressions.{Attribute, GenericRow, Row, Expression}
@@ -15,6 +15,7 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import parquet.hadoop.api.WriteSupport
 
 /**
  * Parquet table scan operator. Imports the file that backs the given [[org.apache.spark.sql.ParquetRelation]]
@@ -84,6 +85,55 @@ class RowReadSupport extends ReadSupport[Row] with Logging {
                      ): ReadContext = {
     logger.debug(s"read support initialized for schema ${fileSchema.toString}")
     new ReadContext(fileSchema, keyValueMetaData)
+  }
+}
+
+/**
+ * A [[parquet.hadoop.api.WriteSupport]] for Row ojects.
+ */
+class RowWriteSupport extends WriteSupport[Row] with Logging {
+  final val PARQUET_ROW_SCHEMA: String = "spark.sql.parquet.row.schema"
+
+  def setSchema(schema: MessageType, configuration: Configuration) {
+    // for testing
+    this.schema = schema
+    configuration.set(PARQUET_ROW_SCHEMA, schema.toString)
+  }
+
+  def getSchema(configuration: Configuration): MessageType = {
+    return MessageTypeParser.parseMessageType(configuration.get(PARQUET_ROW_SCHEMA))
+  }
+
+  private var schema: MessageType = null
+  private var writer: RecordConsumer = null
+  private var attributes: Seq[Attribute] = null
+
+  override def init(configuration: Configuration): WriteSupport.WriteContext = {
+    schema = if(schema == null)
+      getSchema(configuration)
+    else
+      schema
+    attributes = ParquetTypesConverter.convertToAttributes(schema)
+    new WriteSupport.WriteContext(schema, new java.util.HashMap[java.lang.String, java.lang.String]());
+  }
+
+  override def prepareForWrite(recordConsumer: RecordConsumer): Unit = {
+    writer = recordConsumer
+  }
+
+  // TODO: add groups (nested fields)
+  override def write(record: Row): Unit = {
+    writer.startMessage()
+    attributes.zipWithIndex.foreach {
+      case (attribute, index) => {
+        if(record(index) != null) { // null values indicate optional fields but we do not check currently
+          writer.startField(attribute.name, index)
+          ParquetTypesConverter.consumeType(writer, attribute.dataType, record, index)
+          writer.endField(attribute.name, index)
+        }
+      }
+    }
+    writer.endMessage()
   }
 }
 
