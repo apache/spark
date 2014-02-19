@@ -25,7 +25,6 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 if [[ -z "$MASTER" ]]; then
   echoerr "Sparkify: Connecting to chicago spark cluster ..."
   export MASTER=spark://dn05.chi.shopify.com:7077
-  export REMOTE_SPARK_HOME=/u/apps/spark/current
   export SPARK_JAVA_OPTS="-Dspark.cores.max=10"
   export SPARK_CLASSPATH="$FWDIR/conf/chicago_hadoop:$SPARK_CLASSPATH"
 
