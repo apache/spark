@@ -23,14 +23,23 @@ import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, Row}
 object ParquetTestData {
 
 
-  val testSchema = """message myrecord {
-                      optional boolean myboolean;
-                      optional int32 myint;
-                      optional binary mystring;
-                      optional int64 mylong;
-                      optional float myfloat;
-                      optional double mydouble;
-                      }"""
+  val testSchema =
+    """message myrecord {
+      |optional boolean myboolean;
+      |optional int32 myint;
+      |optional binary mystring;
+      |optional int64 mylong;
+      |optional float myfloat;
+      |optional double mydouble;
+      |}""".stripMargin
+
+  val subTestSchema =
+    """
+      |message myrecord {
+      |optional boolean myboolean;
+      |optional int64 mylong;
+      |}
+    """.stripMargin
 
   val testFile = new File("/tmp/testParquetFile").getAbsoluteFile
 
@@ -322,6 +331,14 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
     assert(allChecks)
   }
 
+  test("Projection of simple Parquet file") {
+    val scanner = new ParquetTableScan(ParquetTestData.testData, None)(TestSqlContext.sparkContext)
+    val first = scanner.pruneColumns(ParquetTypesConverter.convertToAttributes(MessageTypeParser.parseMessageType(ParquetTestData.subTestSchema)))
+    assert(first)
+    val rdd = scanner.execute()
+    assert(rdd != null)
+  }
+
   /**
    * Computes the given [[org.apache.spark.sql.ParquetRelation]] and returns its RDD.
    *
@@ -329,8 +346,7 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
    * @return An RDD of Rows.
    */
   private def getRDD(parquetRelation: ParquetRelation): RDD[Row] = {
-    val catalystSchema: List[Attribute] = ParquetTypesConverter.convertToAttributes(parquetRelation.parquetSchema)
-    val scanner = new ParquetTableScan(catalystSchema, parquetRelation, None)(TestSqlContext.sparkContext)
+    val scanner = new ParquetTableScan(parquetRelation, None)(TestSqlContext.sparkContext)
     scanner.execute
   }
 }

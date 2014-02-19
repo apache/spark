@@ -7,11 +7,14 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ArrayType
 import org.apache.spark.sql.catalyst.expressions.{Row, AttributeReference, Attribute}
 
-import parquet.schema.{MessageTypeParser, MessageType}
+import parquet.schema.{GroupType, MessageTypeParser, MessageType}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
+import parquet.schema.{PrimitiveType => ParquetPrimitiveType}
+import parquet.schema.{Type => ParquetType}
 
 import scala.collection.JavaConversions._
 import parquet.io.api.{Binary, RecordConsumer}
+import parquet.schema.Type.Repetition
 
 /**
  * Relation formed by underlying Parquet file that contains data stored in columnar form.
@@ -28,7 +31,7 @@ case class ParquetRelation(val tableName: String, val parquetSchema: MessageType
 
   val output = attributes
 
-  /* TODO: implement low-level Parquet metadata store access */
+  /* TODO: implement low-level Parquet metadata store access if needed */
   // val metaData: ParquetMetadata
   // def getBlocks: java.util.List[BlockMetaData] = metaData.getBlocks
   // def getColumns: java.util.List[ColumnDescriptor] = metaData.getFileMetaData.getSchema.getColumns
@@ -42,7 +45,7 @@ object ParquetRelation {
 }
 
 object ParquetTypesConverter {
-  def toDataType(parquetType : ParquetPrimitiveTypeName) : DataType = parquetType match {
+  def toDataType(parquetType : ParquetPrimitiveTypeName): DataType = parquetType match {
     // for now map binary to string type
     // TODO: figure out how Parquet uses strings or why we can't use them in a MessageType schema
     case ParquetPrimitiveTypeName.BINARY => StringType
@@ -54,6 +57,17 @@ object ParquetTypesConverter {
     case ParquetPrimitiveTypeName.INT64 => LongType
     case ParquetPrimitiveTypeName.INT96 => LongType // TODO: is there an equivalent?
     case _ => sys.error(s"Unsupported parquet datatype")
+  }
+
+  def fromDataType(ctype: DataType): ParquetPrimitiveTypeName = ctype match {
+    case StringType => ParquetPrimitiveTypeName.BINARY
+    case BooleanType => ParquetPrimitiveTypeName.BOOLEAN
+    case DoubleType => ParquetPrimitiveTypeName.DOUBLE
+    case ArrayType(ByteType) => ParquetPrimitiveTypeName.FIXED_LEN_BYTE_ARRAY
+    case FloatType => ParquetPrimitiveTypeName.FLOAT
+    case IntegerType => ParquetPrimitiveTypeName.INT32
+    case LongType => ParquetPrimitiveTypeName.INT64
+    case _ => sys.error(s"Unsupported datatype")
   }
 
   def consumeType(consumer: RecordConsumer, ctype: DataType, record: Row, index: Int): Unit = {
@@ -75,13 +89,21 @@ object ParquetTypesConverter {
 
   def getSchema(schemaString : String) : MessageType = MessageTypeParser.parseMessageType(schemaString)
 
-  def convertToAttributes(parquetSchema: MessageType) : List[Attribute] = {
+  def convertToAttributes(parquetSchema: MessageType) : Seq[Attribute] = {
     parquetSchema.getColumns.map {
       case (desc) => {
         val ctype = toDataType(desc.getType)
-        val name = desc.getPath.toString
+        val name: String = desc.getPath.mkString(".")
         new AttributeReference(name, ctype, false)()
       }
-    }.toList
+    }
+  }
+
+  // TODO: allow nesting?
+  def convertFromAttributes(attributes: Seq[Attribute]): MessageType = {
+    val fields: Seq[ParquetType] = attributes.map {
+      a => new ParquetPrimitiveType(Repetition.OPTIONAL, fromDataType(a.dataType), a.name)
+    }
+    new MessageType("root", fields)
   }
 }

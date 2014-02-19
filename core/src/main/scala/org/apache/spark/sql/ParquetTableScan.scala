@@ -5,6 +5,7 @@ import parquet.schema.{MessageTypeParser, MessageType}
 import parquet.hadoop.ParquetInputFormat
 import parquet.hadoop.api.{WriteSupport, ReadSupport}
 import parquet.hadoop.api.ReadSupport.ReadContext
+import parquet.io.InvalidRecordException
 
 import catalyst.expressions.{Attribute, GenericRow, Row, Expression}
 import catalyst.plans.logical.LeafNode
@@ -15,27 +16,25 @@ import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
-import parquet.hadoop.api.WriteSupport
 
 /**
  * Parquet table scan operator. Imports the file that backs the given [[org.apache.spark.sql.ParquetRelation]]
  * as a RDD[Row]. Only a stub currently.
  */
 case class ParquetTableScan(
-                             attributes: Seq[Attribute],
-                             relation: ParquetRelation,
-                             partitionPruningPred: Option[Expression] // not used
-                             )(
-                             @transient val sc: SparkContext)
+    relation: ParquetRelation,
+    columnPruningPred: Option[Expression])(
+    @transient val sc: SparkContext)
   extends LeafNode {
+
+  // TODO: make use of column pruning predicate
+
+  private var prunedAttributes = relation.attributes  // used for projections
 
   /**
    * Runs this query returning the result as an RDD.
   */
   def execute(): RDD[Row] = {
-    // TODO: for now we do not check whether the relation's schema matches the one of the
-    // underlying Parquet file
-
     val job = new Job(new Configuration())
     ParquetInputFormat.setReadSupportClass(job, classOf[org.apache.spark.sql.RowReadSupport])
     // TODO: add record filters, etc.
@@ -47,7 +46,43 @@ case class ParquetTableScan(
       .map(_._2)
   }
 
-  override def output: Seq[Attribute] = attributes // right now we pass everything through, always
+  /**
+   * Applies a (candidate) projection.
+   *
+   * @param attributes The list of attributes to be used in the projection.
+   * @return True, if successful; false otherwise.
+   */
+  def pruneColumns(attributes: Seq[Attribute]): Boolean = {
+    if(!validateProjection(attributes))
+      false
+    else {
+      prunedAttributes = attributes
+      true
+    }
+  }
+
+  /**
+   * Evaluates a candidate projection by checking whether the candidate is a subtype of the
+   * original type.
+   *
+   * @param projection The candidate projection.
+   * @return True if the projection is valid, false otherwise.
+   */
+  private def validateProjection(projection: Seq[Attribute]): Boolean = {
+    val original: MessageType = relation.parquetSchema
+    val candidate: MessageType = ParquetTypesConverter.convertFromAttributes(projection)
+    var retval = true
+    try {
+      original.checkContains(candidate)
+    } catch {
+      case e: InvalidRecordException => {
+        retval = false
+      }
+    }
+    retval
+  }
+
+  override def output: Seq[Attribute] = prunedAttributes
 }
 
 /**
@@ -69,20 +104,18 @@ class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterial
  */
 class RowReadSupport extends ReadSupport[Row] with Logging {
   override def prepareForRead(
-                               conf: Configuration,
-                               stringMap: java.util.Map[String, String],
-                               fileSchema: MessageType,
-                               readContext: ReadContext
-                               ): RecordMaterializer[Row] = {
+      conf: Configuration,
+      stringMap: java.util.Map[String, String],
+      fileSchema: MessageType,
+      readContext: ReadContext): RecordMaterializer[Row] = {
     logger.debug(s"preparing for read with schema ${fileSchema.toString}")
     new RowRecordMaterializer(fileSchema)
   }
 
   override def init(
-                     configuration: Configuration,
-                     keyValueMetaData: java.util.Map[String, String],
-                     fileSchema: MessageType
-                     ): ReadContext = {
+      configuration: Configuration,
+      keyValueMetaData: java.util.Map[String, String],
+      fileSchema: MessageType): ReadContext = {
     logger.debug(s"read support initialized for schema ${fileSchema.toString}")
     new ReadContext(fileSchema, keyValueMetaData)
   }
@@ -97,6 +130,7 @@ class RowWriteSupport extends WriteSupport[Row] with Logging {
   def setSchema(schema: MessageType, configuration: Configuration) {
     // for testing
     this.schema = schema
+    // TODO: could use Attributes themselves instead of Parquet schema?
     configuration.set(PARQUET_ROW_SCHEMA, schema.toString)
   }
 
