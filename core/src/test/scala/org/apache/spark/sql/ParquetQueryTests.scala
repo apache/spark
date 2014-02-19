@@ -13,23 +13,23 @@ import org.apache.spark.rdd.RDD
 import parquet.schema.{MessageTypeParser, MessageType}
 import parquet.column.ColumnDescriptor
 import parquet.hadoop.metadata.{ParquetMetadata, CompressionCodecName}
-import parquet.hadoop.{ParquetFileReader, ParquetFileWriter}
+import parquet.hadoop.{ParquetWriter, ParquetFileReader, ParquetFileWriter}
 import parquet.bytes.BytesInput
 import parquet.column.Encoding._
 import parquet.column.page.PageReadStore
 
-import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Attribute, Row}
 
 object ParquetTestData {
 
 
   val testSchema = """message myrecord {
-                      required boolean myboolean;
-                      required int32 myint;
-                      required binary mystring;
-                      required int64 mylong;
-                      required float myfloat;
-                      required double mydouble;
+                      optional boolean myboolean;
+                      optional int32 myint;
+                      optional binary mystring;
+                      optional int64 mylong;
+                      optional float myfloat;
+                      optional double mydouble;
                       }"""
 
   val testFile = new File("/tmp/testParquetFile").getAbsoluteFile
@@ -40,8 +40,36 @@ object ParquetTestData {
     testFile.delete
     val path: Path = new Path(testFile.toURI)
     val configuration: Configuration = new Configuration
+    val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
 
-    val schema: MessageType = MessageTypeParser.parseMessageType(ParquetTestData.testSchema)
+    val writeSupport = new RowWriteSupport()
+    writeSupport.setSchema(schema, configuration)
+    val writer = new ParquetWriter(path, writeSupport)
+    for(i <- 0 until 15) {
+      val data = new Array[Any](6)
+      if(i % 3 ==0)
+        data.update(0, true)
+      else
+        data.update(0, false)
+      if(i % 5 == 0)
+        data.update(1, 5)
+      else
+        data.update(1, null) // optional
+      data.update(2, "abc")
+      data.update(3, 1L<<33)
+      data.update(4, 2.5F)
+      data.update(5, 4.5D)
+      writer.write(new GenericRow(data))
+    }
+    writer.close()
+  }
+
+  def writeFileAsPages = {
+    testFile.delete
+    val path: Path = new Path(testFile.toURI)
+    val configuration: Configuration = new Configuration
+    val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
+
     val path1: Array[String] = Array("myboolean")
     val c1: ColumnDescriptor = schema.getColumnDescription(path1)
     val path2: Array[String] = Array("myint")
@@ -154,7 +182,7 @@ object ParquetTestData {
     println("metadata: " + readFooter.getFileMetaData.toString)
     val r: ParquetFileReader = new ParquetFileReader(configuration, path, readFooter.getBlocks, Arrays.asList(schema.getColumnDescription(path1), schema.getColumnDescription(path2)))
     var pages: PageReadStore = r.readNextRowGroup
-    println("number of rows first group" + pages.getRowCount)
+    println("number of rows first group " + pages.getRowCount)
     var pageReader = pages.getPageReader(c1)
     var page = pageReader.readPage()
     assert(page != null)
@@ -274,7 +302,6 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
     ParquetTestData.writeComplexFile
   }
 
-
   test("Import of simple Parquet file") {
     val result = getRDD(ParquetTestData.testData).collect()
     val allChecks: Boolean = result.zipWithIndex.forall {
@@ -284,7 +311,7 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
             (row(0) == true)
           else
             (row(0) == false)
-        val checkInt = (row(1) == 5)
+        val checkInt = ((index % 5) != 0) || (row(1) == 5)
         val checkString = (row(2) == "abc")
         val checkLong = (row(3) == (1L<<33))
         val checkFloat = (row(4) == 2.5F)
