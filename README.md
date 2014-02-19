@@ -37,6 +37,13 @@ For example to use SparkR with a CDH 4.2.0 MR1 cluster, you can run
 
     SPARK_HADOOP_VERSION=2.0.0-mr1-cdh4.2.0 ./install-dev.sh
 
+By default, SparkR uses [sbt](http://www.scala-sbt.org) to build an assembly
+jar. If you wish to use [maven](http://maven.apache.org/) instead, you can set
+the environment variable `USE_MAVEN=1`. For example
+
+    USE_MAVEN=1 ./install-dev.sh
+
+
 ## Running sparkR
 If you have cloned and built SparkR, you can start using it by launching the SparkR
 shell with
