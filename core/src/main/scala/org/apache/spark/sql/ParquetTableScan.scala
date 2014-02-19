@@ -1,14 +1,9 @@
 package org.apache.spark.sql
-package shark
-
-import org.apache.spark.SerializableWritable
-import org.apache.spark.rdd.RDD
 
 import parquet.io.api._
 import parquet.schema.MessageType
 import parquet.hadoop.ParquetInputFormat
 import parquet.hadoop.api.ReadSupport
-import org.apache.hadoop.conf.Configuration
 import parquet.hadoop.api.ReadSupport.ReadContext
 
 import catalyst.expressions.{Attribute, GenericRow, Row, Expression}
@@ -16,8 +11,13 @@ import catalyst.plans.logical.LeafNode
 import catalyst.types._
 
 import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.conf.Configuration
+
+import org.apache.spark.SparkContext
+import org.apache.spark.rdd.RDD
+
 /**
- * Parquet table scan operator. Imports the file that backs the given [[org.apache.spark.sql.shark.ParquetRelation]]
+ * Parquet table scan operator. Imports the file that backs the given [[org.apache.spark.sql.ParquetRelation]]
  * as a RDD[Row]. Only a stub currently.
  */
 case class ParquetTableScan(
@@ -25,21 +25,8 @@ case class ParquetTableScan(
                              relation: ParquetRelation,
                              partitionPruningPred: Option[Expression] // not used
                              )(
-                             @transient val sc: SharkContext)
+                             @transient val sc: SparkContext)
   extends LeafNode {
-
-  private val _broadcastedHiveConf =
-    sc.sparkContext.broadcast(new SerializableWritable(sc.hiveconf))
-
-  def broadcastedHiveConf = _broadcastedHiveConf
-
-  def hiveConf = _broadcastedHiveConf.value.value
-
-  // TODO: currently this is not used
-  private val _minSplitsPerRDD = math.min(
-    math.max(sc.hiveconf.getInt("mapred.map.tasks", 1), sc. sparkContext.defaultMinSplits),
-    relation.numberOfBlocks // we don't want to have more splits than blocks
-  )
 
   /**
    * Runs this query returning the result as an RDD.
@@ -48,10 +35,10 @@ case class ParquetTableScan(
     // TODO: for now we do not check whether the relation's schema matches the one of the
     // underlying Parquet file
 
-    val job = new Job(sc.hiveconf)
-    ParquetInputFormat.setReadSupportClass(job, classOf[org.apache.spark.sql.shark.RowReadSupport])
+    val job = new Job(new Configuration())
+    ParquetInputFormat.setReadSupportClass(job, classOf[org.apache.spark.sql.RowReadSupport])
     // TODO: add record filters, etc.
-    sc.sparkContext.newAPIHadoopFile(
+    sc.newAPIHadoopFile(
       relation.path.toUri.toString,
       classOf[ParquetInputFormat[Row]],
       classOf[Void], classOf[Row],

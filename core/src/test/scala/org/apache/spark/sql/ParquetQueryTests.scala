@@ -1,6 +1,4 @@
 package org.apache.spark.sql
-package shark
-package execution
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
@@ -21,7 +19,6 @@ import parquet.column.Encoding._
 import parquet.column.page.PageReadStore
 
 import org.apache.spark.sql.catalyst.expressions.{Attribute, Row}
-import shark.TestShark
 
 object ParquetTestData {
 
@@ -252,6 +249,12 @@ object ParquetTestData {
     }
   }
 
+  /**
+   * Concatenates a sequence of byte arrays.
+   *
+   * @param values The sequence of byte arrays to be concatenated.
+   * @return The concatenation of the given byte arrays.
+   */
   private def concat(values: Array[Byte]*) : Array[Byte] = {
     var retval = List[Byte]()
     for(value <- values)
@@ -293,14 +296,14 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
   }
 
   /**
-   * Computes the given [[org.apache.spark.sql.shark.ParquetRelation]] and returns its RDD.
+   * Computes the given [[org.apache.spark.sql.ParquetRelation]] and returns its RDD.
    *
    * @param parquetRelation The Parquet relation.
    * @return An RDD of Rows.
    */
   private def getRDD(parquetRelation: ParquetRelation): RDD[Row] = {
     val catalystSchema: List[Attribute] = ParquetTypesConverter.convertToAttributes(parquetRelation.parquetSchema)
-    val scanner = new ParquetTableScan(catalystSchema, parquetRelation, None)(TestShark)
+    val scanner = new ParquetTableScan(catalystSchema, parquetRelation, None)(TestSqlContext.sparkContext)
     scanner.execute
   }
 }
