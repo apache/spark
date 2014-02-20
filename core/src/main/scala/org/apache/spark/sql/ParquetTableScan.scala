@@ -1,11 +1,12 @@
 package org.apache.spark.sql
 
 import parquet.io.api._
+import parquet.io.InvalidRecordException
 import parquet.schema.{MessageTypeParser, MessageType}
-import parquet.hadoop.ParquetInputFormat
+import parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
 import parquet.hadoop.api.{WriteSupport, ReadSupport}
 import parquet.hadoop.api.ReadSupport.ReadContext
-import parquet.io.InvalidRecordException
+import parquet.column.ParquetProperties
 
 import catalyst.expressions.{Attribute, GenericRow, Row, Expression}
 import catalyst.plans.logical.LeafNode
@@ -37,6 +38,9 @@ case class ParquetTableScan(
   def execute(): RDD[Row] = {
     val job = new Job(new Configuration())
     ParquetInputFormat.setReadSupportClass(job, classOf[org.apache.spark.sql.RowReadSupport])
+    job.getConfiguration.set(
+        RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
+        ParquetTypesConverter.convertFromAttributes(prunedAttributes).toString)
     // TODO: add record filters, etc.
     sc.newAPIHadoopFile(
       relation.path.toUri.toString,
@@ -103,35 +107,43 @@ class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterial
  * A [[parquet.hadoop.api.ReadSupport]] for Row objects.
  */
 class RowReadSupport extends ReadSupport[Row] with Logging {
+
   override def prepareForRead(
       conf: Configuration,
       stringMap: java.util.Map[String, String],
       fileSchema: MessageType,
       readContext: ReadContext): RecordMaterializer[Row] = {
     logger.debug(s"preparing for read with schema ${fileSchema.toString}")
-    new RowRecordMaterializer(fileSchema)
+    new RowRecordMaterializer(readContext.getRequestedSchema)
   }
 
   override def init(
       configuration: Configuration,
       keyValueMetaData: java.util.Map[String, String],
       fileSchema: MessageType): ReadContext = {
-    logger.debug(s"read support initialized for schema ${fileSchema.toString}")
-    new ReadContext(fileSchema, keyValueMetaData)
+    val requested_schema_string = configuration.get(RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA, fileSchema.toString)
+    val requested_schema = MessageTypeParser.parseMessageType(requested_schema_string)
+    logger.debug(s"read support initialized for original schema ${requested_schema.toString}")
+    new ReadContext(requested_schema, keyValueMetaData)
   }
+}
+
+object RowReadSupport {
+  val PARQUET_ROW_REQUESTED_SCHEMA = "org.apache.spark.sql.parquet.row.requested_schema"
 }
 
 /**
  * A [[parquet.hadoop.api.WriteSupport]] for Row ojects.
  */
 class RowWriteSupport extends WriteSupport[Row] with Logging {
-  final val PARQUET_ROW_SCHEMA: String = "spark.sql.parquet.row.schema"
+  final val PARQUET_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.schema"
 
   def setSchema(schema: MessageType, configuration: Configuration) {
     // for testing
     this.schema = schema
     // TODO: could use Attributes themselves instead of Parquet schema?
     configuration.set(PARQUET_ROW_SCHEMA, schema.toString)
+    configuration.set(ParquetOutputFormat.WRITER_VERSION, ParquetProperties.WriterVersion.PARQUET_1_0.toString)
   }
 
   def getSchema(configuration: Configuration): MessageType = {

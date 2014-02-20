@@ -43,7 +43,7 @@ object ParquetTestData {
 
   val testFile = new File("/tmp/testParquetFile").getAbsoluteFile
 
-  val testData = ParquetRelation(testSchema, new Path(testFile.toURI))
+  lazy val testData = ParquetRelation(new Path(testFile.toURI))
 
   def writeFile = {
     testFile.delete
@@ -201,7 +201,7 @@ object ParquetTestData {
 
   val complexTestFile: File = new File("/tmp/testComplexParquetFile").getAbsoluteFile
 
-  val complexTestData = ParquetRelation(complexSchema, new Path(complexTestFile.toURI))
+  lazy val complexTestData = ParquetRelation(new Path(complexTestFile.toURI))
 
   // this second test is from TestParquetFileWriter
   def writeComplexFile = {
@@ -335,8 +335,19 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
     val scanner = new ParquetTableScan(ParquetTestData.testData, None)(TestSqlContext.sparkContext)
     val first = scanner.pruneColumns(ParquetTypesConverter.convertToAttributes(MessageTypeParser.parseMessageType(ParquetTestData.subTestSchema)))
     assert(first)
-    val rdd = scanner.execute()
-    assert(rdd != null)
+    val result = scanner.execute().collect()
+    val allChecks: Boolean = result.zipWithIndex.forall {
+      case (row, index) => {
+        val checkBoolean =
+          if (index % 3 == 0)
+            (row(0) == true)
+          else
+            (row(0) == false)
+        val checkLong = (row(1) == (1L<<33))
+        checkBoolean && checkLong && (row.size == 2)
+      }
+    }
+    assert(allChecks)
   }
 
   /**

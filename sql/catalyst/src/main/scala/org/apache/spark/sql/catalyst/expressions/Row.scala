@@ -36,6 +36,7 @@ abstract class Row extends Seq[Any] with Serializable {
   def getInt(i: Int): Int
   def getLong(i: Int): Long
   def getDouble(i: Int): Double
+  def getFloat(i: Int): Float
   def getBoolean(i: Int): Boolean
   def getShort(i: Int): Short
   def getByte(i: Int): Byte
@@ -57,6 +58,7 @@ object EmptyRow extends Row {
   def getInt(i: Int): Int = throw new UnsupportedOperationException
   def getLong(i: Int): Long = throw new UnsupportedOperationException
   def getDouble(i: Int): Double = throw new UnsupportedOperationException
+  def getFloat(i: Int): Float = throw new UnsupportedOperationException
   def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
   def getShort(i: Int): Short = throw new UnsupportedOperationException
   def getByte(i: Int): Byte = throw new UnsupportedOperationException
@@ -87,6 +89,10 @@ class GenericRow(input: Seq[Any]) extends Row {
   def getDouble(i: Int): Double = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive double value.")
     values(i).asInstanceOf[Double]
+  }
+  def getFloat(i: Int): Float = {
+    if (values(i) == null) sys.error("Failed to check null bit for primitive float value.")
+    values(i).asInstanceOf[Float]
   }
   def getBoolean(i: Int): Boolean = {
     if (values(i) == null) sys.error("Failed to check null bit for primitive boolean value.")
