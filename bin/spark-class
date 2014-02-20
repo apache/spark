@@ -28,11 +28,7 @@ SCALA_VERSION=2.10
 FWDIR="$(cd `dirname $0`/..; pwd)"
 
 #Export this as SPARK_HOME unless REMOTE_SPARK_HOME is set
-if [ -n "${REMOTE_SPARK_HOME}" ]; then
-    export SPARK_HOME=$REMOTE_SPARK_HOME
-else
-    export SPARK_HOME="$FWDIR"
-fi
+export SPARK_HOME="$FWDIR"
 
 # Load environment variables from conf/spark-env.sh, if it exists
 if [ -e "$FWDIR/conf/spark-env.sh" ] ; then

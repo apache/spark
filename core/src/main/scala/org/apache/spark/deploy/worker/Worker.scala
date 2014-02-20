@@ -204,14 +204,14 @@ private[spark] class Worker(
         System.exit(1)
       }
 
-    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_, execSparkHome_) =>
+    case LaunchExecutor(masterUrl, appId, execId, appDesc, cores_, memory_) =>
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
       } else {
         logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
         // TODO (pwendell): We shuld make sparkHome an Option[String] in
         // ApplicationDescription to be more explicit about this.
-        val effectiveSparkHome = Option(execSparkHome_).getOrElse(sparkHome.getAbsolutePath)
+        val effectiveSparkHome = sparkHome.getAbsolutePath
         val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
           self, workerId, host, new File(effectiveSparkHome), workDir, akkaUrl, ExecutorState.RUNNING)
         executors(appId + "/" + execId) = manager
