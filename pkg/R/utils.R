@@ -65,7 +65,7 @@ deserializeByteArrays <- function(byteArrs) {
 # Returns TRUE if `name` refers to an RDD in the given environment `env`
 isRDD <- function(name, env) {
   obj <- get(name, envir=env)
-  class(obj) == "RDD"
+  inherits(obj, "RDD")
 }
 
 # Returns TRUE if `name` is a function in the SparkR package.
