@@ -25,16 +25,18 @@ import org.apache.spark.SparkContext
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageUtils, RDDInfo}
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.{GatewayUISparkListener, SparkUI, StorageStatusFetchSparkListener}
+import org.apache.spark.ui._
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
-private[spark] class BlockManagerUI(parent: SparkUI, live: Boolean) {
+private[spark] class BlockManagerUI(parent: SparkUI) {
+  val live = parent.live
   val sc = parent.sc
 
   private val indexPage = new IndexPage(this)
   private val rddPage = new RDDPage(this)
   private var _listener: Option[BlockManagerListener] = None
 
+  def appName = parent.appName
   def listener = _listener.get
 
   def start() {

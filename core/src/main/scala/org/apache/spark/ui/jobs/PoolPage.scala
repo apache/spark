@@ -26,7 +26,9 @@ import org.apache.spark.ui.UIUtils
 
 /** Page showing specific pool details */
 private[spark] class PoolPage(parent: JobProgressUI) {
+  private val live = parent.live
   private val sc = parent.sc
+  private def appName = parent.appName
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -39,13 +41,14 @@ private[spark] class PoolPage(parent: JobProgressUI) {
       }
       val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
 
-      val pool = sc.getPoolForName(poolName).get
-      val poolTable = new PoolTable(Seq(pool), parent)
+      // For now, pool information is only accessible in live UI's
+      val pools = if (live) Seq(sc.getPoolForName(poolName).get) else Seq()
+      val poolTable = new PoolTable(pools, parent)
 
       val content = <h4>Summary </h4> ++ poolTable.toNodeSeq ++
                     <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(content, sc.appName, "Fair Scheduler Pool: " + poolName, Stages)
+      UIUtils.headerSparkPage(content, appName, "Fair Scheduler Pool: " + poolName, Stages)
     }
   }
 }

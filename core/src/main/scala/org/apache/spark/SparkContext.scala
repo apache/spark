@@ -157,9 +157,6 @@ class SparkContext(
   private[spark] val ui = new SparkUI(this)
   ui.bind()
 
-  // Keeps track of all previously persisted UI rendered by this SparkContext
-  private[spark] val persistedUIs = HashMap[Int, SparkUI]()
-
   val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
@@ -211,9 +208,13 @@ class SparkContext(
 
   ui.start()
 
+  // Trigger application start
+  val environmentDetails = SparkEnv.environmentDetails(this)
+  val applicationStart = new SparkListenerApplicationStart(environmentDetails)
+  dagScheduler.post(applicationStart)
+
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
-    val env = SparkEnv.get
     val hadoopConf = SparkHadoopUtil.get.newConfiguration()
     // Explicitly check for S3 environment variables
     if (System.getenv("AWS_ACCESS_KEY_ID") != null &&
@@ -579,41 +580,6 @@ class SparkContext(
     new CheckpointRDD[T](this, path)
   }
 
-  /**
-   * Render a previously persisted SparkUI from a set of event logs
-   * @param logPath Path of directory containing the event logs
-   */
-  def renderPersistedUI(logPath: String) = {
-    val oldUI = new SparkUI(this, live = false)
-    oldUI.start()
-    val success = oldUI.renderFromDisk(logPath)
-    if (!success) {
-      oldUI.stop()
-    } else {
-      oldUI.bind()
-      persistedUIs(oldUI.boundPort.get) = oldUI
-    }
-  }
-
-  /**
-   * Return a list of ports bound by persisted UI's
-   */
-  def getPersistedUIPorts = persistedUIs.keys.toSeq
-
-  /**
-   * Stop the persisted UI bound to the given port, if any
-   */
-  def stopPersistedUI(port: Int) = {
-    persistedUIs.remove(port).foreach(_.stop())
-  }
-
-  /**
-   * Stop all persisted UI's rendered in this context
-   */
-  def stopAllPersistedUIs() = {
-    persistedUIs.keys.foreach(stopPersistedUI)
-  }
-
   /** Build the union of a list of RDDs. */
   def union[T: ClassTag](rdds: Seq[RDD[T]]): RDD[T] = new UnionRDD(this, rdds)
 
@@ -820,7 +786,6 @@ class SparkContext(
   /** Shut down the SparkContext. */
   def stop() {
     ui.stop()
-    stopAllPersistedUIs()
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler

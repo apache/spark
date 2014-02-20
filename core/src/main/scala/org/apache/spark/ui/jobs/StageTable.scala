@@ -22,15 +22,14 @@ import java.util.Date
 import scala.xml.Node
 import scala.collection.mutable.HashMap
 
-import org.apache.spark.scheduler.{SchedulingMode, StageInfo, TaskInfo}
+import org.apache.spark.scheduler.{StageInfo, TaskInfo}
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
 private[spark] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
-  private val sc = parent.sc
   private val dateFmt = parent.dateFmt
-  private val isFairScheduler = sc.getSchedulingMode == SchedulingMode.FAIR
+  private def isFairScheduler = parent.isFairScheduler
   private def listener = parent.listener
 
   def toNodeSeq: Seq[Node] = {

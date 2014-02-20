@@ -41,7 +41,7 @@ private[spark] trait UISparkListener extends SparkListener
  *  (2) If the UI is rendered from disk, GatewayUISparkListener replays each event deserialized
  *      from the event logs to all attached listeners.
  */
-private[spark] class GatewayUISparkListener(live: Boolean) extends SparkListener {
+private[spark] class GatewayUISparkListener(parent: SparkUI, live: Boolean) extends SparkListener {
 
   // Log events only if the UI is live
   private val logger: Option[FileLogger] = if (live) Some(new FileLogger()) else None
@@ -95,9 +95,15 @@ private[spark] class GatewayUISparkListener(live: Boolean) extends SparkListener
     logger.foreach(_.close())
   }
 
-  override def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) {
-    listeners.foreach(_.onLoadEnvironment(loadEnvironment))
-    logEvent(loadEnvironment)
+  override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
+    // Retrieve app name from the application start event
+    // For live UI's, this should be equivalent to sc.appName
+    val sparkProperties = applicationStart.environmentDetails("Spark Properties").toMap
+    val appName = sparkProperties.get("spark.app.name")
+    appName.foreach(parent.setAppName)
+
+    listeners.foreach(_.onApplicationStart(applicationStart))
+    logEvent(applicationStart)
     logger.foreach(_.flush())
   }
 
@@ -126,7 +132,7 @@ private[spark] class StorageStatusFetchSparkListener(
     gateway: GatewayUISparkListener,
     live: Boolean)
   extends UISparkListener {
-  var storageStatusList: Seq[StorageStatus] = sc.getExecutorStorageStatus
+  var storageStatusList: Seq[StorageStatus] = Seq()
 
   /**
    * Fetch storage information from SparkEnv, which involves a query to the driver. This is

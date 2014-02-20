@@ -200,6 +200,10 @@ class DAGScheduler(
     listenerBus.addListener(listener)
   }
 
+  def post(event: SparkListenerEvent) {
+    listenerBus.post(event)
+  }
+
   private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
     if (!cacheLocs.contains(rdd.id)) {
       val blockIds = rdd.partitions.indices.map(index=> RDDBlockId(rdd.id, index)).toArray[BlockId]

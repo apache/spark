@@ -36,35 +36,37 @@ import net.liftweb.json._
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
-/** Top level user interface for Spark */
-private[spark] class SparkUI(val sc: SparkContext, live: Boolean = true) extends Logging {
+/** Top level user interface for Spark. */
+private[spark] class SparkUI(val sc: SparkContext) extends Logging {
+
+  // If SparkContext is not provided, assume this UI is rendered from persisted storage
+  val live = sc != null
   val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
-  val port = if (live) {
+  var port = if (live) {
       sc.conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
     } else {
-      // While each context has only one live SparkUI, it can have many persisted ones
-      // For persisted UI's, climb upwards from the configured / default port
-      val nextPort = SparkUI.lastPersistedUIPort match {
-        case Some(p) => p + 1
-        case None => sc.conf.get("spark.ui.persisted.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt
-      }
-      SparkUI.lastPersistedUIPort = Some(nextPort)
-      nextPort
+      SparkUI.DEFAULT_PERSISTED_PORT.toInt
     }
   var boundPort: Option[Int] = None
   var server: Option[Server] = None
+  var started = false
+  var appName = ""
 
   private val handlers = Seq[(String, Handler)](
     ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
     ("/", createRedirectHandler("/stages"))
   )
-  private val storage = new BlockManagerUI(this, live)
-  private val jobs = new JobProgressUI(this, live)
-  private val env = new EnvironmentUI(this, live)
-  private val exec = new ExecutorsUI(this, live)
+  private val storage = new BlockManagerUI(this)
+  private val jobs = new JobProgressUI(this)
+  private val env = new EnvironmentUI(this)
+  private val exec = new ExecutorsUI(this)
 
   // Add MetricsServlet handlers by default
-  private val metricsServletHandlers = SparkEnv.get.metricsSystem.getServletHandlers
+  private val metricsServletHandlers = if (live) {
+    SparkEnv.get.metricsSystem.getServletHandlers
+  } else {
+    Array[(String, Handler)]()
+  }
 
   private val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
     exec.getHandlers ++ metricsServletHandlers ++ handlers
@@ -73,10 +75,22 @@ private[spark] class SparkUI(val sc: SparkContext, live: Boolean = true) extends
   private var _gatewayListener: Option[GatewayUISparkListener] = None
 
   def gatewayListener = _gatewayListener.getOrElse {
-    val gateway = new GatewayUISparkListener(live)
+    val gateway = new GatewayUISparkListener(this, live)
     _gatewayListener = Some(gateway)
     gateway
   }
+
+  // Only meaningful if port is set before binding
+  def setPort(p: Int) = {
+    if (boundPort.isDefined) {
+      logWarning("Attempted to set Spark Web UI port after it is already bound to %s."
+        .format(appUIAddress))
+    } else {
+      port = p
+    }
+  }
+
+  def setAppName(name: String) = appName = name
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {
@@ -107,6 +121,7 @@ private[spark] class SparkUI(val sc: SparkContext, live: Boolean = true) extends
     jobs.start()
     env.start()
     exec.start()
+    started = true
   }
 
   def stop() {
@@ -116,11 +131,13 @@ private[spark] class SparkUI(val sc: SparkContext, live: Boolean = true) extends
 
   /**
    * Reconstruct a previously persisted SparkUI from logs residing in the given directory.
-   * Return true if log files are found and processed.
+   *
+   * This method must be invoked after the SparkUI has started. Return true if log files
+   * are found and processed.
    */
-  def renderFromDisk(dirPath: String): Boolean = {
-    // Live UI's should never invoke this
-    assert(!live)
+  def renderFromPersistedStorage(dirPath: String): Boolean = {
+    assert(!live, "Live Spark Web UI attempted to render from persisted storage!")
+    assert(started, "Spark Web UI attempted to render from persisted storage before starting!")
 
     // Check validity of the given path
     val logDir = new File(dirPath)
@@ -129,8 +146,7 @@ private[spark] class SparkUI(val sc: SparkContext, live: Boolean = true) extends
         .format(dirPath))
       return false
     }
-    // Maintaining the order of log files is important because information of one job is
-    // dependent on that of another
+    // Assume events are ordered not only within each log file, but also across files by file name
     val logFiles = logDir.listFiles.filter(_.isFile).sortBy(_.getName)
     if (logFiles.size == 0) {
       logWarning("No logs found in given directory %s when rendering persisted Spark Web UI!"
@@ -139,14 +155,19 @@ private[spark] class SparkUI(val sc: SparkContext, live: Boolean = true) extends
     }
 
     // Replay events in each event log
-    logFiles.foreach(processEventLog)
+    // Use a new SparkListenerBus to avoid depending on SparkContext
+    val bus = new SparkListenerBus
+    logFiles.foreach { file => processEventLog(file, bus) }
     true
   }
 
   /**
-   * Replay each event in the order maintained in the given log to the gateway listener
+   * Replay each event in the order maintained in the given log to the gateway listener.
+   *
+   * A custom SparkListenerBus, rather than the DAG scheduler's, is used to decouple the
+   * replaying of logged events from the creation of a SparkContext.
    */
-  private def processEventLog(file: File) = {
+  private def processEventLog(file: File, listenerBus: SparkListenerBus) = {
     val fileStream = new FileInputStream(file)
     val bufferedStream = new FastBufferedInputStream(fileStream)
     var currentLine = ""
@@ -155,7 +176,7 @@ private[spark] class SparkUI(val sc: SparkContext, live: Boolean = true) extends
       lines.foreach { line =>
         currentLine = line
         val event = SparkListenerEvent.fromJson(parse(line))
-        sc.dagScheduler.listenerBus.postToListeners(event, Seq(gatewayListener))
+        listenerBus.postToListeners(event, Seq(gatewayListener))
       }
     } catch {
       case e: Exception =>
@@ -174,7 +195,4 @@ private[spark] object SparkUI {
   val DEFAULT_PORT = "4040"
   val DEFAULT_PERSISTED_PORT = "14040"
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
-
-  // Keep track of the port of the last persisted UI
-  var lastPersistedUIPort: Option[Int] = None
 }

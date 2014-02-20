@@ -56,9 +56,9 @@ private[spark] class ExecutorTable(stageId: Int, parent: JobProgressUI) {
   private def createExecutorTable() : Seq[Node] = {
     // Make an executor-id -> address map
     val executorIdToAddress = mutable.HashMap[String, String]()
-    val storageStatusList = parent.sc.getExecutorStorageStatus
+    val storageStatusList = listener.storageStatusList
     for (statusId <- 0 until storageStatusList.size) {
-      val blockManagerId = parent.sc.getExecutorStorageStatus(statusId).blockManagerId
+      val blockManagerId = storageStatusList(statusId).blockManagerId
       val address = blockManagerId.hostPort
       val executorId = blockManagerId.executorId
       executorIdToAddress.put(executorId, address)

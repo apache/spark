@@ -29,8 +29,8 @@ import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
 private[spark] class StagePage(parent: JobProgressUI) {
-  private val sc = parent.sc
   private val dateFmt = parent.dateFmt
+  private def appName = parent.appName
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -44,7 +44,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
             <h4>Tasks</h4> No tasks have started yet
           </div>
         return UIUtils.headerSparkPage(
-          content, sc.appName, "Details for Stage %s".format(stageId), Stages)
+          content, appName, "Details for Stage %s".format(stageId), Stages)
       }
 
       val tasks = listener.stageIdToTaskInfos(stageId).values.toSeq.sortBy(_.taskInfo.launchTime)
@@ -203,7 +203,7 @@ private[spark] class StagePage(parent: JobProgressUI) {
         <h4>Aggregated Metrics by Executor</h4> ++ executorTable.toNodeSeq ++
         <h4>Tasks</h4> ++ taskTable
 
-      UIUtils.headerSparkPage(content, sc.appName, "Details for Stage %d".format(stageId), Stages)
+      UIUtils.headerSparkPage(content, appName, "Details for Stage %d".format(stageId), Stages)
     }
   }
 

@@ -23,13 +23,15 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.Handler
 
+import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[spark] class JobProgressUI(parent: SparkUI, live: Boolean) {
+private[spark] class JobProgressUI(parent: SparkUI) {
   val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  val live = parent.live
   val sc = parent.sc
 
   private val indexPage = new IndexPage(this)
@@ -37,11 +39,13 @@ private[spark] class JobProgressUI(parent: SparkUI, live: Boolean) {
   private val poolPage = new PoolPage(this)
   private var _listener: Option[JobProgressListener] = None
 
+  def appName = parent.appName
+  def isFairScheduler = listener.schedulingMode.exists(_ == SchedulingMode.FAIR)
   def listener = _listener.get
 
   def start() {
     val gateway = parent.gatewayListener
-    _listener = Some(new JobProgressListener(sc))
+    _listener = Some(new JobProgressListener(sc, gateway, live))
     gateway.registerSparkListener(listener)
   }
 

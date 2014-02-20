@@ -22,7 +22,8 @@ import scala.collection.mutable.{ListBuffer, HashMap}
 import org.apache.spark.{ExceptionFailure, SparkContext, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler._
-import org.apache.spark.ui.{GatewayUISparkListener, UISparkListener}
+import org.apache.spark.ui.{GatewayUISparkListener, StorageStatusFetchSparkListener}
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 
 /**
  * Tracks task-level information to be displayed in the UI.
@@ -31,11 +32,19 @@ import org.apache.spark.ui.{GatewayUISparkListener, UISparkListener}
  * class, since the UI thread and the DAGScheduler event loop may otherwise
  * be reading/updating the internal data structures concurrently.
  */
-private[spark] class JobProgressListener(sc: SparkContext) extends UISparkListener {
+private[spark] class JobProgressListener(
+    sc: SparkContext,
+    gateway: GatewayUISparkListener,
+    live: Boolean)
+  extends StorageStatusFetchSparkListener(sc, gateway, live) {
+  import JobProgressListener._
 
   // How many stages to remember
-  val RETAINED_STAGES = sc.conf.getInt("spark.ui.retainedStages", 1000)
-  val DEFAULT_POOL_NAME = "default"
+  val retainedStages = if (live) {
+    sc.conf.getInt("spark.ui.retainedStages", DEFAULT_RETAINED_STAGES)
+  } else {
+    DEFAULT_RETAINED_STAGES
+  }
 
   val stageIdToPool = new HashMap[Int, String]()
   val stageIdToDescription = new HashMap[Int, String]()
@@ -61,6 +70,8 @@ private[spark] class JobProgressListener(sc: SparkContext) extends UISparkListen
   val stageIdToTaskInfos = HashMap[Int, HashMap[Long, TaskUIData]]()
   val stageIdToExecutorSummaries = HashMap[Int, HashMap[String, ExecutorSummary]]()
 
+  var schedulingMode: Option[SchedulingMode] = None
+
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stageInfo
     val stageId = stage.stageId
@@ -73,8 +84,8 @@ private[spark] class JobProgressListener(sc: SparkContext) extends UISparkListen
 
   /** If stages is too large, remove and garbage collect old stages */
   private def trimIfNecessary(stages: ListBuffer[StageInfo]) = synchronized {
-    if (stages.size > RETAINED_STAGES) {
-      val toRemove = RETAINED_STAGES / 10
+    if (stages.size > retainedStages) {
+      val toRemove = retainedStages / 10
       stages.takeRight(toRemove).foreach( s => {
         stageIdToTaskInfos.remove(s.stageId)
         stageIdToTime.remove(s.stageId)
@@ -218,9 +229,23 @@ private[spark] class JobProgressListener(sc: SparkContext) extends UISparkListen
       case _ =>
     }
   }
+
+  override def onApplicationStart(applicationStart: SparkListenerApplicationStart) = synchronized {
+    val schedulingModeName =
+      applicationStart.environmentDetails("Spark Properties").toMap.get("spark.scheduler.mode")
+    schedulingMode = schedulingModeName match {
+      case Some(name) => Some(SchedulingMode.withName(name))
+      case None => None
+    }
+  }
 }
 
 private[spark] case class TaskUIData(
   taskInfo: TaskInfo,
   taskMetrics: Option[TaskMetrics] = None,
   exception: Option[ExceptionFailure] = None)
+
+private[spark] object JobProgressListener {
+  val DEFAULT_RETAINED_STAGES = 1000
+  val DEFAULT_POOL_NAME = "default"
+}

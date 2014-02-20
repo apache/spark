@@ -103,18 +103,13 @@ case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkLi
   }
 }
 
-/** An event used in the EnvironmentUI */
-private[spark] case class SparkListenerLoadEnvironment(
-    jvmInformation: Seq[(String, String)],
-    sparkProperties: Seq[(String, String)],
-    systemProperties: Seq[(String, String)],
-    classpathEntries: Seq[(String, String)])
+case class SparkListenerApplicationStart(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent {
   override def toJson = {
-    val jvmInformationJson = Utils.mapToJson(jvmInformation.toMap)
-    val sparkPropertiesJson = Utils.mapToJson(sparkProperties.toMap)
-    val systemPropertiesJson = Utils.mapToJson(systemProperties.toMap)
-    val classpathEntriesJson = Utils.mapToJson(classpathEntries.toMap)
+    val jvmInformationJson = Utils.mapToJson(environmentDetails("JVM Information").toMap)
+    val sparkPropertiesJson = Utils.mapToJson(environmentDetails("Spark Properties").toMap)
+    val systemPropertiesJson = Utils.mapToJson(environmentDetails("System Properties").toMap)
+    val classpathEntriesJson = Utils.mapToJson(environmentDetails("Classpath Entries").toMap)
     super.toJson ~
     ("JVM Information" -> jvmInformationJson) ~
     ("Spark Properties" -> sparkPropertiesJson) ~
@@ -159,7 +154,7 @@ object SparkListenerEvent {
     val taskEnd =  Utils.getFormattedClassName(SparkListenerTaskEnd)
     val jobStart =  Utils.getFormattedClassName(SparkListenerJobStart)
     val jobEnd =  Utils.getFormattedClassName(SparkListenerJobEnd)
-    val loadEnvironment = Utils.getFormattedClassName(SparkListenerLoadEnvironment)
+    val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
     val storageStatusFetch =  Utils.getFormattedClassName(SparkListenerStorageStatusFetch)
     val getRDDInfo =  Utils.getFormattedClassName(SparkListenerGetRDDInfo)
     val shutdown =  Utils.getFormattedClassName(SparkListenerShutdown)
@@ -172,7 +167,7 @@ object SparkListenerEvent {
       case `taskEnd` => taskEndFromJson(json)
       case `jobStart` => jobStartFromJson(json)
       case `jobEnd` => jobEndFromJson(json)
-      case `loadEnvironment` => loadEnvironmentFromJson(json)
+      case `applicationStart` => applicationStartFromJson(json)
       case `storageStatusFetch` => storageStatusFetchFromJson(json)
       case `getRDDInfo` => getRDDInfoFromJson(json)
       case `shutdown` => SparkListenerShutdown
@@ -226,13 +221,13 @@ object SparkListenerEvent {
       JobResult.fromJson(json \ "Job Result"))
   }
 
-  private def loadEnvironmentFromJson(json: JValue): SparkListenerEvent = {
-    implicit val format = DefaultFormats
-    new SparkListenerLoadEnvironment(
-      Utils.mapFromJson(json \ "JVM Information").toSeq,
-      Utils.mapFromJson(json \ "Spark Properties").toSeq,
-      Utils.mapFromJson(json \ "System Properties").toSeq,
-      Utils.mapFromJson(json \ "Classpath Entries").toSeq)
+  private def applicationStartFromJson(json: JValue): SparkListenerEvent = {
+    val environmentDetails = Map[String, Seq[(String, String)]](
+      "JVM Information" -> Utils.mapFromJson(json \ "JVM Information").toSeq,
+      "Spark Properties" -> Utils.mapFromJson(json \ "Spark Properties").toSeq,
+      "System Properties" -> Utils.mapFromJson(json \ "System Properties").toSeq,
+      "Classpath Entries" -> Utils.mapFromJson(json \ "Classpath Entries").toSeq)
+    new SparkListenerApplicationStart(environmentDetails)
   }
 
   private def storageStatusFetchFromJson(json: JValue): SparkListenerEvent = {
@@ -292,9 +287,9 @@ trait SparkListener {
   def onJobEnd(jobEnd: SparkListenerJobEnd) { }
 
   /**
-   * Called when the Spark environment is loaded
+   * Called when the application starts
    */
-  def onLoadEnvironment(loadEnvironment: SparkListenerLoadEnvironment) { }
+  def onApplicationStart(applicationStart: SparkListenerApplicationStart) { }
 
   /**
    * Called when Spark fetches storage statuses from the driver

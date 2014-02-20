@@ -17,8 +17,10 @@
 
 package org.apache.spark
 
+import scala.collection.JavaConversions._
 import scala.collection.mutable
 import scala.concurrent.Await
+import scala.util.Properties
 
 import akka.actor._
 
@@ -233,5 +235,55 @@ object SparkEnv extends Logging {
       sparkFilesDir,
       metricsSystem,
       conf)
+  }
+
+  /**
+   * Return a map representation of jvm information, Spark properties, system properties, and
+   * class paths. Map keys define the category, and map values represent the corresponding
+   * attributes as a sequence of KV pairs.
+   */
+  private[spark]
+  def environmentDetails(sc: SparkContext): Map[String, Seq[(String, String)]] = {
+    val jvmInformation = Seq(
+      ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
+      ("Java Home", Properties.javaHome),
+      ("Scala Version", Properties.versionString),
+      ("Scala Home", Properties.scalaHome)
+    ).sorted
+
+    // Spark properties, including scheduling mode and app name whether or not they are configured
+    var additionalFields = Seq[(String, String)]()
+    sc.conf.getOption("spark.scheduler.mode").getOrElse {
+      additionalFields ++= Seq(("spark.scheduler.mode", sc.getSchedulingMode.toString))
+    }
+    sc.conf.getOption("spark.app.name").getOrElse {
+      additionalFields ++= Seq(("spark.app.name", sc.appName))
+    }
+    val sparkProperties = sc.conf.getAll.sorted ++ additionalFields
+
+    val systemProperties = System.getProperties.iterator.toSeq
+    val classPathProperty = systemProperties.find { case (k, v) =>
+      k == "java.class.path"
+    }.getOrElse(("", ""))
+
+    // System properties that are not java classpaths
+    val otherProperties = systemProperties.filter { case (k, v) =>
+      k != "java.class.path" && !k.startsWith("spark.")
+    }.sorted
+
+    // Class paths including all added jars and files
+    val classPathEntries = classPathProperty._2
+      .split(sc.conf.get("path.separator", ":"))
+      .filterNot(e => e.isEmpty)
+      .map(e => (e, "System Classpath"))
+    val addedJars = sc.addedJars.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
+    val addedFiles = sc.addedFiles.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
+    val classPaths = (addedJars ++ addedFiles ++ classPathEntries).sorted
+
+    Map[String, Seq[(String, String)]](
+      "JVM Information" -> jvmInformation,
+      "Spark Properties" -> sparkProperties,
+      "System Properties" -> otherProperties,
+      "Classpath Entries" -> classPaths)
   }
 }

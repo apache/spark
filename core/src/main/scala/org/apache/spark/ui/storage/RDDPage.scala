@@ -29,7 +29,7 @@ import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
 private[spark] class RDDPage(parent: BlockManagerUI) {
-  private val sc = parent.sc
+  private def appName = parent.appName
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -96,7 +96,7 @@ private[spark] class RDDPage(parent: BlockManagerUI) {
         </div>
       </div>;
 
-    UIUtils.headerSparkPage(content, sc.appName, "RDD Storage Info for " + rddInfo.name, Storage)
+    UIUtils.headerSparkPage(content, appName, "RDD Storage Info for " + rddInfo.name, Storage)
   }
 
   /** Header fields for the worker table */

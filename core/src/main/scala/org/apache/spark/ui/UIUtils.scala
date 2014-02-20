@@ -19,8 +19,6 @@ package org.apache.spark.ui
 
 import scala.xml.Node
 
-import org.apache.spark.SparkContext
-
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils {
   import Page._

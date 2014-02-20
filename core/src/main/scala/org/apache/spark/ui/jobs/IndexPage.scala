@@ -21,13 +21,15 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.{NodeSeq, Node}
 
-import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils
 
 /** Page showing list of all ongoing and recently finished stages and pools*/
 private[spark] class IndexPage(parent: JobProgressUI) {
+  private val live = parent.live
   private val sc = parent.sc
+  private def appName = parent.appName
+  private def isFairScheduler = parent.isFairScheduler
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
@@ -42,34 +44,42 @@ private[spark] class IndexPage(parent: JobProgressUI) {
         new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
-      val pools = sc.getAllPools
+      // For now, pool information is only accessible in live UI's
+      val pools = if (live) sc.getAllPools else Seq()
       val poolTable = new PoolTable(pools, parent)
+
       val summary: NodeSeq =
-       <div>
-         <ul class="unstyled">
-           <li>
-             <strong>Total Duration: </strong>
-             {parent.formatDuration(now - sc.startTime)}
-           </li>
-           <li><strong>Scheduling Mode:</strong> {sc.getSchedulingMode}</li>
-           <li>
-             <a href="#active"><strong>Active Stages:</strong></a>
-             {activeStages.size}
-           </li>
-           <li>
-             <a href="#completed"><strong>Completed Stages:</strong></a>
-             {completedStages.size}
-           </li>
-           <li>
+        <div>
+          <ul class="unstyled">
+            {if (live) {
+              // Total duration is not meaningful unless the UI is live
+              <li>
+                <strong>Total Duration: </strong>
+                {parent.formatDuration(now - sc.startTime)}
+              </li>
+            }}
+            <li>
+              <strong>Scheduling Mode: </strong>
+              {listener.schedulingMode.map(_.toString).getOrElse("Unknown")}
+            </li>
+            <li>
+              <a href="#active"><strong>Active Stages:</strong></a>
+              {activeStages.size}
+            </li>
+            <li>
+              <a href="#completed"><strong>Completed Stages:</strong></a>
+              {completedStages.size}
+            </li>
+             <li>
              <a href="#failed"><strong>Failed Stages:</strong></a>
-             {failedStages.size}
-           </li>
-         </ul>
-       </div>
+              {failedStages.size}
+            </li>
+          </ul>
+        </div>
 
       val content = summary ++
-        {if (sc.getSchedulingMode == SchedulingMode.FAIR) {
-           <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
+        {if (live && isFairScheduler) {
+          <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
         } else {
           Seq()
         }} ++
@@ -80,7 +90,7 @@ private[spark] class IndexPage(parent: JobProgressUI) {
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(content, sc.appName, "Spark Stages", Stages)
+      UIUtils.headerSparkPage(content, appName, "Spark Stages", Stages)
     }
   }
 }

@@ -15,23 +15,32 @@
  * limitations under the License.
  */
 
-package org.apache.spark.scheduler
+package org.apache.spark.ui
 
-import net.liftweb.json.JsonAST.JValue
-import net.liftweb.json.DefaultFormats
+/**
+ * Reload a persisted UI independently from a SparkContext
+ */
+object UIReloader {
+  def main(args: Array[String]) {
+    if (args.length < 1) {
+      println("Usage: ./bin/spark-class org.apache.spark.ui.UIReloader [log path]")
+      System.exit(1)
+    }
 
-private[spark] object TaskLocality extends Enumeration {
-  // Process local is expected to be used ONLY within TaskSetManager for now.
-  val PROCESS_LOCAL, NODE_LOCAL, RACK_LOCAL, ANY = Value
+    val ui = new SparkUI(null)
+    ui.bind()
+    ui.start()
+    val success = ui.renderFromPersistedStorage(args(0))
+    if (!success) {
+      ui.stop()
+    }
 
-  type TaskLocality = Value
-
-  def isAllowed(constraint: TaskLocality, condition: TaskLocality): Boolean = {
-    condition <= constraint
-  }
-
-  def fromJson(json: JValue): TaskLocality = {
-    implicit val format = DefaultFormats
-    TaskLocality.withName(json.extract[String])
+    println("\nTo exit, type exit or quit.")
+    var line = ""
+    while (line != "exit" && line != "quit") {
+      print("> ")
+      line = readLine()
+    }
+    println("\nReceived signal to exit.")
   }
 }

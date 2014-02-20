@@ -31,11 +31,13 @@ import org.apache.spark.ui.Page.Executors
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
 
-private[spark] class ExecutorsUI(parent: SparkUI, live: Boolean) {
+private[spark] class ExecutorsUI(parent: SparkUI) {
+  val live = parent.live
   val sc = parent.sc
 
   private var _listener: Option[ExecutorsListener] = None
 
+  def appName = parent.appName
   def listener = _listener.get
 
   def start() {
@@ -55,7 +57,8 @@ private[spark] class ExecutorsUI(parent: SparkUI, live: Boolean) {
     val memUsed = storageStatusList.map(_.memUsed()).fold(0L)(_ + _)
     val diskSpaceUsed = storageStatusList.flatMap(_.blocks.values.map(_.diskSize)).fold(0L)(_ + _)
     val execInfo = for (statusId <- 0 until storageStatusList.size) yield getExecInfo(statusId)
-    val execTable = UIUtils.listingTable(execHeader, execRow, execInfo)
+    val execInfoSorted = execInfo.sortBy(_.getOrElse("Executor ID", ""))
+    val execTable = UIUtils.listingTable(execHeader, execRow, execInfoSorted)
 
     val content =
       <div class="row-fluid">
@@ -74,7 +77,7 @@ private[spark] class ExecutorsUI(parent: SparkUI, live: Boolean) {
           </div>
         </div>;
 
-    UIUtils.headerSparkPage(content, sc.appName, "Executors (" + execInfo.size + ")", Executors)
+    UIUtils.headerSparkPage(content, appName, "Executors (" + execInfo.size + ")", Executors)
   }
 
   /** Header fields for the executors table */
