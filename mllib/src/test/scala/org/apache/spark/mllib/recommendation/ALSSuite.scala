@@ -18,9 +18,9 @@
 package org.apache.spark.mllib.recommendation
 
 import scala.collection.JavaConversions._
+import scala.math.abs
 import scala.util.Random
 
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.jblas._
@@ -34,7 +34,8 @@ object ALSSuite {
       products: Int,
       features: Int,
       samplingRate: Double,
-      implicitPrefs: Boolean): (java.util.List[Rating], DoubleMatrix, DoubleMatrix) = {
+      implicitPrefs: Boolean,
+      negativeWeights: Boolean): (java.util.List[Rating], DoubleMatrix, DoubleMatrix) = {
     val (sampledRatings, trueRatings, truePrefs) =
       generateRatings(users, products, features, samplingRate, implicitPrefs)
     (seqAsJavaList(sampledRatings), trueRatings, truePrefs)
@@ -45,7 +46,8 @@ object ALSSuite {
       products: Int,
       features: Int,
       samplingRate: Double,
-      implicitPrefs: Boolean = false): (Seq[Rating], DoubleMatrix, DoubleMatrix) = {
+      implicitPrefs: Boolean = false,
+      negativeWeights: Boolean = false): (Seq[Rating], DoubleMatrix, DoubleMatrix) = {
     val rand = new Random(42)
 
     // Create a random matrix with uniform values from -1 to 1
@@ -56,7 +58,9 @@ object ALSSuite {
     val productMatrix = randomMatrix(features, products)
     val (trueRatings, truePrefs) = implicitPrefs match {
       case true =>
-        val raw = new DoubleMatrix(users, products, Array.fill(users * products)(rand.nextInt(10).toDouble): _*)
+        // Generate raw values from [0,9], or if negativeWeights, from [-2,7]
+        val raw = new DoubleMatrix(users, products,
+          Array.fill(users * products)((if (negativeWeights) -2 else 0) + rand.nextInt(10).toDouble): _*)
         val prefs = new DoubleMatrix(users, products, raw.data.map(v => if (v > 0) 1.0 else 0.0): _*)
         (raw, prefs)
       case false => (userMatrix.mmul(productMatrix), null)
@@ -107,6 +111,10 @@ class ALSSuite extends FunSuite with LocalSparkContext {
     testALS(100, 200, 2, 15, 0.7, 0.4, true, true)
   }
 
+  test("rank-2 matrices implicit negative") {
+    testALS(100, 200, 2, 15, 0.7, 0.4, true, false, true)
+  }
+
   /**
    * Test if we can correctly factorize R = U * P where U and P are of known rank.
    *
@@ -118,13 +126,14 @@ class ALSSuite extends FunSuite with LocalSparkContext {
    * @param matchThreshold max difference allowed to consider a predicted rating correct
    * @param implicitPrefs  flag to test implicit feedback
    * @param bulkPredict    flag to test bulk prediciton
+   * @param negativeWeights whether the generated data can contain negative values
    */
   def testALS(users: Int, products: Int, features: Int, iterations: Int,
     samplingRate: Double, matchThreshold: Double, implicitPrefs: Boolean = false,
-    bulkPredict: Boolean = false)
+    bulkPredict: Boolean = false, negativeWeights: Boolean = false)
   {
     val (sampledRatings, trueRatings, truePrefs) = ALSSuite.generateRatings(users, products,
-      features, samplingRate, implicitPrefs)
+      features, samplingRate, implicitPrefs, negativeWeights)
     val model = implicitPrefs match {
       case false => ALS.train(sc.parallelize(sampledRatings), features, iterations)
       case true => ALS.trainImplicit(sc.parallelize(sampledRatings), features, iterations)
@@ -166,13 +175,13 @@ class ALSSuite extends FunSuite with LocalSparkContext {
       for (u <- 0 until users; p <- 0 until products) {
         val prediction = predictedRatings.get(u, p)
         val truePref = truePrefs.get(u, p)
-        val confidence = 1 + 1.0 * trueRatings.get(u, p)
+        val confidence = 1 + 1.0 * abs(trueRatings.get(u, p))
         val err = confidence * (truePref - prediction) * (truePref - prediction)
         sqErr += err
-        denom += 1
+        denom += confidence
       }
       val rmse = math.sqrt(sqErr / denom)
-      if (math.abs(rmse) > matchThreshold) {
+      if (rmse > matchThreshold) {
         fail("Model failed to predict RMSE: %f\ncorr: %s\npred: %s\nU: %s\n P: %s".format(
           rmse, truePrefs, predictedRatings, predictedU, predictedP))
       }
