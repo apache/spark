@@ -179,10 +179,11 @@ class SparkContext(
   }
   // Convert java options to env vars as a work around
   // since we can't set env vars directly in sbt.
-  for { (envKey, propKey) <- Seq(("SPARK_HOME", "spark.home"), ("SPARK_TESTING", "spark.testing"))
+  for { (envKey, propKey) <- Seq(("SPARK_TESTING", "spark.testing"))
     value <- Option(System.getenv(envKey)).orElse(Option(System.getProperty(propKey)))} {
     executorEnvs(envKey) = value
   }
+
   // Since memory can be set with a system property too, use that
   executorEnvs("SPARK_MEM") = executorMemory + "m"
   executorEnvs ++= conf.getExecutorEnv
