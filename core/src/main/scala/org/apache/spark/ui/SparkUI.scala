@@ -31,6 +31,7 @@ import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.ui.jobs.JobProgressUI
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.Utils
+import org.apache.spark.util.JsonProtocol
 
 import net.liftweb.json._
 
@@ -175,7 +176,7 @@ private[spark] class SparkUI(val sc: SparkContext) extends Logging {
       val lines = Source.fromInputStream(bufferedStream).getLines()
       lines.foreach { line =>
         currentLine = line
-        val event = SparkListenerEvent.fromJson(parse(line))
+        val event = JsonProtocol.sparkEventFromJson(parse(line))
         listenerBus.postToListeners(event, Seq(gatewayListener))
       }
     } catch {

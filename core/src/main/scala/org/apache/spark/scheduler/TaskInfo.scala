@@ -17,10 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import net.liftweb.json.JsonDSL._
-import net.liftweb.json.JsonAST.JValue
-import net.liftweb.json.DefaultFormats
-
 /**
  * Information about a running task attempt inside a TaskSet.
  */
@@ -31,8 +27,7 @@ class TaskInfo(
     val launchTime: Long,
     val executorId: String,
     val host: String,
-    val taskLocality: TaskLocality.TaskLocality)
-  extends JsonSerializable {
+    val taskLocality: TaskLocality.TaskLocality) {
 
   /**
    * The time when the task started remotely getting the result. Will not be set if the
@@ -95,37 +90,4 @@ class TaskInfo(
   }
 
   def timeRunning(currentTime: Long): Long = currentTime - launchTime
-
-  override def toJson = {
-    ("Task ID" -> taskId) ~
-    ("Index" -> index) ~
-    ("Launch Time" -> launchTime) ~
-    ("Executor ID" -> executorId) ~
-    ("Host" -> host) ~
-    ("Locality" -> taskLocality.toString) ~
-    ("Getting Result Time" -> gettingResultTime) ~
-    ("Finish Time" -> finishTime) ~
-    ("Failed" -> failed) ~
-    ("Serialized Size" -> serializedSize)
-  }
-}
-
-private[spark]
-object TaskInfo {
-  def fromJson(json: JValue): TaskInfo = {
-    implicit val format = DefaultFormats
-    val taskInfo = new TaskInfo(
-      (json \ "Task ID").extract[Long],
-      (json \ "Index").extract[Int],
-      (json \ "Launch Time").extract[Long],
-      (json \ "Executor ID").extract[String],
-      (json \ "Host").extract[String],
-      TaskLocality.fromJson(json \ "Locality"))
-
-    taskInfo.gettingResultTime = (json \ "Getting Result Time").extract[Long]
-    taskInfo.finishTime = (json \ "Finish Time").extract[Long]
-    taskInfo.failed = (json \ "Failed").extract[Boolean]
-    taskInfo.serializedSize = (json \ "Serialized Size").extract[Int]
-    taskInfo
-  }
 }

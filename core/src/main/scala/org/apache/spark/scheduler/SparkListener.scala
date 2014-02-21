@@ -19,231 +19,45 @@ package org.apache.spark.scheduler
 
 import java.util.Properties
 
+import scala.collection.Map
+
 import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.{RDDInfo, StorageStatus}
 
-import net.liftweb.json.JsonDSL._
-import net.liftweb.json.JsonAST._
-import net.liftweb.json.DefaultFormats
-
-trait JsonSerializable { def toJson: JValue }
-
-sealed trait SparkListenerEvent extends JsonSerializable {
-  override def toJson = "Event" -> Utils.getFormattedClassName(this)
-}
+sealed trait SparkListenerEvent
 
 case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties)
-  extends SparkListenerEvent {
-  override def toJson = {
-    val propertiesJson = Utils.propertiesToJson(properties)
-    super.toJson ~
-    ("Stage Info" -> stageInfo.toJson) ~
-    ("Properties" -> propertiesJson)
-  }
-}
+  extends SparkListenerEvent
 
-case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent {
-  override def toJson = {
-    super.toJson ~
-    ("Stage Info" -> stageInfo.toJson)
-  }
-}
+case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
 
-case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent {
-  override def toJson = {
-    super.toJson ~
-    ("Stage ID" -> stageId) ~
-    ("Task Info" -> taskInfo.toJson)
-  }
-}
+case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends SparkListenerEvent
 
-case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent {
-  override def toJson = {
-    super.toJson ~
-    ("Task Info" -> taskInfo.toJson)
-  }
-}
+case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
-case class SparkListenerTaskEnd(
-    stageId: Int,
-    taskType: String,
-    reason: TaskEndReason,
-    taskInfo: TaskInfo,
-    taskMetrics: TaskMetrics)
-  extends SparkListenerEvent {
-  override def toJson = {
-    super.toJson ~
-    ("Stage ID" -> stageId) ~
-    ("Task Type" -> taskType) ~
-    ("Task End Reason" -> reason.toJson) ~
-    ("Task Info" -> taskInfo.toJson) ~
-    ("Task Metrics" -> taskMetrics.toJson)
-  }
-}
+case class SparkListenerTaskEnd(stageId: Int, taskType: String, reason: TaskEndReason,
+  taskInfo: TaskInfo, taskMetrics: TaskMetrics) extends SparkListenerEvent
 
 case class SparkListenerJobStart(jobId: Int, stageIds: Seq[Int], properties: Properties = null)
-  extends SparkListenerEvent {
-  override def toJson = {
-    val stageIdsJson = JArray(stageIds.map(JInt(_)).toList)
-    val propertiesJson = Utils.propertiesToJson(properties)
-    super.toJson ~
-    ("Job ID" -> jobId) ~
-    ("Stage IDs" -> stageIdsJson) ~
-    ("Properties" -> propertiesJson)
-  }
-}
+  extends SparkListenerEvent
 
-case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent {
-  override def toJson = {
-    super.toJson ~
-    ("Job ID" -> jobId) ~
-    ("Job Result" -> jobResult.toJson)
-  }
-}
+case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent
 
 case class SparkListenerApplicationStart(environmentDetails: Map[String, Seq[(String, String)]])
-  extends SparkListenerEvent {
-  override def toJson = {
-    val jvmInformationJson = Utils.mapToJson(environmentDetails("JVM Information").toMap)
-    val sparkPropertiesJson = Utils.mapToJson(environmentDetails("Spark Properties").toMap)
-    val systemPropertiesJson = Utils.mapToJson(environmentDetails("System Properties").toMap)
-    val classpathEntriesJson = Utils.mapToJson(environmentDetails("Classpath Entries").toMap)
-    super.toJson ~
-    ("JVM Information" -> jvmInformationJson) ~
-    ("Spark Properties" -> sparkPropertiesJson) ~
-    ("System Properties" -> systemPropertiesJson) ~
-    ("Classpath Entries" -> classpathEntriesJson)
-  }
-}
+  extends SparkListenerEvent
 
 /** An event used in the ExecutorsUI and BlockManagerUI to fetch storage status from SparkEnv */
 private[spark] case class SparkListenerStorageStatusFetch(storageStatusList: Seq[StorageStatus])
-  extends SparkListenerEvent {
-  override def toJson = {
-    val storageStatusListJson = JArray(storageStatusList.map(_.toJson).toList)
-    super.toJson ~
-    ("Storage Status List" -> storageStatusListJson)
-  }
-}
+  extends SparkListenerEvent
 
 /** An event used in the BlockManagerUI to query information of persisted RDDs */
 private[spark] case class SparkListenerGetRDDInfo(rddInfoList: Seq[RDDInfo])
-  extends SparkListenerEvent {
-  override def toJson = {
-    val rddInfoListJson = JArray(rddInfoList.map(_.toJson).toList)
-    super.toJson ~
-    ("RDD Info List" -> rddInfoListJson)
-  }
-}
+  extends SparkListenerEvent
 
 /** An event used in the listener to shutdown the listener daemon thread. */
 private[scheduler] case object SparkListenerShutdown extends SparkListenerEvent
-
-object SparkListenerEvent {
-  /**
-   * Deserialize a SparkListenerEvent from JSON
-   */
-  def fromJson(json: JValue): SparkListenerEvent = {
-    implicit val format = DefaultFormats
-    val stageSubmitted =  Utils.getFormattedClassName(SparkListenerStageSubmitted)
-    val stageCompleted =  Utils.getFormattedClassName(SparkListenerStageCompleted)
-    val taskStart =  Utils.getFormattedClassName(SparkListenerTaskStart)
-    val taskGettingResult =  Utils.getFormattedClassName(SparkListenerTaskGettingResult)
-    val taskEnd =  Utils.getFormattedClassName(SparkListenerTaskEnd)
-    val jobStart =  Utils.getFormattedClassName(SparkListenerJobStart)
-    val jobEnd =  Utils.getFormattedClassName(SparkListenerJobEnd)
-    val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
-    val storageStatusFetch =  Utils.getFormattedClassName(SparkListenerStorageStatusFetch)
-    val getRDDInfo =  Utils.getFormattedClassName(SparkListenerGetRDDInfo)
-    val shutdown =  Utils.getFormattedClassName(SparkListenerShutdown)
-
-    (json \ "Event").extract[String] match {
-      case `stageSubmitted` => stageSubmittedFromJson(json)
-      case `stageCompleted` => stageCompletedFromJson(json)
-      case `taskStart` => taskStartFromJson(json)
-      case `taskGettingResult` => taskGettingResultFromJson(json)
-      case `taskEnd` => taskEndFromJson(json)
-      case `jobStart` => jobStartFromJson(json)
-      case `jobEnd` => jobEndFromJson(json)
-      case `applicationStart` => applicationStartFromJson(json)
-      case `storageStatusFetch` => storageStatusFetchFromJson(json)
-      case `getRDDInfo` => getRDDInfoFromJson(json)
-      case `shutdown` => SparkListenerShutdown
-    }
-  }
-
-  private def stageSubmittedFromJson(json: JValue): SparkListenerEvent = {
-    new SparkListenerStageSubmitted(
-      StageInfo.fromJson(json \ "Stage Info"),
-      Utils.propertiesFromJson(json \ "Properties"))
-  }
-
-  private def stageCompletedFromJson(json: JValue): SparkListenerEvent = {
-    new SparkListenerStageCompleted(StageInfo.fromJson(json \ "Stage Info"))
-  }
-
-  private def taskStartFromJson(json: JValue): SparkListenerEvent = {
-    implicit val format = DefaultFormats
-    new SparkListenerTaskStart(
-      (json \ "Stage ID").extract[Int],
-      TaskInfo.fromJson(json \ "Task Info"))
-  }
-
-  private def taskGettingResultFromJson(json: JValue): SparkListenerEvent = {
-    new SparkListenerTaskGettingResult(TaskInfo.fromJson(json \ "Task Info"))
-  }
-
-  private def taskEndFromJson(json: JValue): SparkListenerEvent = {
-    implicit val format = DefaultFormats
-    new SparkListenerTaskEnd(
-      (json \ "Stage ID").extract[Int],
-      (json \ "Task Type").extract[String],
-      TaskEndReason.fromJson(json \ "Task End Reason"),
-      TaskInfo.fromJson(json \ "Task Info"),
-      TaskMetrics.fromJson(json \ "Task Metrics"))
-  }
-
-  private def jobStartFromJson(json: JValue): SparkListenerEvent = {
-    implicit val format = DefaultFormats
-    val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
-    new SparkListenerJobStart(
-      (json \ "Job ID").extract[Int],
-      stageIds,
-      Utils.propertiesFromJson(json \ "Properties"))
-  }
-
-  private def jobEndFromJson(json: JValue): SparkListenerEvent = {
-    implicit val format = DefaultFormats
-    new SparkListenerJobEnd(
-      (json \ "Job ID").extract[Int],
-      JobResult.fromJson(json \ "Job Result"))
-  }
-
-  private def applicationStartFromJson(json: JValue): SparkListenerEvent = {
-    val environmentDetails = Map[String, Seq[(String, String)]](
-      "JVM Information" -> Utils.mapFromJson(json \ "JVM Information").toSeq,
-      "Spark Properties" -> Utils.mapFromJson(json \ "Spark Properties").toSeq,
-      "System Properties" -> Utils.mapFromJson(json \ "System Properties").toSeq,
-      "Classpath Entries" -> Utils.mapFromJson(json \ "Classpath Entries").toSeq)
-    new SparkListenerApplicationStart(environmentDetails)
-  }
-
-  private def storageStatusFetchFromJson(json: JValue): SparkListenerEvent = {
-    implicit val format = DefaultFormats
-    val storageStatusList =
-      (json \ "Storage Status List").extract[List[JValue]].map(StorageStatus.fromJson)
-    new SparkListenerStorageStatusFetch(storageStatusList)
-  }
-
-  private def getRDDInfoFromJson(json: JValue): SparkListenerEvent = {
-    implicit val format = DefaultFormats
-    val rddInfoList =
-      (json \ "RDD Info List").extract[List[JValue]].map(RDDInfo.fromJson)
-    new SparkListenerGetRDDInfo(rddInfoList)
-  }
-}
 
 
 /**

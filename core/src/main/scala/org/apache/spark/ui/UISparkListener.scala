@@ -23,6 +23,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.SparkContext
 import org.apache.spark.storage.StorageStatus
 import org.apache.spark.util.FileLogger
+import org.apache.spark.util.JsonProtocol
 
 import net.liftweb.json.JsonAST._
 
@@ -55,7 +56,8 @@ private[spark] class GatewayUISparkListener(parent: SparkUI, live: Boolean) exte
 
   /** Log the event as JSON */
   private def logEvent(event: SparkListenerEvent) {
-    logger.foreach(_.logLine(compactRender(event.toJson)))
+    val eventJson = JsonProtocol.sparkEventToJson(event)
+    logger.foreach(_.logLine(compactRender(eventJson)))
   }
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {

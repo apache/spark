@@ -20,11 +20,6 @@ package org.apache.spark.storage
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 import java.util.concurrent.ConcurrentHashMap
 import org.apache.spark.util.Utils
-import org.apache.spark.scheduler.JsonSerializable
-
-import net.liftweb.json.JsonDSL._
-import net.liftweb.json.JsonAST.JValue
-import net.liftweb.json.DefaultFormats
 
 /**
  * This class represent an unique identifier for a BlockManager.
@@ -39,7 +34,7 @@ private[spark] class BlockManagerId private (
     private var host_ : String,
     private var port_ : Int,
     private var nettyPort_ : Int
-  ) extends Externalizable with JsonSerializable {
+  ) extends Externalizable {
 
   private def this() = this(null, null, 0, 0)  // For deserialization only
 
@@ -90,13 +85,6 @@ private[spark] class BlockManagerId private (
     case _ =>
       false
   }
-
-  override def toJson = {
-    ("Executor ID" -> executorId_) ~
-    ("Host" -> host_) ~
-    ("Port" -> port_) ~
-    ("Netty Port" -> nettyPort_)
-  }
 }
 
 
@@ -125,14 +113,5 @@ private[spark] object BlockManagerId {
   def getCachedBlockManagerId(id: BlockManagerId): BlockManagerId = {
     blockManagerIdCache.putIfAbsent(id, id)
     blockManagerIdCache.get(id)
-  }
-
-  def fromJson(json: JValue): BlockManagerId = {
-    implicit val format = DefaultFormats
-    new BlockManagerId(
-      (json \ "Executor ID").extract[String],
-      (json \ "Host").extract[String],
-      (json \ "Port").extract[Int],
-      (json \ "Netty Port").extract[Int])
   }
 }

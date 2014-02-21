@@ -20,12 +20,10 @@ package org.apache.spark.util
 import java.io._
 import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address}
 import java.nio.ByteBuffer
-import java.util.{Properties, Locale, Random, UUID}
+import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
-import java.lang.StackTraceElement
 
 import scala.collection.JavaConversions._
-import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
@@ -41,8 +39,6 @@ import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.{SparkConf, SparkException, Logging}
 
 import net.liftweb.json.JsonAST._
-import net.liftweb.json.JsonDSL._
-import net.liftweb.json.DefaultFormats
 
 /**
  * Various utility methods used by Spark.
@@ -877,81 +873,12 @@ private[spark] object Utils extends Logging {
     obj.getClass.getSimpleName.replace("$", "")
   }
 
-  /** Convert a (String, String) map to a JSON object */
-  def mapToJson(m: Map[String, String]): JValue = {
-    val jsonFields = m.map { case (k, v) => JField(k, JString(v)) }
-    JObject(jsonFields.toList)
-  }
-
-  /** Convert a JSON object to a (String, String) map */
-  def mapFromJson(json: JValue): Map[String, String] = {
-    val jsonFields = json.asInstanceOf[JObject].obj
-    jsonFields.map { case JField(k, JString(v)) => (k, v) }.toMap
-  }
-
-  /** Convert a java Properties to a JSON object */
-  def propertiesToJson(properties: Properties): JValue = {
-    Option(properties).map { p =>
-      mapToJson(p.asScala)
-    }.getOrElse(JNothing)
-  }
-
-  /** Convert a JSON object to a java Properties */
-  def propertiesFromJson(json: JValue): Properties = {
-    val properties = new Properties()
-    if (json != JNothing) {
-      mapFromJson(json).map { case (k, v) => properties.setProperty(k, v) }
+  def jsonOption(json: JValue): Option[JValue] = {
+    json match {
+      case JNothing => None
+      case value: JValue => Some(value)
     }
-    properties
   }
 
-  /** Convert a java UUID to a JSON object */
-  def UUIDToJson(id: UUID): JValue = {
-    ("Least Significant Bits" -> id.getLeastSignificantBits) ~
-    ("Most Significant Bits" -> id.getMostSignificantBits)
-  }
-
-  /** Convert a JSON object to a java UUID */
-  def UUIDFromJson(json: JValue): UUID = {
-    implicit val format = DefaultFormats
-    new UUID(
-      (json \ "Least Significant Bits").extract[Long],
-      (json \ "Most Significant Bits").extract[Long])
-  }
-
-  /** Convert a java stack trace to a JSON object */
-  def stackTraceToJson(stackTrace: Array[StackTraceElement]): JValue = {
-    JArray(stackTrace.map { case line =>
-      ("Declaring Class" -> line.getClassName) ~
-      ("Method Name" -> line.getMethodName) ~
-      ("File Name" -> line.getFileName) ~
-      ("Line Number" -> line.getLineNumber)
-    }.toList)
-  }
-
-  /** Convert a JSON object to a java stack trace */
-  def stackTraceFromJson(json: JValue): Array[StackTraceElement] = {
-    implicit val format = DefaultFormats
-    json.extract[List[JValue]].map { line =>
-      new StackTraceElement(
-        (line \ "Declaring Class").extract[String],
-        (line \ "Method Name").extract[String],
-        (line \ "File Name").extract[String],
-        (line \ "Line Number").extract[Int])
-    }.toArray
-  }
-
-  /** Convert an Exception to a JSON object */
-  def exceptionToJson(exception: Exception): JValue = {
-    ("Message" -> exception.toString) ~
-    ("Stack Trace" -> stackTraceToJson(exception.getStackTrace))
-  }
-
-  /** Convert a JSON object to an Exception */
-  def exceptionFromJson(json: JValue): Exception = {
-    implicit val format = DefaultFormats
-    val e = new Exception((json \ "Message").extract[String])
-    e.setStackTrace(stackTraceFromJson(json \ "Stack Trace"))
-    e
-  }
+  def emptyJson = JObject(List[JField]())
 }

@@ -24,11 +24,11 @@ import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
 import net.liftweb.json.JsonAST.JValue
 
-import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
 import org.apache.spark.deploy.master.ExecutorInfo
 import org.apache.spark.ui.UIUtils
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{Utils}
+import org.apache.spark.deploy.JsonProtocol
 
 private[spark] class ApplicationPage(parent: MasterWebUI) {
   val master = parent.masterActorRef

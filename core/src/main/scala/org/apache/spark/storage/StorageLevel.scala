@@ -19,12 +19,6 @@ package org.apache.spark.storage
 
 import java.io.{Externalizable, IOException, ObjectInput, ObjectOutput}
 
-import org.apache.spark.scheduler.JsonSerializable
-
-import net.liftweb.json.JsonDSL._
-import net.liftweb.json.JsonAST.JValue
-import net.liftweb.json.DefaultFormats
-
 /**
  * Flags for controlling the storage of an RDD. Each StorageLevel records whether to use memory,
  * whether to drop the RDD to disk if it falls out of memory, whether to keep the data in memory
@@ -38,7 +32,7 @@ class StorageLevel private(
     private var useMemory_ : Boolean,
     private var deserialized_ : Boolean,
     private var replication_ : Int = 1)
-  extends Externalizable with JsonSerializable {
+  extends Externalizable {
 
   // TODO: Also add fields for caching priority, dataset ID, and flushing.
   private def this(flags: Int, replication: Int) {
@@ -111,13 +105,6 @@ class StorageLevel private(
     result += "%sx Replicated".format(replication)
     result
   }
-
-  override def toJson = {
-    ("Use Disk" -> useDisk) ~
-    ("Use Memory" -> useMemory) ~
-    ("Deserialized" -> deserialized) ~
-    ("Replication" -> replication)
-  }
 }
 
 
@@ -159,14 +146,5 @@ object StorageLevel {
   private[spark] def getCachedStorageLevel(level: StorageLevel): StorageLevel = {
     storageLevelCache.putIfAbsent(level, level)
     storageLevelCache.get(level)
-  }
-
-  def fromJson(json: JValue): StorageLevel = {
-    implicit val format = DefaultFormats
-    new StorageLevel(
-      (json \ "Use Disk").extract[Boolean],
-      (json \ "Use Memory").extract[Boolean],
-      (json \ "Deserialized").extract[Boolean],
-      (json \ "Replication").extract[Int])
   }
 }

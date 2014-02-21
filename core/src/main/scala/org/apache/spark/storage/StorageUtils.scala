@@ -19,17 +19,12 @@ package org.apache.spark.storage
 
 import org.apache.spark.SparkContext
 import org.apache.spark.util.Utils
-import org.apache.spark.scheduler.JsonSerializable
-
-import net.liftweb.json.JsonDSL._
-import net.liftweb.json.JsonAST._
-import net.liftweb.json.DefaultFormats
 
 import BlockManagerMasterActor.BlockStatus
 
 private[spark]
 case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
-  blocks: Map[BlockId, BlockStatus]) extends JsonSerializable {
+  blocks: Map[BlockId, BlockStatus]) {
 
   def memUsed() = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
 
@@ -47,33 +42,6 @@ case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
     case (rdd: RDDBlockId, status) => Some(rdd, status)
     case _ => None
   }
-
-  override def toJson = {
-    val blocksJson = JArray(
-      blocks.toList.map { case (id, status) =>
-        ("Block ID" -> id.toJson) ~
-        ("Status" -> status.toJson)
-      })
-    ("Block Manager ID" -> blockManagerId.toJson) ~
-    ("Maximum Memory" -> maxMem) ~
-    ("Blocks" -> blocksJson)
-  }
-}
-
-private[spark]
-case object StorageStatus {
-  def fromJson(json: JValue): StorageStatus = {
-    implicit val format = DefaultFormats
-    val blocks = (json \ "Blocks").extract[List[JValue]].map { block =>
-      val id = BlockId.fromJson(block \ "Block ID")
-      val status = BlockStatus.fromJson(block \ "Status")
-      (id, status)
-    }.toMap
-    new StorageStatus(
-      BlockManagerId.fromJson(json \ "Block Manager ID"),
-      (json \ "Maximum Memory").extract[Long],
-      blocks)
-  }
 }
 
 case class RDDInfo(
@@ -84,7 +52,7 @@ case class RDDInfo(
     numPartitions: Int,
     memSize: Long,
     diskSize: Long)
-  extends JsonSerializable with Ordered[RDDInfo] {
+  extends Ordered[RDDInfo] {
   override def toString = {
     ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s; " +
        "DiskSize: %s").format(name, id, storageLevel.toString, numCachedPartitions,
@@ -93,30 +61,6 @@ case class RDDInfo(
 
   override def compare(that: RDDInfo) = {
     this.id - that.id
-  }
-
-  override def toJson = {
-    ("RDD ID" -> id) ~
-    ("Name" -> name) ~
-    ("Storage Level" -> storageLevel.toJson) ~
-    ("Number of Cached Partitions" -> numCachedPartitions) ~
-    ("Number of Partitions" -> numPartitions) ~
-    ("Memory Size" -> memSize) ~
-    ("Disk Size" -> diskSize)
-  }
-}
-
-case object RDDInfo {
-  def fromJson(json: JValue): RDDInfo = {
-    implicit val format = DefaultFormats
-    new RDDInfo(
-      (json \ "RDD ID").extract[Int],
-      (json \ "Name").extract[String],
-      StorageLevel.fromJson(json \ "Storage Level"),
-      (json \ "Number of Cached Partitions").extract[Int],
-      (json \ "Number of Partitions").extract[Int],
-      (json \ "Memory Size").extract[Long],
-      (json \ "Disk Size").extract[Long])
   }
 }
 

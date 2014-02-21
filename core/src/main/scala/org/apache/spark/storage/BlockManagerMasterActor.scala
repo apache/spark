@@ -30,11 +30,6 @@ import akka.pattern.ask
 import org.apache.spark.{SparkConf, Logging, SparkException}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{AkkaUtils, Utils}
-import org.apache.spark.scheduler.JsonSerializable
-
-import net.liftweb.json.JsonDSL._
-import net.liftweb.json.JsonAST.JValue
-import net.liftweb.json.DefaultFormats
 
 /**
  * BlockManagerMasterActor is an actor on the master node to track statuses of
@@ -316,23 +311,6 @@ private[spark]
 object BlockManagerMasterActor {
 
   case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
-    extends JsonSerializable {
-    override def toJson = {
-      ("Storage Level" -> storageLevel.toJson) ~
-      ("Memory Size" -> memSize) ~
-      ("Disk Size" -> diskSize)
-    }
-  }
-
-  case object BlockStatus {
-    def fromJson(json: JValue): BlockStatus = {
-      implicit val format = DefaultFormats
-      new BlockStatus(
-        StorageLevel.fromJson(json \ "Storage Level"),
-        (json \ "Memory Size").extract[Long],
-        (json \ "Disk Size").extract[Long])
-    }
-  }
 
   class BlockManagerInfo(
       val blockManagerId: BlockManagerId,
