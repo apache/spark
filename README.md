@@ -42,6 +42,9 @@ jar. If you wish to use [maven](http://maven.apache.org/) instead, you can set
 the environment variable `USE_MAVEN=1`. For example
 
     USE_MAVEN=1 ./install-dev.sh
+    
+If you are building SparkR from behind a proxy, you can [setup maven](https://maven.apache.org/guides/mini/guide-proxies.html) to use the right proxy
+server.
 
 
 ## Running sparkR
