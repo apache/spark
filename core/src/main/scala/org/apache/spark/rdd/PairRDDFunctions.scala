@@ -77,6 +77,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
       serializerClass: String = null): RDD[(K, C)] = {
+    require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (getKeyClass().isArray) {
       if (mapSideCombine) {
         throw new SparkException("Cannot use map-side combining with array keys.")
