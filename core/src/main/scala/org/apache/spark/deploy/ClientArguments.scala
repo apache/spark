@@ -17,8 +17,6 @@
 
 package org.apache.spark.deploy
 
-import java.net.URL
-
 import scala.collection.mutable.ListBuffer
 
 import org.apache.log4j.Level
@@ -71,13 +69,10 @@ private[spark] class ClientArguments(args: Array[String]) {
     case "launch" :: _master :: _jarUrl :: _mainClass :: tail =>
       cmd = "launch"
 
-      try {
-        new URL(_jarUrl)
-      } catch {
-        case e: Exception =>
-          println(s"Jar url '${_jarUrl}' is not a valid URL.")
-          println(s"Jar must be in URL format (e.g. hdfs://XX, file://XX)")
-          printUsageAndExit(-1)
+      if (!ClientArguments.isValidJarUrl(_jarUrl)) {
+        println(s"Jar url '${_jarUrl}' is not in valid format.")
+        println(s"Must be a jar file path in URL format (e.g. hdfs://XX.jar, file://XX.jar)")
+        printUsageAndExit(-1)
       }
 
       jarUrl = _jarUrl
@@ -114,4 +109,8 @@ private[spark] class ClientArguments(args: Array[String]) {
     System.err.println(usage)
     System.exit(exitCode)
   }
+}
+
+object ClientArguments {
+  def isValidJarUrl(s: String) = s.matches("(.+):(.+)jar")
 }
