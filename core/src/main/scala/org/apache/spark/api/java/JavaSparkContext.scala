@@ -106,10 +106,10 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
   def startTime: java.lang.Long = sc.startTime
 
   /** Default level of parallelism to use when not given by user (e.g. parallelize and makeRDD). */
-  def defaultParallelism: Integer = sc.defaultParallelism
+  def defaultParallelism: java.lang.Integer = sc.defaultParallelism
 
   /** Default min number of partitions for Hadoop RDDs when not given by user */
-  def defaultMinSplits: Integer = sc.defaultMinSplits
+  def defaultMinSplits: java.lang.Integer = sc.defaultMinSplits
 
   /** Distribute a local Scala collection to form an RDD. */
   def parallelize[T](list: java.util.List[T], numSlices: Int): JavaRDD[T] = {
