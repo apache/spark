@@ -50,7 +50,7 @@ fi
 echo "building with hadoop version ${SPARK_HADOOP_VERSION}"
 
 echo "Writing revision file"
-git rev-parse master > core/src/main/resources/revision.txt
+git rev-parse HEAD > core/src/main/resources/revision.txt
 
 printf "Launching sbt from ${JAR}\n"
 java \
