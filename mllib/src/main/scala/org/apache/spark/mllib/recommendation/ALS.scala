@@ -209,8 +209,8 @@ class ALS private (var numBlocks: Int, var rank: Int, var iterations: Int, var l
   def computeYtY(factors: RDD[(Int, Array[Array[Double]])]) = {
     if (implicitPrefs) {
       Option(
-        factors.flatMapValues{ case factorArray =>
-          factorArray.map{ vector =>
+        factors.flatMapValues { case factorArray =>
+          factorArray.view.map { vector =>
             val x = new DoubleMatrix(vector)
             x.mmul(x.transpose())
           }
