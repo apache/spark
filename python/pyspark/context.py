@@ -167,6 +167,10 @@ class SparkContext(object):
                     SparkContext._active_spark_context = instance
 
     @classmethod
+    def getRevision(self):
+        return SparkContext._jvm.org.apache.spark.Version.getRevision()
+
+    @classmethod
     def setSystemProperty(cls, key, value):
         """
         Set a Java system property, such as spark.executor.memory. This must

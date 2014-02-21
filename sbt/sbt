@@ -49,6 +49,9 @@ if [ -z "$SPARK_HADOOP_VERSION" ] ; then
 fi
 echo "building with hadoop version ${SPARK_HADOOP_VERSION}"
 
+echo "Writing revision file"
+git rev-parse master > core/src/main/resources/revision.txt
+
 printf "Launching sbt from ${JAR}\n"
 java \
   -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m \
