@@ -54,7 +54,7 @@ setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) 
     !(e$isCached || e$isCheckpointed)
   }
 
-  if (class(prev) != "PipelinedRDD" || !isPipelinable(prev)) {
+  if (!inherits(prev, "PipelinedRDD") || !isPipelinable(prev)) {
     # This transformation is the first in its stage:
     .Object@func <- func
     .Object@prev_jrdd <- getJRDD(prev)
