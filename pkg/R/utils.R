@@ -15,13 +15,13 @@ convertJListToRList <- function(jList, flatten) {
              # Assume it is either an R object or a Java obj ref.
              obj <- .jsimplify(jElem)
 
-             if (class(obj) == "jobjRef" && .jinstanceof(obj, "[B")) {
+             if (inherits(obj, "jobjRef") && .jinstanceof(obj, "[B")) {
                # RDD[Array[Byte]].
 
                rRaw <- .jevalArray(.jcastToArray(jElem))
                res <- unserialize(rRaw)
 
-             } else if (class(obj) == "jobjRef" &&
+             } else if (inherits(obj, "jobjRef") &&
                         .jinstanceof(obj, "scala.Tuple2")) {
                # JavaPairRDD[Array[Byte], Array[Byte]].
 
@@ -30,7 +30,7 @@ convertJListToRList <- function(jList, flatten) {
                res <- list(unserialize(.jevalArray(keyBytes)),
                            unserialize(.jevalArray(valBytes)))
 
-             } else if (class(obj) == "jobjRef" && !.jinstanceof(obj, "[B")) {
+             } else if (inherits(obj, "jobjRef") && !.jinstanceof(obj, "[B")) {
                stop(paste("utils.R: convertJListToRList only supports",
                           "RDD[Array[Byte]] and",
                           "JavaPairRDD[Array[Byte], Array[Byte]] for now"))
@@ -38,8 +38,9 @@ convertJListToRList <- function(jList, flatten) {
 
              # jElem is of a primitive Java type, is simplified to R's
              # corresponding type.
-             if (class(obj) != "jobjRef")
+             if (!inherits(obj, "jobjRef")) {
                res <- list(obj)
+             }
 
              res
            })
@@ -99,8 +100,6 @@ getDependencies <- function(name) {
 
   currentEnv <- closureEnv
   while (TRUE) {
-    #print(currentEnv)
-
     # Don't serialize namespaces
     if (!isNamespace(currentEnv)) {
       varsToSave <- c(varsToSave, ls(currentEnv))
@@ -119,8 +118,6 @@ getDependencies <- function(name) {
   filteredVars <- Filter(
                     function(x) { !exists(x, .broadcastNames, inherits=FALSE) },
                     filteredVars)
-
-  #cat("Saving ", filteredVars, "\n", file=stderr())
 
   fileName <- tempfile(pattern="spark-utils", fileext=".deps")
   save(list=filteredVars, file=fileName, envir=closureEnv)
