@@ -43,6 +43,12 @@ if [ ! -f ${JAR} ]; then
   printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
   exit -1
 fi
+
+if [ -z "$SPARK_HADOOP_VERSION" ] ; then
+  export SPARK_HADOOP_VERSION="2.0.0-mr1-cdh4.4.0"
+fi
+echo "building with hadoop version ${SPARK_HADOOP_VERSION}"
+
 printf "Launching sbt from ${JAR}\n"
 java \
   -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m \
