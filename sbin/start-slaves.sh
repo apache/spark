@@ -20,6 +20,18 @@
 sbin=`dirname "$0"`
 sbin=`cd "$sbin"; pwd`
 
+
+START_TACHYON=false
+
+while (( "$#" )); do
+case $1 in
+    --with-tachyon)
+      START_TACHYON=true
+      ;;
+  esac
+shift
+done
+
 . "$sbin/spark-config.sh"
 
 if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
@@ -37,7 +49,7 @@ fi
 
 # Launch the slaves
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
-  exec "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" 1 spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT
+  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" 1 spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT
 else
   if [ "$SPARK_WORKER_WEBUI_PORT" = "" ]; then
     SPARK_WORKER_WEBUI_PORT=8081
@@ -45,4 +57,11 @@ else
   for ((i=0; i<$SPARK_WORKER_INSTANCES; i++)); do
     "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/start-slave.sh" $(( $i + 1 ))  spark://$SPARK_MASTER_IP:$SPARK_MASTER_PORT --webui-port $(( $SPARK_WORKER_WEBUI_PORT + $i ))
   done
+fi
+
+if [ "$START_TACHYON" == "true" ]; then
+  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
+
+  # set -t so we can call sudo
+  SPARK_SSH_OPTS="-o StrictHostKeyChecking=no -t" "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/tachyon/bin/tachyon-start.sh" worker SudoMount \; sleep 1
 fi

@@ -25,3 +25,5 @@ sbin=`cd "$sbin"; pwd`
 . "$sbin/spark-config.sh"
 
 "$sbin"/spark-daemon.sh stop org.apache.spark.deploy.master.Master 1
+
+"$sbin"/tachyon/bin/tachyon killAll tachyon.master.Master

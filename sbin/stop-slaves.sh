@@ -26,6 +26,9 @@ if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
   . "${SPARK_CONF_DIR}/spark-env.sh"
 fi
 
+# do before the below calls as they exec
+"$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/tachyon/bin/tachyon killAll tachyon.worker.Worker
+
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then
   "$sbin"/spark-daemons.sh stop org.apache.spark.deploy.worker.Worker 1
 else
