@@ -18,7 +18,7 @@
 package org.apache.spark.broadcast
 
 import java.io.{File, FileOutputStream, ObjectInputStream, OutputStream}
-import java.net.{Authenticator, PasswordAuthentication, URL, URLConnection, URI}
+import java.net.{URL, URLConnection, URI}
 import java.util.concurrent.TimeUnit
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
@@ -158,34 +158,10 @@ private object HttpBroadcast extends Logging {
 
     var uc: URLConnection = null
     if (securityManager.isAuthenticationEnabled()) {
-      val uri = new URI(url)
-      val userCred = securityManager.getSecretKey()
-      if (userCred == null) {
-        // if auth is on force the user to specify a password
-        throw new Exception("secret key is null with authentication on")
-      }
-      val userInfo = securityManager.getHttpUser()  + ":" + userCred
-      val newuri = new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(), uri.getPath(),
-        uri.getQuery(), uri.getFragment())
-
+      logDebug("broadcast security enabled")
+      val newuri = Utils.constructURIForAuthentication(new URI(url), securityManager)
       uc = newuri.toURL().openConnection()
       uc.setAllowUserInteraction(false)
-      logDebug("broadcast security enabled")
-
-      // set our own authenticator to properly negotiate user/password
-      Authenticator.setDefault(
-         new Authenticator() {
-           override def getPasswordAuthentication(): PasswordAuthentication = {
-             var passAuth: PasswordAuthentication = null
-             val userInfo = getRequestingURL().getUserInfo()
-             if (userInfo != null) {
-               val  parts = userInfo.split(":", 2)
-               passAuth = new PasswordAuthentication(parts(0), parts(1).toCharArray())
-             }
-             return passAuth
-           }
-         }
-      );
     } else {
       logDebug("broadcast not using security")
       uc = new URL(url).openConnection()

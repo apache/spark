@@ -19,14 +19,11 @@ package org.apache.spark.network
 
 import org.apache.spark._
 import org.apache.spark.SparkSaslServer
-import org.apache.spark.SparkSaslServer.SaslDigestCallbackHandler
 
 import scala.collection.mutable.{HashMap, Queue, ArrayBuffer}
 
-import java.io._
 import java.nio._
 import java.nio.channels._
-import java.nio.channels.spi._
 import java.net._
 
 
@@ -466,7 +463,7 @@ private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : S
         val newMessage = Message.create(header).asInstanceOf[BufferMessage]
         newMessage.started = true
         newMessage.startTime = System.currentTimeMillis
-        newMessage.isSecurityNeg = if (header.securityNeg == 1) true else false
+        newMessage.isSecurityNeg = header.securityNeg == 1
         logDebug(
           "Starting to receive [" + newMessage + "] from [" + getRemoteConnectionManagerId() + "]")
         messages += ((newMessage.id, newMessage))

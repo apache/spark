@@ -68,6 +68,11 @@ class SparkHadoopUtil {
   def getCurrentUserCredentials(): Credentials = { null }
 
   def addCurrentUserCredentials(creds: Credentials) {}
+
+  def addSecretKeyToUserCredentials(key: String, secret: String) {}
+
+  def getSecretKeyFromUserCredentials(key: String): Array[Byte] = { null }
+
 }
 
 object SparkHadoopUtil {

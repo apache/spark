@@ -63,52 +63,57 @@ private[spark] class HttpServer(resourceBase: File, securityManager: SecurityMan
       val resHandler = new ResourceHandler
       resHandler.setResourceBase(resourceBase.getAbsolutePath)
 
+      val handlerList = new HandlerList
+      handlerList.setHandlers(Array(resHandler, new DefaultHandler))
+
       if (securityManager.isAuthenticationEnabled()) {
-        logDebug("server is using security")
-        val constraint = new Constraint()
-        constraint.setName(Constraint.__DIGEST_AUTH)
-        constraint.setRoles(Array("user"))
-        constraint.setAuthenticate(true)
-        constraint.setDataConstraint(Constraint.DC_NONE)
- 
-        val cm = new ConstraintMapping()
-        cm.setConstraint(constraint)
-        cm.setPathSpec("/*")
-  
-        val sh = new ConstraintSecurityHandler()
-
-        // the hashLoginService lets us do a simply user and
-        // secret right now. This could be changed to use the
-        // JAASLoginService for other options. 
-        val hashLogin = new HashLoginService()
-
-        val userCred = new Password(securityManager.getSecretKey())
-        if (userCred == null) {
-          throw new Exception("secret key is null with authentication on")
-        }
-        hashLogin.putUser(securityManager.getHttpUser(), userCred, Array("user"))
-
-        logDebug("hashlogin loading user: " + hashLogin.getUsers())
-
-        sh.setLoginService(hashLogin)
-        sh.setAuthenticator(new DigestAuthenticator());
-        sh.setConstraintMappings(Array(cm))
-
+        logDebug("HttpServer is using security")
+        val sh = setupSecurityHandler(securityManager)
         // make sure we go through security handler to get resources
-        val handlerList = new HandlerList
-        handlerList.setHandlers(Array(resHandler, new DefaultHandler))
         sh.setHandler(handlerList)
         server.setHandler(sh)
       } else {
-        logDebug("server is not using security")
-        val handlerList = new HandlerList
-        handlerList.setHandlers(Array(resHandler, new DefaultHandler))
+        logDebug("HttpServer is not using security")
         server.setHandler(handlerList)
       }
 
       server.start()
       port = server.getConnectors()(0).getLocalPort()
     }
+  }
+
+  /** 
+   * Setup Jetty to the HashLoginService using a single user with our
+   * shared secret. Configure it to use DIGEST-MD5 authentication so that the password
+   * isn't passed in plaintext.
+   */
+  private def setupSecurityHandler(securityMgr: SecurityManager): ConstraintSecurityHandler = {
+    val constraint = new Constraint()
+    // use DIGEST-MD5 as the authentication mechanism 
+    constraint.setName(Constraint.__DIGEST_AUTH)
+    constraint.setRoles(Array("user"))
+    constraint.setAuthenticate(true)
+    constraint.setDataConstraint(Constraint.DC_NONE)
+ 
+    val cm = new ConstraintMapping()
+    cm.setConstraint(constraint)
+    cm.setPathSpec("/*")
+    val sh = new ConstraintSecurityHandler()
+
+    // the hashLoginService lets us do a single user and
+    // secret right now. This could be changed to use the
+    // JAASLoginService for other options.
+    val hashLogin = new HashLoginService()
+
+    val userCred = new Password(securityMgr.getSecretKey())
+    if (userCred == null) {
+      throw new Exception("Error: secret key is null with authentication on")
+    }
+    hashLogin.putUser(securityMgr.getHttpUser(), userCred, Array("user"))
+    sh.setLoginService(hashLogin)
+    sh.setAuthenticator(new DigestAuthenticator());
+    sh.setConstraintMappings(Array(cm))
+    sh
   }
 
   def stop() {

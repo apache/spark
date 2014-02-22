@@ -18,7 +18,6 @@
 package org.apache.spark.util
 
 import java.io._
-import java.net.{Authenticator, PasswordAuthentication}
 import java.net.{InetAddress, URL, URLConnection, URI, NetworkInterface, Inet4Address, ServerSocket}
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
@@ -238,6 +237,22 @@ private[spark] object Utils extends Logging {
   }
 
   /**
+   * Construct a URI container information used for authentication.
+   * This also sets the default authenticator to properly negotiation the
+   * user/password based on the URI.
+   *
+   * Note this relies on the Authenticator.setDefault being set properly to decode
+   * the user name and password. This is currently set in the SecurityManager.
+   */
+  def constructURIForAuthentication(uri: URI, securityMgr: SecurityManager): URI = {
+    val userCred = securityMgr.getSecretKey()
+    if (userCred == null) throw new Exception("Secret key is null with authentication on")
+    val userInfo = securityMgr.getHttpUser()  + ":" + userCred
+    new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(), uri.getPath(), 
+      uri.getQuery(), uri.getFragment())
+  }
+
+  /**
    * Download a file requested by the executor. Supports fetching the file in a variety of ways,
    * including HTTP, HDFS and files on a standard filesystem, based on the URL parameter.
    *
@@ -261,31 +276,10 @@ private[spark] object Utils extends Logging {
         val sparkEnv = SparkEnv.get
         val securityMgr = if (sparkEnv != null) sparkEnv.securityManager else new SecurityManager()
         if (securityMgr.isAuthenticationEnabled()) {
-          val userCred = securityMgr.getSecretKey()
-          if (userCred == null) {
-            throw new Exception("secret key is null with authentication on")
-          }
-          val userInfo = securityMgr.getHttpUser()  + ":" + userCred
-          val newuri = new URI(uri.getScheme(), userInfo, uri.getHost(), uri.getPort(), 
-            uri.getPath(), uri.getQuery(), uri.getFragment())
+          logDebug("fetchFile with security enabled")
+          val newuri = constructURIForAuthentication(uri, securityMgr)
           uc = newuri.toURL().openConnection()
           uc.setAllowUserInteraction(false)
-          logDebug("in security enabled")
-
-          // set our own authenticator to properly negotiate user/password
-          Authenticator.setDefault(
-            new Authenticator() {
-              override def getPasswordAuthentication(): PasswordAuthentication = {
-                var passAuth: PasswordAuthentication = null
-                val userInfo = getRequestingURL().getUserInfo()
-                if (userInfo != null) {
-                  val  parts = userInfo.split(":", 2)
-                  passAuth = new PasswordAuthentication(parts(0), parts(1).toCharArray())
-                }
-                return passAuth
-              }
-            }
-          );
         } else {
           logDebug("fetchFile not using security")
           uc = new URL(url).openConnection()

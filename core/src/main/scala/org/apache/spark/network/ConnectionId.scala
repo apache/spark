@@ -17,14 +17,18 @@
 
 package org.apache.spark.network
 
-private[spark] case class ConnectionId(id : String) {}
+private[spark] case class ConnectionId(connectionManagerId: ConnectionManagerId, uniqId: Int) {
+  override def toString = connectionManagerId.host + "_" + connectionManagerId.port + "_" + uniqId  
+}
 
 private[spark] object ConnectionId {
 
-  def createConnectionId(connectionManagerId : ConnectionManagerId, secureMsgId : Int) : ConnectionId = {
-    val connIdStr = connectionManagerId.host + "_" + connectionManagerId.port + "_" + secureMsgId
-    val connId = new ConnectionId(connIdStr)
-    return connId
+  def createConnectionIdFromString(connectionIdString: String) : ConnectionId = {
+    val res = connectionIdString.split("_").map(_.trim())
+    if (res.size != 3) {
+      throw new Exception("Error converting ConnectionId string: " + connectionIdString + 
+        " to a ConnectionId Object")
+    }
+    new ConnectionId(new ConnectionManagerId(res(0), res(1).toInt), res(2).toInt)
   } 
 }
-
