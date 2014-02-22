@@ -37,7 +37,8 @@ import scala.concurrent.duration._
 
 import org.apache.spark.util.{SystemClock, Utils}
 
-private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManager: SecurityManager) extends Logging {
+private[spark] class ConnectionManager(port: Int, conf: SparkConf,
+    securityManager: SecurityManager) extends Logging {
 
   class MessageStatus(
       val message: Message,
@@ -54,7 +55,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
   private val selector = SelectorProvider.provider.openSelector()
 
   // default to 30 second timeout waiting for authentication
-  private val authTimeout= System.getProperty("spark.core.connection.auth.wait.timeout","30000").toInt
+  private val authTimeout = System.getProperty("spark.core.connection.auth.wait.timeout",
+    "30000").toInt
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.handler.threads.min", 20),
@@ -564,7 +566,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
           logDebug("Server sasl not completed: " + connection.connectionId)
         }
         if (replyToken != null) {
-          var securityMsgResp = SecurityMessage.fromResponse(replyToken, securityMsg.getConnectionId)
+          var securityMsgResp = SecurityMessage.fromResponse(replyToken,
+            securityMsg.getConnectionId)
           var message = securityMsgResp.toBufferMessage
           if (message == null) throw new Exception("Error creating security Message")
           sendSecurityMessage(connection.getRemoteConnectionManagerId(), message)
@@ -689,7 +692,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
           var firstResponse: Array[Byte] = null
           try {
             firstResponse = conn.sparkSaslClient.firstToken()
-            var securityMsg = SecurityMessage.fromResponse(firstResponse, conn.connectionId.toString())
+            var securityMsg = SecurityMessage.fromResponse(firstResponse,
+              conn.connectionId.toString())
             var message = securityMsg.toBufferMessage
             if (message == null) throw new Exception("Error creating security message")
             connectionsAwaitingSasl += ((conn.connectionId, conn))
@@ -714,13 +718,15 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
     def startNewConnection(): SendingConnection = {
       val inetSocketAddress = new InetSocketAddress(connManagerId.host, connManagerId.port)
       val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
-      val newConnection = new SendingConnection(inetSocketAddress, selector, connManagerId, newConnectionId)
+      val newConnection = new SendingConnection(inetSocketAddress, selector, connManagerId,
+        newConnectionId)
       logInfo("creating new sending connection for security! " + newConnectionId )
       registerRequests.enqueue(newConnection)
 
       newConnection
     }
-    // I removed the lookupKey stuff as part of merge ... should I re-add it ? We did not find it useful in our test-env ...
+    // I removed the lookupKey stuff as part of merge ... should I re-add it ?
+    // We did not find it useful in our test-env ...
     // If we do re-add it, we should consistently use it everywhere I guess ?
     message.senderAddress = id.toSocketAddress()
     logDebug("Sending Security [" + message + "] to [" + connManagerId + "]")
@@ -737,7 +743,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
       val inetSocketAddress = new InetSocketAddress(connectionManagerId.host,
         connectionManagerId.port)
       val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
-      val newConnection = new SendingConnection(inetSocketAddress, selector, connectionManagerId, newConnectionId)
+      val newConnection = new SendingConnection(inetSocketAddress, selector, connectionManagerId,
+        newConnectionId)
       logDebug("creating new sending connection: " + newConnectionId)
       registerRequests.enqueue(newConnection)
 
@@ -751,7 +758,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf, securityManag
       checkSendAuthFirst(connectionManagerId, connection)
     }
     message.senderAddress = id.toSocketAddress()
-    logDebug("Before Sending [" + message + "] to [" + connectionManagerId + "]" + " connectionid: " + connection.connectionId)
+    logDebug("Before Sending [" + message + "] to [" + connectionManagerId + "]" + " " +
+      "connectionid: "  + connection.connectionId)
 
     if (authEnabled) {
       // if we aren't authenticated yet lets block the senders until authentication completes

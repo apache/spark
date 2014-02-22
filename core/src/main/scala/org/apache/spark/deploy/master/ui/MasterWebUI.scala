@@ -62,7 +62,8 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
 
   val handlers = metricsHandlers ++ Seq[ServletContextHandler](
     createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static/*"),
-    createServletHandler("/app/json", (request: HttpServletRequest) => applicationPage.renderJson(request)),
+    createServletHandler("/app/json",
+      (request: HttpServletRequest) => applicationPage.renderJson(request)),
     createServletHandler("/app", (request: HttpServletRequest) => applicationPage.render(request)),
     createServletHandler("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
     createServletHandler("*", (request: HttpServletRequest) => indexPage.render(request))

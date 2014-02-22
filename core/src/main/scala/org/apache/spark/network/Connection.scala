@@ -447,8 +447,11 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
 
 
 // Must be created within selector loop - else deadlock
-private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : Selector, id_ : ConnectionId)
-  extends Connection(channel_, selector_, id_) {
+private[spark] class ReceivingConnection(
+    channel_ : SocketChannel,
+    selector_ : Selector,
+    id_ : ConnectionId)
+    extends Connection(channel_, selector_, id_) {
 
   def isSaslComplete(): Boolean = {
     if (sparkSaslServer != null) sparkSaslServer.isComplete() else false
@@ -509,7 +512,7 @@ private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : S
 
   val inbox = new Inbox()
   val headerBuffer: ByteBuffer = ByteBuffer.allocate(MessageChunkHeader.HEADER_SIZE)
-  var onReceiveCallback: (Connection , Message) => Unit = null
+  var onReceiveCallback: (Connection, Message) => Unit = null
   var currentChunk: MessageChunk = null
 
   channel.register(selector, SelectionKey.OP_READ)
@@ -584,7 +587,7 @@ private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : S
         }
       }
     } catch {
-      case e: Exception  => {
+      case e: Exception => {
         logWarning("Error reading from connection to " + getRemoteConnectionManagerId(), e)
         callOnExceptionCallback(e)
         close()

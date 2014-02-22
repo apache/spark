@@ -54,8 +54,11 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)
 
   def getHandlers = Seq[ServletContextHandler](
-    createServletHandler("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),
-    createServletHandler("/stages/pool", (request: HttpServletRequest) => poolPage.render(request)),
-    createServletHandler("/stages", (request: HttpServletRequest) => indexPage.render(request))
+    createServletHandler("/stages/stage",
+      (request: HttpServletRequest) => stagePage.render(request)),
+    createServletHandler("/stages/pool",
+      (request: HttpServletRequest) => poolPage.render(request)),
+    createServletHandler("/stages",
+      (request: HttpServletRequest) => indexPage.render(request))
   )
 }

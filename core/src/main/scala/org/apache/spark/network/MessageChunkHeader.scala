@@ -74,6 +74,7 @@ private[spark] object MessageChunkHeader {
     buffer.get(ipBytes)
     val ip = InetAddress.getByAddress(ipBytes)
     val port = buffer.getInt()
-    new MessageChunkHeader(typ, id, totalSize, chunkSize, other, securityNeg, new InetSocketAddress(ip, port))
+    new MessageChunkHeader(typ, id, totalSize, chunkSize, other, securityNeg,
+      new InetSocketAddress(ip, port))
   }
 }

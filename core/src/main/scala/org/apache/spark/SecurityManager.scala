@@ -1,13 +1,13 @@
 /*
- * Licensed to the Apache Software Foundation (ASF) under one
- * or more contributor license agreements.  See the NOTICE file
- * distributed with this work for additional information
- * regarding copyright ownership.  The ASF licenses this file
- * to you under the Apache License, Version 2.0 (the
- * "License"); you may not use this file except in compliance
- * with the License.  You may obtain a copy of the License at
+/*
+ * Licensed to the Apache Software Foundation (ASF) under one or more
+ * contributor license agreements.  See the NOTICE file distributed with
+ * this work for additional information regarding copyright ownership.
+ * The ASF licenses this file to You under the Apache License, Version 2.0
+ * (the "License"); you may not use this file except in compliance with
+ * the License.  You may obtain a copy of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *    http://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS,
@@ -104,10 +104,10 @@ import scala.collection.mutable.ArrayBuffer
  *
  *  - HTTP for the Spark UI -> the UI was changed to use servlets so that javax servlet filters 
  *            can be used. Yarn requires a specific AmIpFilter be installed for security to work
- *            properly. For non-Yarn deployments, users can write a filter to go through a companies 
- *            normal login service. If an authentication filter is in place then the SparkUI 
- *            can be configured to check the logged in user against the list of users who have 
- *            view acls to see if that user is authorized.
+ *            properly. For non-Yarn deployments, users can write a filter to go through a
+ *            companies normal login service. If an authentication filter is in place then the
+ *            SparkUI can be configured to check the logged in user against the list of users who
+ *            have view acls to see if that user is authorized.
  *            The filters can also be used for many different purposes. For instance filters 
  *            could be used for logging, encypryption, or compression.
  *            

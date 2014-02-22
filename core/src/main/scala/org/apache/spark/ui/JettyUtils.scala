@@ -121,7 +121,7 @@ private[spark] object JettyUtils extends Logging {
   }
 
   private def addFilters(handlers: Seq[ServletContextHandler]) {
-    val filters : Array[String] = System.getProperty("spark.ui.filters", "").split(',').map(_.trim())
+    val filters: Array[String] = System.getProperty("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {
       case filter : String => 
         if (!filter.isEmpty) {
