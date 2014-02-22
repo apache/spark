@@ -44,14 +44,8 @@ case class StorageStatus(blockManagerId: BlockManagerId, maxMem: Long,
   }
 }
 
-case class RDDInfo(
-    id: Int,
-    name: String,
-    storageLevel: StorageLevel,
-    numCachedPartitions: Int,
-    numPartitions: Int,
-    memSize: Long,
-    diskSize: Long)
+case class RDDInfo(id: Int, name: String, storageLevel: StorageLevel,
+  numCachedPartitions: Int, numPartitions: Int, memSize: Long, diskSize: Long)
   extends Ordered[RDDInfo] {
   override def toString = {
     ("RDD \"%s\" (%d) Storage: %s; CachedPartitions: %d; TotalPartitions: %d; MemorySize: %s; " +

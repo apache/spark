@@ -28,7 +28,6 @@ import org.scalatest.FunSuite
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, RecoveryState, WorkerInfo}
 import org.apache.spark.deploy.worker.{ExecutorRunner, DriverRunner}
-import org.apache.spark.deploy.{ExecutorState, DriverDescription, Command, ApplicationDescription}
 
 class JsonProtocolSuite extends FunSuite {
 
