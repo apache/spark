@@ -15,21 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.api.java.function
 
-import java.io.Serializable;
-
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
+import java.lang.{Double => JDouble}
 
 /**
- * A three-argument function that takes arguments of type T1, T2 and T3 and returns an R.
+ * A function that returns Doubles, and can be used to construct DoubleRDDs.
  */
-public abstract class Function3<T1, T2, T3, R> extends WrappedFunction3<T1, T2, T3, R>
-        implements Serializable {
-
-    public ClassTag<R> returnType() {
-        return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
-    }
+// DoubleFunction does not extend Function because some UDF functions, like map,
+// are overloaded for both Function and DoubleFunction.
+abstract class DoubleFunction[T] extends WrappedFunction1[T, JDouble] with Serializable {
+    // Intentionally left blank
 }
-

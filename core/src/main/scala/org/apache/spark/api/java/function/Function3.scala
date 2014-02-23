@@ -15,21 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.api.java.function
 
-import java.io.Serializable;
-
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
+import org.apache.spark.api.java.JavaSparkContext
+import scala.reflect.ClassTag
 
 /**
- * A two-argument function that takes arguments of type T1 and T2 and returns an R.
+ * A three-argument function that takes arguments of type T1, T2 and T3 and returns an R.
  */
-public abstract class Function2<T1, T2, R> extends WrappedFunction2<T1, T2, R>
-  implements Serializable {
-
-  public ClassTag<R> returnType() {
-    return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
-  }
+abstract class Function3[T1, T2, T3, R] extends WrappedFunction3[T1, T2, T3, R] with Serializable {
+  def returnType(): ClassTag[R] = JavaSparkContext.fakeClassTag
 }
-

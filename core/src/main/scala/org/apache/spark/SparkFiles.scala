@@ -15,29 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark
 
-import java.io.Serializable;
-
-import scala.Tuple2;
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
+import java.io.File
 
 /**
- * A function that returns zero or more key-value pair records from each input record. The
- * key-value pairs are represented as scala.Tuple2 objects.
+ * Resolves paths to files added through `SparkContext.addFile()`.
  */
-// PairFlatMapFunction does not extend FlatMapFunction because flatMap is
-// overloaded for both FlatMapFunction and PairFlatMapFunction.
-public abstract class PairFlatMapFunction<T, K, V>
-  extends WrappedFunction1<T, Iterable<Tuple2<K, V>>>
-  implements Serializable {
+object SparkFiles {
 
-  public ClassTag<K> keyType() {
-    return (ClassTag<K>) ClassTag$.MODULE$.apply(Object.class);
-  }
+  /**
+   * Get the absolute path of a file added through `SparkContext.addFile()`.
+   */
+  def get(filename: String): String =
+    new File(getRootDirectory(), filename).getAbsolutePath()
 
-  public ClassTag<V> valueType() {
-    return (ClassTag<V>) ClassTag$.MODULE$.apply(Object.class);
-  }
+  /**
+   * Get the root directory that contains files added through `SparkContext.addFile()`.
+   */
+  def getRootDirectory(): String =
+    SparkEnv.get.sparkFilesDir
+
 }

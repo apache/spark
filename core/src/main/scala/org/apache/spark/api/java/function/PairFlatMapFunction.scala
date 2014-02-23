@@ -15,16 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.api.java.function
 
-import java.io.Serializable;
+import java.lang.{Iterable => JIterable}
+import org.apache.spark.api.java.JavaSparkContext
+import scala.reflect.ClassTag
 
 /**
- * A function that returns Doubles, and can be used to construct DoubleRDDs.
+ * A function that returns zero or more key-value pair records from each input record. The
+ * key-value pairs are represented as scala.Tuple2 objects.
  */
-// DoubleFunction does not extend Function because some UDF functions, like map,
-// are overloaded for both Function and DoubleFunction.
-public abstract class DoubleFunction<T> extends WrappedFunction1<T, Double>
-  implements Serializable {
-    // Intentionally left blank
+// PairFlatMapFunction does not extend FlatMapFunction because flatMap is
+// overloaded for both FlatMapFunction and PairFlatMapFunction.
+abstract class PairFlatMapFunction[T, K, V] extends WrappedFunction1[T, JIterable[(K, V)]]
+  with Serializable {
+
+  def keyType(): ClassTag[K] = JavaSparkContext.fakeClassTag
+
+  def valueType(): ClassTag[V] = JavaSparkContext.fakeClassTag
 }

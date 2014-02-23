@@ -15,21 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.api.java.function
 
-import java.io.Serializable;
-
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
+import scala.reflect.ClassTag
+import org.apache.spark.api.java.JavaSparkContext
 
 /**
- * Base class for functions whose return types do not create special RDDs. PairFunction and
- * DoubleFunction are handled separately, to allow PairRDDs and DoubleRDDs to be constructed
- * when mapping RDDs of other types.
+ * A two-argument function that takes arguments of type T1 and T2 and returns an R.
  */
-public abstract class Function<T, R> extends WrappedFunction1<T, R> implements Serializable {
-  public ClassTag<R> returnType() {
-    return ClassTag$.MODULE$.apply(Object.class);
-  }
+abstract class Function2[T1, T2, R] extends WrappedFunction2[T1, T2, R] with Serializable {
+  def returnType(): ClassTag[R] = JavaSparkContext.fakeClassTag
 }
 
