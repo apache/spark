@@ -147,6 +147,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
+    // TOOD: Set
+    val numPartitions = 200
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.Distinct(child) =>
         execution.Aggregate(
@@ -180,6 +182,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Generate(generator, join = join, outer = outer, planLater(child)) :: Nil
       case logical.NoRelation =>
         execution.ExistingRdd(Nil, singleRowRdd) :: Nil
+      case logical.Repartition(expressions, child) =>
+        execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
       case _ => Nil
     }
   }
