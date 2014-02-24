@@ -60,6 +60,7 @@ class SparkSqlContext(val sparkContext: SparkContext) extends Logging {
     val sparkContext = self.sparkContext
 
     val strategies: Seq[Strategy] =
+      TopK ::
       PartialAggregation ::
       SparkEquiInnerJoin ::
       BasicOperators ::

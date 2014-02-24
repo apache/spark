@@ -172,6 +172,7 @@ abstract class SharkContext(sc: SparkContext) extends SparkSqlContext(sc) {
     val sharkContext = self
 
     override val strategies: Seq[Strategy] = Seq(
+      TopK,
       ColumnPrunings,
       PartitionPrunings,
       HiveTableScans,

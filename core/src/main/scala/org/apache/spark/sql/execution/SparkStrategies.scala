@@ -137,6 +137,14 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   protected lazy val singleRowRdd =
     sparkContext.parallelize(Seq(new GenericRow(IndexedSeq()): Row), 1)
 
+  object TopK extends Strategy {
+    def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+      case logical.StopAfter(limit, logical.Sort(order, child)) =>
+        execution.TopK(Evaluate(limit, Nil).asInstanceOf[Int], order, planLater(child))(sparkContext) :: Nil
+      case _ => Nil
+    }
+  }
+
   // Can we automate these 'pass through' operations?
   object BasicOperators extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
