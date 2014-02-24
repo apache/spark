@@ -180,8 +180,16 @@ case class InsertIntoHiveTable(
     case (s: String, oi: JavaHiveVarcharObjectInspector) => new HiveVarchar(s, s.size)
     case (bd: BigDecimal, oi: JavaHiveDecimalObjectInspector) =>
       new HiveDecimal(bd.underlying())
+    case (row: Row, oi: StandardStructObjectInspector) =>
+      val struct = oi.create()
+      row.zip(oi.getAllStructFieldRefs).foreach {
+        case (data, field) =>
+          oi.setStructFieldData(struct, field, wrap(data, field.getFieldObjectInspector))
+      }
+      struct
     case (s: Seq[_], oi: ListObjectInspector) =>
-      seqAsJavaList(s.map(wrap(_, oi.getListElementObjectInspector)))
+      val wrappedSeq = s.map(wrap(_, oi.getListElementObjectInspector))
+      seqAsJavaList(wrappedSeq)
     case (obj, _) => obj
   }
 

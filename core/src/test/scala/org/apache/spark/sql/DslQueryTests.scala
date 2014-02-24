@@ -96,6 +96,13 @@ class BasicQuerySuite extends DslQueryTest {
       testData.data)
   }
 
+  test("agg") {
+    checkAnswer(
+      testData2.groupBy('a)('a, Sum('b)),
+      Seq((1,3),(2,3),(3,3))
+    )
+  }
+
   test("select *") {
     checkAnswer(
       testData.select(Star(None)),

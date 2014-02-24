@@ -26,8 +26,11 @@ import scala.collection.JavaConversions._
  * Starts up an instance of shark where metadata is stored locally. An in-process metadata data is
  * created with data stored in ./metadata.  Warehouse data is stored in in ./warehouse.
  */
-class LocalSharkContext(sc: SparkContext) extends SharkContext(sc) {
-  override def warehousePath = new File("warehouse").getCanonicalPath
+class LocalSharkContext(
+    sc: SparkContext,
+    override val warehousePath: String = new File("warehouse").getCanonicalPath)
+  extends SharkContext(sc) {
+
   override def metastorePath = new File("metastore").getCanonicalPath
 }
 
@@ -172,6 +175,7 @@ abstract class SharkContext(sc: SparkContext) extends SparkSqlContext(sc) {
     val sharkContext = self
 
     override val strategies: Seq[Strategy] = Seq(
+      TopK,
       ColumnPrunings,
       PartitionPrunings,
       HiveTableScans,

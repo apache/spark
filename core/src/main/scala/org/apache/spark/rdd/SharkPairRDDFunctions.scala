@@ -56,7 +56,7 @@ class SharkPairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   def groupByKeyLocally(): RDD[(K, Seq[V])] = {
     def createCombiner(v: V) = ArrayBuffer(v)
     def mergeValue(buf: ArrayBuffer[V], v: V) = buf += v
-    val aggregator = new Aggregator[K, V, ArrayBuffer[V]](createCombiner _, mergeValue _, null)
+    val aggregator = new Aggregator[K, V, ArrayBuffer[V]](createCombiner _, mergeValue _, _ ++ _)
     val bufs = self.mapPartitionsWithContext((context, iter) => {
       new InterruptibleIterator(context, aggregator.combineValuesByKey(iter, context))
     }, preservesPartitioning = true)

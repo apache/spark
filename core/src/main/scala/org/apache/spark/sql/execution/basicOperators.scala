@@ -53,6 +53,23 @@ case class StopAfter(limit: Int, child: SparkPlan)(@transient sc: SparkContext) 
   def execute() = sc.makeRDD(executeCollect(), 1)
 }
 
+case class TopK(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
+               (@transient sc: SparkContext) extends UnaryNode {
+  override def otherCopyArgs = sc :: Nil
+
+  def output = child.output
+
+  @transient
+  lazy val ordering = new RowOrdering(sortOrder)
+
+  override def executeCollect() = child.execute().takeOrdered(limit)(ordering)
+
+  // TODO: Terminal split should be implemented differently from non-terminal split.
+  // TODO: Pick num splits based on |limit|.
+  def execute() = sc.makeRDD(executeCollect(), 1)
+}
+
+
 case class Sort(
     sortOrder: Seq[SortOrder],
     global: Boolean,
