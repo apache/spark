@@ -31,9 +31,14 @@ trait OverrideCatalog extends Catalog {
     tableName: String,
     alias: Option[String] = None): LogicalPlan = {
 
-    overrides.get((databaseName, tableName))
-      .map(r => alias.map(a => Subquery(a.toLowerCase, r)).getOrElse(r))
-      .getOrElse(super.lookupRelation(databaseName, tableName, alias))
+    val overriddenTable = overrides.get((databaseName, tableName))
+
+    // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
+    // properly qualified with this alias.
+    val withAlias =
+      overriddenTable.map(r => alias.map(a => Subquery(a.toLowerCase, r)).getOrElse(r))
+
+    withAlias.getOrElse(super.lookupRelation(databaseName, tableName, alias))
   }
 
   def overrideTable(databaseName: Option[String], tableName: String, plan: LogicalPlan) =
