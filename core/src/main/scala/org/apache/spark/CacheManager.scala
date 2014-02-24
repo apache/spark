@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
-import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, RDDBlockId}
+import org.apache.spark.storage.{BlockManager, StorageLevel, RDDBlockId}
 import org.apache.spark.rdd.RDD
 
 
