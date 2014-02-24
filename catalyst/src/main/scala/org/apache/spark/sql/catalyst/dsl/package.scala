@@ -138,6 +138,9 @@ package object dsl {
         alias: Option[String] = None) =
       Generate(generator, join, outer, None, plan)
 
+    def insertInto(tableName: String, overwrite: Boolean = false) =
+      InsertIntoTable(analysis.UnresolvedRelation(None, tableName), Map.empty, plan, overwrite)
+
     def analyze = analysis.SimpleAnalyzer(plan)
   }
 }
