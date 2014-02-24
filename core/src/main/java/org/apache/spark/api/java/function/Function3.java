@@ -15,13 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import scala.reflect.ClassTag
+import java.io.Serializable;
 
-/**
- * A function that returns zero or more output records from each input record.
- */
-abstract class FlatMapFunction[T, R] extends Function[T, java.lang.Iterable[R]] {
-  def elementType(): ClassTag[R] = ClassTag.Any.asInstanceOf[ClassTag[R]]
+public interface Function3<T1, T2, T3, R> extends Serializable {
+  public R call(T1 v1, T2 v2, T3 v3) throws Exception;
 }

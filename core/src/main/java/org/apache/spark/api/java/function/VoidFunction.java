@@ -15,19 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import scala.reflect.ClassTag
-import org.apache.spark.api.java.JavaSparkContext
+import java.io.Serializable;
 
-/**
- * A function that returns key-value pairs (Tuple2<K, V>), and can be used to construct PairRDDs.
- */
-// PairFunction does not extend Function because some UDF functions, like map,
-// are overloaded for both Function and PairFunction.
-abstract class PairFunction[T, K, V] extends WrappedFunction1[T, (K, V)] with Serializable {
-
-  def keyType(): ClassTag[K] = JavaSparkContext.fakeClassTag
-
-  def valueType(): ClassTag[V] = JavaSparkContext.fakeClassTag
+public interface VoidFunction<T> extends Serializable {
+  public void call(T t) throws Exception;
 }

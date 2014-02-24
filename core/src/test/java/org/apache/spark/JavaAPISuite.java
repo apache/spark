@@ -386,14 +386,14 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void map() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
-    JavaDoubleRDD doubles = rdd.map(new DoubleFunction<Integer>() {
+    JavaDoubleRDD doubles = rdd.mapToDouble(new DoubleFunction<Integer>() {
       @Override
       public Double call(Integer x) {
         return 1.0 * x;
       }
     }).cache();
     doubles.collect();
-    JavaPairRDD<Integer, Integer> pairs = rdd.map(new PairFunction<Integer, Integer, Integer>() {
+    JavaPairRDD<Integer, Integer> pairs = rdd.mapToPair(new PairFunction<Integer, Integer, Integer>() {
       @Override
       public Tuple2<Integer, Integer> call(Integer x) {
         return new Tuple2<Integer, Integer>(x, x);
@@ -422,7 +422,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals("Hello", words.first());
     Assert.assertEquals(11, words.count());
 
-    JavaPairRDD<String, String> pairs = rdd.flatMap(
+    JavaPairRDD<String, String> pairs = rdd.flatMapToPair(
       new PairFlatMapFunction<String, String, String>() {
 
         @Override
@@ -436,7 +436,7 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(new Tuple2<String, String>("Hello", "Hello"), pairs.first());
     Assert.assertEquals(11, pairs.count());
 
-    JavaDoubleRDD doubles = rdd.flatMap(new DoubleFlatMapFunction<String>() {
+    JavaDoubleRDD doubles = rdd.flatMapToDouble(new DoubleFlatMapFunction<String>() {
       @Override
       public Iterable<Double> call(String s) {
         List<Double> lengths = new LinkedList<Double>();
@@ -459,7 +459,7 @@ public class JavaAPISuite implements Serializable {
       JavaPairRDD<Integer, String> pairRDD = sc.parallelizePairs(pairs);
 
       // Regression test for SPARK-668:
-      JavaPairRDD<String, Integer> swapped = pairRDD.flatMap(
+      JavaPairRDD<String, Integer> swapped = pairRDD.flatMapToPair(
           new PairFlatMapFunction<Tuple2<Integer, String>, String, Integer>() {
           @Override
           public Iterable<Tuple2<String, Integer>> call(Tuple2<Integer, String> item) throws Exception {
@@ -469,7 +469,7 @@ public class JavaAPISuite implements Serializable {
       swapped.collect();
 
       // There was never a bug here, but it's worth testing:
-      pairRDD.map(new PairFunction<Tuple2<Integer, String>, String, Integer>() {
+      pairRDD.mapToPair(new PairFunction<Tuple2<Integer, String>, String, Integer>() {
           @Override
           public Tuple2<String, Integer> call(Tuple2<Integer, String> item) throws Exception {
               return item.swap();
@@ -592,7 +592,7 @@ public class JavaAPISuite implements Serializable {
     );
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
-    rdd.map(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
+    rdd.mapToPair(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
       @Override
       public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2()));
@@ -601,7 +601,7 @@ public class JavaAPISuite implements Serializable {
 
     // Try reading the output back as an object file
     JavaPairRDD<Integer, String> readRDD = sc.sequenceFile(outputDir, IntWritable.class,
-      Text.class).map(new PairFunction<Tuple2<IntWritable, Text>, Integer, String>() {
+      Text.class).mapToPair(new PairFunction<Tuple2<IntWritable, Text>, Integer, String>() {
       @Override
       public Tuple2<Integer, String> call(Tuple2<IntWritable, Text> pair) {
         return new Tuple2<Integer, String>(pair._1().get(), pair._2().toString());
@@ -622,7 +622,7 @@ public class JavaAPISuite implements Serializable {
     );
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
-    rdd.map(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
+    rdd.mapToPair(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
       @Override
       public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2()));
@@ -653,7 +653,7 @@ public class JavaAPISuite implements Serializable {
     );
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
-    rdd.map(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
+    rdd.mapToPair(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
       @Override
       public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2()));
@@ -713,7 +713,7 @@ public class JavaAPISuite implements Serializable {
     );
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
-    rdd.map(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
+    rdd.mapToPair(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
       @Override
       public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2()));
@@ -743,7 +743,7 @@ public class JavaAPISuite implements Serializable {
     );
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
-    rdd.map(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
+    rdd.mapToPair(new PairFunction<Tuple2<Integer, String>, IntWritable, Text>() {
       @Override
       public Tuple2<IntWritable, Text> call(Tuple2<Integer, String> pair) {
         return new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2()));
@@ -766,7 +766,7 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void zip() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
-    JavaDoubleRDD doubles = rdd.map(new DoubleFunction<Integer>() {
+    JavaDoubleRDD doubles = rdd.mapToDouble(new DoubleFunction<Integer>() {
       @Override
       public Double call(Integer x) {
         return 1.0 * x;
@@ -893,13 +893,13 @@ public class JavaAPISuite implements Serializable {
   @Test
   public void mapOnPairRDD() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1,2,3,4));
-    JavaPairRDD<Integer, Integer> rdd2 = rdd1.map(new PairFunction<Integer, Integer, Integer>() {
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(new PairFunction<Integer, Integer, Integer>() {
       @Override
       public Tuple2<Integer, Integer> call(Integer i) throws Exception {
         return new Tuple2<Integer, Integer>(i, i % 2);
       }
     });
-    JavaPairRDD<Integer, Integer> rdd3 = rdd2.map(
+    JavaPairRDD<Integer, Integer> rdd3 = rdd2.mapToPair(
         new PairFunction<Tuple2<Integer, Integer>, Integer, Integer>() {
       @Override
       public Tuple2<Integer, Integer> call(Tuple2<Integer, Integer> in) throws Exception {
@@ -919,7 +919,7 @@ public class JavaAPISuite implements Serializable {
   public void collectPartitions() {
     JavaRDD<Integer> rdd1 = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5, 6, 7), 3);
 
-    JavaPairRDD<Integer, Integer> rdd2 = rdd1.map(new PairFunction<Integer, Integer, Integer>() {
+    JavaPairRDD<Integer, Integer> rdd2 = rdd1.mapToPair(new PairFunction<Integer, Integer, Integer>() {
       @Override
       public Tuple2<Integer, Integer> call(Integer i) throws Exception {
         return new Tuple2<Integer, Integer>(i, i % 2);
@@ -984,7 +984,7 @@ public class JavaAPISuite implements Serializable {
   public void collectAsMapWithIntArrayValues() {
     // Regression test for SPARK-1040
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1));
-    JavaPairRDD<Integer, int[]> pairRDD = rdd.map(new PairFunction<Integer, Integer, int[]>() {
+    JavaPairRDD<Integer, int[]> pairRDD = rdd.mapToPair(new PairFunction<Integer, Integer, int[]>() {
       @Override
       public Tuple2<Integer, int[]> call(Integer x) throws Exception {
         return new Tuple2<Integer, int[]>(x, new int[] { x });

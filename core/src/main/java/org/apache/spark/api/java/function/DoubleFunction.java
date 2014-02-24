@@ -15,15 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import java.lang.{Double => JDouble}
+import java.io.Serializable;
 
-/**
- * A function that returns Doubles, and can be used to construct DoubleRDDs.
- */
-// DoubleFunction does not extend Function because some UDF functions, like map,
-// are overloaded for both Function and DoubleFunction.
-abstract class DoubleFunction[T] extends WrappedFunction1[T, JDouble] with Serializable {
-    // Intentionally left blank
+public interface DoubleFunction<T> extends Serializable {
+  public Double call(T t) throws Exception;
 }

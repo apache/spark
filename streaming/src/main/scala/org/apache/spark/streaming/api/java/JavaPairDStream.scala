@@ -25,12 +25,13 @@ import scala.reflect.ClassTag
 
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, Function3 => JFunction3}
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
 import org.apache.spark.Partitioner
 import org.apache.hadoop.mapred.{JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.conf.Configuration
-import org.apache.spark.api.java.{JavaUtils, JavaRDD, JavaPairRDD}
+import org.apache.spark.api.java.{JavaUtils, JavaPairRDD}
+import org.apache.spark.api.java.JavaPairRDD._
 import org.apache.spark.storage.StorageLevel
 import com.google.common.base.Optional
 import org.apache.spark.rdd.RDD
@@ -54,7 +55,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(f: JFunction[(K, V), java.lang.Boolean]): JavaPairDStream[K, V] =
-    dstream.filter((x => f(x).booleanValue()))
+    dstream.filter((x => f.call(x).booleanValue()))
 
   /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
   def cache(): JavaPairDStream[K, V] = dstream.cache()
@@ -279,7 +280,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                       DStream's batching interval
    */
   def reduceByKeyAndWindow(
-      reduceFunc: Function2[V, V, V],
+      reduceFunc: JFunction2[V, V, V],
       windowDuration: Duration,
       slideDuration: Duration
     ):JavaPairDStream[K, V] = {
@@ -299,7 +300,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    * @param numPartitions  Number of partitions of each RDD in the new DStream.
    */
   def reduceByKeyAndWindow(
-      reduceFunc: Function2[V, V, V],
+      reduceFunc: JFunction2[V, V, V],
       windowDuration: Duration,
       slideDuration: Duration,
       numPartitions: Int
@@ -320,7 +321,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                    DStream.
    */
   def reduceByKeyAndWindow(
-      reduceFunc: Function2[V, V, V],
+      reduceFunc: JFunction2[V, V, V],
       windowDuration: Duration,
       slideDuration: Duration,
       partitioner: Partitioner
@@ -345,8 +346,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                       DStream's batching interval
    */
   def reduceByKeyAndWindow(
-      reduceFunc: Function2[V, V, V],
-      invReduceFunc: Function2[V, V, V],
+      reduceFunc: JFunction2[V, V, V],
+      invReduceFunc: JFunction2[V, V, V],
       windowDuration: Duration,
       slideDuration: Duration
     ): JavaPairDStream[K, V] = {
@@ -374,8 +375,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                       set this to null if you do not want to filter
    */
   def reduceByKeyAndWindow(
-      reduceFunc: Function2[V, V, V],
-      invReduceFunc: Function2[V, V, V],
+      reduceFunc: JFunction2[V, V, V],
+      invReduceFunc: JFunction2[V, V, V],
       windowDuration: Duration,
       slideDuration: Duration,
       numPartitions: Int,
@@ -412,8 +413,8 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
    *                       set this to null if you do not want to filter
    */
   def reduceByKeyAndWindow(
-      reduceFunc: Function2[V, V, V],
-      invReduceFunc: Function2[V, V, V],
+      reduceFunc: JFunction2[V, V, V],
+      invReduceFunc: JFunction2[V, V, V],
       windowDuration: Duration,
       slideDuration: Duration,
       partitioner: Partitioner,

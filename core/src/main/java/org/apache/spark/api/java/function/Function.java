@@ -15,20 +15,10 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import scala.runtime.AbstractFunction3
+import java.io.Serializable;
 
-/**
- * Subclass of Function3 for ease of calling from Java. The main thing it does is re-expose the
- * apply() method as call() and declare that it can throw Exception (since AbstractFunction3.apply
- * isn't marked to allow that).
- */
-private[spark] abstract class WrappedFunction3[T1, T2, T3, R]
-  extends AbstractFunction3[T1, T2, T3, R] {
-  @throws(classOf[Exception])
-  def call(t1: T1, t2: T2, t3: T3): R
-
-  final def apply(t1: T1, t2: T2, t3: T3): R = call(t1, t2, t3)
+public interface Function<T1, R> extends Serializable {
+  public R call(T1 v1) throws Exception;
 }
-
