@@ -12,4 +12,6 @@ package object sql {
     com.typesafe.scalalogging.slf4j.Logger(org.slf4j.LoggerFactory.getLogger(name))
 
   protected[sql] type Logging = com.typesafe.scalalogging.slf4j.Logging
+
+  type Row = catalyst.expressions.Row
 }
