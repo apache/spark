@@ -381,8 +381,8 @@ class DAGScheduler(
                   running -= stage
                 }
                 stageToInfos -= stage
-                for (shuffleDep <- stage.shuffleDep) {
-                  shuffleToMapStage.remove(shuffleDep.shuffleId)
+                for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
+                  shuffleToMapStage.remove(k)
                 }
                 if (pendingTasks.contains(stage) && !pendingTasks(stage).isEmpty) {
                   logDebug("Removing pending status for stage %d".format(stageId))
