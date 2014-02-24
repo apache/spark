@@ -137,6 +137,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   protected lazy val singleRowRdd =
     sparkContext.parallelize(Seq(new GenericRow(IndexedSeq()): Row), 1)
 
+  def convertToCatalyst(a: Any): Any = a match {
+    case s: Seq[Any] => s.map(convertToCatalyst)
+    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toSeq)
+    case other => other
+  }
+
   object TopK extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.StopAfter(limit, logical.Sort(order, child)) =>
@@ -170,7 +176,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         val dataAsRdd =
-          sparkContext.parallelize(data.map(r => new GenericRow(r.productIterator.toVector): Row))
+          sparkContext.parallelize(data.map(r => new GenericRow(r.productIterator.map(convertToCatalyst).toVector): Row))
         execution.ExistingRdd(output, dataAsRdd) :: Nil
       case logical.StopAfter(limit, child) =>
         execution.StopAfter(
