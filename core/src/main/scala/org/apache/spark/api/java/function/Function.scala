@@ -15,28 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
+package org.apache.spark.api.java.function
 
-import java.io.File;
+import scala.reflect.ClassTag
+import org.apache.spark.api.java.JavaSparkContext
 
 /**
- * Resolves paths to files added through `SparkContext.addFile()`.
+ * Base class for functions whose return types do not create special RDDs. PairFunction and
+ * DoubleFunction are handled separately, to allow PairRDDs and DoubleRDDs to be constructed
+ * when mapping RDDs of other types.
  */
-public class SparkFiles {
-
-  private SparkFiles() {}
-
-  /**
-   * Get the absolute path of a file added through `SparkContext.addFile()`.
-   */
-  public static String get(String filename) {
-    return new File(getRootDirectory(), filename).getAbsolutePath();
-  }
-
-  /**
-   * Get the root directory that contains files added through `SparkContext.addFile()`.
-   */
-  public static String getRootDirectory() {
-    return SparkEnv.get().sparkFilesDir();
-  }
+abstract class Function[T, R] extends WrappedFunction1[T, R] with Serializable {
+  def returnType(): ClassTag[R] = JavaSparkContext.fakeClassTag
 }
+

@@ -17,9 +17,9 @@
 
 package org.apache.spark.metrics.sink
 
-import com.codahale.metrics.{JmxReporter, MetricRegistry}
-
 import java.util.Properties
+
+import com.codahale.metrics.{JmxReporter, MetricRegistry}
 
 class JmxSink(val property: Properties, val registry: MetricRegistry) extends Sink {
   val reporter: JmxReporter = JmxReporter.forRegistry(registry).build()

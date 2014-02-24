@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{IOException, File, FileNotFoundException, PrintWriter}
+import java.io.{File, FileNotFoundException, IOException, PrintWriter}
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 import java.util.concurrent.LinkedBlockingQueue
@@ -25,8 +25,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**

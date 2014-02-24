@@ -19,8 +19,8 @@ package org.apache.spark.scheduler
 
 import com.codahale.metrics.{Gauge,MetricRegistry}
 
-import org.apache.spark.metrics.source.Source
 import org.apache.spark.SparkContext
+import org.apache.spark.metrics.source.Source
 
 private[spark] class DAGSchedulerSource(val dagScheduler: DAGScheduler, sc: SparkContext)
     extends Source {

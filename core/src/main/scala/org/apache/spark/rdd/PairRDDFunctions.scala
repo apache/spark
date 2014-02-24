@@ -22,12 +22,13 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.{HashMap => JHashMap}
 
+import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.JavaConversions._
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.ClassTag
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.SequenceFile.CompressionType
@@ -38,15 +39,14 @@ import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
 import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
-import com.clearspring.analytics.stream.cardinality.HyperLogLog
-
 // SparkHadoopWriter and SparkHadoopMapReduceUtil are actually source files defined in Spark.
 import org.apache.hadoop.mapred.SparkHadoopWriter
 import org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil
+
 import org.apache.spark._
+import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
-import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.util.SerializableHyperLogLog
 
 /**
@@ -77,6 +77,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       partitioner: Partitioner,
       mapSideCombine: Boolean = true,
       serializerClass: String = null): RDD[(K, C)] = {
+    require(mergeCombiners != null, "mergeCombiners must be defined") // required as of Spark 0.9.0
     if (getKeyClass().isArray) {
       if (mapSideCombine) {
         throw new SparkException("Cannot use map-side combining with array keys.")

@@ -20,11 +20,12 @@ package org.apache.spark.scheduler
 import scala.Tuple2
 import scala.collection.mutable.{HashMap, Map}
 
+import org.scalatest.{BeforeAndAfter, FunSuite}
+
 import org.apache.spark._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.{BlockId, BlockManagerId, BlockManagerMaster}
-import org.scalatest.{BeforeAndAfter, FunSuite}
 
 /**
  * Tests for DAGScheduler. These tests directly call the event processing functions in DAGScheduler

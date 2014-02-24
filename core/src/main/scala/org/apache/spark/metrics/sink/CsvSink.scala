@@ -17,11 +17,11 @@
 
 package org.apache.spark.metrics.sink
 
-import com.codahale.metrics.{CsvReporter, MetricRegistry}
-
 import java.io.File
 import java.util.{Locale, Properties}
 import java.util.concurrent.TimeUnit
+
+import com.codahale.metrics.{CsvReporter, MetricRegistry}
 
 import org.apache.spark.metrics.MetricsSystem
 

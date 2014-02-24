@@ -17,14 +17,12 @@
 
 package org.apache.spark.rdd
 
+import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.partial.SumEvaluator
 import org.apache.spark.util.StatCounter
-import org.apache.spark.{TaskContext, Logging}
-
-import scala.collection.immutable.NumericRange
 
 /**
  * Extra functions available on RDDs of Doubles through an implicit conversion.

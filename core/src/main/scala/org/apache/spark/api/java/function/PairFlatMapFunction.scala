@@ -15,21 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.api.java.function
 
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
-
-import java.io.Serializable;
+import java.lang.{Iterable => JIterable}
+import org.apache.spark.api.java.JavaSparkContext
+import scala.reflect.ClassTag
 
 /**
- * A two-argument function that takes arguments of type T1 and T2 and returns an R.
+ * A function that returns zero or more key-value pair records from each input record. The
+ * key-value pairs are represented as scala.Tuple2 objects.
  */
-public abstract class Function2<T1, T2, R> extends WrappedFunction2<T1, T2, R>
-  implements Serializable {
+// PairFlatMapFunction does not extend FlatMapFunction because flatMap is
+// overloaded for both FlatMapFunction and PairFlatMapFunction.
+abstract class PairFlatMapFunction[T, K, V] extends WrappedFunction1[T, JIterable[(K, V)]]
+  with Serializable {
 
-  public ClassTag<R> returnType() {
-    return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
-  }
+  def keyType(): ClassTag[K] = JavaSparkContext.fakeClassTag
+
+  def valueType(): ClassTag[V] = JavaSparkContext.fakeClassTag
 }
-

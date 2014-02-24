@@ -946,6 +946,11 @@ class RDD(object):
         Pass each value in the key-value pair RDD through a flatMap function
         without changing the keys; this also retains the original RDD's
         partitioning.
+
+        >>> x = sc.parallelize([("a", ["x", "y", "z"]), ("b", ["p", "r"])])
+        >>> def f(x): return x
+        >>> x.flatMapValues(f).collect()
+        [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
         flat_map_fn = lambda (k, v): ((k, x) for x in f(v))
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
@@ -955,6 +960,11 @@ class RDD(object):
         Pass each value in the key-value pair RDD through a map function
         without changing the keys; this also retains the original RDD's
         partitioning.
+
+        >>> x = sc.parallelize([("a", ["apple", "banana", "lemon"]), ("b", ["grapes"])])
+        >>> def f(x): return len(x)
+        >>> x.mapValues(f).collect()
+        [('a', 3), ('b', 1)]
         """
         map_values_fn = lambda (k, v): (k, f(v))
         return self.map(map_values_fn, preservesPartitioning=True)

@@ -15,29 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.api.java.function
 
-import scala.Tuple2;
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
-
-import java.io.Serializable;
+import scala.reflect.ClassTag
+import org.apache.spark.api.java.JavaSparkContext
 
 /**
- * A function that returns zero or more key-value pair records from each input record. The
- * key-value pairs are represented as scala.Tuple2 objects.
+ * A function that returns key-value pairs (Tuple2<K, V>), and can be used to construct PairRDDs.
  */
-// PairFlatMapFunction does not extend FlatMapFunction because flatMap is
-// overloaded for both FlatMapFunction and PairFlatMapFunction.
-public abstract class PairFlatMapFunction<T, K, V>
-  extends WrappedFunction1<T, Iterable<Tuple2<K, V>>>
-  implements Serializable {
+// PairFunction does not extend Function because some UDF functions, like map,
+// are overloaded for both Function and PairFunction.
+abstract class PairFunction[T, K, V] extends WrappedFunction1[T, (K, V)] with Serializable {
 
-  public ClassTag<K> keyType() {
-    return (ClassTag<K>) ClassTag$.MODULE$.apply(Object.class);
-  }
+  def keyType(): ClassTag[K] = JavaSparkContext.fakeClassTag
 
-  public ClassTag<V> valueType() {
-    return (ClassTag<V>) ClassTag$.MODULE$.apply(Object.class);
-  }
+  def valueType(): ClassTag[V] = JavaSparkContext.fakeClassTag
 }

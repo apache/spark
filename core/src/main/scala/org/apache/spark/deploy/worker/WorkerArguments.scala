@@ -17,8 +17,9 @@
 
 package org.apache.spark.deploy.worker
 
-import org.apache.spark.util.{Utils, IntParam, MemoryParam}
 import java.lang.management.ManagementFactory
+
+import org.apache.spark.util.{IntParam, MemoryParam, Utils}
 
 /**
  * Command-line parser for the master.

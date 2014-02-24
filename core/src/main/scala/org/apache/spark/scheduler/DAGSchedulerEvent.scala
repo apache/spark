@@ -22,8 +22,8 @@ import java.util.Properties
 import scala.collection.mutable.Map
 
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.rdd.RDD
 
 /**
  * Types of events that can be handled by the DAGScheduler. The DAGScheduler uses an event queue

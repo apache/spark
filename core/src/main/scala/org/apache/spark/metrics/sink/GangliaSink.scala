@@ -20,8 +20,8 @@ package org.apache.spark.metrics.sink
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
-import com.codahale.metrics.ganglia.GangliaReporter
 import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.ganglia.GangliaReporter
 import info.ganglia.gmetric4j.gmetric.GMetric
 
 import org.apache.spark.metrics.MetricsSystem

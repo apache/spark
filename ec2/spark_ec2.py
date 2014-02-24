@@ -218,6 +218,12 @@ def get_spark_ami(opts):
 # Returns a tuple of EC2 reservation objects for the master and slaves
 # Fails if there already instances running in the cluster's groups.
 def launch_cluster(conn, opts, cluster_name):
+  if opts.identity_file is None:
+    print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
+    sys.exit(1)
+  if opts.key_pair is None:
+    print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
+    sys.exit(1)    
   print "Setting up security groups..."
   master_group = get_or_make_group(conn, cluster_name + "-master")
   slave_group = get_or_make_group(conn, cluster_name + "-slaves")

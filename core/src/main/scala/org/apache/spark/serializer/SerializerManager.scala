@@ -18,8 +18,8 @@
 package org.apache.spark.serializer
 
 import java.util.concurrent.ConcurrentHashMap
-import org.apache.spark.SparkConf
 
+import org.apache.spark.SparkConf
 
 /**
  * A service that returns a serializer object given the serializer's class name. If a previous

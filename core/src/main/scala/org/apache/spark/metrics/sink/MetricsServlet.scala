@@ -17,15 +17,13 @@
 
 package org.apache.spark.metrics.sink
 
-import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.json.MetricsModule
-
-import com.fasterxml.jackson.databind.ObjectMapper
-
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 import javax.servlet.http.HttpServletRequest
 
+import com.codahale.metrics.MetricRegistry
+import com.codahale.metrics.json.MetricsModule
+import com.fasterxml.jackson.databind.ObjectMapper
 import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.ui.JettyUtils
