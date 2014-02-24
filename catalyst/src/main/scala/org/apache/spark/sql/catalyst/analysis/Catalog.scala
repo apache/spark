@@ -2,7 +2,7 @@ package org.apache.spark.sql
 package catalyst
 package analysis
 
-import plans.logical.LogicalPlan
+import plans.logical.{LogicalPlan, Subquery}
 import scala.collection.mutable
 
 /**
@@ -32,6 +32,7 @@ trait OverrideCatalog extends Catalog {
     alias: Option[String] = None): LogicalPlan = {
 
     overrides.get((databaseName, tableName))
+      .map(r => alias.map(a => Subquery(a.toLowerCase, r)).getOrElse(r))
       .getOrElse(super.lookupRelation(databaseName, tableName, alias))
   }
 
