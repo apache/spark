@@ -146,7 +146,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   object TopK extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.StopAfter(limit, logical.Sort(order, child)) =>
-        execution.TopK(Evaluate(limit, Nil).asInstanceOf[Int], order, planLater(child))(sparkContext) :: Nil
+        execution.TopK(
+          Evaluate(limit, Nil).asInstanceOf[Int], order, planLater(child))(sparkContext) :: Nil
       case _ => Nil
     }
   }
@@ -176,7 +177,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.Sample(fraction, withReplacement, seed, planLater(child)) :: Nil
       case logical.LocalRelation(output, data) =>
         val dataAsRdd =
-          sparkContext.parallelize(data.map(r => new GenericRow(r.productIterator.map(convertToCatalyst).toVector): Row))
+          sparkContext.parallelize(data.map(r =>
+            new GenericRow(r.productIterator.map(convertToCatalyst).toVector): Row))
         execution.ExistingRdd(output, dataAsRdd) :: Nil
       case logical.StopAfter(limit, child) =>
         execution.StopAfter(

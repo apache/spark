@@ -53,7 +53,8 @@ case class StopAfter(limit: Int, child: SparkPlan)(@transient sc: SparkContext) 
   def execute() = sc.makeRDD(executeCollect(), 1)
 }
 
-case class TopK(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)(@transient sc: SparkContext) extends UnaryNode {
+case class TopK(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
+               (@transient sc: SparkContext) extends UnaryNode {
   override def otherCopyArgs = sc :: Nil
 
   def output = child.output
