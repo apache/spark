@@ -63,6 +63,8 @@ class BernoulliSampler[T](lb: Double, ub: Double, complement: Boolean = false)
     }
   }
 
+  def cloneComplement() = new BernoulliSampler[T](lb, ub, !complement)
+
   override def clone = new BernoulliSampler[T](lb, ub, complement)
 }
 

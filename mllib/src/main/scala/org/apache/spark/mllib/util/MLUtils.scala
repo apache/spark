@@ -187,12 +187,12 @@ object MLUtils {
    */
   def kFold[T : ClassTag](rdd: RDD[T], folds: Int, seed: Int): List[Pair[RDD[T], RDD[T]]] = {
     val foldsF = folds.toFloat
-    1.to(folds).map(fold => ((
-      new PartitionwiseSampledRDD(rdd, new BernoulliSampler[T]((fold-1)/foldsF,fold/foldsF,
-        complement = false), seed),
-      new PartitionwiseSampledRDD(rdd, new BernoulliSampler[T]((fold-1)/foldsF,fold/foldsF,
-        complement = true), seed)
-    ))).toList
+    1.to(folds).map  { fold =>
+      val sampler = new BernoulliSampler[T]((fold-1)/foldsF,fold/foldsF, complement = false)
+      val train = new PartitionwiseSampledRDD(rdd, sampler, seed)
+      val test = new PartitionwiseSampledRDD(rdd, sampler.cloneComplement(), seed)
+      (train, test)
+    }.toList
   }
 
   /**
