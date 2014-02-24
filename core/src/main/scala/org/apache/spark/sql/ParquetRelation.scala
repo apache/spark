@@ -6,7 +6,7 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.spark.sql.catalyst.plans.logical.BaseRelation
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.expressions.{Row, AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, AttributeReference, Attribute}
 
 import parquet.schema.{MessageTypeParser, MessageType}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
@@ -15,26 +15,26 @@ import parquet.schema.{Type => ParquetType}
 
 import parquet.io.api.{Binary, RecordConsumer}
 import parquet.schema.Type.Repetition
-import parquet.hadoop.ParquetFileReader
+import parquet.hadoop.{ParquetWriter, ParquetFileReader}
 import parquet.hadoop.metadata.ParquetMetadata
 
 import scala.collection.JavaConversions._
+import java.io.File
 
 /**
  * Relation formed by underlying Parquet file that contains data stored in columnar form.
  *
  * @param tableName The name of the relation.
- * @param conf Hadoop configuration.
  * @param path The path to the Parquet file.
  */
-case class ParquetRelation(val tableName: String, val conf: Configuration, val path: Path)
+case class ParquetRelation(val tableName: String, val path: String)
 
   extends BaseRelation {
 
-  private val parquetMetaData: ParquetMetadata = readMetaData
+  private def parquetMetaData: ParquetMetadata = readMetaData
 
   /** Schema derived from ParquetFile **/
-  val parquetSchema: MessageType = parquetMetaData.getFileMetaData.getSchema
+  def parquetSchema: MessageType = parquetMetaData.getFileMetaData.getSchema
 
   /** Attributes **/
   val attributes = ParquetTypesConverter.convertToAttributes(parquetSchema)
@@ -42,12 +42,15 @@ case class ParquetRelation(val tableName: String, val conf: Configuration, val p
   /** Output **/
   val output = attributes
 
-  private def readMetaData: ParquetMetadata = ParquetFileReader.readFooter(conf, path)
+  private def readMetaData: ParquetMetadata = ParquetFileReader.readFooter(new Configuration(), new Path(path))
+
+  override def isPartitioned = false // Parquet files have no concepts of keys, therefore no Partitioner
+  // Note: we could allow Block level access; needs to be thought through
 }
 
 object ParquetRelation {
   def apply(path: Path, tableName: String = "ParquetTable") =
-    new ParquetRelation(tableName, new Configuration(), path)
+    new ParquetRelation(tableName, path.toUri.toString)
 }
 
 object ParquetTypesConverter {
@@ -110,5 +113,58 @@ object ParquetTypesConverter {
       a => new ParquetPrimitiveType(Repetition.OPTIONAL, fromDataType(a.dataType), a.name)
     }
     new MessageType("root", fields)
+  }
+}
+
+object ParquetTestData {
+
+  val testSchema =
+    """message myrecord {
+      |optional boolean myboolean;
+      |optional int32 myint;
+      |optional binary mystring;
+      |optional int64 mylong;
+      |optional float myfloat;
+      |optional double mydouble;
+      |}""".stripMargin
+
+  val subTestSchema =
+    """
+      |message myrecord {
+      |optional boolean myboolean;
+      |optional int64 mylong;
+      |}
+    """.stripMargin
+
+  val testFile = new File("/tmp/testParquetFile").getAbsoluteFile
+
+  lazy val testData = ParquetRelation(new Path(testFile.toURI))
+
+  def writeFile = {
+    testFile.delete
+    val path: Path = new Path(testFile.toURI)
+    val configuration: Configuration = new Configuration
+    val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
+
+    val writeSupport = new RowWriteSupport()
+    writeSupport.setSchema(schema, configuration)
+    val writer = new ParquetWriter(path, writeSupport)
+    for(i <- 0 until 15) {
+      val data = new Array[Any](6)
+      if(i % 3 ==0)
+        data.update(0, true)
+      else
+        data.update(0, false)
+      if(i % 5 == 0)
+        data.update(1, 5)
+      else
+        data.update(1, null) // optional
+      data.update(2, "abc")
+      data.update(3, 1L<<33)
+      data.update(4, 2.5F)
+      data.update(5, 4.5D)
+      writer.write(new GenericRow(data))
+    }
+    writer.close()
   }
 }

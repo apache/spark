@@ -23,14 +23,9 @@ import scala.util.parsing.combinator.RegexParsers
 import org.apache.hadoop.hive.metastore.api.{FieldSchema, StorageDescriptor, SerDeInfo}
 import org.apache.hadoop.hive.metastore.api.{Table => TTable, Partition => TPartition}
 import org.apache.hadoop.hive.ql.metadata.{Hive, Partition, Table}
-import org.apache.hadoop.hive.metastore.HiveMetaStoreClient
-import org.apache.hadoop.hive.metastore.api.{FieldSchema, Partition, Table}
-import org.apache.hadoop.hive.metastore.api.{StorageDescriptor, SerDeInfo}
 import org.apache.hadoop.hive.ql.plan.TableDesc
 import org.apache.hadoop.hive.ql.session.SessionState
 import org.apache.hadoop.hive.serde2.Deserializer
-import org.apache.hadoop.hive.serde2.AbstractDeserializer
-import org.apache.hadoop.mapred.InputFormat
 
 import catalyst.analysis.Catalog
 import catalyst.expressions._
@@ -212,6 +207,8 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
   def hiveQlPartitions = partitions.map { p =>
     new Partition(hiveQlTable, p)
   }
+
+  override def isPartitioned = hiveQlTable.isPartitioned
 
   val tableDesc = new TableDesc(
     Class.forName(hiveQlTable.getSerializationLib).asInstanceOf[Class[Deserializer]],

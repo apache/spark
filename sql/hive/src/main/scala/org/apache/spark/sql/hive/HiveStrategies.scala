@@ -21,7 +21,7 @@ package hive
 import catalyst.expressions._
 import catalyst.planning._
 import catalyst.plans._
-import catalyst.plans.logical.LogicalPlan
+import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
 
 import org.apache.spark.sql.execution._
 
@@ -43,6 +43,8 @@ trait HiveStrategies {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
+      case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
+        InsertIntoParquetTable(table, planLater(child))(hiveContext) :: Nil
       case _ => Nil
     }
   }
@@ -52,8 +54,12 @@ trait HiveStrategies {
       // Push attributes into table scan when possible.
       case p @ logical.Project(projectList, m: MetastoreRelation) if isSimpleProject(projectList) =>
         HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m, None)(hiveContext) :: Nil
+      case p @ logical.Project(projectList, r: ParquetRelation) if isSimpleProject(projectList) =>
+        ParquetTableScan(projectList.asInstanceOf[Seq[Attribute]], r, None)(hiveContext) :: Nil
       case m: MetastoreRelation =>
         HiveTableScan(m.output, m, None)(hiveContext) :: Nil
+      case p: ParquetRelation =>
+        ParquetTableScan(p.output, p, None)(hiveContext) :: Nil
       case _ => Nil
     }
   }
@@ -69,7 +75,7 @@ trait HiveStrategies {
   object PartitionPrunings extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
       case p @ FilteredOperation(predicates, relation: MetastoreRelation)
-        if relation.hiveQlTable.isPartitioned =>
+        if relation.isPartitioned =>
 
         val partitionKeyIds = relation.partitionKeys.map(_.id).toSet
 
@@ -97,7 +103,7 @@ trait HiveStrategies {
    */
   object ColumnPrunings extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case PhysicalOperation(projectList, predicates, relation: MetastoreRelation) =>
+      case PhysicalOperation(projectList, predicates, relation: BaseRelation) =>
         val predicateOpt = predicates.reduceOption(And)
         val predicateRefs = predicateOpt.map(_.references).getOrElse(Set.empty)
         val projectRefs = projectList.flatMap(_.references)
@@ -112,7 +118,7 @@ trait HiveStrategies {
         val prunedCols = (projectRefs ++ (predicateRefs -- projectRefs)).intersect(relation.output)
 
         val filteredScans =
-          if (relation.hiveQlTable.isPartitioned) {
+          if (relation.isPartitioned) {  // from here on relation must be a [[MetaStoreRelation]]
             // Applies partition pruning first for partitioned table
             val filteredRelation = predicateOpt.map(logical.Filter(_, relation)).getOrElse(relation)
             PartitionPrunings(filteredRelation).view.map(_.transform {
@@ -120,7 +126,14 @@ trait HiveStrategies {
                 scan.copy(attributes = prunedCols)(hiveContext)
             })
           } else {
-            val scan = HiveTableScan(prunedCols, relation, None)(hiveContext)
+            val scan = relation match {
+              case MetastoreRelation(_, _, _) => {
+                HiveTableScan(prunedCols, relation.asInstanceOf[MetastoreRelation], None)(hiveContext)
+              }
+              case ParquetRelation(_, _) => {
+                ParquetTableScan(relation.output, relation.asInstanceOf[ParquetRelation], None)(hiveContext).pruneColumns(prunedCols)
+              }
+            }
             predicateOpt.map(execution.Filter(_, scan)).getOrElse(scan) :: Nil
           }
 

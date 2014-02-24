@@ -9,41 +9,40 @@ import parquet.hadoop.api.ReadSupport.ReadContext
 import parquet.column.ParquetProperties
 
 import catalyst.expressions.{Attribute, GenericRow, Row, Expression}
-import catalyst.plans.logical.LeafNode
+import org.apache.spark.sql.execution.{UnaryNode, LeafNode}
 import catalyst.types._
 
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.{Path, FileSystem}
 
-import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
+import org.apache.spark.sql.execution.SparkPlan
+import org.apache.spark.api.java.JavaPairRDD
 
 /**
  * Parquet table scan operator. Imports the file that backs the given [[org.apache.spark.sql.ParquetRelation]]
  * as a RDD[Row]. Only a stub currently.
  */
 case class ParquetTableScan(
+    attributes: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Option[Expression])(
-    @transient val sc: SparkContext)
+    @transient val sc: SparkSqlContext)
   extends LeafNode {
-
-  // TODO: make use of column pruning predicate
-
-  private var prunedAttributes = relation.attributes  // used for projections
 
   /**
    * Runs this query returning the result as an RDD.
   */
-  def execute(): RDD[Row] = {
+  override def execute(): RDD[Row] = {
     val job = new Job(new Configuration())
     ParquetInputFormat.setReadSupportClass(job, classOf[org.apache.spark.sql.RowReadSupport])
     job.getConfiguration.set(
         RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
-        ParquetTypesConverter.convertFromAttributes(prunedAttributes).toString)
+        ParquetTypesConverter.convertFromAttributes(attributes).toString)
     // TODO: add record filters, etc.
-    sc.newAPIHadoopFile(
-      relation.path.toUri.toString,
+    sc.sparkContext.newAPIHadoopFile(
+      relation.path,
       classOf[ParquetInputFormat[Row]],
       classOf[Void], classOf[Row],
       job.getConfiguration)
@@ -53,16 +52,15 @@ case class ParquetTableScan(
   /**
    * Applies a (candidate) projection.
    *
-   * @param attributes The list of attributes to be used in the projection.
-   * @return True, if successful; false otherwise.
+   * @param prunedAttributes The list of attributes to be used in the projection.
+   * @return Pruned TableScan.
    */
-  def pruneColumns(attributes: Seq[Attribute]): Boolean = {
-    if(!validateProjection(attributes))
-      false
-    else {
-      prunedAttributes = attributes
-      true
-    }
+  def pruneColumns(prunedAttributes: Seq[Attribute]): ParquetTableScan = {
+    val success = validateProjection(prunedAttributes)
+    if(success)
+      ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sc)
+    else
+      ParquetTableScan(attributes, relation, columnPruningPred)(sc)
   }
 
   /**
@@ -86,8 +84,52 @@ case class ParquetTableScan(
     retval
   }
 
-  override def output: Seq[Attribute] = prunedAttributes
+  override def output: Seq[Attribute] = attributes
 }
+
+case class InsertIntoParquetTable(
+    relation: ParquetRelation,
+    child: SparkPlan)(
+    @transient val sc: SparkSqlContext)
+  extends UnaryNode {
+
+  /**
+   * Inserts all the rows in the Parquet file.
+   */
+  override def execute() = {
+    val childRdd = child.execute()
+    assert(childRdd != null)
+
+    val job = new Job(new Configuration())
+    ParquetOutputFormat.setWriteSupportClass(job, classOf[org.apache.spark.sql.RowWriteSupport])
+    val conf = job.getConfiguration
+    // TODO: move that to function in object
+    conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, relation.parquetSchema.toString)
+    // TODO: we should pass the read schema, too, in case we insert from a select from a Parquet table?
+    // conf.set(RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA, relation.parquetSchema.toString)
+
+    // TODO: add checks: file exists, etc.
+    val fs = FileSystem.get(conf)
+    fs.delete(new Path(relation.path), true)
+
+    JavaPairRDD.fromRDD(childRdd.map(Tuple2(0, _))).saveAsNewAPIHadoopFile(
+      relation.path.toString,
+      classOf[Void],
+      classOf[org.apache.spark.sql.catalyst.expressions.GenericRow],
+      classOf[parquet.hadoop.ParquetOutputFormat[org.apache.spark.sql.catalyst.expressions.GenericRow]],
+      conf)
+
+    // From InsertIntoHiveTable:
+    // It would be nice to just return the childRdd unchanged so insert operations could be chained,
+    // however for now we return an empty list to simplify compatibility checks with hive, which
+    // does not return anything for insert operations.
+    // TODO: implement hive compatibility as rules.
+    sc.sparkContext.makeRDD(Nil, 1)
+  }
+
+  override def output = child.output
+}
+
 
 /**
  * A [[parquet.io.api.RecordMaterializer]] for Rows.
@@ -136,18 +178,16 @@ object RowReadSupport {
  * A [[parquet.hadoop.api.WriteSupport]] for Row ojects.
  */
 class RowWriteSupport extends WriteSupport[Row] with Logging {
-  final val PARQUET_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.schema"
-
   def setSchema(schema: MessageType, configuration: Configuration) {
     // for testing
     this.schema = schema
     // TODO: could use Attributes themselves instead of Parquet schema?
-    configuration.set(PARQUET_ROW_SCHEMA, schema.toString)
+    configuration.set(RowWriteSupport.PARQUET_ROW_SCHEMA, schema.toString)
     configuration.set(ParquetOutputFormat.WRITER_VERSION, ParquetProperties.WriterVersion.PARQUET_1_0.toString)
   }
 
   def getSchema(configuration: Configuration): MessageType = {
-    return MessageTypeParser.parseMessageType(configuration.get(PARQUET_ROW_SCHEMA))
+    return MessageTypeParser.parseMessageType(configuration.get(RowWriteSupport.PARQUET_ROW_SCHEMA))
   }
 
   private var schema: MessageType = null
@@ -181,6 +221,10 @@ class RowWriteSupport extends WriteSupport[Row] with Logging {
     }
     writer.endMessage()
   }
+}
+
+object RowWriteSupport {
+  val PARQUET_ROW_SCHEMA: String = "org.apache.spark.sql.parquet.row.schema"
 }
 
 /**
