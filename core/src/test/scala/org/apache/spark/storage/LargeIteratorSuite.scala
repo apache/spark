@@ -18,6 +18,8 @@ package org.apache.spark.storage
 
 import org.scalatest.FunSuite
 import org.apache.spark.{LocalSparkContext, SparkContext}
+import org.apache.commons.io.FileUtils
+import java.io.File
 
 class Expander(base:String, count:Int) extends Iterator[String] {
   var i = 0;
@@ -51,5 +53,6 @@ class LargeIteratorSuite extends FunSuite with LocalSparkContext {
     ) );
     val out = seeds.flatMap(Expander.expand(_,10000000));
     out.map(_ + "...").persist(StorageLevel.DISK_ONLY).saveAsTextFile("./test.out")
+    FileUtils.deleteDirectory(new File("./test.out"))
   }
 }
