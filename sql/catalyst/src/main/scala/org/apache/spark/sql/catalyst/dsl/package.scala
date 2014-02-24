@@ -19,6 +19,7 @@ package org.apache.spark.sql
 package catalyst
 
 import scala.language.implicitConversions
+import scala.reflect.runtime.universe.TypeTag
 
 import analysis.UnresolvedAttribute
 import expressions._
@@ -53,6 +54,52 @@ import types._
  * }}}
  */
 package object dsl {
+
+  /**
+   * Provides experimental support for generating catalyst schemas for scala objects.
+   */
+  object reflect {
+    import scala.reflect.runtime.universe._
+
+    /** Returns a Sequence of attributes for the given case class type. */
+    def attributesFor[T: TypeTag]: Seq[Attribute] = schemaFor[T] match {
+      case s: StructType =>
+        s.fields.map(f => AttributeReference(f.name, f.dataType, nullable = true)())
+    }
+
+    /** Returns a catalyst DataType for the given Scala Type using reflection. */
+    def schemaFor[T: TypeTag]: DataType = schemaFor(typeOf[T])
+
+    /** Returns a catalyst DataType for the given Scala Type using reflection. */
+    def schemaFor(tpe: `Type`): DataType = tpe match {
+      case t if t <:< typeOf[Product] =>
+        val params = t.member("<init>": TermName).asMethod.paramss
+        StructType(
+          params.head.map(p => StructField(p.name.toString, schemaFor(p.typeSignature), true)))
+      case t if t <:< typeOf[Seq[_]] =>
+        val TypeRef(_, _, Seq(elementType)) = t
+        ArrayType(schemaFor(elementType))
+      case t if t <:< typeOf[String] => StringType
+      case t if t <:< definitions.IntTpe => IntegerType
+      case t if t <:< definitions.LongTpe => LongType
+      case t if t <:< definitions.DoubleTpe => DoubleType
+      case t if t <:< definitions.ShortTpe => ShortType
+      case t if t <:< definitions.ByteTpe => ByteType
+    }
+  }
+
+  implicit class CaseClassRelation[A <: Product : TypeTag](data: Seq[A]) {
+
+    /**
+     * Implicitly added to Sequences of case class objects.  Returns a catalyst logical relation
+     * for the the data in the sequence.
+     */
+    def asRelation: LocalRelation = {
+      val output = reflect.attributesFor[A]
+      LocalRelation(output, data)
+    }
+  }
+
   protected trait ImplicitOperators {
     def expr: Expression
 
