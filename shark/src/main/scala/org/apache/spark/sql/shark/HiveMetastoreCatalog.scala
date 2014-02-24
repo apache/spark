@@ -20,6 +20,8 @@ import catalyst.types._
 import scala.collection.JavaConversions._
 
 class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
+  import HiveMetastoreTypes._
+
   val client = Hive.get(shark.hiveconf)
 
   def lookupRelation(
@@ -42,37 +44,39 @@ class HiveMetastoreCatalog(shark: SharkContext) extends Catalog with Logging {
       alias)(table.getTTable, partitions.map(part => part.getTPartition))
   }
 
+  def createTable(databaseName: String, tableName: String, schema: Seq[Attribute]) {
+    val table = new Table(databaseName, tableName)
+    val hiveSchema =
+      schema.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
+    table.setFields(hiveSchema)
+
+    val sd = new StorageDescriptor()
+    table.getTTable.setSd(sd)
+    sd.setCols(hiveSchema)
+
+    // TODO: THESE ARE ALL DEFAULTS, WE NEED TO PARSE / UNDERSTAND the output specs.
+    sd.setCompressed(false)
+    sd.setParameters(Map[String, String]())
+    sd.setInputFormat("org.apache.hadoop.mapred.TextInputFormat")
+    sd.setOutputFormat("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")
+    val serDeInfo = new SerDeInfo()
+    serDeInfo.setName(tableName)
+    serDeInfo.setSerializationLib("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
+    serDeInfo.setParameters(Map[String, String]())
+    sd.setSerdeInfo(serDeInfo)
+    client.createTable(table)
+  }
+
   /**
    * Creates any tables required for query execution.
    * For example, because of a CREATE TABLE X AS statement.
    */
   object CreateTables extends Rule[LogicalPlan] {
-    import HiveMetastoreTypes._
-
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
       case InsertIntoCreatedTable(db, tableName, child) =>
         val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase())
 
-        val table = new Table(databaseName, tableName)
-        val schema =
-          child.output.map(attr => new FieldSchema(attr.name, toMetastoreType(attr.dataType), ""))
-        table.setFields(schema)
-
-        val sd = new StorageDescriptor()
-        table.getTTable.setSd(sd)
-        sd.setCols(schema)
-
-        // TODO: THESE ARE ALL DEFAULTS, WE NEED TO PARSE / UNDERSTAND the output specs.
-        sd.setCompressed(false)
-        sd.setParameters(Map[String, String]())
-        sd.setInputFormat("org.apache.hadoop.mapred.TextInputFormat")
-        sd.setOutputFormat("org.apache.hadoop.hive.ql.io.HiveIgnoreKeyTextOutputFormat")
-        val serDeInfo = new SerDeInfo()
-        serDeInfo.setName(tableName)
-        serDeInfo.setSerializationLib("org.apache.hadoop.hive.serde2.lazy.LazySimpleSerDe")
-        serDeInfo.setParameters(Map[String, String]())
-        sd.setSerdeInfo(serDeInfo)
-        client.createTable(table)
+        createTable(databaseName, tableName, child.output)
 
         InsertIntoTable(
           lookupRelation(Some(databaseName), tableName, None).asInstanceOf[BaseRelation],
