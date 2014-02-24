@@ -73,8 +73,8 @@ def main(infile, outfile):
         command = pickleSer._read_with_length(infile)
         (func, deserializer, serializer) = command
         init_time = time.time()
-            iterator = deserializer.load_stream(infile)
-            serializer.dump_stream(func(split_index, iterator), outfile)
+        iterator = deserializer.load_stream(infile)
+        serializer.dump_stream(func(split_index, iterator), outfile)
     except Exception as e:
         # Write the error to stderr in addition to trying to passi t back to
         # Java, in case it happened while serializing a record
