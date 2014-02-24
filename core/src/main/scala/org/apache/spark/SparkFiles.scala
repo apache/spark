@@ -15,21 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark
 
-import java.io.Serializable;
-
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
+import java.io.File
 
 /**
- * Base class for functions whose return types do not create special RDDs. PairFunction and
- * DoubleFunction are handled separately, to allow PairRDDs and DoubleRDDs to be constructed
- * when mapping RDDs of other types.
+ * Resolves paths to files added through `SparkContext.addFile()`.
  */
-public abstract class Function<T, R> extends WrappedFunction1<T, R> implements Serializable {
-  public ClassTag<R> returnType() {
-    return ClassTag$.MODULE$.apply(Object.class);
-  }
-}
+object SparkFiles {
 
+  /**
+   * Get the absolute path of a file added through `SparkContext.addFile()`.
+   */
+  def get(filename: String): String =
+    new File(getRootDirectory(), filename).getAbsolutePath()
+
+  /**
+   * Get the root directory that contains files added through `SparkContext.addFile()`.
+   */
+  def getRootDirectory(): String =
+    SparkEnv.get.sparkFilesDir
+
+}

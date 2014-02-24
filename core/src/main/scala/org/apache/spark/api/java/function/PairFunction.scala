@@ -15,28 +15,19 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
+package org.apache.spark.api.java.function
 
-import java.io.File;
+import scala.reflect.ClassTag
+import org.apache.spark.api.java.JavaSparkContext
 
 /**
- * Resolves paths to files added through `SparkContext.addFile()`.
+ * A function that returns key-value pairs (Tuple2<K, V>), and can be used to construct PairRDDs.
  */
-public class SparkFiles {
+// PairFunction does not extend Function because some UDF functions, like map,
+// are overloaded for both Function and PairFunction.
+abstract class PairFunction[T, K, V] extends WrappedFunction1[T, (K, V)] with Serializable {
 
-  private SparkFiles() {}
+  def keyType(): ClassTag[K] = JavaSparkContext.fakeClassTag
 
-  /**
-   * Get the absolute path of a file added through `SparkContext.addFile()`.
-   */
-  public static String get(String filename) {
-    return new File(getRootDirectory(), filename).getAbsolutePath();
-  }
-
-  /**
-   * Get the root directory that contains files added through `SparkContext.addFile()`.
-   */
-  public static String getRootDirectory() {
-    return SparkEnv.get().sparkFilesDir();
-  }
+  def valueType(): ClassTag[V] = JavaSparkContext.fakeClassTag
 }

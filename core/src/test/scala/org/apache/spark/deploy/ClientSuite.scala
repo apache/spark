@@ -15,29 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.deploy
 
-import java.io.Serializable;
+import org.scalatest.FunSuite
+import org.scalatest.matchers.ShouldMatchers
 
-import scala.Tuple2;
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
+class ClientSuite extends FunSuite with ShouldMatchers {
+  test("correctly validates driver jar URL's") {
+    ClientArguments.isValidJarUrl("http://someHost:8080/foo.jar") should be (true)
+    ClientArguments.isValidJarUrl("file://some/path/to/a/jarFile.jar") should be (true)
+    ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo.jar") should be (true)
 
-/**
- * A function that returns zero or more key-value pair records from each input record. The
- * key-value pairs are represented as scala.Tuple2 objects.
- */
-// PairFlatMapFunction does not extend FlatMapFunction because flatMap is
-// overloaded for both FlatMapFunction and PairFlatMapFunction.
-public abstract class PairFlatMapFunction<T, K, V>
-  extends WrappedFunction1<T, Iterable<Tuple2<K, V>>>
-  implements Serializable {
-
-  public ClassTag<K> keyType() {
-    return (ClassTag<K>) ClassTag$.MODULE$.apply(Object.class);
+    ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo") should be (false)
+    ClientArguments.isValidJarUrl("/missing/a/protocol/jarfile.jar") should be (false)
+    ClientArguments.isValidJarUrl("not-even-a-path.jar") should be (false)
   }
 
-  public ClassTag<V> valueType() {
-    return (ClassTag<V>) ClassTag$.MODULE$.apply(Object.class);
-  }
 }

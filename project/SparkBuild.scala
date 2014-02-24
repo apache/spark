@@ -86,7 +86,7 @@ object SparkBuild extends Build {
     case None => DEFAULT_YARN
     case Some(v) => v.toBoolean
   }
-  lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client" 
+  lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
 
   // Conditionally include the yarn sub-project
   lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
@@ -236,13 +236,15 @@ object SparkBuild extends Build {
     publishLocalBoth <<= Seq(publishLocal in MavenCompile, publishLocal).dependOn
   ) ++ net.virtualvoid.sbt.graph.Plugin.graphSettings ++ ScalaStyleSettings
 
-  val slf4jVersion = "1.7.2"
+  val slf4jVersion = "1.7.5"
 
   val excludeCglib = ExclusionRule(organization = "org.sonatype.sisu.inject")
   val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
   val excludeAsm = ExclusionRule(organization = "asm")
   val excludeSnappy = ExclusionRule(organization = "org.xerial.snappy")
+  val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
+  val excludeSLF4J = ExclusionRule(organization = "org.slf4j")
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
@@ -257,6 +259,8 @@ object SparkBuild extends Build {
         "log4j"                    % "log4j"            % "1.2.17",
         "org.slf4j"                % "slf4j-api"        % slf4jVersion,
         "org.slf4j"                % "slf4j-log4j12"    % slf4jVersion,
+        "org.slf4j"                % "jul-to-slf4j"     % slf4jVersion,
+        "org.slf4j"                % "jcl-over-slf4j"   % slf4jVersion,
         "commons-daemon"           % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
         "com.ning"                 % "compress-lzf"     % "1.0.0",
         "org.xerial.snappy"        % "snappy-java"      % "1.0.5",
@@ -268,9 +272,9 @@ object SparkBuild extends Build {
         "it.unimi.dsi"             % "fastutil"         % "6.4.4",
         "colt"                     % "colt"             % "1.2.0",
         "org.apache.mesos"         % "mesos"            % "0.13.0",
-        "net.java.dev.jets3t"      % "jets3t"           % "0.7.1",
+        "net.java.dev.jets3t"      % "jets3t"           % "0.7.1" excludeAll(excludeCommonsLogging),
         "org.apache.derby"         % "derby"            % "10.4.2.0"                     % "test",
-        "org.apache.hadoop"        % hadoopClient       % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
+        "org.apache.hadoop"        % hadoopClient       % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib, excludeCommonsLogging, excludeSLF4J),
         "org.apache.avro"          % "avro"             % "1.7.4",
         "org.apache.avro"          % "avro-ipc"         % "1.7.4" excludeAll(excludeNetty),
         "org.apache.zookeeper"     % "zookeeper"        % "3.4.5" excludeAll(excludeNetty),
@@ -300,18 +304,15 @@ object SparkBuild extends Build {
     name := "spark-examples",
     libraryDependencies ++= Seq(
       "com.twitter"          %% "algebird-core"   % "0.1.11",
-      "org.apache.hbase"     %  "hbase"           % "0.94.6" excludeAll(excludeNetty, excludeAsm),
-      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm),
+      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging),
       "org.apache.cassandra" % "cassandra-all" % "1.2.6"
         exclude("com.google.guava", "guava")
         exclude("com.googlecode.concurrentlinkedhashmap", "concurrentlinkedhashmap-lru")
         exclude("com.ning","compress-lzf")
         exclude("io.netty", "netty")
         exclude("jline","jline")
-        exclude("log4j","log4j")
         exclude("org.apache.cassandra.deps", "avro")
-        excludeAll(excludeSnappy)
-        excludeAll(excludeCglib)
+        excludeAll(excludeSnappy, excludeCglib, excludeSLF4J)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
@@ -416,7 +417,7 @@ object SparkBuild extends Build {
         exclude("com.sun.jdmk", "jmxtools")
         exclude("com.sun.jmx", "jmxri")
         exclude("net.sf.jopt-simple", "jopt-simple")
-        excludeAll(excludeNetty)
+        excludeAll(excludeNetty, excludeSLF4J)
     )
   )
 
