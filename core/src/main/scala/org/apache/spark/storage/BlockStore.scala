@@ -40,6 +40,9 @@ abstract class BlockStore(val blockManager: BlockManager) extends Logging {
   def putValues(blockId: BlockId, values: Iterator[Any], level: StorageLevel,
     returnValues: Boolean) : PutResult
 
+  def putValues(blockId: BlockId, values: ArrayBuffer[Any], level: StorageLevel,
+                returnValues: Boolean) : PutResult
+
   /**
    * Return the size of a block in bytes.
    */

@@ -455,7 +455,7 @@ private[spark] class BlockManager(
 
   def put(blockId: BlockId, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean)
     : Long = {
-    doPut(blockId, Left(values), level, tellMaster)
+    doPut(blockId, Left(Left(values)), level, tellMaster)
   }
 
   /**
@@ -477,7 +477,7 @@ private[spark] class BlockManager(
   def put(blockId: BlockId, values: ArrayBuffer[Any], level: StorageLevel,
           tellMaster: Boolean = true) : Long = {
     require(values != null, "Values is null")
-    doPut(blockId, Left(values.toIterator), level, tellMaster)
+    doPut(blockId, Left(Right(values)), level, tellMaster)
   }
 
   /**
@@ -489,7 +489,7 @@ private[spark] class BlockManager(
     doPut(blockId, Right(bytes), level, tellMaster)
   }
 
-  private def doPut(blockId: BlockId, data: Either[Iterator[Any], ByteBuffer],
+  private def doPut(blockId: BlockId, data: Either[Either[Iterator[Any],ArrayBuffer[Any]], ByteBuffer],
                     level: StorageLevel, tellMaster: Boolean = true): Long = {
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
@@ -552,7 +552,10 @@ private[spark] class BlockManager(
             if (level.useMemory) {
               // Save it just to memory first, even if it also has useDisk set to true; we will
               // drop it to disk later if the memory store can't hold it.
-              val res = memoryStore.putValues(blockId, values, level, true)
+              val res = values match {
+                case Left(values_i) => memoryStore.putValues(blockId, values_i, level, true)
+                case Right(values_a) => memoryStore.putValues(blockId, values_a, level, true)
+              }
               size = res.size
               res.data match {
                 case Right(newBytes) => bytesAfterPut = newBytes
@@ -562,7 +565,12 @@ private[spark] class BlockManager(
               // Save directly to disk.
               // Don't get back the bytes unless we replicate them.
               val askForBytes = level.replication > 1
-              val res = diskStore.putValues(blockId, values, level, askForBytes)
+
+              val res = values match {
+                case Left(values_i) => diskStore.putValues(blockId, values_i, level, askForBytes)
+                case Right(values_a) => diskStore.putValues(blockId, values_a, level, askForBytes)
+              }
+
               size = res.size
               res.data match {
                 case Right(newBytes) => bytesAfterPut = newBytes
