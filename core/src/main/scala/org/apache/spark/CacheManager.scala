@@ -73,7 +73,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           if (context.runningLocally) { return computedValues }
           if (storageLevel.useDisk && !storageLevel.useMemory) {
             blockManager.put(key, computedValues, storageLevel, tellMaster = true)
-            return blockManager.get(key)  match {
+            return blockManager.get(key) match {
               case Some(values) =>
                 return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
               case None =>
