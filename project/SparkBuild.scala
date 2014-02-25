@@ -58,11 +58,11 @@ object SparkBuild extends Build {
 
   lazy val graphx = Project("graphx", file("graphx"), settings = graphxSettings) dependsOn(core)
 
-  lazy val catalyst = Project("catalyst", file("schema/catalyst"), settings = catalystSettings)
+  lazy val catalyst = Project("catalyst", file("sql/catalyst"), settings = catalystSettings)
 
-  lazy val schema = Project("schema", file("schema/core"), settings = schemaCoreSettings) dependsOn(core, catalyst)
+  lazy val sql = Project("sql", file("sql/core"), settings = schemaCoreSettings) dependsOn(core, catalyst)
 
-  lazy val hive = Project("hive", file("schema/hive"), settings = hiveSettings) dependsOn(schema)
+  lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql)
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
@@ -123,7 +123,7 @@ object SparkBuild extends Build {
     .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter) dependsOn(allExternal: _*)
 
   // Everything except assembly, tools and examples belong to packageProjects
-  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx) ++ maybeYarnRef
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, hive) ++ maybeYarnRef
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++ Seq[ProjectReference](examples, tools, assemblyProj)
 
@@ -365,8 +365,13 @@ object SparkBuild extends Build {
       "org.apache.hive" % "hive-metastore" % "0.12.0",
       "org.apache.hive" % "hive-exec" % "0.12.0",
       "org.apache.hive" % "hive-serde" % "0.12.0"),
-    // Multiple queries rely on the TestShark singleton.  See comments there for more details.
+    // Multiple queries rely on the TestHive singleton.  See comments there for more details.
     parallelExecution in Test := false,
+    // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
+    // only for this subproject.
+    scalacOptions <<= scalacOptions map { currentOpts: Seq[String] =>
+      currentOpts.filterNot(_ == "-deprecation")
+    },
     initialCommands in console :=
       """
         |import org.apache.spark.sql.catalyst.analysis._
@@ -378,8 +383,8 @@ object SparkBuild extends Build {
         |import org.apache.spark.sql.catalyst.types._
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
-        |import org.apache.spark.sql.shark._
-        |import org.apache.spark.sql.shark.TestShark._""".stripMargin
+        |import org.apache.spark.sql.hive._
+        |import org.apache.spark.sql.hive.TestHive._""".stripMargin
   )
 
   def streamingSettings = sharedSettings ++ Seq(

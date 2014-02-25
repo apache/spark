@@ -17,6 +17,15 @@
 # limitations under the License.
 #
 
+# Required to correctly launch hadoop/hive for generating the golden answers.
+HADOOP_CLASSPATH=""
+
+for i in $HIVE_HOME/lib/*
+do HADOOP_CLASSPATH=$HADOOP_CLASSPATH:$i
+done
+
+export HADOOP_CLASSPATH
+
 # This script launches sbt for this project. If present it uses the system 
 # version of sbt. If there is no system version of sbt it attempts to download
 # sbt locally.
