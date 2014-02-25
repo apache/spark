@@ -51,8 +51,11 @@ class LargeIteratorSuite extends FunSuite with LocalSparkContext {
       "This is the second sentence that we will test:",
       "This is the third sentence that we will test:"
     ) );
-    val out = seeds.flatMap(Expander.expand(_,10000000));
-    out.map(_ + "...").persist(StorageLevel.DISK_ONLY).saveAsTextFile("./test.out")
+    val expand_size = 10000000;
+    val out = seeds.flatMap(Expander.expand(_,expand_size));
+    val expanded = out.map(_ + "...").persist(StorageLevel.DISK_ONLY)
+    assert( expanded.filter( _.startsWith("This is the first sentence that we will test")).count() == expand_size )
+    expanded.saveAsTextFile("./test.out")
     FileUtils.deleteDirectory(new File("./test.out"))
   }
 }
