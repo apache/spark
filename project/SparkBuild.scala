@@ -58,6 +58,12 @@ object SparkBuild extends Build {
 
   lazy val graphx = Project("graphx", file("graphx"), settings = graphxSettings) dependsOn(core)
 
+  lazy val catalyst = Project("catalyst", file("schema/catalyst"), settings = catalystSettings)
+
+  lazy val schema = Project("schema", file("schema/core"), settings = schemaCoreSettings) dependsOn(core, catalyst)
+
+  lazy val hive = Project("hive", file("schema/hive"), settings = hiveSettings) dependsOn(schema)
+
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
@@ -336,6 +342,44 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       "org.jblas" % "jblas" % "1.2.3"
     )
+  )
+
+  def catalystSettings = sharedSettings ++ Seq(
+    name := "catalyst",
+    // The mechanics of rewriting expression ids to compare trees in some test cases makes
+    // assumptions about the the expression ids being contiguious.  Running tests in parallel breaks
+    // this non-deterministically.  TODO: FIX THIS.
+    parallelExecution in Test := false,
+    libraryDependencies ++= Seq(
+    "org.scalatest" %% "scalatest" % "1.9.1" % "test",
+    "com.typesafe" %% "scalalogging-slf4j" % "1.0.1")
+  )
+
+  def schemaCoreSettings = sharedSettings ++ Seq(
+    name := "spark-schema"
+  )
+
+  def hiveSettings = sharedSettings ++ Seq(
+    name := "spark-hive",
+    libraryDependencies ++= Seq(
+      "org.apache.hive" % "hive-metastore" % "0.12.0",
+      "org.apache.hive" % "hive-exec" % "0.12.0",
+      "org.apache.hive" % "hive-serde" % "0.12.0"),
+    // Multiple queries rely on the TestShark singleton.  See comments there for more details.
+    parallelExecution in Test := false,
+    initialCommands in console :=
+      """
+        |import org.apache.spark.sql.catalyst.analysis._
+        |import org.apache.spark.sql.catalyst.dsl._
+        |import org.apache.spark.sql.catalyst.errors._
+        |import org.apache.spark.sql.catalyst.expressions._
+        |import org.apache.spark.sql.catalyst.plans.logical._
+        |import org.apache.spark.sql.catalyst.rules._
+        |import org.apache.spark.sql.catalyst.types._
+        |import org.apache.spark.sql.catalyst.util._
+        |import org.apache.spark.sql.execution
+        |import org.apache.spark.sql.shark._
+        |import org.apache.spark.sql.shark.TestShark._""".stripMargin
   )
 
   def streamingSettings = sharedSettings ++ Seq(
