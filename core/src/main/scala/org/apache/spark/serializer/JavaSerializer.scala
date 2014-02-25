@@ -23,10 +23,10 @@ import java.nio.ByteBuffer
 import org.apache.spark.SparkConf
 import org.apache.spark.util.ByteBufferInputStream
 
-private[spark] class JavaSerializationStream(out: OutputStream) extends SerializationStream {
+private[spark] class JavaSerializationStream(out: OutputStream, conf: SparkConf) extends SerializationStream {
   val objOut = new ObjectOutputStream(out)
   var counter = 0
-  val counterReset = System.getProperty("spark.serializer.objectStreamReset", "10000").toLong
+  val counterReset = conf.getInt("spark.serializer.objectStreamReset", 10000)
 
   /* Calling reset to avoid memory leak:
    * http://stackoverflow.com/questions/1281549/memory-leak-traps-in-the-java-standard-api
@@ -58,7 +58,7 @@ extends DeserializationStream {
   def close() { objIn.close() }
 }
 
-private[spark] class JavaSerializerInstance extends SerializerInstance {
+private[spark] class JavaSerializerInstance(conf: SparkConf) extends SerializerInstance {
   def serialize[T](t: T): ByteBuffer = {
     val bos = new ByteArrayOutputStream()
     val out = serializeStream(bos)
@@ -80,7 +80,7 @@ private[spark] class JavaSerializerInstance extends SerializerInstance {
   }
 
   def serializeStream(s: OutputStream): SerializationStream = {
-    new JavaSerializationStream(s)
+    new JavaSerializationStream(s, conf)
   }
 
   def deserializeStream(s: InputStream): DeserializationStream = {
@@ -96,5 +96,5 @@ private[spark] class JavaSerializerInstance extends SerializerInstance {
  * A Spark serializer that uses Java's built-in serialization.
  */
 class JavaSerializer(conf: SparkConf) extends Serializer {
-  def newInstance(): SerializerInstance = new JavaSerializerInstance
+  def newInstance(): SerializerInstance = new JavaSerializerInstance(conf)
 }
