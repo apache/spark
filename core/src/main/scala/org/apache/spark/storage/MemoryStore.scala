@@ -71,8 +71,8 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     : PutResult = {
 
     if (level.deserialized) {
-      val valueEntries = new ArrayBuffer[Any]();
-      valueEntries ++= values;
+      val valueEntries = new ArrayBuffer[Any]()
+      valueEntries ++= values
       val sizeEstimate = SizeEstimator.estimate(valueEntries.asInstanceOf[AnyRef])
       tryToPut(blockId, valueEntries, sizeEstimate, true)
       PutResult(sizeEstimate, Left(valueEntries.toIterator))

@@ -77,8 +77,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
               case Some(values) =>
                 return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
               case None =>
-                logInfo("Failure to store %s".format(key));
-                return null;
+                logInfo("Failure to store %s".format(key))
+                return null
             }
           } else {
             val elements = new ArrayBuffer[Any]
