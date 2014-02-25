@@ -86,6 +86,8 @@ private[deploy] object DeployMessages {
 
   case class KillDriver(driverId: String) extends DeployMessage
 
+  case class UnregisteredWorker() extends DeployMessage
+
   // AppClient to Master
 
   case class RegisterApplication(appDescription: ApplicationDescription)
