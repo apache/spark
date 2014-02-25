@@ -71,7 +71,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val computedValues = rdd.computeOrReadCheckpoint(split, context)
           // Persist the result, so long as the task is not running locally
           if (context.runningLocally) { return computedValues }
-          if (storageLevel.useDisk || !storageLevel.useMemory) {
+          if (storageLevel.useDisk && !storageLevel.useMemory) {
             blockManager.put(key, computedValues, storageLevel, tellMaster = true)
             return blockManager.get(key)  match {
               case Some(values) =>
