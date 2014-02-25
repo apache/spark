@@ -699,14 +699,17 @@ object JavaPairRDD {
   }
 
   implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
+
   private[spark]
-  implicit def toJFunction2[T1, T2, R](fun: JFunction2[T1, T2, R])
-  : Function2[T1, T2, R] = (x: T1, x1: T2) => fun.call(x, x1)
+  implicit def toScalaFunction2[T1, T2, R](fun: JFunction2[T1, T2, R]): Function2[T1, T2, R] = {
+    (x: T1, x1: T2) => fun.call(x, x1)
+  }
+
+  private[spark] implicit def toScalaFunction[T, R](fun: JFunction[T, R]): T => R = x => fun.call(x)
+
   private[spark]
-  implicit def toJFunction[T, R](fun: JFunction[T, R]): T => R = (x) => fun.call(x)
-  private[spark]
-  implicit def pairFunToScalaFun[A, B, C](x: PairFunction[A, B, C]): A => (B, C) =
-    (y: A) => x.call(y)
+  implicit def pairFunToScalaFun[A, B, C](x: PairFunction[A, B, C]): A => (B, C) = y => x.call(y)
+
   /** Convert a JavaRDD of key-value pairs to JavaPairRDD. */
   def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)]): JavaPairRDD[K, V] = {
     implicit val ctagK: ClassTag[K] = fakeClassTag

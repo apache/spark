@@ -91,11 +91,11 @@ object SparkBuild extends Build {
   lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
   val maybeAvro = if (hadoopVersion.startsWith("0.23.") && isYarnEnabled) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
 
+  // Conditionally include the java 8 sub-project
   lazy val javaVersion = System.getProperty("java.specification.version")
-  lazy val isJava8Enabled = if (javaVersion == "1.8") true else false
-  lazy val java8Tests = Project("java8-tests", file("java8-tests"), settings = java8TestsSettings) dependsOn(core % "compile->compile;test->test") dependsOn(streaming % "compile->compile;test->test")
-  // Conditionally include the yarn sub-project
+  lazy val isJava8Enabled = javaVersion.toDouble >= "1.8".toDouble
   val maybeJava8Tests = if (isJava8Enabled) Seq[ProjectReference](java8Tests) else Seq[ProjectReference]()
+  lazy val java8Tests = Project("java8-tests", file("java8-tests"), settings = java8TestsSettings) dependsOn(core % "compile->compile;test->test") dependsOn(streaming % "compile->compile;test->test")
 
   // Conditionally include the yarn sub-project
   lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
@@ -128,7 +128,8 @@ object SparkBuild extends Build {
   // Everything except assembly, tools, java8Tests and examples belong to packageProjects
   lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx) ++ maybeYarnRef
 
-  lazy val allProjects = packageProjects ++ allExternalRefs ++ Seq[ProjectReference](examples, tools, assemblyProj) ++ maybeJava8Tests
+  lazy val allProjects = packageProjects ++ allExternalRefs ++
+    Seq[ProjectReference](examples, tools, assemblyProj) ++ maybeJava8Tests
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.apache.spark",

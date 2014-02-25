@@ -17,26 +17,27 @@
 
 package org.apache.spark;
 
+import java.io.File;
+import java.io.Serializable;
+import java.util.*;
+
+import scala.Tuple2;
+
 import com.google.common.base.Optional;
 import com.google.common.io.Files;
 import org.apache.hadoop.io.IntWritable;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapred.SequenceFileOutputFormat;
+import org.junit.After;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
 import org.apache.spark.api.java.JavaDoubleRDD;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
-import org.junit.After;
-import org.junit.Assert;
-import org.junit.Before;
-import org.junit.Test;
-import scala.Tuple2;
-
-import java.io.File;
-import java.io.Serializable;
-import java.util.*;
-
 
 /**
  * Most of these tests replicate org.apache.spark.JavaAPISuite using java 8
@@ -221,12 +222,12 @@ public class Java8APISuite implements Serializable {
   public void mapPartitions() {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4), 2);
     JavaRDD<Integer> partitionSums = rdd.mapPartitions(iter -> {
-        int sum = 0;
-        while (iter.hasNext()) {
-          sum += iter.next();
-        }
-        return Collections.singletonList(sum);
-      });
+      int sum = 0;
+      while (iter.hasNext()) {
+        sum += iter.next();
+      }
+      return Collections.singletonList(sum);
+    });
 
     Assert.assertEquals("[3, 7]", partitionSums.collect().toString());
   }
@@ -242,8 +243,8 @@ public class Java8APISuite implements Serializable {
     );
     JavaPairRDD<Integer, String> rdd = sc.parallelizePairs(pairs);
 
-    rdd.mapToPair(
-      pair -> new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2())))
+    rdd.mapToPair(pair ->
+      new Tuple2<IntWritable, Text>(new IntWritable(pair._1()), new Text(pair._2())))
       .saveAsHadoopFile(outputDir, IntWritable.class, Text.class, SequenceFileOutputFormat.class);
 
     // Try reading the output back as an object file

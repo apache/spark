@@ -388,7 +388,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     JavaDoubleRDD doubles = rdd.mapToDouble(new DoubleFunction<Integer>() {
       @Override
-      public Double call(Integer x) {
+      public double call(Integer x) {
         return 1.0 * x;
       }
     }).cache();
@@ -768,7 +768,7 @@ public class JavaAPISuite implements Serializable {
     JavaRDD<Integer> rdd = sc.parallelize(Arrays.asList(1, 2, 3, 4, 5));
     JavaDoubleRDD doubles = rdd.mapToDouble(new DoubleFunction<Integer>() {
       @Override
-      public Double call(Integer x) {
+      public double call(Integer x) {
         return 1.0 * x;
       }
     });

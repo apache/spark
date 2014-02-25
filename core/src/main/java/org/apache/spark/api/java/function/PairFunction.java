@@ -17,9 +17,13 @@
 
 package org.apache.spark.api.java.function;
 
-import java.io.Serializable;
 import scala.Tuple2;
 
+import java.io.Serializable;
+
+/**
+ * A function that returns key-value pairs (Tuple2<K, V>), and can be used to construct PairRDDs.
+ */
 public interface PairFunction<T, K, V> extends Serializable {
-    public Tuple2<K, V> call(T t) throws Exception;
+  public Tuple2<K, V> call(T t) throws Exception;
 }

@@ -30,6 +30,12 @@ There are a few key differences between the Java and Scala APIs:
   classes for key-value pairs and doubles. For example, 
   [`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD)
   stores key-value pairs.
+* To support upcoming java 8 lambda expression, methods are defined on the basis of 
+  the passed anonymous function's (a.k.a lambda expression) return type, 
+  for example mapToPair(...) or flatMapToPair returns
+  [`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD),
+  similarly mapToDouble and flatMapToDouble returns
+  [`JavaDoubleRDD`](api/core/index.html#org.apache.spark.api.java.JavaDoubleRDD).
 * RDD methods like `collect()` and `countByKey()` return Java collections types,
   such as `java.util.List` and `java.util.Map`.
 * Key-value pairs, which are simply written as `(key, value)` in Scala, are represented
@@ -77,7 +83,6 @@ class has a single abstract method, `call()`, that must be implemented.
 RDD [storage level](scala-programming-guide.html#rdd-persistence) constants, such as `MEMORY_AND_DISK`, are
 declared in the [org.apache.spark.api.java.StorageLevels](api/core/index.html#org.apache.spark.api.java.StorageLevels) class. To
 define your own storage level, you can use StorageLevels.create(...). 
-
 
 # Other Features
 
@@ -127,11 +132,20 @@ class Split extends FlatMapFunction<String, String> {
 JavaRDD<String> words = lines.flatMap(new Split());
 {% endhighlight %}
 
+Java 8+ users can also possibly write the above `FlatMapFunction` in a more concise way using 
+lambda expression as follows:
+
+{% highlight java %}
+JavaRDD<String> words = lines.flatMap(s -> Arrays.asList(s.split(" ")));
+{% endhighlight %}
+
+Same possibility applies to all passed in anonymous classes in java 8.
+
 Continuing with the word count example, we map each word to a `(word, 1)` pair:
 
 {% highlight java %}
 import scala.Tuple2;
-JavaPairRDD<String, Integer> ones = words.map(
+JavaPairRDD<String, Integer> ones = words.mapToPair(
   new PairFunction<String, String, Integer>() {
     public Tuple2<String, Integer> call(String s) {
       return new Tuple2(s, 1);
@@ -140,7 +154,7 @@ JavaPairRDD<String, Integer> ones = words.map(
 );
 {% endhighlight %}
 
-Note that `map` was passed a `PairFunction<String, String, Integer>` and
+Note that `mapToPair` was passed a `PairFunction<String, String, Integer>` and
 returned a `JavaPairRDD<String, Integer>`.
 
 To finish the word count program, we will use `reduceByKey` to count the
@@ -164,7 +178,7 @@ possible to chain the RDD transformations, so the word count example could also
 be written as:
 
 {% highlight java %}
-JavaPairRDD<String, Integer> counts = lines.flatMap(
+JavaPairRDD<String, Integer> counts = lines.flatMapToPair(
     ...
   ).map(
     ...

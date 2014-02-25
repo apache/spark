@@ -17,21 +17,23 @@
 
 package org.apache.spark.streaming;
 
+import java.io.Serializable;
+import java.util.*;
+
+import scala.Tuple2;
+
 import com.google.common.base.Optional;
 import com.google.common.collect.Lists;
 import com.google.common.collect.Sets;
+import org.junit.Assert;
+import org.junit.Test;
+
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
 import org.apache.spark.api.java.function.PairFunction;
 import org.apache.spark.streaming.api.java.JavaDStream;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
-import org.junit.Assert;
-import org.junit.Test;
-import scala.Tuple2;
-
-import java.io.Serializable;
-import java.util.*;
 
 /**
  * Most of these tests replicate org.apache.spark.streaming.JavaAPISuite using java 8
@@ -329,7 +331,8 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       return rdd1.union(rdd2).mapToPair(mapToTuple).join(prdd3);
     });
     JavaTestUtils.attachTestOutputStream(transformed2);
-    List<List<Tuple2<Integer, Tuple2<Integer, String>>>> result = JavaTestUtils.runStreams(ssc, 2, 2);
+    List<List<Tuple2<Integer, Tuple2<Integer, String>>>> result =
+      JavaTestUtils.runStreams(ssc, 2, 2);
     Assert.assertEquals(expected, result);
   }
 
@@ -475,7 +478,8 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
         new Tuple2<Integer, String>(3, "new york"),
         new Tuple2<Integer, String>(1, "new york")));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
     JavaPairDStream<Integer, String> reversed = pairStream.mapToPair(x -> x.swap());
     JavaTestUtils.attachTestOutputStream(reversed);
@@ -500,7 +504,8 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
         new Tuple2<Integer, String>(3, "new york"),
         new Tuple2<Integer, String>(1, "new york")));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
     JavaPairDStream<Integer, String> reversed = pairStream.mapPartitionsToPair(in -> {
       LinkedList<Tuple2<Integer, String>> out = new LinkedList<Tuple2<Integer, String>>();
@@ -634,7 +639,8 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       Arrays.asList(new Tuple2<String, Integer>("california", 10),
         new Tuple2<String, Integer>("new york", 4)));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> reduceWindowed =
@@ -657,7 +663,8 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       Arrays.asList(new Tuple2<String, Integer>("california", 14),
         new Tuple2<String, Integer>("new york", 9)));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> updated = pairStream.updateStateByKey((values, state) -> {
@@ -689,11 +696,13 @@ public class Java8APISuite extends LocalJavaStreamingContext implements Serializ
       Arrays.asList(new Tuple2<String, Integer>("california", 10),
         new Tuple2<String, Integer>("new york", 4)));
 
-    JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
+    JavaDStream<Tuple2<String, Integer>> stream =
+      JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> reduceWindowed =
-      pairStream.reduceByKeyAndWindow((x, y) -> x + y, (x, y) -> x - y, new Duration(2000), new Duration(1000));
+      pairStream.reduceByKeyAndWindow((x, y) -> x + y, (x, y) -> x - y, new Duration(2000),
+        new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 

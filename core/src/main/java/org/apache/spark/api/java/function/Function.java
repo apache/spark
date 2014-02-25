@@ -19,6 +19,11 @@ package org.apache.spark.api.java.function;
 
 import java.io.Serializable;
 
+/**
+ * Base interface for functions whose return types do not create special RDDs. PairFunction and
+ * DoubleFunction are handled separately, to allow PairRDDs and DoubleRDDs to be constructed
+ * when mapping RDDs of other types.
+ */
 public interface Function<T1, R> extends Serializable {
   public R call(T1 v1) throws Exception;
 }

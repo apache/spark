@@ -19,6 +19,9 @@ package org.apache.spark.api.java.function;
 
 import java.io.Serializable;
 
+/**
+ * A function that takes two inputs and returns zero or more output records.
+ */
 public interface FlatMapFunction2<T1, T2, R> extends Serializable {
   public Iterable<R> call(T1 t1, T2 t2) throws Exception;
 }

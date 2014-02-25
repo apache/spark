@@ -742,15 +742,13 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             new Tuple2<Integer, String>(9, "s")));
 
     JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaPairDStream<Integer,String> flatMapped = stream.flatMapToPair(
+    JavaPairDStream<Integer, String> flatMapped = stream.flatMapToPair(
       new PairFlatMapFunction<String, Integer, String>() {
-        @Override
-        public Iterable<Tuple2<Integer, String>> call(String in) throws Exception {
-          List<Tuple2<Integer, String>> out = Lists.newArrayList();
-          for (String letter: in.split("(?!^)")) {
-            out.add(new Tuple2<Integer, String>(in.length(), letter));
-          }
-          return out;
+      @Override
+      public Iterable<Tuple2<Integer, String>> call(String in) throws Exception {
+        List<Tuple2<Integer, String>> out = Lists.newArrayList();
+        for (String letter: in.split("(?!^)")) {
+          out.add(new Tuple2<Integer, String>(in.length(), letter));
         }
       });
     JavaTestUtils.attachTestOutputStream(flatMapped);
@@ -1228,7 +1226,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> reduceWindowed =
-        pairStream.reduceByKeyAndWindow(new IntegerSum(), new IntegerDifference(), new Duration(2000), new Duration(1000));
+        pairStream.reduceByKeyAndWindow(new IntegerSum(), new IntegerDifference(),
+          new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
