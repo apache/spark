@@ -489,7 +489,8 @@ private[spark] class BlockManager(
     doPut(blockId, Right(bytes), level, tellMaster)
   }
 
-  private def doPut(blockId: BlockId, data: Either[Either[Iterator[Any],ArrayBuffer[Any]], ByteBuffer],
+  private def doPut(blockId: BlockId,
+                    data: Either[Either[Iterator[Any],ArrayBuffer[Any]], ByteBuffer],
                     level: StorageLevel, tellMaster: Boolean = true): Long = {
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")

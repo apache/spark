@@ -23,7 +23,8 @@ import java.nio.ByteBuffer
 import org.apache.spark.SparkConf
 import org.apache.spark.util.ByteBufferInputStream
 
-private[spark] class JavaSerializationStream(out: OutputStream, conf: SparkConf) extends SerializationStream {
+private[spark] class JavaSerializationStream(out: OutputStream,
+                                             conf: SparkConf) extends SerializationStream {
   val objOut = new ObjectOutputStream(out)
   var counter = 0
   val counterReset = conf.getInt("spark.serializer.objectStreamReset", 10000)
