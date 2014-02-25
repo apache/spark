@@ -115,7 +115,7 @@ object SimpleApp {
   def main(args: Array[String]) {
     val logFile = "$YOUR_SPARK_HOME/README.md" // Should be some file on your system
     val sc = new SparkContext("local", "Simple App", "YOUR_SPARK_HOME",
-      List("target/scala-{{site.SCALA_VERSION}}/simple-project_{{site.SCALA_VERSION}}-1.0.jar"))
+      List("target/scala-{{site.SCALA_BINARY_VERSION}}/simple-project_{{site.SCALA_BINARY_VERSION}}-1.0.jar"))
     val logData = sc.textFile(logFile, 2).cache()
     val numAs = logData.filter(line => line.contains("a")).count()
     val numBs = logData.filter(line => line.contains("b")).count()
@@ -214,7 +214,7 @@ To build the program, we also write a Maven `pom.xml` file that lists Spark as a
   <dependencies>
     <dependency> <!-- Spark dependency -->
       <groupId>org.apache.spark</groupId>
-      <artifactId>spark-core_{{site.SCALA_VERSION}}</artifactId>
+      <artifactId>spark-core_{{site.SCALA_BINARY_VERSION}}</artifactId>
       <version>{{site.SPARK_VERSION}}</version>
     </dependency>
   </dependencies>

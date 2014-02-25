@@ -17,10 +17,11 @@
 
 package org.apache.spark.storage
 
-import java.util.LinkedHashMap
-import java.util.concurrent.ArrayBlockingQueue
 import java.nio.ByteBuffer
-import collection.mutable.ArrayBuffer
+import java.util.LinkedHashMap
+
+import scala.collection.mutable.ArrayBuffer
+
 import org.apache.spark.util.{SizeEstimator, Utils}
 
 /**

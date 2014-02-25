@@ -17,7 +17,6 @@
 
 package org.apache.spark.storage
 
-import java.nio.ByteBuffer
 import java.util.concurrent.LinkedBlockingQueue
 
 import scala.collection.mutable.ArrayBuffer
@@ -26,14 +25,12 @@ import scala.collection.mutable.Queue
 
 import io.netty.buffer.ByteBuf
 
-import org.apache.spark.Logging
-import org.apache.spark.SparkException
+import org.apache.spark.{Logging, SparkException}
 import org.apache.spark.network.BufferMessage
 import org.apache.spark.network.ConnectionManagerId
 import org.apache.spark.network.netty.ShuffleCopier
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.Utils
-
 
 /**
  * A block fetcher iterator interface. There are two implementations:
@@ -76,9 +73,9 @@ object BlockFetcherIterator {
 
     import blockManager._
 
-    private var _remoteBytesRead = 0l
-    private var _remoteFetchTime = 0l
-    private var _fetchWaitTime = 0l
+    private var _remoteBytesRead = 0L
+    private var _remoteFetchTime = 0L
+    private var _fetchWaitTime = 0L
 
     if (blocksByAddress == null) {
       throw new IllegalArgumentException("BlocksByAddress is null")

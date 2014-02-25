@@ -18,7 +18,8 @@
 package org.apache.spark.util
 
 import java.io._
-import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address}
+import java.net.{InetAddress, Inet4Address, NetworkInterface, URI, URL}
+import java.nio.ByteBuffer
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 
@@ -30,16 +31,11 @@ import scala.reflect.ClassTag
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
-import org.apache.hadoop.io._
-
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.deploy.SparkHadoopUtil
-import java.nio.ByteBuffer
-import org.apache.spark.{SparkConf, SparkException, Logging}
-
 
 /**
  * Various utility methods used by Spark.
@@ -86,7 +82,8 @@ private[spark] object Utils extends Logging {
   }
 
   /** Serialize via nested stream using specific serializer */
-  def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(f: SerializationStream => Unit) = {
+  def serializeViaNestedStream(os: OutputStream, ser: SerializerInstance)(
+      f: SerializationStream => Unit) = {
     val osWrapper = ser.serializeStream(new OutputStream {
       def write(b: Int) = os.write(b)
 
@@ -100,7 +97,8 @@ private[spark] object Utils extends Logging {
   }
 
   /** Deserialize via nested stream using specific serializer */
-  def deserializeViaNestedStream(is: InputStream, ser: SerializerInstance)(f: DeserializationStream => Unit) = {
+  def deserializeViaNestedStream(is: InputStream, ser: SerializerInstance)(
+      f: DeserializationStream => Unit) = {
     val isWrapper = ser.deserializeStream(new InputStream {
       def read(): Int = is.read()
 
@@ -853,4 +851,17 @@ private[spark] object Utils extends Logging {
     System.currentTimeMillis - start
   }
 
+  /**
+   * Counts the number of elements of an iterator using a while loop rather than calling
+   * [[scala.collection.Iterator#size]] because it uses a for loop, which is slightly slower
+   * in the current version of Scala.
+   */
+  def getIteratorSize[T](iterator: Iterator[T]): Long = {
+    var count = 0L
+    while (iterator.hasNext) {
+      count += 1L
+      iterator.next()
+    }
+    count
+  }
 }

@@ -17,23 +17,15 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.concurrent.duration._
-
 import java.text.SimpleDateFormat
-
 import javax.servlet.http.HttpServletRequest
+
+import scala.Seq
 
 import org.eclipse.jetty.server.Handler
 
-import scala.Seq
-import scala.collection.mutable.{HashSet, ListBuffer, HashMap, ArrayBuffer}
-
+import org.apache.spark.SparkContext
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.{ExceptionFailure, SparkContext, Success}
-import org.apache.spark.scheduler._
-import collection.mutable
-import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */

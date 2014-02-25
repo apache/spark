@@ -24,8 +24,7 @@ import org.scalatest.FunSuite
 
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
-import java.nio.ByteBuffer
-import org.apache.spark.util.{Utils, FakeClock}
+import org.apache.spark.util.FakeClock
 
 class FakeDAGScheduler(taskScheduler: FakeClusterScheduler) extends DAGScheduler(taskScheduler) {
   override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -269,7 +268,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
     assert(manager.resourceOffer("exec1", "host1", 1, ANY).get.index === 0)
 
     // Tell it the task has finished but the result was lost.
-    manager.handleFailedTask(0, TaskState.FINISHED, Some(TaskResultLost))
+    manager.handleFailedTask(0, TaskState.FINISHED, TaskResultLost)
     assert(sched.endedTasks(0) === TaskResultLost)
 
     // Re-offer the host -- now we should get task 0 again.
@@ -290,7 +289,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       assert(offerResult.isDefined,
         "Expect resource offer on iteration %s to return a task".format(index))
       assert(offerResult.get.index === 0)
-      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, Some(TaskResultLost))
+      manager.handleFailedTask(offerResult.get.taskId, TaskState.FINISHED, TaskResultLost)
       if (index < MAX_TASK_FAILURES) {
         assert(!sched.taskSetsFailed.contains(taskSet.id))
       } else {

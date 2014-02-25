@@ -18,12 +18,15 @@
 package org.apache.spark.rdd
 
 import java.io.IOException
+
 import scala.reflect.ClassTag
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition {}
 
@@ -60,7 +63,8 @@ class CheckpointRDD[T: ClassTag](sc: SparkContext, val checkpointPath: String)
   checkpointData.get.cpFile = Some(checkpointPath)
 
   override def getPreferredLocations(split: Partition): Seq[String] = {
-    val status = fs.getFileStatus(new Path(checkpointPath, CheckpointRDD.splitIdToFile(split.index)))
+    val status = fs.getFileStatus(new Path(checkpointPath,
+      CheckpointRDD.splitIdToFile(split.index)))
     val locations = fs.getFileBlockLocations(status, 0, status.getLen)
     locations.headOption.toList.flatMap(_.getHosts).filter(_ != "localhost")
   }

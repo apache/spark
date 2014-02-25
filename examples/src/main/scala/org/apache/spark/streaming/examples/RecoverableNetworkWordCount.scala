@@ -30,8 +30,8 @@ import java.nio.charset.Charset
  *
  * Usage: NetworkWordCount <master> <hostname> <port> <checkpoint-directory> <output-file>
  *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
- *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
- *   <checkpoint-directory> directory to HDFS-compatible file system which checkpoint data
+ *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive
+ *   data. <checkpoint-directory> directory to HDFS-compatible file system which checkpoint data
  *   <output-file> file to which the word counts will be appended
  *
  * In local mode, <master> should be 'local[n]' with n > 1
@@ -54,11 +54,13 @@ import java.nio.charset.Charset
  *
  * To run this example in a local standalone cluster with automatic driver recovery,
  *
- *      `$ ./spark-class org.apache.spark.deploy.Client -s launch <cluster-url> <path-to-examples-jar> \
+ *      `$ ./spark-class org.apache.spark.deploy.Client -s launch <cluster-url> \
+ *              <path-to-examples-jar> \
  *              org.apache.spark.streaming.examples.RecoverableNetworkWordCount <cluster-url> \
  *              localhost 9999 ~/checkpoint ~/out`
  *
- * <path-to-examples-jar> would typically be <spark-dir>/examples/target/scala-XX/spark-examples....jar
+ * <path-to-examples-jar> would typically be
+ * <spark-dir>/examples/target/scala-XX/spark-examples....jar
  *
  * Refer to the online documentation for more details.
  */
@@ -96,11 +98,12 @@ object RecoverableNetworkWordCount {
       System.err.println("You arguments were " + args.mkString("[", ", ", "]"))
       System.err.println(
         """
-          |Usage: RecoverableNetworkWordCount <master> <hostname> <port> <checkpoint-directory> <output-file>
-          |     <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
-          |     <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
-          |     <checkpoint-directory> directory to HDFS-compatible file system which checkpoint data
-          |     <output-file> file to which the word counts will be appended
+          |Usage: RecoverableNetworkWordCount <master> <hostname> <port> <checkpoint-directory>
+          |     <output-file> <master> is the Spark master URL. In local mode, <master> should be
+          |     'local[n]' with n > 1. <hostname> and <port> describe the TCP server that Spark
+          |     Streaming would connect to receive data. <checkpoint-directory> directory to
+          |     HDFS-compatible file system which checkpoint data <output-file> file to which the
+          |     word counts will be appended
           |
           |In local mode, <master> should be 'local[n]' with n > 1
           |Both <checkpoint-directory> and <output-file> must be absolute paths

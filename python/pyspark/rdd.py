@@ -455,6 +455,18 @@ class RDD(object):
             yield None
         self.mapPartitions(processPartition).collect()  # Force evaluation
 
+    def foreachPartition(self, f):
+        """
+        Applies a function to each partition of this RDD.
+
+        >>> def f(iterator): 
+        ...      for x in iterator: 
+        ...           print x 
+        ...      yield None
+        >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartition(f)
+        """
+        self.mapPartitions(f).collect()  # Force evaluation
+        
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
@@ -695,6 +707,24 @@ class RDD(object):
         """
         return dict(self.collect())
 
+    def keys(self):
+        """
+        Return an RDD with the keys of each tuple.
+        >>> m = sc.parallelize([(1, 2), (3, 4)]).keys()
+        >>> m.collect()
+        [1, 3]
+        """
+        return self.map(lambda (k, v): k)
+
+    def values(self):
+        """
+        Return an RDD with the values of each tuple.
+        >>> m = sc.parallelize([(1, 2), (3, 4)]).values()
+        >>> m.collect()
+        [2, 4]
+        """
+        return self.map(lambda (k, v): v)
+
     def reduceByKey(self, func, numPartitions=None):
         """
         Merge the values for each key using an associative reduce function.
@@ -916,6 +946,11 @@ class RDD(object):
         Pass each value in the key-value pair RDD through a flatMap function
         without changing the keys; this also retains the original RDD's
         partitioning.
+
+        >>> x = sc.parallelize([("a", ["x", "y", "z"]), ("b", ["p", "r"])])
+        >>> def f(x): return x
+        >>> x.flatMapValues(f).collect()
+        [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
         flat_map_fn = lambda (k, v): ((k, x) for x in f(v))
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
@@ -925,6 +960,11 @@ class RDD(object):
         Pass each value in the key-value pair RDD through a map function
         without changing the keys; this also retains the original RDD's
         partitioning.
+
+        >>> x = sc.parallelize([("a", ["apple", "banana", "lemon"]), ("b", ["grapes"])])
+        >>> def f(x): return len(x)
+        >>> x.mapValues(f).collect()
+        [('a', 3), ('b', 1)]
         """
         map_values_fn = lambda (k, v): (k, f(v))
         return self.map(map_values_fn, preservesPartitioning=True)
@@ -986,6 +1026,36 @@ class RDD(object):
         [(0, ([0], [0])), (1, ([1], [1])), (2, ([], [2])), (3, ([], [3])), (4, ([2], [4]))]
         """
         return self.map(lambda x: (f(x), x))
+
+    def repartition(self, numPartitions):
+        """
+         Return a new RDD that has exactly numPartitions partitions.
+          
+         Can increase or decrease the level of parallelism in this RDD. Internally, this uses
+         a shuffle to redistribute data.
+         If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
+         which can avoid performing a shuffle.
+         >>> rdd = sc.parallelize([1,2,3,4,5,6,7], 4)
+         >>> sorted(rdd.glom().collect())
+         [[1], [2, 3], [4, 5], [6, 7]]
+         >>> len(rdd.repartition(2).glom().collect())
+         2
+         >>> len(rdd.repartition(10).glom().collect())
+         10
+        """
+        jrdd = self._jrdd.repartition(numPartitions)
+        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
+
+    def coalesce(self, numPartitions, shuffle=False):
+        """
+        Return a new RDD that is reduced into `numPartitions` partitions.
+        >>> sc.parallelize([1, 2, 3, 4, 5], 3).glom().collect()
+        [[1], [2, 3], [4, 5]]
+        >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
+        [[1, 2, 3, 4, 5]]
+        """
+        jrdd = self._jrdd.coalesce(numPartitions)
+        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
 
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the

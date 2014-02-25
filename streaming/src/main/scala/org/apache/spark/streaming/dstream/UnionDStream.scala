@@ -48,7 +48,8 @@ class UnionDStream[T: ClassTag](parents: Array[DStream[T]])
     val rdds = new ArrayBuffer[RDD[T]]()
     parents.map(_.getOrCompute(validTime)).foreach(_ match {
       case Some(rdd) => rdds += rdd
-      case None => throw new Exception("Could not generate RDD from a parent for unifying at time " + validTime)
+      case None => throw new Exception("Could not generate RDD from a parent for unifying at time "
+        + validTime)
     })
     if (rdds.size > 0) {
       Some(new UnionRDD(ssc.sc, rdds))

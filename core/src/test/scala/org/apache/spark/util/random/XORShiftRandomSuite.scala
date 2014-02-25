@@ -19,6 +19,7 @@ package org.apache.spark.util.random
 
 import org.scalatest.FunSuite
 import org.scalatest.matchers.ShouldMatchers
+
 import org.apache.spark.util.Utils.times
 
 class XORShiftRandomSuite extends FunSuite with ShouldMatchers {

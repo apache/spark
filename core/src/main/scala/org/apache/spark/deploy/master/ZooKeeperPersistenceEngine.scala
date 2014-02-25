@@ -17,10 +17,10 @@
 
 package org.apache.spark.deploy.master
 
-import org.apache.spark.{SparkConf, Logging}
+import akka.serialization.Serialization
 import org.apache.zookeeper._
 
-import akka.serialization.Serialization
+import org.apache.spark.{Logging, SparkConf}
 
 class ZooKeeperPersistenceEngine(serialization: Serialization, conf: SparkConf)
   extends PersistenceEngine
@@ -87,7 +87,7 @@ class ZooKeeperPersistenceEngine(serialization: Serialization, conf: SparkConf)
   }
 
   def deserializeFromFile[T](filename: String)(implicit m: Manifest[T]): T = {
-    val fileData = zk.getData("/spark/master_status/" + filename)
+    val fileData = zk.getData(WORKING_DIR + "/" + filename)
     val clazz = m.runtimeClass.asInstanceOf[Class[T]]
     val serializer = serialization.serializerFor(clazz)
     serializer.fromBinary(fileData).asInstanceOf[T]

@@ -15,22 +15,22 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package main.scala
 
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
-import scala.runtime.AbstractFunction2;
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
 
-import java.io.Serializable;
-
-/**
- * A three-argument function that takes arguments of type T1, T2 and T3 and returns an R.
- */
-public abstract class Function3<T1, T2, T3, R> extends WrappedFunction3<T1, T2, T3, R>
-        implements Serializable {
-
-    public ClassTag<R> returnType() {
-        return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
+object SimpleApp {
+  def main(args: Array[String]) {
+    val logFile = "input.txt"
+    val sc = new SparkContext("local", "Simple App")
+    val logData = sc.textFile(logFile, 2).cache()
+    val numAs = logData.filter(line => line.contains("a")).count()
+    val numBs = logData.filter(line => line.contains("b")).count()
+    if (numAs != 2 || numBs != 2) {
+      println("Failed to parse log files with Spark")
+      System.exit(-1)
     }
+    println("Test succeeded")
+  }
 }
-

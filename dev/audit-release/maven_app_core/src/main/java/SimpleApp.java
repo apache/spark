@@ -15,17 +15,27 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+import org.apache.spark.api.java.*;
+import org.apache.spark.api.java.function.Function;
 
+public class SimpleApp {
+  public static void main(String[] args) {
+    String logFile = "input.txt";
+    JavaSparkContext sc = new JavaSparkContext("local", "Simple App");
+    JavaRDD<String> logData = sc.textFile(logFile).cache();
 
-import java.io.Serializable;
+    long numAs = logData.filter(new Function<String, Boolean>() {
+      public Boolean call(String s) { return s.contains("a"); }
+    }).count();
 
-/**
- * A function that returns Doubles, and can be used to construct DoubleRDDs.
- */
-// DoubleFunction does not extend Function because some UDF functions, like map,
-// are overloaded for both Function and DoubleFunction.
-public abstract class DoubleFunction<T> extends WrappedFunction1<T, Double>
-  implements Serializable {
-    // Intentionally left blank
+    long numBs = logData.filter(new Function<String, Boolean>() {
+      public Boolean call(String s) { return s.contains("b"); }
+    }).count();
+
+   if (numAs != 2 || numBs != 2) {
+     System.out.println("Failed to parse log files with Spark");
+     System.exit(-1);
+   }
+   System.out.println("Test succeeded");
+  }
 }

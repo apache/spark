@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.InetAddress
 
 import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.bio.SocketConnector
@@ -26,6 +25,7 @@ import org.eclipse.jetty.server.handler.DefaultHandler
 import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.server.handler.ResourceHandler
 import org.eclipse.jetty.util.thread.QueuedThreadPool
+
 import org.apache.spark.util.Utils
 
 /**

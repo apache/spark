@@ -30,15 +30,14 @@ import akka.pattern.ask
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 import akka.serialization.SerializationExtension
 
-
-import org.apache.spark.{SparkConf, Logging, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkException}
 import org.apache.spark.deploy.{ApplicationDescription, DriverDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
+import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{AkkaUtils, Utils}
-import org.apache.spark.deploy.master.DriverState.DriverState
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
   import context.dispatcher   // to use Akka's scheduler.schedule()
@@ -54,7 +53,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
-  val actorToWorker = new HashMap[ActorRef, WorkerInfo]
   val addressToWorker = new HashMap[Address, WorkerInfo]
 
   val apps = new HashSet[ApplicationInfo]
@@ -150,10 +148,11 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   override def receive = {
     case ElectedLeader => {
       val (storedApps, storedDrivers, storedWorkers) = persistenceEngine.readPersistedData()
-      state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty)
+      state = if (storedApps.isEmpty && storedDrivers.isEmpty && storedWorkers.isEmpty) {
         RecoveryState.ALIVE
-      else
+      } else {
         RecoveryState.RECOVERING
+      }
       logInfo("I have been elected leader! New state: " + state)
       if (state == RecoveryState.RECOVERING) {
         beginRecovery(storedApps, storedDrivers, storedWorkers)
@@ -166,25 +165,27 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       System.exit(0)
     }
 
-    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerWebUiPort, publicAddress) => {
+    case RegisterWorker(id, workerHost, workerPort, cores, memory, workerUiPort, publicAddress) =>
+    {
       logInfo("Registering worker %s:%d with %d cores, %s RAM".format(
-        host, workerPort, cores, Utils.megabytesToString(memory)))
+        workerHost, workerPort, cores, Utils.megabytesToString(memory)))
       if (state == RecoveryState.STANDBY) {
         // ignore, don't send response
       } else if (idToWorker.contains(id)) {
         sender ! RegisterWorkerFailed("Duplicate worker ID")
       } else {
         val worker = new WorkerInfo(id, workerHost, workerPort, cores, memory,
-          sender, workerWebUiPort, publicAddress)
+          sender, workerUiPort, publicAddress)
         if (registerWorker(worker)) {
           persistenceEngine.addWorker(worker)
           sender ! RegisteredWorker(masterUrl, masterWebUiUrl)
           schedule()
         } else {
           val workerAddress = worker.actor.path.address
-          logWarning("Worker registration failed. Attempted to re-register worker at same address: " +
-            workerAddress)
-          sender ! RegisterWorkerFailed("Attempted to re-register worker at same address: " + workerAddress)
+          logWarning("Worker registration failed. Attempted to re-register worker at same " +
+            "address: " + workerAddress)
+          sender ! RegisterWorkerFailed("Attempted to re-register worker at same address: "
+            + workerAddress)
         }
       }
     }
@@ -534,7 +535,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     workers += worker
     idToWorker(worker.id) = worker
-    actorToWorker(worker.actor) = worker
     addressToWorker(workerAddress) = worker
     true
   }
@@ -543,7 +543,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     logInfo("Removing worker " + worker.id + " on " + worker.host + ":" + worker.port)
     worker.setState(WorkerState.DEAD)
     idToWorker -= worker.id
-    actorToWorker -= worker.actor
     addressToWorker -= worker.actor.path.address
     for (exec <- worker.executors.values) {
       logInfo("Telling app of lost executor: " + exec.id)
@@ -644,8 +643,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
           worker.id, WORKER_TIMEOUT/1000))
         removeWorker(worker)
       } else {
-        if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT))
+        if (worker.lastHeartbeat < currentTime - ((REAPER_ITERATIONS + 1) * WORKER_TIMEOUT)) {
           workers -= worker // we've seen this DEAD worker in the UI, etc. for long enough; cull it
+        }
       }
     }
   }

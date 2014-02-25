@@ -17,14 +17,12 @@
 
 package org.apache.spark.rdd
 
+import org.apache.spark.{TaskContext, Logging}
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.MeanEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.partial.SumEvaluator
 import org.apache.spark.util.StatCounter
-import org.apache.spark.{TaskContext, Logging}
-
-import scala.collection.immutable.NumericRange
 
 /**
  * Extra functions available on RDDs of Doubles through an implicit conversion.
@@ -37,8 +35,8 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   }
 
   /**
-   * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance and count
-   * of the RDD's elements in one operation.
+   * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance and
+   * count of the RDD's elements in one operation.
    */
   def stats(): StatCounter = {
     self.mapPartitions(nums => Iterator(StatCounter(nums))).reduce((a, b) => a.merge(b))

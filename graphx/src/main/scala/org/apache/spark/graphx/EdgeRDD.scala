@@ -66,8 +66,8 @@ class EdgeRDD[@specialized ED: ClassTag](
     this
   }
 
-  private[graphx] def mapEdgePartitions[ED2: ClassTag](f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2])
-    : EdgeRDD[ED2] = {
+  private[graphx] def mapEdgePartitions[ED2: ClassTag](
+      f: (PartitionID, EdgePartition[ED]) => EdgePartition[ED2]): EdgeRDD[ED2] = {
     new EdgeRDD[ED2](partitionsRDD.mapPartitions({ iter =>
       val (pid, ep) = iter.next()
       Iterator(Tuple2(pid, f(pid, ep)))
@@ -97,8 +97,8 @@ class EdgeRDD[@specialized ED: ClassTag](
    *
    * @param other the EdgeRDD to join with
    * @param f the join function applied to corresponding values of `this` and `other`
-   * @return a new EdgeRDD containing only edges that appear in both `this` and `other`, with values
-   * supplied by `f`
+   * @return a new EdgeRDD containing only edges that appear in both `this` and `other`,
+   *         with values supplied by `f`
    */
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgeRDD[ED2])

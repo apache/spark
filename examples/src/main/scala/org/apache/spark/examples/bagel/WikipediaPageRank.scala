@@ -33,7 +33,8 @@ import scala.xml.{XML,NodeSeq}
 object WikipediaPageRank {
   def main(args: Array[String]) {
     if (args.length < 5) {
-      System.err.println("Usage: WikipediaPageRank <inputFile> <threshold> <numPartitions> <host> <usePartitioner>")
+      System.err.println(
+        "Usage: WikipediaPageRank <inputFile> <threshold> <numPartitions> <host> <usePartitioner>")
       System.exit(-1)
     }
     val sparkConf = new SparkConf()
@@ -61,24 +62,26 @@ object WikipediaPageRank {
       val fields = line.split("\t")
       val (title, body) = (fields(1), fields(3).replace("\\n", "\n"))
       val links =
-        if (body == "\\N")
+        if (body == "\\N") {
           NodeSeq.Empty
-        else
+        } else {
           try {
             XML.loadString(body) \\ "link" \ "target"
           } catch {
             case e: org.xml.sax.SAXParseException =>
-              System.err.println("Article \""+title+"\" has malformed XML in body:\n"+body)
+              System.err.println("Article \"" + title + "\" has malformed XML in body:\n" + body)
             NodeSeq.Empty
           }
+        }
       val outEdges = links.map(link => new String(link.text)).toArray
       val id = new String(title)
       (id, new PRVertex(1.0 / numVertices, outEdges))
     })
-    if (usePartitioner)
+    if (usePartitioner) {
       vertices = vertices.partitionBy(new HashPartitioner(sc.defaultParallelism)).cache
-    else
+    } else {
       vertices = vertices.cache
+    }
     println("Done parsing input file.")
 
     // Do the computation
@@ -92,7 +95,7 @@ object WikipediaPageRank {
           utils.computeWithCombiner(numVertices, epsilon))
 
     // Print the result
-    System.err.println("Articles with PageRank >= "+threshold+":")
+    System.err.println("Articles with PageRank >= " + threshold + ":")
     val top =
       (result
        .filter { case (id, vertex) => vertex.value >= threshold }

@@ -18,9 +18,9 @@
 package org.apache.spark
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
-import org.apache.spark.storage.{BlockId, BlockManager, StorageLevel, RDDBlockId}
-import org.apache.spark.rdd.RDD
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.storage.{BlockManager, RDDBlockId, StorageLevel}
 
 /** Spark class responsible for passing RDDs split contents to the BlockManager and making
     sure a node doesn't load two copies of an RDD at once.
@@ -31,8 +31,8 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
   private val loading = new HashSet[RDDBlockId]()
 
   /** Gets or computes an RDD split. Used by RDD.iterator() when an RDD is cached. */
-  def getOrCompute[T](rdd: RDD[T], split: Partition, context: TaskContext, storageLevel: StorageLevel)
-      : Iterator[T] = {
+  def getOrCompute[T](rdd: RDD[T], split: Partition, context: TaskContext,
+      storageLevel: StorageLevel): Iterator[T] = {
     val key = RDDBlockId(rdd.id, split.index)
     logDebug("Looking for partition " + key)
     blockManager.get(key) match {

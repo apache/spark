@@ -21,7 +21,6 @@ import akka.actor.Actor
 
 import org.apache.spark.storage.BlockManagerMessages._
 
-
 /**
  * An actor to take commands from the master to execute options. For example,
  * this is used to remove blocks from the slave's BlockManager.

@@ -18,8 +18,8 @@
 package org.apache.hadoop.mapred
 
 import java.io.IOException
-import java.text.SimpleDateFormat
 import java.text.NumberFormat
+import java.text.SimpleDateFormat
 import java.util.Date
 
 import org.apache.hadoop.fs.FileSystem

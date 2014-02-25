@@ -22,30 +22,27 @@ import java.util.Random
 import scala.collection.Map
 import scala.collection.JavaConversions.mapAsScalaMap
 import scala.collection.mutable.ArrayBuffer
-
 import scala.reflect.{classTag, ClassTag}
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
+import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.TextOutputFormat
 
-import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
-import com.clearspring.analytics.stream.cardinality.HyperLogLog
-
+import org.apache.spark._
 import org.apache.spark.Partitioner._
+import org.apache.spark.SparkContext._
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableHyperLogLog}
-
-import org.apache.spark.SparkContext._
-import org.apache.spark._
-import org.apache.spark.util.random.{PoissonSampler, BernoulliSampler}
+import org.apache.spark.util.{BoundedPriorityQueue, SerializableHyperLogLog, Utils}
+import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -394,6 +391,43 @@ abstract class RDD[T: ClassTag](
   def ++(other: RDD[T]): RDD[T] = this.union(other)
 
   /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   */
+  def intersection(other: RDD[T]): RDD[T] =
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)))
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
+        .keys
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   *
+   * @param partitioner Partitioner to use for the resulting RDD
+   */
+  def intersection(other: RDD[T], partitioner: Partitioner): RDD[T] =
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)), partitioner)
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
+        .keys
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.  Performs a hash partition across the cluster
+   *
+   * Note that this method performs a shuffle internally.
+   *
+   * @param numPartitions How many partitions to use in the resulting RDD
+   */
+  def intersection(other: RDD[T], numPartitions: Int): RDD[T] =
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)), new HashPartitioner(numPartitions))
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
+        .keys
+
+  /**
    * Return an RDD created by coalescing all elements within each partition into an array.
    */
   def glom(): RDD[Array[T]] = new GlommedRDD(this)
@@ -738,18 +772,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return the number of elements in the RDD.
    */
-  def count(): Long = {
-    sc.runJob(this, (iter: Iterator[T]) => {
-      // Use a while loop to count the number of elements rather than iter.size because
-      // iter.size uses a for loop, which is slightly slower in current version of Scala.
-      var result = 0L
-      while (iter.hasNext) {
-        result += 1L
-        iter.next()
-      }
-      result
-    }).sum
-  }
+  def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
    * (Experimental) Approximate version of count() that returns a potentially incomplete result
@@ -830,6 +853,29 @@ abstract class RDD[T: ClassTag](
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
     val zeroCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
     aggregate(zeroCounter)(_.add(_), _.merge(_)).value.cardinality()
+  }
+
+  /**
+   * Zips this RDD with its element indices. The ordering is first based on the partition index
+   * and then the ordering of items within each partition. So the first item in the first
+   * partition gets index 0, and the last item in the last partition receives the largest index.
+   * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
+   * This method needs to trigger a spark job when this RDD contains more than one partitions.
+   */
+  def zipWithIndex(): RDD[(T, Long)] = new ZippedWithIndexRDD(this)
+
+  /**
+   * Zips this RDD with generated unique Long ids. Items in the kth partition will get ids k, n+k,
+   * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
+   * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
+   */
+  def zipWithUniqueId(): RDD[(T, Long)] = {
+    val n = this.partitions.size.toLong
+    this.mapPartitionsWithIndex { case (k, iter) =>
+      iter.zipWithIndex.map { case (item, i) =>
+        (item, i * n + k)
+      }
+    }
   }
 
   /**

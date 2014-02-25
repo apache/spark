@@ -132,7 +132,7 @@ object FeederActor {
  * To run this example locally, you may run Feeder Actor as
  *    `$ ./bin/run-example org.apache.spark.streaming.examples.FeederActor 127.0.1.1 9999`
  * and then run the example
- *    `$ ./bin/run-example org.apache.spark.streaming.examples.ActorWordCount local[2] 127.0.1.1 9999`
+ *    `./bin/run-example org.apache.spark.streaming.examples.ActorWordCount local[2] 127.0.1.1 9999`
  */
 object ActorWordCount {
   def main(args: Array[String]) {

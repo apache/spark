@@ -25,7 +25,6 @@ import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils._
 
-
 /** Page showing list of all ongoing and recently finished stages and pools*/
 private[spark] class IndexPage(parent: JobProgressUI) {
   def listener = parent.listener
@@ -43,7 +42,8 @@ private[spark] class IndexPage(parent: JobProgressUI) {
       }
 
       val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
-      val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
+      val completedStagesTable = new StageTable(completedStages.sortBy(_.submissionTime).reverse,
+        parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
       val pools = listener.sc.getAllPools

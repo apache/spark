@@ -19,21 +19,18 @@ package org.apache.spark
 
 import java.io._
 import java.net.URI
-import java.util.{UUID, Properties}
+import java.util.{Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
 
 import scala.collection.{Map, Set}
 import scala.collection.generic.Growable
-
 import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.reflect.{ClassTag, classTag}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
-import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable,
-  FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
-import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat,
-  TextInputFormat}
+import org.apache.hadoop.io.{ArrayWritable, BooleanWritable, BytesWritable, DoubleWritable, FloatWritable, IntWritable, LongWritable, NullWritable, Text, Writable}
+import org.apache.hadoop.mapred.{FileInputFormat, InputFormat, JobConf, SequenceFileInputFormat, TextInputFormat}
 import org.apache.hadoop.mapreduce.{InputFormat => NewInputFormat, Job => NewHadoopJob}
 import org.apache.hadoop.mapreduce.lib.input.{FileInputFormat => NewFileInputFormat}
 import org.apache.mesos.MesosNativeLibrary
@@ -42,14 +39,12 @@ import org.apache.spark.deploy.{LocalSparkCluster, SparkHadoopUtil}
 import org.apache.spark.partial.{ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd._
 import org.apache.spark.scheduler._
-import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend,
-  SparkDeploySchedulerBackend, SimrSchedulerBackend}
+import org.apache.spark.scheduler.cluster.{CoarseGrainedSchedulerBackend, SparkDeploySchedulerBackend, SimrSchedulerBackend}
 import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, MesosSchedulerBackend}
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{Utils, TimeStampedHashMap, MetadataCleaner, MetadataCleanerType,
-  ClosureCleaner}
+import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -63,9 +58,9 @@ import org.apache.spark.util.{Utils, TimeStampedHashMap, MetadataCleaner, Metada
  */
 class SparkContext(
     config: SparkConf,
-    // This is used only by YARN for now, but should be relevant to other cluster types (Mesos, etc)
-    // too. This is typically generated from InputFormatInfo.computePreferredLocations. It contains
-    // a map from hostname to a list of input format splits on the host.
+    // This is used only by YARN for now, but should be relevant to other cluster types (Mesos,
+    // etc) too. This is typically generated from InputFormatInfo.computePreferredLocations. It
+    // contains a map from hostname to a list of input format splits on the host.
     val preferredNodeLocationData: Map[String, Set[SplitInfo]] = Map())
   extends Logging {
 
@@ -169,6 +164,11 @@ class SparkContext(
     .orElse(Option(System.getenv("SPARK_MEM")))
     .map(Utils.memoryStringToMb)
     .getOrElse(512)
+
+  if (!conf.contains("spark.executor.memory") && sys.env.contains("SPARK_MEM")) {
+    logWarning("Using SPARK_MEM to set amount of memory to use per executor process is " +
+      "deprecated, instead use spark.executor.memory")
+  }
 
   // Environment variables to pass to our executors
   private[spark] val executorEnvs = HashMap[String, String]()
@@ -552,10 +552,11 @@ class SparkContext(
 
   /**
    * Load an RDD saved as a SequenceFile containing serialized objects, with NullWritable keys and
-   * BytesWritable values that contain a serialized partition. This is still an experimental storage
-   * format and may not be supported exactly as is in future Spark releases. It will also be pretty
-   * slow if you use the default serializer (Java serialization), though the nice thing about it is
-   * that there's very little effort required to save arbitrary objects.
+   * BytesWritable values that contain a serialized partition. This is still an experimental
+   * storage format and may not be supported exactly as is in future Spark releases. It will also
+   * be pretty slow if you use the default serializer (Java serialization),
+   * though the nice thing about it is that there's very little effort required to save arbitrary
+   * objects.
    */
   def objectFile[T: ClassTag](
       path: String,
@@ -1043,7 +1044,7 @@ object SparkContext {
 
   implicit object LongAccumulatorParam extends AccumulatorParam[Long] {
     def addInPlace(t1: Long, t2: Long) = t1 + t2
-    def zero(initialValue: Long) = 0l
+    def zero(initialValue: Long) = 0L
   }
 
   implicit object FloatAccumulatorParam extends AccumulatorParam[Float] {
@@ -1109,7 +1110,8 @@ object SparkContext {
 
   implicit def floatWritableConverter() = simpleWritableConverter[Float, FloatWritable](_.get)
 
-  implicit def booleanWritableConverter() = simpleWritableConverter[Boolean, BooleanWritable](_.get)
+  implicit def booleanWritableConverter() =
+    simpleWritableConverter[Boolean, BooleanWritable](_.get)
 
   implicit def bytesWritableConverter() = {
     simpleWritableConverter[Array[Byte], BytesWritable](_.getBytes)
@@ -1258,7 +1260,8 @@ object SparkContext {
 
       case "yarn-client" =>
         val scheduler = try {
-          val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
+          val clazz =
+            Class.forName("org.apache.spark.scheduler.cluster.YarnClientClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
           cons.newInstance(sc).asInstanceOf[TaskSchedulerImpl]
 
@@ -1269,7 +1272,8 @@ object SparkContext {
         }
 
         val backend = try {
-          val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend")
+          val clazz =
+            Class.forName("org.apache.spark.scheduler.cluster.YarnClientSchedulerBackend")
           val cons = clazz.getConstructor(classOf[TaskSchedulerImpl], classOf[SparkContext])
           cons.newInstance(scheduler, sc).asInstanceOf[CoarseGrainedSchedulerBackend]
         } catch {

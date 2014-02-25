@@ -18,13 +18,15 @@
 package org.apache.spark.rdd
 
 import scala.collection.mutable.HashMap
+import scala.collection.parallel.mutable
+
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.{Span, Millis}
+import org.scalatest.time.{Millis, Span}
+
+import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
-import scala.collection.parallel.mutable
-import org.apache.spark._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
@@ -48,7 +50,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     val partitionSums = nums.mapPartitions(iter => Iterator(iter.reduceLeft(_ + _)))
     assert(partitionSums.collect().toList === List(3, 7))
 
-    val partitionSumsWithSplit = nums.mapPartitionsWithSplit {
+    val partitionSumsWithSplit = nums.mapPartitionsWithIndex {
       case(split, iter) => Iterator((split, iter.reduceLeft(_ + _)))
     }
     assert(partitionSumsWithSplit.collect().toList === List((0, 3), (1, 7)))
@@ -373,8 +375,8 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       val prng42 = new Random(42)
       val prng43 = new Random(43)
       Array(1, 2, 3, 4, 5, 6).filter{i =>
-	      if (i < 4) 0 == prng42.nextInt(3)
-	      else 0 == prng43.nextInt(3)}
+        if (i < 4) 0 == prng42.nextInt(3)
+        else 0 == prng43.nextInt(3)}
     }
     assert(sample.size === checkSample.size)
     for (i <- 0 until sample.size) assert(sample(i) === checkSample(i))
@@ -505,5 +507,50 @@ class RDDSuite extends FunSuite with SharedSparkContext {
     intercept[IllegalArgumentException] {
       sc.runJob(sc.parallelize(1 to 10, 2), {iter: Iterator[Int] => iter.size}, Seq(0, 1, 2), false)
     }
+  }
+
+  test("intersection") {
+    val all = sc.parallelize(1 to 10)
+    val evens = sc.parallelize(2 to 10 by 2)
+    val intersection = Array(2, 4, 6, 8, 10)
+
+    // intersection is commutative
+    assert(all.intersection(evens).collect.sorted === intersection)
+    assert(evens.intersection(all).collect.sorted === intersection)
+  }
+
+  test("intersection strips duplicates in an input") {
+    val a = sc.parallelize(Seq(1,2,3,3))
+    val b = sc.parallelize(Seq(1,1,2,3))
+    val intersection = Array(1,2,3)
+
+    assert(a.intersection(b).collect.sorted === intersection)
+    assert(b.intersection(a).collect.sorted === intersection)
+  }
+
+  test("zipWithIndex") {
+    val n = 10
+    val data = sc.parallelize(0 until n, 3)
+    val ranked = data.zipWithIndex()
+    ranked.collect().foreach { x =>
+      assert(x._1 === x._2)
+    }
+  }
+
+  test("zipWithIndex with a single partition") {
+    val n = 10
+    val data = sc.parallelize(0 until n, 1)
+    val ranked = data.zipWithIndex()
+    ranked.collect().foreach { x =>
+      assert(x._1 === x._2)
+    }
+  }
+
+  test("zipWithUniqueId") {
+    val n = 10
+    val data = sc.parallelize(0 until n, 3)
+    val ranked = data.zipWithUniqueId()
+    val ids = ranked.map(_._1).distinct().collect()
+    assert(ids.length === n)
   }
 }
