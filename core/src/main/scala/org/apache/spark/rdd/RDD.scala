@@ -401,7 +401,7 @@ abstract class RDD[T: ClassTag](
       ascending: Boolean = true,
       numPartitions: Int = this.partitions.size): RDD[T] =
     this.keyBy[K](f)
-        .sortByKey()
+        .sortByKey(ascending, numPartitions)
         .values
 
   /**
