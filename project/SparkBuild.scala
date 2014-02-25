@@ -95,7 +95,7 @@ object SparkBuild extends Build {
   lazy val javaVersion = System.getProperty("java.specification.version")
   lazy val isJava8Enabled = javaVersion.toDouble >= "1.8".toDouble
   val maybeJava8Tests = if (isJava8Enabled) Seq[ProjectReference](java8Tests) else Seq[ProjectReference]()
-  lazy val java8Tests = Project("java8-tests", file("java8-tests"), settings = java8TestsSettings) dependsOn(core % "compile->compile;test->test") dependsOn(streaming % "compile->compile;test->test")
+  lazy val java8Tests = Project("java8-tests", file("java8-tests"), settings = java8TestsSettings) dependsOn(core) dependsOn(streaming % "compile->compile;test->test")
 
   // Conditionally include the yarn sub-project
   lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
