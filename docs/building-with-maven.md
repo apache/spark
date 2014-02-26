@@ -76,3 +76,7 @@ The maven build includes support for building a Debian package containing the as
     $ mvn -Pdeb -DskipTests clean package
 
 The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.
+
+## A note about Hadoop version 0.23.x
+
+For building spark with hadoop 0.23.x and also yarn, you will have to provide a dependency on avro manually.
