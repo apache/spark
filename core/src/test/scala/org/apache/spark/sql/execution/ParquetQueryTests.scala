@@ -1,4 +1,4 @@
-package org.apache.spark.sql
+package org.apache.spark.sql.execution
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
@@ -6,12 +6,11 @@ import org.apache.spark.rdd.RDD
 
 import parquet.schema.MessageTypeParser
 
-import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.hadoop.fs.{Path, FileSystem}
-import org.apache.hadoop.conf.Configuration
 import parquet.hadoop.ParquetFileWriter
 import org.apache.hadoop.mapreduce.Job
 import parquet.hadoop.util.ContextUtil
+import org.apache.spark.sql.TestSqlContext
 
 class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
   override def beforeAll() {
@@ -70,16 +69,16 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
     val path = new Path("file:///tmp/test/mytesttable")
     val fs: FileSystem = FileSystem.getLocal(ContextUtil.getConfiguration(job))
     ParquetTypesConverter.writeMetaData(ParquetTestData.testData.attributes, path)
-    assert(fs.exists(new Path(path.getParent, ParquetFileWriter.PARQUET_METADATA_FILE)))
+    assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
     val metaData = ParquetTypesConverter.readMetaData(path)
     assert(metaData != null)
-    ParquetTestData.testData.parquetSchema.checkContains(metaData.getFileMetaData.getSchema) // throws excpetion if incompatible
-    metaData.getFileMetaData.getSchema.checkContains(ParquetTestData.testData.parquetSchema) // throws excpetion if incompatible
+    ParquetTestData.testData.parquetSchema.checkContains(metaData.getFileMetaData.getSchema) // throws exception if incompatible
+    metaData.getFileMetaData.getSchema.checkContains(ParquetTestData.testData.parquetSchema) // throws exception if incompatible
     fs.delete(path.getParent, true)
   }
 
   /**
-   * Computes the given [[org.apache.spark.sql.ParquetRelation]] and returns its RDD.
+   * Computes the given [[org.apache.spark.sql.execution.ParquetRelation]] and returns its RDD.
    *
    * @param parquetRelation The Parquet relation.
    * @return An RDD of Rows.

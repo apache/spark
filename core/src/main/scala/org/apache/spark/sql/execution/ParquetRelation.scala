@@ -1,12 +1,12 @@
-package org.apache.spark.sql
+package org.apache.spark.sql.execution
 
-import org.apache.hadoop.fs.{FileStatus, Path, FileSystem}
+import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.conf.Configuration
 
 import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, InsertIntoCreatedTable, BaseRelation}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.expressions.{GenericRow, Row, AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Row, GenericRow, AttributeReference, Attribute}
 
 import parquet.schema.{MessageTypeParser, MessageType}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
@@ -16,7 +16,7 @@ import parquet.schema.{Type => ParquetType}
 import parquet.io.api.{Binary, RecordConsumer}
 import parquet.schema.Type.Repetition
 import parquet.hadoop.{Footer, ParquetFileWriter, ParquetWriter, ParquetFileReader}
-import parquet.hadoop.metadata.{BlockMetaData, FileMetaData, GlobalMetaData, ParquetMetadata}
+import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 
 import scala.collection.JavaConversions._
 import java.io.{IOException, FileNotFoundException, File}

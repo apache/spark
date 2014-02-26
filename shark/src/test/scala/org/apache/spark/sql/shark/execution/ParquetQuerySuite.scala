@@ -1,10 +1,10 @@
 
-package org.apache.spark.sql
+package org.apache.spark.sql.execution
 package shark
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.ParquetTestData
+import org.apache.spark.sql.shark.TestShark
 
 class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
 

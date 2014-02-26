@@ -36,6 +36,8 @@ import catalyst.types._
 
 import scala.collection.JavaConversions._
 
+import org.apache.spark.sql.execution.CreateParquetTable
+
 
 class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
   import HiveMetastoreTypes._
