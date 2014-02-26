@@ -25,7 +25,7 @@ import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils
 
 /** Page showing specific pool details */
-private[spark] class PoolPage(parent: JobProgressUI) {
+private[ui] class PoolPage(parent: JobProgressUI) {
   private val live = parent.live
   private val sc = parent.sc
   private def appName = parent.appName

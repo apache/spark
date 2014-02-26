@@ -71,10 +71,10 @@ private[spark] class SparkListenerBus extends Logging {
         listeners.foreach(_.onTaskEnd(taskEnd))
       case applicationStart: SparkListenerApplicationStart =>
         listeners.foreach(_.onApplicationStart(applicationStart))
-      case storageStatusFetch: SparkListenerStorageStatusFetch =>
-        listeners.foreach(_.onStorageStatusFetch(storageStatusFetch))
-      case getRDDInfo: SparkListenerGetRDDInfo =>
-        listeners.foreach(_.onGetRDDInfo(getRDDInfo))
+      case environmentUpdate: SparkListenerEnvironmentUpdate =>
+        listeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
+      case executorsStateChange: SparkListenerExecutorsStateChange =>
+        listeners.foreach(_.onExecutorsStateChange(executorsStateChange))
       case SparkListenerShutdown =>
         return true
       case _ =>

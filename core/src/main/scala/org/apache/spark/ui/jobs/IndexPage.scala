@@ -25,7 +25,7 @@ import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils
 
 /** Page showing list of all ongoing and recently finished stages and pools*/
-private[spark] class IndexPage(parent: JobProgressUI) {
+private[ui] class IndexPage(parent: JobProgressUI) {
   private val live = parent.live
   private val sc = parent.sc
   private def appName = parent.appName

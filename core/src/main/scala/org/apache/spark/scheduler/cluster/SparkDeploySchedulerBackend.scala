@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.deploy.{Command, ApplicationDescription}

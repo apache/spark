@@ -27,7 +27,7 @@ import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
-private[spark] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
+private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
   private val dateFmt = parent.dateFmt
   private def isFairScheduler = parent.isFairScheduler
   private def listener = parent.listener

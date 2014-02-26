@@ -18,13 +18,15 @@
 package org.apache.spark
 
 import scala.collection.mutable.{ArrayBuffer, HashSet}
+
 import org.apache.spark.storage.{BlockManager, StorageLevel, RDDBlockId}
 import org.apache.spark.rdd.RDD
 
 
-/** Spark class responsible for passing RDDs split contents to the BlockManager and making
-    sure a node doesn't load two copies of an RDD at once.
-  */
+/**
+ * Spark class responsible for passing RDDs split contents to the BlockManager and making
+ * sure a node doesn't load two copies of an RDD at once.
+ */
 private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
 
   /** Keys of RDD splits that are being computed/loaded. */
@@ -69,11 +71,17 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           // If we got here, we have to load the split
           logInfo("Partition %s not found, computing it".format(key))
           val computedValues = rdd.computeOrReadCheckpoint(split, context)
+
           // Persist the result, so long as the task is not running locally
           if (context.runningLocally) { return computedValues }
           val elements = new ArrayBuffer[Any]
           elements ++= computedValues
-          blockManager.put(key, elements, storageLevel, tellMaster = true)
+          val updatedBlocks = blockManager.put(key, elements, storageLevel, tellMaster = true)
+
+          // Update task metrics to include any updated blocks
+          val metrics = context.taskMetrics
+          metrics.updatedBlocks = Some(updatedBlocks ++ metrics.updatedBlocks.getOrElse(Seq()))
+
           elements.iterator.asInstanceOf[Iterator[T]]
         } finally {
           loading.synchronized {

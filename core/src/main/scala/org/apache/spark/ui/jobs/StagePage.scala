@@ -28,7 +28,7 @@ import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
-private[spark] class StagePage(parent: JobProgressUI) {
+private[ui] class StagePage(parent: JobProgressUI) {
   private val dateFmt = parent.dateFmt
   private def appName = parent.appName
   private def listener = parent.listener

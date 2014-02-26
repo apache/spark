@@ -24,15 +24,15 @@ import scala.util.Properties
 
 import akka.actor._
 
+import com.google.common.collect.MapMaker
+
+import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
-import org.apache.spark.storage.{BlockManagerMasterActor, BlockManager, BlockManagerMaster}
 import org.apache.spark.network.ConnectionManager
 import org.apache.spark.serializer.{Serializer, SerializerManager}
+import org.apache.spark.storage._
 import org.apache.spark.util.{Utils, AkkaUtils}
-import org.apache.spark.api.python.PythonWorkerFactory
-
-import com.google.common.collect.MapMaker
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
@@ -167,9 +167,18 @@ object SparkEnv extends Logging {
       }
     }
 
-    val blockManagerMaster = new BlockManagerMaster(registerOrLookup(
-      "BlockManagerMaster",
-      new BlockManagerMasterActor(isLocal, conf)), conf)
+    // Listen for block manager registration
+    val blockManagerListener = new BlockManagerRegistrationListener
+    lazy val blockManagerMasterActor = {
+      val actor = new BlockManagerMasterActor(isLocal, conf)
+      actor.registerListener(blockManagerListener)
+      actor
+    }
+
+    val blockManagerMaster =
+      new BlockManagerMaster(registerOrLookup("BlockManagerMaster", blockManagerMasterActor), conf)
+    blockManagerMaster.registrationListener = Some(blockManagerListener)
+
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
       serializer, conf)
 
@@ -243,7 +252,12 @@ object SparkEnv extends Logging {
    * attributes as a sequence of KV pairs.
    */
   private[spark]
-  def environmentDetails(sc: SparkContext): Map[String, Seq[(String, String)]] = {
+  def environmentDetails(
+      conf: SparkConf,
+      schedulingMode: String,
+      addedJars: Seq[String],
+      addedFiles: Seq[String]): Map[String, Seq[(String, String)]] = {
+
     val jvmInformation = Seq(
       ("Java Version", "%s (%s)".format(Properties.javaVersion, Properties.javaVendor)),
       ("Java Home", Properties.javaHome),
@@ -251,15 +265,12 @@ object SparkEnv extends Logging {
       ("Scala Home", Properties.scalaHome)
     ).sorted
 
-    // Spark properties, including scheduling mode and app name whether or not they are configured
+    // Spark properties, including scheduling mode whether or not it is configured
     var additionalFields = Seq[(String, String)]()
-    sc.conf.getOption("spark.scheduler.mode").getOrElse {
-      additionalFields ++= Seq(("spark.scheduler.mode", sc.getSchedulingMode.toString))
+    conf.getOption("spark.scheduler.mode").getOrElse {
+      additionalFields ++= Seq(("spark.scheduler.mode", schedulingMode))
     }
-    sc.conf.getOption("spark.app.name").getOrElse {
-      additionalFields ++= Seq(("spark.app.name", sc.appName))
-    }
-    val sparkProperties = sc.conf.getAll.sorted ++ additionalFields
+    val sparkProperties = conf.getAll.sorted ++ additionalFields
 
     val systemProperties = System.getProperties.iterator.toSeq
     val classPathProperty = systemProperties.find { case (k, v) =>
@@ -273,12 +284,11 @@ object SparkEnv extends Logging {
 
     // Class paths including all added jars and files
     val classPathEntries = classPathProperty._2
-      .split(sc.conf.get("path.separator", ":"))
+      .split(conf.get("path.separator", ":"))
       .filterNot(e => e.isEmpty)
       .map(e => (e, "System Classpath"))
-    val addedJars = sc.addedJars.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
-    val addedFiles = sc.addedFiles.iterator.toSeq.map{ case (path, _) => (path, "Added By User") }
-    val classPaths = (addedJars ++ addedFiles ++ classPathEntries).sorted
+    val addedJarsAndFiles = (addedJars ++ addedFiles).map((_, "Added By User"))
+    val classPaths = (addedJarsAndFiles ++ classPathEntries).sorted
 
     Map[String, Seq[(String, String)]](
       "JVM Information" -> jvmInformation,

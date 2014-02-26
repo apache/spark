@@ -20,6 +20,7 @@ package org.apache.spark.scheduler
 import scala.collection.mutable
 
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.storage.RDDInfo
 
 /**
  * Stores information about a stage to pass from the scheduler to SparkListeners. Also
@@ -29,9 +30,8 @@ private[spark]
 class StageInfo(
     val stageId: Int,
     val name: String,
-    val rddName: String,
-    val numPartitions: Int,
     val numTasks: Int,
+    val rddInfo: RDDInfo,
     val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] =
       mutable.Buffer[(TaskInfo, TaskMetrics)]()) {
 
@@ -44,6 +44,9 @@ class StageInfo(
 private[spark]
 object StageInfo {
   def fromStage(stage: Stage): StageInfo = {
-    new StageInfo(stage.id, stage.name, stage.rdd.name, stage.numPartitions, stage.numTasks)
+    val rdd = stage.rdd
+    val rddName = Option(rdd.name).getOrElse(rdd.id.toString)
+    val rddInfo = new RDDInfo(rdd.id, rddName, rdd.partitions.size, rdd.getStorageLevel)
+    new StageInfo(stage.id, stage.name, stage.numTasks, rddInfo)
   }
 }

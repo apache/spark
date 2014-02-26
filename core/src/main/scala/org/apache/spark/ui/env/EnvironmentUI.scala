@@ -23,13 +23,12 @@ import scala.xml.Node
 
 import org.eclipse.jetty.server.Handler
 
-import org.apache.spark.SparkContext
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Environment
 import org.apache.spark.ui._
 
-private[spark] class EnvironmentUI(parent: SparkUI) {
+private[ui] class EnvironmentUI(parent: SparkUI) {
   val live = parent.live
   val sc = parent.sc
 
@@ -40,7 +39,7 @@ private[spark] class EnvironmentUI(parent: SparkUI) {
 
   def start() {
     val gateway = parent.gatewayListener
-    _listener = Some(new EnvironmentListener(sc))
+    _listener = Some(new EnvironmentListener())
     gateway.registerSparkListener(listener)
   }
 
@@ -78,14 +77,14 @@ private[spark] class EnvironmentUI(parent: SparkUI) {
 /**
  * A SparkListener that prepares information to be displayed on the EnvironmentUI
  */
-private[spark] class EnvironmentListener(sc: SparkContext) extends UISparkListener {
+private[ui] class EnvironmentListener extends UISparkListener {
   var jvmInformation: Seq[(String, String)] = Seq()
   var sparkProperties: Seq[(String, String)] = Seq()
   var systemProperties: Seq[(String, String)] = Seq()
   var classpathEntries: Seq[(String, String)] = Seq()
 
-  override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
-    val environmentDetails = applicationStart.environmentDetails
+  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
+    val environmentDetails = environmentUpdate.environmentDetails
     jvmInformation = environmentDetails("JVM Information")
     sparkProperties = environmentDetails("Spark Properties")
     systemProperties = environmentDetails("System Properties")

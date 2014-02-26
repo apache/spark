@@ -24,7 +24,7 @@ import scala.collection.Map
 import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.storage.{RDDInfo, StorageStatus}
+import org.apache.spark.storage.StorageStatus
 
 sealed trait SparkListenerEvent
 
@@ -45,19 +45,16 @@ case class SparkListenerJobStart(jobId: Int, stageIds: Seq[Int], properties: Pro
 
 case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent
 
-case class SparkListenerApplicationStart(environmentDetails: Map[String, Seq[(String, String)]])
+case class SparkListenerApplicationStart(appName: String) extends SparkListenerEvent
+
+case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent
 
-/** An event used in the ExecutorsUI and BlockManagerUI to fetch storage status from SparkEnv */
-private[spark] case class SparkListenerStorageStatusFetch(storageStatusList: Seq[StorageStatus])
-  extends SparkListenerEvent
-
-/** An event used in the BlockManagerUI to query information of persisted RDDs */
-private[spark] case class SparkListenerGetRDDInfo(rddInfoList: Seq[RDDInfo])
+case class SparkListenerExecutorsStateChange(storageStatusList: Seq[StorageStatus])
   extends SparkListenerEvent
 
 /** An event used in the listener to shutdown the listener daemon thread. */
-private[scheduler] case object SparkListenerShutdown extends SparkListenerEvent
+private[spark] case object SparkListenerShutdown extends SparkListenerEvent
 
 
 /**
@@ -106,14 +103,15 @@ trait SparkListener {
   def onApplicationStart(applicationStart: SparkListenerApplicationStart) { }
 
   /**
-   * Called when Spark fetches storage statuses from the driver
+   * Called when environment properties have been updated
    */
-  def onStorageStatusFetch(storageStatusFetch: SparkListenerStorageStatusFetch) { }
+  def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) { }
 
   /**
-   * Called when Spark queries statuses of persisted RDD's
+   * Called when a new executor has joined, or an existing executor is lost
    */
-  def onGetRDDInfo(getRDDInfo: SparkListenerGetRDDInfo) { }
+  def onExecutorsStateChange(executorsStateChange: SparkListenerExecutorsStateChange) { }
+
 }
 
 /**

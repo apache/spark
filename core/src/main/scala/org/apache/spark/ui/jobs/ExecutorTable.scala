@@ -23,7 +23,7 @@ import scala.xml.Node
 import org.apache.spark.util.Utils
 
 /** Page showing executor summary */
-private[spark] class ExecutorTable(stageId: Int, parent: JobProgressUI) {
+private[ui] class ExecutorTable(stageId: Int, parent: JobProgressUI) {
   private def listener = parent.listener
 
   def toNodeSeq: Seq[Node] = {

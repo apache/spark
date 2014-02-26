@@ -17,6 +17,8 @@
 
 package org.apache.spark.executor
 
+import org.apache.spark.storage.{BlockId, BlockStatus}
+
 class TaskMetrics extends Serializable {
   /**
    * Host's name the task runs on
@@ -68,6 +70,11 @@ class TaskMetrics extends Serializable {
    * here
    */
   var shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
+
+  /**
+   * If blocks have been updated as a result of this task, collect the statuses of this blocks here
+   */
+  var updatedBlocks: Option[Seq[(BlockId, BlockStatus)]] = None
 }
 
 object TaskMetrics {

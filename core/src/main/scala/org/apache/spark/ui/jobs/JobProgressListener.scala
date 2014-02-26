@@ -21,9 +21,9 @@ import scala.collection.mutable.{ListBuffer, HashMap}
 
 import org.apache.spark.{ExceptionFailure, SparkContext, Success}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler._
-import org.apache.spark.ui.{GatewayUISparkListener, StorageStatusFetchSparkListener}
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.scheduler._
+import org.apache.spark.ui.StorageStatusSparkListener
 
 /**
  * Tracks task-level information to be displayed in the UI.
@@ -32,11 +32,9 @@ import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
  * class, since the UI thread and the DAGScheduler event loop may otherwise
  * be reading/updating the internal data structures concurrently.
  */
-private[spark] class JobProgressListener(
-    sc: SparkContext,
-    gateway: GatewayUISparkListener,
-    live: Boolean)
-  extends StorageStatusFetchSparkListener(sc, gateway, live) {
+private[ui] class JobProgressListener(sc: SparkContext, live: Boolean)
+  extends StorageStatusSparkListener {
+
   import JobProgressListener._
 
   // How many stages to remember
@@ -75,7 +73,7 @@ private[spark] class JobProgressListener(
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stageInfo
     val stageId = stage.stageId
-    // Remove by stageId, rather than by StageInfo, in case the StageInfo is from disk
+    // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
     poolToActiveStages(stageIdToPool(stageId)).remove(stageId)
     activeStages.remove(stageId)
     completedStages += stage
@@ -172,7 +170,7 @@ private[spark] class JobProgressListener(
     }
 
     val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashMap[Long, TaskInfo]())
-    // Remove by taskId, rather than by TaskInfo, in case the TaskInfo is from disk
+    // Remove by taskId, rather than by TaskInfo, in case the TaskInfo is from storage
     tasksActive.remove(taskEnd.taskInfo.taskId)
 
     val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
@@ -220,7 +218,7 @@ private[spark] class JobProgressListener(
     jobEnd.jobResult match {
       case JobFailed(_, stageId) =>
         activeStages.get(stageId).foreach { s =>
-          // Remove by stageId, rather than by StageInfo, in case the StageInfo is from disk
+          // Remove by stageId, rather than by StageInfo, in case the StageInfo is from storage
           activeStages.remove(s.stageId)
           poolToActiveStages(stageIdToPool(stageId)).remove(s.stageId)
           failedStages += s
@@ -230,9 +228,9 @@ private[spark] class JobProgressListener(
     }
   }
 
-  override def onApplicationStart(applicationStart: SparkListenerApplicationStart) = synchronized {
+  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) = {
     val schedulingModeName =
-      applicationStart.environmentDetails("Spark Properties").toMap.get("spark.scheduler.mode")
+      environmentUpdate.environmentDetails("Spark Properties").toMap.get("spark.scheduler.mode")
     schedulingMode = schedulingModeName match {
       case Some(name) => Some(SchedulingMode.withName(name))
       case None => None
@@ -240,12 +238,12 @@ private[spark] class JobProgressListener(
   }
 }
 
-private[spark] case class TaskUIData(
-  taskInfo: TaskInfo,
-  taskMetrics: Option[TaskMetrics] = None,
-  exception: Option[ExceptionFailure] = None)
+private[ui] case class TaskUIData(
+    taskInfo: TaskInfo,
+    taskMetrics: Option[TaskMetrics] = None,
+    exception: Option[ExceptionFailure] = None)
 
-private[spark] object JobProgressListener {
+private object JobProgressListener {
   val DEFAULT_RETAINED_STAGES = 1000
   val DEFAULT_POOL_NAME = "default"
 }

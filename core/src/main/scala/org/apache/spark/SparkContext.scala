@@ -161,7 +161,7 @@ class SparkContext(
 
   // Add each JAR given through the constructor
   if (jars != null) {
-    jars.foreach(addJar)
+    jars.foreach { jar => addJar(jar, updateEnvironment = false) }
   }
 
   private[spark] val executorMemory = conf.getOption("spark.executor.memory")
@@ -204,14 +204,14 @@ class SparkContext(
   taskScheduler.start()
 
   @volatile private[spark] var dagScheduler = new DAGScheduler(taskScheduler)
-  dagScheduler.start()
 
+  // Start the UI before the DAG scheduler, because the UI listens for Spark events
   ui.start()
 
-  // Trigger application start
-  val environmentDetails = SparkEnv.environmentDetails(this)
-  val applicationStart = new SparkListenerApplicationStart(environmentDetails)
-  dagScheduler.post(applicationStart)
+  dagScheduler.start()
+  dagScheduler.post(new SparkListenerApplicationStart(appName))
+
+  updateEnvironmentProperties()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
@@ -631,7 +631,7 @@ class SparkContext(
    * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
    * use `SparkFiles.get(path)` to find its download location.
    */
-  def addFile(path: String) {
+  def addFile(path: String, updateEnvironment: Boolean = true) {
     val uri = new URI(path)
     val key = uri.getScheme match {
       case null | "file" => env.httpFileServer.addFile(new File(uri.getPath))
@@ -644,6 +644,9 @@ class SparkContext(
     Utils.fetchFile(path, new File(SparkFiles.getRootDirectory), conf)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
+    if (updateEnvironment) {
+      updateEnvironmentProperties()
+    }
   }
 
   def addSparkListener(listener: SparkListener) {
@@ -711,8 +714,11 @@ class SparkContext(
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
-  def clearFiles() {
+  def clearFiles(updateEnvironment: Boolean = true) {
     addedFiles.clear()
+    if (updateEnvironment) {
+      updateEnvironmentProperties()
+    }
   }
 
   /**
@@ -730,7 +736,7 @@ class SparkContext(
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
-  def addJar(path: String) {
+  def addJar(path: String, updateEnvironment: Boolean = true) {
     if (path == null) {
       logWarning("null specified as parameter to addJar")
     } else {
@@ -774,14 +780,20 @@ class SparkContext(
         logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
       }
     }
+    if (updateEnvironment) {
+      updateEnvironmentProperties()
+    }
   }
 
   /**
    * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
    * any new nodes.
    */
-  def clearJars() {
+  def clearJars(updateEnvironment: Boolean = true) {
     addedJars.clear()
+    if (updateEnvironment) {
+      updateEnvironmentProperties()
+    }
   }
 
   /** Shut down the SparkContext. */
@@ -798,8 +810,8 @@ class SparkContext(
       // TODO: Cache.stop()?
       env.stop()
       // Clean up locally linked files
-      clearFiles()
-      clearJars()
+      clearFiles(updateEnvironment = false)
+      clearJars(updateEnvironment = false)
       SparkEnv.set(null)
       ShuffleMapTask.clearCache()
       ResultTask.clearCache()
@@ -1021,6 +1033,19 @@ class SparkContext(
 
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
+
+  /** Update environment properties and post the corresponding event to the DAG scheduler */
+  private def updateEnvironmentProperties() {
+    val schedulingMode = getSchedulingMode.toString
+    val addedJarPaths = addedJars.keys.toSeq
+    val addedFilePaths = addedFiles.keys.toSeq
+    val environmentDetails =
+      SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
+    val environmentUpdate = new SparkListenerEnvironmentUpdate(environmentDetails)
+
+    // In case the DAG scheduler is not ready yet, first check whether its reference is valid
+    Option(dagScheduler).foreach(_.post(environmentUpdate))
+  }
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
   private[spark] def cleanup(cleanupTime: Long) {

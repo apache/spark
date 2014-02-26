@@ -50,9 +50,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
     listener.stageInfos.size should be {1}
     val first = listener.stageInfos.head
-    first.rddName should be {"Target RDD"}
+    first.rddInfo.name should be {"Target RDD"}
     first.numTasks should be {4}
-    first.numPartitions should be {4}
+    first.rddInfo.numPartitions should be {4}
     first.submissionTime should be ('defined)
     first.completionTime should be ('defined)
     first.taskInfos.length should be {4}
@@ -110,7 +110,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       checkNonZeroAvg(
         stageInfo.taskInfos.map{_._2.executorDeserializeTime},
         stageInfo + " executorDeserializeTime")
-      if (stageInfo.rddName == d4.name) {
+      if (stageInfo.rddInfo.name == d4.name) {
         checkNonZeroAvg(
           stageInfo.taskInfos.map{_._2.shuffleReadMetrics.get.fetchWaitTime},
           stageInfo + " fetchWaitTime")
@@ -118,11 +118,11 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
       stageInfo.taskInfos.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
-        if (stageInfo.rddName == d2.name || stageInfo.rddName == d3.name) {
+        if (stageInfo.rddInfo.name == d2.name || stageInfo.rddInfo.name == d3.name) {
           taskMetrics.shuffleWriteMetrics should be ('defined)
           taskMetrics.shuffleWriteMetrics.get.shuffleBytesWritten should be > (0l)
         }
-        if (stageInfo.rddName == d4.name) {
+        if (stageInfo.rddInfo.name == d4.name) {
           taskMetrics.shuffleReadMetrics should be ('defined)
           val sm = taskMetrics.shuffleReadMetrics.get
           sm.totalBlocksFetched should be > (0)

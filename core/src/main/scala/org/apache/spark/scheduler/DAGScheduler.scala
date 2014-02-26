@@ -194,6 +194,9 @@ class DAGScheduler(
           }
       }
     }))
+
+    // Start listening for block manager registration
+    blockManagerMaster.registrationListener.foreach(_.setListenerBus(listenerBus))
   }
 
   def addSparkListener(listener: SparkListener) {
@@ -545,14 +548,13 @@ class DAGScheduler(
         logInfo("Missing parents: " + getMissingParentStages(finalStage))
         if (allowLocal && finalStage.parents.size == 0 && partitions.length == 1) {
           // Compute very short actions like first() or take() with no parent stages locally.
-          listenerBus.post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
+          post(SparkListenerJobStart(job.jobId, Array[Int](), properties))
           runLocally(job)
         } else {
           idToActiveJob(jobId) = job
           activeJobs += job
           resultStageToJob(finalStage) = job
-          listenerBus.post(
-            SparkListenerJobStart(job.jobId, jobIdToStageIds(jobId).toArray, properties))
+          post(SparkListenerJobStart(job.jobId, jobIdToStageIds(jobId).toArray, properties))
           submitStage(finalStage)
         }
 
@@ -593,15 +595,15 @@ class DAGScheduler(
               task.stageId, stageInfo.name, taskInfo.serializedSize / 1024, TASK_SIZE_TO_WARN))
           }
         }
-        listenerBus.post(SparkListenerTaskStart(task.stageId, taskInfo))
+        post(SparkListenerTaskStart(task.stageId, taskInfo))
 
       case GettingResultEvent(task, taskInfo) =>
-        listenerBus.post(SparkListenerTaskGettingResult(taskInfo))
+        post(SparkListenerTaskGettingResult(taskInfo))
 
       case completion @ CompletionEvent(task, reason, _, _, taskInfo, taskMetrics) =>
         val stageId = task.stageId
         val taskType = Utils.getFormattedClassName(task)
-        listenerBus.post(SparkListenerTaskEnd(stageId, taskType, reason, taskInfo, taskMetrics))
+        post(SparkListenerTaskEnd(stageId, taskType, reason, taskInfo, taskMetrics))
         handleTaskCompletion(completion)
 
       case TaskSetFailed(taskSet, reason) =>
@@ -619,7 +621,7 @@ class DAGScheduler(
         for (job <- activeJobs) {
           val error = new SparkException("Job cancelled because SparkContext was shut down")
           job.listener.jobFailed(error)
-          listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, -1)))
+          post(SparkListenerJobEnd(job.jobId, JobFailed(error, -1)))
         }
         return true
     }
@@ -697,7 +699,7 @@ class DAGScheduler(
       stageIdToStage -= s.id     // but that won't get cleaned up via the normal paths through
       stageToInfos -= s          // completion events or stage abort
       jobIdToStageIds -= job.jobId
-      listenerBus.post(SparkListenerJobEnd(job.jobId, jobResult))
+      post(SparkListenerJobEnd(job.jobId, jobResult))
     }
   }
 
@@ -771,7 +773,7 @@ class DAGScheduler(
 
     // must be run listener before possible NotSerializableException
     // should be "StageSubmitted" first and then "JobEnded"
-    listenerBus.post(SparkListenerStageSubmitted(stageToInfos(stage), properties))
+    post(SparkListenerStageSubmitted(stageToInfos(stage), properties))
 
     if (tasks.size > 0) {
       // Preemptively serialize a task to make sure it can be serialized. We are catching this
@@ -820,7 +822,7 @@ class DAGScheduler(
       }
       logInfo("%s (%s) finished in %s s".format(stage, stage.name, serviceTime))
       stageToInfos(stage).completionTime = Some(System.currentTimeMillis())
-      listenerBus.post(SparkListenerStageCompleted(stageToInfos(stage)))
+      post(SparkListenerStageCompleted(stageToInfos(stage)))
       running -= stage
     }
     event.reason match {
@@ -845,7 +847,7 @@ class DAGScheduler(
                     resultStageToJob -= stage
                     markStageAsFinished(stage)
                     jobIdToStageIdsRemove(job.jobId)
-                    listenerBus.post(SparkListenerJobEnd(job.jobId, JobSucceeded))
+                    post(SparkListenerJobEnd(job.jobId, JobSucceeded))
                   }
                   job.listener.taskSucceeded(rt.outputId, event.result)
                 }
@@ -982,6 +984,8 @@ class DAGScheduler(
       logDebug("Additional executor lost message for " + execId +
                "(epoch " + currentEpoch + ")")
     }
+    val storageStatusList = blockManagerMaster.getStorageStatus
+    post(new SparkListenerExecutorsStateChange(storageStatusList))
   }
 
   private def handleExecutorGained(execId: String, host: String) {
@@ -990,6 +994,8 @@ class DAGScheduler(
       logInfo("Host gained which was in lost list earlier: " + host)
       failedEpoch -= execId
     }
+    // Do not trigger SparkListenerExecutorsStateChange, because it is already triggered in
+    // blockManagerMaster.registrationListener when a new BlockManager registers with the master
   }
 
   private def handleJobCancellation(jobId: Int) {
@@ -1004,7 +1010,7 @@ class DAGScheduler(
       jobIdToStageIds -= jobId
       activeJobs -= job
       idToActiveJob -= jobId
-      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, job.finalStage.id)))
+      post(SparkListenerJobEnd(job.jobId, JobFailed(error, job.finalStage.id)))
     }
   }
 
@@ -1027,7 +1033,7 @@ class DAGScheduler(
       idToActiveJob -= resultStage.jobId
       activeJobs -= job
       resultStageToJob -= resultStage
-      listenerBus.post(SparkListenerJobEnd(job.jobId, JobFailed(error, failedStage.id)))
+      post(SparkListenerJobEnd(job.jobId, JobFailed(error, failedStage.id)))
     }
     if (dependentStages.isEmpty) {
       logInfo("Ignoring failure of " + failedStage + " because all jobs depending on it are done")

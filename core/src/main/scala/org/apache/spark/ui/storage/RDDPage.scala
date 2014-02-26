@@ -21,36 +21,31 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.apache.spark.storage.{BlockId, StorageStatus, StorageUtils}
-import org.apache.spark.storage.BlockManagerMasterActor.BlockStatus
+import org.apache.spark.storage.{BlockId, BlockStatus, StorageStatus, StorageUtils}
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
-private[spark] class RDDPage(parent: BlockManagerUI) {
+private[ui] class RDDPage(parent: BlockManagerUI) {
   private def appName = parent.appName
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.fetchStorageStatus()
-    listener.getRDDInfo()
     val storageStatusList = listener.storageStatusList
     val id = request.getParameter("id").toInt
-    val filteredStorageStatusList =
-      StorageUtils.filterStorageStatusByRDD(storageStatusList.toArray, id)
     val rddInfo = listener.rddInfoList.filter(_.id == id).head
 
     // Worker table
-    val workers = filteredStorageStatusList.map((id, _))
+    val workers = storageStatusList.map((id, _))
     val workerTable = UIUtils.listingTable(workerHeader, workerRow, workers)
 
     // Block table
-    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).toArray.
-      sortWith(_._1.name < _._1.name)
+    val filteredStorageStatusList = StorageUtils.filterStorageStatusByRDD(storageStatusList, id)
+    val blockStatuses = filteredStorageStatusList.flatMap(_.blocks).sortWith(_._1.name < _._1.name)
     val blockLocations = StorageUtils.blockLocationsFromStorageStatus(filteredStorageStatusList)
-    val blocks = blockStatuses.map { case (id, status) =>
-      (id, status, blockLocations.get(id).getOrElse(Seq("Unknown")))
+    val blocks = blockStatuses.map { case (blockId, status) =>
+      (blockId, status, blockLocations.get(blockId).getOrElse(Seq("Unknown")))
     }
     val blockTable = UIUtils.listingTable(blockHeader, blockRow, blocks)
 

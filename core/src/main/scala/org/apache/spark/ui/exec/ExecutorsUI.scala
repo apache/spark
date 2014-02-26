@@ -24,14 +24,14 @@ import scala.xml.Node
 
 import org.eclipse.jetty.server.Handler
 
-import org.apache.spark.{SparkContext, ExceptionFailure}
+import org.apache.spark.ExceptionFailure
 import org.apache.spark.scheduler._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Executors
 import org.apache.spark.ui._
 import org.apache.spark.util.Utils
 
-private[spark] class ExecutorsUI(parent: SparkUI) {
+private[ui] class ExecutorsUI(parent: SparkUI) {
   val live = parent.live
   val sc = parent.sc
 
@@ -42,7 +42,7 @@ private[spark] class ExecutorsUI(parent: SparkUI) {
 
   def start() {
     val gateway = parent.gatewayListener
-    _listener = Some(new ExecutorsListener(sc, gateway, live))
+    _listener = Some(new ExecutorsListener())
     gateway.registerSparkListener(listener)
   }
 
@@ -51,7 +51,6 @@ private[spark] class ExecutorsUI(parent: SparkUI) {
   )
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    listener.fetchStorageStatus()
     val storageStatusList = listener.storageStatusList
     val maxMem = storageStatusList.map(_.maxMem).fold(0L)(_ + _)
     val memUsed = storageStatusList.map(_.memUsed()).fold(0L)(_ + _)
@@ -164,11 +163,7 @@ private[spark] class ExecutorsUI(parent: SparkUI) {
 /**
  * A SparkListener that prepares information to be displayed on the ExecutorsUI
  */
-private[spark] class ExecutorsListener(
-    sc: SparkContext,
-    gateway: GatewayUISparkListener,
-    live: Boolean)
-  extends StorageStatusFetchSparkListener(sc, gateway, live) {
+private[ui] class ExecutorsListener extends StorageStatusSparkListener {
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()
@@ -203,6 +198,7 @@ private[spark] class ExecutorsListener(
           executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
       }
     }
+    super.onTaskEnd(taskEnd)
   }
 
   /**

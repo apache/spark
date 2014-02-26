@@ -21,18 +21,20 @@ import java.util.{UUID, Properties}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
-
-import org.apache.spark.executor.{ShuffleWriteMetrics, ShuffleReadMetrics, TaskMetrics}
-import org.apache.spark.scheduler._
-import org.apache.spark.storage.BlockManagerMasterActor.BlockStatus
-import org.apache.spark.storage._
-import org.apache.spark._
+import scala.collection.mutable
 
 import net.liftweb.json.JsonDSL._
 import net.liftweb.json.JsonAST._
 import net.liftweb.json.DefaultFormats
 
+
+import org.apache.spark.executor.{ShuffleWriteMetrics, ShuffleReadMetrics, TaskMetrics}
+import org.apache.spark.scheduler._
+import org.apache.spark.storage._
+import org.apache.spark._
+
 private[spark] object JsonProtocol {
+  private implicit val format = DefaultFormats
 
   /**
    * JSON serialization methods for SparkListenerEvent's
@@ -41,30 +43,31 @@ private[spark] object JsonProtocol {
   def sparkEventToJson(event: SparkListenerEvent): JValue = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
-        stageSubmittedEventToJson(stageSubmitted)
+        stageSubmittedToJson(stageSubmitted)
       case stageCompleted: SparkListenerStageCompleted =>
-        stageCompletedEventToJson(stageCompleted)
+        stageCompletedToJson(stageCompleted)
       case taskStart: SparkListenerTaskStart =>
-        taskStartEventToJson(taskStart)
+        taskStartToJson(taskStart)
       case taskGettingResult: SparkListenerTaskGettingResult =>
-        taskGettingResultEventToJson(taskGettingResult)
+        taskGettingResultToJson(taskGettingResult)
       case taskEnd: SparkListenerTaskEnd =>
-        taskEndEventToJson(taskEnd)
+        taskEndToJson(taskEnd)
       case jobStart: SparkListenerJobStart =>
-        jobStartEventToJson(jobStart)
+        jobStartToJson(jobStart)
       case jobEnd: SparkListenerJobEnd =>
-        jobEndEventToJson(jobEnd)
+        jobEndToJson(jobEnd)
       case applicationStart: SparkListenerApplicationStart =>
-        applicationStartEventToJson(applicationStart)
-      case storageStatusFetch: SparkListenerStorageStatusFetch =>
-        storageStatusFetchEventToJson(storageStatusFetch)
-      case getRDDInfo: SparkListenerGetRDDInfo =>
-        getRDDInfoEventToJson(getRDDInfo)
-      // SparkListenerShutdown is not supported
+        applicationStartToJson(applicationStart)
+      case environmentUpdate: SparkListenerEnvironmentUpdate =>
+        environmentUpdateToJson(environmentUpdate)
+      case executorsStateChange: SparkListenerExecutorsStateChange =>
+        executorsStateChangeToJson(executorsStateChange)
+      case SparkListenerShutdown =>
+        shutdownToJson()
     }
   }
 
-  def stageSubmittedEventToJson(stageSubmitted: SparkListenerStageSubmitted): JValue = {
+  def stageSubmittedToJson(stageSubmitted: SparkListenerStageSubmitted): JValue = {
     val stageInfo = stageInfoToJson(stageSubmitted.stageInfo)
     val properties = propertiesToJson(stageSubmitted.properties)
     ("Event" -> Utils.getFormattedClassName(stageSubmitted)) ~
@@ -72,26 +75,26 @@ private[spark] object JsonProtocol {
     ("Properties" -> properties)
   }
 
-  def stageCompletedEventToJson(stageCompleted: SparkListenerStageCompleted): JValue = {
+  def stageCompletedToJson(stageCompleted: SparkListenerStageCompleted): JValue = {
     val stageInfo = stageInfoToJson(stageCompleted.stageInfo)
     ("Event" -> Utils.getFormattedClassName(stageCompleted)) ~
     ("Stage Info" -> stageInfo)
   }
 
-  def taskStartEventToJson(taskStart: SparkListenerTaskStart): JValue = {
+  def taskStartToJson(taskStart: SparkListenerTaskStart): JValue = {
     val taskInfo = taskInfoToJson(taskStart.taskInfo)
     ("Event" -> Utils.getFormattedClassName(taskStart)) ~
     ("Stage ID" -> taskStart.stageId) ~
     ("Task Info" -> taskInfo)
   }
 
-  def taskGettingResultEventToJson(taskGettingResult: SparkListenerTaskGettingResult): JValue = {
+  def taskGettingResultToJson(taskGettingResult: SparkListenerTaskGettingResult): JValue = {
     val taskInfo = taskInfoToJson(taskGettingResult.taskInfo)
     ("Event" -> Utils.getFormattedClassName(taskGettingResult)) ~
     ("Task Info" -> taskInfo)
   }
 
-  def taskEndEventToJson(taskEnd: SparkListenerTaskEnd): JValue = {
+  def taskEndToJson(taskEnd: SparkListenerTaskEnd): JValue = {
     val taskEndReason = taskEndReasonToJson(taskEnd.reason)
     val taskInfo = taskInfoToJson(taskEnd.taskInfo)
     val taskMetrics = taskMetricsToJson(taskEnd.taskMetrics)
@@ -103,7 +106,7 @@ private[spark] object JsonProtocol {
     ("Task Metrics" -> taskMetrics)
   }
 
-  def jobStartEventToJson(jobStart: SparkListenerJobStart): JValue = {
+  def jobStartToJson(jobStart: SparkListenerJobStart): JValue = {
     val properties = propertiesToJson(jobStart.properties)
     ("Event" -> Utils.getFormattedClassName(jobStart)) ~
     ("Job ID" -> jobStart.jobId) ~
@@ -111,37 +114,41 @@ private[spark] object JsonProtocol {
     ("Properties" -> properties)
   }
 
-  def jobEndEventToJson(jobEnd: SparkListenerJobEnd): JValue = {
+  def jobEndToJson(jobEnd: SparkListenerJobEnd): JValue = {
     val jobResult = jobResultToJson(jobEnd.jobResult)
     ("Event" -> Utils.getFormattedClassName(jobEnd)) ~
     ("Job ID" -> jobEnd.jobId) ~
     ("Job Result" -> jobResult)
   }
 
-  def applicationStartEventToJson(applicationStart: SparkListenerApplicationStart): JValue = {
-    val environmentDetails = applicationStart.environmentDetails
+  def applicationStartToJson(applicationStart: SparkListenerApplicationStart): JValue = {
+    ("Event" -> Utils.getFormattedClassName(applicationStart)) ~
+    ("App Name" -> applicationStart.appName)
+  }
+
+  def environmentUpdateToJson(environmentUpdate: SparkListenerEnvironmentUpdate): JValue = {
+    val environmentDetails = environmentUpdate.environmentDetails
     val jvmInformation = mapToJson(environmentDetails("JVM Information").toMap)
     val sparkProperties = mapToJson(environmentDetails("Spark Properties").toMap)
     val systemProperties = mapToJson(environmentDetails("System Properties").toMap)
     val classpathEntries = mapToJson(environmentDetails("Classpath Entries").toMap)
-    ("Event" -> Utils.getFormattedClassName(applicationStart)) ~
+    ("Event" -> Utils.getFormattedClassName(environmentUpdate)) ~
     ("JVM Information" -> jvmInformation) ~
     ("Spark Properties" -> sparkProperties) ~
     ("System Properties" -> systemProperties) ~
     ("Classpath Entries" -> classpathEntries)
   }
 
-  def storageStatusFetchEventToJson(storageStatusFetch: SparkListenerStorageStatusFetch): JValue = {
+  def executorsStateChangeToJson(executorsStateChange: SparkListenerExecutorsStateChange)
+      : JValue = {
     val storageStatusList =
-      JArray(storageStatusFetch.storageStatusList.map(storageStatusToJson).toList)
-    ("Event" -> Utils.getFormattedClassName(storageStatusFetch)) ~
-      ("Storage Status List" -> storageStatusList)
+      JArray(executorsStateChange.storageStatusList.map(storageStatusToJson).toList)
+    ("Event" -> Utils.getFormattedClassName(executorsStateChange)) ~
+    ("Storage Status List" -> storageStatusList)
   }
 
-  def getRDDInfoEventToJson(getRDDInfo: SparkListenerGetRDDInfo): JValue = {
-    val rddInfoList = JArray(getRDDInfo.rddInfoList.map(rddInfoToJson).toList)
-    ("Event" -> Utils.getFormattedClassName(getRDDInfo)) ~
-    ("RDD Info List" -> rddInfoList)
+  def shutdownToJson(): JValue = {
+    "Event" -> Utils.getFormattedClassName(SparkListenerShutdown)
   }
 
   /**
@@ -149,6 +156,7 @@ private[spark] object JsonProtocol {
    */
 
   def stageInfoToJson(stageInfo: StageInfo): JValue = {
+    val rddInfo = rddInfoToJson(stageInfo.rddInfo)
     val taskInfos = JArray(stageInfo.taskInfos.map { case (info, metrics) =>
       ("Task Info" -> taskInfoToJson(info)) ~
       ("Task Metrics" -> taskMetricsToJson(metrics))
@@ -157,9 +165,8 @@ private[spark] object JsonProtocol {
     val completionTime = stageInfo.completionTime.map(JInt(_)).getOrElse(JNothing)
     ("Stage ID" -> stageInfo.stageId) ~
     ("Stage Name" -> stageInfo.name) ~
-    ("RDD Name" -> stageInfo.rddName) ~
-    ("Number of Partitions" -> stageInfo.numPartitions) ~
     ("Number of Tasks" -> stageInfo.numTasks) ~
+    ("RDD Info" -> rddInfo) ~
     ("Task Infos" -> taskInfos) ~
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
@@ -184,6 +191,12 @@ private[spark] object JsonProtocol {
       taskMetrics.shuffleReadMetrics.map(shuffleReadMetricsToJson).getOrElse(JNothing)
     val shuffleWriteMetrics =
       taskMetrics.shuffleWriteMetrics.map(shuffleWriteMetricsToJson).getOrElse(JNothing)
+    val updatedBlocks = taskMetrics.updatedBlocks.map { blocks =>
+        JArray(blocks.toList.map { case (id, status) =>
+          ("Block ID" -> blockIdToJson(id)) ~
+          ("Status" -> blockStatusToJson(status))
+        })
+      }.getOrElse(JNothing)
     ("Host Name" -> taskMetrics.hostname) ~
     ("Executor Deserialize Time" -> taskMetrics.executorDeserializeTime) ~
     ("Executor Run Time" -> taskMetrics.executorRunTime) ~
@@ -193,7 +206,8 @@ private[spark] object JsonProtocol {
     ("Memory Bytes Spilled" -> taskMetrics.memoryBytesSpilled) ~
     ("Disk Bytes Spilled" -> taskMetrics.diskBytesSpilled) ~
     ("Shuffle Read Metrics" -> shuffleReadMetrics) ~
-    ("Shuffle Write Metrics" -> shuffleWriteMetrics)
+    ("Shuffle Write Metrics" -> shuffleWriteMetrics) ~
+    ("Updated Blocks" -> updatedBlocks)
   }
 
   def shuffleReadMetricsToJson(shuffleReadMetrics: ShuffleReadMetrics): JValue = {
@@ -268,8 +282,8 @@ private[spark] object JsonProtocol {
     ("RDD ID" -> rddInfo.id) ~
     ("Name" -> rddInfo.name) ~
     ("Storage Level" -> storageLevel) ~
-    ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
     ("Number of Partitions" -> rddInfo.numPartitions) ~
+    ("Number of Cached Partitions" -> rddInfo.numCachedPartitions) ~
     ("Memory Size" -> rddInfo.memSize) ~
     ("Disk Size" -> rddInfo.diskSize)
   }
@@ -364,11 +378,10 @@ private[spark] object JsonProtocol {
     val jobStart = Utils.getFormattedClassName(SparkListenerJobStart)
     val jobEnd = Utils.getFormattedClassName(SparkListenerJobEnd)
     val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
-    val storageStatusFetch = Utils.getFormattedClassName(SparkListenerStorageStatusFetch)
-    val getRDDInfo = Utils.getFormattedClassName(SparkListenerGetRDDInfo)
-    // SparkListenerShutdown is not supported
+    val environmentUpdate = Utils.getFormattedClassName(SparkListenerEnvironmentUpdate)
+    val executorsStateChanged = Utils.getFormattedClassName(SparkListenerExecutorsStateChange)
+    val shutdown = Utils.getFormattedClassName(SparkListenerShutdown)
 
-    implicit val format = DefaultFormats
     (json \ "Event").extract[String] match {
       case `stageSubmitted` => stageSubmittedFromJson(json)
       case `stageCompleted` => stageCompletedFromJson(json)
@@ -378,8 +391,9 @@ private[spark] object JsonProtocol {
       case `jobStart` => jobStartFromJson(json)
       case `jobEnd` => jobEndFromJson(json)
       case `applicationStart` => applicationStartFromJson(json)
-      case `storageStatusFetch` => storageStatusFetchFromJson(json)
-      case `getRDDInfo` => getRDDInfoFromJson(json)
+      case `environmentUpdate` => environmentUpdateFromJson(json)
+      case `executorsStateChanged` => executorsStateChangeFromJson(json)
+      case `shutdown` => SparkListenerShutdown
     }
   }
 
@@ -395,7 +409,6 @@ private[spark] object JsonProtocol {
   }
 
   def taskStartFromJson(json: JValue): SparkListenerTaskStart = {
-    implicit val format = DefaultFormats
     val stageId = (json \ "Stage ID").extract[Int]
     val taskInfo = taskInfoFromJson(json \ "Task Info")
     new SparkListenerTaskStart(stageId, taskInfo)
@@ -407,7 +420,6 @@ private[spark] object JsonProtocol {
   }
 
   def taskEndFromJson(json: JValue): SparkListenerTaskEnd = {
-    implicit val format = DefaultFormats
     val stageId = (json \ "Stage ID").extract[Int]
     val taskType = (json \ "Task Type").extract[String]
     val taskEndReason = taskEndReasonFromJson(json \ "Task End Reason")
@@ -417,7 +429,6 @@ private[spark] object JsonProtocol {
   }
 
   def jobStartFromJson(json: JValue): SparkListenerJobStart = {
-    implicit val format = DefaultFormats
     val jobId = (json \ "Job ID").extract[Int]
     val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
     val properties = propertiesFromJson(json \ "Properties")
@@ -425,32 +436,28 @@ private[spark] object JsonProtocol {
   }
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {
-    implicit val format = DefaultFormats
     val jobId = (json \ "Job ID").extract[Int]
     val jobResult = jobResultFromJson(json \ "Job Result")
     new SparkListenerJobEnd(jobId, jobResult)
   }
 
   def applicationStartFromJson(json: JValue): SparkListenerApplicationStart = {
+    new SparkListenerApplicationStart((json \ "App Name").extract[String])
+  }
+
+  def environmentUpdateFromJson(json: JValue): SparkListenerEnvironmentUpdate = {
     val environmentDetails = Map[String, Seq[(String, String)]](
       "JVM Information" -> mapFromJson(json \ "JVM Information").toSeq,
       "Spark Properties" -> mapFromJson(json \ "Spark Properties").toSeq,
       "System Properties" -> mapFromJson(json \ "System Properties").toSeq,
       "Classpath Entries" -> mapFromJson(json \ "Classpath Entries").toSeq)
-    new SparkListenerApplicationStart(environmentDetails)
+    new SparkListenerEnvironmentUpdate(environmentDetails)
   }
 
-  def storageStatusFetchFromJson(json: JValue): SparkListenerStorageStatusFetch = {
-    implicit val format = DefaultFormats
+  def executorsStateChangeFromJson(json: JValue): SparkListenerExecutorsStateChange = {
     val storageStatusList =
       (json \ "Storage Status List").extract[List[JValue]].map(storageStatusFromJson)
-    new SparkListenerStorageStatusFetch(storageStatusList)
-  }
-
-  def getRDDInfoFromJson(json: JValue): SparkListenerGetRDDInfo = {
-    implicit val format = DefaultFormats
-    val rddInfoList = (json \ "RDD Info List").extract[List[JValue]].map(rddInfoFromJson)
-    new SparkListenerGetRDDInfo(rddInfoList)
+    new SparkListenerExecutorsStateChange(storageStatusList)
   }
 
   /**
@@ -458,12 +465,10 @@ private[spark] object JsonProtocol {
    */
 
   def stageInfoFromJson(json: JValue): StageInfo = {
-    implicit val format = DefaultFormats
     val stageId = (json \ "Stage ID").extract[Int]
     val stageName = (json \ "Stage Name").extract[String]
-    val rddName = (json \ "RDD Name").extract[String]
-    val numPartitions = (json \ "Number of Partitions").extract[Int]
     val numTasks = (json \ "Number of Tasks").extract[Int]
+    val rddInfo = rddInfoFromJson(json \ "RDD Info")
     val taskInfos = (json \ "Task Infos").extract[List[JValue]].map { value =>
       (taskInfoFromJson(value \ "Task Info"), taskMetricsFromJson(value \ "Task Metrics"))
     }.toBuffer
@@ -471,7 +476,7 @@ private[spark] object JsonProtocol {
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val emittedTaskSizeWarning = (json \ "Emitted Task Size Warning").extract[Boolean]
 
-    val stageInfo = new StageInfo(stageId, stageName, rddName, numPartitions, numTasks, taskInfos)
+    val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfo, taskInfos)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.emittedTaskSizeWarning = emittedTaskSizeWarning
@@ -479,7 +484,6 @@ private[spark] object JsonProtocol {
   }
 
   def taskInfoFromJson(json: JValue): TaskInfo = {
-    implicit val format = DefaultFormats
     val taskId = (json \ "Task ID").extract[Long]
     val index = (json \ "Index").extract[Int]
     val launchTime = (json \ "Launch Time").extract[Long]
@@ -500,7 +504,6 @@ private[spark] object JsonProtocol {
   }
 
   def taskMetricsFromJson(json: JValue): TaskMetrics = {
-    implicit val format = DefaultFormats
     val metrics = new TaskMetrics
     metrics.hostname = (json \ "Host Name").extract[String]
     metrics.executorDeserializeTime = (json \ "Executor Deserialize Time").extract[Long]
@@ -513,11 +516,17 @@ private[spark] object JsonProtocol {
       Utils.jsonOption(json \ "Shuffle Read Metrics").map(shuffleReadMetricsFromJson)
     metrics.shuffleWriteMetrics =
       Utils.jsonOption(json \ "Shuffle Write Metrics").map(shuffleWriteMetricsFromJson)
+    metrics.updatedBlocks = Utils.jsonOption(json \ "Updated Blocks").map { value =>
+      value.extract[List[JValue]].map { block =>
+        val id = blockIdFromJson(block \ "Block ID")
+        val status = blockStatusFromJson(block \ "Status")
+        (id, status)
+      }
+    }
     metrics
   }
 
   def shuffleReadMetricsFromJson(json: JValue): ShuffleReadMetrics = {
-    implicit val format = DefaultFormats
     val metrics = new ShuffleReadMetrics
     metrics.shuffleFinishTime = (json \ "Shuffle Finish Time").extract[Long]
     metrics.totalBlocksFetched = (json \ "Total Blocks Fetched").extract[Int]
@@ -530,7 +539,6 @@ private[spark] object JsonProtocol {
   }
 
   def shuffleWriteMetricsFromJson(json: JValue): ShuffleWriteMetrics = {
-    implicit val format = DefaultFormats
     val metrics = new ShuffleWriteMetrics
     metrics.shuffleBytesWritten = (json \ "Shuffle Bytes Written").extract[Long]
     metrics.shuffleWriteTime = (json \ "Shuffle Write Time").extract[Long]
@@ -538,7 +546,6 @@ private[spark] object JsonProtocol {
   }
 
   def taskEndReasonFromJson(json: JValue): TaskEndReason = {
-    implicit val format = DefaultFormats
     val success = Utils.getFormattedClassName(Success)
     val resubmitted = Utils.getFormattedClassName(Resubmitted)
     val fetchFailed = Utils.getFormattedClassName(FetchFailed)
@@ -571,7 +578,6 @@ private[spark] object JsonProtocol {
   }
 
   def blockManagerIdFromJson(json: JValue): BlockManagerId = {
-    implicit val format = DefaultFormats
     val executorId = (json \ "Executor ID").extract[String]
     val host = (json \ "Host").extract[String]
     val port = (json \ "Port").extract[Int]
@@ -580,7 +586,6 @@ private[spark] object JsonProtocol {
   }
 
   def jobResultFromJson(json: JValue): JobResult = {
-    implicit val format = DefaultFormats
     val jobSucceeded = Utils.getFormattedClassName(JobSucceeded)
     val jobFailed = Utils.getFormattedClassName(JobFailed)
 
@@ -594,31 +599,34 @@ private[spark] object JsonProtocol {
   }
 
   def storageStatusFromJson(json: JValue): StorageStatus = {
-    implicit val format = DefaultFormats
     val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
     val maxMem = (json \ "Maximum Memory").extract[Long]
     val blocks = (json \ "Blocks").extract[List[JValue]].map { block =>
       val id = blockIdFromJson(block \ "Block ID")
       val status = blockStatusFromJson(block \ "Status")
       (id, status)
-    }.toMap
-    new StorageStatus(blockManagerId, maxMem, blocks)
+    }
+    val blockMap = mutable.Map[BlockId, BlockStatus](blocks: _*)
+    new StorageStatus(blockManagerId, maxMem, blockMap)
   }
 
   def rddInfoFromJson(json: JValue): RDDInfo = {
-    implicit val format = DefaultFormats
     val rddId = (json \ "RDD ID").extract[Int]
     val name = (json \ "Name").extract[String]
     val storageLevel = storageLevelFromJson(json \ "Storage Level")
-    val numCachedPartitions = (json \ "Number of Cached Partitions").extract[Int]
     val numPartitions = (json \ "Number of Partitions").extract[Int]
+    val numCachedPartitions = (json \ "Number of Cached Partitions").extract[Int]
     val memSize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
-    new RDDInfo(rddId, name, storageLevel, numCachedPartitions, numPartitions, memSize, diskSize)
+
+    val rddInfo = new RDDInfo(rddId, name, numPartitions, storageLevel)
+    rddInfo.numCachedPartitions = numCachedPartitions
+    rddInfo.memSize = memSize
+    rddInfo.diskSize = diskSize
+    rddInfo
   }
 
   def storageLevelFromJson(json: JValue): StorageLevel = {
-    implicit val format = DefaultFormats
     val useDisk = (json \ "Use Disk").extract[Boolean]
     val useMemory = (json \ "Use Memory").extract[Boolean]
     val deserialized = (json \ "Deserialized").extract[Boolean]
@@ -627,7 +635,6 @@ private[spark] object JsonProtocol {
   }
 
   def blockIdFromJson(json: JValue): BlockId = {
-    implicit val format = DefaultFormats
     val rddBlockId = Utils.getFormattedClassName(RDDBlockId)
     val shuffleBlockId = Utils.getFormattedClassName(ShuffleBlockId)
     val broadcastBlockId = Utils.getFormattedClassName(BroadcastBlockId)
@@ -672,11 +679,10 @@ private[spark] object JsonProtocol {
   }
 
   def blockStatusFromJson(json: JValue): BlockStatus = {
-    implicit val format = DefaultFormats
     val storageLevel = storageLevelFromJson(json \ "Storage Level")
     val memorySize = (json \ "Memory Size").extract[Long]
     val diskSize = (json \ "Disk Size").extract[Long]
-    new BlockStatus(storageLevel, memorySize, diskSize)
+    BlockStatus(storageLevel, memorySize, diskSize)
   }
 
   /**
@@ -697,14 +703,12 @@ private[spark] object JsonProtocol {
   }
 
   def UUIDFromJson(json: JValue): UUID = {
-    implicit val format = DefaultFormats
     val leastSignificantBits = (json \ "Least Significant Bits").extract[Long]
     val mostSignificantBits = (json \ "Most Significant Bits").extract[Long]
     new UUID(leastSignificantBits, mostSignificantBits)
   }
 
   def stackTraceFromJson(json: JValue): Array[StackTraceElement] = {
-    implicit val format = DefaultFormats
     json.extract[List[JValue]].map { line =>
       val declaringClass = (line \ "Declaring Class").extract[String]
       val methodName = (line \ "Method Name").extract[String]
@@ -715,7 +719,6 @@ private[spark] object JsonProtocol {
   }
 
   def exceptionFromJson(json: JValue): Exception = {
-    implicit val format = DefaultFormats
     val e = new Exception((json \ "Message").extract[String])
     e.setStackTrace(stackTraceFromJson(json \ "Stack Trace"))
     e

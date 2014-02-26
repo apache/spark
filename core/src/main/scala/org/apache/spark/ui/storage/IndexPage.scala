@@ -27,14 +27,12 @@ import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
-private[spark] class IndexPage(parent: BlockManagerUI) {
+private[ui] class IndexPage(parent: BlockManagerUI) {
   private def appName = parent.appName
   private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     // Calculate macro-level statistics
-    listener.fetchStorageStatus()
-    listener.getRDDInfo()
     val rdds = listener.rddInfoList
     val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
     UIUtils.headerSparkPage(content, appName, "Storage ", Storage)

@@ -29,7 +29,7 @@ import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
-private[spark] class JobProgressUI(parent: SparkUI) {
+private[ui] class JobProgressUI(parent: SparkUI) {
   val dateFmt = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   val live = parent.live
   val sc = parent.sc
@@ -45,7 +45,7 @@ private[spark] class JobProgressUI(parent: SparkUI) {
 
   def start() {
     val gateway = parent.gatewayListener
-    _listener = Some(new JobProgressListener(sc, gateway, live))
+    _listener = Some(new JobProgressListener(sc, live))
     gateway.registerSparkListener(listener)
   }
 
