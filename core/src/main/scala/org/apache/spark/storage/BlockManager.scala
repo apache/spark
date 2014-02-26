@@ -360,7 +360,7 @@ private[spark] class BlockManager(
                 // TODO: Consider creating a putValues that also takes in a iterator?
                 val valuesBuffer = new ArrayBuffer[Any]
                 valuesBuffer ++= values
-                memoryStore.putValues(blockId, valuesBuffer.toIterator, level, true).data match {
+                memoryStore.putValues(blockId, valuesBuffer, level, true).data match {
                   case Left(values2) =>
                     return Some(values2)
                   case _ =>
@@ -703,7 +703,7 @@ private[spark] class BlockManager(
           logInfo("Writing block " + blockId + " to disk")
           data match {
             case Left(elements) =>
-              diskStore.putValues(blockId, elements.toIterator, level, false)
+              diskStore.putValues(blockId, elements, level, false)
             case Right(bytes) =>
               diskStore.putBytes(blockId, bytes, level)
           }
