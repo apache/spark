@@ -99,13 +99,12 @@ With this mode, your application is actually run on the remote machine where the
 
 ## Launch spark application with yarn-client mode.
 
-With yarn-client mode, the application will be launched locally. Just like running application or spark-shell on Local / Mesos / Standalone mode. The launch method is also the similar with them, just make sure that when you need to specify a master url, use "yarn-client" instead. And you also need to export the env value for SPARK_JAR and SPARK_YARN_APP_JAR
+With yarn-client mode, the application will be launched locally. Just like running application or spark-shell on Local / Mesos / Standalone mode. The launch method is also the similar with them, just make sure that when you need to specify a master url, use "yarn-client" instead. And you also need to export the env value for SPARK_JAR.
 
 Configuration in yarn-client mode:
 
 In order to tune worker core/number/memory etc. You need to export environment variables or add them to the spark configuration file (./conf/spark_env.sh). The following are the list of options.
 
-* `SPARK_YARN_APP_JAR`, Path to your application's JAR file (required)
 * `SPARK_WORKER_INSTANCES`, Number of workers to start (Default: 2)
 * `SPARK_WORKER_CORES`, Number of cores for the workers (Default: 1).
 * `SPARK_WORKER_MEMORY`, Memory per Worker (e.g. 1000M, 2G) (Default: 1G)
@@ -118,12 +117,11 @@ In order to tune worker core/number/memory etc. You need to export environment v
 For example:
 
     SPARK_JAR=./assembly/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop2.0.5-alpha.jar \
-    SPARK_YARN_APP_JAR=examples/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
     ./bin/run-example org.apache.spark.examples.SparkPi yarn-client
 
+or
 
     SPARK_JAR=./assembly/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-assembly-{{site.SPARK_VERSION}}-hadoop2.0.5-alpha.jar \
-    SPARK_YARN_APP_JAR=examples/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
     MASTER=yarn-client ./bin/spark-shell
 
 
