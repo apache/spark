@@ -529,8 +529,15 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
     val workerAddress = worker.actor.path.address
     if (addressToWorker.contains(workerAddress)) {
-      logInfo("Attempted to re-register worker at same address: " + workerAddress)
-      return false
+      val oldWorker = addressToWorker(workerAddress)
+      if (oldWorker.state == WorkerState.UNKNOWN) {
+        // A worker registering from UNKNOWN implies that the worker was restarted during recovery.
+        // The old worker must thus be dead, so we will remove it and accept the new worker.
+        removeWorker(oldWorker)
+      } else {
+        logInfo("Attempted to re-register worker at same address: " + workerAddress)
+        return false
+      }
     }
 
     workers += worker
