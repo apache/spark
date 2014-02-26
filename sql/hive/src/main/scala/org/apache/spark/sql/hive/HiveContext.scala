@@ -112,6 +112,8 @@ abstract class HiveContext(sc: SparkContext) extends SparkSqlContext(sc) {
 
   /* A catalyst metadata catalog that points to the Hive Metastore. */
   override val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+  // TODO: this is a temporary workaround to register Parquet tables, think of something more permanent
+  CreateParquetTable.catalog = catalog
 
   /* An analyzer that uses the Hive metastore. */
   override val analyzer = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)

@@ -7,6 +7,7 @@ import parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
 import parquet.hadoop.api.{WriteSupport, ReadSupport}
 import parquet.hadoop.api.ReadSupport.ReadContext
 import parquet.column.ParquetProperties
+import parquet.hadoop.util.ContextUtil
 
 import catalyst.expressions.{Attribute, GenericRow, Row, Expression}
 import org.apache.spark.sql.execution.{UnaryNode, LeafNode}
@@ -14,7 +15,7 @@ import catalyst.types._
 
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.fs.Path
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.execution.SparkPlan
@@ -35,9 +36,10 @@ case class ParquetTableScan(
    * Runs this query returning the result as an RDD.
   */
   override def execute(): RDD[Row] = {
-    val job = new Job(new Configuration())
+    val job = new Job()
     ParquetInputFormat.setReadSupportClass(job, classOf[org.apache.spark.sql.RowReadSupport])
-    job.getConfiguration.set(
+    val conf: Configuration = ContextUtil.getConfiguration(job)
+    conf.set(
         RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertFromAttributes(attributes).toString)
     // TODO: add record filters, etc.
@@ -45,7 +47,7 @@ case class ParquetTableScan(
       relation.path,
       classOf[ParquetInputFormat[Row]],
       classOf[Void], classOf[Row],
-      job.getConfiguration)
+      conf)
       .map(_._2)
   }
 
@@ -60,7 +62,7 @@ case class ParquetTableScan(
     if(success)
       ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sc)
     else
-      ParquetTableScan(attributes, relation, columnPruningPred)(sc)
+      this // TODO: add warning to log that column projection was unsuccessful?
   }
 
   /**
@@ -97,29 +99,35 @@ case class InsertIntoParquetTable(
    * Inserts all the rows in the Parquet file.
    */
   override def execute() = {
+
+    // TODO: currently we do not check whether the "schema"s are compatible
+    // That means if one first creates a table and then INSERTs data with
+    // and incompatible schema the execition will fail. It would be nice
+    // to catch this early one, maybe having the planner validate the schema
+    // before calling execute().
+
     val childRdd = child.execute()
     assert(childRdd != null)
 
-    val job = new Job(new Configuration())
+    val job = new Job()
     ParquetOutputFormat.setWriteSupportClass(job, classOf[org.apache.spark.sql.RowWriteSupport])
-    val conf = job.getConfiguration
+    val conf = ContextUtil.getConfiguration(job)
     // TODO: move that to function in object
     conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, relation.parquetSchema.toString)
-    // TODO: we should pass the read schema, too, in case we insert from a select from a Parquet table?
-    // conf.set(RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA, relation.parquetSchema.toString)
 
     // TODO: add checks: file exists, etc.
-    val fs = FileSystem.get(conf)
-    fs.delete(new Path(relation.path), true)
+    val fspath = new Path(relation.path)
+    val fs = fspath.getFileSystem(conf)
+    fs.delete(fspath, true)
 
-    JavaPairRDD.fromRDD(childRdd.map(Tuple2(0, _))).saveAsNewAPIHadoopFile(
+    JavaPairRDD.fromRDD(childRdd.map(Tuple2(null, _))).saveAsNewAPIHadoopFile(
       relation.path.toString,
       classOf[Void],
       classOf[org.apache.spark.sql.catalyst.expressions.GenericRow],
       classOf[parquet.hadoop.ParquetOutputFormat[org.apache.spark.sql.catalyst.expressions.GenericRow]],
       conf)
 
-    // From InsertIntoHiveTable:
+    // From [[InsertIntoHiveTable]]:
     // It would be nice to just return the childRdd unchanged so insert operations could be chained,
     // however for now we return an empty list to simplify compatibility checks with hive, which
     // does not return anything for insert operations.
@@ -129,7 +137,6 @@ case class InsertIntoParquetTable(
 
   override def output = child.output
 }
-
 
 /**
  * A [[parquet.io.api.RecordMaterializer]] for Rows.
@@ -212,7 +219,7 @@ class RowWriteSupport extends WriteSupport[Row] with Logging {
     writer.startMessage()
     attributes.zipWithIndex.foreach {
       case (attribute, index) => {
-        if(record(index) != null) { // null values indicate optional fields but we do not check currently
+        if(record(index) != null && record(index) != Nil) { // null values indicate optional fields but we do not check currently
           writer.startField(attribute.name, index)
           ParquetTypesConverter.consumeType(writer, attribute.dataType, record, index)
           writer.endField(attribute.name, index)

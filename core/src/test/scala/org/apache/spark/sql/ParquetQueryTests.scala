@@ -7,6 +7,11 @@ import org.apache.spark.rdd.RDD
 import parquet.schema.MessageTypeParser
 
 import org.apache.spark.sql.catalyst.expressions.Row
+import org.apache.hadoop.fs.{Path, FileSystem}
+import org.apache.hadoop.conf.Configuration
+import parquet.hadoop.ParquetFileWriter
+import org.apache.hadoop.mapreduce.Job
+import parquet.hadoop.util.ContextUtil
 
 class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
   override def beforeAll() {
@@ -58,6 +63,19 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
       }
     }
     assert(allChecks)
+  }
+
+  test("Writing metadata from scratch for table CREATE") {
+    val job = new Job()
+    val path = new Path("file:///tmp/test/mytesttable")
+    val fs: FileSystem = FileSystem.getLocal(ContextUtil.getConfiguration(job))
+    ParquetTypesConverter.writeMetaData(ParquetTestData.testData.attributes, path)
+    assert(fs.exists(new Path(path.getParent, ParquetFileWriter.PARQUET_METADATA_FILE)))
+    val metaData = ParquetTypesConverter.readMetaData(path)
+    assert(metaData != null)
+    ParquetTestData.testData.parquetSchema.checkContains(metaData.getFileMetaData.getSchema) // throws excpetion if incompatible
+    metaData.getFileMetaData.getSchema.checkContains(ParquetTestData.testData.parquetSchema) // throws excpetion if incompatible
+    fs.delete(path.getParent, true)
   }
 
   /**

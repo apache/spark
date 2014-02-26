@@ -9,7 +9,10 @@ import org.apache.spark.sql.ParquetTestData
 class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
 
   def runQuery(querystr: String): Array[Row] = {
-    TestShark.sql(querystr).rdd.collect()
+    TestShark
+      .sql(querystr)
+      .rdd
+      .collect()
   }
 
   override def beforeAll() {
@@ -17,10 +20,10 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
     // without restarting the JVM.
     System.clearProperty("spark.driver.port")
     System.clearProperty("spark.hostPort")
-    org.apache.spark.sql.ParquetTestData.testFile.delete()
     ParquetTestData.writeFile
-    val testRel = ParquetTestData.testData
-    TestShark.catalog.overrideTable(Some[String]("default"), "testtable", testRel)
+
+    // Override initial Parquet test table
+    TestShark.catalog.overrideTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
   }
 
   override def afterAll() {
@@ -28,21 +31,39 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
   }
 
   test("SELECT on Parquet table") {
-    val rdd = runQuery("SELECT myboolean, mylong FROM default.testtable")
+    val rdd = runQuery("SELECT myboolean, mylong FROM parquet.testsource")
     assert(rdd != null)
     assert(rdd.forall(_.size == 2))
   }
 
-  test("Filter on Parquet table") {
-    val rdd = runQuery("SELECT myboolean, mylong FROM default.testtable WHERE myboolean=true")
+  test("Simple column projection on Parquet table") {
+    val rdd = runQuery("SELECT myboolean, mylong FROM parquet.testsource WHERE myboolean=true")
     assert(rdd.size === 5)
     assert(rdd.forall(_.getBoolean(0)))
   }
 
-  // TODO: fix insert into table
-  /*test("INSERT OVERWRITE Parquet table") {
-    val rdd = runQuery("INSERT OVERWRITE TABLE default.testtable SELECT * FROM default.testtable")
-    assert(rdd != null)
+  // TODO: It seems that "CREATE TABLE" is passed directly to Hive as a NativeCommand, which
+  // makes this test fail. One should come up with a more permanent solution first.
+  /*test("CREATE Parquet table") {
+    val result = runQuery("CREATE TABLE IF NOT EXISTS parquet.tmptable (key INT, value STRING)")
+    assert(result != null)
   }*/
+
+  test("CREATE TABLE AS Parquet table") {
+    runQuery("CREATE TABLE parquet.testdest AS SELECT * FROM src")
+    val rddCopy = runQuery("SELECT * FROM parquet.testdest").sortBy(_.getInt(0))
+    val rddOrig = runQuery("SELECT * FROM src").sortBy(_.getInt(0))
+    val allsame = (rddCopy, rddOrig).zipped.forall { (a,b) => (a,b).zipped.forall { (x,y) => x==y}}
+    assert(allsame)
+  }
+
+  test("INSERT OVERWRITE to Parquet table") {
+    runQuery("CREATE TABLE parquet.testdest AS SELECT * FROM src")
+    runQuery("INSERT OVERWRITE TABLE parquet.testdest SELECT * FROM src")
+    val rddCopy = runQuery("SELECT * FROM parquet.testdest").sortBy(_.getInt(0))
+    val rddOrig = runQuery("SELECT * FROM src").sortBy(_.getInt(0))
+    val allsame = (rddCopy, rddOrig).zipped.forall { (a,b) => (a,b).zipped.forall { (x,y) => x==y } }
+    assert(allsame)
+  }
 }
 

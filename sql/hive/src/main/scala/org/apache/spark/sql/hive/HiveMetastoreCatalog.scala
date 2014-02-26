@@ -91,6 +91,8 @@ class HiveMetastoreCatalog(hive: HiveContext) extends Catalog with Logging {
    */
   object CreateTables extends Rule[LogicalPlan] {
     def apply(plan: LogicalPlan): LogicalPlan = plan transform {
+      // TODO: this is a temporary workaround to register Parquet tables, think of something more permanent
+      case InsertIntoCreatedTable(Some("parquet"), tableName, child) => CreateParquetTable(plan)
       case InsertIntoCreatedTable(db, tableName, child) =>
         val databaseName = db.getOrElse(SessionState.get.getCurrentDatabase())
 
