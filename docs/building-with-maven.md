@@ -25,6 +25,8 @@ If you don't run this, you may see errors like the following:
 
 You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
 
+*Note: For Java 1.8 and above this step is not required.*
+
 ## Specifying the Hadoop version ##
 
 Because HDFS is not protocol-compatible across versions, if you want to read from HDFS, you'll need to build Spark against the specific HDFS version in your environment. You can do this through the "hadoop.version" property. If unset, Spark will build against Hadoop 1.0.4 by default.
@@ -76,3 +78,11 @@ The maven build includes support for building a Debian package containing the as
     $ mvn -Pdeb -DskipTests clean package
 
 The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.
+
+## Running java 8 test suites.
+
+Running only java 8 tests and nothing else.
+
+    $ mvn test -DskipTests -Pjava8-tests
+    
+Java 8 tests are run when -Pjava8-tests profile is enabled, they will run inspite of -DskipTests. For these tests to run java 8 should be installed on the system running the tests.
