@@ -17,45 +17,31 @@
 package org.apache.spark.storage
 
 import org.scalatest.FunSuite
-import org.apache.spark.{LocalSparkContext, SparkContext}
-import org.apache.commons.io.FileUtils
-import java.io.File
-
-class Expander(base:String, count:Int) extends Iterator[String] {
-  var i = 0;
-  def next() : String = {
-    i += 1;
-    return base + i.toString;
-  }
-  def hasNext() : Boolean = i < count;
-}
-
-object Expander {
-  def expand(s:String, i:Int) : Iterator[String] = {
-    return new Expander(s,i)
-  }
-}
+import org.apache.spark.{SparkConf, LocalSparkContext, SparkContext}
 
 class LargeIteratorSuite extends FunSuite with LocalSparkContext {
-  /* Tests the ability of Spark to deal with user provided iterators that
-   * generate more data then available memory. In any memory based persistance
-   * Spark will unroll the iterator into an ArrayBuffer for caching, however in
-   * the case that the use defines DISK_ONLY persistance, the iterator will be 
-   * fed directly to the serializer and written to disk.
-   */
-  val clusterUrl = "local-cluster[1,1,512]"
-  test("Flatmap iterator") {
-    sc = new SparkContext(clusterUrl, "mem_test");
-    val seeds = sc.parallelize( Array(
-      "This is the first sentence that we will test:",
-      "This is the second sentence that we will test:",
-      "This is the third sentence that we will test:"
-    ) );
-    val expand_size = 10000000;
-    val out = seeds.flatMap(Expander.expand(_,expand_size));
-    val expanded = out.map(_ + "...").persist(StorageLevel.DISK_ONLY)
-    assert( expanded.filter( _.startsWith("This is the first sentence that we will test")).count() == expand_size )
-    expanded.saveAsTextFile("./test.out")
-    FileUtils.deleteDirectory(new File("./test.out"))
+/* Tests the ability of Spark to deal with user provided iterators that
+ * generate more data then available memory. In any memory based persistance
+ * Spark will unroll the iterator into an ArrayBuffer for caching, however in
+ * the case that the use defines DISK_ONLY persistance, the iterator will be
+ * fed directly to the serializer and written to disk.
+ */
+test("Flatmap iterator") {
+  //create a local spark cluster, but limit it to 128mb of RAM
+  val sconf = new SparkConf().setMaster("local-cluster[1,1,128]")
+    .setAppName("mem_test")
+    .set("spark.executor.memory", "128m")
+  sc = new SparkContext(sconf)
+  try {
+    val expand_size = 1000000
+    val data = sc.parallelize( (1 to 4).toSeq ).
+      flatMap( x => Stream.range(1, expand_size).
+      map( y => "%d: string test %d".format(y,x) ) )
+    // If we did persist(StorageLevel.MEMORY_ONLY), it would cause OutOfMemoryError
+    var persisted = data.persist(StorageLevel.DISK_ONLY)
+    assert( persisted.filter( _.startsWith("1:") ).count() == 4 )
+  } catch {
+    case _ : OutOfMemoryError => assert(false)
   }
+}
 }
