@@ -307,6 +307,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
           workerInfo.lastHeartbeat = System.currentTimeMillis()
         case None =>
           logWarning("Got heartbeat from unregistered worker " + workerId)
+          sender ! UnregisteredWorker
       }
     }
 
