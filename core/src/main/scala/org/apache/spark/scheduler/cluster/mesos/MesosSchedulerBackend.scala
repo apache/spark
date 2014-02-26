@@ -202,10 +202,9 @@ private[spark] class MesosSchedulerBackend(
             offer.getHostname,
             getResource(offer.getResourcesList, "cpus").toInt)
         }
-
-        // Call into the TaskSchedulerImpl
-        val taskLists = scheduler.resourceOffers(offerableWorkers)
-
+        // Call into the ClusterScheduler
+        val taskLists = scheduler.resourceOffers(
+          TaskSchedulerImpl.buildMapFromWorkerOffers(scheduler, offerableWorkers))
         // Build a list of Mesos tasks for each slave
         val mesosTasks = offers.map(o => Collections.emptyList[MesosTaskInfo]())
         for ((taskList, index) <- taskLists.zipWithIndex) {

@@ -31,6 +31,7 @@ import org.apache.spark.{Logging, SparkException, TaskState}
 import org.apache.spark.scheduler.{SchedulerBackend, SlaveLost, TaskDescription, TaskSchedulerImpl, WorkerOffer}
 import org.apache.spark.scheduler.cluster.CoarseGrainedClusterMessages._
 import org.apache.spark.util.{AkkaUtils, Utils}
+import org.apache.spark.util.collection.LRUMap
 
 /**
  * A scheduler backend that waits for coarse grained executors to connect to it through Akka.
@@ -50,11 +51,22 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
   private val timeout = AkkaUtils.askTimeout(conf)
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
+
+    private val schedulingMode = conf.getBoolean("spark.scheduler.lruOffer", false)
+
     private val executorActor = new HashMap[String, ActorRef]
     private val executorAddress = new HashMap[String, Address]
     private val executorHost = new HashMap[String, String]
-    private val freeCores = new HashMap[String, Int]
+    private val executorWorkerOffer = {
+      if (schedulingMode) {
+        new LRUMap[String, WorkerOffer](1000)
+      }
+      else {
+        new HashMap[String, WorkerOffer]
+      }
+    }
     private val addressToExecutorId = new HashMap[Address, String]
+
 
     override def preStart() {
       // Listen for remote client disconnection events, since they don't go through Akka's watch()
@@ -76,7 +88,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           sender ! RegisteredExecutor(sparkProperties)
           executorActor(executorId) = sender
           executorHost(executorId) = Utils.parseHostPort(hostPort)._1
-          freeCores(executorId) = cores
+          executorWorkerOffer(executorId) = new WorkerOffer(executorId, executorHost(executorId), cores)
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
@@ -87,7 +99,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         scheduler.statusUpdate(taskId, state, data.value)
         if (TaskState.isFinished(state)) {
           if (executorActor.contains(executorId)) {
-            freeCores(executorId) += 1
+            executorWorkerOffer(executorId).cores += 1
             makeOffers(executorId)
           } else {
             // Ignoring the update since we don't know about the executor.
@@ -124,34 +136,33 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     }
 
     // Make fake resource offers on all executors
-    def makeOffers() {
-      launchTasks(scheduler.resourceOffers(
-        executorHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
+    private[this] def makeOffers() {
+      launchTasks(scheduler.resourceOffers(executorWorkerOffer))
     }
 
     // Make fake resource offers on just one executor
-    def makeOffers(executorId: String) {
+    private[this] def makeOffers(executorId: String) {
       launchTasks(scheduler.resourceOffers(
-        Seq(new WorkerOffer(executorId, executorHost(executorId), freeCores(executorId)))))
+        TaskSchedulerImpl.buildMapFromWorkerOffers(scheduler, Seq(executorWorkerOffer(executorId)))))
     }
 
     // Launch tasks returned by a set of resource offers
-    def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
+    private[this] def launchTasks(tasks: Seq[Seq[TaskDescription]]) {
       for (task <- tasks.flatten) {
-        freeCores(task.executorId) -= 1
+        executorWorkerOffer(task.executorId).cores -= 1
         executorActor(task.executorId) ! LaunchTask(task)
       }
     }
 
     // Remove a disconnected slave from the cluster
-    def removeExecutor(executorId: String, reason: String) {
+    private[this] def removeExecutor(executorId: String, reason: String) {
       if (executorActor.contains(executorId)) {
         logInfo("Executor " + executorId + " disconnected, so removing it")
-        val numCores = freeCores(executorId)
+        val numCores = executorWorkerOffer(executorId).cores
         addressToExecutorId -= executorAddress(executorId)
         executorActor -= executorId
         executorHost -= executorId
-        freeCores -= executorId
+        executorWorkerOffer -= executorId
         totalCoreCount.addAndGet(-numCores)
         scheduler.executorLost(executorId, SlaveLost(reason))
       }
@@ -173,7 +184,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
       Props(new DriverActor(properties)), name = CoarseGrainedSchedulerBackend.ACTOR_NAME)
   }
 
-  def stopExecutors() {
+  private[this] def stopExecutors() {
     try {
       if (driverActor != null) {
         logInfo("Shutting down all executors")

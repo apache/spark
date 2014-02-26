@@ -21,14 +21,15 @@ import java.nio.ByteBuffer
 import java.util.{TimerTask, Timer}
 import java.util.concurrent.atomic.AtomicLong
 
-import scala.concurrent.duration._
 import scala.collection.mutable.ArrayBuffer
-import scala.collection.mutable.HashMap
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.{HashMap, HashSet, Map}
+import scala.concurrent.duration._
+
 
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.util.collection.LRUMap
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -195,11 +196,13 @@ private[spark] class TaskSchedulerImpl(
    * sets for tasks in order of priority. We fill each node with tasks in a round-robin manner so
    * that tasks are balanced across the cluster.
    */
-  def resourceOffers(offers: Seq[WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
+  def resourceOffers(execWorkerOffers: Map[String, WorkerOffer]): Seq[Seq[TaskDescription]] = synchronized {
     SparkEnv.set(sc.env)
 
+    val workerOffers = execWorkerOffers.values
+
     // Mark each slave as alive and remember its hostname
-    for (o <- offers) {
+    for (o <- workerOffers) {
       executorIdToHost(o.executorId) = o.host
       if (!executorsByHost.contains(o.host)) {
         executorsByHost(o.host) = new HashSet[String]()
@@ -208,8 +211,8 @@ private[spark] class TaskSchedulerImpl(
     }
 
     // Build a list of tasks to assign to each worker
-    val tasks = offers.map(o => new ArrayBuffer[TaskDescription](o.cores))
-    val availableCpus = offers.map(o => o.cores).toArray
+    val tasks = workerOffers.map(o => new ArrayBuffer[TaskDescription](o.cores)).toArray
+    val availableCpus = workerOffers.map(o => o.cores).toArray
     val sortedTaskSets = rootPool.getSortedTaskSetQueue()
     for (taskSet <- sortedTaskSets) {
       logDebug("parentName: %s, name: %s, runningTasks: %s".format(
@@ -222,16 +225,20 @@ private[spark] class TaskSchedulerImpl(
     for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
       do {
         launchedTask = false
-        for (i <- 0 until offers.size) {
-          val execId = offers(i).executorId
-          val host = offers(i).host
+        for (i <- 0 until workerOffers.size) {
+          //will not trigger LRU moving
+          val candidateOffer = execWorkerOffers.head._2
+          val execId = candidateOffer.executorId
+          val host = candidateOffer.host
           for (task <- taskSet.resourceOffer(execId, host, availableCpus(i), maxLocality)) {
             tasks(i) += task
             val tid = task.taskId
+            //trigger LRU
+            val selectedExecId = execWorkerOffers.get(execWorkerOffers.head._1).get.executorId
             taskIdToTaskSetId(tid) = taskSet.taskSet.id
-            taskIdToExecutorId(tid) = execId
-            activeExecutorIds += execId
-            executorsByHost(host) += execId
+            taskIdToExecutorId(tid) = selectedExecId
+            activeExecutorIds += selectedExecId
+            executorsByHost(host) += selectedExecId
             availableCpus(i) -= 1
             launchedTask = true
           }
@@ -457,5 +464,19 @@ private[spark] object TaskSchedulerImpl {
     }
 
     retval.toList
+  }
+
+
+  def buildMapFromWorkerOffers(scheduler: TaskSchedulerImpl, workerOffers: Seq[WorkerOffer]) = {
+    val map = {
+      if (scheduler.conf.getBoolean("spark.scheduler.lruOffer", false)) {
+        new LRUMap[String, WorkerOffer](1000)
+      }
+      else {
+        new HashMap[String, WorkerOffer]
+      }
+    }
+    for (workerOffer <- workerOffers) map += workerOffer.executorId -> workerOffer
+    map
   }
 }
