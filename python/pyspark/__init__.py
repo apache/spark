@@ -41,7 +41,6 @@ Public classes:
 import sys
 import os
 sys.path.insert(0, os.path.join(os.environ["SPARK_HOME"], "python/lib/py4j-0.8.1-src.zip"))
-sys.path.insert(0, os.path.join(os.environ["SPARK_HOME"], "python/lib/errbit-1.1.3.zip"))
 
 
 from pyspark.conf import SparkConf

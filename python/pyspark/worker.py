@@ -32,19 +32,9 @@ from pyspark.files import SparkFiles
 from pyspark.serializers import write_with_length, write_int, read_long, \
     write_long, read_int, SpecialLengths, UTF8Deserializer, PickleSerializer
 
+
 pickleSer = PickleSerializer()
 utf8_deserializer = UTF8Deserializer()
-
-
-import errbit
-import errbit.client
-
-def send_to_errbit(exctype, value, traceback):
-    client = errbit.client.Client()
-    client.post((exctype, value, traceback))
-    sys.__excepthook__(exctype, value, traceback)
-
-sys.excepthook = send_to_errbit
 
 
 def report_times(outfile, boot, init, finish):
