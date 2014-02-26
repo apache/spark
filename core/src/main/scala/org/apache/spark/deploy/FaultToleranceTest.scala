@@ -27,7 +27,8 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.sys.process._
 
-import net.liftweb.json.JsonParser
+import org.json4s._
+import org.json4s.jackson.JsonMethods
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.deploy.master.RecoveryState
@@ -311,7 +312,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
 private[spark] class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile: File)
   extends Logging  {
 
-  implicit val formats = net.liftweb.json.DefaultFormats
+  implicit val formats = org.json4s.DefaultFormats
   var state: RecoveryState.Value = _
   var liveWorkerIPs: List[String] = _
   var numLiveApps = 0
@@ -321,7 +322,7 @@ private[spark] class TestMasterInfo(val ip: String, val dockerId: DockerId, val 
   def readState() {
     try {
       val masterStream = new InputStreamReader(new URL("http://%s:8080/json".format(ip)).openStream)
-      val json = JsonParser.parse(masterStream, closeAutomatically = true)
+      val json = JsonMethods.parse(masterStream)
 
       val workers = json \ "workers"
       val liveWorkers = workers.children.filter(w => (w \ "state").extract[String] == "ALIVE")
@@ -349,7 +350,7 @@ private[spark] class TestMasterInfo(val ip: String, val dockerId: DockerId, val 
 private[spark] class TestWorkerInfo(val ip: String, val dockerId: DockerId, val logFile: File)
   extends Logging {
 
-  implicit val formats = net.liftweb.json.DefaultFormats
+  implicit val formats = org.json4s.DefaultFormats
 
   logDebug("Created worker: " + this)
 
