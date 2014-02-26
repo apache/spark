@@ -44,10 +44,6 @@ private[spark] class YarnClientSchedulerBackend(
   override def start() {
     super.start()
 
-    val userJar = System.getenv("SPARK_YARN_APP_JAR")
-    if (userJar == null)
-      throw new SparkException("env SPARK_YARN_APP_JAR is not set")
-
     val driverHost = conf.get("spark.driver.host")
     val driverPort = conf.get("spark.driver.port")
     val hostport = driverHost + ":" + driverPort
@@ -55,7 +51,7 @@ private[spark] class YarnClientSchedulerBackend(
     val argsArrayBuf = new ArrayBuffer[String]()
     argsArrayBuf += (
       "--class", "notused",
-      "--jar", userJar,
+      "--jar", null,
       "--args", hostport,
       "--master-class", "org.apache.spark.deploy.yarn.WorkerLauncher"
     )

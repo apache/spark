@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy
 
-import net.liftweb.json.JsonDSL._
+import org.json4s.JsonDSL._
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}
 import org.apache.spark.deploy.master.{ApplicationInfo, DriverInfo, WorkerInfo}

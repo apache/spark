@@ -68,7 +68,8 @@ trait ClientBase extends Logging {
   def validateArgs() = {
     Map(
       (System.getenv("SPARK_JAR") == null) -> "Error: You must set SPARK_JAR environment variable!",
-      (args.userJar == null) -> "Error: You must specify a user jar!",
+      ((args.userJar == null && args.amClass == classOf[ApplicationMaster].getName) ->
+          "Error: You must specify a user jar when running in standalone mode!"),
       (args.userClass == null) -> "Error: You must specify a user class!",
       (args.numWorkers <= 0) -> "Error: You must specify at least 1 worker!",
       (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: AM memory size must be" +

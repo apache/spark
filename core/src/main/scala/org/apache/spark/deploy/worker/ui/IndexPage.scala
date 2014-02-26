@@ -22,7 +22,7 @@ import scala.xml.Node
 
 import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
-import net.liftweb.json.JsonAST.JValue
+import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}

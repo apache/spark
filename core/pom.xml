@@ -55,8 +55,8 @@
             <artifactId>avro-ipc</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.apache.zookeeper</groupId>
-            <artifactId>zookeeper</artifactId>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-recipes</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
@@ -130,8 +130,9 @@
             <artifactId>scala-library</artifactId>
         </dependency>
         <dependency>
-            <groupId>net.liftweb</groupId>
-            <artifactId>lift-json_${scala.binary.version}</artifactId>
+            <groupId>org.json4s</groupId>
+            <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
+            <version>3.2.6</version>
         </dependency>
         <dependency>
             <groupId>it.unimi.dsi</groupId>
