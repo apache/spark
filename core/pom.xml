@@ -225,7 +225,7 @@
                         </goals>
                         <configuration>
                             <exportAntProperties>true</exportAntProperties>
-                            <tasks>
+                            <target>
                                 <property name="spark.classpath" refid="maven.test.classpath" />
                                 <property environment="env" />
                                 <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">
@@ -238,7 +238,7 @@
                                         </not>
                                     </condition>
                                 </fail>
-                            </tasks>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>
