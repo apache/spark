@@ -96,13 +96,14 @@ private[spark] object JsonProtocol {
   def taskEndToJson(taskEnd: SparkListenerTaskEnd): JValue = {
     val taskEndReason = taskEndReasonToJson(taskEnd.reason)
     val taskInfo = taskInfoToJson(taskEnd.taskInfo)
-    val taskMetrics = taskMetricsToJson(taskEnd.taskMetrics)
+    val taskMetrics = taskEnd.taskMetrics
+    val taskMetricsJson = if (taskMetrics != null) taskMetricsToJson(taskMetrics) else JNothing
     ("Event" -> Utils.getFormattedClassName(taskEnd)) ~
     ("Stage ID" -> taskEnd.stageId) ~
     ("Task Type" -> taskEnd.taskType) ~
     ("Task End Reason" -> taskEndReason) ~
     ("Task Info" -> taskInfo) ~
-    ("Task Metrics" -> taskMetrics)
+    ("Task Metrics" -> taskMetricsJson)
   }
 
   def jobStartToJson(jobStart: SparkListenerJobStart): JValue = {
@@ -157,8 +158,9 @@ private[spark] object JsonProtocol {
   def stageInfoToJson(stageInfo: StageInfo): JValue = {
     val rddInfo = rddInfoToJson(stageInfo.rddInfo)
     val taskInfos = JArray(stageInfo.taskInfos.map { case (info, metrics) =>
+      val metricsJson = if (metrics != null) taskMetricsToJson(metrics) else JNothing
       ("Task Info" -> taskInfoToJson(info)) ~
-      ("Task Metrics" -> taskMetricsToJson(metrics))
+      ("Task Metrics" -> metricsJson)
     }.toList)
     val submissionTime = stageInfo.submissionTime.map(JInt(_)).getOrElse(JNothing)
     val completionTime = stageInfo.completionTime.map(JInt(_)).getOrElse(JNothing)

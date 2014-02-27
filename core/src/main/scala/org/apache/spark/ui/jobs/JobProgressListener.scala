@@ -159,7 +159,8 @@ private[ui] class JobProgressListener(sc: SparkContext, live: Boolean)
         // update duration
         y.taskTime += taskEnd.taskInfo.duration
 
-        Option(taskEnd.taskMetrics).foreach { taskMetrics =>
+        val taskMetrics = taskEnd.taskMetrics
+        if (taskMetrics != null) {
           taskMetrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
           taskMetrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
           y.memoryBytesSpilled += taskMetrics.memoryBytesSpilled

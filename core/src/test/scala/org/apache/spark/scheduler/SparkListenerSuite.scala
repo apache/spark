@@ -70,7 +70,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     listener.stageInfos.size should be {1}
     val first = listener.stageInfos.head
     first.numTasks should be {2}
-    first.numPartitions should be {4}
+    first.rddInfo.numPartitions should be {4}
   }
 
   test("local metrics") {
@@ -164,7 +164,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     val TASK_INDEX = 0
     assert(listener.startedTasks.contains(TASK_INDEX))
-    assert(listener.startedGettingResultTasks.isEmpty == true)
+    assert(listener.startedGettingResultTasks.isEmpty)
     assert(listener.endedTasks.contains(TASK_INDEX))
   }
 

@@ -135,9 +135,12 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val execId = taskEnd.taskInfo.executorId
-    val updatedBlocks = taskEnd.taskMetrics.updatedBlocks.getOrElse(Seq())
-    if (updatedBlocks.length > 0) {
-      updateStorageStatus(execId, updatedBlocks)
+    val metrics = taskEnd.taskMetrics
+    if (metrics != null) {
+      val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq())
+      if (updatedBlocks.length > 0) {
+        updateStorageStatus(execId, updatedBlocks)
+      }
     }
   }
 
@@ -163,7 +166,8 @@ private[ui] class RDDInfoSparkListener extends StorageStatusSparkListener {
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     super.onTaskEnd(taskEnd)
-    if (taskEnd.taskMetrics.updatedBlocks.isDefined) {
+    val metrics = taskEnd.taskMetrics
+    if (metrics != null && metrics.updatedBlocks.isDefined) {
       updateRDDInfo()
     }
   }
