@@ -24,6 +24,7 @@ import scala.io.Source
 import com.google.common.io.Files
 import org.apache.hadoop.io._
 import org.apache.hadoop.io.compress.DefaultCodec
+import org.apache.hadoop.mapred.FileAlreadyExistsException
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext._
@@ -207,5 +208,26 @@ class FileSuite extends FunSuite with LocalSparkContext {
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)
     assert(rdd.count() === 3)
+  }
+
+  test ("prevent user from overwriting the empty directory") {
+    sc = new SparkContext("local", "test")
+    val tempdir = Files.createTempDir()
+    var randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    intercept[FileAlreadyExistsException] {
+      randomRDD.saveAsTextFile(tempdir.getPath)
+    }
+  }
+
+  test ("prevent user from overwriting the non-empty directory") {
+    sc = new SparkContext("local", "test")
+    val tempdir = Files.createTempDir()
+    var randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    randomRDD.saveAsTextFile(tempdir.getPath + "/output")
+    assert(new File(tempdir.getPath + "/output/part-00000").exists() === true)
+    randomRDD = sc.parallelize(Array((1, "a"), (1, "a"), (2, "b"), (3, "c")), 1)
+    intercept[FileAlreadyExistsException] {
+      randomRDD.saveAsTextFile(tempdir.getPath + "/output")
+    }
   }
 }

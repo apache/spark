@@ -34,14 +34,11 @@ import org.apache.hadoop.fs.Path
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
-import org.apache.hadoop.mapreduce.{Job => NewAPIHadoopJob}
-import org.apache.hadoop.mapreduce.{RecordWriter => NewRecordWriter}
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob, RecordWriter => NewRecordWriter, JobContext, SparkHadoopMapReduceUtil}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
 
 // SparkHadoopWriter and SparkHadoopMapReduceUtil are actually source files defined in Spark.
 import org.apache.hadoop.mapred.SparkHadoopWriter
-import org.apache.hadoop.mapreduce.SparkHadoopMapReduceUtil
 
 import org.apache.spark._
 import org.apache.spark.Partitioner.defaultPartitioner
@@ -604,8 +601,12 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     val job = new NewAPIHadoopJob(conf)
     job.setOutputKeyClass(keyClass)
     job.setOutputValueClass(valueClass)
+
     val wrappedConf = new SerializableWritable(job.getConfiguration)
-    NewFileOutputFormat.setOutputPath(job, new Path(path))
+    val outpath = new Path(path)
+    NewFileOutputFormat.setOutputPath(job, outpath)
+    val jobFormat = outputFormatClass.newInstance
+    jobFormat.checkOutputSpecs(new JobContext(wrappedConf.value, job.getJobID))
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
@@ -633,7 +634,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       committer.commitTask(hadoopContext)
       return 1
     }
-    val jobFormat = outputFormatClass.newInstance
+
     /* apparently we need a TaskAttemptID to construct an OutputCommitter;
      * however we're only going to use this local OutputCommitter for
      * setupJob/commitJob, so we just use a dummy "map" task.
@@ -642,7 +643,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
-    val count = self.context.runJob(self, writeShard _).sum
+    self.context.runJob(self, writeShard _).sum
     jobCommitter.commitJob(jobTaskContext)
   }
 
@@ -711,6 +712,10 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
 
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
+
+    val path = new Path(conf.get("mapred.output.dir"))
+    val fs = path.getFileSystem(conf)
+    conf.getOutputFormat.checkOutputSpecs(fs, conf)
 
     val writer = new SparkHadoopWriter(conf)
     writer.preSetup()
