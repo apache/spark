@@ -240,6 +240,7 @@ class SparkContext(
     localProperties.set(props)
   }
 
+  @deprecated("Properties no longer need to be explicitly initialized.", "1.0.0")
   def initLocalProperties() {
     localProperties.set(new Properties())
   }
@@ -308,7 +309,7 @@ class SparkContext(
   private val dagSchedulerSource = new DAGSchedulerSource(this.dagScheduler, this)
   private val blockManagerSource = new BlockManagerSource(SparkEnv.get.blockManager, this)
 
-  def initDriverMetrics() {
+  private def initDriverMetrics() {
     SparkEnv.get.metricsSystem.registerSource(dagSchedulerSource)
     SparkEnv.get.metricsSystem.registerSource(blockManagerSource)
   }
