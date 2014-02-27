@@ -11,6 +11,7 @@ import parquet.hadoop.ParquetFileWriter
 import org.apache.hadoop.mapreduce.Job
 import parquet.hadoop.util.ContextUtil
 import org.apache.spark.sql.TestSqlContext
+import org.apache.spark.sql.catalyst.expressions.Row
 
 class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
   override def beforeAll() {
