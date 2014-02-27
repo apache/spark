@@ -61,6 +61,8 @@ private[spark] object JsonProtocol {
         environmentUpdateToJson(environmentUpdate)
       case executorsStateChange: SparkListenerExecutorsStateChange =>
         executorsStateChangeToJson(executorsStateChange)
+      case unpersistRDD: SparkListenerUnpersistRDD =>
+        unpersistRDDToJson(unpersistRDD)
       case SparkListenerShutdown =>
         shutdownToJson()
     }
@@ -145,6 +147,11 @@ private[spark] object JsonProtocol {
       JArray(executorsStateChange.storageStatusList.map(storageStatusToJson).toList)
     ("Event" -> Utils.getFormattedClassName(executorsStateChange)) ~
     ("Storage Status List" -> storageStatusList)
+  }
+
+  def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD): JValue = {
+    ("Event" -> Utils.getFormattedClassName(unpersistRDD)) ~
+    ("RDD ID" -> unpersistRDD.rddId)
   }
 
   def shutdownToJson(): JValue = {
@@ -381,6 +388,7 @@ private[spark] object JsonProtocol {
     val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
     val environmentUpdate = Utils.getFormattedClassName(SparkListenerEnvironmentUpdate)
     val executorsStateChanged = Utils.getFormattedClassName(SparkListenerExecutorsStateChange)
+    val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
     val shutdown = Utils.getFormattedClassName(SparkListenerShutdown)
 
     (json \ "Event").extract[String] match {
@@ -394,6 +402,7 @@ private[spark] object JsonProtocol {
       case `applicationStart` => applicationStartFromJson(json)
       case `environmentUpdate` => environmentUpdateFromJson(json)
       case `executorsStateChanged` => executorsStateChangeFromJson(json)
+      case `unpersistRDD` => unpersistRDDFromJson(json)
       case `shutdown` => SparkListenerShutdown
     }
   }
@@ -459,6 +468,10 @@ private[spark] object JsonProtocol {
     val storageStatusList =
       (json \ "Storage Status List").extract[List[JValue]].map(storageStatusFromJson)
     new SparkListenerExecutorsStateChange(storageStatusList)
+  }
+
+  def unpersistRDDFromJson(json: JValue): SparkListenerUnpersistRDD = {
+    new SparkListenerUnpersistRDD((json \ "RDD ID").extract[Int])
   }
 
   /**

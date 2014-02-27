@@ -61,8 +61,8 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, live: Boolean) extends
     }
   }
 
+  private def startLogger() = logger.foreach(_.start())
   private def closeLogger() = logger.foreach(_.close())
-  private def restartLogger() = logger.foreach(_.start())
 
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
     listeners.foreach(_.onStageSubmitted(stageSubmitted))
@@ -89,7 +89,7 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, live: Boolean) extends
 
   override def onJobStart(jobStart: SparkListenerJobStart) {
     listeners.foreach(_.onJobStart(jobStart))
-    restartLogger()
+    startLogger()
     logEvent(jobStart)
   }
 
@@ -115,6 +115,13 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, live: Boolean) extends
     listeners.foreach(_.onExecutorsStateChange(executorsStateChange))
     logEvent(executorsStateChange, flushLogger = true)
   }
+
+  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) {
+    listeners.foreach(_.onUnpersistRDD(unpersistRDD))
+    // In case logger has not already started, as unpersist may be called between jobs
+    startLogger()
+    logEvent(unpersistRDD, flushLogger = true)
+  }
 }
 
 /**
@@ -133,6 +140,16 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
     }
   }
 
+  /** Update storage status list to reflect the removal of an RDD from the cache */
+  def updateStorageStatus(unpersistedRDDId: Int) {
+    storageStatusList.foreach { storageStatus =>
+      val unpersistedBlocksIds = storageStatus.rddBlocks.keys.filter(_.rddId == unpersistedRDDId)
+      unpersistedBlocksIds.foreach { blockId =>
+        storageStatus.blocks(blockId) = BlockStatus(StorageLevel.NONE, 0L, 0L)
+      }
+    }
+  }
+
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val execId = taskEnd.taskInfo.executorId
     val metrics = taskEnd.taskMetrics
@@ -142,6 +159,10 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
         updateStorageStatus(execId, updatedBlocks)
       }
     }
+  }
+
+  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) {
+    updateStorageStatus(unpersistRDD.rddId)
   }
 
   override def onExecutorsStateChange(executorsStateChange: SparkListenerExecutorsStateChange) {
@@ -179,7 +200,11 @@ private[ui] class RDDInfoSparkListener extends StorageStatusSparkListener {
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     // Remove all partitions that are no longer cached
-    // TODO(aor): Handle unpersist
     _rddInfoMap.retain { case (id, info) => info.numCachedPartitions > 0 }
+  }
+
+  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) {
+    super.onUnpersistRDD(unpersistRDD)
+    updateRDDInfo()
   }
 }

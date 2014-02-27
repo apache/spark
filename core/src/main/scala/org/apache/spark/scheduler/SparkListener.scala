@@ -53,6 +53,8 @@ case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(S
 case class SparkListenerExecutorsStateChange(storageStatusList: Seq[StorageStatus])
   extends SparkListenerEvent
 
+case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
+
 /** An event used in the listener to shutdown the listener daemon thread. */
 private[spark] case object SparkListenerShutdown extends SparkListenerEvent
 
@@ -112,6 +114,10 @@ trait SparkListener {
    */
   def onExecutorsStateChange(executorsStateChange: SparkListenerExecutorsStateChange) { }
 
+  /**
+   * Called when an RDD is manually unpersisted by the application
+   */
+  def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) { }
 }
 
 /**

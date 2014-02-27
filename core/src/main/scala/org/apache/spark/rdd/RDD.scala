@@ -145,9 +145,8 @@ abstract class RDD[T: ClassTag](
       throw new UnsupportedOperationException(
         "Cannot change storage level of an RDD after it was already assigned a level")
     }
+    sc.persistRDD(this)
     storageLevel = newLevel
-    // Register the RDD with the SparkContext
-    sc.persistentRdds(id) = this
     this
   }
 
@@ -165,8 +164,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): RDD[T] = {
     logInfo("Removing RDD " + id + " from persistence list")
-    sc.env.blockManager.master.removeRdd(id, blocking)
-    sc.persistentRdds.remove(id)
+    sc.unpersistRDD(this, blocking)
     storageLevel = StorageLevel.NONE
     this
   }

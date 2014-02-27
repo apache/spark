@@ -75,6 +75,8 @@ private[spark] class SparkListenerBus extends Logging {
         listeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
       case executorsStateChange: SparkListenerExecutorsStateChange =>
         listeners.foreach(_.onExecutorsStateChange(executorsStateChange))
+      case unpersistRDD: SparkListenerUnpersistRDD =>
+        listeners.foreach(_.onUnpersistRDD(unpersistRDD))
       case SparkListenerShutdown =>
         return true
       case _ =>

@@ -700,7 +700,7 @@ class SparkContext(
   }
 
   /**
-   *  Return current scheduling mode
+   * Return current scheduling mode
    */
   def getSchedulingMode: SchedulingMode.SchedulingMode = {
     taskScheduler.schedulingMode
@@ -725,6 +725,23 @@ class SparkContext(
    */
   private [spark] def getPreferredLocs(rdd: RDD[_], partition: Int): Seq[TaskLocation] = {
     dagScheduler.getPreferredLocs(rdd, partition)
+  }
+
+  /**
+   * Register an RDD to be persisted in memory and/or disk storage
+   */
+  private[spark] def persistRDD(rdd: RDD[_]) {
+    persistentRdds(rdd.id) = rdd
+  }
+
+  /**
+   * Unpersist an RDD from memory and/or disk storage
+   */
+  private[spark] def unpersistRDD(rdd: RDD[_], blocking: Boolean = true) {
+    val rddId = rdd.id
+    env.blockManager.master.removeRdd(rddId, blocking)
+    persistentRdds.remove(rddId)
+    dagScheduler.post(new SparkListenerUnpersistRDD(rddId))
   }
 
   /**
