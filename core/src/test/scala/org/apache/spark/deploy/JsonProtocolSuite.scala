@@ -119,8 +119,8 @@ class JsonProtocolSuite extends FunSuite {
       new File("sparkHome"), new File("workDir"), "akka://worker", ExecutorState.RUNNING)
   }
   def createDriverRunner(): DriverRunner = {
-    new DriverRunner("driverId", new File("workDir"), new File("sparkHome"), createDriverDesc(),
-      null, "akka://worker")
+    new DriverRunner("driverId", createDriverDesc(), new File("workDir"), new File("sparkHome"),
+      null, "akka://worker", null)
   }
 
   def assertValidJson(json: JValue) {

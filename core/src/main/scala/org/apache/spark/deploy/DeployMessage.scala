@@ -55,7 +55,7 @@ private[deploy] object DeployMessages {
     extends DeployMessage
 
   case class DriverStateChanged(
-      driverId: String,
+      driverID: String,
       state: DriverState,
       exception: Option[Exception])
     extends DeployMessage

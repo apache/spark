@@ -265,7 +265,7 @@ private[spark] class Worker(
 
     case LaunchDriver(driverId, driverDesc) => {
       logInfo(s"Asked to launch driver $driverId")
-      val driver = new DriverRunner(driverId, workDir, sparkHome, driverDesc, self, akkaUrl)
+      val driver = new DriverRunner(driverId, driverDesc, workDir, sparkHome, self, akkaUrl, conf)
       drivers(driverId) = driver
       driver.start()
 
@@ -286,11 +286,11 @@ private[spark] class Worker(
     case DriverStateChanged(driverId, state, exception) => {
       state match {
         case DriverState.ERROR =>
-          logWarning(s"Driver $driverId failed with unrecoverable exception: ${exception.get}")
+          logWarning(s"Driver ${driverId} failed with unrecoverable exception: ${exception.get}")
         case DriverState.FINISHED =>
-          logInfo(s"Driver $driverId exited successfully")
+          logInfo(s"Driver ${driverId} exited successfully")
         case DriverState.KILLED =>
-          logInfo(s"Driver $driverId was killed by user")
+          logInfo(s"Driver ${driverId} was killed by user")
       }
       masterLock.synchronized {
         master ! DriverStateChanged(driverId, state, exception)

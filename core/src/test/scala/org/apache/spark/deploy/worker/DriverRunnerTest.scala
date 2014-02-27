@@ -21,18 +21,25 @@ import java.io.File
 
 import org.mockito.Mockito._
 import org.mockito.Matchers._
-import org.mockito.invocation.InvocationOnMock
-import org.mockito.stubbing.Answer
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.{Command, DriverDescription}
+import org.mockito.stubbing.Answer
+import org.mockito.invocation.InvocationOnMock
+import org.apache.spark.deploy.master.{WorkerInfo, DriverState, Master, DriverInfo}
+import java.util.Date
+import org.apache.spark.SparkConf
+import akka.actor.{Props, AddressFromURIString, ActorSystem}
+import akka.testkit.TestActorRef
+import org.apache.spark.deploy.DeployMessages.DriverStateChanged
 
 class DriverRunnerTest extends FunSuite {
   private def createDriverRunner() = {
     val command = new Command("mainClass", Seq(), Map())
     val driverDescription = new DriverDescription("jarUrl", 512, 1, true, command)
-    new DriverRunner("driverId", new File("workDir"), new File("sparkHome"), driverDescription,
-      null, "akka://1.2.3.4/worker/")
+    val driverInfo = new DriverInfo(System.currentTimeMillis(), "driverId", driverDescription, new Date())
+    new DriverRunner(driverInfo.id, driverDescription, new File("workDir"), new File("sparkHome"),
+      null, "akka://1.2.3.4/worker/", new SparkConf())
   }
 
   private def createProcessBuilderAndProcess(): (ProcessBuilderLike, Process) = {
@@ -60,6 +67,7 @@ class DriverRunnerTest extends FunSuite {
 
   test("Process failing several times and then succeeding") {
     val runner = createDriverRunner()
+    runner.conf.set("spark.driver.maxRetry", "5")
 
     val sleeper = mock(classOf[Sleeper])
     runner.setSleeper(sleeper)
@@ -111,8 +119,51 @@ class DriverRunnerTest extends FunSuite {
     verify(sleeper, times(0)).sleep(anyInt())
   }
 
+  test ("Driver will be retried for several times in master end when received DriverStateChanged") {
+    val actorSystem = ActorSystem("test")
+    val actorRef = TestActorRef[Master](Props(classOf[Master], "127.0.0.1", 7707, 80))(actorSystem)
+    val driverInfo = new DriverInfo(0, "0",
+      new DriverDescription("jar/driver.jar", 1000, 4, true, null), new Date)
+    actorRef.underlyingActor.conf.set("spark.driver.maxRetry", "3")
+    actorRef.underlyingActor.workers += new WorkerInfo("worker-1", "127.0.0.1", 7077, 2,
+      3, null, 80, "http://192.168.55.110")
+    actorRef.underlyingActor.workers += new WorkerInfo("worker-2", "127.0.0.1", 7077, 2,
+      3, null, 80, "http://192.168.55.110")
+    actorRef.underlyingActor.drivers += ("0" -> driverInfo)
+    actorRef.underlyingActor.receive(new DriverStateChanged("0", DriverState.FAILED, null))
+    actorRef.underlyingActor.receive(new DriverStateChanged("0", DriverState.FAILED, null))
+    assert(driverInfo.retriedcountOnMaster == 2)
+  }
+
+  test ("Driver will be retried for at most specified times in master end when received DriverStateChanged") {
+    val actorSystem = ActorSystem("test")
+    val actorRef = TestActorRef[Master](Props(classOf[Master], "127.0.0.1", 7707, 80))(actorSystem)
+    val driverInfo = new DriverInfo(0, "0",
+      new DriverDescription("jar/driver.jar", 1000, 4, true, null), new Date)
+    actorRef.underlyingActor.conf.set("spark.driver.maxRetry", "1")
+    actorRef.underlyingActor.workers += new WorkerInfo("worker-1", "127.0.0.1", 7077, 2,
+      3, null, 80, "http://192.168.55.110")
+    actorRef.underlyingActor.workers += new WorkerInfo("worker-2", "127.0.0.1", 7077, 2,
+      3, null, 80, "http://192.168.55.110")
+    actorRef.underlyingActor.drivers += ("0" -> driverInfo)
+    actorRef.underlyingActor.receive(new DriverStateChanged("0", DriverState.FAILED, null))
+    actorRef.underlyingActor.receive(new DriverStateChanged("0", DriverState.FAILED, null))
+    assert(driverInfo.retriedcountOnMaster == 1)
+  }
+
+  test ("Driver will not be retried in master end if it was killed") {
+    val actorSystem = ActorSystem("test")
+    val actorRef = TestActorRef[Master](Props(classOf[Master], "127.0.0.1", 7707, 80))(actorSystem)
+    val driverInfo = new DriverInfo(0, "0",
+      new DriverDescription("jar/driver.jar", 1000, 4, true, null), new Date)
+    actorRef.underlyingActor.conf.set("spark.driver.maxRetry", "3")
+    actorRef.underlyingActor.drivers += ("0" -> driverInfo)
+    assert(driverInfo.retriedcountOnMaster == 0)
+  }
+
   test("Reset of backoff counter") {
     val runner = createDriverRunner()
+    runner.conf.set("spark.driver.maxRetry", "5")
 
     val sleeper = mock(classOf[Sleeper])
     runner.setSleeper(sleeper)

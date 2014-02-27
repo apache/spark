@@ -71,8 +71,8 @@ private[spark] class Master(
   var nextAppNumber = 0
 
   val appIdToUI = new HashMap[String, SparkUI]
-
-  val drivers = new HashSet[DriverInfo]
+  val drivers = new HashMap[String, DriverInfo]//driverid -> driverinfo
+  val driverAssignments = new HashMap[String, HashSet[String]]//driverid -> HashSet[workerID]
   val completedDrivers = new ArrayBuffer[DriverInfo]
   val waitingDrivers = new ArrayBuffer[DriverInfo] // Drivers currently spooled for scheduling
   var nextDriverNumber = 0
@@ -209,12 +209,9 @@ private[spark] class Master(
         val driver = createDriver(description)
         persistenceEngine.addDriver(driver)
         waitingDrivers += driver
-        drivers.add(driver)
+        drivers += driver.id -> driver
+        driverAssignments(driver.id) = new HashSet[String]
         schedule()
-
-        // TODO: It might be good to instead have the submission client poll the master to determine
-        //       the current status of the driver. For now it's simply "fire and forget".
-
         sender ! SubmitDriverResponse(true, Some(driver.id),
           s"Driver successfully submitted as ${driver.id}")
       }
@@ -226,12 +223,12 @@ private[spark] class Master(
         sender ! KillDriverResponse(driverId, success = false, msg)
       } else {
         logInfo("Asked to kill driver " + driverId)
-        val driver = drivers.find(_.id == driverId)
+        val driver = drivers.get(driverId)
         driver match {
           case Some(d) =>
             if (waitingDrivers.contains(d)) {
               waitingDrivers -= d
-              self ! DriverStateChanged(driverId, DriverState.KILLED, None)
+              self ! DriverStateChanged(d.id, DriverState.KILLED, None)
             }
             else {
               // We just notify the worker to kill the driver here. The final bookkeeping occurs
@@ -254,7 +251,7 @@ private[spark] class Master(
     }
 
     case RequestDriverStatus(driverId) => {
-      (drivers ++ completedDrivers).find(_.id == driverId) match {
+      (drivers.values ++ completedDrivers).find(_.id == driverId) match {
         case Some(driver) =>
           sender ! DriverStatusResponse(found = true, Some(driver.state),
             driver.worker.map(_.id), driver.worker.map(_.hostPort), driver.exception)
@@ -305,12 +302,25 @@ private[spark] class Master(
       }
     }
 
-    case DriverStateChanged(driverId, state, exception) => {
+    case DriverStateChanged(driverID, state, exception) => {
       state match {
-        case DriverState.ERROR | DriverState.FINISHED | DriverState.KILLED | DriverState.FAILED =>
-          removeDriver(driverId, state, exception)
+        case DriverState.FINISHED | DriverState.KILLED =>
+          removeDriver(driverID, state, exception)
+        case DriverState.ERROR | DriverState.FAILED =>
+          drivers.get(driverID) match {
+            case Some(driver) =>
+              val maxRetry = conf.getInt("spark.driver.maxRetry", 0)
+              if ((maxRetry != 0 && driver.retriedcountOnMaster < Math.min(maxRetry, workers.size)) ||
+                (maxRetry == 0 && driver.retriedcountOnMaster < workers.size)) {
+                //recover the driver
+                relaunchDriver(driver)
+              } else {
+                removeDriver(driver.id, state, exception)
+              }
+            case None =>
+          }
         case _ =>
-          throw new Exception(s"Received unexpected state update for driver $driverId: $state")
+          throw new Exception(s"Received unexpected state update for driver $driverID: $state")
       }
     }
 
@@ -350,7 +360,7 @@ private[spark] class Master(
           }
 
           for (driverId <- driverIds) {
-            drivers.find(_.id == driverId).foreach { driver =>
+            drivers.get(driverId).foreach { driver =>
               driver.worker = Some(worker)
               driver.state = DriverState.RUNNING
               worker.drivers(driverId) = driver
@@ -373,7 +383,7 @@ private[spark] class Master(
 
     case RequestMasterState => {
       sender ! MasterStateResponse(host, port, workers.toArray, apps.toArray, completedApps.toArray,
-        drivers.toArray, completedDrivers.toArray, state)
+        drivers.values.toArray, completedDrivers.toArray, state)
     }
 
     case CheckForWorkerTimeOut => {
@@ -405,7 +415,7 @@ private[spark] class Master(
     for (driver <- storedDrivers) {
       // Here we just read in the list of drivers. Any drivers associated with now-lost workers
       // will be re-launched when we detect that the worker is missing.
-      drivers += driver
+      drivers += (driver.id -> driver)
     }
 
     for (worker <- storedWorkers) {
@@ -432,14 +442,14 @@ private[spark] class Master(
     apps.filter(_.state == ApplicationState.UNKNOWN).foreach(finishApplication)
 
     // Reschedule drivers which were not claimed by any workers
-    drivers.filter(_.worker.isEmpty).foreach { d =>
-      logWarning(s"Driver ${d.id} was not found after master recovery")
-      if (d.desc.supervise) {
-        logWarning(s"Re-launching ${d.id}")
-        relaunchDriver(d)
+    drivers.filter(_._2.worker.isEmpty).foreach { d =>
+      logWarning(s"Driver ${d._1} was not found after master recovery")
+      if (d._2.desc.supervise) {
+        logWarning(s"Re-launching ${d._1}")
+        relaunchDriver(d._2)
       } else {
-        removeDriver(d.id, DriverState.ERROR, None)
-        logWarning(s"Did not re-launch ${d.id} because it was not supervised")
+        removeDriver(d._1, DriverState.ERROR, None)
+        logWarning(s"Did not re-launch ${d._1} because it was not supervised")
       }
     }
 
@@ -468,7 +478,9 @@ private[spark] class Master(
     val shuffledWorkers = Random.shuffle(workers) // Randomization helps balance drivers
     for (worker <- shuffledWorkers if worker.state == WorkerState.ALIVE) {
       for (driver <- waitingDrivers) {
-        if (worker.memoryFree >= driver.desc.mem && worker.coresFree >= driver.desc.cores) {
+        if (worker.memoryFree >= driver.desc.mem &&
+          worker.coresFree >= driver.desc.cores &&
+          !driverAssignments(driver.id).contains(worker.id)) {
           launchDriver(worker, driver)
           waitingDrivers -= driver
         }
@@ -582,6 +594,8 @@ private[spark] class Master(
   def relaunchDriver(driver: DriverInfo) {
     driver.worker = None
     driver.state = DriverState.RELAUNCHING
+    //we add this value for both worker failure and program failure
+    driver.retriedcountOnMaster += 1
     waitingDrivers += driver
     schedule()
   }
@@ -720,16 +734,18 @@ private[spark] class Master(
   def launchDriver(worker: WorkerInfo, driver: DriverInfo) {
     logInfo("Launching driver " + driver.id + " on worker " + worker.id)
     worker.addDriver(driver)
+    driverAssignments(driver.id) += worker.id
     driver.worker = Some(worker)
     worker.actor ! LaunchDriver(driver.id, driver.desc)
     driver.state = DriverState.RUNNING
   }
 
   def removeDriver(driverId: String, finalState: DriverState, exception: Option[Exception]) {
-    drivers.find(d => d.id == driverId) match {
+    drivers.get(driverId) match {
       case Some(driver) =>
         logInfo(s"Removing driver: $driverId")
-        drivers -= driver
+        drivers -= driverId
+        driverAssignments -= driver.id
         completedDrivers += driver
         persistenceEngine.removeDriver(driver)
         driver.state = finalState
