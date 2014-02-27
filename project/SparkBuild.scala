@@ -60,7 +60,7 @@ object SparkBuild extends Build {
 
   lazy val catalyst = Project("catalyst", file("sql/catalyst"), settings = catalystSettings)
 
-  lazy val sql = Project("sql", file("sql/core"), settings = schemaCoreSettings) dependsOn(core, catalyst)
+  lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core, catalyst)
 
   lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql)
 
@@ -123,7 +123,7 @@ object SparkBuild extends Build {
     .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter) dependsOn(allExternal: _*)
 
   // Everything except assembly, tools and examples belong to packageProjects
-  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, hive) ++ maybeYarnRef
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, catalyst, sql, hive) ++ maybeYarnRef
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++ Seq[ProjectReference](examples, tools, assemblyProj)
 
@@ -355,8 +355,8 @@ object SparkBuild extends Build {
     "com.typesafe" %% "scalalogging-slf4j" % "1.0.1")
   )
 
-  def schemaCoreSettings = sharedSettings ++ Seq(
-    name := "spark-schema"
+  def sqlCoreSettings = sharedSettings ++ Seq(
+    name := "spark-sql"
   )
 
   def hiveSettings = sharedSettings ++ Seq(
