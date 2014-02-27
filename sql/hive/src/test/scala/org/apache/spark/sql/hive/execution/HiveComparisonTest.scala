@@ -79,7 +79,7 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
       .map(name => new File(targetDir, s"$suiteName.$name"))
 
   /** The local directory with cached golden answer will be stored. */
-  protected val answerCache = new File("src/test/golden")
+  protected val answerCache = new File("src/test/resources/golden")
   if (!answerCache.exists) {
     answerCache.mkdir()
   }
