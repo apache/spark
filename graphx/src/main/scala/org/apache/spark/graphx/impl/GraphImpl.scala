@@ -388,9 +388,10 @@ object GraphImpl {
   private def collectVertexIdsFromEdges(
       edges: EdgeRDD[_],
       partitioner: Partitioner): RDD[(VertexId, Int)] = {
-    // TODO: Consider doing map side distinct before shuffle.
     new ShuffledRDD[VertexId, Int, (VertexId, Int)](
-      edges.collectVertexIds.map(vid => (vid, 0)), partitioner)
+      edges.collectVertexIds.mapPartitions(
+        (vids => vids.map(vid => (vid, 0)).toStream.distinct.toIterator)),
+        partitioner)
       .setSerializer(classOf[VertexIdMsgSerializer].getName)
   }
 } // end of object GraphImpl
