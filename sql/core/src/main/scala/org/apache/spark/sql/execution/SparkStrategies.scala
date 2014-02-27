@@ -162,9 +162,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
   object TopK extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.StopAfter(limit, logical.Sort(order, child)) =>
-        execution.TopK(
-          limit.applyInt(null), order, planLater(child))(sparkContext) :: Nil
+      case logical.StopAfter(IntegerLiteral(limit), logical.Sort(order, child)) =>
+        execution.TopK(limit, order, planLater(child))(sparkContext) :: Nil
       case _ => Nil
     }
   }
@@ -197,10 +196,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
           sparkContext.parallelize(data.map(r =>
             new GenericRow(r.productIterator.map(convertToCatalyst).toArray): Row))
         execution.ExistingRdd(output, dataAsRdd) :: Nil
-      case logical.StopAfter(limit, child) =>
-        execution.StopAfter(
-          limit.applyInt(null),
-          planLater(child))(sparkContext) :: Nil
+      case logical.StopAfter(IntegerLiteral(limit), child) =>
+        execution.StopAfter(limit, planLater(child))(sparkContext) :: Nil
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater))(sparkContext) :: Nil
       case logical.Generate(generator, join, outer, _, child) =>

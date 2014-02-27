@@ -169,11 +169,11 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
 
   def this() = this(null, null) // Required for serialization.
 
-  var count: Long = _
-  val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(null))
-  val sumAsDouble = Cast(sum, DoubleType)
+  private var count: Long = _
+  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(null))
+  private val sumAsDouble = Cast(sum, DoubleType)
 
-  val addFunction = Add(sum, expr)
+  private val addFunction = Add(sum, expr)
 
   override def apply(input: Row): Any = sumAsDouble.applyDouble(null) / count.toDouble
 
@@ -201,9 +201,9 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
 case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(null))
+  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(null))
 
-  val addFunction = Add(sum, expr)
+  private val addFunction = Add(sum, expr)
 
   def update(input: Row): Unit = {
     sum.update(addFunction, input)

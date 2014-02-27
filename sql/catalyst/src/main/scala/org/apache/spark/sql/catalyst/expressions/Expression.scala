@@ -53,6 +53,9 @@ abstract class Expression extends TreeNode[Expression] {
   def apply(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
 
+  // Primitive Accessor functions that avoid boxing for performance.
+  // Note this is an Unstable API as it doesn't correctly handle null values yet.
+
   def applyBoolean(input: Row): Boolean = apply(input).asInstanceOf[Boolean]
   def applyInt(input: Row): Int = apply(input).asInstanceOf[Int]
   def applyDouble(input: Row): Double = apply(input).asInstanceOf[Double]
@@ -103,15 +106,19 @@ abstract class Expression extends TreeNode[Expression] {
     }
 
     val evalE1 = e1.apply(i)
-    val evalE2 = e2.apply(i)
-    if (evalE1 == null || evalE2 == null) {
+    if(evalE1 == null) {
       null
     } else {
-      e1.dataType match {
-        case n: NumericType =>
-          f.asInstanceOf[(Numeric[n.JvmType], n.JvmType, n.JvmType) => Int](
-            n.numeric, evalE1.asInstanceOf[n.JvmType], evalE2.asInstanceOf[n.JvmType])
-        case other => sys.error(s"Type $other does not support numeric operations")
+      val evalE2 = e2.apply(i)
+      if (evalE2 == null) {
+        null
+      } else {
+        e1.dataType match {
+          case n: NumericType =>
+            f.asInstanceOf[(Numeric[n.JvmType], n.JvmType, n.JvmType) => Int](
+              n.numeric, evalE1.asInstanceOf[n.JvmType], evalE2.asInstanceOf[n.JvmType])
+          case other => sys.error(s"Type $other does not support numeric operations")
+        }
       }
     }
   }
@@ -127,15 +134,19 @@ abstract class Expression extends TreeNode[Expression] {
     }
 
     val evalE1 = e1.apply(i: Row)
-    val evalE2 = e2.apply(i: Row)
-    if (evalE1 == null || evalE2 == null) {
+    if(evalE1 == null) {
       null
     } else {
-      e1.dataType match {
-        case ft: FractionalType =>
-          f.asInstanceOf[(Fractional[ft.JvmType], ft.JvmType, ft.JvmType) => ft.JvmType](
-            ft.fractional, evalE1.asInstanceOf[ft.JvmType], evalE2.asInstanceOf[ft.JvmType])
-        case other => sys.error(s"Type $other does not support fractional operations")
+      val evalE2 = e2.apply(i: Row)
+      if (evalE2 == null) {
+        null
+      } else {
+        e1.dataType match {
+          case ft: FractionalType =>
+            f.asInstanceOf[(Fractional[ft.JvmType], ft.JvmType, ft.JvmType) => ft.JvmType](
+              ft.fractional, evalE1.asInstanceOf[ft.JvmType], evalE2.asInstanceOf[ft.JvmType])
+          case other => sys.error(s"Type $other does not support fractional operations")
+        }
       }
     }
   }
@@ -149,16 +160,21 @@ abstract class Expression extends TreeNode[Expression] {
     if (e1.dataType != e2.dataType) {
       throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
     }
+
     val evalE1 = e1.apply(i)
-    val evalE2 = e2.apply(i)
-    if (evalE1 == null || evalE2 == null) {
+    if(evalE1 == null) {
       null
     } else {
-      e1.dataType match {
-        case i: IntegralType =>
-          f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
-            i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
-        case other => sys.error(s"Type $other does not support numeric operations")
+      val evalE2 = e2.apply(i)
+      if (evalE2 == null) {
+        null
+      } else {
+        e1.dataType match {
+          case i: IntegralType =>
+            f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
+              i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
+          case other => sys.error(s"Type $other does not support numeric operations")
+        }
       }
     }
   }

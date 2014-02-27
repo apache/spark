@@ -47,7 +47,7 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
       val o = ordinal.apply(input).asInstanceOf[Int]
       if (baseValue == null) {
         null
-      } else if (o >= baseValue.size) {
+      } else if (o >= baseValue.size || o < 0) {
         null
       } else {
         baseValue(o)

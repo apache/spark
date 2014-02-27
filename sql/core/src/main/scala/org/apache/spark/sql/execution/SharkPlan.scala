@@ -44,7 +44,8 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
    */
   def executeCollect(): Array[Row] = execute().collect()
 
-  protected def buildRow(values: Seq[Any]): Row = new catalyst.expressions.GenericRow(values.toArray)
+  protected def buildRow(values: Seq[Any]): Row =
+    new catalyst.expressions.GenericRow(values.toArray)
 }
 
 trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {

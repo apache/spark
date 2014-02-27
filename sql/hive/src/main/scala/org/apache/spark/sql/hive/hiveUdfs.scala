@@ -244,7 +244,8 @@ trait HiveInspectors {
     case si: StructObjectInspector =>
       val allRefs = si.getAllStructFieldRefs
       new GenericRow(
-        allRefs.map(r => unwrapData(si.getStructFieldData(data,r), r.getFieldObjectInspector)).toArray)
+        allRefs.map(r =>
+          unwrapData(si.getStructFieldData(data,r), r.getFieldObjectInspector)).toArray)
   }
 
   /** Converts native catalyst types to the types expected by Hive */
