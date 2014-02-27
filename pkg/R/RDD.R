@@ -125,6 +125,8 @@ setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
                            as.character(.sparkREnv[["libname"]]),
                            broadcastArr,
                            prev_jrdd$classTag())
+            # The RDD is serialized after we create a RRDD
+            rdd@env$serialized <- TRUE
             rdd@env$jrdd_val <- rddRef$asJavaRDD()
             rdd@env$jrdd_val
           })
