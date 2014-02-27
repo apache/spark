@@ -19,10 +19,12 @@ package org.apache.spark.api.java.function
 
 import scala.reflect.ClassTag
 
+import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+
 /**
  * A function that takes the a partition 
  */
 abstract class MapPartitionsWithIndexFunction[A, B] extends Function2[Integer,
   java.util.Iterator[A], java.util.Iterator[B]] {
-  def elementType() : ClassTag[B] = ClassTag.Any.asInstanceOf[ClassTag[B]]
+  def elementType() : ClassTag[B] = fakeClassTag
 }
