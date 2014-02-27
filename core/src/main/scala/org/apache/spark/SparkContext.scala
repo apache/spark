@@ -351,7 +351,7 @@ class SparkContext(
    * using the older MapReduce API (`org.apache.hadoop.mapred`).
    *
    * @param conf JobConf for setting up the dataset
-   * @param inputFormatClass Class of the [[InputFormat]]
+   * @param inputFormatClass Class of the InputFormat
    * @param keyClass Class of the keys
    * @param valueClass Class of the values
    * @param minSplits Minimum number of Hadoop Splits to generate.

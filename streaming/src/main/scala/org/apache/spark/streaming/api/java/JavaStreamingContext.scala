@@ -406,7 +406,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * JavaPairDStream in the list of JavaDStreams, convert it to a JavaDStream using
    * [[org.apache.spark.streaming.api.java.JavaPairDStream]].toJavaDStream().
    * In the transform function, convert the JavaRDD corresponding to that JavaDStream to
-   * a JavaPairRDD using [[org.apache.spark.api.java.JavaPairRDD]].fromJavaRDD().
+   * a JavaPairRDD using org.apache.spark.api.java.JavaPairRDD.fromJavaRDD().
    */
   def transform[T](
       dstreams: JList[JavaDStream[_]],
@@ -429,7 +429,7 @@ class JavaStreamingContext(val ssc: StreamingContext) {
    * JavaPairDStream in the list of JavaDStreams, convert it to a JavaDStream using
    * [[org.apache.spark.streaming.api.java.JavaPairDStream]].toJavaDStream().
    * In the transform function, convert the JavaRDD corresponding to that JavaDStream to
-   * a JavaPairRDD using [[org.apache.spark.api.java.JavaPairRDD]].fromJavaRDD().
+   * a JavaPairRDD using org.apache.spark.api.java.JavaPairRDD.fromJavaRDD().
    */
   def transform[K, V](
       dstreams: JList[JavaDStream[_]],
