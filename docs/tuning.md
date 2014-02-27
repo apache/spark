@@ -44,7 +44,10 @@ This setting configures the serializer used for not only shuffling data between 
 nodes but also when serializing RDDs to disk.  The only reason Kryo is not the default is because of the custom
 registration requirement, but we recommend trying it in any network-intensive application.
 
-Finally, to register your classes with Kryo, create a public class that extends
+Spark automatically includes Kryo serializers for the many commonly-used core Scala classes covered
+in the AllScalaRegistrar from the [Twitter chill](https://github.com/twitter/chill) library.
+
+To register your own custom classes with Kryo, create a public class that extends
 [`org.apache.spark.serializer.KryoRegistrator`](api/core/index.html#org.apache.spark.serializer.KryoRegistrator) and set the
 `spark.kryo.registrator` config property to point to it, as follows:
 
@@ -72,8 +75,8 @@ If your objects are large, you may also need to increase the `spark.kryoserializ
 config property. The default is 2, but this value needs to be large enough to hold the *largest*
 object you will serialize.
 
-Finally, if you don't register your classes, Kryo will still work, but it will have to store the
-full class name with each object, which is wasteful.
+Finally, if you don't register your custom classes, Kryo will still work, but it will have to store
+the full class name with each object, which is wasteful.
 
 # Memory Tuning
 

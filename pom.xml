@@ -393,9 +393,9 @@
         <scope>test</scope>
       </dependency>
       <dependency>
-        <groupId>org.apache.zookeeper</groupId>
-        <artifactId>zookeeper</artifactId>
-        <version>3.4.5</version>
+        <groupId>org.apache.curator</groupId>
+        <artifactId>curator-recipes</artifactId>
+        <version>2.4.0</version>
         <exclusions>
           <exclusion>
             <groupId>org.jboss.netty</groupId>
