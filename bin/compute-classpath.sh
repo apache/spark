@@ -33,6 +33,10 @@ fi
 # Build up classpath
 CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
 
+# Datanucleus jars do not work if included in the uberjar as plugin.xml metadata is lost.
+DATANUCLEUSJARS=$(JARS=("$FWDIR/lib_managed/jars"/datanucleus-*.jar); IFS=:; echo "${JARS[*]}")
+CLASSPATH=$CLASSPATH:$DATANUCLEUSJARS
+
 # First check if we have a dependencies jar. If so, include binary classes with the deps jar
 if [ -f "$FWDIR"/assembly/target/scala-$SCALA_VERSION/spark-assembly*hadoop*-deps.jar ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/core/target/scala-$SCALA_VERSION/classes"
