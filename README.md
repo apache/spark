@@ -1,12 +1,12 @@
 # Apache Spark
 
-Lightning-Fast Cluster Computing - <http://spark.incubator.apache.org/>
+Lightning-Fast Cluster Computing - <http://spark.apache.org/>
 
 
 ## Online Documentation
 
 You can find the latest Spark documentation, including a programming
-guide, on the project webpage at <http://spark.incubator.apache.org/documentation.html>.
+guide, on the project webpage at <http://spark.apache.org/documentation.html>.
 This README file only contains basic setup instructions.
 
 
@@ -92,19 +92,8 @@ If your project is built with Maven, add this to your POM file's `<dependencies>
 
 ## Configuration
 
-Please refer to the [Configuration guide](http://spark.incubator.apache.org/docs/latest/configuration.html)
+Please refer to the [Configuration guide](http://spark.apache.org/docs/latest/configuration.html)
 in the online documentation for an overview on how to configure Spark.
-
-
-## Apache Incubator Notice
-
-Apache Spark is an effort undergoing incubation at The Apache Software
-Foundation (ASF), sponsored by the Apache Incubator. Incubation is required of
-all newly accepted projects until a further review indicates that the
-infrastructure, communications, and decision making process have stabilized in
-a manner consistent with other successful ASF projects. While incubation status
-is not necessarily a reflection of the completeness or stability of the code,
-it does indicate that the project has yet to be fully endorsed by the ASF.
 
 
 ## Contributing to Spark
