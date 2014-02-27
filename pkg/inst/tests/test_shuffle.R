@@ -14,10 +14,8 @@ numPairs <- list(list(1L, 100), list(2L, 200), list(4L, -1), list(3L, 1),
                  list(3L, 0))
 numPairsRdd <- parallelize(sc, numPairs, length(numPairs))
 
-strList <- list("Dexter Morgan: Blood. Sometimes it sets my teeth on edge, ",
-                "other times it helps me control the chaos.",
-                "Dexter Morgan: Harry and Dorris Morgan did a wonderful job ",
-                "raising me. But they're both dead now. I didn't kill them. Honest.")
+strList <- list("Dexter Morgan: Blood. Sometimes it sets my teeth on edge and ",
+                "Dexter Morgan: Harry and Dorris Morgan did a wonderful job ")
 strListRDD <- parallelize(sc, strList, 4)
 
 test_that("groupByKey for integers", {
@@ -100,6 +98,23 @@ test_that("partitionBy works with dependencies", {
   expected_second <- list(list(1, 100), list(3, 1), list(3, 0))
   actual_first <- collectPartition(resultRDD, 0L)
   actual_second <- collectPartition(resultRDD, 1L)
+
+  expect_equal(actual_first, expected_first)
+  expect_equal(actual_second, expected_second)
+})
+
+test_that("test partitionBy with string keys", {
+  words <- flatMap(strListRDD, function(line) { strsplit(line, " ")[[1]] })
+  wordCount <- lapply(words, function(word) { list(word, 1L) })
+
+  resultRDD <- partitionBy(wordCount, 2L)
+  expected_first <- list(list("Dexter", 1), list("Dexter", 1))
+  expected_second <- list(list("and", 1), list("and", 1))
+
+  actual_first <- Filter(function(item) { item[[1]] == "Dexter" },
+                         collectPartition(resultRDD, 0L))
+  actual_second <- Filter(function(item) { item[[1]] == "and" },
+                          collectPartition(resultRDD, 1L))
 
   expect_equal(actual_first, expected_first)
   expect_equal(actual_second, expected_second)

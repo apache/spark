@@ -26,3 +26,19 @@ test_that("textFile() followed by a collect() returns the same content", {
 
   unlink(fileName)
 })
+
+test_that("textFile() word count works as expected", {
+  fileName <- tempfile(pattern="spark-test", fileext=".tmp")
+  writeLines(mockFile, fileName)
+
+  rdd <- textFile(sc, fileName)
+
+  words <- flatMap(rdd, function(line) { strsplit(line, " ")[[1]] })
+  wordCount <- lapply(words, function(word) { list(word, 1L) })
+
+  counts <- reduceByKey(wordCount, "+", 2L)
+  output <- collect(counts)
+  expected <- list(list("pretty.", 1), list("is", 2), list("awesome.", 1),
+                   list("Spark", 2))
+  expect_equal(output, expected)
+})
