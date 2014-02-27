@@ -54,7 +54,8 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
       new Stage(0, rootRdd, rootRdd.partitions.size, None, List(shuffleMapStage), jobID, None)
     val rootStageInfo = StageInfo.fromStage(rootStage)
 
-    joblogger.onStageSubmitted(SparkListenerStageSubmitted(rootStageInfo, null))
+    joblogger.onJobStart(SparkListenerJobStart(jobID, Seq[Int](0, 1)))
+    joblogger.onStageSubmitted(SparkListenerStageSubmitted(rootStageInfo))
     joblogger.createLogWriterTest(jobID)
     joblogger.getJobIDToPrintWriter.size should be (1)
     joblogger.getJobIDToStageIDs.get(jobID).get.size should be (2)

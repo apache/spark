@@ -631,17 +631,16 @@ private[spark] class BlockManager(
           reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
         }
         updatedBlocks += ((blockId, putBlockStatus))
-      } catch {
-        case e: Exception =>
-          // If we failed in putting the block to memory/disk, notify other possible readers
-          // that it has failed, and then remove it from the block info map.
-          if (!marked) {
-            // Note that the remove must happen before markFailure otherwise another thread
-            // could've inserted a new BlockInfo before we remove it.
-            blockInfo.remove(blockId)
-            putBlockInfo.markFailure()
-            logWarning("Putting block " + blockId + " failed")
-          }
+      } finally {
+        // If we failed in putting the block to memory/disk, notify other possible readers
+        // that it has failed, and then remove it from the block info map.
+        if (!marked) {
+          // Note that the remove must happen before markFailure otherwise another thread
+          // could've inserted a new BlockInfo before we remove it.
+          blockInfo.remove(blockId)
+          putBlockInfo.markFailure()
+          logWarning("Putting block " + blockId + " failed")
+        }
       }
     }
     logDebug("Put block " + blockId + " locally took " + Utils.getUsedTimeMs(startTimeMs))

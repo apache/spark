@@ -987,8 +987,11 @@ class DAGScheduler(
       logDebug("Additional executor lost message for " + execId +
                "(epoch " + currentEpoch + ")")
     }
-    val storageStatusList = blockManagerMaster.getStorageStatus
-    post(new SparkListenerExecutorsStateChange(storageStatusList))
+    // Block manager master actor should not be null except during tests
+    if (blockManagerMaster.driverActor != null) {
+      val storageStatusList = blockManagerMaster.getStorageStatus
+      post(new SparkListenerExecutorsStateChange(storageStatusList))
+    }
   }
 
   private def handleExecutorGained(execId: String, host: String) {

@@ -28,7 +28,7 @@ import org.apache.spark.storage.StorageStatus
 
 sealed trait SparkListenerEvent
 
-case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties)
+case class SparkListenerStageSubmitted(stageInfo: StageInfo, properties: Properties = null)
   extends SparkListenerEvent
 
 case class SparkListenerStageCompleted(stageInfo: StageInfo) extends SparkListenerEvent
