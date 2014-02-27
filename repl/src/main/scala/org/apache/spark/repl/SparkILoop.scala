@@ -182,16 +182,15 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   /** Create a new interpreter. */
   def createInterpreter() {
-    if (settings != null) {
-      if (addedClasspath != "") settings.classpath.append(addedClasspath)
+    require(settings != null)
 
-      // work around for Scala bug
-      val totalClassPath = SparkILoop.getAddedJars.foldLeft(
-        settings.classpath.value)((l, r) => ClassPath.join(l, r))
-      this.settings.classpath.value = totalClassPath
+    if (addedClasspath != "") settings.classpath.append(addedClasspath)
+    // work around for Scala bug
+    val totalClassPath = SparkILoop.getAddedJars.foldLeft(
+      settings.classpath.value)((l, r) => ClassPath.join(l, r))
+    this.settings.classpath.value = totalClassPath
 
-      intp = new SparkILoopInterpreter
-    }
+    intp = new SparkILoopInterpreter
   }
 
   /** print a friendly help message */
