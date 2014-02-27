@@ -157,7 +157,7 @@ some example applications.
 
 # Where to Go from Here
 
-PySpark also includes several sample programs in the [`python/examples` folder](https://github.com/apache/incubator-spark/tree/master/python/examples).
+PySpark also includes several sample programs in the [`python/examples` folder](https://github.com/apache/spark/tree/master/python/examples).
 You can run them by passing the files to `pyspark`; e.g.:
 
     ./bin/pyspark python/examples/wordcount.py
