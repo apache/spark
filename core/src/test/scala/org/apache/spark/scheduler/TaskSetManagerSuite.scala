@@ -301,7 +301,7 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
 
   test ("executors should be scheduled with LRU order when the feature is enabled") {
     sc = new SparkContext("local", "test")
-    val sched = new FakeClusterScheduler(sc,
+    val sched = new FakeTaskScheduler(sc,
       ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
     sched.rootPool = new Pool("", sched.schedulingMode, 0, 0)
     sched.schedulableBuilder = new FIFOSchedulableBuilder(sched.rootPool)
