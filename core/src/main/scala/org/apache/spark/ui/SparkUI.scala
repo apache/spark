@@ -22,8 +22,8 @@ import java.io.{FileInputStream, File}
 import scala.io.Source
 
 import it.unimi.dsi.fastutil.io.FastBufferedInputStream
-import net.liftweb.json._
 import org.eclipse.jetty.server.{Handler, Server}
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
 import org.apache.spark.scheduler._

@@ -20,7 +20,7 @@ package org.apache.spark.ui
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-import net.liftweb.json.JsonAST._
+import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
@@ -54,8 +54,8 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, live: Boolean) extends
 
   /** Log the event as JSON */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
-    val eventJson = JsonProtocol.sparkEventToJson(event)
-    logger.foreach(_.logLine(compactRender(eventJson)))
+    val eventJson = compact(render(JsonProtocol.sparkEventToJson(event)))
+    logger.foreach(_.logLine(eventJson))
     if (flushLogger) {
       logger.foreach(_.flush())
     }

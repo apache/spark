@@ -23,10 +23,9 @@ import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable
 
-import net.liftweb.json.JsonDSL._
-import net.liftweb.json.JsonAST._
-import net.liftweb.json.DefaultFormats
-
+import org.json4s.JsonDSL._
+import org.json4s.JsonAST._
+import org.json4s.DefaultFormats
 
 import org.apache.spark.executor.{ShuffleWriteMetrics, ShuffleReadMetrics, TaskMetrics}
 import org.apache.spark.scheduler._

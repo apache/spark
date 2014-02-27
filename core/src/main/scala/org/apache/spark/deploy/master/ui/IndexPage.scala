@@ -23,7 +23,6 @@ import scala.concurrent.Await
 import scala.xml.Node
 
 import akka.pattern.ask
-import javax.servlet.http.HttpServletRequest
 import org.json4s.JValue
 
 import org.apache.spark.deploy.{DeployWebUI, JsonProtocol}

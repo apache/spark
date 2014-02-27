@@ -31,7 +31,7 @@ import scala.reflect.ClassTag
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-import net.liftweb.json.JsonAST._
+import org.json4s._
 import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
