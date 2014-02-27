@@ -79,4 +79,4 @@ The debian package can then be found under assembly/target. We added the short c
 
 ## A note about Hadoop version 0.23.x
 
-For building spark with hadoop 0.23.x and also yarn, you will have to provide a dependency on avro manually.
+For building spark with hadoop 0.23.x and also yarn, you will have to manually add a dependency on avro (org.apache.avro, avro, 1.7.4).

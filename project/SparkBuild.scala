@@ -87,7 +87,7 @@ object SparkBuild extends Build {
     case Some(v) => v.toBoolean
   }
   lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
-  val isAvroNeeded = hadoopVersion.startsWith("0.23.") && isYarnEnabled
+  val maybeAvro = if (hadoopVersion.startsWith("0.23.") && isYarnEnabled) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
   // Conditionally include the yarn sub-project
   lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
   lazy val yarn = Project("yarn", file("yarn/stable"), settings = yarnSettings) dependsOn(core)
@@ -286,8 +286,8 @@ object SparkBuild extends Build {
         "com.twitter"               %% "chill"            % "0.3.1",
         "com.twitter"                % "chill-java"       % "0.3.1",
         "com.clearspring.analytics"  % "stream"           % "2.5.1"
-      ) ++ (if (isAvroNeeded) Seq(
-        "org.apache.avro"            % "avro"             % "1.7.4") else Seq())
+      ),
+    libraryDependencies ++= maybeAvro
   )
 
   def rootSettings = sharedSettings ++ Seq(
