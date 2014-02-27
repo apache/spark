@@ -86,6 +86,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
               <li><strong>Drivers:</strong>
                 {state.activeDrivers.size} Running,
                 {state.completedDrivers.size} Completed </li>
+              <li><strong>Status:</strong> {state.status}</li>
             </ul>
           </div>
         </div>
