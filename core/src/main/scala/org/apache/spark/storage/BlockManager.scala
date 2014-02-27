@@ -35,6 +35,12 @@ import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
 import org.apache.spark.util._
 
+sealed trait Values
+
+case class ByteBufferValues(buffer: ByteBuffer) extends Values
+case class IteratorValues(iterator: Iterator[Any]) extends Values
+case class ArrayBufferValues(buffer: ArrayBuffer[Any]) extends Values
+
 private[spark] class BlockManager(
     executorId: String,
     actorSystem: ActorSystem,
@@ -455,7 +461,7 @@ private[spark] class BlockManager(
 
   def put(blockId: BlockId, values: Iterator[Any], level: StorageLevel, tellMaster: Boolean)
     : Long = {
-    doPut(blockId, Left(Left(values)), level, tellMaster)
+    doPut(blockId, IteratorValues(values), level, tellMaster)
   }
 
   /**
@@ -477,7 +483,7 @@ private[spark] class BlockManager(
   def put(blockId: BlockId, values: ArrayBuffer[Any], level: StorageLevel,
           tellMaster: Boolean = true) : Long = {
     require(values != null, "Values is null")
-    doPut(blockId, Left(Right(values)), level, tellMaster)
+    doPut(blockId, ArrayBufferValues(values), level, tellMaster)
   }
 
   /**
@@ -486,11 +492,11 @@ private[spark] class BlockManager(
   def putBytes(blockId: BlockId, bytes: ByteBuffer, level: StorageLevel,
                tellMaster: Boolean = true) {
     require(bytes != null, "Bytes is null")
-    doPut(blockId, Right(bytes), level, tellMaster)
+    doPut(blockId, ByteBufferValues(bytes), level, tellMaster)
   }
 
   private def doPut(blockId: BlockId,
-                    data: Either[Either[Iterator[Any],ArrayBuffer[Any]], ByteBuffer],
+                    data: Values,
                     level: StorageLevel, tellMaster: Boolean = true): Long = {
     require(blockId != null, "BlockId is null")
     require(level != null && level.isValid, "StorageLevel is null or invalid")
@@ -533,8 +539,9 @@ private[spark] class BlockManager(
 
     // If we're storing bytes, then initiate the replication before storing them locally.
     // This is faster as data is already serialized and ready to send.
-    val replicationFuture = if (data.isRight && level.replication > 1) {
-      val bufferView = data.right.get.duplicate() // Doesn't copy the bytes, just creates a wrapper
+    val replicationFuture = if (data.isInstanceOf[ByteBufferValues] && level.replication > 1) {
+      //Duplicate doesn't copy the bytes, just creates a wrapper
+      val bufferView = data.asInstanceOf[ByteBufferValues].buffer.duplicate()
       Future {
         replicate(blockId, bufferView, level)
       }
@@ -548,42 +555,43 @@ private[spark] class BlockManager(
 
       var marked = false
       try {
-        data match {
-          case Left(values) => {
-            if (level.useMemory) {
-              // Save it just to memory first, even if it also has useDisk set to true; we will
-              // drop it to disk later if the memory store can't hold it.
-              val res = values match {
-                case Left(values_i) => memoryStore.putValues(blockId, values_i, level, true)
-                case Right(values_a) => memoryStore.putValues(blockId, values_a, level, true)
-              }
-              size = res.size
-              res.data match {
-                case Right(newBytes) => bytesAfterPut = newBytes
-                case Left(newIterator) => valuesAfterPut = newIterator
-              }
-            } else {
-              // Save directly to disk.
-              // Don't get back the bytes unless we replicate them.
-              val askForBytes = level.replication > 1
-
-              val res = values match {
-                case Left(values_i) => diskStore.putValues(blockId, values_i, level, askForBytes)
-                case Right(values_a) => diskStore.putValues(blockId, values_a, level, askForBytes)
-              }
-
-              size = res.size
-              res.data match {
-                case Right(newBytes) => bytesAfterPut = newBytes
-                case _ =>
-              }
+        if (level.useMemory) {
+          // Save it just to memory first, even if it also has useDisk set to true; we will
+          // drop it to disk later if the memory store can't hold it.
+          val res = data match {
+            case IteratorValues(values_i) =>
+              memoryStore.putValues(blockId, values_i, level, true)
+            case ArrayBufferValues(values_a) =>
+              memoryStore.putValues(blockId, values_a, level, true)
+            case ByteBufferValues(value_bytes) => {
+              value_bytes.rewind();
+              memoryStore.putBytes(blockId, value_bytes, level)
             }
           }
-          case Right(bytes) => {
-            bytes.rewind()
-            // Store it only in memory at first, even if useDisk is also set to true
-            (if (level.useMemory) memoryStore else diskStore).putBytes(blockId, bytes, level)
-            size = bytes.limit
+          size = res.size
+          res.data match {
+            case Right(newBytes) => bytesAfterPut = newBytes
+            case Left(newIterator) => valuesAfterPut = newIterator
+          }
+        } else {
+          // Save directly to disk.
+          // Don't get back the bytes unless we replicate them.
+          val askForBytes = level.replication > 1
+
+          val res = data match {
+            case IteratorValues(values_i) =>
+              diskStore.putValues(blockId, values_i, level, askForBytes)
+            case ArrayBufferValues(values_a) =>
+              diskStore.putValues(blockId, values_a, level, askForBytes)
+            case ByteBufferValues(value_bytes) => {
+              value_bytes.rewind();
+              diskStore.putBytes(blockId, value_bytes, level)
+            }
+          }
+          size = res.size
+          res.data match {
+            case Right(newBytes) => bytesAfterPut = newBytes
+            case _ =>
           }
         }
 
@@ -612,8 +620,8 @@ private[spark] class BlockManager(
     // values and need to serialize and replicate them now:
     if (level.replication > 1) {
       data match {
-        case Right(bytes) => Await.ready(replicationFuture, Duration.Inf)
-        case Left(values) => {
+        case ByteBufferValues(bytes) => Await.ready(replicationFuture, Duration.Inf)
+        case _ => {
           val remoteStartTime = System.currentTimeMillis
           // Serialize the block if not already done
           if (bytesAfterPut == null) {
