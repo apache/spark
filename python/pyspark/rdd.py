@@ -42,12 +42,13 @@ from py4j.java_collections import ListConverter, MapConverter
 __all__ = ["RDD"]
 
 def _extract_concise_traceback():
+    """
+    This function returns the traceback info for a callsite, returns a dict
+    with function name, file name and line number
+    """
     tb = traceback.extract_stack()
     if len(tb) == 0:
-        return "I'm lost!"
-    # HACK:  This function is in a file called 'rdd.py' in the top level of
-    # everything PySpark.  Just trim off the directory name and assume
-    # everything in that tree is PySpark guts.
+        return None
     file, line, module, what = tb[len(tb) - 1]
     sparkpath = os.path.dirname(file)
     first_spark_frame = len(tb) - 1
@@ -58,16 +59,20 @@ def _extract_concise_traceback():
             break
     if first_spark_frame == 0:
         file, line, fun, what = tb[0]
-        return "%s at %s:%d" % (fun, file, line)
+        return {"function": fun, "file": file, "line": line}
     sfile, sline, sfun, swhat = tb[first_spark_frame]
     ufile, uline, ufun, uwhat = tb[first_spark_frame-1]
-    return "%s at %s:%d" % (sfun, ufile, uline)
+    return {"function": sfun, "file": ufile, "line": uline}
 
 _spark_stack_depth = 0
 
 class _JavaStackTrace(object):
     def __init__(self, sc):
-        self._traceback = _extract_concise_traceback()
+        tb = _extract_concise_traceback()
+        if tb is not None:
+            self._traceback = "%s at %s:%s" % (tb["function"], tb["file"], tb["line"])
+        else:
+            self._traceback = "Error! Could not extract traceback info"
         self._context = sc
 
     def __enter__(self):
