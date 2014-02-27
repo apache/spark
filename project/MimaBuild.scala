@@ -48,7 +48,8 @@ object MimaBuild {
       exclude[MissingClassProblem]("org.apache.spark.mllib.optimization.SquaredGradient"),
       exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.regression.LinearRegressionWithSGD.gradient"),
       exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.regression.RidgeRegressionWithSGD.gradient"),
-      exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.regression.LassoWithSGD.gradient")
+      exclude[IncompatibleResultTypeProblem]("org.apache.spark.mllib.regression.LassoWithSGD.gradient"),
+      exclude[FinalClassProblem]("org.apache.spark.SparkFiles")
     )
   }
 
