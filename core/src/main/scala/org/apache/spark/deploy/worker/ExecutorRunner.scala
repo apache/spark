@@ -72,6 +72,7 @@ private[spark] class ExecutorRunner(
       logInfo("Killing process!")
       process.destroy()
       process.waitFor()
+      process = null
     }
   }
 
