@@ -8,14 +8,132 @@
 #' @rdname RDD
 #' @seealso parallelize, textFile
 #'
+#' @param env An R environment that stores bookkeeping states of the RDD
 #' @param jrdd Java object reference to the backing JavaRDD
-#' @param serialized TRUE if the JavaRDD contains serialized R objects
 #' @export
-setClass("RDD", slots = list(jrdd = "jobjRef", serialized = "logical"))
+setClass("RDD",
+         slots = list(env = "environment",
+                      jrdd = "jobjRef"))
+
+setClass("PipelinedRDD",
+         slots = list(prev = "RDD",
+                      func = "function",
+                      prev_jrdd = "jobjRef"),
+         contains = "RDD")
+
+
+setMethod("initialize", "RDD", function(.Object, jrdd, serialized,
+                                        isCached, isCheckpointed) {
+  # We use an environment to store mutable states inside an RDD object.
+  # Note that R's call-by-value semantics makes modifying slots inside an
+  # object (passed as an argument into a function, such as cache()) difficult:
+  # i.e. one needs to make a copy of the RDD object and sets the new slot value
+  # there.
+
+  # The slots are inheritable from superclass. Here, both `env' and `jrdd' are
+  # inherited from RDD, but only the former is used.
+  .Object@env <- new.env()
+  .Object@env$isCached <- isCached
+  .Object@env$isCheckpointed <- isCheckpointed
+  .Object@env$serialized <- serialized
+
+  .Object@jrdd <- jrdd
+  .Object
+})
+
+setMethod("initialize", "PipelinedRDD", function(.Object, prev, func, jrdd_val) {
+  .Object@env <- new.env()
+  .Object@env$isCached <- FALSE
+  .Object@env$isCheckpointed <- FALSE
+  .Object@env$jrdd_val <- jrdd_val
+  .Object@env$serialized <- prev@env$serialized
+  .Object@prev <- prev
+
+  isPipelinable <- function(rdd) {
+    e <- rdd@env
+    !(e$isCached || e$isCheckpointed)
+  }
+
+  if (!inherits(prev, "PipelinedRDD") || !isPipelinable(prev)) {
+    # This transformation is the first in its stage:
+    .Object@func <- func
+    .Object@prev_jrdd <- getJRDD(prev)
+  } else {
+    pipelinedFunc <- function(split, iterator) {
+      func(split, prev@func(split, iterator))
+    }
+    .Object@func <- pipelinedFunc
+    .Object@prev_jrdd <- prev@prev_jrdd # maintain the pipeline
+  }
+
+  .Object
+})
+
+
+#' @rdname RDD
+#' @export
+RDD <- function(jrdd, serialized = TRUE, isCached = FALSE,
+                isCheckpointed = FALSE) {
+  new("RDD", jrdd, serialized, isCached, isCheckpointed)
+}
+
+#' @rdname PipelinedRDD
+#' @export
+PipelinedRDD <- function(prev, func) {
+  new("PipelinedRDD", prev, func, NULL)
+}
+
+
+# The jrdd accessor function.
+setGeneric("getJRDD", function(rdd) { standardGeneric("getJRDD") })
+setMethod("getJRDD", signature(rdd = "RDD"), function(rdd) rdd@jrdd )
+setMethod("getJRDD", signature(rdd = "PipelinedRDD"),
+          function(rdd) {
+            if (!is.null(rdd@env$jrdd_val)) {
+              return(rdd@env$jrdd_val)
+            }
+
+            # TODO: This is to handle anonymous functions. Find out a
+            # better way to do this.
+            computeFunc <- function(split, part) {
+              rdd@func(split, part)
+            }
+            serializedFunc <- serialize("computeFunc", connection = NULL,
+                                        ascii = TRUE)
+            serializedFuncArr <- .jarray(serializedFunc)
+
+            packageNamesArr <- .jarray(serialize(.sparkREnv[[".packages"]],
+                                                 connection = NULL,
+                                                 ascii = TRUE))
+
+            refs <- lapply(ls(.broadcastNames),
+                           function(name) { get(name, .broadcastNames) })
+            broadcastArr <- .jarray(refs,
+                                    "org/apache/spark/broadcast/Broadcast")
+
+            depsBin <- getDependencies(computeFunc)
+            depsBinArr <- .jarray(depsBin)
+
+            prev_jrdd <- rdd@prev_jrdd
+
+            rddRef <- new(J("edu.berkeley.cs.amplab.sparkr.RRDD"),
+                           prev_jrdd$rdd(),
+                           serializedFuncArr,
+                           rdd@env$serialized,
+                           depsBinArr,
+                           packageNamesArr,
+                           as.character(.sparkREnv[["libname"]]),
+                           broadcastArr,
+                           prev_jrdd$classTag())
+            rdd@env$jrdd_val <- rddRef$asJavaRDD()
+            rdd@env$jrdd_val
+          })
+
 
 setValidity("RDD",
             function(object) {
-              cls <- object@jrdd$getClass()
+              jrdd <- getJRDD(object)
+              cls <- jrdd$getClass()
               className <- cls$getName()
               if (grep("spark.api.java.*RDD*", className) == 1) {
                 TRUE
@@ -24,11 +142,9 @@ setValidity("RDD",
               }
             })
 
-#' @rdname RDD
-#' @export
-RDD <- function(jrdd, serialized = TRUE) {
-  new("RDD", jrdd = jrdd, serialized = serialized)
-}
+
+############ Actions and Transformations ############
+
 
 #' Persist an RDD
 #'
@@ -50,7 +166,69 @@ setGeneric("cache", function(rdd) { standardGeneric("cache") })
 setMethod("cache",
           signature(rdd = "RDD"),
           function(rdd) {
-            .jcall(rdd@jrdd, "Lorg/apache/spark/api/java/JavaRDD;", "cache")
+            .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;", "cache")
+            rdd@env$isCached <- TRUE
+            rdd
+          })
+
+
+#' Unpersist an RDD
+#'
+#' Mark the RDD as non-persistent, and remove all blocks for it from memory and
+#' disk.
+#'
+#' @param rdd The RDD to unpersist
+#' @rdname unpersist-methods
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' rdd <- parallelize(sc, 1:10, 2L)
+#' cache(rdd) # rdd@env$isCached == TRUE
+#' unpersist(rdd) # rdd@env$isCached == FALSE
+#'}
+setGeneric("unpersist", function(rdd) { standardGeneric("unpersist") })
+
+#' @rdname unpersist-methods
+#' @aliases unpersist,RDD-method
+setMethod("unpersist",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            .jcall(getJRDD(rdd), "Lorg/apache/spark/api/java/JavaRDD;",
+                   "unpersist")
+            rdd@env$isCached <- FALSE
+            rdd
+          })
+
+
+#' Checkpoint an RDD
+#'
+#' Mark this RDD for checkpointing. It will be saved to a file inside the
+#' checkpoint directory set with setCheckpointDir() and all references to its
+#' parent RDDs will be removed. This function must be called before any job has
+#' been executed on this RDD. It is strongly recommended that this RDD is
+#' persisted in memory, otherwise saving it on a file will require recomputation.
+#'
+#' @param rdd The RDD to checkpoint
+#' @rdname checkpoint-methods
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' setCheckpointDir(sc, "checkpoints")
+#' rdd <- parallelize(sc, 1:10, 2L)
+#' checkpoint(rdd)
+#'}
+setGeneric("checkpoint", function(rdd) { standardGeneric("checkpoint") })
+
+#' @rdname checkpoint-methods
+#' @aliases checkpoint,RDD-method
+setMethod("checkpoint",
+          signature(rdd = "RDD"),
+          function(rdd) {
+            jrdd <- getJRDD(rdd)
+            .jcall(jrdd$rdd(), "V", "checkpoint")
+            rdd@env$isCheckpointed <- TRUE
             rdd
           })
 
@@ -81,7 +259,7 @@ setMethod("collect",
           signature(rdd = "RDD"),
           function(rdd, flatten = TRUE) {
             # Assumes a pairwise RDD is backed by a JavaPairRDD.
-            collected <- .jcall(rdd@jrdd, "Ljava/util/List;", "collect")
+            collected <- .jcall(getJRDD(rdd), "Ljava/util/List;", "collect")
             convertJListToRList(collected, flatten)
           })
 
@@ -101,7 +279,7 @@ setGeneric("collectPartition",
 setMethod("collectPartition",
           signature(rdd = "RDD", partitionId = "integer"),
           function(rdd, partitionId) {
-            jPartitionsList <- .jcall(rdd@jrdd,
+            jPartitionsList <- .jcall(getJRDD(rdd),
                                       "[Ljava/util/List;",
                                       "collectPartitions",
                                       .jarray(as.integer(partitionId)))
@@ -169,11 +347,10 @@ setMethod("length",
 setMethod("lapply",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
-            partitionFunc <- function(part) {
-              lapply(part, FUN)
+            func <- function(split, iterator) {
+              lapply(iterator, FUN)
             }
-
-            lapplyPartition(X, partitionFunc)
+            PipelinedRDD(X, func)
           })
 
 #' @rdname lapply
@@ -275,36 +452,10 @@ setGeneric("lapplyPartitionsWithIndex", function(X, FUN) {
 setMethod("lapplyPartitionsWithIndex",
           signature(X = "RDD", FUN = "function"),
           function(X, FUN) {
-            # TODO: This is to handle anonymous functions. Find out a
-            # better way to do this.
-            computeFunc <- function(split, part) {
+            closureCapturingFunc <- function(split, part) {
               FUN(split, part)
             }
-            serializedFunc <- serialize("computeFunc",
-                                        connection = NULL, ascii = TRUE)
-            serializedFuncArr <- .jarray(serializedFunc)
-            packageNamesArr <- .jarray(serialize(.sparkREnv$.packages,
-                                                 connection = NULL,
-                                                 ascii = TRUE))
-            refs <- lapply(ls(.broadcastNames), function(name) {
-                           get(name, .broadcastNames) })
-            broadcastArr <- .jarray(refs,
-                                    "org/apache/spark/broadcast/Broadcast")
-
-
-            depsBin <- getDependencies(computeFunc)
-            depsBinArr <- .jarray(depsBin)
-            rddRef <- new(J("edu.berkeley.cs.amplab.sparkr.RRDD"),
-                           X@jrdd$rdd(),
-                           serializedFuncArr,
-                           X@serialized,
-                           depsBinArr,
-                           packageNamesArr,
-                           as.character(.sparkREnv$libname),
-                           broadcastArr,
-                           X@jrdd$classTag())
-            jrdd <- rddRef$asJavaRDD()
-            RDD(jrdd, TRUE)
+            PipelinedRDD(X, closureCapturingFunc)
           })
 
 
@@ -379,7 +530,8 @@ setMethod("take",
           function(rdd, num) {
             resList <- list()
             index <- -1
-            partitions <- .jcall(rdd@jrdd, "Ljava/util/List;", "splits")
+            jrdd <- getJRDD(rdd)
+            partitions <- .jcall(jrdd, "Ljava/util/List;", "splits")
             numPartitions <- .jcall(partitions, "I", "size")
             # TODO(shivaram): Collect more than one partition based on size
             # estimates similar to the scala version of `take`.
@@ -390,7 +542,7 @@ setMethod("take",
                 break
 
               # a JList of byte arrays
-              partitionArr <- .jcall(rdd@jrdd,
+              partitionArr <- .jcall(jrdd,
                                      "[Ljava/util/List;",
                                      "collectPartitions",
                                      .jarray(as.integer(index)))
@@ -598,21 +750,22 @@ setMethod("partitionBy",
                            get(name, .broadcastNames) })
             broadcastArr <- .jarray(refs,
                                     "org/apache/spark/broadcast/Broadcast")
+            jrdd <- getJRDD(rdd)
 
 
             # We create a PairwiseRRDD that extends RDD[(Array[Byte],
             # Array[Byte])], where the key is the hashed split, the value is
             # the content (key-val pairs).
             pairwiseRRDD <- new(J("edu.berkeley.cs.amplab.sparkr.PairwiseRRDD"),
-                                rdd@jrdd$rdd(),
+                                jrdd$rdd(),
                                 as.integer(numPartitions),
                                 serializedHashFuncBytes,
-                                rdd@serialized,
+                                rdd@env$serialized,
                                 depsBinArr,
                                 packageNamesArr,
                                 as.character(.sparkREnv$libname),
                                 broadcastArr,
-                                rdd@jrdd$classTag())
+                                jrdd$classTag())
 
             # Create a corresponding partitioner.
             rPartitioner <- new(J("org.apache.spark.HashPartitioner"),

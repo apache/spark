@@ -40,9 +40,9 @@ test_that("parallelize() on simple vectors and lists returns an RDD", {
              strListRDD2)
 
   for (rdd in rdds) {
-    expect_that(class(rdd), is_equivalent_to("RDD"))
+    expect_true(inherits(rdd, "RDD"))
     expect_true(.hasSlot(rdd, "jrdd")
-                && class(rdd@jrdd) == "jobjRef"
+                && inherits(rdd@jrdd, "jobjRef")
                 && .jinstanceof(rdd@jrdd, "org/apache/spark/api/java/JavaRDD"))
   }
 })

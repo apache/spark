@@ -43,7 +43,7 @@ sparkR.init <- function(
   }
 
   hm <- .jnew("java/util/HashMap")
-  for ( varname in names(sparkEnvir)) {
+  for (varname in names(sparkEnvir)) {
     hm$put(varname, sparkEnvir[[varname]])
   }
 

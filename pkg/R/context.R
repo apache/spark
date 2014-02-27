@@ -157,3 +157,23 @@ broadcast <- function(sc, object) {
   id <- as.character(.jsimplify(.jcall(jBroadcast, "J", "id")))
   Broadcast(id, object, jBroadcast, objName)
 }
+
+#' @title Set the checkpoint directory
+#'
+#' Set the directory under which RDDs are going to be checkpointed. The
+#' directory must be a HDFS path if running on a cluster.
+#'
+#' @param sc Spark Context to use
+#' @param dirName Directory path
+#' @export
+#' @examples
+#'\dontrun{
+#' sc <- sparkR.init()
+#' setCheckpointDir(sc, "~/checkpoints")
+#' rdd <- parallelize(sc, 1:2, 2L)
+#' checkpoint(rdd)
+#'}
+setCheckpointDir <- function(sc, dirName) {
+  ssc <- .jcall(sc, "Lorg/apache/spark/SparkContext;", "sc")
+  .jcall(ssc, "V", "setCheckpointDir", suppressWarnings(normalizePath(dirName)))
+}
