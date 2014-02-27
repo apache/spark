@@ -43,7 +43,7 @@ object Bagel extends Logging {
    *                      Default is the default parallelism of the SparkContext
    * @param storageLevel org.apache.spark.storage.StorageLevel to use for caching of
    *                    intermediate RDDs in each superstep. Defaults to caching in memory.
-   *@param compute function that takes a Vertex, optional set of (possibly combined) messages to
+   * @param compute function that takes a Vertex, optional set of (possibly combined) messages to
    *                the Vertex, optional Aggregator and the current superstep,
    *                and returns a set of (Vertex, outgoing Messages) pairs
    * @tparam K key

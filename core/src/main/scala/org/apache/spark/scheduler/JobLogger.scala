@@ -81,7 +81,7 @@ class JobLogger(val user: String, val logDirName: String)
   /**
    * Create a log file for one job
    * @param jobID ID of the job
-   * @exception FileNotFoundException Fail to create log file
+   * @throws FileNotFoundException Fail to create log file
    */
   protected def createLogWriter(jobID: Int) {
     try {
