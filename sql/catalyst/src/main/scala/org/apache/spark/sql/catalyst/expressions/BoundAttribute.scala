@@ -29,8 +29,10 @@ import catalyst.plans.QueryPlan
  * to be retrieved more efficiently.  However, since operations like column pruning can change
  * the layout of intermediate tuples, BindReferences should be run after all such transformations.
  */
-case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: Attribute)
+case class BoundReference(ordinal: Int, baseReference: Attribute)
   extends Attribute with trees.LeafNode[Expression] {
+
+  type EvaluatedType = Any
 
   def nullable = baseReference.nullable
   def dataType = baseReference.dataType
@@ -38,11 +40,13 @@ case class BoundReference(inputTuple: Int, ordinal: Int, baseReference: Attribut
   def qualifiers = baseReference.qualifiers
   def name = baseReference.name
 
-  def newInstance = BoundReference(inputTuple, ordinal, baseReference.newInstance)
+  def newInstance = BoundReference(ordinal, baseReference.newInstance)
   def withQualifiers(newQualifiers: Seq[String]) =
-    BoundReference(inputTuple, ordinal, baseReference.withQualifiers(newQualifiers))
+    BoundReference(ordinal, baseReference.withQualifiers(newQualifiers))
 
-  override def toString = s"$baseReference:$inputTuple.$ordinal"
+  override def toString = s"$baseReference:$ordinal"
+
+  override def apply(input: Row): Any = input(ordinal)
 }
 
 class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
@@ -51,30 +55,28 @@ class BindReferences[TreeNode <: QueryPlan[TreeNode]] extends Rule[TreeNode] {
   def apply(plan: TreeNode): TreeNode = {
     plan.transform {
       case leafNode if leafNode.children.isEmpty => leafNode
-      case nonLeaf => nonLeaf.transformExpressions { case e =>
-        bindReference(e, nonLeaf.children.map(_.output))
+      case unaryNode if unaryNode.children.size == 1 => unaryNode.transformExpressions { case e =>
+        bindReference(e, unaryNode.children.head.output)
       }
     }
   }
 }
 
 object BindReferences extends Logging {
-  def bindReference(expression: Expression, input: Seq[Seq[Attribute]]): Expression = {
+  def bindReference(expression: Expression, input: Seq[Attribute]): Expression = {
     expression.transform { case a: AttributeReference =>
       attachTree(a, "Binding attribute") {
-        def inputAsString = input.map(_.mkString("{", ",", "}")).mkString(",")
-
-        for {
-          (tuple, inputTuple) <- input.zipWithIndex
-          (attr, ordinal) <- tuple.zipWithIndex
-          if attr == a
-        } {
-          logger.debug(s"Binding $attr to $inputTuple.$ordinal given input $inputAsString")
-          return BoundReference(inputTuple, ordinal, a)
+        val ordinal = input.indexWhere(_.exprId == a.exprId)
+        if (ordinal == -1) {
+          // TODO: This fallback is required because some operators (such as ScriptTransform)
+          // produce new attributes that can't be bound.  Likely the right thing to do is remove
+          // this rule and require all operators to explicitly bind to the input schema that
+          // they specify.
+          logger.debug(s"Couldn't find $a in ${input.mkString("[", ",", "]")}")
+          a
+        } else {
+          BoundReference(ordinal, a)
         }
-
-        logger.debug(s"No binding found for $a given input $inputAsString")
-        a
       }
     }
   }

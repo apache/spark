@@ -25,6 +25,8 @@ import types._
  * Returns the item at `ordinal` in the Array `child` or the Key `ordinal` in Map `child`.
  */
 case class GetItem(child: Expression, ordinal: Expression) extends Expression {
+  type EvaluatedType = Any
+
   val children = child :: ordinal :: Nil
   /** `Null` is returned for invalid ordinals. */
   override def nullable = true
@@ -38,12 +40,36 @@ case class GetItem(child: Expression, ordinal: Expression) extends Expression {
     (child.dataType.isInstanceOf[ArrayType] || child.dataType.isInstanceOf[MapType])
 
   override def toString = s"$child[$ordinal]"
+
+  override def apply(input: Row): Any = {
+    if (child.dataType.isInstanceOf[ArrayType]) {
+      val baseValue = child.apply(input).asInstanceOf[Seq[_]]
+      val o = ordinal.apply(input).asInstanceOf[Int]
+      if (baseValue == null) {
+        null
+      } else if (o >= baseValue.size) {
+        null
+      } else {
+        baseValue(o)
+      }
+    } else {
+      val baseValue = child.apply(input).asInstanceOf[Map[Any, _]]
+      val key = ordinal.apply(input)
+      if (baseValue == null) {
+        null
+      } else {
+        baseValue.get(key).orNull
+      }
+    }
+  }
 }
 
 /**
  * Returns the value of fields in the Struct `child`.
  */
 case class GetField(child: Expression, fieldName: String) extends UnaryExpression {
+  type EvaluatedType = Any
+
   def dataType = field.dataType
   def nullable = field.nullable
 
@@ -60,5 +86,11 @@ case class GetField(child: Expression, fieldName: String) extends UnaryExpressio
   lazy val ordinal = structType.fields.indexOf(field)
 
   override lazy val resolved = childrenResolved && child.dataType.isInstanceOf[StructType]
+
+  override def apply(input: Row): Any = {
+    val baseValue = child.apply(input).asInstanceOf[Row]
+    if (baseValue == null) null else baseValue(ordinal)
+  }
+
   override def toString = s"$child.$fieldName"
 }

@@ -22,6 +22,7 @@ package expressions
 import catalyst.analysis.UnresolvedException
 
 case class Coalesce(children: Seq[Expression]) extends Expression {
+  type EvaluatedType = Any
 
   /** Coalesce is nullable if all of its children are nullable, or if it has no children. */
   def nullable = !children.exists(!_.nullable)
@@ -39,5 +40,36 @@ case class Coalesce(children: Seq[Expression]) extends Expression {
     children.head.dataType
   } else {
     throw new UnresolvedException(this, "Coalesce cannot have children of different types.")
+  }
+
+  override def apply(input: Row): Any = {
+    var i = 0
+    var result: Any = null
+    while(i < children.size && result == null) {
+      result = children(i).apply(input)
+      i += 1
+    }
+    result
+  }
+}
+
+case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
+  def references = child.references
+  override def foldable = child.foldable
+  def nullable = false
+
+  override def apply(input: Row): Any = {
+    child.apply(input) == null
+  }
+}
+
+case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
+  def references = child.references
+  override def foldable = child.foldable
+  def nullable = false
+  override def toString = s"IS NOT NULL $child"
+
+  override def apply(input: Row): Any = {
+    child.apply(input) != null
   }
 }

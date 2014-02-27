@@ -19,11 +19,15 @@ package org.apache.spark.sql
 package catalyst
 package expressions
 
+import errors._
 import trees._
 import types._
 
 abstract class Expression extends TreeNode[Expression] {
   self: Product =>
+
+  /** The narrowest possible type that is produced when this expression is evaluated. */
+  type EvaluatedType <: Any
 
   def dataType: DataType
   /**
@@ -45,18 +49,119 @@ abstract class Expression extends TreeNode[Expression] {
   def nullable: Boolean
   def references: Set[Attribute]
 
+  /** Returns the result of evaluating this expression on a given input Row */
+  def apply(input: Row = null): EvaluatedType =
+    throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
+
+  def applyBoolean(input: Row): Boolean = apply(input).asInstanceOf[Boolean]
+  def applyInt(input: Row): Int = apply(input).asInstanceOf[Int]
+  def applyDouble(input: Row): Double = apply(input).asInstanceOf[Double]
+  def applyString(input: Row): String = apply(input).asInstanceOf[String]
+
   /**
-   * Returns true if this expression and all its children have been resolved to a specific schema
-   * and false if it is still contains any unresolved placeholders. Implementations of expressions
-   * should override this.
+   * Returns `true` if this expression and all its children have been resolved to a specific schema
+   * and `false` if it is still contains any unresolved placeholders. Implementations of expressions
+   * should override this if the resolution of this type of expression involves more than just
+   * the resolution of its children.
    */
   lazy val resolved: Boolean = childrenResolved
 
   /**
    * Returns true if  all the children of this expression have been resolved to a specific schema
-   * and false if it is still contains any unresolved placeholders.
+   * and false if any still contains any unresolved placeholders.
    */
   def childrenResolved = !children.exists(!_.resolved)
+
+  /**
+   * A set of helper functions that return the correct descendant of [[scala.math.Numeric]] type
+   * and do any casting necessary of child evaluation.
+   */
+  @inline
+  def n1(e: Expression, i: Row, f: ((Numeric[Any], Any) => Any)): Any  = {
+    val evalE = e.apply(i)
+    if (evalE == null) {
+      null
+    } else {
+      e.dataType match {
+        case n: NumericType =>
+          val castedFunction = f.asInstanceOf[(Numeric[n.JvmType], n.JvmType) => n.JvmType]
+          castedFunction(n.numeric, evalE.asInstanceOf[n.JvmType])
+        case other => sys.error(s"Type $other does not support numeric operations")
+      }
+    }
+  }
+
+  @inline
+  protected final def n2(
+      i: Row,
+      e1: Expression,
+      e2: Expression,
+      f: ((Numeric[Any], Any, Any) => Any)): Any  = {
+
+    if (e1.dataType != e2.dataType) {
+      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+    }
+
+    val evalE1 = e1.apply(i)
+    val evalE2 = e2.apply(i)
+    if (evalE1 == null || evalE2 == null) {
+      null
+    } else {
+      e1.dataType match {
+        case n: NumericType =>
+          f.asInstanceOf[(Numeric[n.JvmType], n.JvmType, n.JvmType) => Int](
+            n.numeric, evalE1.asInstanceOf[n.JvmType], evalE2.asInstanceOf[n.JvmType])
+        case other => sys.error(s"Type $other does not support numeric operations")
+      }
+    }
+  }
+
+  @inline
+  protected final def f2(
+      i: Row,
+      e1: Expression,
+      e2: Expression,
+      f: ((Fractional[Any], Any, Any) => Any)): Any  = {
+    if (e1.dataType != e2.dataType) {
+      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+    }
+
+    val evalE1 = e1.apply(i: Row)
+    val evalE2 = e2.apply(i: Row)
+    if (evalE1 == null || evalE2 == null) {
+      null
+    } else {
+      e1.dataType match {
+        case ft: FractionalType =>
+          f.asInstanceOf[(Fractional[ft.JvmType], ft.JvmType, ft.JvmType) => ft.JvmType](
+            ft.fractional, evalE1.asInstanceOf[ft.JvmType], evalE2.asInstanceOf[ft.JvmType])
+        case other => sys.error(s"Type $other does not support fractional operations")
+      }
+    }
+  }
+
+  @inline
+  protected final def i2(
+      i: Row,
+      e1: Expression,
+      e2: Expression,
+      f: ((Integral[Any], Any, Any) => Any)): Any  = {
+    if (e1.dataType != e2.dataType) {
+      throw new TreeNodeException(this,  s"Types do not match ${e1.dataType} != ${e2.dataType}")
+    }
+    val evalE1 = e1.apply(i)
+    val evalE2 = e2.apply(i)
+    if (evalE1 == null || evalE2 == null) {
+      null
+    } else {
+      e1.dataType match {
+        case i: IntegralType =>
+          f.asInstanceOf[(Integral[i.JvmType], i.JvmType, i.JvmType) => i.JvmType](
+            i.integral, evalE1.asInstanceOf[i.JvmType], evalE2.asInstanceOf[i.JvmType])
+        case other => sys.error(s"Type $other does not support numeric operations")
+      }
+    }
+  }
 }
 
 abstract class BinaryExpression extends Expression with trees.BinaryNode[Expression] {

@@ -43,14 +43,22 @@ case class Generate(
 
   def execute() = {
     if (join) {
-      val outerNulls = Seq.fill(generator.output.size)(null)
       child.execute().mapPartitions { iter =>
+        val nullValues = Seq.fill(generator.output.size)(Literal(null))
+        // Used to produce rows with no matches when outer = true.
+        val outerProjection =
+          new Projection(child.output ++ nullValues, child.output)
+
+        val joinProjection =
+          new Projection(child.output ++ generator.output, child.output ++ generator.output)
+        val joinedRow = new JoinedRow
+
         iter.flatMap {row =>
           val outputRows = generator(row)
           if (outer && outputRows.isEmpty) {
-            new GenericRow(row ++ outerNulls) :: Nil
+            outerProjection(row) :: Nil
           } else {
-            outputRows.map(or => new GenericRow(row ++ or))
+            outputRows.map(or => joinProjection(joinedRow(row, or)))
           }
         }
       }
