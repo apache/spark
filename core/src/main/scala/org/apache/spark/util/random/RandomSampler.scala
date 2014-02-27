@@ -18,6 +18,7 @@
 package org.apache.spark.util.random
 
 import java.util.Random
+
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand
 

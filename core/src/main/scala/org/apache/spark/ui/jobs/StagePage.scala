@@ -18,7 +18,6 @@
 package org.apache.spark.ui.jobs
 
 import java.util.Date
-
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node

@@ -18,8 +18,8 @@
 package org.apache.spark.scheduler.cluster
 
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.deploy.{Command, ApplicationDescription}
+import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.util.Utils
 

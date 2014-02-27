@@ -28,9 +28,9 @@ import scala.reflect.ClassTag
 import akka.actor._
 
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
 import org.apache.spark.util.{Utils, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 
@@ -279,8 +279,10 @@ class DAGScheduler(
     if (mapOutputTracker.has(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      for (i <- 0 until locs.size) stage.outputLocs(i) = List(locs(i))
-      stage.numAvailableOutputs = locs.size
+      for (i <- 0 until locs.size) {
+        stage.outputLocs(i) = Option(locs(i)).toList   // locs(i) will be null if missing
+      }
+      stage.numAvailableOutputs = locs.count(_ != null)
     } else {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
@@ -380,25 +382,26 @@ class DAGScheduler(
           } else {
             def removeStage(stageId: Int) {
               // data structures based on Stage
-              stageIdToStage.get(stageId).foreach { s =>
-                if (running.contains(s)) {
+              for (stage <- stageIdToStage.get(stageId)) {
+                if (running.contains(stage)) {
                   logDebug("Removing running stage %d".format(stageId))
-                  running -= s
+                  running -= stage
                 }
-                stageToInfos -= s
-                shuffleToMapStage.keys.filter(shuffleToMapStage(_) == s).foreach(shuffleId =>
-                  shuffleToMapStage.remove(shuffleId))
-                if (pendingTasks.contains(s) && !pendingTasks(s).isEmpty) {
+                stageToInfos -= stage
+                for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
+                  shuffleToMapStage.remove(k)
+                }
+                if (pendingTasks.contains(stage) && !pendingTasks(stage).isEmpty) {
                   logDebug("Removing pending status for stage %d".format(stageId))
                 }
-                pendingTasks -= s
-                if (waiting.contains(s)) {
+                pendingTasks -= stage
+                if (waiting.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
-                  waiting -= s
+                  waiting -= stage
                 }
-                if (failed.contains(s)) {
+                if (failed.contains(stage)) {
                   logDebug("Removing stage %d from failed set.".format(stageId))
-                  failed -= s
+                  failed -= stage
                 }
               }
               // data structures based on StageId

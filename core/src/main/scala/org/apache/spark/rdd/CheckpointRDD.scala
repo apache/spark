@@ -18,12 +18,15 @@
 package org.apache.spark.rdd
 
 import java.io.IOException
+
 import scala.reflect.ClassTag
+
+import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.fs.Path
+
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.hadoop.conf.Configuration
-import org.apache.hadoop.fs.Path
 
 private[spark] class CheckpointRDDPartition(val index: Int) extends Partition {}
 

@@ -17,8 +17,8 @@
 
 package org.apache.spark.storage
 
-import java.util.LinkedHashMap
 import java.nio.ByteBuffer
+import java.util.LinkedHashMap
 
 import scala.collection.mutable.ArrayBuffer
 

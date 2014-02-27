@@ -22,9 +22,6 @@ import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
 
 import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
-
-import SparkContext._
 
 /**
  * Holds state shared across task threads in some ThreadingSuite tests.

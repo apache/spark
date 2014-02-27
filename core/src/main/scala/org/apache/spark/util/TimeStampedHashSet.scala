@@ -17,10 +17,10 @@
 
 package org.apache.spark.util
 
-import scala.collection.mutable.Set
-import scala.collection.JavaConversions
 import java.util.concurrent.ConcurrentHashMap
 
+import scala.collection.JavaConversions
+import scala.collection.mutable.Set
 
 class TimeStampedHashSet[A] extends Set[A] {
   val internalMap = new ConcurrentHashMap[A, Long]()

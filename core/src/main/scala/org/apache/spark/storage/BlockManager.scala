@@ -26,12 +26,10 @@ import scala.concurrent.duration._
 import scala.util.Random
 
 import akka.actor.{ActorSystem, Cancellable, Props}
-
 import it.unimi.dsi.fastutil.io.{FastBufferedOutputStream, FastByteArrayOutputStream}
-
 import sun.nio.ch.DirectBuffer
 
-import org.apache.spark.{SparkConf, Logging, SparkEnv, SparkException}
+import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException}
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer

@@ -16,7 +16,7 @@ This guide shows the programming model and features of Bagel by walking through 
 To use Bagel in your program, add the following SBT or Maven dependency:
 
     groupId = org.apache.spark
-    artifactId = spark-bagel_{{site.SCALA_VERSION}}
+    artifactId = spark-bagel_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION}}
 
 # Programming Model

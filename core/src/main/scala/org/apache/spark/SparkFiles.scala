@@ -15,22 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark
 
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
-import scala.runtime.AbstractFunction2;
-
-import java.io.Serializable;
+import java.io.File
 
 /**
- * A three-argument function that takes arguments of type T1, T2 and T3 and returns an R.
+ * Resolves paths to files added through `SparkContext.addFile()`.
  */
-public abstract class Function3<T1, T2, T3, R> extends WrappedFunction3<T1, T2, T3, R>
-        implements Serializable {
+object SparkFiles {
 
-    public ClassTag<R> returnType() {
-        return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
-    }
+  /**
+   * Get the absolute path of a file added through `SparkContext.addFile()`.
+   */
+  def get(filename: String): String =
+    new File(getRootDirectory(), filename).getAbsolutePath()
+
+  /**
+   * Get the root directory that contains files added through `SparkContext.addFile()`.
+   */
+  def getRootDirectory(): String =
+    SparkEnv.get.sparkFilesDir
+
 }
-

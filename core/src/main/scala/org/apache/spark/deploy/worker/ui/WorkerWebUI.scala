@@ -18,11 +18,11 @@
 package org.apache.spark.deploy.worker.ui
 
 import java.io.File
-
 import javax.servlet.http.HttpServletRequest
+
 import org.eclipse.jetty.server.{Handler, Server}
 
-import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.ui.{JettyUtils, UIUtils}
 import org.apache.spark.ui.JettyUtils._

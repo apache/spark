@@ -17,7 +17,7 @@
 
 package org.apache.spark.deploy.worker
 
-import java.io.{File, FileOutputStream, IOException, InputStream}
+import java.io.{File, FileOutputStream, InputStream, IOException}
 import java.lang.System._
 
 import org.apache.spark.Logging

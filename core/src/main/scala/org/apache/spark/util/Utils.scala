@@ -18,7 +18,7 @@
 package org.apache.spark.util
 
 import java.io._
-import java.net.{InetAddress, URL, URI, NetworkInterface, Inet4Address}
+import java.net.{InetAddress, Inet4Address, NetworkInterface, URI, URL}
 import java.nio.ByteBuffer
 import java.util.{Locale, Random, UUID}
 import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
@@ -31,14 +31,13 @@ import scala.reflect.ClassTag
 
 import com.google.common.io.Files
 import com.google.common.util.concurrent.ThreadFactoryBuilder
-
-import org.apache.hadoop.fs.{Path, FileSystem, FileUtil}
-
-import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.spark.{SparkConf, SparkException, Logging}
-
 import net.liftweb.json.JsonAST._
+import org.apache.hadoop.fs.{FileSystem, FileUtil, Path}
+
+import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
+
 
 /**
  * Various utility methods used by Spark.

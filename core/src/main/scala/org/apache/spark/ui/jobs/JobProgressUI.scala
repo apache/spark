@@ -18,7 +18,6 @@
 package org.apache.spark.ui.jobs
 
 import java.text.SimpleDateFormat
-
 import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.Handler

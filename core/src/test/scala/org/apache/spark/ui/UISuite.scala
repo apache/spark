@@ -17,10 +17,12 @@
 
 package org.apache.spark.ui
 
-import scala.util.{Failure, Success, Try}
 import java.net.ServerSocket
-import org.scalatest.FunSuite
+
+import scala.util.{Failure, Success, Try}
+
 import org.eclipse.jetty.server.Server
+import org.scalatest.FunSuite
 
 class UISuite extends FunSuite {
   test("jetty port increases under contention") {

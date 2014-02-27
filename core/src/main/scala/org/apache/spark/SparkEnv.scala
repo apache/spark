@@ -23,7 +23,6 @@ import scala.concurrent.Await
 import scala.util.Properties
 
 import akka.actor._
-
 import com.google.common.collect.MapMaker
 
 import org.apache.spark.api.python.PythonWorkerFactory
@@ -32,7 +31,8 @@ import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.ConnectionManager
 import org.apache.spark.serializer.{Serializer, SerializerManager}
 import org.apache.spark.storage._
-import org.apache.spark.util.{Utils, AkkaUtils}
+import org.apache.spark.util.{AkkaUtils, Utils}
+
 
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),

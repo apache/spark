@@ -15,27 +15,20 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.deploy
 
-import scala.Tuple2;
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
+import org.scalatest.FunSuite
+import org.scalatest.matchers.ShouldMatchers
 
-import java.io.Serializable;
+class ClientSuite extends FunSuite with ShouldMatchers {
+  test("correctly validates driver jar URL's") {
+    ClientArguments.isValidJarUrl("http://someHost:8080/foo.jar") should be (true)
+    ClientArguments.isValidJarUrl("file://some/path/to/a/jarFile.jar") should be (true)
+    ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo.jar") should be (true)
 
-/**
- * A function that returns key-value pairs (Tuple2<K, V>), and can be used to construct PairRDDs.
- */
-// PairFunction does not extend Function because some UDF functions, like map,
-// are overloaded for both Function and PairFunction.
-public abstract class PairFunction<T, K, V> extends WrappedFunction1<T, Tuple2<K, V>>
-  implements Serializable {
-
-  public ClassTag<K> keyType() {
-    return (ClassTag<K>) ClassTag$.MODULE$.apply(Object.class);
+    ClientArguments.isValidJarUrl("hdfs://someHost:1234/foo") should be (false)
+    ClientArguments.isValidJarUrl("/missing/a/protocol/jarfile.jar") should be (false)
+    ClientArguments.isValidJarUrl("not-even-a-path.jar") should be (false)
   }
 
-  public ClassTag<V> valueType() {
-    return (ClassTag<V>) ClassTag$.MODULE$.apply(Object.class);
-  }
 }

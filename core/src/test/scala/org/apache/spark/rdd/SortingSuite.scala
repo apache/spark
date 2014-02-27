@@ -18,7 +18,6 @@
 package org.apache.spark.rdd
 
 import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
 import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.{Logging, SharedSparkContext}

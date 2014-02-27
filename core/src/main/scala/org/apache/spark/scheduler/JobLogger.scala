@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{IOException, File, FileNotFoundException, PrintWriter}
+import java.io.{File, FileNotFoundException, IOException, PrintWriter}
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 import java.util.concurrent.LinkedBlockingQueue

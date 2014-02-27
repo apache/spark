@@ -21,21 +21,19 @@ import java.io.{FileInputStream, File}
 
 import scala.io.Source
 
+import it.unimi.dsi.fastutil.io.FastBufferedInputStream
+import net.liftweb.json._
 import org.eclipse.jetty.server.{Handler, Server}
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
 import org.apache.spark.scheduler._
+import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
 import org.apache.spark.ui.exec.ExecutorsUI
-import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.ui.jobs.JobProgressUI
-import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.util.Utils
 import org.apache.spark.util.JsonProtocol
-
-import net.liftweb.json._
-
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 
 /** Top level user interface for Spark. */
 private[spark] class SparkUI(val sc: SparkContext) extends Logging {

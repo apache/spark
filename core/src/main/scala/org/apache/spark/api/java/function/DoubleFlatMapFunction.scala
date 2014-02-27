@@ -15,17 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function;
+package org.apache.spark.api.java.function
 
-
-import java.io.Serializable;
+import java.lang.{Double => JDouble, Iterable => JIterable}
 
 /**
- * A function that returns Doubles, and can be used to construct DoubleRDDs.
+ * A function that returns zero or more records of type Double from each input record.
  */
-// DoubleFunction does not extend Function because some UDF functions, like map,
-// are overloaded for both Function and DoubleFunction.
-public abstract class DoubleFunction<T> extends WrappedFunction1<T, Double>
-  implements Serializable {
-    // Intentionally left blank
+// DoubleFlatMapFunction does not extend FlatMapFunction because flatMap is
+// overloaded for both FlatMapFunction and DoubleFlatMapFunction.
+abstract class DoubleFlatMapFunction[T] extends WrappedFunction1[T, JIterable[JDouble]]
+   with Serializable {
+   // Intentionally left blank
 }
