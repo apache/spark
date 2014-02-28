@@ -25,37 +25,27 @@ import org.apache.spark.Logging
 
 /**
  * A generic class for logging information to file
- * @param user User identifier if SPARK_LOG_DIR is not set, in which case log directory
- *             defaults to /tmp/spark-[user]
- * @param name Name of logger, also the base name of the log files
- * @param flushPeriod How many writes until the results are flushed to disk. By default,
- *                    only flush manually
+ * @param logDir Path to the directory in which files are logged
+ * @param name An identifier of each FileLogger instance
  */
-class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALUE) extends Logging {
-  private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-  private var logCount = 0
-  private var fileIndex = 0
+class FileLogger(
+    logDir: String = Option(System.getenv("SPARK_LOG_DIR"))
+      .getOrElse("/tmp/spark-%s".format(System.getProperty("user.name", "user"))),
+    name: String = String.valueOf(System.currentTimeMillis()))
+  extends Logging {
 
-  private val logDir =
-    if (System.getenv("SPARK_LOG_DIR") != null) {
-      "%s/%s/".format(System.getenv("SPARK_LOG_DIR"), name)
-    } else {
-      "/tmp/spark-%s/%s/".format(user, name)
-    }
+  private val logPath = logDir.stripSuffix("/") + "/" + name
+  private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  private var fileIndex = 0
 
   private var writer: Option[PrintWriter] = {
     createLogDir()
     Some(createWriter())
   }
 
-  def this() = this(System.getProperty("user.name", "<Unknown>"),
-    String.valueOf(System.currentTimeMillis()))
-
-  def this(_name: String) = this(System.getProperty("user.name", "<Unknown>"), _name)
-
   /** Create a logging directory with the given path */
   private def createLogDir() = {
-    val dir = new File(logDir)
+    val dir = new File(logPath)
     if (dir.exists) {
       logWarning("Logging directory already exists: " + logDir)
     }
@@ -68,7 +58,7 @@ class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALU
   /** Create a new writer to the file identified with the given path */
   private def createWriter() = {
     // Overwrite any existing file
-    val fileWriter = new FileWriter(logDir + fileIndex)
+    val fileWriter = new FileWriter(logPath + "/" + fileIndex)
     val bufferedWriter = new BufferedWriter(fileWriter)
     new PrintWriter(bufferedWriter)
   }
@@ -85,11 +75,6 @@ class FileLogger(user: String, name: String, flushPeriod: Int = Integer.MAX_VALU
       writeInfo = DATE_FORMAT.format(date) + ": " + msg
     }
     writer.foreach(_.print(writeInfo))
-    logCount += 1
-    if (logCount % flushPeriod == 0) {
-      flush()
-      logCount = 0
-    }
   }
 
   /**
