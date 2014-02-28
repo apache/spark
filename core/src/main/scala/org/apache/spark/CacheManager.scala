@@ -71,10 +71,21 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val computedValues = rdd.computeOrReadCheckpoint(split, context)
           // Persist the result, so long as the task is not running locally
           if (context.runningLocally) { return computedValues }
-          val elements = new ArrayBuffer[Any]
-          elements ++= computedValues
-          blockManager.put(key, elements, storageLevel, tellMaster = true)
-          elements.iterator.asInstanceOf[Iterator[T]]
+          if (storageLevel.useDisk && !storageLevel.useMemory) {
+            blockManager.put(key, computedValues, storageLevel, tellMaster = true)
+            return blockManager.get(key) match {
+              case Some(values) =>
+                return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
+              case None =>
+                logInfo("Failure to store %s".format(key))
+                return null
+            }
+          } else {
+            val elements = new ArrayBuffer[Any]
+            elements ++= computedValues
+            blockManager.put(key, elements, storageLevel, tellMaster = true)
+            return elements.iterator.asInstanceOf[Iterator[T]]
+          }
         } finally {
           loading.synchronized {
             loading.remove(key)
