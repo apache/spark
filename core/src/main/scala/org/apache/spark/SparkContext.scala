@@ -157,7 +157,7 @@ class SparkContext(
 
   // Add each JAR given through the constructor
   if (jars != null) {
-    jars.foreach { jar => addJar(jar, updateEnvironment = false) }
+    jars.foreach(addJar)
   }
 
   private[spark] val executorMemory = conf.getOption("spark.executor.memory")
@@ -627,7 +627,7 @@ class SparkContext(
    * filesystems), or an HTTP, HTTPS or FTP URI.  To access the file in Spark jobs,
    * use `SparkFiles.get(path)` to find its download location.
    */
-  def addFile(path: String, updateEnvironment: Boolean = true) {
+  def addFile(path: String) {
     val uri = new URI(path)
     val key = uri.getScheme match {
       case null | "file" => env.httpFileServer.addFile(new File(uri.getPath))
@@ -640,9 +640,6 @@ class SparkContext(
     Utils.fetchFile(path, new File(SparkFiles.getRootDirectory), conf)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
-    if (updateEnvironment) {
-      updateEnvironmentProperties()
-    }
   }
 
   def addSparkListener(listener: SparkListener) {
@@ -710,11 +707,9 @@ class SparkContext(
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
-  def clearFiles(updateEnvironment: Boolean = true) {
+  @deprecated("added files are now temporary files and need not be deleted manually", "1.0.0")
+  def clearFiles() {
     addedFiles.clear()
-    if (updateEnvironment) {
-      updateEnvironmentProperties()
-    }
   }
 
   /**
@@ -749,7 +744,7 @@ class SparkContext(
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
    */
-  def addJar(path: String, updateEnvironment: Boolean = true) {
+  def addJar(path: String) {
     if (path == null) {
       logWarning("null specified as parameter to addJar")
     } else {
@@ -763,8 +758,8 @@ class SparkContext(
           // A JAR file which exists only on the driver node
           case null | "file" =>
             if (SparkHadoopUtil.get.isYarnMode() && master == "yarn-standalone") {
-              // In order for this to work in yarn standalone mode the user must specify the 
-              // --addjars option to the client to upload the file into the distributed cache 
+              // In order for this to work in yarn standalone mode the user must specify the
+              // --addjars option to the client to upload the file into the distributed cache
               // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
               try {
@@ -772,7 +767,7 @@ class SparkContext(
               } catch {
                 case e: Exception => {
                   // For now just log an error but allow to go through so spark examples work.
-                  // The spark examples don't really need the jar distributed since its also 
+                  // The spark examples don't really need the jar distributed since its also
                   // the app jar.
                   logError("Error adding jar (" + e + "), was the --addJars option used?")
                   null
@@ -793,20 +788,15 @@ class SparkContext(
         logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
       }
     }
-    if (updateEnvironment) {
-      updateEnvironmentProperties()
-    }
   }
 
   /**
    * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
    * any new nodes.
    */
-  def clearJars(updateEnvironment: Boolean = true) {
+  @deprecated("added jars are now temporary files and need not be deleted manually", "1.0.0")
+  def clearJars() {
     addedJars.clear()
-    if (updateEnvironment) {
-      updateEnvironmentProperties()
-    }
   }
 
   /** Shut down the SparkContext. */
@@ -822,9 +812,6 @@ class SparkContext(
       taskScheduler = null
       // TODO: Cache.stop()?
       env.stop()
-      // Clean up locally linked files
-      clearFiles(updateEnvironment = false)
-      clearJars(updateEnvironment = false)
       SparkEnv.set(null)
       ShuffleMapTask.clearCache()
       ResultTask.clearCache()
@@ -1047,17 +1034,20 @@ class SparkContext(
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
-  /** Update environment properties and post the corresponding event to the DAG scheduler */
+  /**
+   * Update environment properties and post the corresponding event to the DAG scheduler,
+   * if it is ready.
+   */
   private def updateEnvironmentProperties() {
-    val schedulingMode = getSchedulingMode.toString
-    val addedJarPaths = addedJars.keys.toSeq
-    val addedFilePaths = addedFiles.keys.toSeq
-    val environmentDetails =
-      SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
-    val environmentUpdate = new SparkListenerEnvironmentUpdate(environmentDetails)
-
-    // DAG scheduler may not be ready yet
-    Option(dagScheduler).foreach(_.post(environmentUpdate))
+    Option(dagScheduler).foreach { scheduler =>
+      val schedulingMode = getSchedulingMode.toString
+      val addedJarPaths = addedJars.keys.toSeq
+      val addedFilePaths = addedFiles.keys.toSeq
+      val environmentDetails =
+        SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
+      val environmentUpdate = new SparkListenerEnvironmentUpdate(environmentDetails)
+      scheduler.post(environmentUpdate)
+    }
   }
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
