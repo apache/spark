@@ -28,7 +28,7 @@ import org.apache.hadoop.mapred.FileAlreadyExistsException
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext._
-import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat, TextOutputFormat}
 
 class FileSuite extends FunSuite with LocalSparkContext {
 
@@ -244,8 +244,8 @@ class FileSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val tempdir = Files.createTempDir()
     val randomRDD = sc.parallelize(Array(("key1", "a"), ("key2", "a"), ("key3", "b"), ("key4", "c")), 1)
-    randomRDD.saveAsTextFile(tempdir.getPath + "/output")
-    assert(new File(tempdir.getPath + "/output/part-00000").exists() === true)
+    randomRDD.saveAsNewAPIHadoopFile[TextOutputFormat[String, String]](tempdir.getPath + "/output")
+    assert(new File(tempdir.getPath + "/output/part-r-00000").exists() === true)
     intercept[FileAlreadyExistsException] {
       randomRDD.saveAsNewAPIHadoopFile[TextOutputFormat[String, String]](tempdir.getPath)
     }

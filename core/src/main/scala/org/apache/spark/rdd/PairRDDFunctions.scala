@@ -29,21 +29,13 @@ import scala.collection.mutable.ArrayBuffer
 import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
-<<<<<<< HEAD
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.fs.{FileSystem, Path}
-=======
-import org.apache.hadoop.conf.Configuration
->>>>>>> Create a saveAsNewAPIHadoopDataset method
+import org.apache.hadoop.fs.FileSystem
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
-import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob, RecordWriter => NewRecordWriter, JobContext, SparkHadoopMapReduceUtil}
-<<<<<<< HEAD
+import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob, RecordWriter => NewRecordWriter, SparkHadoopMapReduceUtil}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
-=======
-
->>>>>>> Create a saveAsNewAPIHadoopDataset method
 
 // SparkHadoopWriter and SparkHadoopMapReduceUtil are actually source files defined in Spark.
 import org.apache.hadoop.mapred.SparkHadoopWriter
@@ -613,7 +605,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     job.setOutputValueClass(valueClass)
     job.setOutputFormatClass(outputFormatClass)
     job.getConfiguration.set("mapred.output.dir", path)
-    saveAsNewAPIHadoopDataset(job)
+    saveAsNewAPIHadoopDataset(job.getConfiguration)
   }
 
   /**
@@ -661,22 +653,22 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
 
   /**
    * Output the RDD to any Hadoop-supported storage system with new Hadoop API, using a Hadoop
-   * Job object for that storage system. The Job should set an OutputFormat and any output paths
+   * Configuration object for that storage system. The Conf should set an OutputFormat and any output paths
    * required (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
    * MapReduce job.
    */
-  def saveAsNewAPIHadoopDataset(job: NewAPIHadoopJob) {
+  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+    val job = new NewAPIHadoopJob(conf)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
     val wrappedConf = new SerializableWritable(job.getConfiguration)
     val outfmt = job.getOutputFormatClass
-    val outputFormatInstance = outfmt.newInstance()
+    val jobFormat = outfmt.newInstance
 
-    if (outputFormatInstance.isInstanceOf[FileOutputFormat[_, _]]) {
+    if (jobFormat.isInstanceOf[NewFileOutputFormat[_, _]]) {
       // FileOutputFormat ignores the filesystem parameter
-      val conf = job.getConfiguration
-      outputFormatInstance.checkOutputSpecs(job)
+      jobFormat.checkOutputSpecs(job)
     }
 
     def writeShard(context: TaskContext, iter: Iterator[(K,V)]): Int = {
@@ -688,6 +680,10 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
         attemptNumber)
       val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
       val format = outfmt.newInstance
+      format match {
+        case c: Configurable => c.setConf(wrappedConf.value)
+        case _ => ()
+      }
       val committer = format.getOutputCommitter(hadoopContext)
       committer.setupTask(hadoopContext)
       val writer = format.getRecordWriter(hadoopContext).asInstanceOf[NewRecordWriter[K,V]]
@@ -699,7 +695,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
       committer.commitTask(hadoopContext)
       return 1
     }
-    val jobFormat = outfmt.newInstance
+
     val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)

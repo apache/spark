@@ -560,10 +560,10 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /**
    * Output the RDD to any Hadoop-supported storage system, using
-   * a org.apache.hadoop.mapreduce.Job object for that storage system.
+   * a Configuration object for that storage system.
    */
-  def saveAsNewAPIHadoopDataset(job: Job) {
-    rdd.saveAsNewAPIHadoopDataset(job)
+  def saveAsNewAPIHadoopDataset(conf: Configuration) {
+    rdd.saveAsNewAPIHadoopDataset(conf)
   }
 
   /** Output the RDD to any Hadoop-supported file system. */
