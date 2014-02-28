@@ -136,8 +136,9 @@ if [ "$SPARK_TACHYON" == "true" ]; then
 
   tar xf "tachyon-${TACHYON_VERSION}-bin.tar.gz"
   cp "tachyon-${TACHYON_VERSION}/target/tachyon-${TACHYON_VERSION}-jar-with-dependencies.jar" "$DISTDIR/jars"
-  mkdir "$DISTDIR/sbin/tachyon"
+  mkdir -p "$DISTDIR/sbin/tachyon/src/main/java/tachyon/web"
   cp -r "tachyon-${TACHYON_VERSION}"/{bin,conf,libexec} "$DISTDIR/sbin/tachyon"
+  cp -r "tachyon-${TACHYON_VERSION}"/src/main/java/tachyon/web/resources "$DISTDIR/sbin/tachyon/src/main/java/tachyon/web"
   sed -i "s|export TACHYON_JAR=\$TACHYON_HOME/target/\(.*\)|# This is set for spark's make-distribution\n  export TACHYON_JAR=\$TACHYON_HOME/../../jars/\1|" "$DISTDIR/sbin/tachyon/libexec/tachyon-config.sh"
 
   popd > /dev/null
