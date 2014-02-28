@@ -39,6 +39,7 @@ import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
 import org.apache.spark.{SparkConf, SparkContext, Logging}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
 
@@ -68,6 +69,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     math.max(args.numWorkers * 2, 3))
 
   private var registered = false
+  
+  private val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(
+    SparkContext.SPARK_UNKNOWN_USER)
 
   def run() {
     // Setup the directories so things go to YARN approved directories rather
@@ -152,7 +156,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       false /* initialize */ ,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
     val t = new Thread {
-      override def run() {
+      override def run(): Unit = SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
         var successed = false
         try {
           // Copy
