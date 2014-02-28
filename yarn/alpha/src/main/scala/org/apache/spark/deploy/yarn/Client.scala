@@ -314,6 +314,7 @@ class Client(args: ClientArguments, conf: Configuration, sparkConf: SparkConf)
     Client.populateClasspath(yarnConf, sparkConf, log4jConfLocalRes != null, env)
     env("SPARK_YARN_MODE") = "true"
     env("SPARK_YARN_STAGING_DIR") = stagingDir
+    env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
 
     // Set the environment variables to be passed on to the Workers.
     distCacheMgr.setDistFilesEnv(env)
