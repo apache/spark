@@ -18,6 +18,17 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 
+/**
+ * Used for "binning" the features bins for faster best split calculation. For a continuous
+ * feature, a bin is determined by a low and a high "split". For a categorical feature,
+ * the a bin is determined using a single label value (category).
+ * @param lowSplit signifying the lower threshold for the continuous feature to be
+ *                 accepted in the bin
+ * @param highSplit signifying the upper threshold for the continuous feature to be
+ *                 accepted in the bin
+ * @param featureType type of feature -- categorical or continuous
+ * @param category categorical label value accepted in the bin
+ */
 case class Bin(lowSplit : Split, highSplit : Split, featureType : FeatureType, category : Double) {
 
 }

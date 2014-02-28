@@ -18,6 +18,13 @@ package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.mllib.tree.configuration.FeatureType.FeatureType
 
+/**
+ * Split applied to a feature
+ * @param feature feature index
+ * @param threshold threshold for continuous feature
+ * @param featureType type of feature -- categorical or continuous
+ * @param categories accepted values for categorical variables
+ */
 case class Split(
     feature: Int,
     threshold : Double,
@@ -29,12 +36,28 @@ case class Split(
       ", categories = " + categories
 }
 
-class DummyLowSplit(feature: Int, kind : FeatureType)
-  extends Split(feature, Double.MinValue, kind, List())
+/**
+ * Split with minimum threshold for continuous features. Helps with the smallest bin creation.
+ * @param feature feature index
+ * @param featureType type of feature -- categorical or continuous
+ */
+class DummyLowSplit(feature: Int, featureType : FeatureType)
+  extends Split(feature, Double.MinValue, featureType, List())
 
-class DummyHighSplit(feature: Int, kind : FeatureType)
-  extends Split(feature, Double.MaxValue, kind, List())
+/**
+ * Split with maximum threshold for continuous features. Helps with the highest bin creation.
+ * @param feature feature index
+ * @param featureType type of feature -- categorical or continuous
+ */
+class DummyHighSplit(feature: Int, featureType : FeatureType)
+  extends Split(feature, Double.MaxValue, featureType, List())
 
-class DummyCategoricalSplit(feature: Int, kind : FeatureType)
-  extends Split(feature, Double.MaxValue, kind, List())
+/**
+ * Split with no acceptable feature values for categorical features. Helps with the first bin
+ * creation.
+ * @param feature feature index
+ * @param featureType type of feature -- categorical or continuous
+ */
+class DummyCategoricalSplit(feature: Int, featureType : FeatureType)
+  extends Split(feature, Double.MaxValue, featureType, List())
 

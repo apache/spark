@@ -29,7 +29,7 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.Algo._
 
-/*
+/**
 A class that implements a decision tree algorithm for classification and regression.
 It supports both continuous and categorical features.
 
@@ -40,7 +40,7 @@ quantile calculation strategy, etc.
  */
 class DecisionTree(val strategy : Strategy) extends Serializable with Logging {
 
-  /*
+  /**
   Method to train a decision tree model over an RDD
 
   @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
@@ -157,14 +157,14 @@ class DecisionTree(val strategy : Strategy) extends Serializable with Logging {
 
 object DecisionTree extends Serializable with Logging {
 
-  /*
+  /**
   Returns an Array[Split] of optimal splits for all nodes at a given level
 
   @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-  for DecisionTree
+                            for DecisionTree
   @param parentImpurities Impurities for all parent nodes for the current level
   @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
-  parameters for construction the DecisionTree
+                                 parameters for construction the DecisionTree
   @param level Level of the tree
   @param filters Filter for all nodes at a given level
   @param splits possible splits for all features
@@ -200,7 +200,7 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
-    /*
+    /**
     Find whether the sample is valid input for the current node.
     In other words, does it pass through all the filters for the current node.
     */
@@ -236,7 +236,9 @@ object DecisionTree extends Serializable with Logging {
       true
     }
 
-    /*Finds the right bin for the given feature*/
+    /**
+    Finds the right bin for the given feature
+    */
     def findBin(featureIndex: Int, labeledPoint: LabeledPoint, isFeatureContinuous : Boolean) : Int = {
 
       if (isFeatureContinuous){
@@ -266,7 +268,8 @@ object DecisionTree extends Serializable with Logging {
 
     }
 
-    /*Finds bins for all nodes (and all features) at a given level
+    /**
+     Finds bins for all nodes (and all features) at a given level
      k features, l nodes (level = log2(l))
      Storage label, b11, b12, b13, .., bk, b21, b22, .. ,bl1, bl2, .. ,blk
      Denotes invalid sample for tree by noting bin for feature 1 as -1
@@ -343,7 +346,8 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
-    /*Performs a sequential aggregation over a partition.
+    /**
+    Performs a sequential aggregation over a partition.
 
     for p bins, k features, l nodes (level = log2(l)) storage is of the form:
     b111_left_count,b111_right_count, .... , ..
@@ -370,7 +374,8 @@ object DecisionTree extends Serializable with Logging {
     }
     logDebug("binAggregateLength = " + binAggregateLength)
 
-    /*Combines the aggregates from partitions
+    /**
+    Combines the aggregates from partitions
     @param agg1 Array containing aggregates from one or more partitions
     @param agg2 Array containing aggregates from one or more partitions
 
@@ -507,7 +512,7 @@ object DecisionTree extends Serializable with Logging {
       }
     }
 
-    /*
+    /**
     Extracts left and right split aggregates
 
     @param binData Array[Double] of size 2*numFeatures*numSplits
@@ -604,7 +609,7 @@ object DecisionTree extends Serializable with Logging {
       gains
     }
 
-    /*
+    /**
     Find the best split for a node given bin aggregate data
 
     @param binData Array[Double] of size 2*numSplits*numFeatures
@@ -669,7 +674,7 @@ object DecisionTree extends Serializable with Logging {
     bestSplits
   }
 
-  /*
+  /**
   Returns split and bins for decision tree calculation.
 
   @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data

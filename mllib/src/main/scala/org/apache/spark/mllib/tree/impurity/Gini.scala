@@ -18,8 +18,18 @@ package org.apache.spark.mllib.tree.impurity
 
 import javax.naming.OperationNotSupportedException
 
+/**
+ * Class for calculating the [[http://en.wikipedia.org/wiki/Gini_coefficient Gini
+ * coefficent]] during binary classification
+ */
 object Gini extends Impurity {
 
+  /**
+   * gini coefficient calculation
+   * @param c0 count of instances with label 0
+   * @param c1 count of instances with label 1
+   * @return gini coefficient value
+   */
   def calculate(c0 : Double, c1 : Double): Double = {
     if (c0 == 0 || c1 == 0) {
       0

@@ -20,6 +20,16 @@ import org.apache.spark.Logging
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 
+/**
+ * Node in a decision tree
+ * @param id integer node id
+ * @param predict predicted value at the node
+ * @param isLeaf whether the leaf is a node
+ * @param split split to calculate left and right nodes
+ * @param leftNode  left child
+ * @param rightNode right child
+ * @param stats information gain stats
+ */
 class Node ( val id : Int,
              val predict : Double,
              val isLeaf : Boolean,

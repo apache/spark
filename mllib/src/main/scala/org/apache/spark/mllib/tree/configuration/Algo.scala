@@ -16,6 +16,9 @@
  */
 package org.apache.spark.mllib.tree.configuration
 
+/**
+ * Enum to select the algorithm for the decision tree
+ */
 object Algo extends Enumeration {
   type Algo = Value
   val Classification, Regression = Value

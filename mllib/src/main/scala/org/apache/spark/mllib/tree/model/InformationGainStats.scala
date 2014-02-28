@@ -16,6 +16,14 @@
  */
 package org.apache.spark.mllib.tree.model
 
+/**
+ * Information gain statistics for each split
+ * @param gain information gain value
+ * @param impurity current node impurity
+ * @param leftImpurity left node impurity
+ * @param rightImpurity right node impurity
+ * @param predict predicted value
+ */
 class InformationGainStats(
     val gain : Double,
     val impurity: Double,

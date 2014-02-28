@@ -16,12 +16,23 @@
  */
 package org.apache.spark.mllib.tree.model
 
-import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.configuration.Algo._
+import org.apache.spark.rdd.RDD
 
+/**
+ * Model to store the decision tree parameters
+ * @param topNode root node
+ * @param algo algorithm type -- classification or regression
+ */
 class DecisionTreeModel(val topNode : Node, val algo : Algo) extends Serializable {
 
-  def predict(features : Array[Double]) = {
+  /**
+   * Predict values for a single data point using the model trained.
+   *
+   * @param features array representing a single data point
+   * @return Double prediction from the trained model
+   */
+  def predict(features : Array[Double]) : Double = {
     algo match {
       case Classification => {
         if (topNode.predictIfLeaf(features) < 0.5) 0.0 else 1.0
@@ -31,5 +42,16 @@ class DecisionTreeModel(val topNode : Node, val algo : Algo) extends Serializabl
       }
     }
   }
+
+  /**
+   * Predict values for the given data set using the model trained.
+   *
+   * @param features RDD representing data points to be predicted
+   * @return RDD[Int] where each entry contains the corresponding prediction
+   */
+  def predict(features: RDD[Array[Double]]): RDD[Double] = {
+    features.map(x => predict(x))
+  }
+
 
 }

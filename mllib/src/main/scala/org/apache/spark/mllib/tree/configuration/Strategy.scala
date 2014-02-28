@@ -20,6 +20,19 @@ import org.apache.spark.mllib.tree.impurity.Impurity
 import org.apache.spark.mllib.tree.configuration.Algo._
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 
+/**
+ * Stores all the configuration options for tree construction
+ * @param algo classification or regression
+ * @param impurity criterion used for information gain calculation
+ * @param maxDepth maximum depth of the tree
+ * @param maxBins maximum number of bins used for splitting features
+ * @param quantileCalculationStrategy algorithm for calculating quantiles
+ * @param categoricalFeaturesInfo A map storing information about the categorical variables and the
+ *                                number of discrete values they take. For example, an entry (n ->
+ *                                k) implies the feature n is categorical with k categories 0,
+ *                                1, 2, ... , k-1. It's important to note that features are
+ *                                zero-indexed.
+ */
 class Strategy  (
                 val algo : Algo,
                 val impurity : Impurity,

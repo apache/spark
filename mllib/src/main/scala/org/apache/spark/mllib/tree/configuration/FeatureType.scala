@@ -16,6 +16,9 @@
  */
 package org.apache.spark.mllib.tree.configuration
 
+/**
+ * Enum to describe whether a feature is "continuous" or "categorical"
+ */
 object FeatureType extends Enumeration {
   type FeatureType = Value
   val Continuous, Categorical = Value
