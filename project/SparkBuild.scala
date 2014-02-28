@@ -50,7 +50,7 @@ object SparkBuild extends Build {
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
-    .dependsOn(core, graphx, bagel, mllib)
+    .dependsOn(core, graphx, bagel, mllib, hive)
 
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
