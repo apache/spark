@@ -30,8 +30,8 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
   test("inner method") {
     sc = new SparkContext("local", "joblogger")
     val joblogger = new JobLogger {
-      def createLogWriterTest(jobID: Int) = createLogWriter(jobID)
-      def closeLogWriterTest(jobID: Int) = closeLogWriter(jobID)
+      def createLogWriterTest(jobId: Int) = createLogWriter(jobId)
+      def closeLogWriterTest(jobId: Int) = closeLogWriter(jobId)
     }
     type MyRDD = RDD[(Int, Int)]
     def makeRdd(numPartitions: Int, dependencies: List[Dependency[_]]): MyRDD = {
@@ -44,34 +44,34 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
         }).toArray
       }
     }
-    val jobID = 5
+    val jobId = 5
     val parentRdd = makeRdd(4, Nil)
     val shuffleDep = new ShuffleDependency(parentRdd, null)
     val rootRdd = makeRdd(4, List(shuffleDep))
     val shuffleMapStage =
-      new Stage(1, parentRdd, parentRdd.partitions.size, Some(shuffleDep), Nil, jobID, None)
+      new Stage(1, parentRdd, parentRdd.partitions.size, Some(shuffleDep), Nil, jobId, None)
     val rootStage =
-      new Stage(0, rootRdd, rootRdd.partitions.size, None, List(shuffleMapStage), jobID, None)
+      new Stage(0, rootRdd, rootRdd.partitions.size, None, List(shuffleMapStage), jobId, None)
     val rootStageInfo = StageInfo.fromStage(rootStage)
 
-    joblogger.onJobStart(SparkListenerJobStart(jobID, Seq[Int](0, 1)))
+    joblogger.onJobStart(SparkListenerJobStart(jobId, Seq[Int](0, 1)))
     joblogger.onStageSubmitted(SparkListenerStageSubmitted(rootStageInfo))
-    joblogger.createLogWriterTest(jobID)
-    joblogger.getJobIDToPrintWriter.size should be (1)
-    joblogger.getJobIDToStageIDs.get(jobID).get.size should be (2)
-    joblogger.getStageIDToJobID.get(0) should be (Some(jobID))
-    joblogger.getStageIDToJobID.get(1) should be (Some(jobID))
-    joblogger.closeLogWriterTest(jobID)
-    joblogger.getStageIDToJobID.size should be (0)
-    joblogger.getJobIDToStageIDs.size should be (0)
-    joblogger.getJobIDToPrintWriter.size should be (0)
+    joblogger.createLogWriterTest(jobId)
+    joblogger.getJobIdToPrintWriter.size should be (1)
+    joblogger.getJobIdToStageIds.get(jobId).get.size should be (2)
+    joblogger.getStageIdToJobId.get(0) should be (Some(jobId))
+    joblogger.getStageIdToJobId.get(1) should be (Some(jobId))
+    joblogger.closeLogWriterTest(jobId)
+    joblogger.getStageIdToJobId.size should be (0)
+    joblogger.getJobIdToStageIds.size should be (0)
+    joblogger.getJobIdToPrintWriter.size should be (0)
   }
   
   test("inner variables") {
     sc = new SparkContext("local[4]", "joblogger")
     val joblogger = new JobLogger {
-      override protected def closeLogWriter(jobID: Int) = 
-        getJobIDToPrintWriter.get(jobID).foreach { fileWriter =>
+      override protected def closeLogWriter(jobId: Int) =
+        getJobIdToPrintWriter.get(jobId).foreach { fileWriter =>
           fileWriter.close()
         }
     }
@@ -84,11 +84,11 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     val user = System.getProperty("user.name",  SparkContext.SPARK_UNKNOWN_USER)
     
     joblogger.getLogDir should be ("/tmp/spark-%s".format(user))
-    joblogger.getJobIDToPrintWriter.size should be (1)
-    joblogger.getStageIDToJobID.size should be (2)
-    joblogger.getStageIDToJobID.get(0) should be (Some(0))
-    joblogger.getStageIDToJobID.get(1) should be (Some(0))
-    joblogger.getJobIDToStageIDs.size should be (1)
+    joblogger.getJobIdToPrintWriter.size should be (1)
+    joblogger.getStageIdToJobId.size should be (2)
+    joblogger.getStageIdToJobId.get(0) should be (Some(0))
+    joblogger.getStageIdToJobId.get(1) should be (Some(0))
+    joblogger.getJobIdToStageIds.size should be (1)
   }
   
   

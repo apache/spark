@@ -47,9 +47,9 @@ class JobLogger(val user: String, val logDirName: String)
       "/tmp/spark-%s".format(user)
     }
 
-  private val jobIDToPrintWriter = new HashMap[Int, PrintWriter]
-  private val stageIDToJobID = new HashMap[Int, Int]
-  private val jobIDToStageIDs = new HashMap[Int, Seq[Int]]
+  private val jobIdToPrintWriter = new HashMap[Int, PrintWriter]
+  private val stageIdToJobId = new HashMap[Int, Int]
+  private val jobIdToStageIds = new HashMap[Int, Seq[Int]]
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent]
 
@@ -57,9 +57,9 @@ class JobLogger(val user: String, val logDirName: String)
 
   // The following 5 functions are used only in testing.
   private[scheduler] def getLogDir = logDir
-  private[scheduler] def getJobIDToPrintWriter = jobIDToPrintWriter
-  private[scheduler] def getStageIDToJobID = stageIDToJobID
-  private[scheduler] def getJobIDToStageIDs = jobIDToStageIDs
+  private[scheduler] def getJobIdToPrintWriter = jobIdToPrintWriter
+  private[scheduler] def getStageIdToJobId = stageIdToJobId
+  private[scheduler] def getJobIdToStageIds = jobIdToStageIds
   private[scheduler] def getEventQueue = eventQueue
 
   /** Create a folder for log files, the folder's name is the creation time of jobLogger */
@@ -76,78 +76,78 @@ class JobLogger(val user: String, val logDirName: String)
 
   /**
    * Create a log file for one job
-   * @param jobID ID of the job
+   * @param jobId ID of the job
    * @exception FileNotFoundException Fail to create log file
    */
-  protected def createLogWriter(jobID: Int) {
+  protected def createLogWriter(jobId: Int) {
     try {
-      val fileWriter = new PrintWriter(logDir + "/" + logDirName + "/" + jobID)
-      jobIDToPrintWriter += (jobID -> fileWriter)
+      val fileWriter = new PrintWriter(logDir + "/" + logDirName + "/" + jobId)
+      jobIdToPrintWriter += (jobId -> fileWriter)
     } catch {
       case e: FileNotFoundException => e.printStackTrace()
     }
   }
 
   /**
-   * Close log file, and clean the stage relationship in stageIDToJobID
-   * @param jobID ID of the job
+   * Close log file, and clean the stage relationship in stageIdToJobId
+   * @param jobId ID of the job
    */
-  protected def closeLogWriter(jobID: Int) {
-    jobIDToPrintWriter.get(jobID).foreach { fileWriter =>
+  protected def closeLogWriter(jobId: Int) {
+    jobIdToPrintWriter.get(jobId).foreach { fileWriter =>
       fileWriter.close()
-      jobIDToStageIDs.get(jobID).foreach(_.foreach { stageID =>
-        stageIDToJobID -= stageID
+      jobIdToStageIds.get(jobId).foreach(_.foreach { stageId =>
+        stageIdToJobId -= stageId
       })
-      jobIDToPrintWriter -= jobID
-      jobIDToStageIDs -= jobID
+      jobIdToPrintWriter -= jobId
+      jobIdToStageIds -= jobId
     }
   }
 
   /**
    * Build up the maps that represent stage-job relationships
-   * @param jobID ID of the job
-   * @param stageIDs IDs of the associated stages
+   * @param jobId ID of the job
+   * @param stageIds IDs of the associated stages
    */
-  protected def buildJobStageDependencies(jobID: Int, stageIDs: Seq[Int]) = {
-    jobIDToStageIDs(jobID) = stageIDs
-    stageIDs.foreach { stageID => stageIDToJobID(stageID) = jobID }
+  protected def buildJobStageDependencies(jobId: Int, stageIds: Seq[Int]) = {
+    jobIdToStageIds(jobId) = stageIds
+    stageIds.foreach { stageId => stageIdToJobId(stageId) = jobId }
   }
 
   /**
    * Write info into log file
-   * @param jobID ID of the job
+   * @param jobId ID of the job
    * @param info Info to be recorded
    * @param withTime Controls whether to record time stamp before the info, default is true
    */
-  protected def jobLogInfo(jobID: Int, info: String, withTime: Boolean = true) {
+  protected def jobLogInfo(jobId: Int, info: String, withTime: Boolean = true) {
     var writeInfo = info
     if (withTime) {
       val date = new Date(System.currentTimeMillis())
       writeInfo = DATE_FORMAT.format(date) + ": " + info
     }
-    jobIDToPrintWriter.get(jobID).foreach(_.println(writeInfo))
+    jobIdToPrintWriter.get(jobId).foreach(_.println(writeInfo))
   }
 
   /**
    * Write info into log file
-   * @param stageID ID of the stage
+   * @param stageId ID of the stage
    * @param info Info to be recorded
    * @param withTime Controls whether to record time stamp before the info, default is true
    */
-  protected def stageLogInfo(stageID: Int, info: String, withTime: Boolean = true) {
-    stageIDToJobID.get(stageID).foreach(jobID => jobLogInfo(jobID, info, withTime))
+  protected def stageLogInfo(stageId: Int, info: String, withTime: Boolean = true) {
+    stageIdToJobId.get(stageId).foreach(jobId => jobLogInfo(jobId, info, withTime))
   }
 
   /**
    * Record task metrics into job log files, including execution info and shuffle metrics
-   * @param stageID Stage ID of the task
+   * @param stageId Stage ID of the task
    * @param status Status info of the task
    * @param taskInfo Task description info
    * @param taskMetrics Task running metrics
    */
-  protected def recordTaskMetrics(stageID: Int, status: String,
+  protected def recordTaskMetrics(stageId: Int, status: String,
                                 taskInfo: TaskInfo, taskMetrics: TaskMetrics) {
-    val info = " TID=" + taskInfo.taskId + " STAGE_ID=" + stageID +
+    val info = " TID=" + taskInfo.taskId + " STAGE_ID=" + stageId +
                " START_TIME=" + taskInfo.launchTime + " FINISH_TIME=" + taskInfo.finishTime +
                " EXECUTOR_ID=" + taskInfo.executorId +  " HOST=" + taskMetrics.hostname
     val executorRunTime = " EXECUTOR_RUN_TIME=" + taskMetrics.executorRunTime
@@ -166,7 +166,7 @@ class JobLogger(val user: String, val logDirName: String)
       case Some(metrics) => " SHUFFLE_BYTES_WRITTEN=" + metrics.shuffleBytesWritten
       case None => ""
     }
-    stageLogInfo(stageID, status + info + executorRunTime + readMetrics + writeMetrics)
+    stageLogInfo(stageId, status + info + executorRunTime + readMetrics + writeMetrics)
   }
 
   /**
@@ -184,8 +184,8 @@ class JobLogger(val user: String, val logDirName: String)
    * @param stageCompleted Stage completed event
    */
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
-    val stageID = stageCompleted.stageInfo.stageId
-    stageLogInfo(stageID, "STAGE_ID=%d STATUS=COMPLETED".format(stageID))
+    val stageId = stageCompleted.stageInfo.stageId
+    stageLogInfo(stageId, "STAGE_ID=%d STATUS=COMPLETED".format(stageId))
   }
 
   /**
@@ -217,8 +217,8 @@ class JobLogger(val user: String, val logDirName: String)
    * @param jobEnd Job end event
    */
   override def onJobEnd(jobEnd: SparkListenerJobEnd) {
-    val jobID = jobEnd.jobId
-    var info = "JOB_ID=" + jobID
+    val jobId = jobEnd.jobId
+    var info = "JOB_ID=" + jobId
     jobEnd.jobResult match {
       case JobSucceeded => info += " STATUS=SUCCESS"
       case JobFailed(exception, _) =>
@@ -226,19 +226,19 @@ class JobLogger(val user: String, val logDirName: String)
         exception.getMessage.split("\\s+").foreach(info += _ + "_")
       case _ =>
     }
-    jobLogInfo(jobID, info.substring(0, info.length - 1).toUpperCase)
-    closeLogWriter(jobID)
+    jobLogInfo(jobId, info.substring(0, info.length - 1).toUpperCase)
+    closeLogWriter(jobId)
   }
 
   /**
    * Record job properties into job log file
-   * @param jobID ID of the job
+   * @param jobId ID of the job
    * @param properties Properties of the job
    */
-  protected def recordJobProperties(jobID: Int, properties: Properties) {
+  protected def recordJobProperties(jobId: Int, properties: Properties) {
     if (properties != null) {
       val description = properties.getProperty(SparkContext.SPARK_JOB_DESCRIPTION, "")
-      jobLogInfo(jobID, description, false)
+      jobLogInfo(jobId, description, false)
     }
   }
 
@@ -247,11 +247,11 @@ class JobLogger(val user: String, val logDirName: String)
    * @param jobStart Job start event
    */
   override def onJobStart(jobStart: SparkListenerJobStart) {
-    val jobID = jobStart.jobId
+    val jobId = jobStart.jobId
     val properties = jobStart.properties
-    createLogWriter(jobID)
-    recordJobProperties(jobID, properties)
-    buildJobStageDependencies(jobID, jobStart.stageIds)
-    jobLogInfo(jobID, "JOB_ID=" + jobID + " STATUS=STARTED")
+    createLogWriter(jobId)
+    recordJobProperties(jobId, properties)
+    buildJobStageDependencies(jobId, jobStart.stageIds)
+    jobLogInfo(jobId, "JOB_ID=" + jobId + " STATUS=STARTED")
   }
 }
