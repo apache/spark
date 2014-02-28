@@ -125,7 +125,7 @@ cp -r "$FWDIR/sbin" "$DISTDIR"
 
 # Download and copy in tachyon, if requested
 if [ "$SPARK_TACHYON" == "true" ]; then
-  TACHYON_VERSION="0.4.0"
+  TACHYON_VERSION="0.4.1"
   TACHYON_URL="https://github.com/amplab/tachyon/releases/download/v${TACHYON_VERSION}/tachyon-${TACHYON_VERSION}-bin.tar.gz"
 
   TMPD=`mktemp -d`
