@@ -98,8 +98,8 @@ object StorageUtils {
     val rddInfos = blockStatusMap.map { case (rddId, blocks) =>
       // Add up memory and disk sizes
       val persistedBlocks = blocks.filter { status => status.memSize + status.diskSize > 0 }
-      val memSize = persistedBlocks.map(_.memSize).reduceOption(_+_).getOrElse(0L)
-      val diskSize = persistedBlocks.map(_.diskSize).reduceOption(_+_).getOrElse(0L)
+      val memSize = persistedBlocks.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
+      val diskSize = persistedBlocks.map(_.diskSize).reduceOption(_ + _).getOrElse(0L)
       rddInfoMap.get(rddId).map { rddInfo =>
         rddInfo.numCachedPartitions = persistedBlocks.length
         rddInfo.memSize = memSize
