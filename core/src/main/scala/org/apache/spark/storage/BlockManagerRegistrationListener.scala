@@ -21,7 +21,7 @@ import org.apache.spark.scheduler._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
 
-/** A listener for block manager state changes */
+/** A listener for block manager registration */
 private[spark] class BlockManagerRegistrationListener {
 
   private var _listenerBus: Option[SparkListenerBus] = None

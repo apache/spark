@@ -26,15 +26,14 @@ import org.apache.spark.ui._
 
 /** Web UI showing storage status of all RDD's in the given SparkContext. */
 private[ui] class BlockManagerUI(parent: SparkUI) {
+  lazy val appName = parent.appName
+  lazy val listener = _listener.get
   val live = parent.live
   val sc = parent.sc
 
   private val indexPage = new IndexPage(this)
   private val rddPage = new RDDPage(this)
   private var _listener: Option[BlockManagerListener] = None
-
-  def appName = parent.appName
-  def listener = _listener.get
 
   def start() {
     val gateway = parent.gatewayListener

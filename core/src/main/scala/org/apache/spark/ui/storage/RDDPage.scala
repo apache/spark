@@ -28,8 +28,8 @@ import org.apache.spark.util.Utils
 
 /** Page showing storage details for a given RDD */
 private[ui] class RDDPage(parent: BlockManagerUI) {
-  private def appName = parent.appName
-  private def listener = parent.listener
+  private lazy val appName = parent.appName
+  private lazy val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     val storageStatusList = listener.storageStatusList

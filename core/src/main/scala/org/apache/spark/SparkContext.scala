@@ -1056,7 +1056,7 @@ class SparkContext(
       SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
     val environmentUpdate = new SparkListenerEnvironmentUpdate(environmentDetails)
 
-    // In case the DAG scheduler is not ready yet, first check whether its reference is valid
+    // DAG scheduler may not be ready yet
     Option(dagScheduler).foreach(_.post(environmentUpdate))
   }
 

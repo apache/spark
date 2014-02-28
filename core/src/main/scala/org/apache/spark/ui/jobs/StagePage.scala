@@ -28,9 +28,9 @@ import org.apache.spark.util.{Utils, Distribution}
 
 /** Page showing statistics and task list for a given stage */
 private[ui] class StagePage(parent: JobProgressUI) {
+  private lazy val appName = parent.appName
+  private lazy val listener = parent.listener
   private val dateFmt = parent.dateFmt
-  private def appName = parent.appName
-  private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {

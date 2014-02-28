@@ -29,13 +29,12 @@ import org.apache.spark.ui.Page.Environment
 import org.apache.spark.ui._
 
 private[ui] class EnvironmentUI(parent: SparkUI) {
+  lazy val appName = parent.appName
+  lazy val listener = _listener.get
   val live = parent.live
   val sc = parent.sc
 
   private var _listener: Option[EnvironmentListener] = None
-
-  def appName = parent.appName
-  def listener = _listener.get
 
   def start() {
     val gateway = parent.gatewayListener

@@ -26,11 +26,11 @@ import org.apache.spark.ui.UIUtils
 
 /** Page showing list of all ongoing and recently finished stages and pools*/
 private[ui] class IndexPage(parent: JobProgressUI) {
+  private lazy val appName = parent.appName
+  private lazy val isFairScheduler = parent.isFairScheduler
+  private lazy val listener = parent.listener
   private val live = parent.live
   private val sc = parent.sc
-  private def appName = parent.appName
-  private def isFairScheduler = parent.isFairScheduler
-  private def listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {

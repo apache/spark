@@ -28,8 +28,8 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class IndexPage(parent: BlockManagerUI) {
-  private def appName = parent.appName
-  private def listener = parent.listener
+  private lazy val appName = parent.appName
+  private lazy val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     // Calculate macro-level statistics
