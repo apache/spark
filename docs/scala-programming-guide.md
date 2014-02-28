@@ -365,7 +365,7 @@ res2: Int = 10
 
 # Where to Go from Here
 
-You can see some [example Spark programs](http://spark.incubator.apache.org/examples.html) on the Spark website.
+You can see some [example Spark programs](http://spark.apache.org/examples.html) on the Spark website.
 In addition, Spark includes several samples in `examples/src/main/scala`. Some of them have both Spark versions and local (non-parallel) versions, allowing you to see what had to be changed to make the program run on a cluster. You can run them using by passing the class name to the `bin/run-example` script included in Spark; for example:
 
     ./bin/run-example org.apache.spark.examples.SparkPi
