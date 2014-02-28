@@ -847,6 +847,8 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
+    val rddPartitions = rdd.partitions.map(_.index)
+    partitions.foreach(p =>require(rddPartitions.contains(p), "partition index out of range: " +p))
     val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite)
