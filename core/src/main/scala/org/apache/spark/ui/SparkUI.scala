@@ -74,7 +74,7 @@ private[spark] class SparkUI(val sc: SparkContext) extends Logging {
   private var _gatewayListener: Option[GatewayUISparkListener] = None
 
   def gatewayListener = _gatewayListener.getOrElse {
-    val gateway = new GatewayUISparkListener(this, live)
+    val gateway = new GatewayUISparkListener(this, sc)
     _gatewayListener = Some(gateway)
     gateway
   }
@@ -125,6 +125,7 @@ private[spark] class SparkUI(val sc: SparkContext) extends Logging {
 
   def stop() {
     server.foreach(_.stop())
+    _gatewayListener.foreach(_.stop())
     logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 

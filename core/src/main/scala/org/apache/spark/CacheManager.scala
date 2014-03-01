@@ -80,7 +80,7 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           // Update task metrics to include any blocks whose storage status is updated
           val metrics = context.taskMetrics
           if (metrics != null) {
-            metrics.updatedBlocks = Some(updatedBlocks ++ metrics.updatedBlocks.getOrElse(Seq()))
+            metrics.updatedBlocks = Some(updatedBlocks)
           }
 
           elements.iterator.asInstanceOf[Iterator[T]]

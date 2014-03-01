@@ -29,8 +29,7 @@ import org.apache.spark.Logging
  * @param name An identifier of each FileLogger instance
  */
 class FileLogger(
-    logDir: String = Option(System.getenv("SPARK_LOG_DIR"))
-      .getOrElse("/tmp/spark-%s".format(System.getProperty("user.name", "user"))),
+    logDir: String,
     name: String = String.valueOf(System.currentTimeMillis()))
   extends Logging {
 

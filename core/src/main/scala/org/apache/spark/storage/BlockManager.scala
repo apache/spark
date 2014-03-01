@@ -151,7 +151,7 @@ private[spark] class BlockManager(
   private def reportAllBlocks() {
     logInfo("Reporting " + blockInfo.size + " blocks to the master.")
     for ((blockId, info) <- blockInfo) {
-      val status = getUpdatedBlockStatus(blockId, info)
+      val status = getCurrentBlockStatus(blockId, info)
       if (!tryToReportBlockStatus(blockId, info, status)) {
         logError("Failed to report " + blockId + " to master; giving up.")
         return
@@ -251,7 +251,7 @@ private[spark] class BlockManager(
    * the block is dropped from memory and possibly added to disk, return the new storage level
    * and the updated in-memory and on-disk sizes.
    */
-  private def getUpdatedBlockStatus(blockId: BlockId, info: BlockInfo): BlockStatus = {
+  private def getCurrentBlockStatus(blockId: BlockId, info: BlockInfo): BlockStatus = {
     val (newLevel, inMemSize, onDiskSize) = info.synchronized {
       info.level match {
         case null =>
@@ -626,7 +626,7 @@ private[spark] class BlockManager(
         // and tell the master about it.
         marked = true
         putBlockInfo.markReady(size)
-        val putBlockStatus = getUpdatedBlockStatus(blockId, putBlockInfo)
+        val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
         if (tellMaster) {
           reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
         }
@@ -767,7 +767,7 @@ private[spark] class BlockManager(
           logWarning("Block " + blockId + " could not be dropped from memory as it does not exist")
         }
 
-        val status = getUpdatedBlockStatus(blockId, info)
+        val status = getCurrentBlockStatus(blockId, info)
         if (info.tellMaster) {
           reportBlockStatus(blockId, info, status, droppedMemorySize)
         }
@@ -812,7 +812,7 @@ private[spark] class BlockManager(
       }
       blockInfo.remove(blockId)
       if (tellMaster && info.tellMaster) {
-        val status = getUpdatedBlockStatus(blockId, info)
+        val status = getCurrentBlockStatus(blockId, info)
         reportBlockStatus(blockId, info, status)
       }
     } else {
@@ -848,7 +848,7 @@ private[spark] class BlockManager(
           iterator.remove()
           logInfo("Dropped block " + id)
         }
-        val status = getUpdatedBlockStatus(id, info)
+        val status = getCurrentBlockStatus(id, info)
         reportBlockStatus(id, info, status)
       }
     }

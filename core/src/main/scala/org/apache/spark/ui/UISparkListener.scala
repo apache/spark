@@ -26,6 +26,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 import org.apache.spark.util.FileLogger
 import org.apache.spark.util.JsonProtocol
+import org.apache.spark.SparkContext
 
 private[ui] trait UISparkListener extends SparkListener
 
@@ -36,16 +37,20 @@ private[ui] trait UISparkListener extends SparkListener
  *
  *  (1) If the UI is live, GatewayUISparkListener posts each event to all attached listeners
  *      then logs it as JSON. This centralizes event logging and avoids having all attached
- *      listeners log the events on their own. By default, GatewayUISparkListener logs one
- *      file per job, though this needs not be the case.
+ *      listeners log the events on their own.
  *
  *  (2) If the UI is rendered from disk, GatewayUISparkListener replays each event deserialized
  *      from the event logs to all attached listeners.
  */
-private[ui] class GatewayUISparkListener(parent: SparkUI, live: Boolean) extends SparkListener {
+private[ui] class GatewayUISparkListener(parent: SparkUI, sc: SparkContext) extends SparkListener {
 
   // Log events only if the UI is live
-  private val logger: Option[FileLogger] = if (live) Some(new FileLogger()) else None
+  private val logger: Option[FileLogger] = {
+    if (sc != null && sc.conf.getBoolean("spark.eventLog.enabled", false)) {
+      val logDir = sc.conf.get("spark.eventLog.dir", "/tmp/spark-events")
+      Some(new FileLogger(logDir))
+    } else None
+  }
 
   // Children listeners for which this gateway is responsible
   private val listeners = ArrayBuffer[UISparkListener]()
@@ -61,17 +66,14 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, live: Boolean) extends
     }
   }
 
-  private def startLogger() = logger.foreach(_.start())
-  private def closeLogger() = logger.foreach(_.close())
-
   override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
     listeners.foreach(_.onStageSubmitted(stageSubmitted))
-    logEvent(stageSubmitted, flushLogger = true)
+    logEvent(stageSubmitted)
   }
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     listeners.foreach(_.onStageCompleted(stageCompleted))
-    logEvent(stageCompleted, flushLogger = true)
+    logEvent(stageCompleted)
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) {
@@ -89,14 +91,12 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, live: Boolean) extends
 
   override def onJobStart(jobStart: SparkListenerJobStart) {
     listeners.foreach(_.onJobStart(jobStart))
-    startLogger()
-    logEvent(jobStart)
+    logEvent(jobStart, flushLogger = true)
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd) {
     listeners.foreach(_.onJobEnd(jobEnd))
-    logEvent(jobEnd)
-    closeLogger()
+    logEvent(jobEnd, flushLogger = true)
   }
 
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
@@ -118,10 +118,10 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, live: Boolean) extends
 
   override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) {
     listeners.foreach(_.onUnpersistRDD(unpersistRDD))
-    // In case logger has not already started, as unpersist may be called between jobs
-    startLogger()
     logEvent(unpersistRDD, flushLogger = true)
   }
+
+  def stop() = logger.foreach(_.close())
 }
 
 /**
