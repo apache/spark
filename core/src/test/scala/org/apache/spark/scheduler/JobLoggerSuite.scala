@@ -79,7 +79,7 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     val rdd = sc.parallelize(1 to 1e2.toInt, 4).map{ i => (i % 12, 2 * i) }
     rdd.reduceByKey(_+_).collect()
 
-    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
     val user = System.getProperty("user.name",  SparkContext.SPARK_UNKNOWN_USER)
     
@@ -110,7 +110,7 @@ class JobLoggerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     val rdd = sc.parallelize(1 to 1e2.toInt, 4).map{ i => (i % 12, 2 * i) }
     rdd.reduceByKey(_+_).collect()
 
-    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
     joblogger.onJobStartCount should be (1)
     joblogger.onJobEndCount should be (1)

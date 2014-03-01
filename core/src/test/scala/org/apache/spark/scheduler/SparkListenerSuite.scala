@@ -46,7 +46,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     rdd2.setName("Target RDD")
     rdd2.count
 
-    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
     listener.stageInfos.size should be {1}
     val first = listener.stageInfos.head
@@ -65,7 +65,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     val rdd2 = rdd1.map(x => x.toString)
     sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1), true)
 
-    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
     listener.stageInfos.size should be {1}
     val first = listener.stageInfos.head
@@ -86,7 +86,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
     val d = sc.parallelize(0 to 1e4.toInt, 64).map{i => w(i)}
     d.count()
-    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (1)
 
     val d2 = d.map{i => w(i) -> i * 2}.setName("shuffle input 1")
@@ -98,7 +98,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
     d4.collectAsMap()
 
-    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (4)
     listener.stageInfos.foreach { stageInfo =>
       /* small test, so some tasks might take less than 1 millisecond, but average should be greater
@@ -146,7 +146,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x,y) => x)
     assert(result === 1.to(akkaFrameSize).toArray)
 
-    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     val TASK_INDEX = 0
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.contains(TASK_INDEX))
@@ -161,7 +161,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     val result = sc.parallelize(Seq(1), 1).map(x => 2 * x).reduce((x, y) => x)
     assert(result === 2)
 
-    assert(sc.dagScheduler.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
+    assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     val TASK_INDEX = 0
     assert(listener.startedTasks.contains(TASK_INDEX))
     assert(listener.startedGettingResultTasks.isEmpty)

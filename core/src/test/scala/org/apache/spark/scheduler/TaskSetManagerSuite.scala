@@ -26,7 +26,9 @@ import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.FakeClock
 
-class FakeDAGScheduler(taskScheduler: FakeClusterScheduler) extends DAGScheduler(taskScheduler) {
+class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeClusterScheduler)
+  extends DAGScheduler(sc) {
+
   override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
     taskScheduler.startedTasks += taskInfo.index
   }
@@ -66,7 +68,7 @@ class FakeClusterScheduler(sc: SparkContext, liveExecutors: (String, String)* /*
 
   val executors = new mutable.HashMap[String, String] ++ liveExecutors
 
-  dagScheduler = new FakeDAGScheduler(this)
+  dagScheduler = new FakeDAGScheduler(sc, this)
 
   def removeExecutor(execId: String): Unit = executors -= execId
 

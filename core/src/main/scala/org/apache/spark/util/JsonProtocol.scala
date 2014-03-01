@@ -83,28 +83,31 @@ private[spark] object JsonProtocol {
   }
 
   def taskStartToJson(taskStart: SparkListenerTaskStart): JValue = {
-    val taskInfo = taskInfoToJson(taskStart.taskInfo)
+    val taskInfo = taskStart.taskInfo
+    val taskInfoJson = if (taskInfo != null) taskInfoToJson(taskInfo) else JNothing
     ("Event" -> Utils.getFormattedClassName(taskStart)) ~
     ("Stage ID" -> taskStart.stageId) ~
-    ("Task Info" -> taskInfo)
+    ("Task Info" -> taskInfoJson)
   }
 
   def taskGettingResultToJson(taskGettingResult: SparkListenerTaskGettingResult): JValue = {
-    val taskInfo = taskInfoToJson(taskGettingResult.taskInfo)
+    val taskInfo = taskGettingResult.taskInfo
+    val taskInfoJson = if (taskInfo != null) taskInfoToJson(taskInfo) else JNothing
     ("Event" -> Utils.getFormattedClassName(taskGettingResult)) ~
-    ("Task Info" -> taskInfo)
+    ("Task Info" -> taskInfoJson)
   }
 
   def taskEndToJson(taskEnd: SparkListenerTaskEnd): JValue = {
     val taskEndReason = taskEndReasonToJson(taskEnd.reason)
-    val taskInfo = taskInfoToJson(taskEnd.taskInfo)
+    val taskInfo = taskEnd.taskInfo
+    val taskInfoJson = if (taskInfo != null) taskInfoToJson(taskInfo) else JNothing
     val taskMetrics = taskEnd.taskMetrics
     val taskMetricsJson = if (taskMetrics != null) taskMetricsToJson(taskMetrics) else JNothing
     ("Event" -> Utils.getFormattedClassName(taskEnd)) ~
     ("Stage ID" -> taskEnd.stageId) ~
     ("Task Type" -> taskEnd.taskType) ~
     ("Task End Reason" -> taskEndReason) ~
-    ("Task Info" -> taskInfo) ~
+    ("Task Info" -> taskInfoJson) ~
     ("Task Metrics" -> taskMetricsJson)
   }
 
@@ -166,7 +169,8 @@ private[spark] object JsonProtocol {
     val rddInfo = rddInfoToJson(stageInfo.rddInfo)
     val taskInfos = JArray(stageInfo.taskInfos.map { case (info, metrics) =>
       val metricsJson = if (metrics != null) taskMetricsToJson(metrics) else JNothing
-      ("Task Info" -> taskInfoToJson(info)) ~
+      val infoJson = if (info != null) taskInfoToJson(info) else JNothing
+      ("Task Info" -> infoJson) ~
       ("Task Metrics" -> metricsJson)
     }.toList)
     val submissionTime = stageInfo.submissionTime.map(JInt(_)).getOrElse(JNothing)
@@ -410,23 +414,23 @@ private[spark] object JsonProtocol {
   def stageSubmittedFromJson(json: JValue): SparkListenerStageSubmitted = {
     val stageInfo = stageInfoFromJson(json \ "Stage Info")
     val properties = propertiesFromJson(json \ "Properties")
-    new SparkListenerStageSubmitted(stageInfo, properties)
+    SparkListenerStageSubmitted(stageInfo, properties)
   }
 
   def stageCompletedFromJson(json: JValue): SparkListenerStageCompleted = {
     val stageInfo = stageInfoFromJson(json \ "Stage Info")
-    new SparkListenerStageCompleted(stageInfo)
+    SparkListenerStageCompleted(stageInfo)
   }
 
   def taskStartFromJson(json: JValue): SparkListenerTaskStart = {
     val stageId = (json \ "Stage ID").extract[Int]
     val taskInfo = taskInfoFromJson(json \ "Task Info")
-    new SparkListenerTaskStart(stageId, taskInfo)
+    SparkListenerTaskStart(stageId, taskInfo)
   }
 
   def taskGettingResultFromJson(json: JValue): SparkListenerTaskGettingResult = {
     val taskInfo = taskInfoFromJson(json \ "Task Info")
-    new SparkListenerTaskGettingResult(taskInfo)
+    SparkListenerTaskGettingResult(taskInfo)
   }
 
   def taskEndFromJson(json: JValue): SparkListenerTaskEnd = {
@@ -435,24 +439,24 @@ private[spark] object JsonProtocol {
     val taskEndReason = taskEndReasonFromJson(json \ "Task End Reason")
     val taskInfo = taskInfoFromJson(json \ "Task Info")
     val taskMetrics = taskMetricsFromJson(json \ "Task Metrics")
-    new SparkListenerTaskEnd(stageId, taskType, taskEndReason, taskInfo, taskMetrics)
+    SparkListenerTaskEnd(stageId, taskType, taskEndReason, taskInfo, taskMetrics)
   }
 
   def jobStartFromJson(json: JValue): SparkListenerJobStart = {
     val jobId = (json \ "Job ID").extract[Int]
     val stageIds = (json \ "Stage IDs").extract[List[JValue]].map(_.extract[Int])
     val properties = propertiesFromJson(json \ "Properties")
-    new SparkListenerJobStart(jobId, stageIds, properties)
+    SparkListenerJobStart(jobId, stageIds, properties)
   }
 
   def jobEndFromJson(json: JValue): SparkListenerJobEnd = {
     val jobId = (json \ "Job ID").extract[Int]
     val jobResult = jobResultFromJson(json \ "Job Result")
-    new SparkListenerJobEnd(jobId, jobResult)
+    SparkListenerJobEnd(jobId, jobResult)
   }
 
   def applicationStartFromJson(json: JValue): SparkListenerApplicationStart = {
-    new SparkListenerApplicationStart((json \ "App Name").extract[String])
+    SparkListenerApplicationStart((json \ "App Name").extract[String])
   }
 
   def environmentUpdateFromJson(json: JValue): SparkListenerEnvironmentUpdate = {
@@ -461,17 +465,17 @@ private[spark] object JsonProtocol {
       "Spark Properties" -> mapFromJson(json \ "Spark Properties").toSeq,
       "System Properties" -> mapFromJson(json \ "System Properties").toSeq,
       "Classpath Entries" -> mapFromJson(json \ "Classpath Entries").toSeq)
-    new SparkListenerEnvironmentUpdate(environmentDetails)
+    SparkListenerEnvironmentUpdate(environmentDetails)
   }
 
   def executorsStateChangeFromJson(json: JValue): SparkListenerExecutorsStateChange = {
     val storageStatusList =
       (json \ "Storage Status List").extract[List[JValue]].map(storageStatusFromJson)
-    new SparkListenerExecutorsStateChange(storageStatusList)
+    SparkListenerExecutorsStateChange(storageStatusList)
   }
 
   def unpersistRDDFromJson(json: JValue): SparkListenerUnpersistRDD = {
-    new SparkListenerUnpersistRDD((json \ "RDD ID").extract[Int])
+    SparkListenerUnpersistRDD((json \ "RDD ID").extract[Int])
   }
 
   /**

@@ -151,12 +151,15 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-    val execId = taskEnd.taskInfo.executorId
-    val metrics = taskEnd.taskMetrics
-    if (metrics != null) {
-      val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq())
-      if (updatedBlocks.length > 0) {
-        updateStorageStatus(execId, updatedBlocks)
+    val info = taskEnd.taskInfo
+    if (info != null) {
+      val execId = info.executorId
+      val metrics = taskEnd.taskMetrics
+      if (metrics != null) {
+        val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq())
+        if (updatedBlocks.length > 0) {
+          updateStorageStatus(execId, updatedBlocks)
+        }
       }
     }
   }

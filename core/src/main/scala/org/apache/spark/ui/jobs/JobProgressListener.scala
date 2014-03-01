@@ -123,11 +123,13 @@ private[ui] class JobProgressListener(sc: SparkContext, live: Boolean)
   override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
     val sid = taskStart.stageId
     val taskInfo = taskStart.taskInfo
-    val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashMap[Long, TaskInfo]())
-    tasksActive(taskInfo.taskId) = taskInfo
-    val taskMap = stageIdToTaskInfos.getOrElse(sid, HashMap[Long, TaskUIData]())
-    taskMap(taskInfo.taskId) = new TaskUIData(taskInfo)
-    stageIdToTaskInfos(sid) = taskMap
+    if (taskInfo != null) {
+      val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashMap[Long, TaskInfo]())
+      tasksActive(taskInfo.taskId) = taskInfo
+      val taskMap = stageIdToTaskInfos.getOrElse(sid, HashMap[Long, TaskUIData]())
+      taskMap(taskInfo.taskId) = new TaskUIData(taskInfo)
+      stageIdToTaskInfos(sid) = taskMap
+    }
   }
 
   override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult)
@@ -138,81 +140,82 @@ private[ui] class JobProgressListener(sc: SparkContext, live: Boolean)
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val sid = taskEnd.stageId
+    val info = taskEnd.taskInfo
 
-    // create executor summary map if necessary
-    val executorSummaryMap = stageIdToExecutorSummaries.getOrElseUpdate(key = sid,
-      op = new HashMap[String, ExecutorSummary]())
-    executorSummaryMap.getOrElseUpdate(key = taskEnd.taskInfo.executorId,
-      op = new ExecutorSummary())
+    if (info != null) {
+      // create executor summary map if necessary
+      val executorSummaryMap = stageIdToExecutorSummaries.getOrElseUpdate(key = sid,
+        op = new HashMap[String, ExecutorSummary]())
+      executorSummaryMap.getOrElseUpdate(key = info.executorId, op = new ExecutorSummary())
 
-    val executorSummary = executorSummaryMap.get(taskEnd.taskInfo.executorId)
-    executorSummary match {
-      case Some(y) => {
-        // first update failed-task, succeed-task
+      val executorSummary = executorSummaryMap.get(info.executorId)
+      executorSummary match {
+        case Some(y) => {
+          // first update failed-task, succeed-task
+          taskEnd.reason match {
+            case Success =>
+              y.succeededTasks += 1
+            case _ =>
+              y.failedTasks += 1
+          }
+
+          // update duration
+          y.taskTime += info.duration
+
+          val metrics = taskEnd.taskMetrics
+          if (metrics != null) {
+            metrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
+            metrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
+            y.memoryBytesSpilled += metrics.memoryBytesSpilled
+            y.diskBytesSpilled += metrics.diskBytesSpilled
+          }
+        }
+        case _ => {}
+      }
+
+      val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashMap[Long, TaskInfo]())
+      // Remove by taskId, rather than by TaskInfo, in case the TaskInfo is from storage
+      tasksActive.remove(info.taskId)
+
+      val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
         taskEnd.reason match {
-          case Success =>
-            y.succeededTasks += 1
+          case e: ExceptionFailure =>
+            stageIdToTasksFailed(sid) = stageIdToTasksFailed.getOrElse(sid, 0) + 1
+            (Some(e), e.metrics)
           case _ =>
-            y.failedTasks += 1
+            stageIdToTasksComplete(sid) = stageIdToTasksComplete.getOrElse(sid, 0) + 1
+            (None, Option(taskEnd.taskMetrics))
         }
 
-        // update duration
-        y.taskTime += taskEnd.taskInfo.duration
+      stageIdToTime.getOrElseUpdate(sid, 0L)
+      val time = metrics.map(m => m.executorRunTime).getOrElse(0L)
+      stageIdToTime(sid) += time
+      totalTime += time
 
-        val taskMetrics = taskEnd.taskMetrics
-        if (taskMetrics != null) {
-          taskMetrics.shuffleReadMetrics.foreach { y.shuffleRead += _.remoteBytesRead }
-          taskMetrics.shuffleWriteMetrics.foreach { y.shuffleWrite += _.shuffleBytesWritten }
-          y.memoryBytesSpilled += taskMetrics.memoryBytesSpilled
-          y.diskBytesSpilled += taskMetrics.diskBytesSpilled
-        }
-      }
-      case _ => {}
+      stageIdToShuffleRead.getOrElseUpdate(sid, 0L)
+      val shuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s =>
+        s.remoteBytesRead).getOrElse(0L)
+      stageIdToShuffleRead(sid) += shuffleRead
+      totalShuffleRead += shuffleRead
+
+      stageIdToShuffleWrite.getOrElseUpdate(sid, 0L)
+      val shuffleWrite = metrics.flatMap(m => m.shuffleWriteMetrics).map(s =>
+        s.shuffleBytesWritten).getOrElse(0L)
+      stageIdToShuffleWrite(sid) += shuffleWrite
+      totalShuffleWrite += shuffleWrite
+
+      stageIdToMemoryBytesSpilled.getOrElseUpdate(sid, 0L)
+      val memoryBytesSpilled = metrics.map(m => m.memoryBytesSpilled).getOrElse(0L)
+      stageIdToMemoryBytesSpilled(sid) += memoryBytesSpilled
+
+      stageIdToDiskBytesSpilled.getOrElseUpdate(sid, 0L)
+      val diskBytesSpilled = metrics.map(m => m.diskBytesSpilled).getOrElse(0L)
+      stageIdToDiskBytesSpilled(sid) += diskBytesSpilled
+
+      val taskMap = stageIdToTaskInfos.getOrElse(sid, HashMap[Long, TaskUIData]())
+      taskMap(info.taskId) = new TaskUIData(info, metrics, failureInfo)
+      stageIdToTaskInfos(sid) = taskMap
     }
-
-    val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashMap[Long, TaskInfo]())
-    // Remove by taskId, rather than by TaskInfo, in case the TaskInfo is from storage
-    tasksActive.remove(taskEnd.taskInfo.taskId)
-
-    val (failureInfo, metrics): (Option[ExceptionFailure], Option[TaskMetrics]) =
-      taskEnd.reason match {
-        case e: ExceptionFailure =>
-          stageIdToTasksFailed(sid) = stageIdToTasksFailed.getOrElse(sid, 0) + 1
-          (Some(e), e.metrics)
-        case _ =>
-          stageIdToTasksComplete(sid) = stageIdToTasksComplete.getOrElse(sid, 0) + 1
-          (None, Option(taskEnd.taskMetrics))
-      }
-
-    stageIdToTime.getOrElseUpdate(sid, 0L)
-    val time = metrics.map(m => m.executorRunTime).getOrElse(0L)
-    stageIdToTime(sid) += time
-    totalTime += time
-
-    stageIdToShuffleRead.getOrElseUpdate(sid, 0L)
-    val shuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s =>
-      s.remoteBytesRead).getOrElse(0L)
-    stageIdToShuffleRead(sid) += shuffleRead
-    totalShuffleRead += shuffleRead
-
-    stageIdToShuffleWrite.getOrElseUpdate(sid, 0L)
-    val shuffleWrite = metrics.flatMap(m => m.shuffleWriteMetrics).map(s =>
-      s.shuffleBytesWritten).getOrElse(0L)
-    stageIdToShuffleWrite(sid) += shuffleWrite
-    totalShuffleWrite += shuffleWrite
-
-    stageIdToMemoryBytesSpilled.getOrElseUpdate(sid, 0L)
-    val memoryBytesSpilled = metrics.map(m => m.memoryBytesSpilled).getOrElse(0L)
-    stageIdToMemoryBytesSpilled(sid) += memoryBytesSpilled
-
-    stageIdToDiskBytesSpilled.getOrElseUpdate(sid, 0L)
-    val diskBytesSpilled = metrics.map(m => m.diskBytesSpilled).getOrElse(0L)
-    stageIdToDiskBytesSpilled(sid) += diskBytesSpilled
-
-    val taskMap = stageIdToTaskInfos.getOrElse(sid, HashMap[Long, TaskUIData]())
-    val taskInfo = taskEnd.taskInfo
-    taskMap(taskInfo.taskId) = new TaskUIData(taskInfo, metrics, failureInfo)
-    stageIdToTaskInfos(sid) = taskMap
   }
 
   override def onJobEnd(jobEnd: SparkListenerJobEnd) = synchronized {

@@ -43,7 +43,7 @@ private[spark] class BlockManagerRegistrationListener {
    * post the event; otherwise, buffer it.
    */
   def onBlockManagerRegister(storageStatus: Array[StorageStatus]) {
-    val executorsStateChange = new SparkListenerExecutorsStateChange(storageStatus)
+    val executorsStateChange = SparkListenerExecutorsStateChange(storageStatus)
     _listenerBus.map(_.post(executorsStateChange)).getOrElse {
       bufferedEvents += executorsStateChange
     }

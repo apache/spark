@@ -176,28 +176,32 @@ private[ui] class ExecutorsListener extends StorageStatusSparkListener {
   }
 
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-    val eid = formatExecutorId(taskEnd.taskInfo.executorId)
-    executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 1) - 1
-    executorToDuration(eid) = executorToDuration.getOrElse(eid, 0L) + taskEnd.taskInfo.duration
-    taskEnd.reason match {
-      case e: ExceptionFailure =>
-        executorToTasksFailed(eid) = executorToTasksFailed.getOrElse(eid, 0) + 1
-      case _ =>
-        executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
-    }
+    val info = taskEnd.taskInfo
+    if (info != null) {
+      val eid = formatExecutorId(info.executorId)
+      executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 1) - 1
+      executorToDuration(eid) = executorToDuration.getOrElse(eid, 0L) + info.duration
+      taskEnd.reason match {
+        case e: ExceptionFailure =>
+          executorToTasksFailed(eid) = executorToTasksFailed.getOrElse(eid, 0) + 1
+        case _ =>
+          executorToTasksComplete(eid) = executorToTasksComplete.getOrElse(eid, 0) + 1
+      }
 
-    // Update shuffle read/write
-    if (taskEnd.taskMetrics != null) {
-      taskEnd.taskMetrics.shuffleReadMetrics.foreach { shuffleRead =>
-        executorToShuffleRead(eid) =
-          executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead
+      // Update shuffle read/write
+      val metrics = taskEnd.taskMetrics
+      if (metrics != null) {
+        metrics.shuffleReadMetrics.foreach { shuffleRead =>
+          executorToShuffleRead(eid) =
+            executorToShuffleRead.getOrElse(eid, 0L) + shuffleRead.remoteBytesRead
+        }
+        metrics.shuffleWriteMetrics.foreach { shuffleWrite =>
+          executorToShuffleWrite(eid) =
+            executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
+        }
       }
-      taskEnd.taskMetrics.shuffleWriteMetrics.foreach { shuffleWrite =>
-        executorToShuffleWrite(eid) =
-          executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
-      }
+      super.onTaskEnd(taskEnd)
     }
-    super.onTaskEnd(taskEnd)
   }
 
   /**
