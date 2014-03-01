@@ -30,7 +30,7 @@ import scala.reflect.ClassTag
 
 import com.clearspring.analytics.stream.cardinality.HyperLogLog
 import org.apache.hadoop.conf.{Configurable, Configuration}
-import org.apache.hadoop.fs.Path
+import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.io.SequenceFile.CompressionType
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
@@ -606,7 +606,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     val outpath = new Path(path)
     NewFileOutputFormat.setOutputPath(job, outpath)
     val jobFormat = outputFormatClass.newInstance
-    jobFormat.checkOutputSpecs(new JobContext(wrappedConf.value, job.getJobID))
+    jobFormat.checkOutputSpecs(job)
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
     val jobtrackerID = formatter.format(new Date())
     val stageId = self.id
@@ -697,10 +697,10 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * MapReduce job.
    */
   def saveAsHadoopDataset(conf: JobConf) {
-    val outputFormatClass = conf.getOutputFormat
+    val outputFormatInstance = conf.getOutputFormat
     val keyClass = conf.getOutputKeyClass
     val valueClass = conf.getOutputValueClass
-    if (outputFormatClass == null) {
+    if (outputFormatInstance == null) {
       throw new SparkException("Output format class not set")
     }
     if (keyClass == null) {
@@ -713,16 +713,12 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
 
-    if (outputFormatClass.isInstanceOf[FileOutputFormat[_, _]]) {
-      val outputPath = conf.get("mapred.output.dir")
-      if (outputPath == null) {
-        throw new SparkException("mapred.output.dir not set")
-      }
-      val path = new Path(outputPath)
-      val fs = path.getFileSystem(conf)
-      conf.getOutputFormat.checkOutputSpecs(fs, conf)
+    if (outputFormatInstance.isInstanceOf[FileOutputFormat[_, _]]) {
+      // FileOutputFormat ignores the filesystem parameter
+      val ignoredFs = FileSystem.get(conf)
+      conf.getOutputFormat.checkOutputSpecs(ignoredFs, conf)
     }
-    
+
     val writer = new SparkHadoopWriter(conf)
     writer.preSetup()
 
