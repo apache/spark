@@ -200,6 +200,14 @@ Apart from these, the following properties are also available, and may be useful
     to use fair sharing instead of queueing jobs one after another. Useful for
     multi-user services.
   </td>
+  </tr>
+<tr>
+  <td>spark.scheduler.lruOffer</td>
+  <td>false</td>
+  <td>
+    offer resources to the application in LRU order. If set to false, the tasks may be padded into just a few
+    nodes, if true, then the executors will be scheduled in LRU order
+  </td>
 </tr>
 <tr>
   <td>spark.reducer.maxMbInFlight</td>

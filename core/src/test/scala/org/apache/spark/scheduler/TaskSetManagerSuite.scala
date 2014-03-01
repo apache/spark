@@ -25,6 +25,7 @@ import org.scalatest.FunSuite
 import org.apache.spark._
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.FakeClock
+import org.apache.spark.util.collection.LRUMap
 
 class FakeDAGScheduler(taskScheduler: FakeTaskScheduler) extends DAGScheduler(taskScheduler) {
   override def taskStarted(task: Task[_], taskInfo: TaskInfo) {
@@ -296,6 +297,32 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
         assert(sched.taskSetsFailed.contains(taskSet.id))
       }
     }
+  }
+
+  test ("executors should be scheduled with LRU order when the feature is enabled") {
+    sc = new SparkContext("local", "test")
+    val sched = new FakeTaskScheduler(sc,
+      ("exec1", "host1"), ("exec2", "host2"), ("exec3", "host3"))
+    sched.rootPool = new Pool("", sched.schedulingMode, 0, 0)
+    sched.schedulableBuilder = new FIFOSchedulableBuilder(sched.rootPool)
+    val executorWorkerOffer = new LRUMap[String, WorkerOffer](3)
+    executorWorkerOffer += "exec1" -> new WorkerOffer("exec1", "host1", 8)
+    executorWorkerOffer += "exec2" -> new WorkerOffer("exec2", "host2", 8)
+    executorWorkerOffer += "exec3" -> new WorkerOffer("exec3", "host3", 8)
+    val taskSet1 = createTaskSet(1)
+    val taskSet2 = createTaskSet(1)
+    val taskSet3 = createTaskSet(1)
+    val clock = new FakeClock
+    val manager1 = new TaskSetManager(sched, taskSet1, MAX_TASK_FAILURES, clock)
+    val manager2 = new TaskSetManager(sched, taskSet2, MAX_TASK_FAILURES, clock)
+    val manager3 = new TaskSetManager(sched, taskSet3, MAX_TASK_FAILURES, clock)
+    sched.schedulableBuilder.addTaskSetManager(manager1, manager1.taskSet.properties)
+    sched.schedulableBuilder.addTaskSetManager(manager2, manager2.taskSet.properties)
+    sched.schedulableBuilder.addTaskSetManager(manager3, manager3.taskSet.properties)
+    sched.resourceOffers(executorWorkerOffer)
+    assert(sched.taskIdToExecutorId.values.toList(0) == "exec3")
+    assert(sched.taskIdToExecutorId.values.toList(1) == "exec2")
+    assert(sched.taskIdToExecutorId.values.toList(2) == "exec1")
   }
 
 

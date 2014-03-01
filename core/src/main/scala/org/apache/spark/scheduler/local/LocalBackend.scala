@@ -67,7 +67,8 @@ private[spark] class LocalActor(
 
   def reviveOffers() {
     val offers = Seq(new WorkerOffer(localExecutorId, localExecutorHostname, freeCores))
-    for (task <- scheduler.resourceOffers(offers).flatten) {
+    for (task <- scheduler.resourceOffers(
+      TaskSchedulerImpl.buildMapFromWorkerOffers(scheduler, offers)).flatten) {
       freeCores -= 1
       executor.launchTask(executorBackend, task.taskId, task.serializedTask)
     }
