@@ -713,10 +713,16 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     logDebug("Saving as hadoop file of type (" + keyClass.getSimpleName + ", " +
       valueClass.getSimpleName + ")")
 
-    val path = new Path(conf.get("mapred.output.dir"))
-    val fs = path.getFileSystem(conf)
-    conf.getOutputFormat.checkOutputSpecs(fs, conf)
-
+    if (outputFormatClass.isInstanceOf[FileOutputFormat[_, _]]) {
+      val outputPath = conf.get("mapred.output.dir")
+      if (outputPath == null) {
+        throw new SparkException("mapred.output.dir not set")
+      }
+      val path = new Path(outputPath)
+      val fs = path.getFileSystem(conf)
+      conf.getOutputFormat.checkOutputSpecs(fs, conf)
+    }
+    
     val writer = new SparkHadoopWriter(conf)
     writer.preSetup()
 
