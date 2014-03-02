@@ -24,4 +24,5 @@ abstract class BaseRelation extends LeafNode {
   self: Product =>
 
   def tableName: String
+  def isPartitioned: Boolean = false
 }

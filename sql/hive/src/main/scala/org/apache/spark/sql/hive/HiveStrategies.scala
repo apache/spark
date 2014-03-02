@@ -21,7 +21,7 @@ package hive
 import catalyst.expressions._
 import catalyst.planning._
 import catalyst.plans._
-import org.apache.spark.sql.catalyst.plans.logical.{BaseRelation, LogicalPlan}
+import catalyst.plans.logical.{BaseRelation, LogicalPlan}
 
 import org.apache.spark.sql.execution._
 

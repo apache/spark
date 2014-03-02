@@ -1,17 +1,18 @@
 
-package org.apache.spark.sql.execution
-package shark
+package org.apache.spark.sql
+package hive
+package execution
 
 import java.io.File
 
 import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.sql.catalyst.expressions.Row
-import org.apache.spark.sql.shark.TestShark
 import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.WriteToFile
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoCreatedTable
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.execution.{ParquetTestData, ParquetRelation}
 
 class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 
@@ -20,14 +21,14 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
   // runs a SQL and optionally resolves one Parquet table
   def runQuery(querystr: String, tableName: Option[String] = None, filename: Option[String] = None): Array[Row] = {
     // call to resolve references in order to get CREATE TABLE AS to work
-    val query = TestShark
+    val query = TestHive
       .parseSql(querystr)
     val finalQuery =
       if(tableName.nonEmpty && filename.nonEmpty)
         resolveParquetTable(tableName.get, filename.get, query)
       else
         query
-    TestShark.executePlan(finalQuery)
+    TestHive.executePlan(finalQuery)
       .toRdd
       .collect()
   }
@@ -36,9 +37,9 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
   def storeQuery(querystr: String, filename: String): Unit = {
     val query = WriteToFile(
       filename,
-      TestShark.parseSql(querystr),
+      TestHive.parseSql(querystr),
       Some("testtable"))
-    TestShark
+    TestHive
       .executePlan(query)
       .stringResult()
   }
@@ -58,11 +59,11 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
         if(name == tableName) {
           // note: at this stage the plan is not yet analyzed but Parquet needs to know the schema
           // and for that we need the child to be resolved
-          TestShark.loadTestTable("src") // may not be loaded now
+          TestHive.loadTestTable("src") // may not be loaded now
           val relation = ParquetRelation.create(
               filename,
-              TestShark.analyzer(child),
-              TestShark.sparkContext.hadoopConfiguration,
+              TestHive.analyzer(child),
+              TestHive.sparkContext.hadoopConfiguration,
               Some(tableName))
           InsertIntoTable(
             relation.asInstanceOf[BaseRelation],
@@ -82,7 +83,7 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
     // write test data
     ParquetTestData.writeFile
     // Override initial Parquet test table
-    TestShark.catalog.overrideTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
+    TestHive.catalog.overrideTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
   }
 
   override def afterAll() {
