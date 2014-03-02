@@ -952,6 +952,8 @@ class SparkContext(
       resultHandler: (Int, U) => Unit,
       resultFunc: => R): SimpleFutureAction[R] =
   {
+    val rddPartitions = rdd.partitions.map(_.index)
+    require(partitions.forall(rddPartitions.contains(_)), "partition index out of range")
     val cleanF = clean(processPartition)
     val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
