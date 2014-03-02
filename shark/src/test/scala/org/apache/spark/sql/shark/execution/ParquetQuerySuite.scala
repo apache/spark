@@ -2,17 +2,76 @@
 package org.apache.spark.sql.execution
 package shark
 
-import org.scalatest.{BeforeAndAfterAll, FunSuite}
+import java.io.File
+
+import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite}
+
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.shark.TestShark
+import org.apache.spark.sql.catalyst.plans.logical._
+import org.apache.spark.sql.catalyst.plans.logical.WriteToFile
+import org.apache.spark.sql.catalyst.plans.logical.InsertIntoCreatedTable
+import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
 
-class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
+class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 
-  def runQuery(querystr: String): Array[Row] = {
-    TestShark
-      .sql(querystr)
-      .rdd
+  val filename = "file:///tmp/parquettest"
+
+  // runs a SQL and optionally resolves one Parquet table
+  def runQuery(querystr: String, tableName: Option[String] = None, filename: Option[String] = None): Array[Row] = {
+    // call to resolve references in order to get CREATE TABLE AS to work
+    val query = TestShark
+      .parseSql(querystr)
+    val finalQuery =
+      if(tableName.nonEmpty && filename.nonEmpty)
+        resolveParquetTable(tableName.get, filename.get, query)
+      else
+        query
+    TestShark.executePlan(finalQuery)
+      .toRdd
       .collect()
+  }
+
+  // stores a query output to a Parquet file
+  def storeQuery(querystr: String, filename: String): Unit = {
+    val query = WriteToFile(
+      filename,
+      TestShark.parseSql(querystr),
+      Some("testtable"))
+    TestShark
+      .executePlan(query)
+      .stringResult()
+  }
+
+  /**
+   * TODO: This function is necessary as long as there is no notion of a Catalog for
+   * Parquet tables. Once such a thing exists this functionality should be moved there.
+   */
+  def resolveParquetTable(tableName: String, filename: String, plan: LogicalPlan): LogicalPlan = {
+    plan.transform {
+      case relation @ UnresolvedRelation(databaseName, name, alias) =>
+        if(name == tableName)
+          ParquetRelation(tableName, filename)
+        else
+          relation
+      case op @ InsertIntoCreatedTable(databaseName, name, child) =>
+        if(name == tableName) {
+          // note: at this stage the plan is not yet analyzed but Parquet needs to know the schema
+          // and for that we need the child to be resolved
+          TestShark.loadTestTable("src") // may not be loaded now
+          val relation = ParquetRelation.create(
+              filename,
+              TestShark.analyzer(child),
+              TestShark.sparkContext.hadoopConfiguration,
+              Some(tableName))
+          InsertIntoTable(
+            relation.asInstanceOf[BaseRelation],
+            Map.empty,
+            child,
+            overwrite = false)
+        } else
+          op
+    }
   }
 
   override def beforeAll() {
@@ -20,8 +79,8 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
     // without restarting the JVM.
     System.clearProperty("spark.driver.port")
     System.clearProperty("spark.hostPort")
+    // write test data
     ParquetTestData.writeFile
-
     // Override initial Parquet test table
     TestShark.catalog.overrideTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
   }
@@ -30,40 +89,49 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
     ParquetTestData.testFile.delete()
   }
 
-  test("SELECT on Parquet table") {
-    val rdd = runQuery("SELECT myboolean, mylong FROM parquet.testsource")
-    assert(rdd != null)
-    assert(rdd.forall(_.size == 2))
+  override def beforeEach() {
+    (new File(filename)).getAbsoluteFile.delete()
   }
 
-  test("Simple column projection on Parquet table") {
+  override def afterEach() {
+    (new File(filename)).getAbsoluteFile.delete()
+  }
+
+  test("SELECT on Parquet table") {
+    val rdd = runQuery("SELECT * FROM parquet.testsource")
+    assert(rdd != null)
+    assert(rdd.forall(_.size == 6))
+  }
+
+  test("Simple column projection + filter on Parquet table") {
     val rdd = runQuery("SELECT myboolean, mylong FROM parquet.testsource WHERE myboolean=true")
     assert(rdd.size === 5)
     assert(rdd.forall(_.getBoolean(0)))
   }
 
-  // TODO: It seems that "CREATE TABLE" is passed directly to Hive as a NativeCommand, which
-  // makes this test fail. One should come up with a more permanent solution first.
-  /*test("CREATE Parquet table") {
-    val result = runQuery("CREATE TABLE IF NOT EXISTS parquet.tmptable (key INT, value STRING)")
-    assert(result != null)
-  }*/
-
-  test("CREATE TABLE AS Parquet table") {
-    runQuery("CREATE TABLE parquet.testdest AS SELECT * FROM src")
-    val rddCopy = runQuery("SELECT * FROM parquet.testdest").sortBy(_.getInt(0))
-    val rddOrig = runQuery("SELECT * FROM src").sortBy(_.getInt(0))
-    val allsame = (rddCopy, rddOrig).zipped.forall { (a,b) => (a,b).zipped.forall { (x,y) => x==y}}
+  test("Converting Hive to Parquet Table via WriteToFile") {
+    storeQuery("SELECT * FROM src", filename)
+    val rddOne = runQuery("SELECT * FROM src").sortBy(_.getInt(0))
+    val rddTwo = runQuery("SELECT * from ptable", Some("ptable"), Some(filename)).sortBy(_.getInt(0))
+    val allsame = (rddOne, rddTwo).zipped.forall { (a,b) => (a,b).zipped.forall { (x,y) => x==y}}
     assert(allsame)
   }
 
-  test("INSERT OVERWRITE to Parquet table") {
-    runQuery("CREATE TABLE parquet.testdest AS SELECT * FROM src")
-    runQuery("INSERT OVERWRITE TABLE parquet.testdest SELECT * FROM src")
-    val rddCopy = runQuery("SELECT * FROM parquet.testdest").sortBy(_.getInt(0))
+  test("INSERT OVERWRITE TABLE Parquet table") {
+    storeQuery("SELECT * FROM parquet.testsource", filename)
+    runQuery("INSERT OVERWRITE TABLE ptable SELECT * FROM parquet.testsource", Some("ptable"), Some(filename))
+    runQuery("INSERT OVERWRITE TABLE ptable SELECT * FROM parquet.testsource", Some("ptable"), Some(filename))
+    val rddCopy = runQuery("SELECT * FROM ptable", Some("ptable"), Some(filename))
+    val rddOrig = runQuery("SELECT * FROM parquet.testsource")
+    val allsame = (rddCopy, rddOrig).zipped.forall { (a,b) => (a,b).zipped.forall { (x,y) => x==y } }
+    assert(allsame)
+  }
+
+  test("CREATE TABLE AS Parquet table") {
+    runQuery("CREATE TABLE ptable AS SELECT * FROM src", Some("ptable"), Some(filename))
+    val rddCopy = runQuery("SELECT * FROM ptable", Some("ptable"), Some(filename)).sortBy(_.getInt(0))
     val rddOrig = runQuery("SELECT * FROM src").sortBy(_.getInt(0))
     val allsame = (rddCopy, rddOrig).zipped.forall { (a,b) => (a,b).zipped.forall { (x,y) => x==y } }
     assert(allsame)
   }
 }
-

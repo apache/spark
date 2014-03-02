@@ -44,7 +44,7 @@ trait HiveStrategies {
       case logical.InsertIntoTable(table: MetastoreRelation, partition, child, overwrite) =>
         InsertIntoHiveTable(table, partition, planLater(child), overwrite)(hiveContext) :: Nil
       case logical.InsertIntoTable(table: ParquetRelation, partition, child, overwrite) =>
-        InsertIntoParquetTable(table, planLater(child))(hiveContext) :: Nil
+        InsertIntoParquetTable(table, planLater(child))(hiveContext.sparkContext) :: Nil
       case _ => Nil
     }
   }
@@ -55,11 +55,11 @@ trait HiveStrategies {
       case p @ logical.Project(projectList, m: MetastoreRelation) if isSimpleProject(projectList) =>
         HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m, None)(hiveContext) :: Nil
       case p @ logical.Project(projectList, r: ParquetRelation) if isSimpleProject(projectList) =>
-        ParquetTableScan(projectList.asInstanceOf[Seq[Attribute]], r, None)(hiveContext) :: Nil
+        ParquetTableScan(projectList.asInstanceOf[Seq[Attribute]], r, None)(hiveContext.sparkContext) :: Nil
       case m: MetastoreRelation =>
         HiveTableScan(m.output, m, None)(hiveContext) :: Nil
       case p: ParquetRelation =>
-        ParquetTableScan(p.output, p, None)(hiveContext) :: Nil
+        ParquetTableScan(p.output, p, None)(hiveContext.sparkContext) :: Nil
       case _ => Nil
     }
   }
@@ -131,7 +131,7 @@ trait HiveStrategies {
                 HiveTableScan(prunedCols, relation.asInstanceOf[MetastoreRelation], None)(hiveContext)
               }
               case ParquetRelation(_, _) => {
-                ParquetTableScan(relation.output, relation.asInstanceOf[ParquetRelation], None)(hiveContext).pruneColumns(prunedCols)
+                ParquetTableScan(relation.output, relation.asInstanceOf[ParquetRelation], None)(hiveContext.sparkContext).pruneColumns(prunedCols)
               }
             }
             predicateOpt.map(execution.Filter(_, scan)).getOrElse(scan) :: Nil

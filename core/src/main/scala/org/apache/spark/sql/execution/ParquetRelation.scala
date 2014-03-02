@@ -1,39 +1,52 @@
 package org.apache.spark.sql.execution
 
+import java.io.{IOException, FileNotFoundException, File}
+
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.conf.Configuration
+import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.fs.permission.FsAction
 
-import org.apache.spark.sql.catalyst.plans.logical.{InsertIntoTable, LogicalPlan, InsertIntoCreatedTable, BaseRelation}
+import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, BaseRelation}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ArrayType
 import org.apache.spark.sql.catalyst.expressions.{Row, GenericRow, AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 
 import parquet.schema.{MessageTypeParser, MessageType}
 import parquet.schema.PrimitiveType.{PrimitiveTypeName => ParquetPrimitiveTypeName}
 import parquet.schema.{PrimitiveType => ParquetPrimitiveType}
 import parquet.schema.{Type => ParquetType}
-
-import parquet.io.api.{Binary, RecordConsumer}
 import parquet.schema.Type.Repetition
+import parquet.io.api.{Binary, RecordConsumer}
 import parquet.hadoop.{Footer, ParquetFileWriter, ParquetWriter, ParquetFileReader}
 import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
+import parquet.hadoop.util.ContextUtil
 
 import scala.collection.JavaConversions._
-import java.io.{IOException, FileNotFoundException, File}
-import org.apache.hadoop.mapreduce.Job
-import parquet.hadoop.util.ContextUtil
-import org.apache.spark.sql.catalyst.rules.Rule
-import org.apache.spark.sql.catalyst.analysis.OverrideCatalog
 
 /**
  * Relation formed by underlying Parquet file that contains data stored in columnar form.
+ * Note that there are currently two ways to import a ParquetRelation:
+ * a) create the Relation "manually" and register via the OverrideCatalog, e.g.:
+ *    TestShark.catalog.overrideTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
+ *    and then execute the query as usual.
+ * b) store a relation via WriteToFile and manually resolve the corresponding ParquetRelation:
+ *    val query = TestShark.parseSql(querystr).transform {
+ *      case relation @ UnresolvedRelation(databaseName, name, alias) =>
+ *        if(name.equals(tableName))
+ *          ParquetRelation(tableName, filename)
+ *        else
+ *          relation
+ *    }
+ *    TestShark.executePlan(query)
+ *    .toRdd
+ *    .collect()
  *
  * @param tableName The name of the relation.
  * @param path The path to the Parquet file.
  */
-case class ParquetRelation(val tableName: String, val path: String)
-
-  extends BaseRelation {
+case class ParquetRelation(val tableName: String, val path: String) extends BaseRelation {
 
   /** Schema derived from ParquetFile **/
   def parquetSchema: MessageType =
@@ -43,7 +56,8 @@ case class ParquetRelation(val tableName: String, val path: String)
       .getSchema
 
   /** Attributes **/
-  val attributes = ParquetTypesConverter
+  val attributes =
+    ParquetTypesConverter
     .convertToAttributes(parquetSchema)
 
   /** Output **/
@@ -54,61 +68,23 @@ case class ParquetRelation(val tableName: String, val path: String)
 }
 
 object ParquetRelation {
-  def apply(path: Path, tableName: String = "ParquetTable") =
-    new ParquetRelation(tableName, path.toUri.toString)
-}
 
-object RegisterParquetTables extends Rule[LogicalPlan] {
-  var catalog: OverrideCatalog = null
+  def create(pathString: String, child: LogicalPlan, conf: Configuration, tableName: Option[String]): ParquetRelation = {
+    if(!child.resolved)
+      throw new UnresolvedException[LogicalPlan](child, "Attempt to create Parquet table from unresolved child (when schema is not available)")
 
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case p @ InsertIntoTable(relation: ParquetRelation, _, _, _) => {
-      catalog.overrideTable(Some("parquet"), relation.tableName, relation)
-      p
-    }
+    val name = s"${tableName.getOrElse(child.nodeName)}_parquet"
+    val path = checkPath(pathString, conf)
+    ParquetTypesConverter.writeMetaData(child.output, path, conf)
+    new ParquetRelation(name, path.toString)
   }
-}
 
-/**
- * Creates any tables required for query execution.
- * For example, because of a CREATE TABLE X AS statement.
- */
-object CreateParquetTable extends Rule[LogicalPlan] {
-  var catalog: OverrideCatalog = null
-
-  def apply(plan: LogicalPlan): LogicalPlan = plan transform {
-    case InsertIntoCreatedTable(db, tableName, child) => {
-      if(catalog == null)
-        throw new NullPointerException("Catalog was not set inside CreateParquetTable")
-
-      val databaseName = db.getOrElse("parquet") // see TODO in [[CreateTables]]
-      val job = new Job()
-      val conf = ContextUtil.getConfiguration(job)
-      val prefix = "tmp"
-
-      val uri = FileSystem.getDefaultUri(conf)
-      val path = new Path(
-        new Path(uri),
-          new Path(
-            new Path(prefix),
-            new Path(
-              new Path(databaseName),
-              new Path(
-                new Path(tableName),
-                new Path("data")))))
-      // TODO: add checking: directory exists, etc
-
-      ParquetTypesConverter.writeMetaData(child.output, path)
-      val relation = new ParquetRelation(tableName, path.toString)
-
-      catalog.overrideTable(Some("parquet"), tableName, relation)
-
-      InsertIntoTable(
-        relation.asInstanceOf[BaseRelation],
-        Map.empty,
-        child,
-        overwrite = false)
-    }
+  private def checkPath(pathStr: String, conf: Configuration): Path = {
+    val path = new Path(pathStr)
+    val fs = path.getFileSystem(conf)
+    if(fs.exists(path) && !fs.getFileStatus(path).getPermission.getUserAction.implies(FsAction.READ_WRITE))
+      throw new IOException(s"Unable to create ParquetRelation: path ${path.toString} not read-writable")
+    path
   }
 }
 
@@ -174,10 +150,7 @@ object ParquetTypesConverter {
     new MessageType("root", fields)
   }
 
-  // todo: proper exception handling, warning if path exists
-  def writeMetaData(attributes: Seq[Attribute], path: Path) {
-    val job = new Job()
-    val conf = ContextUtil.getConfiguration(job)
+  def writeMetaData(attributes: Seq[Attribute], path: Path, conf: Configuration) {
     val fileSystem = FileSystem.get(conf)
 
     if(fileSystem.exists(path) && !fileSystem.getFileStatus(path).isDir)
@@ -185,12 +158,18 @@ object ParquetTypesConverter {
 
     val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
 
-    if(fileSystem.exists(metadataPath))
-      fileSystem.delete(metadataPath, true)
+    if(fileSystem.exists(metadataPath)) {
+      try {
+        fileSystem.delete(metadataPath, true)
+      } catch {
+        case e: IOException =>
+          throw new IOException(s"Unable to delete previous PARQUET_METADATA_FILE:\n${e.toString}")
+      }
+    }
 
     val extraMetadata = new java.util.HashMap[String, String]()
     extraMetadata.put("path", path.toString)
-    // TODO: add table name, etc.?
+    // TODO: add extra data, e.g., table name, date, etc.?
 
     val parquetSchema: MessageType = ParquetTypesConverter.convertFromAttributes(attributes)
     val metaData: FileMetaData = new FileMetaData(
@@ -257,7 +236,7 @@ object ParquetTestData {
 
   val testFile = new File("/tmp/testParquetFile").getAbsoluteFile
 
-  lazy val testData = ParquetRelation(new Path(testFile.toURI))
+  lazy val testData = new ParquetRelation("testData", testFile.toURI.toString)
 
   def writeFile = {
     testFile.delete

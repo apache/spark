@@ -206,5 +206,9 @@ package object dsl {
       InsertIntoTable(analysis.UnresolvedRelation(None, tableName), Map.empty, plan, overwrite)
 
     def analyze = analysis.SimpleAnalyzer(plan)
+
+    def writeToFile(path: String) = WriteToFile(path, plan, None)
+
+    // TODO: for a loadFromFile it would be good to have a Catalog that knows how to resolve ParquetTables
   }
 }

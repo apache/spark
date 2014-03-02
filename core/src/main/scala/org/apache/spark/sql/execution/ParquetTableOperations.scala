@@ -1,19 +1,21 @@
-package org.apache.spark.sql.execution
+package org.apache.spark.sql
+package execution
 
 import parquet.io.InvalidRecordException
 import parquet.schema.MessageType
 import parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
 import parquet.hadoop.util.ContextUtil
 
+import org.apache.spark.rdd.RDD
+import org.apache.spark.api.java.JavaPairRDD
+import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute, Expression}
 
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
-import org.apache.spark.rdd.RDD
-import org.apache.spark.api.java.JavaPairRDD
-import org.apache.spark.sql.SparkSqlContext
+import java.io.IOException
 
 /**
  * Parquet table scan operator. Imports the file that backs the given [[org.apache.spark.sql.execution.ParquetRelation]]
@@ -23,21 +25,21 @@ case class ParquetTableScan(
     attributes: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Option[Expression])(
-    @transient val sc: SparkSqlContext)
+    @transient val sc: SparkContext)
   extends LeafNode {
 
   /**
    * Runs this query returning the result as an RDD.
   */
   override def execute(): RDD[Row] = {
-    val job = new Job()
+    val job = new Job(sc.hadoopConfiguration)
     ParquetInputFormat.setReadSupportClass(job, classOf[org.apache.spark.sql.execution.RowReadSupport])
     val conf: Configuration = ContextUtil.getConfiguration(job)
     conf.set(
         RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertFromAttributes(attributes).toString)
-    // TODO: add record filters, etc.
-    sc.sparkContext.newAPIHadoopFile(
+    // TODO: think about adding record filters
+    sc.newAPIHadoopFile(
       relation.path,
       classOf[ParquetInputFormat[Row]],
       classOf[Void], classOf[Row],
@@ -86,33 +88,37 @@ case class ParquetTableScan(
 case class InsertIntoParquetTable(
     relation: ParquetRelation,
     child: SparkPlan)(
-    @transient val sc: SparkSqlContext)
+    @transient val sc: SparkContext)
   extends UnaryNode {
 
   /**
-   * Inserts all the rows in the Parquet file.
+   * Inserts all the rows in the Parquet file. Note that OVERWRITE is implicit, since Parquet files are write-once.
    */
   override def execute() = {
-
     // TODO: currently we do not check whether the "schema"s are compatible
     // That means if one first creates a table and then INSERTs data with
-    // and incompatible schema the execition will fail. It would be nice
+    // and incompatible schema the execution will fail. It would be nice
     // to catch this early one, maybe having the planner validate the schema
     // before calling execute().
 
     val childRdd = child.execute()
     assert(childRdd != null)
 
-    val job = new Job()
+    val job = new Job(sc.hadoopConfiguration)
     ParquetOutputFormat.setWriteSupportClass(job, classOf[org.apache.spark.sql.execution.RowWriteSupport])
-    val conf = ContextUtil.getConfiguration(job)
+    val conf = job.getConfiguration
     // TODO: move that to function in object
     conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, relation.parquetSchema.toString)
 
-    // TODO: add checks: file exists, etc.
     val fspath = new Path(relation.path)
     val fs = fspath.getFileSystem(conf)
-    fs.delete(fspath, true)
+
+    try {
+      fs.delete(fspath, true)
+    } catch {
+      case e: IOException =>
+        throw new IOException(s"Unable to clear output directory ${fspath.toString} prior to InsertIntoParquetTable:\n${e.toString}")
+    }
 
     JavaPairRDD.fromRDD(childRdd.map(Tuple2(null, _))).saveAsNewAPIHadoopFile(
       relation.path.toString,
@@ -121,12 +127,8 @@ case class InsertIntoParquetTable(
       classOf[parquet.hadoop.ParquetOutputFormat[org.apache.spark.sql.catalyst.expressions.GenericRow]],
       conf)
 
-    // From [[InsertIntoHiveTable]]:
-    // It would be nice to just return the childRdd unchanged so insert operations could be chained,
-    // however for now we return an empty list to simplify compatibility checks with hive, which
-    // does not return anything for insert operations.
-    // TODO: implement hive compatibility as rules.
-    sc.sparkContext.makeRDD(Nil, 1)
+    // We return the child RDD to allow chaining (alternatively, one could return nothing).
+    childRdd
   }
 
   override def output = child.output
