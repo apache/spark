@@ -17,7 +17,10 @@
 
 package org.apache.spark.util.random
 
+import java.nio.ByteBuffer
 import java.util.{Random => JavaRandom}
+
+import scala.util.hashing.MurmurHash3
 
 import org.apache.spark.util.Utils.timeIt
 
@@ -36,8 +39,8 @@ private[spark] class XORShiftRandom(init: Long) extends JavaRandom(init) {
   
   def this() = this(System.nanoTime)
 
-  private var seed = init
-  
+  private var seed = XORShiftRandom.hashSeed(init)
+
   // we need to just override next - this will be called by nextInt, nextDouble,
   // nextGaussian, nextLong, etc.
   override protected def next(bits: Int): Int = {    
@@ -49,12 +52,18 @@ private[spark] class XORShiftRandom(init: Long) extends JavaRandom(init) {
   }
 
   override def setSeed(s: Long) {
-    seed = s
+    seed = XORShiftRandom.hashSeed(s)
   }
 }
 
 /** Contains benchmark method and main method to run benchmark of the RNG */
 private[spark] object XORShiftRandom {
+
+  /** Hash seeds to have 0/1 bits throughout. */
+  private def hashSeed(seed: Long): Long = {
+    val bytes = ByteBuffer.allocate(java.lang.Long.SIZE).putLong(seed).array()
+    MurmurHash3.bytesHash(bytes)
+  }
 
   /**
    * Main method for running benchmark

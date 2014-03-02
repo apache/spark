@@ -127,7 +127,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   /**
    * Return a new DStream by applying `groupByKey` on each RDD of `this` DStream.
    * Therefore, the values for each key in `this` DStream's RDDs are grouped into a
-   * single sequence to generate the RDDs of the new DStream. [[org.apache.spark.Partitioner]]
+   * single sequence to generate the RDDs of the new DStream. org.apache.spark.Partitioner
    * is used to control the partitioning of each RDD.
    */
   def groupByKey(partitioner: Partitioner): JavaPairDStream[K, JList[V]] =
@@ -151,7 +151,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
 
   /**
    * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
-   * merged using the supplied reduce function. [[org.apache.spark.Partitioner]] is used to control
+   * merged using the supplied reduce function. org.apache.spark.Partitioner is used to control
    * thepartitioning of each RDD.
    */
   def reduceByKey(func: JFunction2[V, V, V], partitioner: Partitioner): JavaPairDStream[K, V] = {
@@ -161,7 +161,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   /**
    * Combine elements of each key in DStream's RDDs using custom function. This is similar to the
    * combineByKey for RDDs. Please refer to combineByKey in
-   * [[org.apache.spark.rdd.PairRDDFunctions]] for more information.
+   * org.apache.spark.rdd.PairRDDFunctions for more information.
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
       mergeValue: JFunction2[C, V, C],
@@ -176,7 +176,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   /**
    * Combine elements of each key in DStream's RDDs using custom function. This is similar to the
    * combineByKey for RDDs. Please refer to combineByKey in
-   * [[org.apache.spark.rdd.PairRDDFunctions]] for more information.
+   * org.apache.spark.rdd.PairRDDFunctions for more information.
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
       mergeValue: JFunction2[C, V, C],
@@ -479,7 +479,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of the key.
-   * [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    * @param updateFunc State update function. If `this` function returns None, then
    *                   corresponding state key-value pair will be eliminated.
    * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
@@ -579,7 +579,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
 
   /**
    * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
-   * The supplied [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * The supplied org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    */
   def join[W](
       other: JavaPairDStream[K, W],
@@ -619,7 +619,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
 
   /**
    * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
-   * The supplied [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * The supplied org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    */
   def leftOuterJoin[W](
       other: JavaPairDStream[K, W],
@@ -660,7 +660,7 @@ class JavaPairDStream[K, V](val dstream: DStream[(K, V)])(
 
   /**
    * Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
-   * `other` DStream. The supplied [[org.apache.spark.Partitioner]] is used to control
+   * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
    */
   def rightOuterJoin[W](

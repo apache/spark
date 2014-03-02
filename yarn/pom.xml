@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-incubating-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -133,7 +133,7 @@
             </goals>
             <configuration>
               <exportAntProperties>true</exportAntProperties>
-              <tasks>
+              <target>
                 <property name="spark.classpath" refid="maven.test.classpath" />
                 <property environment="env" />
                 <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">  
@@ -146,7 +146,7 @@
                     </not>
                   </condition>
                 </fail>
-              </tasks>
+              </target>
             </configuration>
           </execution>
         </executions>
