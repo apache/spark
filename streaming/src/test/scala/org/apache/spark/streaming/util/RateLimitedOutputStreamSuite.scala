@@ -29,7 +29,7 @@ class RateLimitedOutputStreamSuite extends FunSuite {
     System.nanoTime - start
   }
 
-  test("write") {
+  ignore("write") {
     val underlying = new ByteArrayOutputStream
     val data = "X" * 41000
     val stream = new RateLimitedOutputStream(underlying, 10000)
