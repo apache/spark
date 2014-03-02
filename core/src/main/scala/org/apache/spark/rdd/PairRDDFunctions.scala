@@ -700,7 +700,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
     val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
     val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
     jobCommitter.setupJob(jobTaskContext)
-    self.context.runJob(self, writeShard _).sum
+    self.context.runJob(self, writeShard _)
     jobCommitter.commitJob(jobTaskContext)
   }
 
