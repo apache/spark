@@ -23,6 +23,8 @@ import AssemblyKeys._
 import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 
+import scala.collection.JavaConversions._
+
 // For Sonatype publishing
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
@@ -140,6 +142,7 @@ object SparkBuild extends Build {
     fork := true,
     javaOptions in Test += "-Dspark.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
+    javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark").map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
