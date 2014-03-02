@@ -1,51 +1,102 @@
-#!/bin/bash
+#!/usr/bin/env bash
 
-#
-# Licensed to the Apache Software Foundation (ASF) under one or more
-# contributor license agreements.  See the NOTICE file distributed with
-# this work for additional information regarding copyright ownership.
-# The ASF licenses this file to You under the Apache License, Version 2.0
-# (the "License"); you may not use this file except in compliance with
-# the License.  You may obtain a copy of the License at
-#
-#    http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-#
+realpath () {
+(
+  TARGET_FILE=$1
 
-# This script launches sbt for this project. If present it uses the system 
-# version of sbt. If there is no system version of sbt it attempts to download
-# sbt locally.
-SBT_VERSION=`awk -F "=" '/sbt\\.version/ {print $2}' ./project/build.properties`
-URL1=http://typesafe.artifactoryonline.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch.jar
-URL2=http://repo.typesafe.com/typesafe/ivy-releases/org.scala-sbt/sbt-launch/${SBT_VERSION}/sbt-launch.jar
-JAR=sbt/sbt-launch-${SBT_VERSION}.jar
+  cd $(dirname $TARGET_FILE)
+  TARGET_FILE=$(basename $TARGET_FILE)
 
-# Download sbt launch jar if it hasn't been downloaded yet
-if [ ! -f ${JAR} ]; then
-  # Download
-  printf "Attempting to fetch sbt\n"
-  JAR_DL=${JAR}.part
-  if hash curl 2>/dev/null; then
-    (curl --progress-bar ${URL1} > ${JAR_DL} || curl --progress-bar ${URL2} > ${JAR_DL}) && mv ${JAR_DL} ${JAR}
-  elif hash wget 2>/dev/null; then
-    (wget --progress=bar ${URL1} -O ${JAR_DL} || wget --progress=bar ${URL2} -O ${JAR_DL}) && mv ${JAR_DL} ${JAR}
-  else
-    printf "You do not have curl or wget installed, please install sbt manually from http://www.scala-sbt.org/\n"
-    exit -1
-  fi
-fi
-if [ ! -f ${JAR} ]; then
-  # We failed to download
-  printf "Our attempt to download sbt locally to ${JAR} failed. Please install sbt manually from http://www.scala-sbt.org/\n"
-  exit -1
-fi
-printf "Launching sbt from ${JAR}\n"
-java \
-  -Xmx1200m -XX:MaxPermSize=350m -XX:ReservedCodeCacheSize=256m \
-  -jar ${JAR} \
-  "$@"
+  COUNT=0
+  while [ -L "$TARGET_FILE" -a $COUNT -lt 100 ]
+  do
+      TARGET_FILE=$(readlink $TARGET_FILE)
+      cd $(dirname $TARGET_FILE)
+      TARGET_FILE=$(basename $TARGET_FILE)
+      COUNT=$(($COUNT + 1))
+  done
+
+  echo $(pwd -P)/$TARGET_FILE
+)
+}
+
+. $(dirname $(realpath $0))/sbt-launch-lib.bash
+
+
+declare -r noshare_opts="-Dsbt.global.base=project/.sbtboot -Dsbt.boot.directory=project/.boot -Dsbt.ivy.home=project/.ivy"
+declare -r sbt_opts_file=".sbtopts"
+declare -r etc_sbt_opts_file="/etc/sbt/sbtopts"
+
+usage() {
+ cat <<EOM
+Usage: $script_name [options]
+
+  -h | -help         print this message
+  -v | -verbose      this runner is chattier
+  -d | -debug        set sbt log level to debug
+  -no-colors         disable ANSI color codes
+  -sbt-create        start sbt even if current directory contains no sbt project
+  -sbt-dir   <path>  path to global settings/plugins directory (default: ~/.sbt)
+  -sbt-boot  <path>  path to shared boot directory (default: ~/.sbt/boot in 0.11 series)
+  -ivy       <path>  path to local Ivy repository (default: ~/.ivy2)
+  -mem    <integer>  set memory options (default: $sbt_mem, which is $(get_mem_opts $sbt_mem))
+  -no-share          use all local caches; no sharing
+  -no-global         uses global caches, but does not use global ~/.sbt directory.
+  -jvm-debug <port>  Turn on JVM debugging, open at the given port.
+  -batch             Disable interactive mode
+
+  # sbt version (default: from project/build.properties if present, else latest release)
+  -sbt-version  <version>   use the specified version of sbt
+  -sbt-jar      <path>      use the specified jar as the sbt launcher
+  -sbt-rc                   use an RC version of sbt
+  -sbt-snapshot             use a snapshot version of sbt
+
+  # java version (default: java from PATH, currently $(java -version 2>&1 | grep version))
+  -java-home <path>         alternate JAVA_HOME
+
+  # jvm options and output control
+  JAVA_OPTS          environment variable, if unset uses "$java_opts"
+  SBT_OPTS           environment variable, if unset uses "$default_sbt_opts"
+  .sbtopts           if this file exists in the current directory, it is
+                     prepended to the runner args
+  /etc/sbt/sbtopts   if this file exists, it is prepended to the runner args
+  -Dkey=val          pass -Dkey=val directly to the java runtime
+  -J-X               pass option -X directly to the java runtime
+                     (-J is stripped)
+  -S-X               add -X to sbt's scalacOptions (-J is stripped)
+
+In the case of duplicated or conflicting options, the order above
+shows precedence: JAVA_OPTS lowest, command line options highest.
+EOM
+}
+
+process_my_args () {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+     -no-colors) addJava "-Dsbt.log.noformat=true" && shift ;;
+      -no-share) addJava "$noshare_opts" && shift ;;
+     -no-global) addJava "-Dsbt.global.base=$(pwd)/project/.sbtboot" && shift ;;
+      -sbt-boot) require_arg path "$1" "$2" && addJava "-Dsbt.boot.directory=$2" && shift 2 ;;
+       -sbt-dir) require_arg path "$1" "$2" && addJava "-Dsbt.global.base=$2" && shift 2 ;;
+     -debug-inc) addJava "-Dxsbt.inc.debug=true" && shift ;;
+         -batch) exec </dev/null && shift ;;
+
+    -sbt-create) sbt_create=true && shift ;;
+
+              *) addResidual "$1" && shift ;;
+    esac
+  done
+
+  # Now, ensure sbt version is used.
+  [[ "${sbt_version}XXX" != "XXX" ]] && addJava "-Dsbt.version=$sbt_version"
+}
+
+loadConfigFile() {
+  cat "$1" | sed '/^\#/d'
+}
+
+# if sbtopts files exist, prepend their contents to $@ so it can be processed by this runner
+[[ -f "$etc_sbt_opts_file" ]] && set -- $(loadConfigFile "$etc_sbt_opts_file") "$@"
+[[ -f "$sbt_opts_file" ]] && set -- $(loadConfigFile "$sbt_opts_file") "$@"
+
+run "$@"
