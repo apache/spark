@@ -653,9 +653,9 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
 
   /**
    * Output the RDD to any Hadoop-supported storage system with new Hadoop API, using a Hadoop
-   * Configuration object for that storage system. The Conf should set an OutputFormat and any output paths
-   * required (e.g. a table name to write to) in the same way as it would be configured for a Hadoop
-   * MapReduce job.
+   * Configuration object for that storage system. The Conf should set an OutputFormat and any
+   * output paths required (e.g. a table name to write to) in the same way as it would be
+   * configured for a Hadoop MapReduce job.
    */
   def saveAsNewAPIHadoopDataset(conf: Configuration) {
     val job = new NewAPIHadoopJob(conf)
