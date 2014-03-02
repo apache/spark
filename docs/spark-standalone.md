@@ -104,8 +104,8 @@ You can optionally configure the cluster further by setting environment variable
     <td>Total number of cores to allow Spark applications to use on the machine (default: all available cores).</td>
   </tr>
   <tr>
-    <td><code>SPARK_WORKER_MEMORY</code></td>
-    <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property.</td>
+    <td><code>SPARK_WORKER_MEM</code></td>
+    <td>Total amount of memory to allow Spark applications to use on the machine, e.g. <code>1000m</code>, <code>2g</code> (default: total memory minus 1 GB); note that each application's <i>individual</i> memory is configured using its <code>spark.executor.memory</code> property. The old variable </code>SPARK_WORKER_MEMORY</code> has been deprecated.</td>
   </tr>
   <tr>
     <td><code>SPARK_WORKER_WEBUI_PORT</code></td>
