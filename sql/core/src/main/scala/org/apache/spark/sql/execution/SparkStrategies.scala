@@ -210,7 +210,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
       case logical.WriteToFile(path, child, tableName) =>
-        val relation = ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, tableName)
+        val relation =
+          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, tableName)
         execution.InsertIntoParquetTable(relation, planLater(child))(sparkContext) :: Nil
       case _ => Nil
     }

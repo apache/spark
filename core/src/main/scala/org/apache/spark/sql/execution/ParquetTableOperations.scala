@@ -18,8 +18,8 @@ import org.apache.hadoop.fs.Path
 import java.io.IOException
 
 /**
- * Parquet table scan operator. Imports the file that backs the given [[org.apache.spark.sql.execution.ParquetRelation]]
- * as a RDD[Row]. Only a stub currently.
+ * Parquet table scan operator. Imports the file that backs the given
+ * [[org.apache.spark.sql.execution.ParquetRelation]] as a RDD[Row].
  */
 case class ParquetTableScan(
     attributes: Seq[Attribute],
@@ -33,7 +33,9 @@ case class ParquetTableScan(
   */
   override def execute(): RDD[Row] = {
     val job = new Job(sc.hadoopConfiguration)
-    ParquetInputFormat.setReadSupportClass(job, classOf[org.apache.spark.sql.execution.RowReadSupport])
+    ParquetInputFormat.setReadSupportClass(
+      job,
+      classOf[org.apache.spark.sql.execution.RowReadSupport])
     val conf: Configuration = ContextUtil.getConfiguration(job)
     conf.set(
         RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
@@ -55,15 +57,16 @@ case class ParquetTableScan(
    */
   def pruneColumns(prunedAttributes: Seq[Attribute]): ParquetTableScan = {
     val success = validateProjection(prunedAttributes)
-    if(success)
+    if(success) {
       ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sc)
-    else
+    } else {
       this // TODO: add warning to log that column projection was unsuccessful?
+    }
   }
 
   /**
-   * Evaluates a candidate projection by checking whether the candidate is a subtype of the
-   * original type.
+   * Evaluates a candidate projection by checking whether the candidate is a subtype
+   * of the original type.
    *
    * @param projection The candidate projection.
    * @return True if the projection is valid, false otherwise.
@@ -92,7 +95,8 @@ case class InsertIntoParquetTable(
   extends UnaryNode {
 
   /**
-   * Inserts all the rows in the Parquet file. Note that OVERWRITE is implicit, since Parquet files are write-once.
+   * Inserts all the rows in the Parquet file. Note that OVERWRITE is implicit, since
+   * Parquet files are write-once.
    */
   override def execute() = {
     // TODO: currently we do not check whether the "schema"s are compatible
@@ -105,9 +109,13 @@ case class InsertIntoParquetTable(
     assert(childRdd != null)
 
     val job = new Job(sc.hadoopConfiguration)
-    ParquetOutputFormat.setWriteSupportClass(job, classOf[org.apache.spark.sql.execution.RowWriteSupport])
-    val conf = job.getConfiguration
+
+    ParquetOutputFormat.setWriteSupportClass(
+      job,
+      classOf[org.apache.spark.sql.execution.RowWriteSupport])
+
     // TODO: move that to function in object
+    val conf = job.getConfiguration
     conf.set(RowWriteSupport.PARQUET_ROW_SCHEMA, relation.parquetSchema.toString)
 
     val fspath = new Path(relation.path)
@@ -117,14 +125,18 @@ case class InsertIntoParquetTable(
       fs.delete(fspath, true)
     } catch {
       case e: IOException =>
-        throw new IOException(s"Unable to clear output directory ${fspath.toString} prior to InsertIntoParquetTable:\n${e.toString}")
+        throw new IOException(
+          s"Unable to clear output directory ${fspath.toString} prior"
+          + s" to InsertIntoParquetTable:\n${e.toString}")
     }
 
     JavaPairRDD.fromRDD(childRdd.map(Tuple2(null, _))).saveAsNewAPIHadoopFile(
       relation.path.toString,
       classOf[Void],
       classOf[org.apache.spark.sql.catalyst.expressions.GenericRow],
+      // scalastyle:off line.size.limit
       classOf[parquet.hadoop.ParquetOutputFormat[org.apache.spark.sql.catalyst.expressions.GenericRow]],
+      // scalastyle:on line.size.limit
       conf)
 
     // We return the child RDD to allow chaining (alternatively, one could return nothing).
@@ -133,3 +145,4 @@ case class InsertIntoParquetTable(
 
   override def output = child.output
 }
+

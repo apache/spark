@@ -29,9 +29,13 @@ import scala.collection.JavaConversions._
  * Relation formed by underlying Parquet file that contains data stored in columnar form.
  * Note that there are currently two ways to import a ParquetRelation:
  * a) create the Relation "manually" and register via the OverrideCatalog, e.g.:
- *    TestShark.catalog.overrideTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
+ *    TestShark.catalog.overrideTable(
+ *      Some[String]("parquet"),
+ *      "testsource",
+ *      ParquetTestData.testData)
  *    and then execute the query as usual.
- * b) store a relation via WriteToFile and manually resolve the corresponding ParquetRelation:
+ * b) store a relation via WriteToFile and manually resolve the corresponding
+ *    ParquetRelation:
  *    val query = TestShark.parseSql(querystr).transform {
  *      case relation @ UnresolvedRelation(databaseName, name, alias) =>
  *        if(name.equals(tableName))
@@ -63,15 +67,22 @@ case class ParquetRelation(val tableName: String, val path: String) extends Base
   /** Output **/
   override val output = attributes
 
-  override def isPartitioned = false // Parquet files have no concepts of keys, therefore no Partitioner
+  // Parquet files have no concepts of keys, therefore no Partitioner
   // Note: we could allow Block level access; needs to be thought through
+  override def isPartitioned = false
 }
 
 object ParquetRelation {
 
-  def create(pathString: String, child: LogicalPlan, conf: Configuration, tableName: Option[String]): ParquetRelation = {
-    if(!child.resolved)
-      throw new UnresolvedException[LogicalPlan](child, "Attempt to create Parquet table from unresolved child (when schema is not available)")
+  def create(pathString: String,
+             child: LogicalPlan,
+             conf: Configuration,
+             tableName: Option[String]): ParquetRelation = {
+    if(!child.resolved) {
+      throw new UnresolvedException[LogicalPlan](
+        child,
+        "Attempt to create Parquet table from unresolved child (when schema is not available)")
+    }
 
     val name = s"${tableName.getOrElse(child.nodeName)}_parquet"
     val path = checkPath(pathString, conf)
@@ -82,8 +93,14 @@ object ParquetRelation {
   private def checkPath(pathStr: String, conf: Configuration): Path = {
     val path = new Path(pathStr)
     val fs = path.getFileSystem(conf)
-    if(fs.exists(path) && !fs.getFileStatus(path).getPermission.getUserAction.implies(FsAction.READ_WRITE))
-      throw new IOException(s"Unable to create ParquetRelation: path ${path.toString} not read-writable")
+    if(fs.exists(path) &&
+      !fs.getFileStatus(path)
+      .getPermission
+      .getUserAction
+      .implies(FsAction.READ_WRITE)) {
+      throw new IOException(
+        s"Unable to create ParquetRelation: path ${path.toString} not read-writable")
+    }
     path
   }
 }
@@ -130,7 +147,8 @@ object ParquetTypesConverter {
     }
   }
 
-  def getSchema(schemaString : String) : MessageType = MessageTypeParser.parseMessageType(schemaString)
+  def getSchema(schemaString : String) : MessageType =
+    MessageTypeParser.parseMessageType(schemaString)
 
   def convertToAttributes(parquetSchema: MessageType) : Seq[Attribute] = {
     parquetSchema.getColumns.map {
@@ -153,8 +171,9 @@ object ParquetTypesConverter {
   def writeMetaData(attributes: Seq[Attribute], path: Path, conf: Configuration) {
     val fileSystem = FileSystem.get(conf)
 
-    if(fileSystem.exists(path) && !fileSystem.getFileStatus(path).isDir)
+    if(fileSystem.exists(path) && !fileSystem.getFileStatus(path).isDir) {
       throw new IOException(s"Expected to write to directory ${path.toString} but found file")
+    }
 
     val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
 
@@ -171,7 +190,8 @@ object ParquetTypesConverter {
     extraMetadata.put("path", path.toString)
     // TODO: add extra data, e.g., table name, date, etc.?
 
-    val parquetSchema: MessageType = ParquetTypesConverter.convertFromAttributes(attributes)
+    val parquetSchema: MessageType =
+      ParquetTypesConverter.convertFromAttributes(attributes)
     val metaData: FileMetaData = new FileMetaData(
       parquetSchema,
       new java.util.HashMap[String, String](),
@@ -202,13 +222,14 @@ object ParquetTypesConverter {
 
     val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
 
-    if(fs.exists(metadataPath) && fs.isFile(metadataPath))
+    if(fs.exists(metadataPath) && fs.isFile(metadataPath)) {
       // TODO: improve exception handling, etc.
       ParquetFileReader.readFooter(conf, metadataPath)
-    else {
-      if(!fs.exists(path) || !fs.isFile(path))
-        throw new FileNotFoundException(s"Could not find file ${path.toString} when trying to read metadata")
-
+    } else {
+      if(!fs.exists(path) || !fs.isFile(path)) {
+        throw new FileNotFoundException(
+          s"Could not find file ${path.toString} when trying to read metadata")
+      }
       ParquetFileReader.readFooter(conf, path)
     }
   }
@@ -250,14 +271,16 @@ object ParquetTestData {
     val writer = new ParquetWriter(path, writeSupport)
     for(i <- 0 until 15) {
       val data = new Array[Any](6)
-      if(i % 3 ==0)
+      if(i % 3 ==0) {
         data.update(0, true)
-      else
+      } else {
         data.update(0, false)
-      if(i % 5 == 0)
+      }
+      if(i % 5 == 0) {
         data.update(1, 5)
-      else
+      } else {
         data.update(1, null) // optional
+      }
       data.update(2, "abc")
       data.update(3, 1L<<33)
       data.update(4, 2.5F)

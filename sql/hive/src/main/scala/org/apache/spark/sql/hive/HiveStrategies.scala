@@ -55,7 +55,10 @@ trait HiveStrategies {
       case p @ logical.Project(projectList, m: MetastoreRelation) if isSimpleProject(projectList) =>
         HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m, None)(hiveContext) :: Nil
       case p @ logical.Project(projectList, r: ParquetRelation) if isSimpleProject(projectList) =>
-        ParquetTableScan(projectList.asInstanceOf[Seq[Attribute]], r, None)(hiveContext.sparkContext) :: Nil
+        ParquetTableScan(
+          projectList.asInstanceOf[Seq[Attribute]],
+          r,
+          None)(hiveContext.sparkContext) :: Nil
       case m: MetastoreRelation =>
         HiveTableScan(m.output, m, None)(hiveContext) :: Nil
       case p: ParquetRelation =>
@@ -128,10 +131,17 @@ trait HiveStrategies {
           } else {
             val scan = relation match {
               case MetastoreRelation(_, _, _) => {
-                HiveTableScan(prunedCols, relation.asInstanceOf[MetastoreRelation], None)(hiveContext)
+                HiveTableScan(
+                  prunedCols,
+                  relation.asInstanceOf[MetastoreRelation],
+                  None)(hiveContext)
               }
               case ParquetRelation(_, _) => {
-                ParquetTableScan(relation.output, relation.asInstanceOf[ParquetRelation], None)(hiveContext.sparkContext).pruneColumns(prunedCols)
+                ParquetTableScan(
+                  relation.output,
+                  relation.asInstanceOf[ParquetRelation],
+                  None)(hiveContext.sparkContext)
+                  .pruneColumns(prunedCols)
               }
             }
             predicateOpt.map(execution.Filter(_, scan)).getOrElse(scan) :: Nil

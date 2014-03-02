@@ -209,6 +209,7 @@ package object dsl {
 
     def writeToFile(path: String) = WriteToFile(path, plan, None)
 
-    // TODO: for a loadFromFile it would be good to have a Catalog that knows how to resolve ParquetTables
+    // TODO: for a loadFromFile it would be good to have a Catalog that knows
+    // how to resolve ParquetTables
   }
 }
