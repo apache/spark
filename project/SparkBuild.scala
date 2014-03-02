@@ -243,13 +243,11 @@ object SparkBuild extends Build {
 
   val slf4jVersion = "1.7.5"
 
-  val excludeCglib = ExclusionRule(organization = "org.sonatype.sisu.inject")
-  val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
   val excludeAsm = ExclusionRule(organization = "asm")
-  val excludeSnappy = ExclusionRule(organization = "org.xerial.snappy")
   val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
   val excludeSLF4J = ExclusionRule(organization = "org.slf4j")
+  val excludeScalap = ExclusionRule(organization = "org.scala-lang", artifact = "scalap")
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
@@ -273,13 +271,13 @@ object SparkBuild extends Build {
         "org.spark-project.akka"    %% "akka-remote"      % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
         "org.spark-project.akka"    %% "akka-slf4j"       % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
         "org.spark-project.akka"    %% "akka-testkit"     % "2.2.3-shaded-protobuf" % "test",
-        "org.json4s"                %% "json4s-jackson"   % "3.2.6",
+        "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
         "it.unimi.dsi"               % "fastutil"         % "6.4.4",
         "colt"                       % "colt"             % "1.2.0",
         "org.apache.mesos"           % "mesos"            % "0.13.0",
         "net.java.dev.jets3t"        % "jets3t"           % "0.7.1" excludeAll(excludeCommonsLogging),
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
-        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib, excludeCommonsLogging, excludeSLF4J),
+        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J),
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeNetty),
         "com.codahale.metrics"       % "metrics-core"     % "3.0.0",
         "com.codahale.metrics"       % "metrics-jvm"      % "3.0.0",
@@ -316,7 +314,7 @@ object SparkBuild extends Build {
         exclude("io.netty", "netty")
         exclude("jline","jline")
         exclude("org.apache.cassandra.deps", "avro")
-        excludeAll(excludeSnappy, excludeCglib, excludeSLF4J)
+        excludeAll(excludeSLF4J)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
@@ -379,10 +377,10 @@ object SparkBuild extends Build {
   def yarnEnabledSettings = Seq(
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
-      "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
-      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
-      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
-      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
+      "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeNetty, excludeAsm)
     )
   )
 
@@ -428,7 +426,7 @@ object SparkBuild extends Build {
   def flumeSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-flume",
     libraryDependencies ++= Seq(
-      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty, excludeSnappy)
+      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty)
     )
   )
 
