@@ -16,7 +16,13 @@ declare -a residual_args
 declare -a java_args
 declare -a scalac_args
 declare -a sbt_commands
-declare java_cmd=java
+
+if test -x "$JAVA_HOME/bin/java"; then
+    echo -e "using $JAVA_HOME for launching sbt."
+    declare java_cmd="$JAVA_HOME/bin/java"
+else
+    declare java_cmd=java
+fi
 
 echoerr () {
   echo 1>&2 "$@"

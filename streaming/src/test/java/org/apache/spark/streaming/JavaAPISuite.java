@@ -744,11 +744,13 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<Integer, String> flatMapped = stream.flatMapToPair(
       new PairFlatMapFunction<String, Integer, String>() {
-      @Override
-      public Iterable<Tuple2<Integer, String>> call(String in) throws Exception {
-        List<Tuple2<Integer, String>> out = Lists.newArrayList();
-        for (String letter: in.split("(?!^)")) {
-          out.add(new Tuple2<Integer, String>(in.length(), letter));
+        @Override
+        public Iterable<Tuple2<Integer, String>> call(String in) throws Exception {
+          List<Tuple2<Integer, String>> out = Lists.newArrayList();
+          for (String letter: in.split("(?!^)")) {
+            out.add(new Tuple2<Integer, String>(in.length(), letter));
+          }
+          return out;
         }
       });
     JavaTestUtils.attachTestOutputStream(flatMapped);

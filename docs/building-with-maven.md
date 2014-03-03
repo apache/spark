@@ -83,6 +83,8 @@ The debian package can then be found under assembly/target. We added the short c
 
 Running only java 8 tests and nothing else.
 
-    $ mvn test -DskipTests -Pjava8-tests
+    $ mvn install -DskipTests -Pjava8-tests
     
-Java 8 tests are run when -Pjava8-tests profile is enabled, they will run inspite of -DskipTests. For these tests to run java 8 should be installed on the system running the tests.
+Java 8 tests are run when -Pjava8-tests profile is enabled, they will run in spite of -DskipTests. 
+For these tests to run your system must have a JDK 8 installation. 
+If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.

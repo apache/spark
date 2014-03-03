@@ -732,7 +732,7 @@
       </build>
 
       <modules>
-        <module>java8-tests</module>
+        <module>extras/java8-tests</module>
       </modules>
 
     </profile>

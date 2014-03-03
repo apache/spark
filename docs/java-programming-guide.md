@@ -17,6 +17,21 @@ which support the same methods as their Scala counterparts but take Java functio
 Java data and collection types. The main differences have to do with passing functions to RDD
 operations (e.g. map) and handling RDDs of different types, as discussed next.
 
+# Upgrading from pre-1.0 versions of Spark
+
+There are following API changes for codebases written in pre-1.0 versions of Spark.
+
+* All `org.apache.spark.api.java.function.*` abstract classes are now interfaces. 
+  So this means that concrete implementations of these `Function` abstract classes will 
+  have `implements` instead of extends.
+* APIs of map and flatMap in core and map, flatMap and transform in streaming 
+  are changed and are defined on the basis of the passed anonymous function's
+  return type, for example mapToPair(...) or flatMapToPair returns
+  [`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD),
+  similarly mapToDouble and flatMapToDouble returns
+  [`JavaDoubleRDD`](api/core/index.html#org.apache.spark.api.java.JavaDoubleRDD).
+  Please check the API documentation for more details.
+
 # Key Differences in the Java API
 
 There are a few key differences between the Java and Scala APIs:
@@ -30,7 +45,7 @@ There are a few key differences between the Java and Scala APIs:
   classes for key-value pairs and doubles. For example, 
   [`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD)
   stores key-value pairs.
-* To support upcoming java 8 lambda expression, methods are defined on the basis of 
+* To support java 8 lambda expression, methods are defined on the basis of 
   the passed anonymous function's (a.k.a lambda expression) return type, 
   for example mapToPair(...) or flatMapToPair returns
   [`JavaPairRDD`](api/core/index.html#org.apache.spark.api.java.JavaPairRDD),
@@ -139,7 +154,7 @@ lambda expression as follows:
 JavaRDD<String> words = lines.flatMap(s -> Arrays.asList(s.split(" ")));
 {% endhighlight %}
 
-Same possibility applies to all passed in anonymous classes in java 8.
+This lambda syntax can be applied to all anonymous classes in Java 8.
 
 Continuing with the word count example, we map each word to a `(word, 1)` pair:
 

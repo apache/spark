@@ -61,98 +61,55 @@
   <profiles>
     <profile>
       <id>java8-tests</id>
-      <build>
-        <plugins>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-surefire-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>test</id>
-                <goals>
-                  <goal>test</goal>
-                </goals>
-              </execution>
-            </executions>
-            <configuration>
-              <skipTests>false</skipTests>
-              <includes>
-                <include>**/Suite*.java</include>
-                <include>**/*Suite.java</include>
-              </includes>
-            </configuration>
-          </plugin>
-          <plugin>
-            <groupId>org.apache.maven.plugins</groupId>
-            <artifactId>maven-compiler-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>test-compile-first</id>
-                <phase>process-test-resources</phase>
-                <goals>
-                  <goal>testCompile</goal>
-                </goals>
-              </execution>
-            </executions>
-            <configuration>
-              <fork>true</fork>
-              <verbose>true</verbose>
-              <forceJavacCompilerUse>true</forceJavacCompilerUse>
-              <source>1.8</source>
-              <compilerVersion>1.8</compilerVersion>
-              <target>1.8</target>
-              <encoding>UTF-8</encoding>
-              <maxmem>1024m</maxmem>
-            </configuration>
-          </plugin>
-          <plugin>
-            <!-- disabled -->
-            <groupId>net.alchim31.maven</groupId>
-            <artifactId>scala-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <phase>none</phase>
-              </execution>
-              <execution>
-                <id>scala-compile-first</id>
-                <phase>none</phase>
-              </execution>
-              <execution>
-                <id>scala-test-compile-first</id>
-                <phase>none</phase>
-              </execution>
-              <execution>
-                <id>attach-scaladocs</id>
-                <phase>none</phase>
-              </execution>
-            </executions>
-          </plugin>
-          <plugin>
-            <groupId>org.scalatest</groupId>
-            <artifactId>scalatest-maven-plugin</artifactId>
-            <executions>
-              <execution>
-                <id>test</id>
-                <phase>none</phase>
-              </execution>
-            </executions>
-          </plugin>
-        </plugins>
-      </build>
     </profile>
   </profiles>
   <build>
     <plugins>
       <plugin>
         <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <executions>
+          <execution>
+            <id>test</id>
+            <goals>
+              <goal>test</goal>
+            </goals>
+          </execution>
+        </executions>
+        <configuration>
+          <skipTests>false</skipTests>
+          <includes>
+            <include>**/Suite*.java</include>
+            <include>**/*Suite.java</include>
+          </includes>
+          <redirectTestOutputToFile>true</redirectTestOutputToFile>
+        </configuration>
+      </plugin>
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
         <artifactId>maven-compiler-plugin</artifactId>
         <executions>
           <execution>
-            <phase>none</phase>
+            <id>test-compile-first</id>
+            <phase>process-test-resources</phase>
+            <goals>
+              <goal>testCompile</goal>
+            </goals>
           </execution>
         </executions>
+        <configuration>
+          <fork>true</fork>
+          <verbose>true</verbose>
+          <forceJavacCompilerUse>true</forceJavacCompilerUse>
+          <source>1.8</source>
+          <compilerVersion>1.8</compilerVersion>
+          <target>1.8</target>
+          <encoding>UTF-8</encoding>
+          <maxmem>1024m</maxmem>
+        </configuration>
       </plugin>
       <plugin>
+        <!-- disabled -->
         <groupId>net.alchim31.maven</groupId>
         <artifactId>scala-maven-plugin</artifactId>
         <executions>

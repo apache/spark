@@ -95,7 +95,10 @@ object SparkBuild extends Build {
   lazy val javaVersion = System.getProperty("java.specification.version")
   lazy val isJava8Enabled = javaVersion.toDouble >= "1.8".toDouble
   val maybeJava8Tests = if (isJava8Enabled) Seq[ProjectReference](java8Tests) else Seq[ProjectReference]()
-  lazy val java8Tests = Project("java8-tests", file("java8-tests"), settings = java8TestsSettings) dependsOn(core) dependsOn(streaming % "compile->compile;test->test")
+  lazy val java8Tests = Project("java8-tests", file("extras/java8-tests"), settings = java8TestsSettings).
+    dependsOn(core) dependsOn(streaming % "compile->compile;test->test")
+
+  val javaHomeEnv = Properties.envOrNone("JAVA_HOME").map(file)
 
   // Conditionally include the yarn sub-project
   lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
@@ -140,6 +143,7 @@ object SparkBuild extends Build {
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
+    if (javaHomeEnv.isDefined) javaHome := javaHomeEnv else javaHome <<= javaHome in Compile,
     // This is to add convenience of enabling sbt -Dsbt.offline=true for making the build offline.
     offline := "true".equalsIgnoreCase(sys.props("sbt.offline")),
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
