@@ -19,32 +19,37 @@ package org.apache.spark.util
 
 import java.io._
 import java.text.SimpleDateFormat
+import java.net.URI
 import java.util.Date
 
 import org.apache.spark.Logging
+import org.apache.spark.deploy.SparkHadoopUtil
+import org.apache.hadoop.fs.{Path, FileSystem}
 
 /**
  * A generic class for logging information to file
- * @param logDir Path to the directory in which files are logged
+ * @param logBaseDir Path to the directory in which files are logged
  * @param name An identifier of each FileLogger instance
+ * @param overwriteExistingFiles Whether to overwrite existing files
  */
 class FileLogger(
-    logDir: String,
-    name: String = String.valueOf(System.currentTimeMillis()))
+    logBaseDir: String,
+    name: String = String.valueOf(System.currentTimeMillis()),
+    overwriteExistingFiles: Boolean = true)
   extends Logging {
 
-  private val logPath = logDir.stripSuffix("/") + "/" + name
+  private val logDir = logBaseDir.stripSuffix("/") + "/" + name
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private var fileIndex = 0
 
   private var writer: Option[PrintWriter] = {
     createLogDir()
-    Some(createWriter())
+    createWriter()
   }
 
   /** Create a logging directory with the given path */
   private def createLogDir() = {
-    val dir = new File(logPath)
+    val dir = new File(logDir)
     if (dir.exists) {
       logWarning("Logging directory already exists: " + logDir)
     }
@@ -54,12 +59,29 @@ class FileLogger(
     }
   }
 
-  /** Create a new writer to the file identified with the given path */
-  private def createWriter() = {
-    // Overwrite any existing file
-    val fileWriter = new FileWriter(logPath + "/" + fileIndex)
-    val bufferedWriter = new BufferedWriter(fileWriter)
-    new PrintWriter(bufferedWriter)
+  /**
+   * Create a new writer to the file identified with the given path file.
+   * File systems currently supported include hdfs, s3, and the local file system.
+   */
+  private def createWriter(): Option[PrintWriter] = {
+    val logPath = logDir + "/" + fileIndex
+    val uri = new URI(logPath)
+    val fileStream = uri.getScheme match {
+      case "hdfs" | "s3" =>
+        val conf = SparkHadoopUtil.get.newConfiguration()
+        val fs = FileSystem.get(uri, conf)
+        val path = new Path(logPath)
+        fs.create(path, overwriteExistingFiles)
+      case "file" | null =>
+        // org.apache.hadoop.fs.FileSystem (r1.0.4) does not flush on local files
+        // Second parameter is whether to append
+        new FileOutputStream(logPath, !overwriteExistingFiles)
+      case _ =>
+        logWarning("Given logging directory is invalid: %s".format(logDir))
+        return None
+    }
+    val bufferedStream = new BufferedOutputStream(fileStream)
+    Some(new PrintWriter(bufferedStream))
   }
 
   /**
@@ -96,7 +118,7 @@ class FileLogger(
   def start() = {
     writer.getOrElse {
       fileIndex += 1
-      writer = Some(createWriter())
+      writer = createWriter()
     }
   }
 }
