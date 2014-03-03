@@ -1,15 +1,24 @@
-# Java 8 test suites.
+# Java 8 Test Suites
 
-These tests are bundled with spark and run if you have java 8 installed as system default or your `JAVA_HOME` points to a java 8(or higher) installation. `JAVA_HOME` is preferred to system default jdk installation. Since these tests require jdk 8 or higher, they defined to be optional to run in the build system.
+These tests require having Java 8 installed and are isolated from the main Spark build.
+If Java 8 is not your system's default Java version, you will need to point Spark's build
+to your Java location. The set-up depends a bit on the build system:
 
-* For sbt users, it automatically detects the presence of java 8 based on either `JAVA_HOME` environment variable or default installed jdk and run these tests. It takes highest precednce, if java home is passed as follows.
+* Sbt users can either set JAVA_HOME to the location of a Java 8 JDK or explicitly pass
+  `-java-home` to the sbt launch script. If a Java 8 JDK is detected sbt will automatically
+  include the Java 8 test project.
 
-  `$ sbt/sbt -java-home "/path/to/jdk1.8.0"`
+  `$ JAVA_HOME=/opt/jdk1.8.0/ sbt/sbt clean "test-only org.apache.spark.Java8APISuite"`
 
-* For maven users,
+* For Maven users,
 
-  This automatic detection is not possible and thus user has to ensure that either `JAVA_HOME` environment variable or default installed jdk points to jdk 8.
+  Maven users can also refer to their Java 8 directory using JAVA_HOME. However, Maven will not
+  automatically detect the presence of a Java 8 JDK, so a special build profile `-Pjava8-tests`
+  must be used.
 
-  `$ mvn install -Pjava8-tests`
+  `$ JAVA_HOME=/opt/jdk1.8.0/ mvn clean install -DskipTests`
+  `$ JAVA_HOME=/opt/jdk1.8.0/ mvn test -Pjava8-tests -DwildcardSuites=org.apache.spark.Java8APISuite`
 
-  Above command can only be run from project root directory since this module depends on both core and test-jars of core and streaming. These jars are installed first time the above command is run as java8-tests profile enables local publishing of test-jar artifacts as well. Once these artifacts are published then these tests can be run from this module's directory as well.
+  Note that the above command can only be run from project root directory since this module 
+  depends on core and the test-jars of core and streaming. This means an install step is 
+  required to make the test dependencies visible to the Java 8 sub-project.

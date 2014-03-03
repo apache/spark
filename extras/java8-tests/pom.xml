@@ -20,8 +20,8 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-incubating-SNAPSHOT</version>
-    <relativePath>../pom.xml</relativePath>
+    <version>1.0.0-SNAPSHOT</version>
+    <relativePath>../../pom.xml</relativePath>
   </parent>
 
   <groupId>org.apache.spark</groupId>
@@ -77,12 +77,18 @@
           </execution>
         </executions>
         <configuration>
+          <systemPropertyVariables>
+            <!-- For some reason surefire isn't setting this log4j file on the
+                 test classpath automatically. So we add it manually. -->
+            <log4j.configuration>
+              file:src/test/resources/log4j.properties
+            </log4j.configuration>
+          </systemPropertyVariables>
           <skipTests>false</skipTests>
           <includes>
             <include>**/Suite*.java</include>
             <include>**/*Suite.java</include>
           </includes>
-          <redirectTestOutputToFile>true</redirectTestOutputToFile>
         </configuration>
       </plugin>
       <plugin>

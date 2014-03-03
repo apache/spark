@@ -18,7 +18,8 @@ declare -a scalac_args
 declare -a sbt_commands
 
 if test -x "$JAVA_HOME/bin/java"; then
-    echo -e "using $JAVA_HOME for launching sbt."
+    echo -e "Using $JAVA_HOME as default JAVA_HOME."
+    echo "Note, this will be overridden by -java-home if it is set."
     declare java_cmd="$JAVA_HOME/bin/java"
 else
     declare java_cmd=java
