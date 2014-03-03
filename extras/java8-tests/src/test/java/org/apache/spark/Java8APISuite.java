@@ -61,6 +61,19 @@ public class Java8APISuite implements Serializable {
   }
 
   @Test
+  public void foreachWithAnonymousClass() {
+    foreachCalls = 0;
+    JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
+    rdd.foreach(new VoidFunction<String>() {
+      @Override
+      public void call(String s) {
+        foreachCalls++;
+      }
+    });
+    Assert.assertEquals(2, foreachCalls);
+  }
+
+  @Test
   public void foreach() {
     foreachCalls = 0;
     JavaRDD<String> rdd = sc.parallelize(Arrays.asList("Hello", "World"));
