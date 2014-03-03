@@ -364,6 +364,7 @@ object SparkBuild extends Build {
 
   def hiveSettings = sharedSettings ++ Seq(
     name := "spark-hive",
+    javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
       "org.apache.hive" % "hive-metastore" % "0.12.0",
       "org.apache.hive" % "hive-exec" % "0.12.0",
