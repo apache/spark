@@ -847,8 +847,8 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    val rddPartitions = rdd.partitions.map(_.index)
-    require(partitions.forall(rddPartitions.contains(_)), "partition index out of range")
+    val partitionRange = (0 until rdd.partitions.size)
+    require(partitions.forall(partitionRange.contains(_)), "partition index out of range")
     val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite)
@@ -952,8 +952,8 @@ class SparkContext(
       resultHandler: (Int, U) => Unit,
       resultFunc: => R): SimpleFutureAction[R] =
   {
-    val rddPartitions = rdd.partitions.map(_.index)
-    require(partitions.forall(rddPartitions.contains(_)), "partition index out of range")
+    val partitionRange = (0 until rdd.partitions.size)
+    require(partitions.forall(partitionRange.contains(_)), "partition index out of range")
     val cleanF = clean(processPartition)
     val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
