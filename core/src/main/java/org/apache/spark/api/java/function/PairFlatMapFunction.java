@@ -17,10 +17,9 @@
 
 package org.apache.spark.api.java.function;
 
-import scala.Tuple2;
-
 import java.io.Serializable;
 
+import scala.Tuple2;
 
 /**
  * A function that returns zero or more key-value pair records from each input record. The
