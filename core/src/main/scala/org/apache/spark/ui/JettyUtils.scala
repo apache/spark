@@ -46,16 +46,16 @@ private[spark] object JettyUtils extends Logging {
   type Responder[T] = HttpServletRequest => T
 
   // Conversions from various types of Responder's to jetty Handlers
-  implicit def jsonResponderToHandler(responder: Responder[JValue]): HttpServlet =
-    createHandler(responder, "text/json", (in: JValue) => pretty(render(in)))
+  implicit def jsonResponderToServlet(responder: Responder[JValue]): HttpServlet =
+    createServlet(responder, "text/json", (in: JValue) => pretty(render(in)))
 
-  implicit def htmlResponderToHandler(responder: Responder[Seq[Node]]): HttpServlet =
-    createHandler(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)
+  implicit def htmlResponderToServlet(responder: Responder[Seq[Node]]): HttpServlet =
+    createServlet(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)
 
-  implicit def textResponderToHandler(responder: Responder[String]): HttpServlet =
-    createHandler(responder, "text/plain")
+  implicit def textResponderToServlet(responder: Responder[String]): HttpServlet =
+    createServlet(responder, "text/plain")
 
-  def createHandler[T <% AnyRef](responder: Responder[T], contentType: String, 
+  def createServlet[T <% AnyRef](responder: Responder[T], contentType: String, 
                                  extractFn: T => String = (in: Any) => in.toString): HttpServlet = {
     new HttpServlet {
       override def doGet(request: HttpServletRequest,

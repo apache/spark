@@ -47,7 +47,7 @@ class MetricsServlet(val property: Properties, val registry: MetricRegistry) ext
 
   def getHandlers = Array[ServletContextHandler](
     JettyUtils.createServletHandler(servletPath, 
-      JettyUtils.createHandler(request => getMetricsSnapshot(request), "text/json"))
+      JettyUtils.createServlet(request => getMetricsSnapshot(request), "text/json"))
   )
 
   def getMetricsSnapshot(request: HttpServletRequest): String = {
