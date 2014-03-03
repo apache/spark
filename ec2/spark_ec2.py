@@ -398,13 +398,11 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
   if any((master_nodes, slave_nodes)):
     print ("Found %d master(s), %d slaves" %
            (len(master_nodes), len(slave_nodes)))
-  if (master_nodes != [] and slave_nodes != []) or not die_on_error:
+  if master_nodes != [] or not die_on_error:
     return (master_nodes, slave_nodes)
   else:
     if master_nodes == [] and slave_nodes != []:
       print "ERROR: Could not find master in group " + cluster_name + "-master"
-    elif master_nodes != [] and slave_nodes == []:
-      print "ERROR: Could not find slaves in group " + cluster_name + "-slaves"
     else:
       print "ERROR: Could not find any existing cluster"
     sys.exit(1)
