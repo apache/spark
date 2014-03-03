@@ -50,7 +50,7 @@ import scala.collection.mutable.ArrayBuffer
  * Spark does not currently support encryption after authentication.
  * 
  * At this point spark has multiple communication protocols that need to be secured and
- * different underlying mechisms are used depending on the protocol:
+ * different underlying mechanisms are used depending on the protocol:
  *
  *  - Akka -> The only option here is to use the Akka Remote secure-cookie functionality. 
  *            Akka remoting allows you to specify a secure cookie that will be exchanged 
@@ -108,7 +108,7 @@ import scala.collection.mutable.ArrayBuffer
  *            SparkUI can be configured to check the logged in user against the list of users who
  *            have view acls to see if that user is authorized.
  *            The filters can also be used for many different purposes. For instance filters 
- *            could be used for logging, encypryption, or compression.
+ *            could be used for logging, encryption, or compression.
  *            
  *  The exact mechanisms used to generate/distributed the shared secret is deployment specific.
  * 
@@ -122,15 +122,11 @@ import scala.collection.mutable.ArrayBuffer
  *  filters to do authentication. That authentication then happens via the ResourceManager Proxy
  *  and Spark will use that to do authorization against the view acls.
  * 
- *  For other Spark deployments, the shared secret should be specified via the SPARK_SECRET 
+ *  For other Spark deployments, the shared secret must be specified via the SPARK_SECRET 
  *  environment variable. This isn't ideal but it means only the user who starts the process 
- *  has access to view that variable. Note that Spark does try to generate a secret for
- *  you if the SPARK_SECRET environment variable is not set, but it gets put into the java
- *  system property which can be viewed by other users, so setting the SPARK_SECRET environment
- *  variable is recommended.
- *  All the nodes (Master and Workers) need to have the same shared secret
- *  and all the applications running need to have that same shared secret. This again
- *  is not ideal as one user could potentially affect another users application.
+ *  has access to view that variable. 
+ *  All the nodes (Master and Workers) and the applications need to have the same shared secret.
+ *  This again is not ideal as one user could potentially affect another users application.
  *  This should be enhanced in the future to provide better protection.
  *  If the UI needs to be secured the user needs to install a javax servlet filter to do the
  *  authentication. Spark will then use that user to compare against the view acls to do
@@ -152,7 +148,8 @@ private[spark] class SecurityManager extends Logging {
   private val viewAcls = aclUsers.map(_.trim()).filter(!_.isEmpty).toSet
 
   private val secretKey = generateSecretKey()
-  logDebug("is auth enabled = " + authOn + " is uiAcls enabled = " + uiAclsOn)
+  logInfo("SecurityManager, is authentication enabled: " + authOn +
+    " are ui acls enabled: " + uiAclsOn)
 
   // Set our own authenticator to properly negotiate user/password for HTTP connections.
   // This is needed by the HTTP client fetching from the HttpServer. Put here so its 
@@ -170,7 +167,7 @@ private[spark] class SecurityManager extends Logging {
           return passAuth
         }
       }
-    );
+    )
   }
 
   /**
@@ -179,16 +176,12 @@ private[spark] class SecurityManager extends Logging {
    * The way the key is stored depends on the Spark deployment mode. Yarn
    * uses the Hadoop UGI.
    *
-   * For non-Yarn deployments, If the environment variable is not set already 
-   * we generate a secret and since we can't set an environment variable dynamically 
-   * we set the java system property SPARK_SECRET. This will allow it to automatically
-   * work in certain situations.  Others this still will not work and this definitely is 
-   * not ideal since other users can see it. We should switch to put it in 
-   * a config once Spark supports configs.
+   * For non-Yarn deployments, If the environment variable is not set 
+   * we throw an exception. 
    */
   private def generateSecretKey(): String = {
     if (!isAuthenticationEnabled) return null
-    // first check to see if the secret is already set, else generate a new one
+    // first check to see if the secret is already set, else generate a new one if on yarn
     if (SparkHadoopUtil.get.isYarnMode) {
       val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(sparkSecretLookupKey)
       if (secretKey != null) {
@@ -200,17 +193,17 @@ private[spark] class SecurityManager extends Logging {
     }
     val secret = System.getProperty("SPARK_SECRET", System.getenv("SPARK_SECRET")) 
     if (secret != null && !secret.isEmpty()) return secret 
-    // generate one 
-    val sCookie = akka.util.Crypt.generateSecureCookie
-
-    // if we generated the secret then we must be the first so lets set it so t 
-    // gets used by everyone else
-    if (SparkHadoopUtil.get.isYarnMode) {
-      SparkHadoopUtil.get.addSecretKeyToUserCredentials(sparkSecretLookupKey, sCookie)
-      logDebug("adding secret to credentials yarn mode")
+    val sCookie = if (SparkHadoopUtil.get.isYarnMode) {
+      // generate one 
+      akka.util.Crypt.generateSecureCookie
     } else {
-      System.setProperty("SPARK_SECRET", sCookie)
-      logDebug("adding secret to java property")
+      throw new Exception("Error: a secret key must be specified via SPARK_SECRET env variable")  
+    }
+    if (SparkHadoopUtil.get.isYarnMode) {
+      // if we generated the secret then we must be the first so lets set it so t 
+      // gets used by everyone else
+      SparkHadoopUtil.get.addSecretKeyToUserCredentials(sparkSecretLookupKey, sCookie)
+      logInfo("adding secret to credentials in yarn mode")
     }
     sCookie
   }
@@ -223,7 +216,9 @@ private[spark] class SecurityManager extends Logging {
 
   /**
    * Checks the given user against the view acl list to see if they have 
-   * authorization to view the UI.
+   * authorization to view the UI. If the UI acls must are disabled
+   * via spark.ui.acls.enable, all users have view access.
+   * 
    * @param user to see if is authorized
    * @return true is the user has permission, otherwise false 
    */

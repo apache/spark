@@ -32,8 +32,8 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     val socketRemoteConnectionManagerId: ConnectionManagerId, val connectionId: ConnectionId)
   extends Logging {
 
-  var sparkSaslServer : SparkSaslServer = null
-  var sparkSaslClient : SparkSaslClient = null
+  var sparkSaslServer: SparkSaslServer = null
+  var sparkSaslClient: SparkSaslClient = null
 
   def this(channel_ : SocketChannel, selector_ : Selector, id_ : ConnectionId) = {
     this(channel_, selector_,

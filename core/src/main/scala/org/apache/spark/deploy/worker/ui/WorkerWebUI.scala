@@ -48,7 +48,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   val metricsHandlers = worker.metricsSystem.getServletHandlers
 
   val handlers = metricsHandlers ++ Seq[ServletContextHandler](
-    createStaticHandler(WorkerWebUI.STATIC_RESOURCE_DIR, "/static/*"),
+    createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static/*"),
     createServletHandler("/log", (request: HttpServletRequest) => log(request)),
     createServletHandler("/logPage", (request: HttpServletRequest) => logPage(request)),
     createServletHandler("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
@@ -199,6 +199,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 }
 
 private[spark] object WorkerWebUI {
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui"
+  val STATIC_RESOURCE_BASE = "org/apache/spark/ui"
   val DEFAULT_PORT="8081"
 }

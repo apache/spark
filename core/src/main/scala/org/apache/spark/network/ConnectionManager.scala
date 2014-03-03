@@ -56,7 +56,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
 
   // default to 30 second timeout waiting for authentication
   private val authTimeout = System.getProperty("spark.core.connection.auth.wait.timeout",
-    "30000").toInt
+    "30").toInt 
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.handler.threads.min", 20),
@@ -79,6 +79,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     new LinkedBlockingDeque[Runnable]())
 
   private val serverChannel = ServerSocketChannel.open()
+  // used to track the SendingConnections waiting to do SASL negotiation
   private val connectionsAwaitingSasl = new HashMap[ConnectionId, SendingConnection] 
     with SynchronizedMap[ConnectionId, SendingConnection]
   private val connectionsByKey =
@@ -729,7 +730,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
     // We did not find it useful in our test-env ...
     // If we do re-add it, we should consistently use it everywhere I guess ?
     message.senderAddress = id.toSocketAddress()
-    logDebug("Sending Security [" + message + "] to [" + connManagerId + "]")
+    logTrace("Sending Security [" + message + "] to [" + connManagerId + "]")
     val connection = connectionsById.getOrElseUpdate(connManagerId, startNewConnection())
 
     //send security message until going connection has been authenticated
@@ -745,7 +746,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
       val newConnectionId = new ConnectionId(id, idCount.getAndIncrement.intValue)
       val newConnection = new SendingConnection(inetSocketAddress, selector, connectionManagerId,
         newConnectionId)
-      logDebug("creating new sending connection: " + newConnectionId)
+      logTrace("creating new sending connection: " + newConnectionId)
       registerRequests.enqueue(newConnection)
 
       newConnection
@@ -772,10 +773,10 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
             logDebug("getAuthenticated wait connectionid: " + connection.connectionId)
             // have timeout in case remote side never responds
             connection.getAuthenticated().wait(500)
-            if (((clock.getTime() - startTime) >= authTimeout) && (!connection.isSaslComplete())) {
+            if (((clock.getTime() - startTime) >= (authTimeout * 1000)) && (!connection.isSaslComplete())) {
               // took to long to authenticate the connection, something probably went wrong
               throw new Exception("Took to long for authentication to " + connectionManagerId + 
-                ", waited " + authTimeout + "ms, failing.")
+                ", waited " + authTimeout + "seconds, failing.")
             }
           }
         }

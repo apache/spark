@@ -515,9 +515,9 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>  
   <td>spark.core.connection.auth.wait.timeout</td>
-  <td>30000</td>
+  <td>30</td>
   <td>
-    Number of milliseconds for the connection to wait for authentication to occur before timing
+    Number of seconds for the connection to wait for authentication to occur before timing
     out and giving up. 
   </td>
 </tr>

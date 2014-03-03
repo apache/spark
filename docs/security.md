@@ -12,3 +12,5 @@ For Spark on Yarn deployments, configuring `spark.authenticate` to true will aut
 For other types of Spark deployments, the environment variable `SPARK_SECRET` should be configured on each of the nodes. This secret will be used by all the Master/Workers and applications. The UI can be secured using a javax servlet filter installed via `spark.ui.filters`. If an authentication filter is enabled, the acls controls can be used by control which users can via the Spark UI.
 
 See [Spark Configuration](configuration.html) for more details on the security configs.
+
+See <a href="api/core/index.html#org.apache.spark.SecurityManager"><code>org.apache.spark.SecurityManager</code></a> for implementation details about security.

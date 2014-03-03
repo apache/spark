@@ -23,7 +23,7 @@ private[spark] case class ConnectionId(connectionManagerId: ConnectionManagerId,
 
 private[spark] object ConnectionId {
 
-  def createConnectionIdFromString(connectionIdString: String) : ConnectionId = {
+  def createConnectionIdFromString(connectionIdString: String): ConnectionId = {
     val res = connectionIdString.split("_").map(_.trim())
     if (res.size != 3) {
       throw new Exception("Error converting ConnectionId string: " + connectionIdString + 
