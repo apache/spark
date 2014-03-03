@@ -120,7 +120,7 @@ scp spark* \
 # Docs
 cd spark
 cd docs
-jekyll build
+PRODUCTION=1 jekyll build
 echo "Copying release documentation"
 rc_docs_folder=${rc_folder}-docs
 rsync -r _site/* $USER_NAME@people.apache.org /home/$USER_NAME/public_html/$rc_docs_folder
