@@ -162,7 +162,7 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
     val primitiveClasses = Seq(
       Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
       classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long],
-      classOf[HiveDecimal]
+      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte]
     )
     val matchingConstructor = argClass.getConstructors.find { c =>
       c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
