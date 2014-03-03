@@ -139,7 +139,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
 
   /** Return a new DStream by applying a function to all elements of this DStream. */
   def mapToPair[K2, V2](f: PairFunction[T, K2, V2]): JavaPairDStream[K2, V2] = {
-    def cm = implicitly[ClassTag[Tuple2[_, _]]].asInstanceOf[ClassTag[Tuple2[K2, V2]]]
+    def cm: ClassTag[(K2, V2)] = fakeClassTag
     new JavaPairDStream(dstream.map[(K2, V2)](f)(cm))(fakeClassTag[K2], fakeClassTag[V2])
   }
 
@@ -160,7 +160,7 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
   def flatMapToPair[K2, V2](f: PairFlatMapFunction[T, K2, V2]): JavaPairDStream[K2, V2] = {
     import scala.collection.JavaConverters._
     def fn = (x: T) => f.call(x).asScala
-    def cm = implicitly[ClassTag[Tuple2[_, _]]].asInstanceOf[ClassTag[Tuple2[K2, V2]]]
+    def cm: ClassTag[(K2, V2)] = fakeClassTag
     new JavaPairDStream(dstream.flatMap(fn)(cm))(fakeClassTag[K2], fakeClassTag[V2])
   }
 
@@ -284,8 +284,8 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * on each RDD of 'this' DStream.
    */
   def transform[U](transformFunc: JFunction[R, JavaRDD[U]]): JavaDStream[U] = {
-    implicit val cm: ClassTag[U] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
+    implicit val cm: ClassTag[U] = fakeClassTag
+
     def scalaTransform (in: RDD[T]): RDD[U] =
       transformFunc.call(wrapRDD(in)).rdd
     dstream.transform(scalaTransform(_))
@@ -296,8 +296,8 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    * on each RDD of 'this' DStream.
    */
   def transform[U](transformFunc: JFunction2[R, Time, JavaRDD[U]]): JavaDStream[U] = {
-    implicit val cm: ClassTag[U] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
+    implicit val cm: ClassTag[U] = fakeClassTag
+
     def scalaTransform (in: RDD[T], time: Time): RDD[U] =
       transformFunc.call(wrapRDD(in), time).rdd
     dstream.transform(scalaTransform(_, _))
@@ -309,10 +309,9 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    */
   def transformToPair[K2, V2](transformFunc: JFunction[R, JavaPairRDD[K2, V2]]):
   JavaPairDStream[K2, V2] = {
-    implicit val cmk: ClassTag[K2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K2]]
-    implicit val cmv: ClassTag[V2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V2]]
+    implicit val cmk: ClassTag[K2] = fakeClassTag
+    implicit val cmv: ClassTag[V2] = fakeClassTag
+
     def scalaTransform (in: RDD[T]): RDD[(K2, V2)] =
       transformFunc.call(wrapRDD(in)).rdd
     dstream.transform(scalaTransform(_))
@@ -324,10 +323,9 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
    */
   def transformToPair[K2, V2](transformFunc: JFunction2[R, Time, JavaPairRDD[K2, V2]]):
   JavaPairDStream[K2, V2] = {
-    implicit val cmk: ClassTag[K2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K2]]
-    implicit val cmv: ClassTag[V2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V2]]
+    implicit val cmk: ClassTag[K2] = fakeClassTag
+    implicit val cmv: ClassTag[V2] = fakeClassTag
+
     def scalaTransform (in: RDD[T], time: Time): RDD[(K2, V2)] =
       transformFunc.call(wrapRDD(in), time).rdd
     dstream.transform(scalaTransform(_, _))
@@ -341,10 +339,9 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
       other: JavaDStream[U],
       transformFunc: JFunction3[R, JavaRDD[U], Time, JavaRDD[W]]
     ): JavaDStream[W] = {
-    implicit val cmu: ClassTag[U] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
-    implicit val cmv: ClassTag[W] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    implicit val cmu: ClassTag[U] = fakeClassTag
+    implicit val cmv: ClassTag[W] = fakeClassTag
+
     def scalaTransform (inThis: RDD[T], inThat: RDD[U], time: Time): RDD[W] =
       transformFunc.call(wrapRDD(inThis), other.wrapRDD(inThat), time).rdd
     dstream.transformWith[U, W](other.dstream, scalaTransform(_, _, _))
@@ -358,12 +355,9 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
       other: JavaDStream[U],
       transformFunc: JFunction3[R, JavaRDD[U], Time, JavaPairRDD[K2, V2]]
     ): JavaPairDStream[K2, V2] = {
-    implicit val cmu: ClassTag[U] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[U]]
-    implicit val cmk2: ClassTag[K2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K2]]
-    implicit val cmv2: ClassTag[V2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V2]]
+    implicit val cmu: ClassTag[U] = fakeClassTag
+    implicit val cmk2: ClassTag[K2] = fakeClassTag
+    implicit val cmv2: ClassTag[V2] = fakeClassTag
     def scalaTransform (inThis: RDD[T], inThat: RDD[U], time: Time): RDD[(K2, V2)] =
       transformFunc.call(wrapRDD(inThis), other.wrapRDD(inThat), time).rdd
     dstream.transformWith[U, (K2, V2)](other.dstream, scalaTransform(_, _, _))
@@ -377,12 +371,10 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
       other: JavaPairDStream[K2, V2],
       transformFunc: JFunction3[R, JavaPairRDD[K2, V2], Time, JavaRDD[W]]
     ): JavaDStream[W] = {
-    implicit val cmk2: ClassTag[K2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K2]]
-    implicit val cmv2: ClassTag[V2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V2]]
-    implicit val cmw: ClassTag[W] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[W]]
+    implicit val cmk2: ClassTag[K2] = fakeClassTag
+    implicit val cmv2: ClassTag[V2] = fakeClassTag
+    implicit val cmw: ClassTag[W] = fakeClassTag
+
     def scalaTransform (inThis: RDD[T], inThat: RDD[(K2, V2)], time: Time): RDD[W] =
       transformFunc.call(wrapRDD(inThis), other.wrapRDD(inThat), time).rdd
     dstream.transformWith[(K2, V2), W](other.dstream, scalaTransform(_, _, _))
@@ -396,14 +388,10 @@ trait JavaDStreamLike[T, This <: JavaDStreamLike[T, This, R], R <: JavaRDDLike[T
       other: JavaPairDStream[K2, V2],
       transformFunc: JFunction3[R, JavaPairRDD[K2, V2], Time, JavaPairRDD[K3, V3]]
     ): JavaPairDStream[K3, V3] = {
-    implicit val cmk2: ClassTag[K2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K2]]
-    implicit val cmv2: ClassTag[V2] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V2]]
-    implicit val cmk3: ClassTag[K3] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[K3]]
-    implicit val cmv3: ClassTag[V3] =
-      implicitly[ClassTag[AnyRef]].asInstanceOf[ClassTag[V3]]
+    implicit val cmk2: ClassTag[K2] = fakeClassTag
+    implicit val cmv2: ClassTag[V2] = fakeClassTag
+    implicit val cmk3: ClassTag[K3] = fakeClassTag
+    implicit val cmv3: ClassTag[V3] = fakeClassTag
     def scalaTransform (inThis: RDD[T], inThat: RDD[(K2, V2)], time: Time): RDD[(K3, V3)] =
       transformFunc.call(wrapRDD(inThis), other.wrapRDD(inThat), time).rdd
     dstream.transformWith[(K2, V2), (K3, V3)](other.dstream, scalaTransform(_, _, _))
