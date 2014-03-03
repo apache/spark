@@ -105,6 +105,14 @@ package object util {
 
   def stringOrNull(a: AnyRef) = if (a == null) null else a.toString
 
+  def benchmark[A](f: => A): A = {
+    val startTime = System.nanoTime()
+    val ret = f
+    val endTime = System.nanoTime()
+    println(s"${(endTime - startTime).toDouble / 1000000}ms")
+    ret
+  }
+
   /* FIX ME
   implicit class debugLogging(a: AnyRef) {
     def debugLogging() {

@@ -78,6 +78,10 @@ case class Alias(child: Expression, name: String)
     (val exprId: ExprId = NamedExpression.newExprId, val qualifiers: Seq[String] = Nil)
   extends NamedExpression with trees.UnaryNode[Expression] {
 
+  type EvaluatedType = Any
+
+  override def apply(input: Row) = child.apply(input)
+
   def dataType = child.dataType
   def nullable = child.nullable
   def references = child.references

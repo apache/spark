@@ -35,8 +35,9 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) => {
         // TODO: Eliminate redundant expressions in grouping key and value.
-        val rdd = child.execute().map { row =>
-          (buildRow(expressions.toSeq.map(Evaluate(_, Vector(row)))), row)
+        val rdd = child.execute().mapPartitions { iter =>
+          val hashExpressions = new Projection(expressions)
+          iter.map(r => (hashExpressions(r), r))
         }
         val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, (Row, Row)](rdd, part)

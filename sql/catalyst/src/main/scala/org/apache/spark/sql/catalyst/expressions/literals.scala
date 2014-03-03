@@ -46,9 +46,28 @@ object IntegerLiteral {
 }
 
 case class Literal(value: Any, dataType: DataType) extends LeafExpression {
+
   override def foldable = true
   def nullable = value == null
   def references = Set.empty
 
   override def toString = if (value != null) value.toString else "null"
+
+  type EvaluatedType = Any
+  override def apply(input: Row):Any = value
+}
+
+// TODO: Specialize
+case class MutableLiteral(var value: Any, nullable: Boolean = true) extends LeafExpression {
+  type EvaluatedType = Any
+
+  val dataType = Literal(value).dataType
+
+  def references = Set.empty
+
+  def update(expression: Expression, input: Row) = {
+    value = expression.apply(input)
+  }
+
+  override def apply(input: Row) = value
 }

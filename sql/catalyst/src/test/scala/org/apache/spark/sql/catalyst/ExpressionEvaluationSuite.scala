@@ -29,7 +29,7 @@ import dsl._
 class ExpressionEvaluationSuite extends FunSuite {
 
   test("literals") {
-    assert(Evaluate(Literal(1) + Literal(1), Nil) === 2)
+    assert((Literal(1) + Literal(1)).apply(null) === 2)
   }
 
   /**
@@ -62,7 +62,7 @@ class ExpressionEvaluationSuite extends FunSuite {
     notTrueTable.foreach {
       case (v, answer) =>
         val expr = Not(Literal(v, BooleanType))
-        val result = Evaluate(expr, Nil)
+        val result = expr.apply(null)
         if (result != answer)
           fail(s"$expr should not evaluate to $result, expected: $answer")    }
   }
@@ -105,7 +105,7 @@ class ExpressionEvaluationSuite extends FunSuite {
       truthTable.foreach {
         case (l,r,answer) =>
           val expr = op(Literal(l, BooleanType), Literal(r, BooleanType))
-          val result = Evaluate(expr, Nil)
+          val result = expr.apply(null)
           if (result != answer)
             fail(s"$expr should not evaluate to $result, expected: $answer")
       }

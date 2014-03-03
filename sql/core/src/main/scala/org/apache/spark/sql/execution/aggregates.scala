@@ -74,7 +74,7 @@ case class Aggregate(
       // An exact match with a grouping expression
       val exactGroupingExpr = groupingExpressions.indexOf(unaliasedAggregateExpr) match {
         case -1 => None
-        case ordinal => Some(BoundReference(0, ordinal, Alias(impl, "AGGEXPR")().toAttribute))
+        case ordinal => Some(BoundReference(ordinal, Alias(impl, "AGGEXPR")().toAttribute))
       }
 
       exactGroupingExpr.getOrElse(
@@ -88,8 +88,9 @@ case class Aggregate(
     // TODO: If the child of it is an [[catalyst.execution.Exchange]],
     // do not evaluate the groupingExpressions again since we have evaluated it
     // in the [[catalyst.execution.Exchange]].
-    val grouped = child.execute().map { row =>
-      (buildRow(groupingExpressions.map(Evaluate(_, Vector(row)))), row)
+    val grouped = child.execute().mapPartitions { iter =>
+      val buildGrouping = new Projection(groupingExpressions)
+      iter.map(row => (buildGrouping(row), row))
     }.groupByKeyLocally()
 
     val result = grouped.map { case (group, rows) =>
@@ -99,17 +100,16 @@ case class Aggregate(
       val aggFunctions = aggImplementations.flatMap(_ collect { case f: AggregateFunction => f })
 
       rows.foreach { row =>
-        val input = Vector(row)
-        aggFunctions.foreach(_.apply(input))
+        aggFunctions.foreach(_.update(row))
       }
-      buildRow(aggImplementations.map(Evaluate(_, Vector(group))))
+      buildRow(aggImplementations.map(_.apply(group)))
     }
 
-    // TODO: THIS DOES NOT PRESERVE LINEAGE AND BREAKS PIPELINING.
+    // TODO: THIS BREAKS PIPELINING, DOUBLE COMPUTES THE ANSWER, AND USES TOO MUCH MEMORY...
     if (groupingExpressions.isEmpty && result.count == 0) {
       // When there there is no output to the Aggregate operator, we still output an empty row.
       val aggImplementations = createAggregateImplementations()
-      sc.makeRDD(buildRow(aggImplementations.map(Evaluate(_, Nil))) :: Nil)
+      sc.makeRDD(buildRow(aggImplementations.map(_.apply(null))) :: Nil)
     } else {
       result
     }

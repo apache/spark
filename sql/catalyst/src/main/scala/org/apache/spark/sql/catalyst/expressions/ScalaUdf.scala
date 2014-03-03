@@ -22,15 +22,20 @@ package expressions
 import types._
 
 case class ScalaUdf(function: AnyRef, dataType: DataType, children: Seq[Expression])
-  extends Expression with ImplementedUdf {
+  extends Expression {
+
+  type EvaluatedType = Any
 
   def references = children.flatMap(_.references).toSet
   def nullable = true
 
-  def evaluate(evaluatedChildren: Seq[Any]): Any = {
+  override def apply(input: Row): Any = {
     children.size match {
-      case 1 => function.asInstanceOf[(Any) => Any](evaluatedChildren(0))
-      case 2 => function.asInstanceOf[(Any, Any) => Any](evaluatedChildren(0), evaluatedChildren(1))
+      case 1 => function.asInstanceOf[(Any) => Any](children(0).apply(input))
+      case 2 =>
+        function.asInstanceOf[(Any, Any) => Any](
+          children(0).apply(input),
+          children(1).apply(input))
     }
   }
 }

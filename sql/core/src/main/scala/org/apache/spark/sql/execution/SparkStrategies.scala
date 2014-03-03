@@ -152,19 +152,18 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   protected lazy val singleRowRdd =
-    sparkContext.parallelize(Seq(new GenericRow(IndexedSeq()): Row), 1)
+    sparkContext.parallelize(Seq(new GenericRow(Array()): Row), 1)
 
   def convertToCatalyst(a: Any): Any = a match {
     case s: Seq[Any] => s.map(convertToCatalyst)
-    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toSeq)
+    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
     case other => other
   }
 
   object TopK extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
-      case logical.StopAfter(limit, logical.Sort(order, child)) =>
-        execution.TopK(
-          Evaluate(limit, Nil).asInstanceOf[Int], order, planLater(child))(sparkContext) :: Nil
+      case logical.StopAfter(IntegerLiteral(limit), logical.Sort(order, child)) =>
+        execution.TopK(limit, order, planLater(child))(sparkContext) :: Nil
       case _ => Nil
     }
   }
@@ -195,12 +194,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
       case logical.LocalRelation(output, data) =>
         val dataAsRdd =
           sparkContext.parallelize(data.map(r =>
-            new GenericRow(r.productIterator.map(convertToCatalyst).toVector): Row))
+            new GenericRow(r.productIterator.map(convertToCatalyst).toArray): Row))
         execution.ExistingRdd(output, dataAsRdd) :: Nil
-      case logical.StopAfter(limit, child) =>
-        execution.StopAfter(
-          Evaluate(limit, Nil).asInstanceOf[Int],
-          planLater(child))(sparkContext) :: Nil
+      case logical.StopAfter(IntegerLiteral(limit), child) =>
+        execution.StopAfter(limit, planLater(child))(sparkContext) :: Nil
       case Unions(unionChildren) =>
         execution.Union(unionChildren.map(planLater))(sparkContext) :: Nil
       case logical.Generate(generator, join, outer, _, child) =>

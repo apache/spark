@@ -57,14 +57,15 @@ case class ScriptTransformation(
           var curLine = reader.readLine()
           while (curLine != null) {
             // TODO: Use SerDe
-            outputLines += new GenericRow(curLine.split("\t"))
+            outputLines += new GenericRow(curLine.split("\t").asInstanceOf[Array[Any]])
             curLine = reader.readLine()
           }
         }
       }
       readerThread.start()
+      val outputProjection = new Projection(input)
       iter
-        .map(row => input.map(Evaluate(_, Vector(row))))
+        .map(outputProjection)
         // TODO: Use SerDe
         .map(_.mkString("", "\t", "\n").getBytes).foreach(outputStream.write)
       outputStream.close()

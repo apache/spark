@@ -205,7 +205,7 @@ abstract class HiveContext(sc: SparkContext) extends SparkSqlContext(sc) {
 
   override val planner = HivePlanner
 
-  protected lazy val emptyResult = sparkContext.parallelize(Seq(new GenericRow(Vector()): Row), 1)
+  protected lazy val emptyResult = sparkContext.parallelize(Seq(new GenericRow(Array()): Row), 1)
 
   /** Extends QueryExecution with hive specific features. */
   abstract class QueryExecution extends super.QueryExecution {
@@ -222,7 +222,7 @@ abstract class HiveContext(sc: SparkContext) extends SparkSqlContext(sc) {
           if (output.size == 0) {
             emptyResult
           } else {
-            val asRows = output.map(r => new GenericRow(r.split("\t")))
+            val asRows = output.map(r => new GenericRow(r.split("\t").asInstanceOf[Array[Any]]))
             sparkContext.parallelize(asRows, 1)
           }
         case _ =>

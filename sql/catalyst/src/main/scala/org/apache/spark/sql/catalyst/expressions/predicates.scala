@@ -26,9 +26,11 @@ trait Predicate extends Expression {
   self: Product =>
 
   def dataType = BooleanType
+
+  type EvaluatedType = Any
 }
 
-abstract trait PredicateHelper {
+trait PredicateHelper {
   def splitConjunctivePredicates(condition: Expression): Seq[Expression] = condition match {
     case And(cond1, cond2) => splitConjunctivePredicates(cond1) ++ splitConjunctivePredicates(cond2)
     case other => other :: Nil
@@ -45,6 +47,13 @@ case class Not(child: Expression) extends Predicate with trees.UnaryNode[Express
   override def foldable = child.foldable
   def nullable = child.nullable
   override def toString = s"NOT $child"
+
+  override def apply(input: Row): Any = {
+    child.apply(input) match {
+      case null => null
+      case b: Boolean => !b
+    }
+  }
 }
 
 /**
@@ -55,14 +64,43 @@ case class In(value: Expression, list: Seq[Expression]) extends Predicate {
   def references = children.flatMap(_.references).toSet
   def nullable = true // TODO: Figure out correct nullability semantics of IN.
   override def toString = s"$value IN ${list.mkString("(", ",", ")")}"
+
+  override def apply(input: Row): Any = {
+    val evaluatedValue = value.apply(input)
+    list.exists(e => e.apply(input) == evaluatedValue)
+  }
 }
 
 case class And(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "&&"
+
+  override def apply(input: Row): Any = {
+    val l = left.apply(input)
+    val r = right.apply(input)
+    if (l == false || r == false) {
+      false
+    } else if (l == null || r == null ) {
+      null
+    } else {
+      true
+    }
+  }
 }
 
 case class Or(left: Expression, right: Expression) extends BinaryPredicate {
   def symbol = "||"
+
+  override def apply(input: Row): Any = {
+    val l = left.apply(input)
+    val r = right.apply(input)
+    if (l == true || r == true) {
+      true
+    } else if (l == null || r == null) {
+      null
+    } else {
+      false
+    }
+  }
 }
 
 abstract class BinaryComparison extends BinaryPredicate {
@@ -71,35 +109,79 @@ abstract class BinaryComparison extends BinaryPredicate {
 
 case class Equals(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "="
+  override def apply(input: Row): Any = {
+    val l = left.apply(input)
+    val r = right.apply(input)
+    if (l == null || r == null) null else l == r
+  }
 }
 
 case class LessThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<"
+  override def apply(input: Row): Any = {
+    if (left.dataType == StringType && right.dataType == StringType) {
+      val l = left.apply(input)
+      val r = right.apply(input)
+      if(l == null || r == null) {
+        null
+      } else {
+        l.asInstanceOf[String] < r.asInstanceOf[String]
+      }
+    } else {
+      n2(input, left, right, _.lt(_, _))
+    }
+  }
 }
 
 case class LessThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = "<="
+  override def apply(input: Row): Any = {
+    if (left.dataType == StringType && right.dataType == StringType) {
+      val l = left.apply(input)
+      val r = right.apply(input)
+      if(l == null || r == null) {
+        null
+      } else {
+        l.asInstanceOf[String] <= r.asInstanceOf[String]
+      }
+    } else {
+      n2(input, left, right, _.lteq(_, _))
+    }
+  }
 }
 
 case class GreaterThan(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">"
+  override def apply(input: Row): Any = {
+    if (left.dataType == StringType && right.dataType == StringType) {
+      val l = left.apply(input)
+      val r = right.apply(input)
+      if(l == null || r == null) {
+        null
+      } else {
+        l.asInstanceOf[String] > r.asInstanceOf[String]
+      }
+    } else {
+      n2(input, left, right, _.gt(_, _))
+    }
+  }
 }
 
 case class GreaterThanOrEqual(left: Expression, right: Expression) extends BinaryComparison {
   def symbol = ">="
-}
-
-case class IsNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
-  def references = child.references
-  override def foldable = child.foldable
-  def nullable = false
-}
-
-case class IsNotNull(child: Expression) extends Predicate with trees.UnaryNode[Expression] {
-  def references = child.references
-  override def foldable = child.foldable
-  def nullable = false
-  override def toString = s"IS NOT NULL $child"
+  override def apply(input: Row): Any = {
+    if (left.dataType == StringType && right.dataType == StringType) {
+      val l = left.apply(input)
+      val r = right.apply(input)
+      if(l == null || r == null) {
+        null
+      } else {
+        l.asInstanceOf[String] >= r.asInstanceOf[String]
+      }
+    } else {
+      n2(input, left, right, _.gteq(_, _))
+    }
+  }
 }
 
 case class If(predicate: Expression, trueValue: Expression, falseValue: Expression)
@@ -116,6 +198,15 @@ case class If(predicate: Expression, trueValue: Expression, falseValue: Expressi
         s"Can not resolve due to differing types ${trueValue.dataType}, ${falseValue.dataType}")
     }
     trueValue.dataType
+  }
+
+  type EvaluatedType = Any
+  override def apply(input: Row): Any = {
+    if (predicate(input).asInstanceOf[Boolean]) {
+      trueValue.apply(input)
+    } else {
+      falseValue.apply(input)
+    }
   }
 
   override def toString = s"if ($predicate) $trueValue else $falseValue"

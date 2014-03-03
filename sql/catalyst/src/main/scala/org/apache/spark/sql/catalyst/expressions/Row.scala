@@ -65,9 +65,7 @@ object EmptyRow extends Row {
 /**
  * A row implementation that uses an array of objects as the underlying storage.
  */
-class GenericRow(input: Seq[Any]) extends Row {
-  val values = input.toIndexedSeq
-
+class GenericRow(val values: Array[Any]) extends Row {
   def iterator = values.iterator
 
   def length = values.length
@@ -107,8 +105,8 @@ class RowOrdering(ordering: Seq[SortOrder]) extends Ordering[Row] {
     var i = 0
     while (i < ordering.size) {
       val order = ordering(i)
-      val left = Evaluate(order.child, Vector(a))
-      val right = Evaluate(order.child, Vector(b))
+      val left = order.child.apply(a)
+      val right = order.child.apply(b)
 
       if (left == null && right == null) {
         // Both null, continue looking.

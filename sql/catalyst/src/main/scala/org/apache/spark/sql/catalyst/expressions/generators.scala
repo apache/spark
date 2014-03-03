@@ -39,6 +39,8 @@ import catalyst.types._
 abstract class Generator extends Expression with (Row => TraversableOnce[Row]) {
   self: Product =>
 
+  type EvaluatedType = TraversableOnce[Row]
+
   lazy val dataType =
     ArrayType(StructType(output.map(a => StructField(a.name, a.dataType, a.nullable))))
 
@@ -99,14 +101,14 @@ case class Explode(attributeNames: Seq[String], child: Expression)
       }
     }
 
-  def apply(input: Row): TraversableOnce[Row] = {
+  override def apply(input: Row): TraversableOnce[Row] = {
     child.dataType match {
       case ArrayType(_) =>
-        val inputArray = Evaluate(child, Vector(input)).asInstanceOf[Seq[Any]]
-        if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Vector(v)))
+        val inputArray = child.apply(input).asInstanceOf[Seq[Any]]
+        if (inputArray == null) Nil else inputArray.map(v => new GenericRow(Array(v)))
       case MapType(_, _) =>
-        val inputMap = Evaluate(child, Vector(input)).asInstanceOf[Map[Any,Any]]
-        if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Vector(k,v)) }
+        val inputMap = child.apply(input).asInstanceOf[Map[Any,Any]]
+        if (inputMap == null) Nil else inputMap.map { case (k,v) => new GenericRow(Array(k,v)) }
     }
   }
 
