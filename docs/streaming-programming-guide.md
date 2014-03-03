@@ -188,7 +188,7 @@ JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
       return i1 + i2;
     }
   });
-wordCount.print();     // Print a few of the counts to the console
+wordCounts.print();     // Print a few of the counts to the console
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
