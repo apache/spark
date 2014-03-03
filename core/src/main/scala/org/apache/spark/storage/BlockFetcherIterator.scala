@@ -49,7 +49,6 @@ trait BlockFetcherIterator extends Iterator[(BlockId, Option[Iterator[Any]])] wi
   def totalBlocks: Int
   def numLocalBlocks: Int
   def numRemoteBlocks: Int
-  def remoteFetchTime: Long
   def fetchWaitTime: Long
   def remoteBytesRead: Long
 }
@@ -79,7 +78,6 @@ object BlockFetcherIterator {
     import blockManager._
 
     private var _remoteBytesRead = 0L
-    private var _remoteFetchTime = 0L
     private var _fetchWaitTime = 0L
 
     if (blocksByAddress == null) {
@@ -125,7 +123,6 @@ object BlockFetcherIterator {
       future.onSuccess {
         case Some(message) => {
           val fetchDone = System.currentTimeMillis()
-          _remoteFetchTime += fetchDone - fetchStart
           val bufferMessage = message.asInstanceOf[BufferMessage]
           val blockMessageArray = BlockMessageArray.fromBufferMessage(bufferMessage)
           for (blockMessage <- blockMessageArray) {
@@ -241,7 +238,6 @@ object BlockFetcherIterator {
     override def totalBlocks: Int = numLocal + numRemote
     override def numLocalBlocks: Int = numLocal
     override def numRemoteBlocks: Int = numRemote
-    override def remoteFetchTime: Long = _remoteFetchTime
     override def fetchWaitTime: Long = _fetchWaitTime
     override def remoteBytesRead: Long = _remoteBytesRead
  
