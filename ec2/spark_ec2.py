@@ -228,6 +228,7 @@ def launch_cluster(conn, opts, cluster_name):
   master_group = get_or_make_group(conn, cluster_name + "-master")
   slave_group = get_or_make_group(conn, cluster_name + "-slaves")
   if master_group.rules == []: # Group was just now created
+    master_group.vpc_id = None
     master_group.authorize(src_group=master_group)
     master_group.authorize(src_group=slave_group)
     master_group.authorize('tcp', 22, 22, '0.0.0.0/0')
@@ -240,6 +241,7 @@ def launch_cluster(conn, opts, cluster_name):
     if opts.ganglia:
       master_group.authorize('tcp', 5080, 5080, '0.0.0.0/0')
   if slave_group.rules == []: # Group was just now created
+    slave_group.vpc_id = None
     slave_group.authorize(src_group=master_group)
     slave_group.authorize(src_group=slave_group)
     slave_group.authorize('tcp', 22, 22, '0.0.0.0/0')
