@@ -23,6 +23,8 @@ import AssemblyKeys._
 import scala.util.Properties
 import org.scalastyle.sbt.ScalastylePlugin.{Settings => ScalaStyleSettings}
 
+import scala.collection.JavaConversions._
+
 // For Sonatype publishing
 //import com.jsuereth.pgp.sbtplugin.PgpKeys._
 
@@ -123,7 +125,7 @@ object SparkBuild extends Build {
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.apache.spark",
-    version            := "1.0.0-incubating-SNAPSHOT",
+    version            := "1.0.0-SNAPSHOT",
     scalaVersion       := "2.10.3",
     scalacOptions := Seq("-Xmax-classfile-name", "120", "-unchecked", "-deprecation",
       "-target:" + SCALAC_JVM_VERSION),
@@ -140,6 +142,7 @@ object SparkBuild extends Build {
     fork := true,
     javaOptions in Test += "-Dspark.home=" + sparkHome,
     javaOptions in Test += "-Dspark.testing=1",
+    javaOptions in Test ++= System.getProperties.filter(_._1 startsWith "spark").map { case (k,v) => s"-D$k=$v" }.toSeq,
     javaOptions += "-Xmx3g",
     // Show full stack trace and duration in test cases.
     testOptions in Test += Tests.Argument("-oDF"),
@@ -171,7 +174,7 @@ object SparkBuild extends Build {
         <artifactId>apache</artifactId>
         <version>13</version>
       </parent>
-      <url>http://spark.incubator.apache.org/</url>
+      <url>http://spark.apache.org/</url>
       <licenses>
         <license>
           <name>Apache 2.0 License</name>
@@ -180,8 +183,8 @@ object SparkBuild extends Build {
         </license>
       </licenses>
       <scm>
-        <connection>scm:git:git@github.com:apache/incubator-spark.git</connection>
-        <url>scm:git:git@github.com:apache/incubator-spark.git</url>
+        <connection>scm:git:git@github.com:apache/spark.git</connection>
+        <url>scm:git:git@github.com:apache/spark.git</url>
       </scm>
       <developers>
         <developer>
@@ -190,7 +193,7 @@ object SparkBuild extends Build {
           <email>matei.zaharia@gmail.com</email>
           <url>http://www.cs.berkeley.edu/~matei</url>
           <organization>Apache Software Foundation</organization>
-          <organizationUrl>http://spark.incubator.apache.org</organizationUrl>
+          <organizationUrl>http://spark.apache.org</organizationUrl>
         </developer>
       </developers>
       <issueManagement>
@@ -211,7 +214,7 @@ object SparkBuild extends Build {
     */
 
     libraryDependencies ++= Seq(
-        "io.netty"          % "netty-all"       % "4.0.13.Final",
+        "io.netty"          % "netty-all"       % "4.0.17.Final",
         "org.eclipse.jetty" % "jetty-server"    % "7.6.8.v20121106",
         /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
         "org.eclipse.jetty.orbit" % "javax.servlet" % "2.5.0.v201103041518" artifacts Artifact("javax.servlet", "jar", "jar"),
@@ -240,13 +243,11 @@ object SparkBuild extends Build {
 
   val slf4jVersion = "1.7.5"
 
-  val excludeCglib = ExclusionRule(organization = "org.sonatype.sisu.inject")
-  val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
   val excludeAsm = ExclusionRule(organization = "asm")
-  val excludeSnappy = ExclusionRule(organization = "org.xerial.snappy")
   val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
   val excludeSLF4J = ExclusionRule(organization = "org.slf4j")
+  val excludeScalap = ExclusionRule(organization = "org.scala-lang", artifact = "scalap")
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
@@ -270,13 +271,13 @@ object SparkBuild extends Build {
         "org.spark-project.akka"    %% "akka-remote"      % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
         "org.spark-project.akka"    %% "akka-slf4j"       % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
         "org.spark-project.akka"    %% "akka-testkit"     % "2.2.3-shaded-protobuf" % "test",
-        "org.json4s"                %% "json4s-jackson"   % "3.2.6",
+        "org.json4s"                %% "json4s-jackson"   % "3.2.6" excludeAll(excludeScalap),
         "it.unimi.dsi"               % "fastutil"         % "6.4.4",
         "colt"                       % "colt"             % "1.2.0",
         "org.apache.mesos"           % "mesos"            % "0.13.0",
         "net.java.dev.jets3t"        % "jets3t"           % "0.7.1" excludeAll(excludeCommonsLogging),
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
-        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib, excludeCommonsLogging, excludeSLF4J),
+        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J),
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeNetty),
         "com.codahale.metrics"       % "metrics-core"     % "3.0.0",
         "com.codahale.metrics"       % "metrics-jvm"      % "3.0.0",
@@ -313,7 +314,7 @@ object SparkBuild extends Build {
         exclude("io.netty", "netty")
         exclude("jline","jline")
         exclude("org.apache.cassandra.deps", "avro")
-        excludeAll(excludeSnappy, excludeCglib, excludeSLF4J)
+        excludeAll(excludeSLF4J)
     )
   ) ++ assemblySettings ++ extraAssemblySettings
 
@@ -376,10 +377,10 @@ object SparkBuild extends Build {
   def yarnEnabledSettings = Seq(
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
-      "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
-      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
-      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib),
-      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeJackson, excludeNetty, excludeAsm, excludeCglib)
+      "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeNetty, excludeAsm),
+      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeNetty, excludeAsm)
     )
   )
 
@@ -425,7 +426,7 @@ object SparkBuild extends Build {
   def flumeSettings() = sharedSettings ++ Seq(
     name := "spark-streaming-flume",
     libraryDependencies ++= Seq(
-      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty, excludeSnappy)
+      "org.apache.flume" % "flume-ng-sdk" % "1.2.0" % "compile" excludeAll(excludeNetty)
     )
   )
 
