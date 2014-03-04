@@ -25,7 +25,7 @@ FWDIR="$(cd `dirname $0`/..; pwd)"
 if [[ -z "$MASTER" ]]; then
   echoerr "Sparkify: Connecting to chicago spark cluster ..."
   export MASTER=spark://dn05.chi.shopify.com:7077
-  export SPARK_JAVA_OPTS="-Dspark.cores.max=10"
+  export SPARK_JAVA_OPTS="-Dspark.cores.max=150 $SPARK_JAVA_OPTS"
   export SPARK_CLASSPATH="$FWDIR/conf/chicago_hadoop:$SPARK_CLASSPATH"
 
   # Figure out the local IP to bind spark to for shell <-> master communication
@@ -61,4 +61,5 @@ fi
 
 if [[ $MASTER == 'local' ]]; then
   export SPARK_LOCAL_IP=127.0.0.1
+  export SPARK_JAVA_OPTS="-Dspark.ui.port=0"
 fi
