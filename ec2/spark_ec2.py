@@ -402,9 +402,9 @@ def get_existing_cluster(conn, opts, cluster_name, die_on_error=True):
     return (master_nodes, slave_nodes)
   else:
     if master_nodes == [] and slave_nodes != []:
-      print "ERROR: Could not find master in group " + cluster_name + "-master"
+      print >> sys.stderr, "ERROR: Could not find master in group " + cluster_name + "-master"
     else:
-      print "ERROR: Could not find any existing cluster"
+      print >> sys.stderr, "ERROR: Could not find any existing cluster"
     sys.exit(1)
 
 
@@ -679,7 +679,7 @@ def real_main():
 
   if action == "launch":
     if opts.slaves <= 0:
-      print "You have to start at least 1 slave"
+      print >> sys.stderr, "ERROR: You have to start at least 1 slave"
       sys.exit(1)
     if opts.resume:
       (master_nodes, slave_nodes) = get_existing_cluster(
