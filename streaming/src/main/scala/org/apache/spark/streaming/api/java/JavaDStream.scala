@@ -41,7 +41,7 @@ class JavaDStream[T](val dstream: DStream[T])(implicit val classTag: ClassTag[T]
 
   /** Return a new DStream containing only the elements that satisfy a predicate. */
   def filter(f: JFunction[T, java.lang.Boolean]): JavaDStream[T] =
-    dstream.filter((x => f(x).booleanValue()))
+    dstream.filter((x => f.call(x).booleanValue()))
 
   /** Persist RDDs of this DStream with the default storage level (MEMORY_ONLY_SER) */
   def cache(): JavaDStream[T] = dstream.cache()

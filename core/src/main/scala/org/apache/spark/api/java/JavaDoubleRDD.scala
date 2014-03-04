@@ -83,7 +83,7 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: JFunction[JDouble, java.lang.Boolean]): JavaDoubleRDD =
-    fromRDD(srdd.filter(x => f(x).booleanValue()))
+    fromRDD(srdd.filter(x => f.call(x).booleanValue()))
 
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.

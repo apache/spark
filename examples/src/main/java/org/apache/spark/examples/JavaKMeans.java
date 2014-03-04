@@ -98,7 +98,7 @@ public final class JavaKMeans {
     double tempDist;
     do {
       // allocate each vector to closest centroid
-      JavaPairRDD<Integer, Vector> closest = data.map(
+      JavaPairRDD<Integer, Vector> closest = data.mapToPair(
         new PairFunction<Vector, Integer, Vector>() {
           @Override
           public Tuple2<Integer, Vector> call(Vector vector) {
