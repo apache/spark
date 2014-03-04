@@ -203,14 +203,4 @@ private[ui] class ExecutorsListener extends StorageStatusSparkListener {
       super.onTaskEnd(taskEnd)
     }
   }
-
-  /**
-   * In the local mode, there is a discrepancy between the executor ID according to the
-   * task ("localhost") and that according to SparkEnv ("<driver>"). This results in
-   * duplicate rows for the same executor. Thus, in this mode, we aggregate these two
-   * rows and use the executor ID of "<driver>" to be consistent.
-   */
-  private def formatExecutorId(execId: String): String = {
-    if (execId == "localhost") "<driver>" else execId
-  }
 }

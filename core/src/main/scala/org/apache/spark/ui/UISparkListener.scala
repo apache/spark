@@ -41,10 +41,16 @@ private[ui] trait UISparkListener extends SparkListener
  *
  *  (2) If the UI is rendered from disk, GatewayUISparkListener replays each event deserialized
  *      from the event logs to all attached listeners.
+ *
+ * Event logging is specified by three configurable parameters:
+ *
+ *   spark.eventLog.enabled - Whether event logging is enabled.
+ *   spark.eventLog.dir - Path to the directory in which events are logged.
+ *   spark.eventLog.overwrite - Whether to overwrite any existing files.
  */
 private[ui] class GatewayUISparkListener(parent: SparkUI, sc: SparkContext) extends SparkListener {
 
-  // Log events only if the UI is live
+  // Log events only if the UI is live and event logging is enabled
   private val logger: Option[FileLogger] = {
     if (sc != null && sc.conf.getBoolean("spark.eventLog.enabled", false)) {
       val logDir = sc.conf.get("spark.eventLog.dir", "/tmp/spark-events")
@@ -154,7 +160,7 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
   override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
     val info = taskEnd.taskInfo
     if (info != null) {
-      val execId = info.executorId
+      val execId = formatExecutorId(info.executorId)
       val metrics = taskEnd.taskMetrics
       if (metrics != null) {
         val updatedBlocks = metrics.updatedBlocks.getOrElse(Seq())
@@ -171,6 +177,16 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
 
   override def onExecutorsStateChange(executorsStateChange: SparkListenerExecutorsStateChange) {
     storageStatusList = executorsStateChange.storageStatusList
+  }
+
+  /**
+   * In the local mode, there is a discrepancy between the executor ID according to the
+   * task ("localhost") and that according to SparkEnv ("<driver>"). This results in
+   * duplicate rows for the same executor. Thus, in this mode, we aggregate these two
+   * rows and use the executor ID of "<driver>" to be consistent.
+   */
+  protected def formatExecutorId(execId: String): String = {
+    if (execId == "localhost") "<driver>" else execId
   }
 }
 
