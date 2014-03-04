@@ -140,6 +140,7 @@ private[spark] class ExecutorRunner(
       // long-lived processes only. However, in the future, we might restart the executor a few
       // times on the same machine.
       val exitCode = process.waitFor()
+      killProcess()
       state = ExecutorState.FAILED
       val message = "Command exited with code " + exitCode
       worker ! ExecutorStateChanged(appId, execId, state, Some(message), Some(exitCode))
@@ -150,9 +151,7 @@ private[spark] class ExecutorRunner(
       }
       case e: Exception => {
         logError("Error running executor", e)
-        if (process != null) {
-          process.destroy()
-        }
+        killProcess()
         state = ExecutorState.FAILED
         val message = e.getClass + ": " + e.getMessage
         worker ! ExecutorStateChanged(appId, execId, state, Some(message), None)
