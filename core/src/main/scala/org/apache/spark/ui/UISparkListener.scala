@@ -54,8 +54,9 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, sc: SparkContext) exte
   private val logger: Option[FileLogger] = {
     if (sc != null && sc.conf.getBoolean("spark.eventLog.enabled", false)) {
       val logDir = sc.conf.get("spark.eventLog.dir", "/tmp/spark-events")
+      val appName = sc.appName.replaceAll("[ /]", "_").toLowerCase
       val overwrite = sc.conf.getBoolean("spark.eventLog.overwrite", true)
-      Some(new FileLogger(logDir, overwriteExistingFiles = overwrite))
+      Some(new FileLogger(logDir, appName, overwriteExistingFiles = overwrite))
     } else None
   }
 

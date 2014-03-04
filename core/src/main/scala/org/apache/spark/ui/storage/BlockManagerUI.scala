@@ -28,8 +28,6 @@ import org.apache.spark.ui._
 private[ui] class BlockManagerUI(parent: SparkUI) {
   lazy val appName = parent.appName
   lazy val listener = _listener.get
-  val live = parent.live
-  val sc = parent.sc
 
   private val indexPage = new IndexPage(this)
   private val rddPage = new RDDPage(this)
