@@ -50,6 +50,40 @@ The system currently supports three cluster managers:
 In addition, Spark's [EC2 launch scripts](ec2-scripts.html) make it easy to launch a standalone
 cluster on Amazon EC2.
 
+# Launching Applications
+
+The recommended way to launch a compiled Spark application is through the spark-submit script (located in the
+bin directory), which takes care of setting up the classpath with Spark and its dependencies, as well as
+provides a layer over the different cluster managers and deploy modes that Spark supports.  It's usage is
+
+  spark-submit <jar> <options>
+
+Where options are any of:
+
+- **--class** - The main class to run.
+- **--master** - The URL of the cluster manager master, e.g. spark://host:port, mesos://host:port, yarn,
+  or local.
+- **--deploy-mode** - "client" to run the driver in the client process or "cluster" to run the driver in
+  a process on the cluster.  For Mesos, only "client" is supported.
+- **--executor-memory** - Memory per executor (e.g. 1000M, 2G).
+- **--executor-cores** - Number of cores per executor.
+- **--driver-memory** - Memory for driver (e.g. 1000M, 2G)
+- **--name** - Name of the application.
+- **--arg** - Argument to be passed to the application's main class. This option can be specified
+  multiple times to pass multiple arguments.
+  
+The following currently only work for YARN:
+
+- **--queue** - The YARN queue to place the application in.
+- **--files** - Comma separated list of files to be placed next to all executors
+- **--archives** - Comma separated list of archives to be extracted next to all executors
+- **--num-executors** - Number of executors to start.
+- **--more-jars** - For the "cluster" deploy mode, a comma-separated list of local jars
+  that you want SparkContext.addJar to work with.
+
+The master and deploy mode can also be set with the MASTER and DEPLOY_MODE environment variables.
+Values for these options passed via command line will override the environment variables.
+
 # Shipping Code to the Cluster
 
 The recommended way to ship your code to the cluster is to pass it through SparkContext's constructor,
