@@ -23,16 +23,17 @@ import java.nio.ByteBuffer
 import org.apache.spark.SparkConf
 import org.apache.spark.util.ByteBufferInputStream
 
-private[spark] class JavaSerializationStream(out: OutputStream,
-                                             conf: SparkConf) extends SerializationStream {
+private[spark] class JavaSerializationStream(out: OutputStream, conf: SparkConf)
+  extends SerializationStream {
   val objOut = new ObjectOutputStream(out)
   var counter = 0
   val counterReset = conf.getInt("spark.serializer.objectStreamReset", 10000)
 
-  /* Calling reset to avoid memory leak:
+  /**
+   * Calling reset to avoid memory leak:
    * http://stackoverflow.com/questions/1281549/memory-leak-traps-in-the-java-standard-api
-   * But only call it every 1000th time to avoid bloated serialization streams (when
-   * the stream 'resets' object class descriptions have to be re-written)  
+   * But only call it every 10,000th time to avoid bloated serialization streams (when
+   * the stream 'resets' object class descriptions have to be re-written)
    */
   def writeObject[T](t: T): SerializationStream = {
     objOut.writeObject(t)
