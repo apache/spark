@@ -27,6 +27,16 @@ rm -rf ./work
 # Fail fast
 set -e
 
+if test -x "$JAVA_HOME/bin/java"; then
+    declare java_cmd="$JAVA_HOME/bin/java"
+else 
+    declare java_cmd=java
+fi
+
+JAVA_VERSION=$($java_cmd -version 2>&1 | sed 's/java version "\(.*\)\.\(.*\)\..*"/\1\2/; 1q')
+[ "$JAVA_VERSION" -ge 18 ] && echo "" || echo "[Warn] Java 8 tests will not run, because JDK version is < 1.8."
+
+
 echo "========================================================================="
 echo "Running Scala style checks"
 echo "========================================================================="

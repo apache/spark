@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import scala.reflect.ClassTag
+import java.io.Serializable;
+
+import scala.Tuple2;
 
 /**
- * A function that takes two inputs and returns zero or more output records.
+ * A function that returns key-value pairs (Tuple2<K, V>), and can be used to construct PairRDDs.
  */
-abstract class FlatMapFunction2[A, B, C] extends Function2[A, B, java.lang.Iterable[C]] {
-  def elementType() : ClassTag[C] = ClassTag.Any.asInstanceOf[ClassTag[C]]
+public interface PairFunction<T, K, V> extends Serializable {
+  public Tuple2<K, V> call(T t) throws Exception;
 }
