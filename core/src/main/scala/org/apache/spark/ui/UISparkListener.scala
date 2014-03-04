@@ -22,11 +22,11 @@ import scala.collection.mutable.ArrayBuffer
 
 import org.json4s.jackson.JsonMethods._
 
+import org.apache.spark.SparkContext
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 import org.apache.spark.util.FileLogger
 import org.apache.spark.util.JsonProtocol
-import org.apache.spark.SparkContext
 
 private[ui] trait UISparkListener extends SparkListener
 
@@ -74,7 +74,7 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, sc: SparkContext) exte
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
     listeners.foreach(_.onStageCompleted(stageCompleted))
-    logEvent(stageCompleted)
+    logEvent(stageCompleted, flushLogger = true)
   }
 
   override def onTaskStart(taskStart: SparkListenerTaskStart) {
@@ -122,7 +122,7 @@ private[ui] class GatewayUISparkListener(parent: SparkUI, sc: SparkContext) exte
     logEvent(unpersistRDD, flushLogger = true)
   }
 
-  def stop() = logger.foreach(_.close())
+  def stop() = logger.foreach(_.stop())
 }
 
 /**
