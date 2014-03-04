@@ -51,7 +51,8 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
   class DriverActor(sparkProperties: Seq[(String, String)]) extends Actor {
     private val executorActor = new HashMap[String, ActorRef]
-    private val workerOffers = new HashMap[String, WorkerOffer]
+    private val executorAddress = new HashMap[String, Address]
+    private val executorHost = new HashMap[String, String]
     private val freeCores = new HashMap[String, Int]
     private val totalCores = new HashMap[String, Int]
     private val addressToExecutorId = new HashMap[Address, String]
@@ -75,10 +76,10 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           logInfo("Registered executor: " + sender + " with ID " + executorId)
           sender ! RegisteredExecutor(sparkProperties)
           executorActor(executorId) = sender
-          workerOffers += (executorId ->
-            new WorkerOffer(executorId, Utils.parseHostPort(hostPort)._1, cores))
-          totalCores += (executorId -> cores)
-          freeCores += (executorId -> cores)
+          executorHost(executorId) = Utils.parseHostPort(hostPort)._1
+          totalCores(executorId) = cores
+          freeCores(executorId) = cores
+          executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
           totalCoreCount.addAndGet(cores)
           makeOffers()
@@ -126,18 +127,14 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
 
     // Make fake resource offers on all executors
     def makeOffers() {
-      // reconstruct workerOffers
-      workerOffers.keys.foreach { executorId =>
-        workerOffers(executorId) = workerOffers(executorId).copy(cores = freeCores(executorId))
-      }
-      launchTasks(scheduler.resourceOffers(workerOffers.values.toSeq))
+      launchTasks(scheduler.resourceOffers(
+        executorHost.toArray.map {case (id, host) => new WorkerOffer(id, host, freeCores(id))}))
     }
 
     // Make fake resource offers on just one executor
     def makeOffers(executorId: String) {
-      // update the workerOffer
-      workerOffers(executorId) = workerOffers(executorId).copy(cores = freeCores(executorId))
-      launchTasks(scheduler.resourceOffers(Seq(workerOffers(executorId))))
+      launchTasks(scheduler.resourceOffers(
+        Seq(new WorkerOffer(executorId, executorHost(executorId), freeCores(executorId)))))
     }
 
     // Launch tasks returned by a set of resource offers
@@ -154,7 +151,9 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
         logInfo("Executor " + executorId + " disconnected, so removing it")
         val numCores = totalCores(executorId)
         executorActor -= executorId
-        workerOffers -= executorId
+        executorHost -= executorId
+        addressToExecutorId -= executorAddress(executorId)
+        executorAddress -= executorId
         totalCores -= executorId
         freeCores -= executorId
         totalCoreCount.addAndGet(-numCores)
