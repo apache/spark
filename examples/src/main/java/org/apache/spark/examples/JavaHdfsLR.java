@@ -45,7 +45,7 @@ public final class JavaHdfsLR {
     double y;
   }
 
-  static class ParsePoint extends Function<String, DataPoint> {
+  static class ParsePoint implements Function<String, DataPoint> {
     private static final Pattern SPACE = Pattern.compile(" ");
 
     @Override
@@ -60,7 +60,7 @@ public final class JavaHdfsLR {
     }
   }
 
-  static class VectorSum extends Function2<double[], double[], double[]> {
+  static class VectorSum implements Function2<double[], double[], double[]> {
     @Override
     public double[] call(double[] a, double[] b) {
       double[] result = new double[D];
@@ -71,7 +71,7 @@ public final class JavaHdfsLR {
     }
   }
 
-  static class ComputeGradient extends Function<DataPoint, double[]> {
+  static class ComputeGradient implements Function<DataPoint, double[]> {
     private final double[] weights;
 
     ComputeGradient(double[] weights) {

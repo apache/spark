@@ -63,7 +63,7 @@ public final class JavaQueueStream {
 
     // Create the QueueInputDStream and use it do some processing
     JavaDStream<Integer> inputStream = ssc.queueStream(rddQueue);
-    JavaPairDStream<Integer, Integer> mappedStream = inputStream.map(
+    JavaPairDStream<Integer, Integer> mappedStream = inputStream.mapToPair(
         new PairFunction<Integer, Integer, Integer>() {
           @Override
           public Tuple2<Integer, Integer> call(Integer i) {

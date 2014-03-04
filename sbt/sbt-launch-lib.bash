@@ -16,7 +16,14 @@ declare -a residual_args
 declare -a java_args
 declare -a scalac_args
 declare -a sbt_commands
-declare java_cmd=java
+
+if test -x "$JAVA_HOME/bin/java"; then
+    echo -e "Using $JAVA_HOME as default JAVA_HOME."
+    echo "Note, this will be overridden by -java-home if it is set."
+    declare java_cmd="$JAVA_HOME/bin/java"
+else
+    declare java_cmd=java
+fi
 
 echoerr () {
   echo 1>&2 "$@"
@@ -131,7 +138,7 @@ process_args () {
 
        -sbt-jar) require_arg path "$1" "$2" && sbt_jar="$2" && shift 2 ;;
    -sbt-version) require_arg version "$1" "$2" && sbt_version="$2" && shift 2 ;;
-     -java-home) require_arg path "$1" "$2" && java_cmd="$2/bin/java" && shift 2 ;;
+     -java-home) require_arg path "$1" "$2" && java_cmd="$2/bin/java" && export JAVA_HOME=$2 && shift 2 ;;
 
             -D*) addJava "$1" && shift ;;
             -J*) addJava "${1:2}" && shift ;;
