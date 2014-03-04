@@ -127,15 +127,16 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     // Make fake resource offers on all executors
     def makeOffers() {
       // reconstruct workerOffers
-      workerOffers.foreach(o => workerOffers(o._1) =
-        new WorkerOffer(o._1, o._2.host, freeCores(o._1)))
+      workerOffers.keys.foreach { executorId =>
+        workerOffers(executorId) = workerOffers(executorId).copy(cores = freeCores(executorId))
+      }
       launchTasks(scheduler.resourceOffers(workerOffers.values.toSeq))
     }
 
     // Make fake resource offers on just one executor
     def makeOffers(executorId: String) {
-      val oldOffer = workerOffers(executorId)
-      workerOffers(executorId) = new WorkerOffer(executorId, oldOffer.host, freeCores(executorId))
+      // update the workerOffer
+      workerOffers(executorId) = workerOffers(executorId).copy(cores = freeCores(executorId))
       launchTasks(scheduler.resourceOffers(Seq(workerOffers(executorId))))
     }
 
