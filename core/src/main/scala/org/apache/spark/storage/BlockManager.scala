@@ -540,7 +540,7 @@ private[spark] class BlockManager(
     // If we're storing bytes, then initiate the replication before storing them locally.
     // This is faster as data is already serialized and ready to send.
     val replicationFuture = if (data.isInstanceOf[ByteBufferValues] && level.replication > 1) {
-      //Duplicate doesn't copy the bytes, just creates a wrapper
+      // Duplicate doesn't copy the bytes, just creates a wrapper
       val bufferView = data.asInstanceOf[ByteBufferValues].buffer.duplicate()
       Future {
         replicate(blockId, bufferView, level)
@@ -559,13 +559,13 @@ private[spark] class BlockManager(
           // Save it just to memory first, even if it also has useDisk set to true; we will
           // drop it to disk later if the memory store can't hold it.
           val res = data match {
-            case IteratorValues(values_i) =>
-              memoryStore.putValues(blockId, values_i, level, true)
-            case ArrayBufferValues(values_a) =>
-              memoryStore.putValues(blockId, values_a, level, true)
-            case ByteBufferValues(value_bytes) => {
-              value_bytes.rewind();
-              memoryStore.putBytes(blockId, value_bytes, level)
+            case IteratorValues(iterator) =>
+              memoryStore.putValues(blockId, iterator, level, true)
+            case ArrayBufferValues(array) =>
+              memoryStore.putValues(blockId, array, level, true)
+            case ByteBufferValues(bytes) => {
+              bytes.rewind();
+              memoryStore.putBytes(blockId, bytes, level)
             }
           }
           size = res.size
@@ -579,13 +579,13 @@ private[spark] class BlockManager(
           val askForBytes = level.replication > 1
 
           val res = data match {
-            case IteratorValues(values_i) =>
-              diskStore.putValues(blockId, values_i, level, askForBytes)
-            case ArrayBufferValues(values_a) =>
-              diskStore.putValues(blockId, values_a, level, askForBytes)
-            case ByteBufferValues(value_bytes) => {
-              value_bytes.rewind();
-              diskStore.putBytes(blockId, value_bytes, level)
+            case IteratorValues(iterator) =>
+              diskStore.putValues(blockId, iterator, level, askForBytes)
+            case ArrayBufferValues(array) =>
+              diskStore.putValues(blockId, array, level, askForBytes)
+            case ByteBufferValues(bytes) => {
+              bytes.rewind();
+              diskStore.putBytes(blockId, bytes, level)
             }
           }
           size = res.size

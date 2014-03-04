@@ -36,48 +36,39 @@ class FlatmapIteratorSuite extends FunSuite with LocalSparkContext {
     val sconf = new SparkConf().setMaster("local-cluster[1,1,512]")
       .setAppName("iterator_to_disk_test")
     sc = new SparkContext(sconf)
-    try {
-      val expand_size = 100
-      val data = sc.parallelize( (1 to 5).toSeq ).
-        flatMap( x => Stream.range(0, expand_size) )
-      var persisted = data.persist(StorageLevel.DISK_ONLY)
-      println(persisted.count())
-      assert( persisted.count() == 500)
-      assert( persisted.filter( _==1 ).count() == 5 )
-    } catch {
-      case _ : OutOfMemoryError => assert(false)
-    }
+    val expand_size = 100
+    val data = sc.parallelize((1 to 5).toSeq).
+      flatMap( x => Stream.range(0, expand_size))
+    var persisted = data.persist(StorageLevel.DISK_ONLY)
+    println(persisted.count())
+    assert(persisted.count()===500)
+    assert(persisted.filter(_==1).count()===5)
   }
 
   test("Flatmap Iterator to Memory") {
     val sconf = new SparkConf().setMaster("local-cluster[1,1,512]")
       .setAppName("iterator_to_disk_test")
     sc = new SparkContext(sconf)
-    try {
-      val expand_size = 100
-      val data = sc.parallelize( (1 to 5).toSeq ).
-        flatMap( x => Stream.range(0, expand_size) )
-      var persisted = data.persist(StorageLevel.MEMORY_ONLY)
-      println(persisted.count())
-      assert( persisted.count() == 500)
-      assert( persisted.filter( _==1 ).count() == 5 )
-    } catch {
-      case _ : OutOfMemoryError => assert(false)
-    }
+    val expand_size = 100
+    val data = sc.parallelize((1 to 5).toSeq).
+      flatMap(x => Stream.range(0, expand_size))
+    var persisted = data.persist(StorageLevel.MEMORY_ONLY)
+    println(persisted.count())
+    assert(persisted.count()===500)
+    assert(persisted.filter(_==1).count()===5)
   }
 
   test("Serializer Reset") {
     val sconf = new SparkConf().setMaster("local-cluster[1,1,512]")
       .setAppName("serializer_reset_test")
       .set("spark.serializer.objectStreamReset", "10")
-
     sc = new SparkContext(sconf)
     val expand_size = 500
-    val data = sc.parallelize( Seq(1,2) ).
-      flatMap( x => Stream.range(1, expand_size).
-      map( y => "%d: string test %d".format(y,x) ) )
+    val data = sc.parallelize(Seq(1,2)).
+      flatMap(x => Stream.range(1, expand_size).
+      map(y => "%d: string test %d".format(y,x)))
     var persisted = data.persist(StorageLevel.MEMORY_ONLY_SER)
-    assert( persisted.filter( _.startsWith("1:") ).count() == 2 )
+    assert(persisted.filter(_.startsWith("1:")).count()===2)
   }
 
 }

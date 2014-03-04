@@ -56,10 +56,10 @@ private class DiskStore(blockManager: BlockManager, diskManager: DiskBlockManage
   }
 
   override def putValues(
-                          blockId: BlockId,
-                          values: ArrayBuffer[Any],
-                          level: StorageLevel,
-                          returnValues: Boolean)
+      blockId: BlockId,
+      values: ArrayBuffer[Any],
+      level: StorageLevel,
+      returnValues: Boolean)
   : PutResult = {
     return putValues(blockId, values.toIterator, level, returnValues)
   }

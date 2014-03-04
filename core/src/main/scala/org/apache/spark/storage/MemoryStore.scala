@@ -67,10 +67,10 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 
   override def putValues(
-                          blockId: BlockId,
-                          values: ArrayBuffer[Any],
-                          level: StorageLevel,
-                          returnValues: Boolean)
+      blockId: BlockId,
+      values: ArrayBuffer[Any],
+      level: StorageLevel,
+      returnValues: Boolean)
   : PutResult = {
     if (level.deserialized) {
       val sizeEstimate = SizeEstimator.estimate(values.asInstanceOf[AnyRef])
