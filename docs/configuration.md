@@ -236,7 +236,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>6</td>
   <td>
     When using Netty, this parameter specifies the number of concurrent threads fetching the shuffle results. This parameter
-     is only valid when <code>spark.shuffle.use.netty</code> is set to true
+     is only valid when <code>spark.shuffle.use.netty</code> is set to true.
   </td>
 </tr>
 <tr>
@@ -244,6 +244,14 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     If use Netty to fetch map output in shuffle.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.sender.port</td>
+  <td>0</td>
+  <td>
+    When using Netty to send result for shuffle, this parameter specifies the port to use for data transfer.
+    This parameter is only valid when <code>spark.shuffle.use.netty</code> is set to true.
   </td>
 </tr>
 <tr>
