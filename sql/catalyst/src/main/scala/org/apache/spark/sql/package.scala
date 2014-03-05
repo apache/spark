@@ -34,7 +34,7 @@ package object sql {
 
   object Row {
     /**
-     * This method can be used to extract fields from a [[Row]] object in a patten match. Example:
+     * This method can be used to extract fields from a [[Row]] object in a pattern match. Example:
      * {{{
      * import org.apache.spark.sql._
      *
