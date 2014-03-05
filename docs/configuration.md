@@ -495,6 +495,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.task.cpus</td>
+  <td>1</td>
+  <td>
+    CPUs to request per task
+  </td>
+</tr>
+<tr>
   <td>spark.broadcast.blockSize</td>
   <td>4096</td>
   <td>
