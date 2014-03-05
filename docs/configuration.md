@@ -576,6 +576,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.logging.exceptionPrintInterval</td>
+  <td>10000</td>
+  <td>
+    How frequently the driver reprints duplicate exceptions in full. (in milliseconds)
+  </td>
+</tr>
+<tr>
   <td>spark.dead.worker.persistence</td>
   <td>15</td>
   <td>
