@@ -18,122 +18,24 @@
 package org.apache.spark.ui
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 
-import org.json4s.jackson.JsonMethods._
-
-import org.apache.spark.SparkContext
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
-import org.apache.spark.util.FileLogger
-import org.apache.spark.util.JsonProtocol
 
 private[ui] trait UISparkListener extends SparkListener
 
 /**
- * A SparkListener that serves as an entry point for all events posted to the UI.
- *
- * GatewayUISparkListener achieves two functions:
- *
- *  (1) If the UI is live, GatewayUISparkListener posts each event to all attached listeners
- *      then logs it as JSON. This centralizes event logging and avoids having all attached
- *      listeners log the events on their own.
- *
- *  (2) If the UI is rendered from disk, GatewayUISparkListener replays each event deserialized
- *      from the event logs to all attached listeners.
- *
- * Event logging is specified by three configurable parameters:
- *
- *   spark.eventLog.enabled - Whether event logging is enabled.
- *   spark.eventLog.dir - Path to the directory in which events are logged.
- *   spark.eventLog.overwrite - Whether to overwrite any existing files.
+ * A SparkListener that listens only for application start events to set the app name for the UI.
  */
-private[ui] class GatewayUISparkListener(parent: SparkUI, sc: SparkContext) extends SparkListener {
-
-  // Log events only if the UI is live and event logging is enabled
-  private val logger: Option[FileLogger] = {
-    if (sc != null && sc.conf.getBoolean("spark.eventLog.enabled", false)) {
-      val logDir = sc.conf.get("spark.eventLog.dir", "/tmp/spark-events")
-      val appName = sc.appName.replaceAll("[ /]", "_").toLowerCase
-      val overwrite = sc.conf.getBoolean("spark.eventLog.overwrite", true)
-      Some(new FileLogger(logDir, appName, overwriteExistingFiles = overwrite))
-    } else None
-  }
-
-  // Children listeners for which this gateway is responsible
-  private val listeners = ArrayBuffer[UISparkListener]()
-
-  def registerSparkListener(listener: UISparkListener) = listeners += listener
-
-  /** Log the event as JSON */
-  private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
-    val eventJson = compact(render(JsonProtocol.sparkEventToJson(event)))
-    logger.foreach(_.logLine(eventJson))
-    if (flushLogger) {
-      logger.foreach(_.flush())
-    }
-  }
-
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
-    listeners.foreach(_.onStageSubmitted(stageSubmitted))
-    logEvent(stageSubmitted)
-  }
-
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
-    listeners.foreach(_.onStageCompleted(stageCompleted))
-    logEvent(stageCompleted, flushLogger = true)
-  }
-
-  override def onTaskStart(taskStart: SparkListenerTaskStart) {
-    listeners.foreach(_.onTaskStart(taskStart))
-    logEvent(taskStart)
-  }
-  override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult) {
-    listeners.foreach(_.onTaskGettingResult(taskGettingResult))
-    logEvent(taskGettingResult)
-  }
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-    listeners.foreach(_.onTaskEnd(taskEnd))
-    logEvent(taskEnd)
-  }
-
-  override def onJobStart(jobStart: SparkListenerJobStart) {
-    listeners.foreach(_.onJobStart(jobStart))
-    logEvent(jobStart, flushLogger = true)
-  }
-
-  override def onJobEnd(jobEnd: SparkListenerJobEnd) {
-    listeners.foreach(_.onJobEnd(jobEnd))
-    logEvent(jobEnd, flushLogger = true)
-  }
-
+private[ui] class AppNameListener(parent: SparkUI) extends UISparkListener {
   override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
-    // For live UI's, this should be equivalent to sc.appName
-    parent.setAppName(applicationStart.appName)
-    listeners.foreach(_.onApplicationStart(applicationStart))
-    logEvent(applicationStart, flushLogger = true)
+    val appName = applicationStart.appName
+    parent.setAppName(appName)
   }
-
-  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
-    listeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
-    logEvent(environmentUpdate)
-  }
-
-  override def onExecutorsStateChange(executorsStateChange: SparkListenerExecutorsStateChange) {
-    listeners.foreach(_.onExecutorsStateChange(executorsStateChange))
-    logEvent(executorsStateChange, flushLogger = true)
-  }
-
-  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) {
-    listeners.foreach(_.onUnpersistRDD(unpersistRDD))
-    logEvent(unpersistRDD, flushLogger = true)
-  }
-
-  def stop() = logger.foreach(_.stop())
 }
 
 /**
- * A UISparkListener that maintains executor storage status
+ * A SparkListener that maintains executor storage status
  */
 private[ui] class StorageStatusSparkListener extends UISparkListener {
   var storageStatusList = Seq[StorageStatus]()
@@ -192,7 +94,7 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
 }
 
 /**
- * A UISparkListener that maintains RDD information
+ * A SparkListener that maintains RDD information
  */
 private[ui] class RDDInfoSparkListener extends StorageStatusSparkListener {
   private val _rddInfoMap = mutable.Map[Int, RDDInfo]()

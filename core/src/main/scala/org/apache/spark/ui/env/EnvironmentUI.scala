@@ -20,7 +20,6 @@ package org.apache.spark.ui.env
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
-
 import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.scheduler._
@@ -35,9 +34,7 @@ private[ui] class EnvironmentUI(parent: SparkUI) {
   private var _listener: Option[EnvironmentListener] = None
 
   def start() {
-    val gateway = parent.gatewayListener
     _listener = Some(new EnvironmentListener())
-    gateway.registerSparkListener(listener)
   }
 
   def getHandlers = Seq[(String, Handler)](

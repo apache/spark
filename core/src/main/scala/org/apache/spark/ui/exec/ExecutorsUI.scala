@@ -38,9 +38,7 @@ private[ui] class ExecutorsUI(parent: SparkUI) {
   private var _listener: Option[ExecutorsListener] = None
 
   def start() {
-    val gateway = parent.gatewayListener
     _listener = Some(new ExecutorsListener())
-    gateway.registerSparkListener(listener)
   }
 
   def getHandlers = Seq[(String, Handler)](

@@ -22,81 +22,82 @@ import java.text.SimpleDateFormat
 import java.net.URI
 import java.util.Date
 
+import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
+
 import org.apache.spark.Logging
-import org.apache.spark.deploy.SparkHadoopUtil
-import org.apache.hadoop.fs.{FSDataOutputStream, Path, FileSystem}
+import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 
 /**
  * A generic class for logging information to file.
  *
  * @param logBaseDir Path to the directory in which files are logged
  * @param name An identifier of each FileLogger instance
- * @param overwriteExistingFiles Whether to overwrite existing files
+ * @param overwrite Whether to overwrite existing files
  */
 class FileLogger(
     logBaseDir: String,
     name: String = String.valueOf(System.currentTimeMillis()),
-    overwriteExistingFiles: Boolean = true)
+    overwrite: Boolean = true)
   extends Logging {
 
   private val logDir = logBaseDir.stripSuffix("/") + "/" + name
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
+  private val fileSystem = Utils.getHadoopFileSystem(logDir)
   private var fileIndex = 0
 
-  // Only defined if the file system scheme uses the Hadoop API
+  // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
-  private var hadoopFileSystem: Option[FileSystem] = None
 
   private var writer: Option[PrintWriter] = {
     createLogDir()
-    createWriter()
+    Some(createWriter())
   }
 
-  /** Create a logging directory with the given path */
+  /** Create a logging directory with the given path. */
   private def createLogDir() {
-    val dir = new File(logDir)
-    if (dir.exists) {
-      logWarning("Logging directory already exists: " + logDir)
+    val path = new Path(logDir)
+    if (fileSystem.exists(path)) {
+      logWarning("Log directory already exists.")
+      if (overwrite) {
+        // Second parameter is whether to delete recursively
+        fileSystem.delete(path, true)
+      }
     }
-    if (!dir.exists && !dir.mkdirs()) {
+    if (!fileSystem.mkdirs(path)) {
       // Logger should throw a exception rather than continue to construct this object
       throw new IOException("Error in creating log directory:" + logDir)
     }
   }
 
   /**
-   * Create a new writer for the file identified by the given path.
-   *
-   * File systems currently supported include HDFS, S3, and the local file system.
-   * The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
-   * Therefore, for local files, use FileOutputStream instead.
+   * Create a new writer for the file identified by the given path. File systems currently
+   * supported include HDFS, S3, and the local file system.
    */
-  private def createWriter(): Option[PrintWriter] = {
+  private def createWriter(): PrintWriter = {
     val logPath = logDir + "/" + fileIndex
     val uri = new URI(logPath)
 
+    /**
+     * The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
+     * Therefore, for local files, use FileOutputStream instead.
+     */
     val dataStream = uri.getScheme match {
       case "hdfs" | "s3" =>
-        val fs = hadoopFileSystem.getOrElse {
-          val conf = SparkHadoopUtil.get.newConfiguration()
-          hadoopFileSystem = Some(FileSystem.get(uri, conf))
-          hadoopFileSystem.get
-        }
         val path = new Path(logPath)
-        hadoopDataStream = Some(fs.create(path, overwriteExistingFiles))
+        hadoopDataStream = Some(fileSystem.create(path, overwrite))
         hadoopDataStream.get
 
       case "file" | null =>
         // Second parameter is whether to append
-        new FileOutputStream(logPath, !overwriteExistingFiles)
+        new FileOutputStream(logPath, !overwrite)
 
       case unsupportedScheme =>
         throw new UnsupportedOperationException("File system scheme %s is not supported!"
           .format(unsupportedScheme))
     }
 
-    val bufferedStream = new BufferedOutputStream(dataStream)
-    Some(new PrintWriter(bufferedStream))
+    val bufferedStream = new FastBufferedOutputStream(dataStream)
+    new PrintWriter(bufferedStream)
   }
 
   /**
@@ -138,11 +139,11 @@ class FileLogger(
     writer = None
   }
 
-  /** Start a new writer (for a new file) if there does not already exist one */
+  /** Start a writer for a new file if one does not already exit */
   def start() {
     writer.getOrElse {
       fileIndex += 1
-      writer = createWriter()
+      writer = Some(createWriter())
     }
   }
 
@@ -152,7 +153,7 @@ class FileLogger(
    */
   def stop() {
     hadoopDataStream.foreach(_.close())
-    hadoopFileSystem.foreach(_.close())
     writer.foreach(_.close())
+    fileSystem.close()
   }
 }

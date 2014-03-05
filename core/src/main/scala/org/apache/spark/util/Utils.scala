@@ -297,8 +297,7 @@ private[spark] object Utils extends Logging {
         }
       case _ =>
         // Use the Hadoop filesystem library, which supports file://, hdfs://, s3://, and others
-        val conf = SparkHadoopUtil.get.newConfiguration()
-        val fs = FileSystem.get(uri, conf)
+        val fs = getHadoopFileSystem(uri)
         val in = fs.open(new Path(uri))
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
@@ -469,7 +468,7 @@ private[spark] object Utils extends Logging {
    * millisecond.
    */
   def getUsedTimeMs(startTimeMs: Long): String = {
-    return " " + (System.currentTimeMillis - startTimeMs) + " ms"
+    " " + (System.currentTimeMillis - startTimeMs) + " ms"
   }
 
   /**
@@ -760,7 +759,7 @@ private[spark] object Utils extends Logging {
     }
     var i = 0
     while (i < s.length) {
-      var nextChar = s.charAt(i)
+      val nextChar = s.charAt(i)
       if (inDoubleQuote) {
         if (nextChar == '"') {
           inDoubleQuote = false
@@ -880,4 +879,28 @@ private[spark] object Utils extends Logging {
   }
 
   def emptyJson = JObject(List[JField]())
+
+  /**
+   * Return a Hadoop FileSystem with the scheme encoded in the given path.
+   * File systems currently supported include HDFS, S3, and the local file system.
+   */
+  def getHadoopFileSystem(path: URI): FileSystem = {
+    path.getScheme match {
+      case "file" | "hdfs" | "s3" | null =>
+        val conf = SparkHadoopUtil.get.newConfiguration()
+        FileSystem.get(path, conf)
+      case unsupportedScheme =>
+        throw new UnsupportedOperationException("File system scheme %s is not supported!"
+          .format(unsupportedScheme))
+    }
+  }
+
+  /**
+   * Return a Hadoop FileSystem with the scheme encoded in the given path.
+   * File systems currently supported include HDFS, S3, and the local file system.
+   */
+  def getHadoopFileSystem(path: String): FileSystem = {
+    val uri = new URI(path)
+    getHadoopFileSystem(uri)
+  }
 }

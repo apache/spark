@@ -42,9 +42,7 @@ private[ui] class JobProgressUI(parent: SparkUI) {
   private var _listener: Option[JobProgressListener] = None
 
   def start() {
-    val gateway = parent.gatewayListener
     _listener = Some(new JobProgressListener(sc, live))
-    gateway.registerSparkListener(listener)
   }
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)

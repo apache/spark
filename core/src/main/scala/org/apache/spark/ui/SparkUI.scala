@@ -17,23 +17,16 @@
 
 package org.apache.spark.ui
 
-import java.io.{FileInputStream, File}
-
-import scala.io.Source
-
-import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import org.eclipse.jetty.server.{Handler, Server}
-import org.json4s.jackson.JsonMethods._
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
-import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.{SparkReplayerBus, EventLoggingListener}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
 import org.apache.spark.ui.exec.ExecutorsUI
 import org.apache.spark.ui.jobs.JobProgressUI
 import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.util.Utils
-import org.apache.spark.util.JsonProtocol
 
 /** Top level user interface for Spark. */
 private[spark] class SparkUI(val sc: SparkContext) extends Logging {
@@ -51,14 +44,15 @@ private[spark] class SparkUI(val sc: SparkContext) extends Logging {
   var started = false
   var appName = ""
 
-  private val handlers = Seq[(String, Handler)](
-    ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
-    ("/", createRedirectHandler("/stages"))
-  )
   private val storage = new BlockManagerUI(this)
   private val jobs = new JobProgressUI(this)
   private val env = new EnvironmentUI(this)
   private val exec = new ExecutorsUI(this)
+
+  private val handlers = Seq[(String, Handler)](
+    ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
+    ("/", createRedirectHandler("/stages"))
+  )
 
   // Add MetricsServlet handlers by default
   private val metricsServletHandlers = if (live) {
@@ -70,14 +64,15 @@ private[spark] class SparkUI(val sc: SparkContext) extends Logging {
   private val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
     exec.getHandlers ++ metricsServletHandlers ++ handlers
 
-  // Maintain a gateway listener for all events to simplify event logging
-  private var _gatewayListener: Option[GatewayUISparkListener] = None
 
-  def gatewayListener = _gatewayListener.getOrElse {
-    val gateway = new GatewayUISparkListener(this, sc)
-    _gatewayListener = Some(gateway)
-    gateway
-  }
+  // A simple listener that sets the app name for this SparkUI
+  private val appNameListener = new AppNameListener(this)
+
+  // Only log events if this SparkUI is live
+  private var eventLogger: Option[EventLoggingListener] = None
+
+  // Only replay events if this SparkUI is not live
+  private var replayerBus: Option[SparkReplayerBus] = None
 
   // Only meaningful if port is set before binding
   def setPort(p: Int) = {
@@ -111,22 +106,26 @@ private[spark] class SparkUI(val sc: SparkContext) extends Logging {
     //  DAGScheduler() requires that the port of this server is known
     //  This server must register all handlers, including JobProgressUI, before binding
     //  JobProgressUI registers a listener with SparkContext, which requires sc to initialize
-
-    if (live) {
-      // Listen for new events only if this UI is live
-      sc.addSparkListener(gatewayListener)
-    }
     storage.start()
     jobs.start()
     env.start()
     exec.start()
-    started = true
-  }
 
-  def stop() {
-    server.foreach(_.stop())
-    _gatewayListener.foreach(_.stop())
-    logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
+    // Listen for events from the SparkContext if it exists, otherwise from persisted storage
+    val eventBus = if (live) {
+      eventLogger = Some(new EventLoggingListener(sc.appName, sc.conf))
+      sc.listenerBus.addListener(eventLogger.get)
+      sc.listenerBus
+    } else {
+      replayerBus = Some(new SparkReplayerBus)
+      replayerBus.get
+    }
+    eventBus.addListener(storage.listener)
+    eventBus.addListener(jobs.listener)
+    eventBus.addListener(env.listener)
+    eventBus.addListener(exec.listener)
+    eventBus.addListener(appNameListener)
+    started = true
   }
 
   /**
@@ -135,56 +134,16 @@ private[spark] class SparkUI(val sc: SparkContext) extends Logging {
    * This method must be invoked after the SparkUI has started. Return true if log files
    * are found and processed.
    */
-  def renderFromPersistedStorage(dirPath: String): Boolean = {
-    assert(!live, "Live Spark Web UI attempted to render from persisted storage!")
-    assert(started, "Spark Web UI attempted to render from persisted storage before starting!")
-
-    // Check validity of the given path
-    val logDir = new File(dirPath)
-    if (!logDir.exists || !logDir.isDirectory) {
-      logWarning("Given invalid log path %s when rendering persisted Spark Web UI!"
-        .format(dirPath))
-      return false
-    }
-    // Assume events are ordered not only within each log file, but also across files by file name
-    val logFiles = logDir.listFiles.filter(_.isFile).sortBy(_.getName)
-    if (logFiles.size == 0) {
-      logWarning("No logs found in given directory %s when rendering persisted Spark Web UI!"
-        .format(dirPath))
-      return false
-    }
-
-    // Replay events in each event log
-    // Use a new SparkListenerBus to avoid depending on SparkContext
-    val bus = new SparkListenerBus
-    logFiles.foreach { file => processEventLog(file, bus) }
-    true
+  def renderFromPersistedStorage(logDir: String): Boolean = {
+    assume(!live, "Live Spark Web UI attempted to render from persisted storage!")
+    assume(started, "Spark Web UI attempted to render from persisted storage before starting!")
+    replayerBus.get.replay(logDir)
   }
 
-  /**
-   * Replay each event in the order maintained in the given log to the gateway listener.
-   *
-   * A custom SparkListenerBus, rather than the DAG scheduler's, is used to decouple the
-   * replaying of logged events from the creation of a SparkContext.
-   */
-  private def processEventLog(file: File, listenerBus: SparkListenerBus) = {
-    val fileStream = new FileInputStream(file)
-    val bufferedStream = new FastBufferedInputStream(fileStream)
-    var currentLine = ""
-    try {
-      val lines = Source.fromInputStream(bufferedStream).getLines()
-      lines.foreach { line =>
-        currentLine = line
-        val event = JsonProtocol.sparkEventFromJson(parse(line))
-        listenerBus.postToListeners(event, Seq(gatewayListener))
-      }
-    } catch {
-      case e: Exception =>
-        logWarning("Exception in parsing UI logs for %s".format(file.getAbsolutePath))
-        logWarning(currentLine + "\n")
-        logDebug(e.getMessage + e.getStackTraceString)
-    }
-    bufferedStream.close()
+  def stop() {
+    server.foreach(_.stop())
+    eventLogger.foreach(_.stop())
+    logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 
   private[spark] def appUIAddress = host + ":" + boundPort.getOrElse("-1")

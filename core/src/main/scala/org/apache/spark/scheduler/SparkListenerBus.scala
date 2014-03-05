@@ -19,13 +19,10 @@ package org.apache.spark.scheduler
 
 import java.util.concurrent.LinkedBlockingQueue
 
-import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
-
 import org.apache.spark.Logging
 
 /** Asynchronously passes SparkListenerEvents to registered SparkListeners. */
-private[spark] class SparkListenerBus extends Logging {
-  private val sparkListeners = new ArrayBuffer[SparkListener] with SynchronizedBuffer[SparkListener]
+private[spark] class SparkListenerBus extends EventBus with Logging {
 
   /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
@@ -40,7 +37,7 @@ private[spark] class SparkListenerBus extends Logging {
     override def run() {
       while (true) {
         val event = eventQueue.take
-        val shutdown = postToListeners(event, sparkListeners)
+        val shutdown = postToAll(event)
         if (shutdown) {
           // Get out of the while loop and shutdown the daemon thread
           return
@@ -48,45 +45,6 @@ private[spark] class SparkListenerBus extends Logging {
       }
     }
   }.start()
-
-  /**
-   * Post an event to a given list of listeners. Return true if the shutdown event is posted.
-   */
-  private[spark] def postToListeners(event: SparkListenerEvent, listeners: Seq[SparkListener])
-    : Boolean = {
-    event match {
-      case stageSubmitted: SparkListenerStageSubmitted =>
-        listeners.foreach(_.onStageSubmitted(stageSubmitted))
-      case stageCompleted: SparkListenerStageCompleted =>
-        listeners.foreach(_.onStageCompleted(stageCompleted))
-      case jobStart: SparkListenerJobStart =>
-        listeners.foreach(_.onJobStart(jobStart))
-      case jobEnd: SparkListenerJobEnd =>
-        listeners.foreach(_.onJobEnd(jobEnd))
-      case taskStart: SparkListenerTaskStart =>
-        listeners.foreach(_.onTaskStart(taskStart))
-      case taskGettingResult: SparkListenerTaskGettingResult =>
-        listeners.foreach(_.onTaskGettingResult(taskGettingResult))
-      case taskEnd: SparkListenerTaskEnd =>
-        listeners.foreach(_.onTaskEnd(taskEnd))
-      case applicationStart: SparkListenerApplicationStart =>
-        listeners.foreach(_.onApplicationStart(applicationStart))
-      case environmentUpdate: SparkListenerEnvironmentUpdate =>
-        listeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
-      case executorsStateChange: SparkListenerExecutorsStateChange =>
-        listeners.foreach(_.onExecutorsStateChange(executorsStateChange))
-      case unpersistRDD: SparkListenerUnpersistRDD =>
-        listeners.foreach(_.onUnpersistRDD(unpersistRDD))
-      case SparkListenerShutdown =>
-        return true
-      case _ =>
-    }
-    false
-  }
-
-  def addListener(listener: SparkListener) {
-    sparkListeners += listener
-  }
 
   def post(event: SparkListenerEvent) {
     val eventAdded = eventQueue.offer(event)
