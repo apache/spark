@@ -504,6 +504,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.deploy.zookeeper.url</td>
+  <td>(not set)</td>
+  <td>
+    The URL of zookeeper cluster. The user has to set this parameter explicitly when using ZooKeeper.
+  </td>
+</tr>
+<tr>
   <td>spark.files.overwrite</td>
   <td>false</td>
   <td>
