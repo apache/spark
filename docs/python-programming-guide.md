@@ -146,7 +146,7 @@ sc = SparkContext(conf = conf)
 
 # API Docs
 
-[API documentation](api/pyspark/index.html) for PySpark is available as Epydoc.
+[API documentation](http://spark.apache.org/docs/latest/api/pyspark/index.html) for PySpark is available as Epydoc.
 Many of the methods also contain [doctests](http://docs.python.org/2/library/doctest.html) that provide additional usage examples.
 
 # Libraries
