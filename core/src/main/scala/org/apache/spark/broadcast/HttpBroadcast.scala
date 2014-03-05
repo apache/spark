@@ -126,7 +126,10 @@ private object HttpBroadcast extends Logging {
 
   private def createServer(conf: SparkConf) {
     broadcastDir = Utils.createTempDir(Utils.getLocalDir(conf))
-    server = new HttpServer(broadcastDir)
+    server = conf.getOption("spark.httpBroadcast.port").map(_.toInt) match {
+      case Some(port) => new HttpServer(broadcastDir, port)
+      case None => new HttpServer(broadcastDir)
+    }
     server.start()
     serverUri = server.uri
     logInfo("Broadcast server started at " + serverUri)
