@@ -72,7 +72,7 @@ case class HiveTableScan(
       pred.dataType == BooleanType,
       s"Data type of predicate $pred must be BooleanType rather than ${pred.dataType}.")
 
-    BindReferences.bindReference(pred, Seq(relation.partitionKeys))
+    BindReferences.bindReference(pred, relation.partitionKeys)
   }
 
   @transient
@@ -113,7 +113,7 @@ case class HiveTableScan(
   }
 
   private def castFromString(value: String, dataType: DataType) = {
-    Evaluate(Cast(Literal(value), dataType), Nil)
+    Cast(Literal(value), dataType).apply(null)
   }
 
   @transient
@@ -140,8 +140,8 @@ case class HiveTableScan(
 
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
-        val row = new GenericRow(castedValues)
-        Evaluate(shouldKeep, Seq(row)).asInstanceOf[Boolean]
+        val row = new GenericRow(castedValues.toArray)
+        shouldKeep.applyBoolean(row)
       }
     }
   }

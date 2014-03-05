@@ -60,7 +60,7 @@ object ConstantFolding extends Rule[LogicalPlan] {
     case q: LogicalPlan => q transformExpressionsDown {
       // Skip redundant folding of literals.
       case l: Literal => l
-      case e if e.foldable => Literal(Evaluate(e, Nil), e.dataType)
+      case e if e.foldable => Literal(e.apply(null), e.dataType)
     }
   }
 }

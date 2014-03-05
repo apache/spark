@@ -129,10 +129,12 @@ trait HiveFunctionFactory {
 }
 
 abstract class HiveUdf
-    extends Expression with ImplementedUdf with Logging with HiveFunctionFactory {
+    extends Expression with Logging with HiveFunctionFactory {
   self: Product =>
 
   type UDFType
+  type EvaluatedType = Any
+
   val name: String
 
   def nullable = true
@@ -160,7 +162,7 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
     val primitiveClasses = Seq(
       Integer.TYPE, classOf[java.lang.Integer], classOf[java.lang.String], java.lang.Double.TYPE,
       classOf[java.lang.Double], java.lang.Long.TYPE, classOf[java.lang.Long],
-      classOf[HiveDecimal]
+      classOf[HiveDecimal], java.lang.Byte.TYPE, classOf[java.lang.Byte]
     )
     val matchingConstructor = argClass.getConstructors.find { c =>
       c.getParameterTypes.size == 1 && primitiveClasses.contains(c.getParameterTypes.head)
@@ -186,7 +188,8 @@ case class HiveSimpleUdf(name: String, children: Seq[Expression]) extends HiveUd
   }
 
   // TODO: Finish input output types.
-  def evaluate(evaluatedChildren: Seq[Any]): Any = {
+  override def apply(input: Row): Any = {
+    val evaluatedChildren = children.map(_.apply(input))
     // Wrap the function arguments in the expected types.
     val args = evaluatedChildren.zip(wrappers).map {
       case (arg, wrapper) => wrapper(arg)
@@ -211,10 +214,13 @@ case class HiveGenericUdf(
 
   val dataType: DataType = inspectorToDataType(returnInspector)
 
-  def evaluate(evaluatedChildren: Seq[Any]): Any = {
+  override def apply(input: Row): Any = {
     returnInspector // Make sure initialized.
-    val args = evaluatedChildren.map(wrap).map { v =>
-      new DeferredJavaObject(v): DeferredObject
+    val args = children.map { v =>
+      new DeferredObject {
+        override def prepare(i: Int) = {}
+        override def get(): AnyRef = wrap(v.apply(input))
+      }
     }.toArray
     unwrap(function.evaluate(args))
   }
@@ -238,7 +244,8 @@ trait HiveInspectors {
     case si: StructObjectInspector =>
       val allRefs = si.getAllStructFieldRefs
       new GenericRow(
-        allRefs.map(r => unwrapData(si.getStructFieldData(data,r), r.getFieldObjectInspector)))
+        allRefs.map(r =>
+          unwrapData(si.getStructFieldData(data,r), r.getFieldObjectInspector)).toArray)
   }
 
   /** Converts native catalyst types to the types expected by Hive */
@@ -394,12 +401,14 @@ case class HiveGenericUdtf(
     }
   }
 
-  def apply(input: Row): TraversableOnce[Row] = {
+  override def apply(input: Row): TraversableOnce[Row] = {
     outputInspectors // Make sure initialized.
+
+    val inputProjection = new Projection(children)
     val collector = new UDTFCollector
     function.setCollector(collector)
 
-    val udtInput = children.map(Evaluate(_, Vector(input))).map(wrap).toArray
+    val udtInput = inputProjection(input).map(wrap).toArray
     function.process(udtInput)
     collector.collectRows()
   }
@@ -446,10 +455,13 @@ case class HiveUdafFunction(
   private val buffer =
     function.getNewAggregationBuffer.asInstanceOf[GenericUDAFEvaluator.AbstractAggregationBuffer]
 
-  def result: Any = unwrapData(function.evaluate(buffer), returnInspector)
+  override def apply(input: Row): Any = unwrapData(function.evaluate(buffer), returnInspector)
 
-  def apply(input: Seq[Row]): Unit = {
-    val inputs = exprs.map(Evaluate(_, input).asInstanceOf[AnyRef]).toArray
+  @transient
+  val inputProjection = new Projection(exprs)
+
+  def update(input: Row): Unit = {
+    val inputs = inputProjection(input).asInstanceOf[Seq[AnyRef]].toArray
     function.iterate(buffer, inputs)
   }
 }

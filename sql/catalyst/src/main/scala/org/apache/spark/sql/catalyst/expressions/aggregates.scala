@@ -64,14 +64,16 @@ abstract class AggregateFunction
   extends AggregateExpression with Serializable with trees.LeafNode[Expression] {
   self: Product =>
 
+  type EvaluatedType = Any
+
   /** Base should return the generic aggregate expression that this function is computing */
   val base: AggregateExpression
   def references = base.references
   def nullable = base.nullable
   def dataType = base.dataType
 
-  def apply(input: Seq[Row]): Unit
-  def result: Any
+  def update(input: Row): Unit
+  override def apply(input: Row): Any
 
   // Do we really need this?
   def newInstance = makeCopy(productIterator.map { case a: AnyRef => a }.toArray)
@@ -167,15 +169,17 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
 
   def this() = this(null, null) // Required for serialization.
 
-  var count: Long = _
-  var sum: Long = _
+  private var count: Long = _
+  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(null))
+  private val sumAsDouble = Cast(sum, DoubleType)
 
-  def result: Any = sum.toDouble / count.toDouble
+  private val addFunction = Add(sum, expr)
 
-  def apply(input: Seq[Row]): Unit = {
+  override def apply(input: Row): Any = sumAsDouble.applyDouble(null) / count.toDouble
+
+  def update(input: Row): Unit = {
     count += 1
-    // TODO: Support all types here...
-    sum += Evaluate(expr, input).asInstanceOf[Int]
+    sum.update(addFunction, input)
   }
 }
 
@@ -184,25 +188,28 @@ case class CountFunction(expr: Expression, base: AggregateExpression) extends Ag
 
   var count: Int = _
 
-  def apply(input: Seq[Row]): Unit = {
-    val evaluatedExpr = expr.map(Evaluate(_, input))
+  def update(input: Row): Unit = {
+    val evaluatedExpr = expr.map(_.apply(input))
     if (evaluatedExpr.map(_ != null).reduceLeft(_ || _)) {
       count += 1
     }
   }
 
-  def result: Any = count
+  override def apply(input: Row): Any = count
 }
 
 case class SumFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
   def this() = this(null, null) // Required for serialization.
 
-  var sum = Evaluate(Cast(Literal(0), expr.dataType), Nil)
+  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(null))
 
-  def apply(input: Seq[Row]): Unit =
-    sum = Evaluate(Add(Literal(sum), expr), input)
+  private val addFunction = Add(sum, expr)
 
-  def result: Any = sum
+  def update(input: Row): Unit = {
+    sum.update(addFunction, input)
+  }
+
+  override def apply(input: Row): Any = sum.apply(null)
 }
 
 case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
@@ -212,14 +219,14 @@ case class SumDistinctFunction(expr: Expression, base: AggregateExpression)
 
   val seen = new scala.collection.mutable.HashSet[Any]()
 
-  def apply(input: Seq[Row]): Unit = {
-    val evaluatedExpr = Evaluate(expr, input)
+  def update(input: Row): Unit = {
+    val evaluatedExpr = expr.apply(input)
     if (evaluatedExpr != null) {
       seen += evaluatedExpr
     }
   }
 
-  def result: Any =
+  override def apply(input: Row): Any =
     seen.reduceLeft(base.dataType.asInstanceOf[NumericType].numeric.asInstanceOf[Numeric[Any]].plus)
 }
 
@@ -230,14 +237,14 @@ case class CountDistinctFunction(expr: Seq[Expression], base: AggregateExpressio
 
   val seen = new scala.collection.mutable.HashSet[Any]()
 
-  def apply(input: Seq[Row]): Unit = {
-    val evaluatedExpr = expr.map(Evaluate(_, input))
+  def update(input: Row): Unit = {
+    val evaluatedExpr = expr.map(_.apply(input))
     if (evaluatedExpr.map(_ != null).reduceLeft(_ && _)) {
       seen += evaluatedExpr
     }
   }
 
-  def result: Any = seen.size
+  override def apply(input: Row): Any = seen.size
 }
 
 case class FirstFunction(expr: Expression, base: AggregateExpression) extends AggregateFunction {
@@ -245,9 +252,11 @@ case class FirstFunction(expr: Expression, base: AggregateExpression) extends Ag
 
   var result: Any = null
 
-  def apply(input: Seq[Row]): Unit = {
+  def update(input: Row): Unit = {
     if (result == null) {
-      result = Evaluate(expr, input)
+      result = expr.apply(input)
     }
   }
+
+  override def apply(input: Row): Any = result
 }

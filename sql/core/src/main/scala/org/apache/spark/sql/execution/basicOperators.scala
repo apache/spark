@@ -29,15 +29,16 @@ import catalyst.plans.logical.LogicalPlan
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
 
-  def execute() = child.execute().map { row =>
-    buildRow(projectList.map(Evaluate(_, Vector(row))))
+  def execute() = child.execute().mapPartitions { iter =>
+    val buildProjection = new Projection(projectList)
+    iter.map(buildProjection)
   }
 }
 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   def output = child.output
-  def execute() = child.execute().filter { row =>
-    Evaluate(condition, Vector(row)).asInstanceOf[Boolean]
+  def execute() = child.execute().mapPartitions { iter =>
+    iter.filter(condition.applyBoolean)
   }
 }
 

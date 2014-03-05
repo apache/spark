@@ -25,16 +25,21 @@ import types._
 
 case object DynamicType extends DataType
 
-case class WrapDynamic(children: Seq[Attribute]) extends Expression with ImplementedUdf {
+case class WrapDynamic(children: Seq[Attribute]) extends Expression {
+  type EvaluatedType = DynamicRow
+
   def nullable = false
   def references = children.toSet
   def dataType = DynamicType
 
-  def evaluate(evaluatedChildren: Seq[Any]): Any =
-    new DynamicRow(children, evaluatedChildren)
+  override def apply(input: Row): DynamicRow = input match {
+    // Avoid copy for generic rows.
+    case g: GenericRow => new DynamicRow(children, g.values)
+    case otherRowType => new DynamicRow(children, otherRowType.toArray)
+  }
 }
 
-class DynamicRow(val schema: Seq[Attribute], values: Seq[Any])
+class DynamicRow(val schema: Seq[Attribute], values: Array[Any])
   extends GenericRow(values) with Dynamic {
 
   def selectDynamic(attributeName: String): String = {

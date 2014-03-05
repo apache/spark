@@ -44,17 +44,14 @@ case class SparkEquiInnerJoin(
   def output = left.output ++ right.output
 
   def execute() = attachTree(this, "execute") {
-    val leftWithKeys = left.execute().map { row =>
-      val joinKeys = leftKeys.map(Evaluate(_, Vector(row)))
-    //logger.debug(s"leftkey [${leftKeys.mkString(",")}] => ${joinKeys.mkString(",")}] from $row")
-      (joinKeys, row)
+    val leftWithKeys = left.execute().mapPartitions { iter =>
+      val generateLeftKeys = new Projection(leftKeys, left.output)
+      iter.map(row => (generateLeftKeys(row), row))
     }
 
-    val rightWithKeys = right.execute().map { row =>
-      val joinKeys = rightKeys.map(Evaluate(_, Vector(EmptyRow, row)))
-    //logger.debug(s"rightkey [${leftKeys.mkString(",")}] => ${joinKeys.mkString(",")}] from $row")
-
-      (joinKeys, row)
+    val rightWithKeys = right.execute().mapPartitions { iter =>
+      val generateRightKeys = new Projection(rightKeys, right.output)
+      iter.map(row => (generateRightKeys(row), row))
     }
 
     // Do the join.
@@ -67,7 +64,7 @@ case class SparkEquiInnerJoin(
    * Filters any rows where the any of the join keys is null, ensuring three-valued
    * logic for the equi-join conditions.
    */
-  protected def filterNulls(rdd: RDD[(Seq[Any], Row)]) =
+  protected def filterNulls(rdd: RDD[(Row, Row)]) =
     rdd.filter {
       case (key: Seq[_], _) => !key.exists(_ == null)
     }
@@ -101,32 +98,35 @@ case class BroadcastNestedLoopJoin(
   def execute() = {
     val broadcastedRelation = sc.broadcast(broadcast.execute().collect().toIndexedSeq)
 
-    val streamedPlusMatches = streamed.execute().map { streamedRow =>
-      var i = 0
+    val streamedPlusMatches = streamed.execute().mapPartitions { streamedIter =>
       val matchedRows = new mutable.ArrayBuffer[Row]
       val includedBroadcastTuples =  new mutable.BitSet(broadcastedRelation.value.size)
+      val joinedRow = new JoinedRow
+      val boundCondition =
+        condition
+          .map(c => BindReferences.bindReference(c, left.output ++ right.output))
+          .getOrElse(Literal(true))
 
-      while (i < broadcastedRelation.value.size) {
-        // TODO: One bitset per partition instead of per row.
-        val broadcastedRow = broadcastedRelation.value(i)
-        val includeRow = condition match {
-          case None => true
-          case Some(c) => Evaluate(c, Vector(streamedRow, broadcastedRow)).asInstanceOf[Boolean]
+      streamedIter.foreach { streamedRow =>
+        var i = 0
+        var matched = false
+
+        while (i < broadcastedRelation.value.size) {
+          // TODO: One bitset per partition instead of per row.
+          val broadcastedRow = broadcastedRelation.value(i)
+          if (boundCondition.applyBoolean(joinedRow(streamedRow, broadcastedRow))) {
+            matchedRows += buildRow(streamedRow ++ broadcastedRow)
+            matched = true
+            includedBroadcastTuples += i
+          }
+          i += 1
         }
-        if (includeRow) {
-          matchedRows += buildRow(streamedRow ++ broadcastedRow)
-          includedBroadcastTuples += i
+
+        if (!matched && (joinType == LeftOuter || joinType == FullOuter)) {
+          matchedRows += buildRow(streamedRow ++ Array.fill(right.output.size)(null))
         }
-        i += 1
       }
-      val outputRows = if (matchedRows.size > 0) {
-        matchedRows
-      } else if (joinType == LeftOuter || joinType == FullOuter) {
-        Vector(buildRow(streamedRow ++ Array.fill(right.output.size)(null)))
-      } else {
-        Vector()
-      }
-      (outputRows, includedBroadcastTuples)
+      Iterator((matchedRows, includedBroadcastTuples))
     }
 
     val includedBroadcastTuples = streamedPlusMatches.map(_._2)
@@ -142,6 +142,7 @@ case class BroadcastNestedLoopJoin(
         broadcastedRelation.value.zipWithIndex.filter {
           case (row, i) => !allIncludedBroadcastTuples.contains(i)
         }.map {
+          // TODO: Use projection.
           case (row, _) => buildRow(Vector.fill(left.output.size)(null) ++ row)
         }
       } else {
