@@ -17,14 +17,6 @@ declare -a java_args
 declare -a scalac_args
 declare -a sbt_commands
 
-if test -x "$JAVA_HOME/bin/java"; then
-    echo -e "Using $JAVA_HOME as default JAVA_HOME."
-    echo "Note, this will be overridden by -java-home if it is set."
-    declare java_cmd="$JAVA_HOME/bin/java"
-else
-    declare java_cmd=java
-fi
-
 echoerr () {
   echo 1>&2 "$@"
 }
@@ -165,6 +157,17 @@ run() {
   process_args "$@"
   set -- "${residual_args[@]}"
   argumentCount=$#
+  
+  
+  if test -x "$JAVA_HOME/bin/java"; then
+      echo -e "Using $JAVA_HOME as JAVA_HOME."
+      declare java_cmd="$JAVA_HOME/bin/java"
+  elif test -z "$JAVA_HOME"; then
+      declare java_cmd=java
+  else
+      echo -e "JAVA_HOME:$JAVA_HOME points to invalid jdk installation."
+      exit 123
+  fi
 
   # run sbt
   execRunner "$java_cmd" \
