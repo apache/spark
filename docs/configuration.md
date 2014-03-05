@@ -477,6 +477,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.deploy.recoveryDirectory</td>
+  <td>""</td>
+  <td>
+    The user can specify the directory for the master recovery file when using FileSystemPersistenceEngine.
+  </td>
+</tr>
+<tr>
   <td>spark.deploy.retainedApplications</td>
   <td>200</td>
   <td>
