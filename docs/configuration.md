@@ -488,6 +488,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.shuffle.netty.connect.timeout</td>
+  <td>60000</td>
+  <td>
+    This parameter sets the timeout threshold for the Netty connection when shuffling. (in milliseconds)
+  </td>
+</tr>
+<tr>
   <td>spark.shuffle.spill</td>
   <td>true</td>
   <td>
