@@ -19,7 +19,7 @@ package org.apache.spark.ui
 
 import org.eclipse.jetty.server.{Handler, Server}
 
-import org.apache.spark.{Logging, SparkContext, SparkEnv}
+import org.apache.spark.{SparkConf, Logging, SparkContext, SparkEnv}
 import org.apache.spark.scheduler.{SparkReplayerBus, EventLoggingListener}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
@@ -29,15 +29,19 @@ import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.util.Utils
 
 /** Top level user interface for Spark. */
-private[spark] class SparkUI(val sc: SparkContext) extends Logging {
+private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf) extends Logging {
+
+  def this() = this(null, new SparkConf())
+  def this(conf: SparkConf) = this(null, conf)
+  def this(sc: SparkContext) = this(sc, sc.conf)
 
   // If SparkContext is not provided, assume this UI is rendered from persisted storage
   val live = sc != null
   val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
   var port = if (live) {
-      sc.conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
+      conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
     } else {
-      SparkUI.DEFAULT_PERSISTED_PORT.toInt
+      conf.get("spark.persisted.ui.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt
     }
   var boundPort: Option[Int] = None
   var server: Option[Server] = None
@@ -74,16 +78,6 @@ private[spark] class SparkUI(val sc: SparkContext) extends Logging {
   // Only replay events if this SparkUI is not live
   private var replayerBus: Option[SparkReplayerBus] = None
 
-  // Only meaningful if port is set before binding
-  def setPort(p: Int) = {
-    if (boundPort.isDefined) {
-      logWarning("Attempted to set Spark Web UI port after it is already bound to %s."
-        .format(appUIAddress))
-    } else {
-      port = p
-    }
-  }
-
   def setAppName(name: String) = appName = name
 
   /** Bind the HTTP server which backs this web interface */
@@ -113,7 +107,7 @@ private[spark] class SparkUI(val sc: SparkContext) extends Logging {
 
     // Listen for events from the SparkContext if it exists, otherwise from persisted storage
     val eventBus = if (live) {
-      eventLogger = Some(new EventLoggingListener(sc.appName, sc.conf))
+      eventLogger = Some(new EventLoggingListener(sc.appName, conf))
       sc.listenerBus.addListener(eventLogger.get)
       sc.listenerBus
     } else {

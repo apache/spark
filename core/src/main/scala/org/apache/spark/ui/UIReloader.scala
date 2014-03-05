@@ -17,17 +17,22 @@
 
 package org.apache.spark.ui
 
+import org.apache.spark.SparkConf
+
 /**
- * Reload a persisted UI independently from a SparkContext
+ * A simple example that reloads a persisted UI independently from a SparkContext
  */
 object UIReloader {
   def main(args: Array[String]) {
     if (args.length < 1) {
-      println("Usage: ./bin/spark-class org.apache.spark.ui.UIReloader [log path]")
+      println("Usage: ./bin/spark-class org.apache.spark.ui.UIReloader [log path] [port]")
       System.exit(1)
     }
 
-    val ui = new SparkUI(null)
+    val port = if (args.length == 2) args(1) else "14040"
+    val conf = new SparkConf()
+    conf.set("spark.persisted.ui.port", port)
+    val ui = new SparkUI(conf)
     ui.bind()
     ui.start()
     val success = ui.renderFromPersistedStorage(args(0))
