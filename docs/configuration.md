@@ -303,6 +303,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.resultGetter.threads</td>
+  <td>4</td>
+  <td>
+    Set the size of thread pool in TaskScheduler to deserialize and get the task results from remote end when necessary.
+    The size of the thread pool is fixed.
+  </td>
+</tr>
+<tr>
   <td>spark.repl.class.uri</td>
   <td>null</td>
   <td>
