@@ -15,9 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package hive
-package execution
+package org.apache.spark.sql.parquet
+//package hive
+//package execution
+
+// TODO: move this into the parquet package once it can be
 
 import java.io.File
 
@@ -28,7 +30,9 @@ import org.apache.spark.sql.catalyst.plans.logical._
 import org.apache.spark.sql.catalyst.plans.logical.WriteToFile
 import org.apache.spark.sql.catalyst.plans.logical.InsertIntoCreatedTable
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
-import org.apache.spark.sql.execution.{ParquetTestData, ParquetRelation}
+import org.apache.spark.sql.hive.TestHive
+
+//import org.apache.spark.sql.execution.{ParquetTestData, ParquetRelation}
 
 class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 
@@ -53,8 +57,7 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
   def storeQuery(querystr: String, filename: String): Unit = {
     val query = WriteToFile(
       filename,
-      TestHive.parseSql(querystr),
-      Some("testtable"))
+      TestHive.parseSql(querystr))
     TestHive
       .executePlan(query)
       .stringResult()
@@ -92,10 +95,6 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
   }
 
   override def beforeAll() {
-    // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
-    // without restarting the JVM.
-    System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
     // write test data
     ParquetTestData.writeFile
     // Override initial Parquet test table

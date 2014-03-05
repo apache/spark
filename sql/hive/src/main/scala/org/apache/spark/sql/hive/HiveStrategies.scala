@@ -24,6 +24,7 @@ import catalyst.plans._
 import catalyst.plans.logical.{BaseRelation, LogicalPlan}
 
 import org.apache.spark.sql.execution._
+import org.apache.spark.sql.parquet.{ParquetRelation, InsertIntoParquetTable, ParquetTableScan}
 
 trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
@@ -106,6 +107,8 @@ trait HiveStrategies {
    */
   object ColumnPrunings extends Strategy {
     def apply(plan: LogicalPlan): Seq[SparkPlan] = plan match {
+        // TODO(andre): the current mix of HiveRelation and ParquetRelation
+        // here appears artificial; try to refactor to break it into two
       case PhysicalOperation(projectList, predicates, relation: BaseRelation) =>
         val predicateOpt = predicates.reduceOption(And)
         val predicateRefs = predicateOpt.map(_.references).getOrElse(Set.empty)

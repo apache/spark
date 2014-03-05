@@ -16,17 +16,18 @@
  */
 
 package org.apache.spark.sql
-package execution
+package parquet
 
-import parquet.io.InvalidRecordException
-import parquet.schema.MessageType
-import parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
-import parquet.hadoop.util.ContextUtil
+import _root_.parquet.io.InvalidRecordException
+import _root_.parquet.schema.MessageType
+import _root_.parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
+import _root_.parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.SparkContext
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute, Expression}
+import org.apache.spark.sql.execution.{SparkPlan, UnaryNode, LeafNode}
 
 import org.apache.hadoop.mapreduce.Job
 import org.apache.hadoop.conf.Configuration
@@ -36,27 +37,24 @@ import java.io.IOException
 
 /**
  * Parquet table scan operator. Imports the file that backs the given
- * [[org.apache.spark.sql.execution.ParquetRelation]] as a RDD[Row].
+ * [[ParquetRelation]] as a RDD[Row].
  */
 case class ParquetTableScan(
-    attributes: Seq[Attribute],
+    output: Seq[Attribute],
     relation: ParquetRelation,
     columnPruningPred: Option[Expression])(
     @transient val sc: SparkContext)
   extends LeafNode {
 
-  /**
-   * Runs this query returning the result as an RDD.
-  */
   override def execute(): RDD[Row] = {
     val job = new Job(sc.hadoopConfiguration)
     ParquetInputFormat.setReadSupportClass(
       job,
-      classOf[org.apache.spark.sql.execution.RowReadSupport])
+      classOf[org.apache.spark.sql.parquet.RowReadSupport])
     val conf: Configuration = ContextUtil.getConfiguration(job)
     conf.set(
         RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
-        ParquetTypesConverter.convertFromAttributes(attributes).toString)
+        ParquetTypesConverter.convertFromAttributes(output).toString)
     // TODO: think about adding record filters
     sc.newAPIHadoopFile(
       relation.path,
@@ -77,7 +75,8 @@ case class ParquetTableScan(
     if(success) {
       ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sc)
     } else {
-      this // TODO: add warning to log that column projection was unsuccessful?
+      sys.error("Warning: Could not validate Parquet schema projection in pruneColumns")
+      this
     }
   }
 
@@ -91,18 +90,15 @@ case class ParquetTableScan(
   private def validateProjection(projection: Seq[Attribute]): Boolean = {
     val original: MessageType = relation.parquetSchema
     val candidate: MessageType = ParquetTypesConverter.convertFromAttributes(projection)
-    var retval = true
     try {
       original.checkContains(candidate)
+      true
     } catch {
       case e: InvalidRecordException => {
-        retval = false
+        false
       }
     }
-    retval
   }
-
-  override def output: Seq[Attribute] = attributes
 }
 
 case class InsertIntoParquetTable(
@@ -129,7 +125,7 @@ case class InsertIntoParquetTable(
 
     ParquetOutputFormat.setWriteSupportClass(
       job,
-      classOf[org.apache.spark.sql.execution.RowWriteSupport])
+      classOf[org.apache.spark.sql.parquet.RowWriteSupport])
 
     // TODO: move that to function in object
     val conf = job.getConfiguration
@@ -150,10 +146,8 @@ case class InsertIntoParquetTable(
     JavaPairRDD.fromRDD(childRdd.map(Tuple2(null, _))).saveAsNewAPIHadoopFile(
       relation.path.toString,
       classOf[Void],
-      classOf[org.apache.spark.sql.catalyst.expressions.GenericRow],
-      // scalastyle:off line.size.limit
-      classOf[parquet.hadoop.ParquetOutputFormat[org.apache.spark.sql.catalyst.expressions.GenericRow]],
-      // scalastyle:on line.size.limit
+      classOf[ParquetRelation.RowType],
+      classOf[_root_.parquet.hadoop.ParquetOutputFormat[ParquetRelation.RowType]],
       conf)
 
     // We return the child RDD to allow chaining (alternatively, one could return nothing).

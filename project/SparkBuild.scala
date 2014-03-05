@@ -351,15 +351,17 @@ object SparkBuild extends Build {
     // this non-deterministically.  TODO: FIX THIS.
     parallelExecution in Test := false,
     libraryDependencies ++= Seq(
-    "org.scalatest" %% "scalatest" % "1.9.1" % "test",
-    "com.typesafe" %% "scalalogging-slf4j" % "1.0.1")
+      "org.scalatest" %% "scalatest" % "1.9.1" % "test",
+      "com.typesafe" %% "scalalogging-slf4j" % "1.0.1"
+    )
   )
 
   def sqlCoreSettings = sharedSettings ++ Seq(
     name := "spark-sql",
     libraryDependencies ++= Seq(
-    "com.twitter" % "parquet-column" % "1.3.2",
-    "com.twitter" % "parquet-hadoop" % "1.3.2")
+      "com.twitter" % "parquet-column" % "1.3.2",
+      "com.twitter" % "parquet-hadoop" % "1.3.2"
+    )
   )
 
   def hiveSettings = sharedSettings ++ Seq(
@@ -368,7 +370,8 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
       "org.apache.hive" % "hive-metastore" % "0.12.0",
       "org.apache.hive" % "hive-exec" % "0.12.0",
-      "org.apache.hive" % "hive-serde" % "0.12.0"),
+      "org.apache.hive" % "hive-serde" % "0.12.0"
+    ),
     // Multiple queries rely on the TestHive singleton.  See comments there for more details.
     parallelExecution in Test := false,
     // Supporting all SerDes requires us to depend on deprecated APIs, so we turn off the warnings
@@ -388,7 +391,8 @@ object SparkBuild extends Build {
         |import org.apache.spark.sql.catalyst.util._
         |import org.apache.spark.sql.execution
         |import org.apache.spark.sql.hive._
-        |import org.apache.spark.sql.hive.TestHive._""".stripMargin
+        |import org.apache.spark.sql.hive.TestHive._
+        |import org.apache.spark.sql.parquet.ParquetTestData""".stripMargin
   )
 
   def streamingSettings = sharedSettings ++ Seq(

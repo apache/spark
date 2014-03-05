@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.parquet
 
 import org.apache.hadoop.conf.Configuration
 
@@ -28,13 +28,13 @@ import parquet.hadoop.api.ReadSupport.ReadContext
 import parquet.hadoop.ParquetOutputFormat
 import parquet.column.ParquetProperties
 
-import org.apache.spark.sql.catalyst.expressions.{Row, GenericRow, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Row, Attribute}
 import org.apache.spark.sql.catalyst.types._
 
 /**
- * A [[parquet.io.api.RecordMaterializer]] for Rows.
+ * A `parquet.io.api.RecordMaterializer` for Rows.
  *
- * @param root The root group converter for the record.
+ *@param root The root group converter for the record.
  */
 class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterializer[Row] {
 
@@ -49,23 +49,23 @@ class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterial
 }
 
 /**
- * A [[parquet.hadoop.api.ReadSupport]] for Row objects.
+ * A `parquet.hadoop.api.ReadSupport` for Row objects.
  */
 class RowReadSupport extends ReadSupport[Row] with Logging {
 
   override def prepareForRead(
-                               conf: Configuration,
-                               stringMap: java.util.Map[String, String],
-                               fileSchema: MessageType,
-                               readContext: ReadContext): RecordMaterializer[Row] = {
+      conf: Configuration,
+      stringMap: java.util.Map[String, String],
+      fileSchema: MessageType,
+      readContext: ReadContext): RecordMaterializer[Row] = {
     log.debug(s"preparing for read with schema ${fileSchema.toString}")
     new RowRecordMaterializer(readContext.getRequestedSchema)
   }
 
   override def init(
-                     configuration: Configuration,
-                     keyValueMetaData: java.util.Map[String, String],
-                     fileSchema: MessageType): ReadContext = {
+      configuration: Configuration,
+      keyValueMetaData: java.util.Map[String, String],
+      fileSchema: MessageType): ReadContext = {
     val requested_schema_string =
       configuration.get(RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA, fileSchema.toString)
     val requested_schema =
@@ -81,7 +81,7 @@ object RowReadSupport {
 }
 
 /**
- * A [[parquet.hadoop.api.WriteSupport]] for Row ojects.
+ * A `parquet.hadoop.api.WriteSupport` for Row ojects.
  */
 class RowWriteSupport extends WriteSupport[Row] with Logging {
   def setSchema(schema: MessageType, configuration: Configuration) {
@@ -124,14 +124,14 @@ class RowWriteSupport extends WriteSupport[Row] with Logging {
   // TODO: add groups (nested fields)
   override def write(record: Row): Unit = {
     writer.startMessage()
-    attributes.zipWithIndex.foreach {
-      case (attribute, index) => {
+    // TODO: compare performance of the various ways of looping over a row
+    for(pair <- attributes.zipWithIndex) {
+      val (attribute, index) = pair
         // null values indicate optional fields but we do not check currently
-        if(record(index) != null && record(index) != Nil) {
-          writer.startField(attribute.name, index)
-          ParquetTypesConverter.consumeType(writer, attribute.dataType, record, index)
-          writer.endField(attribute.name, index)
-        }
+      if(record(index) != null && record(index) != Nil) {
+        writer.startField(attribute.name, index)
+        ParquetTypesConverter.consumeType(writer, attribute.dataType, record, index)
+        writer.endField(attribute.name, index)
       }
     }
     writer.endMessage()
@@ -143,13 +143,14 @@ object RowWriteSupport {
 }
 
 /**
- * A [[parquet.io.api.GroupConverter]] that is able to convert a Parquet record
+ * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
  * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object.
  *
  * @param schema The corresponding Shark schema in the form of a list of attributes.
  */
 class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
-  var current: GenericRow = new GenericRow(Seq())
+  type RowType = ParquetRelation.RowType
+  var current: RowType = new RowType(Seq())
   // initialization may not strictly be required
   val currentData: Array[Any] = new Array[Any](schema.length)
 
@@ -159,13 +160,14 @@ class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
         // note: for some reason matching for StringType fails so use this ugly if instead
         if (ctype == StringType) new CatalystPrimitiveStringConverter(this, schema.indexOf(a))
         else new CatalystPrimitiveConverter(this, schema.indexOf(a))
-      case _ => throw new RuntimeException("unable to convert datatype in CatalystGroupConverter")
+      case _ => throw new RuntimeException(
+        s"unable to convert datatype ${a.dataType.toString} in CatalystGroupConverter")
     }
   }.toArray
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
-  def getCurrentRecord: GenericRow = current
+  def getCurrentRecord: RowType = current
 
   override def start(): Unit = {
     for (i <- 0 until schema.length) {
@@ -174,12 +176,13 @@ class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
   }
 
   override def end(): Unit = {
-    current = new GenericRow(currentData)
+    // TODO: think about reusing the row versus reusing the underlying array
+    current = new RowType(currentData)
   }
 }
 
 /**
- * A [[parquet.io.api.PrimitiveConverter]] that converts Parquet types to Catalyst types.
+ * A `parquet.io.api.PrimitiveConverter` that converts Parquet types to Catalyst types.
  *
  * @param parent The parent group converter.
  * @param fieldIndex The index inside the record.
@@ -189,26 +192,26 @@ class CatalystPrimitiveConverter(
     fieldIndex: Int) extends PrimitiveConverter {
   // TODO: consider refactoring these together with ParquetTypesConverter
   override def addBinary(value: Binary): Unit =
-    parent.currentData.update(fieldIndex, value.getBytes.asInstanceOf[BinaryType.JvmType])
+    parent.currentData.update(fieldIndex, value.getBytes)
 
   override def addBoolean(value: Boolean): Unit =
-    parent.currentData.update(fieldIndex, value.asInstanceOf[BooleanType.JvmType])
+    parent.currentData.update(fieldIndex, value)
 
   override def addDouble(value: Double): Unit =
-    parent.currentData.update(fieldIndex, value.asInstanceOf[DoubleType.JvmType])
+    parent.currentData.update(fieldIndex, value)
 
   override def addFloat(value: Float): Unit =
-    parent.currentData.update(fieldIndex, value.asInstanceOf[FloatType.JvmType])
+    parent.currentData.update(fieldIndex, value)
 
   override def addInt(value: Int): Unit =
-    parent.currentData.update(fieldIndex, value.asInstanceOf[IntegerType.JvmType])
+    parent.currentData.update(fieldIndex, value)
 
   override def addLong(value: Long): Unit =
-    parent.currentData.update(fieldIndex, value.asInstanceOf[LongType.JvmType])
+    parent.currentData.update(fieldIndex, value)
 }
 
 /**
- * A [[parquet.io.api.PrimitiveConverter]] that converts Parquet strings (fixed-length byte arrays)
+ * A `parquet.io.api.PrimitiveConverter` that converts Parquet strings (fixed-length byte arrays)
  * into Catalyst Strings.
  *
  * @param parent The parent group converter.
@@ -218,6 +221,6 @@ class CatalystPrimitiveStringConverter(
     parent: CatalystGroupConverter,
     fieldIndex: Int) extends CatalystPrimitiveConverter(parent, fieldIndex) {
   override def addBinary(value: Binary): Unit =
-    parent.currentData.update(fieldIndex, value.toStringUsingUTF8.asInstanceOf[StringType.JvmType])
+    parent.currentData.update(fieldIndex, value.toStringUsingUTF8)
 }
 

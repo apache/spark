@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.parquet
 
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
@@ -32,10 +32,6 @@ import org.apache.spark.sql.catalyst.expressions.Row
 
 class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
   override def beforeAll() {
-    // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
-    // without restarting the JVM.
-    System.clearProperty("spark.driver.port")
-    System.clearProperty("spark.hostPort")
     ParquetTestData.writeFile
   }
 
@@ -64,9 +60,9 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
   }
 
   test("Projection of simple Parquet file") {
-    val scanner = new ParquetTableScan(ParquetTestData.testData.attributes, ParquetTestData.testData, None)(TestSqlContext.sparkContext)
+    val scanner = new ParquetTableScan(ParquetTestData.testData.output, ParquetTestData.testData, None)(TestSqlContext.sparkContext)
     val projected = scanner.pruneColumns(ParquetTypesConverter.convertToAttributes(MessageTypeParser.parseMessageType(ParquetTestData.subTestSchema)))
-    assert(projected.attributes.size === 2)
+    assert(projected.output.size === 2)
     val result = projected.execute().collect()
     val allChecks: Boolean = result.zipWithIndex.forall {
       case (row, index) => {
@@ -86,7 +82,7 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
     val job = new Job()
     val path = new Path("file:///tmp/test/mytesttable")
     val fs: FileSystem = FileSystem.getLocal(ContextUtil.getConfiguration(job))
-    ParquetTypesConverter.writeMetaData(ParquetTestData.testData.attributes, path, TestSqlContext.sparkContext.hadoopConfiguration)
+    ParquetTypesConverter.writeMetaData(ParquetTestData.testData.output, path, TestSqlContext.sparkContext.hadoopConfiguration)
     assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
     val metaData = ParquetTypesConverter.readMetaData(path)
     assert(metaData != null)
@@ -96,13 +92,13 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
   }
 
   /**
-   * Computes the given [[org.apache.spark.sql.execution.ParquetRelation]] and returns its RDD.
+   * Computes the given [[ParquetRelation]] and returns its RDD.
    *
    * @param parquetRelation The Parquet relation.
    * @return An RDD of Rows.
    */
   private def getRDD(parquetRelation: ParquetRelation): RDD[Row] = {
-    val scanner = new ParquetTableScan(parquetRelation.attributes, parquetRelation, None)(TestSqlContext.sparkContext)
+    val scanner = new ParquetTableScan(parquetRelation.output, parquetRelation, None)(TestSqlContext.sparkContext)
     scanner.execute
   }
 }

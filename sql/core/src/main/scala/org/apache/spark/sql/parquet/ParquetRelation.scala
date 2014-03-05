@@ -15,9 +15,9 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql.execution
+package org.apache.spark.sql.parquet
 
-import java.io.{IOException, FileNotFoundException, File}
+import java.io.{IOException, FileNotFoundException}
 
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.apache.hadoop.conf.Configuration
@@ -27,7 +27,7 @@ import org.apache.hadoop.fs.permission.FsAction
 import org.apache.spark.sql.catalyst.plans.logical.{LogicalPlan, BaseRelation}
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.catalyst.types.ArrayType
-import org.apache.spark.sql.catalyst.expressions.{Row, GenericRow, AttributeReference, Attribute}
+import org.apache.spark.sql.catalyst.expressions.{Row, AttributeReference, Attribute}
 import org.apache.spark.sql.catalyst.analysis.UnresolvedException
 
 import parquet.schema.{MessageTypeParser, MessageType}
@@ -36,7 +36,7 @@ import parquet.schema.{PrimitiveType => ParquetPrimitiveType}
 import parquet.schema.{Type => ParquetType}
 import parquet.schema.Type.Repetition
 import parquet.io.api.{Binary, RecordConsumer}
-import parquet.hadoop.{Footer, ParquetFileWriter, ParquetWriter, ParquetFileReader}
+import parquet.hadoop.{Footer, ParquetFileWriter, ParquetFileReader}
 import parquet.hadoop.metadata.{FileMetaData, ParquetMetadata}
 import parquet.hadoop.util.ContextUtil
 
@@ -45,29 +45,56 @@ import scala.collection.JavaConversions._
 /**
  * Relation formed by underlying Parquet file that contains data stored in columnar form.
  * Note that there are currently two ways to import a ParquetRelation:
- * a) create the Relation "manually" and register via the OverrideCatalog, e.g.:
- *    TestShark.catalog.overrideTable(
- *      Some[String]("parquet"),
- *      "testsource",
- *      ParquetTestData.testData)
- *    and then execute the query as usual.
- * b) store a relation via WriteToFile and manually resolve the corresponding
- *    ParquetRelation:
- *    val query = TestShark.parseSql(querystr).transform {
- *      case relation @ UnresolvedRelation(databaseName, name, alias) =>
- *        if(name.equals(tableName))
- *          ParquetRelation(tableName, filename)
- *        else
- *          relation
- *    }
- *    TestShark.executePlan(query)
- *    .toRdd
- *    .collect()
  *
- * @param tableName The name of the relation.
+ * {{{
+ * // a) create the Relation "manually" and register via the OverrideCatalog, e.g.:
+ * scala> ParquetTestData.writeFile
+ *
+ * scala> TestHive.catalog.overrideTable(None, "psrc", ParquetTestData.testData)
+ * res1: Option[org.apache.spark.sql.catalyst.plans.logical.LogicalPlan] = None
+ *
+ * scala> val query = sql("SELECT * FROM psrc")
+ * query: org.apache.spark.sql.ExecutedQuery =
+ * SELECT * FROM psrc
+ * === Query Plan ===
+ * ParquetTableScan [myboolean#6,myint#7,mystring#8,mylong#9L,myfloat#10,mydouble#11],
+ * (ParquetRelation testData, file:/tmp/testParquetFile), None
+ *
+ * scala> query.collect
+ * res2: Array[org.apache.spark.sql.Row] = Array([true,5,abc,8589934592,2.5,4.5], ...
+ *
+ * // b) "manually" resolve the relation by modifying the logical plan
+ * scala> import org.apache.spark.sql.execution.ParquetRelation
+ * import org.apache.spark.sql.execution.ParquetRelation
+ *
+ * scala> ParquetTestData.writeFile
+ *
+ * scala> val filename = ParquetTestData.testFile.toString
+ * filename: String = /tmp/testParquetFile
+ *
+ * scala> val query_string = "SELECT * FROM psrc"
+ * query_string: String = SELECT * FROM psrc
+ *
+ * scala> val query = TestHive.parseSql(query_string).transform {
+ *    | case relation @ UnresolvedRelation(databaseName, name, alias) =>
+ *    | if(name == "psrc") ParquetRelation(name, filename)
+ *    | else relation
+ *    | }
+ * query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
+ * Project [*]
+ * ParquetRelation psrc, /tmp/testParquetFile
+ *
+ * scala> executePlan(query).toRdd.collect()
+ * res8: Array[org.apache.spark.sql.Row] = Array([true,5,abc,8589934592,2.5,4.5], ...
+ * }}}
+ *
+ * @param tableName The name of the relation that can be used in queries.
  * @param path The path to the Parquet file.
  */
 case class ParquetRelation(val tableName: String, val path: String) extends BaseRelation {
+
+  // TODO: Figure out resolution of unresolved ParquetRelation (a simple MetaStore?)
+  // to make this more user friendly
 
   /** Schema derived from ParquetFile **/
   def parquetSchema: MessageType =
@@ -91,6 +118,22 @@ case class ParquetRelation(val tableName: String, val path: String) extends Base
 
 object ParquetRelation {
 
+  // The element type for the RDDs that this relation maps to.
+  type RowType = org.apache.spark.sql.catalyst.expressions.GenericRow
+
+  /**
+   * Creates a new ParquetRelation and underlying Parquetfile for the given
+   * LogicalPlan. Note that this is used insider [[SparkStrategies]] to
+   * create a resolved relation as a data sink for writing to a Parquetfile.
+   * The relation is empty but is initialized with ParquetMetadata and
+   * can be inserted into.
+   *
+   * @param pathString The directory the Parquetfile will be stored in.
+   * @param child The child node that will be used for extracting the schema.
+   * @param conf A configuration configuration to be used.
+   * @param tableName The name of the resulting relation.
+   * @return An empty ParquetRelation inferred metadata.
+   */
   def create(pathString: String,
              child: LogicalPlan,
              conf: Configuration,
@@ -111,10 +154,10 @@ object ParquetRelation {
     val path = new Path(pathStr)
     val fs = path.getFileSystem(conf)
     if(fs.exists(path) &&
-      !fs.getFileStatus(path)
-      .getPermission
-      .getUserAction
-      .implies(FsAction.READ_WRITE)) {
+        !fs.getFileStatus(path)
+        .getPermission
+        .getUserAction
+        .implies(FsAction.READ_WRITE)) {
       throw new IOException(
         s"Unable to create ParquetRelation: path ${path.toString} not read-writable")
     }
@@ -134,7 +177,8 @@ object ParquetTypesConverter {
     case ParquetPrimitiveTypeName.INT32 => IntegerType
     case ParquetPrimitiveTypeName.INT64 => LongType
     case ParquetPrimitiveTypeName.INT96 => LongType // TODO: is there an equivalent?
-    case _ => sys.error(s"Unsupported parquet datatype")
+    case _ => sys.error(
+      s"Unsupported parquet datatype ${parquetType.asInstanceOf[Enum[String]].toString()}")
   }
 
   def fromDataType(ctype: DataType): ParquetPrimitiveTypeName = ctype match {
@@ -145,7 +189,7 @@ object ParquetTypesConverter {
     case FloatType => ParquetPrimitiveTypeName.FLOAT
     case IntegerType => ParquetPrimitiveTypeName.INT32
     case LongType => ParquetPrimitiveTypeName.INT64
-    case _ => sys.error(s"Unsupported datatype")
+    case _ => sys.error(s"Unsupported datatype ${ctype.toString}")
   }
 
   def consumeType(consumer: RecordConsumer, ctype: DataType, record: Row, index: Int): Unit = {
@@ -160,7 +204,7 @@ object ParquetTypesConverter {
       case DoubleType => consumer.addDouble(record.getDouble(index))
       case FloatType => consumer.addFloat(record.getFloat(index))
       case BooleanType => consumer.addBoolean(record.getBoolean(index))
-      case _ => sys.error(s"Unsupported datatype, cannot write to consumer")
+      case _ => sys.error(s"Unsupported datatype ${ctype.toString}, cannot write to consumer")
     }
   }
 
@@ -230,7 +274,7 @@ object ParquetTypesConverter {
    * in the parent directory. If so, this is used. Else we read the actual footer at the given
    * location.
    * @param path The path at which we expect one (or more) Parquet files.
-   * @return The [[ParquetMetadata]] containing among other things the schema.
+   * @return The `ParquetMetadata` containing among other things the schema.
    */
   def readMetaData(path: Path): ParquetMetadata = {
     val job = new Job()
@@ -249,61 +293,5 @@ object ParquetTypesConverter {
       }
       ParquetFileReader.readFooter(conf, path)
     }
-  }
-}
-
-object ParquetTestData {
-
-  val testSchema =
-    """message myrecord {
-      |optional boolean myboolean;
-      |optional int32 myint;
-      |optional binary mystring;
-      |optional int64 mylong;
-      |optional float myfloat;
-      |optional double mydouble;
-      |}""".stripMargin
-
-  val subTestSchema =
-    """
-      |message myrecord {
-      |optional boolean myboolean;
-      |optional int64 mylong;
-      |}
-    """.stripMargin
-
-  val testFile = new File("/tmp/testParquetFile").getAbsoluteFile
-
-  lazy val testData = new ParquetRelation("testData", testFile.toURI.toString)
-
-  def writeFile = {
-    testFile.delete
-    val path: Path = new Path(testFile.toURI)
-    val job = new Job()
-    val configuration: Configuration = ContextUtil.getConfiguration(job)
-    val schema: MessageType = MessageTypeParser.parseMessageType(testSchema)
-
-    val writeSupport = new RowWriteSupport()
-    writeSupport.setSchema(schema, configuration)
-    val writer = new ParquetWriter(path, writeSupport)
-    for(i <- 0 until 15) {
-      val data = new Array[Any](6)
-      if(i % 3 ==0) {
-        data.update(0, true)
-      } else {
-        data.update(0, false)
-      }
-      if(i % 5 == 0) {
-        data.update(1, 5)
-      } else {
-        data.update(1, null) // optional
-      }
-      data.update(2, "abc")
-      data.update(3, 1L<<33)
-      data.update(4, 2.5F)
-      data.update(5, 4.5D)
-      writer.write(new GenericRow(data.toSeq))
-    }
-    writer.close()
   }
 }

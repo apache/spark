@@ -111,8 +111,7 @@ case class InsertIntoCreatedTable(
 
 case class WriteToFile(
     path: String,
-    child: LogicalPlan,
-    tableName: Option[String]) extends UnaryNode {
+    child: LogicalPlan) extends UnaryNode {
   def references = Set.empty
   def output = child.output
 }
