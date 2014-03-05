@@ -35,8 +35,11 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
     newPartitioning match {
       case HashPartitioning(expressions, numPartitions) => {
         // TODO: Eliminate redundant expressions in grouping key and value.
-        val rdd = child.execute().mapPartitions { iter =>
+        // TODO: Should avoid copy, but there seems to be a bug in Spark.
+        val rdd = child.execute().map(_.copy()).mapPartitions { iter =>
+          // TODO: Should use MutableProjection
           val hashExpressions = new Projection(expressions)
+          // TODO: Should use mutable pair.
           iter.map(r => (hashExpressions(r), r))
         }
         val part = new HashPartitioner(numPartitions)
@@ -48,7 +51,8 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         // TODO: ShuffledRDD should take an Ordering.
         implicit val ordering = new RowOrdering(sortingExpressions)
 
-        val rdd = child.execute().map(row => (row, null))
+        // TODO: Avoid copy and use MutablePair.
+        val rdd = child.execute().map(row => (row.copy(), null))
         val part = new RangePartitioner(numPartitions, rdd, ascending = true)
         val shuffled = new ShuffledRDD[Row, Null, (Row, Null)](rdd, part)
 

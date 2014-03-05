@@ -112,7 +112,7 @@ class SparkSqlContext(val sparkContext: SparkContext) extends Logging {
     lazy val executedPlan: SparkPlan = PrepareForExecution(sparkPlan)
 
     // TODO: We are loosing schema here.
-    lazy val toRdd: RDD[Row] = executedPlan.execute()
+    lazy val toRdd: RDD[Row] = executedPlan.execute().map(_.copy())
 
     protected def stringOrError[A](f: => A): String =
       try f.toString catch { case e: Throwable => e.toString }

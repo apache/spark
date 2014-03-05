@@ -2,10 +2,9 @@ package org.apache.spark.sql.catalyst
 package expressions
 
 /**
- * Converts a Row to another Row given a set of expressions.
- *
- * If the schema of the input row is specified, then the given expression will be bound to that
- * schema.
+ * Converts a [[Row]] to another Row given a sequence of expression that define each column of the
+ * new row. If the schema of the input row is specified, then the given expression will be bound to
+ * that schema.
  */
 class Projection(expressions: Seq[Expression]) extends (Row => Row) {
   def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
@@ -20,6 +19,33 @@ class Projection(expressions: Seq[Expression]) extends (Row => Row) {
       i += 1
     }
     new GenericRow(outputArray)
+  }
+}
+
+/**
+ * Converts a [[Row]] to another Row given a sequence of expression that define each column of th
+ * new row. If the schema of the input row is specified, then the given expression will be bound to
+ * that schema.
+ *
+ * In contrast to a normal projection, a MutableProjection reuses the same underlying row object
+ * each time an input row is added.  This significatly reduces the cost of calcuating the
+ * projection, but means that it is not safe
+ */
+case class MutableProjection(expressions: Seq[Expression]) extends (Row => Row) {
+  def this(expressions: Seq[Expression], inputSchema: Seq[Attribute]) =
+    this(expressions.map(BindReferences.bindReference(_, inputSchema)))
+
+  private[this] val exprArray = expressions.toArray
+  private[this] val mutableRow = new GenericMutableRow(exprArray.size)
+  def currentValue: Row = mutableRow
+
+  def apply(input: Row): Row = {
+    var i = 0
+    while (i < exprArray.size) {
+      mutableRow(i) = exprArray(i).apply(input)
+      i += 1
+    }
+    mutableRow
   }
 }
 
@@ -68,4 +94,17 @@ class JoinedRow extends Row {
   def getFloat(i: Int): Float =
     if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
 
+  def getString(i: Int): String =
+    if (i < row1.size) row1.getString(i) else row2.getString(i - row1.size)
+
+  def copy() = {
+    val totalSize = row1.size + row2.size
+    val copiedValues = new Array[Any](totalSize)
+    var i = 0
+    while(i < totalSize) {
+      copiedValues(i) = apply(i)
+      i += 1
+    }
+    new GenericRow(copiedValues)
+  }
 }

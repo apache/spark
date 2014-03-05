@@ -90,7 +90,7 @@ case class Aggregate(
     // in the [[catalyst.execution.Exchange]].
     val grouped = child.execute().mapPartitions { iter =>
       val buildGrouping = new Projection(groupingExpressions)
-      iter.map(row => (buildGrouping(row), row))
+      iter.map(row => (buildGrouping(row), row.copy()))
     }.groupByKeyLocally()
 
     val result = grouped.map { case (group, rows) =>
