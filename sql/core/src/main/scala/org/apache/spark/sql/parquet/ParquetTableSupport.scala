@@ -177,7 +177,7 @@ class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
 
   override def end(): Unit = {
     // TODO: think about reusing the row versus reusing the underlying array
-    current = new RowType(currentData)
+    current = new RowType(currentData.clone())
   }
 }
 
