@@ -150,7 +150,7 @@ object RowWriteSupport {
  */
 class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
   type RowType = ParquetRelation.RowType
-  var current: RowType = new RowType(Seq())
+  var current: RowType = new RowType(Array[Any]())
   // initialization may not strictly be required
   val currentData: Array[Any] = new Array[Any](schema.length)
 

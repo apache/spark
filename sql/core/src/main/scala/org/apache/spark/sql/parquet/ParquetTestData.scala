@@ -77,7 +77,7 @@ object ParquetTestData {
       data.update(3, 1L<<33)
       data.update(4, 2.5F)
       data.update(5, 4.5D)
-      writer.write(new ParquetRelation.RowType(data.toSeq))
+      writer.write(new ParquetRelation.RowType(data.toArray))
     }
     writer.close()
   }
