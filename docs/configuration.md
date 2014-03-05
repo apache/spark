@@ -694,6 +694,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.diskStore.subDirectories</td>
+  <td>64</td>
+  <td>
+    Specifies how many subdirectories under each local directory. Setting more sub directories under each local directory
+     can help to avoid the fat inode.
+  </td>
+</tr>
+<tr>
   <td>spark.files.overwrite</td>
   <td>false</td>
   <td>
