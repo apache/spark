@@ -20,6 +20,7 @@ import shutil
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
+from collections import namedtuple
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -87,7 +88,8 @@ class SparkContext(object):
         if rdd._extract_concise_traceback() is not None:
             self._callsite = rdd._extract_concise_traceback()
         else:
-            self._callsite = {"function": None, "file": None, "line": None}
+            tempNamedTuple = namedtuple("Callsite", "function file linenum")
+            self._callsite = tempNamedTuple(function=None, file=None, linenum=None)
         SparkContext._ensure_initialized(self, gateway=gateway)
 
         self.environment = environment or {}
@@ -181,7 +183,7 @@ class SparkContext(object):
                     # Raise error if there is already a running Spark context
                     raise ValueError("Cannot run multiple SparkContexts at once; existing SparkContext(app=%s, master=%s)" \
                         " created by %s at %s:%s " \
-                        % (currentAppName, currentMaster, callsite['function'], callsite['file'], callsite['line']))
+                        % (currentAppName, currentMaster, callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
 

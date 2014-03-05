@@ -18,6 +18,7 @@
 from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
+from collections import namedtuple
 from itertools import chain, ifilter, imap
 import operator
 import os
@@ -47,6 +48,7 @@ def _extract_concise_traceback():
     with function name, file name and line number
     """
     tb = traceback.extract_stack()
+    callsite = namedtuple("Callsite", "function file linenum")
     if len(tb) == 0:
         return None
     file, line, module, what = tb[len(tb) - 1]
@@ -59,10 +61,10 @@ def _extract_concise_traceback():
             break
     if first_spark_frame == 0:
         file, line, fun, what = tb[0]
-        return {"function": fun, "file": file, "line": line}
+        return callsite(function=fun, file=file, linenum=line)
     sfile, sline, sfun, swhat = tb[first_spark_frame]
     ufile, uline, ufun, uwhat = tb[first_spark_frame-1]
-    return {"function": sfun, "file": ufile, "line": uline}
+    return callsite(function=sfun, file=ufile, linenum=uline)
 
 _spark_stack_depth = 0
 
@@ -70,7 +72,7 @@ class _JavaStackTrace(object):
     def __init__(self, sc):
         tb = _extract_concise_traceback()
         if tb is not None:
-            self._traceback = "%s at %s:%s" % (tb["function"], tb["file"], tb["line"])
+            self._traceback = "%s at %s:%s" % (tb.function, tb.file, tb.linenum)
         else:
             self._traceback = "Error! Could not extract traceback info"
         self._context = sc
