@@ -163,7 +163,7 @@ class RDD(object):
 
     def map(self, f, preservesPartitioning=False):
         """
-        Return a new RDD containing the distinct elements in this RDD.
+        Return a new RDD by applying a function to each element of this RDD.
         """
         def func(split, iterator): return imap(f, iterator)
         return PipelinedRDD(self, func, preservesPartitioning)
