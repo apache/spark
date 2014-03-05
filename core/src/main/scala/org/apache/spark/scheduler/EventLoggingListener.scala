@@ -38,13 +38,14 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   private val shouldLog = conf.getBoolean("spark.eventLog.enabled", false)
   private val shouldCompress = conf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", true)
-  private val logDir = conf.get("spark.eventLog.dir", "/tmp/spark-events")
   private val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
+  private val logBaseDir = conf.get("spark.eventLog.dir", "/tmp/spark-events").stripSuffix("/")
   private val name = appName.replaceAll("[ /]", "-").toLowerCase + "-" + System.currentTimeMillis()
+  private val logDir = logBaseDir + "/" + name
 
   private val logger: Option[FileLogger] = if (shouldLog) {
       logInfo("Logging events to %s".format(logDir))
-      Some(new FileLogger(logDir, name, conf, outputBufferSize, shouldCompress, shouldOverwrite))
+      Some(new FileLogger(logDir, conf, outputBufferSize, shouldCompress, shouldOverwrite))
     } else {
       logWarning("Event logging is disabled. To enable it, set spark.eventLog.enabled to true.")
       None

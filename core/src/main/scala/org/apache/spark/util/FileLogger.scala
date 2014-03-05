@@ -31,22 +31,19 @@ import org.apache.spark.io.CompressionCodec
 /**
  * A generic class for logging information to file.
  *
- * @param logBaseDir Path to the directory in which files are logged
- * @param name An identifier of each FileLogger instance
+ * @param logDir Path to the directory in which files are logged
  * @param outputBufferSize The buffer size to use when writing to an output stream in bytes
  * @param compress Whether to compress output
  * @param overwrite Whether to overwrite existing files
  */
 class FileLogger(
-    logBaseDir: String,
-    name: String = String.valueOf(System.currentTimeMillis()),
+    logDir: String,
     conf: SparkConf = new SparkConf(),
     outputBufferSize: Int = 8 * 1024,
     compress: Boolean = false,
     overwrite: Boolean = true)
   extends Logging {
 
-  private val logDir = logBaseDir.stripSuffix("/") + "/" + name
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private val fileSystem = Utils.getHadoopFileSystem(logDir)
   private var fileIndex = 0
