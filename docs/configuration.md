@@ -569,6 +569,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.jars</td>
+  <td>(not set)</td>
+  <td>
+    The external jars to be propagated to the executors from the driver. Users can specify multiple jars by separating them
+     with ",".
+  </td>
+</tr>
+<tr>
   <td>spark.logConf</td>
   <td>false</td>
   <td>
