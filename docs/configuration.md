@@ -232,6 +232,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.shuffle.copier.threads</td>
+  <td>6</td>
+  <td>
+    When using Netty, this parameter specifies the number of concurrent threads fetching the shuffle results. This parameter
+     is only valid when <code>spark.shuffle.use.netty</code> is set to true
+  </td>
+</tr>
+<tr>
   <td>spark.shuffle.spill.compress</td>
   <td>true</td>
   <td>
