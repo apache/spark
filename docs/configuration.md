@@ -172,6 +172,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.storage.blockManagerTimeoutIntervalMs</td>
+  <td>60000</td>
+  <td>
+    This parameter controls two values: First, the interval length for the BlockManagers running on the executors to send hearbeat
+    to the BlockManager running on the driver. Please note that in Spark the actual frequency is the value set with this parameter divided by 4.
+    Second, this value also controls the timeout threshold of the slave node, which is <code>spark.storage.blockManagerSlaveTimeoutMs</code> +
+    <code>spark.storage.blockManagerTimeoutIntervalMs</code> * 3. (In milliseconds)
+  </td>
+</tr>
+<tr>
   <td>spark.storage.memoryFraction</td>
   <td>0.6</td>
   <td>
