@@ -240,6 +240,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.shuffle.use.netty</td>
+  <td>false</td>
+  <td>
+    If use Netty to fetch map output in shuffle.
+  </td>
+</tr>
+<tr>
   <td>spark.shuffle.spill.compress</td>
   <td>true</td>
   <td>
