@@ -455,6 +455,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.dead.worker.persistence</td>
+  <td>15</td>
+  <td>
+    This parameter controls when Spark will remove the worker information from the UI if it is dead.
+    If it has been longer than (<code>spark.dead.worker.persistence</code> + 1) * <code> spark.worker.timeout
+    </code> seconds since the worker is dead, Spark will remove it from UI.
+  </td>
+</tr>
+<tr>
   <td>spark.deploy.defaultCores</td>
   <td>(infinite)</td>
   <td>
@@ -465,7 +474,7 @@ Apart from these, the following properties are also available, and may be useful
     the whole cluster by default. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
     applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
-</td>
+  </td>
 </tr>
 <tr>
   <td>spark.deploy.retainedApplications</td>
