@@ -25,22 +25,26 @@ import org.apache.spark.{Logging, SparkConf}
 /**
  * A SparkListener that logs events to persistent storage.
  *
- * Event logging is specified by three configurable parameters:
+ * Event logging is specified by the following configurable parameters:
  *   spark.eventLog.enabled - Whether event logging is enabled.
- *   spark.eventLog.dir - Path to the directory in which events are logged.
+ *   spark.eventLog.compress - Whether to compress logged events
  *   spark.eventLog.overwrite - Whether to overwrite any existing files.
+ *   spark.eventLog.dir - Path to the directory in which events are logged.
+ *   spark.eventLog.buffer.kb - Buffer size to use when writing to output streams
  */
 private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   extends SparkListener with Logging {
 
   private val shouldLog = conf.getBoolean("spark.eventLog.enabled", false)
-  private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", false)
+  private val shouldCompress = conf.getBoolean("spark.eventLog.compress", false)
+  private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", true)
   private val logDir = conf.get("spark.eventLog.dir", "/tmp/spark-events")
+  private val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val name = appName.replaceAll("[ /]", "-").toLowerCase + "-" + System.currentTimeMillis()
 
   private val logger: Option[FileLogger] = if (shouldLog) {
       logInfo("Logging events to %s".format(logDir))
-      Some(new FileLogger(logDir, name, overwrite = shouldOverwrite))
+      Some(new FileLogger(logDir, name, conf, outputBufferSize, shouldCompress, shouldOverwrite))
     } else {
       logWarning("Event logging is disabled. To enable it, set spark.eventLog.enabled to true.")
       None

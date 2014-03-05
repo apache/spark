@@ -111,7 +111,7 @@ private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf) extends Logg
       sc.listenerBus.addListener(eventLogger.get)
       sc.listenerBus
     } else {
-      replayerBus = Some(new SparkReplayerBus)
+      replayerBus = Some(new SparkReplayerBus(conf))
       replayerBus.get
     }
     eventBus.addListener(storage.listener)

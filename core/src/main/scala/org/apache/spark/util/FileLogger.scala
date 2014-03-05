@@ -23,20 +23,26 @@ import java.net.URI
 import java.util.Date
 
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
-
-import org.apache.spark.Logging
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
+
+import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.io.CompressionCodec
 
 /**
  * A generic class for logging information to file.
  *
  * @param logBaseDir Path to the directory in which files are logged
  * @param name An identifier of each FileLogger instance
+ * @param outputBufferSize The buffer size to use when writing to an output stream in bytes
+ * @param compress Whether to compress output
  * @param overwrite Whether to overwrite existing files
  */
 class FileLogger(
     logBaseDir: String,
     name: String = String.valueOf(System.currentTimeMillis()),
+    conf: SparkConf = new SparkConf(),
+    outputBufferSize: Int = 8 * 1024,
+    compress: Boolean = false,
     overwrite: Boolean = true)
   extends Logging {
 
@@ -44,6 +50,9 @@ class FileLogger(
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
   private val fileSystem = Utils.getHadoopFileSystem(logDir)
   private var fileIndex = 0
+
+  // Only used if compression is enabled
+  private lazy val compressionCodec = CompressionCodec.createCodec(conf)
 
   // Only defined if the file system scheme is not local
   private var hadoopDataStream: Option[FSDataOutputStream] = None
@@ -81,7 +90,7 @@ class FileLogger(
      * The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
      * Therefore, for local files, use FileOutputStream instead.
      */
-    val dataStream = uri.getScheme match {
+    val dstream = uri.getScheme match {
       case "hdfs" | "s3" =>
         val path = new Path(logPath)
         hadoopDataStream = Some(fileSystem.create(path, overwrite))
@@ -96,8 +105,9 @@ class FileLogger(
           .format(unsupportedScheme))
     }
 
-    val bufferedStream = new FastBufferedOutputStream(dataStream)
-    new PrintWriter(bufferedStream)
+    val bstream = new FastBufferedOutputStream(dstream, outputBufferSize)
+    val cstream = if (compress) compressionCodec.compressedOutputStream(bstream) else bstream
+    new PrintWriter(cstream)
   }
 
   /**

@@ -25,13 +25,18 @@ import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.Logging
+import org.apache.spark.{SparkConf, Logging}
 import org.apache.spark.util.{Utils, JsonProtocol}
+import org.apache.spark.io.CompressionCodec
 
 /**
  * An EventBus that replays logged events from persisted storage.
  */
-private[spark] class SparkReplayerBus extends EventBus with Logging {
+private[spark] class SparkReplayerBus(conf: SparkConf) extends EventBus with Logging {
+  private val compressed = conf.getBoolean("spark.eventLog.compress", false)
+
+  // Only used if compression is enabled
+  private lazy val compressionCodec = CompressionCodec.createCodec(conf)
 
   /**
    * Return a list of paths representing log files in the given directory.
@@ -67,10 +72,11 @@ private[spark] class SparkReplayerBus extends EventBus with Logging {
       try {
         val fstream = fileSystem.open(path)
         val bstream = new FastBufferedInputStream(fstream)
-        streamToClose = Some(bstream)
+        val cstream = if (compressed) compressionCodec.compressedInputStream(bstream) else bstream
+        streamToClose = Some(cstream)
 
         // Parse each line as an event and post it to all attached listeners
-        val lines = Source.fromInputStream(bstream).getLines()
+        val lines = Source.fromInputStream(cstream).getLines()
         lines.foreach { line =>
           currentLine = line
           val event = JsonProtocol.sparkEventFromJson(parse(line))
@@ -88,5 +94,4 @@ private[spark] class SparkReplayerBus extends EventBus with Logging {
     fileSystem.close()
     true
   }
-
 }

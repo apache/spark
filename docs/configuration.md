@@ -141,6 +141,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.persisted.ui.port</td>
+  <td>14040</td>
+  <td>
+    Port on which a Spark UI rebuilt from persisted storage is hosted.
+  </td>
+</tr>
+<tr>
   <td>spark.ui.retainedStages</td>
   <td>1000</td>
   <td>
@@ -455,10 +462,19 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.eventLog.compress</td>
+  <td>false</td>
+  <td>
+    Whether to compress logged events, if <code>spark.eventLog.enabled</code> is true.
+  </td>
+</tr>
+<tr>
   <td>spark.eventLog.dir</td>
   <td>/tmp/spark-events</td>
   <td>
-    Directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
+    Base directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
+    Within this base directory, Spark creates a sub-directory for each application, and logs the events
+    specific to the application in this directory.
   </td>
 </tr>
 <tr>
