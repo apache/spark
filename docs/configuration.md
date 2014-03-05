@@ -279,6 +279,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.scheduler.allocation.file</td>
+  <td>(not set)</td>
+  <td>
+    User can specify the allocation file location for the <code>FAIR</code> scheduler with this parameter. By default,
+    Spark uses "fairscheduler.xml" in <code>conf</code> directory as the allocation file.
+  </td>
+</tr>
+<tr>
   <td>spark.scheduler.revive.interval</td>
   <td>1000</td>
   <td>
