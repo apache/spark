@@ -55,8 +55,6 @@ private[spark] object JsonProtocol {
         jobStartToJson(jobStart)
       case jobEnd: SparkListenerJobEnd =>
         jobEndToJson(jobEnd)
-      case applicationStart: SparkListenerApplicationStart =>
-        applicationStartToJson(applicationStart)
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
         environmentUpdateToJson(environmentUpdate)
       case executorsStateChange: SparkListenerExecutorsStateChange =>
@@ -124,11 +122,6 @@ private[spark] object JsonProtocol {
     ("Event" -> Utils.getFormattedClassName(jobEnd)) ~
     ("Job ID" -> jobEnd.jobId) ~
     ("Job Result" -> jobResult)
-  }
-
-  def applicationStartToJson(applicationStart: SparkListenerApplicationStart): JValue = {
-    ("Event" -> Utils.getFormattedClassName(applicationStart)) ~
-    ("App Name" -> applicationStart.appName)
   }
 
   def environmentUpdateToJson(environmentUpdate: SparkListenerEnvironmentUpdate): JValue = {
@@ -389,7 +382,6 @@ private[spark] object JsonProtocol {
     val taskEnd = Utils.getFormattedClassName(SparkListenerTaskEnd)
     val jobStart = Utils.getFormattedClassName(SparkListenerJobStart)
     val jobEnd = Utils.getFormattedClassName(SparkListenerJobEnd)
-    val applicationStart = Utils.getFormattedClassName(SparkListenerApplicationStart)
     val environmentUpdate = Utils.getFormattedClassName(SparkListenerEnvironmentUpdate)
     val executorsStateChanged = Utils.getFormattedClassName(SparkListenerExecutorsStateChange)
     val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
@@ -403,7 +395,6 @@ private[spark] object JsonProtocol {
       case `taskEnd` => taskEndFromJson(json)
       case `jobStart` => jobStartFromJson(json)
       case `jobEnd` => jobEndFromJson(json)
-      case `applicationStart` => applicationStartFromJson(json)
       case `environmentUpdate` => environmentUpdateFromJson(json)
       case `executorsStateChanged` => executorsStateChangeFromJson(json)
       case `unpersistRDD` => unpersistRDDFromJson(json)
@@ -453,10 +444,6 @@ private[spark] object JsonProtocol {
     val jobId = (json \ "Job ID").extract[Int]
     val jobResult = jobResultFromJson(json \ "Job Result")
     SparkListenerJobEnd(jobId, jobResult)
-  }
-
-  def applicationStartFromJson(json: JValue): SparkListenerApplicationStart = {
-    SparkListenerApplicationStart((json \ "App Name").extract[String])
   }
 
   def environmentUpdateFromJson(json: JValue): SparkListenerEnvironmentUpdate = {

@@ -29,24 +29,25 @@ import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.util.Utils
 
 /** Top level user interface for Spark. */
-private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf) extends Logging {
+private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf, port: Int) extends Logging {
 
-  def this() = this(null, new SparkConf())
-  def this(conf: SparkConf) = this(null, conf)
-  def this(sc: SparkContext) = this(sc, sc.conf)
+  def this(sc: SparkContext) =
+    this(sc, sc.conf, sc.conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt)
+
+  // Persisted UI constructors
+  def this(conf: SparkConf, port: Int) = this(null, conf, port)
+  def this(conf: SparkConf) =
+    this(conf, conf.get("spark.persisted.ui.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt)
+  def this() = this(new SparkConf())
 
   // If SparkContext is not provided, assume this UI is rendered from persisted storage
   val live = sc != null
-  val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
-  var port = if (live) {
-      conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
-    } else {
-      conf.get("spark.persisted.ui.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt
-    }
-  var boundPort: Option[Int] = None
-  var server: Option[Server] = None
-  var started = false
-  var appName = ""
+  var appName = if (live) sc.appName else ""
+
+  private val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
+  private var boundPort: Option[Int] = None
+  private var server: Option[Server] = None
+  private var started = false
 
   private val storage = new BlockManagerUI(this)
   private val jobs = new JobProgressUI(this)
@@ -68,10 +69,6 @@ private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf) extends Logg
   private val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
     exec.getHandlers ++ metricsServletHandlers ++ handlers
 
-
-  // A simple listener that sets the app name for this SparkUI
-  private val appNameListener = new AppNameListener(this)
-
   // Only log events if this SparkUI is live
   private var eventLogger: Option[EventLoggingListener] = None
 
@@ -79,6 +76,9 @@ private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf) extends Logg
   private var replayerBus: Option[SparkReplayerBus] = None
 
   def setAppName(name: String) = appName = name
+
+  // Path to directory in which events are logged, if any
+  def eventLogDir: Option[String] = eventLogger.map { l => Some(l.logDir) }.getOrElse(None)
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {
@@ -107,8 +107,12 @@ private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf) extends Logg
 
     // Listen for events from the SparkContext if it exists, otherwise from persisted storage
     val eventBus = if (live) {
-      eventLogger = Some(new EventLoggingListener(sc.appName, conf))
-      sc.listenerBus.addListener(eventLogger.get)
+      val loggingEnabled = conf.getBoolean("spark.eventLog.enabled", false)
+      if (loggingEnabled) {
+        val logger = new EventLoggingListener(appName, conf)
+        eventLogger = Some(logger)
+        sc.listenerBus.addListener(logger)
+      }
       sc.listenerBus
     } else {
       replayerBus = Some(new SparkReplayerBus(conf))
@@ -118,7 +122,6 @@ private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf) extends Logg
     eventBus.addListener(jobs.listener)
     eventBus.addListener(env.listener)
     eventBus.addListener(exec.listener)
-    eventBus.addListener(appNameListener)
     started = true
   }
 
@@ -140,7 +143,7 @@ private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf) extends Logg
     logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 
-  private[spark] def appUIAddress = host + ":" + boundPort.getOrElse("-1")
+  private[spark] def appUIAddress = "http://" + host + ":" + boundPort.getOrElse("-1")
 
 }
 

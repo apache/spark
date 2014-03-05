@@ -37,6 +37,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Actor with Logging {
@@ -50,6 +51,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
   val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
+  val MAX_NUM_PERSISTED_UI = conf.getInt("spark.persisted.ui.maxConcurrent", 25)
+  val PERSISTED_SPARK_UI_PORT =
+    conf.get("spark.persisted.ui.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt
 
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
@@ -62,6 +66,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val waitingApps = new ArrayBuffer[ApplicationInfo]
   val completedApps = new ArrayBuffer[ApplicationInfo]
   var nextAppNumber = 0
+
+  val appIdToUI = new HashMap[String, SparkUI]
+  var nextPersistedUIPort = PERSISTED_SPARK_UI_PORT
 
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -139,6 +146,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
 
   override def postStop() {
     webUi.stop()
+    appIdToUI.values.foreach(_.stop())
     masterMetricsSystem.stop()
     applicationMetricsSystem.stop()
     persistenceEngine.close()
@@ -572,8 +580,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   def createApplication(desc: ApplicationDescription, driver: ActorRef): ApplicationInfo = {
     val now = System.currentTimeMillis()
     val date = new Date(now)
-    new ApplicationInfo(
-      now, newApplicationId(date), desc, date, driver, desc.appUiUrl, defaultCores)
+    new ApplicationInfo(now, newApplicationId(date), desc, date, driver, defaultCores)
   }
 
   def registerApplication(app: ApplicationInfo): Unit = {
@@ -609,8 +616,31 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         })
         completedApps.trimStart(toRemove)
       }
-      completedApps += app // Remember it in our history
       waitingApps -= app
+
+      // If application events are logged, use them to rebuild the UI
+      val rebuildAppUI = app.desc.eventLogDir.isDefined
+      if (rebuildAppUI) {
+        val appName = app.desc.name
+        val eventLogDir = app.desc.eventLogDir.get
+        val ui = startPersistedSparkUI(appName, eventLogDir)
+        app.desc.appUiUrl = ui.appUIAddress
+        appIdToUI(app.id) = ui
+      } else {
+        // Avoid broken links
+        app.desc.appUiUrl = ""
+      }
+      completedApps += app
+
+      // Cap the number of UIs concurrently running
+      if (appIdToUI.size > MAX_NUM_PERSISTED_UI) {
+        val oldCompletedApp = completedApps.find { oldApp => appIdToUI.contains(oldApp.id) }
+        oldCompletedApp.foreach { oldApp =>
+          completedApps -= oldApp
+          appIdToUI.remove(oldApp.id).foreach(_.stop())
+        }
+      }
+
       for (exec <- app.executors.values) {
         exec.worker.removeExecutor(exec)
         exec.worker.actor ! KillExecutor(masterUrl, exec.application.id, exec.id)
@@ -623,6 +653,17 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       persistenceEngine.removeApplication(app)
       schedule()
     }
+  }
+
+  /** Start a new SparkUI rendered from persisted storage */
+  def startPersistedSparkUI(appName: String, eventLogDir: String): SparkUI = {
+    val ui = new SparkUI(conf, nextPersistedUIPort)
+    ui.setAppName(appName)
+    ui.bind()
+    ui.start()
+    ui.renderFromPersistedStorage(eventLogDir)
+    nextPersistedUIPort += 1
+    ui
   }
 
   /** Generate a new app ID given a app's submission date */

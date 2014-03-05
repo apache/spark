@@ -35,28 +35,24 @@ import org.apache.spark.{Logging, SparkConf}
 private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   extends SparkListener with Logging {
 
-  private val shouldLog = conf.getBoolean("spark.eventLog.enabled", false)
   private val shouldCompress = conf.getBoolean("spark.eventLog.compress", false)
   private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", true)
   private val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val logBaseDir = conf.get("spark.eventLog.dir", "/tmp/spark-events").stripSuffix("/")
   private val name = appName.replaceAll("[ /]", "-").toLowerCase + "-" + System.currentTimeMillis()
-  private val logDir = logBaseDir + "/" + name
+  val logDir = logBaseDir + "/" + name
 
-  private val logger: Option[FileLogger] = if (shouldLog) {
-      logInfo("Logging events to %s".format(logDir))
-      Some(new FileLogger(logDir, conf, outputBufferSize, shouldCompress, shouldOverwrite))
-    } else {
-      logWarning("Event logging is disabled. To enable it, set spark.eventLog.enabled to true.")
-      None
-    }
+  private val logger =
+    new FileLogger(logDir, conf, outputBufferSize, shouldCompress, shouldOverwrite)
+
+  logInfo("Logging events to %s".format(logDir))
 
   /** Log the event as JSON */
   private def logEvent(event: SparkListenerEvent, flushLogger: Boolean = false) {
     val eventJson = compact(render(JsonProtocol.sparkEventToJson(event)))
-    logger.foreach(_.logLine(eventJson))
+    logger.logLine(eventJson)
     if (flushLogger) {
-      logger.foreach(_.flush())
+      logger.flush()
     }
   }
 
@@ -65,7 +61,6 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   override def onTaskStart(event: SparkListenerTaskStart) = logEvent(event)
   override def onTaskGettingResult(event: SparkListenerTaskGettingResult) = logEvent(event)
   override def onTaskEnd(event: SparkListenerTaskEnd) = logEvent(event)
-  override def onApplicationStart(event: SparkListenerApplicationStart) = logEvent(event)
   override def onEnvironmentUpdate(event: SparkListenerEnvironmentUpdate) = logEvent(event)
 
   // Events that trigger a flush
@@ -80,5 +75,5 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD) =
     logEvent(event, flushLogger = true)
 
-  def stop() = logger.foreach(_.stop())
+  def stop() = logger.stop()
 }

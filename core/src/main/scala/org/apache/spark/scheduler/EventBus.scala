@@ -62,8 +62,6 @@ private[spark] trait EventBus {
         listeners.foreach(_.onTaskGettingResult(taskGettingResult))
       case taskEnd: SparkListenerTaskEnd =>
         listeners.foreach(_.onTaskEnd(taskEnd))
-      case applicationStart: SparkListenerApplicationStart =>
-        listeners.foreach(_.onApplicationStart(applicationStart))
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
         listeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
       case executorsStateChange: SparkListenerExecutorsStateChange =>

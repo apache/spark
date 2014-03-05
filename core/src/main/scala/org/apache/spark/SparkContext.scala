@@ -202,14 +202,12 @@ class SparkContext(
   ui.start()
 
   // Create and start the scheduler
-  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master, appName)
+  private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
   taskScheduler.start()
 
   @volatile private[spark] var dagScheduler = new DAGScheduler(this)
   dagScheduler.start()
 
-  // Post initialization events
-  postApplicationStartEvent()
   postEnvironmentUpdateEvent()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
@@ -1039,14 +1037,6 @@ class SparkContext(
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
-  /** Post the application start event if the listener bus is ready */
-  private def postApplicationStartEvent() {
-    Option(listenerBus).foreach { bus =>
-      val applicationStart = SparkListenerApplicationStart(appName)
-      bus.post(applicationStart)
-    }
-  }
-
   /** Post the environment update event if the listener bus is ready */
   private def postEnvironmentUpdateEvent() {
     Option(listenerBus).foreach { bus =>
@@ -1223,9 +1213,7 @@ object SparkContext {
   }
 
   /** Creates a task scheduler based on a given master URL. Extracted for testing. */
-  private def createTaskScheduler(sc: SparkContext, master: String, appName: String)
-      : TaskScheduler =
-  {
+  private def createTaskScheduler(sc: SparkContext, master: String): TaskScheduler = {
     // Regular expression used for local[N] master format
     val LOCAL_N_REGEX = """local\[([0-9]+)\]""".r
     // Regular expression for local[N, maxRetries], used in tests with failing tasks
@@ -1264,7 +1252,7 @@ object SparkContext {
       case SPARK_REGEX(sparkUrl) =>
         val scheduler = new TaskSchedulerImpl(sc)
         val masterUrls = sparkUrl.split(",").map("spark://" + _)
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, appName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         scheduler
 
@@ -1281,7 +1269,7 @@ object SparkContext {
         val localCluster = new LocalSparkCluster(
           numSlaves.toInt, coresPerSlave.toInt, memoryPerSlaveInt)
         val masterUrls = localCluster.start()
-        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls, appName)
+        val backend = new SparkDeploySchedulerBackend(scheduler, sc, masterUrls)
         scheduler.initialize(backend)
         backend.shutdownCallback = (backend: SparkDeploySchedulerBackend) => {
           localCluster.stop()
@@ -1337,9 +1325,9 @@ object SparkContext {
         val coarseGrained = sc.conf.getBoolean("spark.mesos.coarse", false)
         val url = mesosUrl.stripPrefix("mesos://") // strip scheme from raw Mesos URLs
         val backend = if (coarseGrained) {
-          new CoarseMesosSchedulerBackend(scheduler, sc, url, appName)
+          new CoarseMesosSchedulerBackend(scheduler, sc, url)
         } else {
-          new MesosSchedulerBackend(scheduler, sc, url, appName)
+          new MesosSchedulerBackend(scheduler, sc, url)
         }
         scheduler.initialize(backend)
         scheduler

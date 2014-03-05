@@ -49,8 +49,11 @@ private[spark] object JettyUtils extends Logging {
   implicit def textResponderToHandler(responder: Responder[String]): Handler =
     createHandler(responder, "text/plain")
 
-  def createHandler[T <% AnyRef](responder: Responder[T], contentType: String,
-                                 extractFn: T => String = (in: Any) => in.toString): Handler = {
+  def createHandler[T <% AnyRef](
+      responder: Responder[T],
+      contentType: String,
+      extractFn: T => String = (in: Any) => in.toString): Handler = {
+
     new AbstractHandler {
       def handle(target: String,
                  baseRequest: Request,
@@ -99,8 +102,10 @@ private[spark] object JettyUtils extends Logging {
    * If the desired port number is contented, continues incrementing ports until a free port is
    * found. Returns the chosen port and the jetty Server object.
    */
-  def startJettyServer(hostName: String, port: Int, handlers: Seq[(String, Handler)]): (Server, Int)
-  = {
+  def startJettyServer(
+      hostName: String,
+      port: Int,
+      handlers: Seq[(String, Handler)]): (Server, Int) = {
 
     val handlersToRegister = handlers.map { case(path, handler) =>
       val contextHandler = new ContextHandler(path)

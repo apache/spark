@@ -45,8 +45,6 @@ case class SparkListenerJobStart(jobId: Int, stageIds: Seq[Int], properties: Pro
 
 case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkListenerEvent
 
-case class SparkListenerApplicationStart(appName: String) extends SparkListenerEvent
-
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent
 
@@ -98,11 +96,6 @@ trait SparkListener {
    * Called when a job ends
    */
   def onJobEnd(jobEnd: SparkListenerJobEnd) { }
-
-  /**
-   * Called when the application starts
-   */
-  def onApplicationStart(applicationStart: SparkListenerApplicationStart) { }
 
   /**
    * Called when environment properties have been updated

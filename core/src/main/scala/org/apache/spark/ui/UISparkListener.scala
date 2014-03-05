@@ -25,16 +25,6 @@ import org.apache.spark.storage._
 private[ui] trait UISparkListener extends SparkListener
 
 /**
- * A SparkListener that listens only for application start events to set the app name for the UI.
- */
-private[ui] class AppNameListener(parent: SparkUI) extends UISparkListener {
-  override def onApplicationStart(applicationStart: SparkListenerApplicationStart) {
-    val appName = applicationStart.appName
-    parent.setAppName(appName)
-  }
-}
-
-/**
  * A SparkListener that maintains executor storage status
  */
 private[ui] class StorageStatusSparkListener extends UISparkListener {
