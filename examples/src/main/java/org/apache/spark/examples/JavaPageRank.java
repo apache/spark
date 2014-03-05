@@ -42,7 +42,7 @@ import java.util.regex.Pattern;
 public final class JavaPageRank {
   private static final Pattern SPACES = Pattern.compile("\\s+");
 
-  private static class Sum extends Function2<Double, Double, Double> {
+  private static class Sum implements Function2<Double, Double, Double> {
     @Override
     public Double call(Double a, Double b) {
       return a + b;
@@ -66,7 +66,7 @@ public final class JavaPageRank {
     JavaRDD<String> lines = ctx.textFile(args[1], 1);
 
     // Loads all URLs from input file and initialize their neighbors.
-    JavaPairRDD<String, List<String>> links = lines.map(new PairFunction<String, String, String>() {
+    JavaPairRDD<String, List<String>> links = lines.mapToPair(new PairFunction<String, String, String>() {
       @Override
       public Tuple2<String, String> call(String s) {
         String[] parts = SPACES.split(s);
@@ -86,7 +86,7 @@ public final class JavaPageRank {
     for (int current = 0; current < Integer.parseInt(args[2]); current++) {
       // Calculates URL contributions to the rank of other URLs.
       JavaPairRDD<String, Double> contribs = links.join(ranks).values()
-        .flatMap(new PairFlatMapFunction<Tuple2<List<String>, Double>, String, Double>() {
+        .flatMapToPair(new PairFlatMapFunction<Tuple2<List<String>, Double>, String, Double>() {
           @Override
           public Iterable<Tuple2<String, Double>> call(Tuple2<List<String>, Double> s) {
             List<Tuple2<String, Double>> results = new ArrayList<Tuple2<String, Double>>();

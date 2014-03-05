@@ -90,6 +90,14 @@ object SparkBuild extends Build {
   }
   lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
   val maybeAvro = if (hadoopVersion.startsWith("0.23.") && isYarnEnabled) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
+
+  // Conditionally include the java 8 sub-project
+  lazy val javaVersion = System.getProperty("java.specification.version")
+  lazy val isJava8Enabled = javaVersion.toDouble >= "1.8".toDouble
+  val maybeJava8Tests = if (isJava8Enabled) Seq[ProjectReference](java8Tests) else Seq[ProjectReference]()
+  lazy val java8Tests = Project("java8-tests", file("extras/java8-tests"), settings = java8TestsSettings).
+    dependsOn(core) dependsOn(streaming % "compile->compile;test->test")
+
   // Conditionally include the yarn sub-project
   lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
   lazy val yarn = Project("yarn", file("yarn/stable"), settings = yarnSettings) dependsOn(core)
@@ -118,10 +126,11 @@ object SparkBuild extends Build {
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
     .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter) dependsOn(allExternal: _*)
 
-  // Everything except assembly, tools and examples belong to packageProjects
+  // Everything except assembly, tools, java8Tests and examples belong to packageProjects
   lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx) ++ maybeYarnRef
 
-  lazy val allProjects = packageProjects ++ allExternalRefs ++ Seq[ProjectReference](examples, tools, assemblyProj)
+  lazy val allProjects = packageProjects ++ allExternalRefs ++
+    Seq[ProjectReference](examples, tools, assemblyProj) ++ maybeJava8Tests
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.apache.spark",
@@ -132,6 +141,7 @@ object SparkBuild extends Build {
     javacOptions := Seq("-target", JAVAC_JVM_VERSION, "-source", JAVAC_JVM_VERSION),
     unmanagedJars in Compile <<= baseDirectory map { base => (base / "lib" ** "*.jar").classpath },
     retrieveManaged := true,
+    javaHome := Properties.envOrNone("JAVA_HOME").map(file),
     // This is to add convenience of enabling sbt -Dsbt.offline=true for making the build offline.
     offline := "true".equalsIgnoreCase(sys.props("sbt.offline")),
     retrievePattern := "[type]s/[artifact](-[revision])(-[classifier]).[ext]",
@@ -368,6 +378,12 @@ object SparkBuild extends Build {
 
   def yarnSettings = yarnCommonSettings ++ Seq(
     name := "spark-yarn"
+  )
+
+  def java8TestsSettings = sharedSettings ++ Seq(
+    name := "java8-tests",
+    javacOptions := Seq("-target", "1.8", "-source", "1.8"),
+    testOptions += Tests.Argument(TestFrameworks.JUnit, "-v", "-a")
   )
 
   // Conditionally include the YARN dependencies because some tools look at all sub-projects and will complain

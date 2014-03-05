@@ -193,6 +193,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
   }
 
   /** Alias for reduceByKeyLocally */
+  @deprecated("Use reduceByKeyLocally", "1.0.0")
   def reduceByKeyToDriver(func: (V, V) => V): Map[K, V] = reduceByKeyLocally(func)
 
   /** Count the number of elements for each key, and return the result to the master as a Map. */
