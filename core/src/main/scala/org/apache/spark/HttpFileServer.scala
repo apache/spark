@@ -24,42 +24,42 @@ import com.google.common.io.Files
 import org.apache.spark.util.Utils
 
 private[spark] class HttpFileServer extends Logging {
-  
+
   var baseDir : File = null
   var fileDir : File = null
   var jarDir : File = null
   var httpServer : HttpServer = null
   var serverUri : String = null
-  
-  def initialize() {
+
+  def initialize(port: Option[Int]) {
     baseDir = Utils.createTempDir()
     fileDir = new File(baseDir, "files")
     jarDir = new File(baseDir, "jars")
     fileDir.mkdir()
     jarDir.mkdir()
     logInfo("HTTP File server directory is " + baseDir)
-    httpServer = new HttpServer(baseDir)
+    httpServer = if (port.isEmpty) new HttpServer(baseDir) else new HttpServer(baseDir, port.get)
     httpServer.start()
     serverUri = httpServer.uri
   }
-  
+
   def stop() {
     httpServer.stop()
   }
-  
+
   def addFile(file: File) : String = {
     addFileToDir(file, fileDir)
     serverUri + "/files/" + file.getName
   }
-  
+
   def addJar(file: File) : String = {
     addFileToDir(file, jarDir)
     serverUri + "/jars/" + file.getName
   }
-  
+
   def addFileToDir(file: File, dir: File) : String = {
     Files.copy(file, new File(dir, file.getName))
     dir + "/" + file.getName
   }
-  
+
 }
