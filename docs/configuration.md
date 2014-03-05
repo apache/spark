@@ -464,6 +464,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.starvation.timeout</td>
+  <td>15000</td>
+  <td>
+    Threshold above which we warn user initial TaskSet may be starved. (in milliseconds)
+  </td>
+</tr>
+<tr>
   <td>spark.streaming.blockInterval</td>
   <td>200</td>
   <td>
