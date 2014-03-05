@@ -218,6 +218,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.repl.class.uri</td>
+  <td>null</td>
+  <td>
+    This parameter specifies the URI of the class defined by REPL as user-defined code.
+  </td>
+</tr>
+<tr>
   <td>spark.closure.serializer</td>
   <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
