@@ -250,8 +250,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.shuffle.sender.port</td>
   <td>0</td>
   <td>
-    When using Netty to send result for shuffle, this parameter specifies the port to use for data transfer.
+    When using Netty to send result for shuffle, this parameter specifies the port number for data transfer.
     This parameter is only valid when <code>spark.shuffle.use.netty</code> is set to true.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.sync</td>
+  <td>false</td>
+  <td>
+    If this parameter is set to true, Spark will force all outstanding writing for the Map outputs be flushed to the disk when closing the writers.
   </td>
 </tr>
 <tr>
