@@ -203,6 +203,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.mesos.extra.cores</td>
+  <td>0</td>
+  <td>
+    When using Mesos, the user can specify how many cores each task can use in addition to the cores it gets from
+    the resource offer.
+  </td>
+</tr>
+<tr>
   <td>spark.ui.port</td>
   <td>4040</td>
   <td>
