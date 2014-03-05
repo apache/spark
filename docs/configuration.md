@@ -87,6 +87,75 @@ there are at least five properties that you will commonly want to control:
     infinite (all available cores) on Mesos.
   </td>
 </tr>
+<tr>
+  <td>spark.core.connection.handler.threads.min</td>
+  <td>20</td>
+  <td>
+    The number of threads to keep in the thread pool handling acceptance of the new connection, even they are
+     idle.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.handler.threads.max</td>
+  <td>60</td>
+  <td>
+    The maximum number of threads to allow in the pool handling acceptance of the new connection.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.handler.threads.keepalive</td>
+  <td>60</td>
+  <td>
+    When the number of threads in the pool handling acceptance of the new connection is greater than the core,
+    this is the maximum time that excess idle threads will wait for new tasks before terminating.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.io.threads.min</td>
+  <td>20</td>
+  <td>
+    The number of threads to keep in the thread pool handling BufferMessage receive/send, even they are
+     idle.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.io.threads.max</td>
+  <td>60</td>
+  <td>
+    The maximum number of threads to allow in the pool handling BufferMessage receive/send.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.io.threads.keepalive</td>
+  <td>60</td>
+  <td>
+    When the number of threads in the pool handling BufferMessage receive/send is greater than the core,
+    this is the maximum time that excess idle threads will wait for new tasks before terminating.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.connect.threads.min</td>
+  <td>20</td>
+  <td>
+    The number of threads to keep in the thread pool handling the establishment of the connection, even they are
+     idle.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.connect.threads.max</td>
+  <td>60</td>
+  <td>
+    The maximum number of threads to allow in the pool handling the establishment of the connection.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.connect.threads.keepalive</td>
+  <td>60</td>
+  <td>
+    When the number of threads in the pool handling the establishment of the connection is greater than the core,
+    this is the maximum time that excess idle threads will wait for new tasks before terminating.
+  </td>
+</tr>
 </table>
 
 
