@@ -177,8 +177,15 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     This parameter controls two values: First, the interval length for the BlockManagers running on the executors to send hearbeat
     to the BlockManager running on the driver. Please note that in Spark the actual frequency is the value set with this parameter divided by 4.
-    Second, this value also controls the timeout threshold of the slave node, which is <code>spark.storage.blockManagerSlaveTimeoutMs</code> +
-    <code>spark.storage.blockManagerTimeoutIntervalMs</code> * 3. (In milliseconds)
+    Second, this value also controls the default timeout threshold of the slave node, which is <code>spark.storage.blockManagerTimeoutIntervalMs</code> * 3.
+    (In milliseconds)
+  </td>
+</tr>
+<tr>
+  <td>spark.storage.blockManagerSlaveTimeoutMs</td>
+  <td><code>spark.storage.blockManagerTimeoutIntervalMs</code> * 3</td>
+  <td>
+    Number of milliseconds after which the BlockManagerMasterActor considers a BlockManager running on the executor lost if it receives no heartbeats.
   </td>
 </tr>
 <tr>
