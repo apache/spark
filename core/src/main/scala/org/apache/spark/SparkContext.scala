@@ -736,8 +736,10 @@ class SparkContext(
         key = uri.getScheme match {
           // A JAR file which exists only on the driver node
           case null | "file" =>
-            if (SparkHadoopUtil.get.isYarnMode() && master == "yarn-standalone") {
-              // In order for this to work in yarn standalone mode the user must specify the 
+            // yarn-standalone is deprecated, but still supported
+            if (SparkHadoopUtil.get.isYarnMode() &&
+                (master == "yarn-standalone" || master == "yarn-cluster")) {
+              // In order for this to work in yarn-cluster mode the user must specify the
               // --addjars option to the client to upload the file into the distributed cache 
               // of the AM to make it show up in the current working directory.
               val fileName = new Path(uri.getPath).getName()
@@ -1243,7 +1245,7 @@ object SparkContext {
         }
         scheduler
 
-      case "yarn-standalone" =>
+      case "yarn-standalone" | "yarn-cluster" =>
         val scheduler = try {
           val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])

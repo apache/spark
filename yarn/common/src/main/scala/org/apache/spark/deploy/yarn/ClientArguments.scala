@@ -129,7 +129,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
     System.err.println(
       "Usage: org.apache.spark.deploy.yarn.Client [options] \n" +
       "Options:\n" +
-      "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-standalone mode)\n" +
+      "  --jar JAR_PATH             Path to your application's JAR file (required in yarn-cluster mode)\n" +
       "  --class CLASS_NAME         Name of your application's main class (required)\n" +
       "  --args ARGS                Arguments to be passed to your application's main class.\n" +
       "                             Mutliple invocations are possible, each will be passed in order.\n" +
