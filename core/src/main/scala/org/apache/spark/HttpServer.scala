@@ -38,9 +38,9 @@ private[spark] class ServerStateException(message: String) extends Exception(mes
  * as well as classes created by the interpreter when the user types in code. This is just a wrapper
  * around a Jetty server.
  */
-private[spark] class HttpServer(resourceBase: File) extends Logging {
+private[spark] class HttpServer(resourceBase: File, localPort: Int = 0) extends Logging {
   private var server: Server = null
-  private var port: Int = -1
+  private var port: Int = localPort
 
   def start() {
     if (server != null) {
@@ -51,7 +51,7 @@ private[spark] class HttpServer(resourceBase: File) extends Logging {
       val connector = new SocketConnector
       connector.setMaxIdleTime(60*1000)
       connector.setSoLingerTime(-1)
-      connector.setPort(0)
+      connector.setPort(port)
       server.addConnector(connector)
 
       val threadPool = new QueuedThreadPool
@@ -72,7 +72,7 @@ private[spark] class HttpServer(resourceBase: File) extends Logging {
       throw new ServerStateException("Server is already stopped")
     } else {
       server.stop()
-      port = -1
+      port = 0
       server = null
     }
   }

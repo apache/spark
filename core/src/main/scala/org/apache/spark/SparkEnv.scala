@@ -191,7 +191,7 @@ object SparkEnv extends Logging {
       "spark.shuffle.fetcher", "org.apache.spark.BlockStoreShuffleFetcher")
 
     val httpFileServer = new HttpFileServer()
-    httpFileServer.initialize()
+    httpFileServer.initialize(conf.getOption("spark.fileserver.port").map(_.toInt))
     conf.set("spark.fileserver.uri",  httpFileServer.serverUri)
 
     val metricsSystem = if (isDriver) {
