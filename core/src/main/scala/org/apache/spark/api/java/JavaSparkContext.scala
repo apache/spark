@@ -415,7 +415,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Clear the job's list of JARs added by `addJar` so that they do not get downloaded to
    * any new nodes.
    */
-  @deprecated("added jars are now temporary files and need not be deleted manually", "1.0.0")
+  @deprecated("adding jars no longer creates local copies that need to be deleted", "1.0.0")
   def clearJars() {
     sc.clearJars()
   }
@@ -424,7 +424,7 @@ class JavaSparkContext(val sc: SparkContext) extends JavaSparkContextVarargsWork
    * Clear the job's list of files added by `addFile` so that they do not get downloaded to
    * any new nodes.
    */
-  @deprecated("added files are now temporary files and need not be deleted manually", "1.0.0")
+  @deprecated("adding files no longer creates local copies that need to be deleted", "1.0.0")
   def clearFiles() {
     sc.clearFiles()
   }
