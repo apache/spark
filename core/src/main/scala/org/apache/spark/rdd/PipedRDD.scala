@@ -26,7 +26,9 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 
+import org.apache.hadoop.mapred.FileSplit
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
+
 
 /**
  * An RDD that pipes the contents of each parent partition through an external command
@@ -58,6 +60,20 @@ class PipedRDD[T: ClassTag](
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
     envVars.foreach { case (variable, value) => currentEnvVars.put(variable, value) }
+
+    // for compatibility with Hadoop which sets these env variables
+    // so the user code can access the input filename
+    if (split.isInstanceOf[HadoopPartition]) {
+      val hadoopSplit = split.asInstanceOf[HadoopPartition]
+
+      if (hadoopSplit.inputSplit.value.isInstanceOf[FileSplit]) {
+        val is: FileSplit = hadoopSplit.inputSplit.value.asInstanceOf[FileSplit]
+        // map.input.file is deprecated in favor of mapreduce.map.input.file but set both
+        // since its not removed yet
+        currentEnvVars.put("map_input_file", is.getPath().toString())
+        currentEnvVars.put("mapreduce_map_input_file", is.getPath().toString())
+      }
+    }
 
     val proc = pb.start()
     val env = SparkEnv.get

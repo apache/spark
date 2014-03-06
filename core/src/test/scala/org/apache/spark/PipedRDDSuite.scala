@@ -19,6 +19,14 @@ package org.apache.spark
 
 import org.scalatest.FunSuite
 
+
+import org.apache.spark.rdd.{HadoopRDD, PipedRDD, HadoopPartition}
+import org.apache.hadoop.mapred.{JobConf, TextInputFormat, FileSplit}
+import org.apache.hadoop.fs.Path
+
+import scala.collection.Map
+import org.apache.hadoop.io.{Text, LongWritable}
+
 class PipedRDDSuite extends FunSuite with SharedSparkContext {
 
   test("basic pipe") {
@@ -87,6 +95,39 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
     intercept[SparkException] {
       piped.collect()
     }
+  }
+
+  test("test pipe exports map_input_file") {
+    testExportInputFile("map_input_file")
+  }
+
+  test("test pipe exports mapreduce_map_input_file") {
+    testExportInputFile("mapreduce_map_input_file")
+  }
+
+  def testExportInputFile(varName:String) {
+    val nums = new HadoopRDD(sc, new JobConf(), classOf[TextInputFormat], classOf[LongWritable],
+        classOf[Text], 2) {
+      override def getPartitions: Array[Partition] = Array(generateFakeHadoopPartition())
+      override val getDependencies = List[Dependency[_]]()
+      override def compute(theSplit: Partition, context: TaskContext) = {
+        new InterruptibleIterator[(LongWritable, Text)](context, Iterator((new LongWritable(1),
+          new Text("b"))))
+      }
+    }
+    val hadoopPart1 = generateFakeHadoopPartition()
+    val pipedRdd = new PipedRDD(nums, "printenv " + varName)
+    val tContext = new TaskContext(0, 0, 0, interrupted = false, runningLocally = false,
+      taskMetrics = null)
+    val rddIter = pipedRdd.compute(hadoopPart1, tContext)
+    val arr = rddIter.toArray
+    assert(arr(0) == "/some/path")
+  }
+
+  def generateFakeHadoopPartition(): HadoopPartition = {
+    val split = new FileSplit(new Path("/some/path"), 0, 1,
+      Array[String]("loc1", "loc2", "loc3", "loc4", "loc5"))
+    new HadoopPartition(sc.newRddId(), 1, split)
   }
 
 }
