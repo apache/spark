@@ -39,21 +39,22 @@ there are at least five properties that you will commonly want to control:
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
+  <td>spark.cores.max</td>
+  <td>(not set)</td>
+  <td>
+    When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
+    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
+    sharing mode</a>, the maximum amount of CPU cores to request for the application from
+    across the cluster (not from each machine). If not set, the default will be
+    <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
+    infinite (all available cores) on Mesos.
+  </td>
+</tr>
+<tr>
   <td>spark.executor.memory</td>
   <td>512m</td>
   <td>
     Amount of memory to use per executor process, in the same format as JVM memory strings (e.g. <code>512m</code>, <code>2g</code>).
-  </td>
-</tr>
-<tr>
-  <td>spark.serializer</td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
-  <td>
-    Class to use for serializing objects that will be sent over the network or need to be cached
-    in serialized form. The default of Java serialization works with any Serializable Java object but is
-    quite slow, so we recommend <a href="tuning.html">using <code>org.apache.spark.serializer.KryoSerializer</code>
-    and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of
-    <a href="api/core/index.html#org.apache.spark.serializer.Serializer"><code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 <tr>
@@ -76,15 +77,14 @@ there are at least five properties that you will commonly want to control:
   </td>
 </tr>
 <tr>
-  <td>spark.cores.max</td>
-  <td>(not set)</td>
+  <td>spark.serializer</td>
+  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
   <td>
-    When running on a <a href="spark-standalone.html">standalone deploy cluster</a> or a
-    <a href="running-on-mesos.html#mesos-run-modes">Mesos cluster in "coarse-grained"
-    sharing mode</a>, the maximum amount of CPU cores to request for the application from
-    across the cluster (not from each machine). If not set, the default will be
-    <code>spark.deploy.defaultCores</code> on Spark's standalone cluster manager, or
-    infinite (all available cores) on Mesos.
+    Class to use for serializing objects that will be sent over the network or need to be cached
+    in serialized form. The default of Java serialization works with any Serializable Java object but is
+    quite slow, so we recommend <a href="tuning.html">using <code>org.apache.spark.serializer.KryoSerializer</code>
+    and configuring Kryo serialization</a> when speed is necessary. Can be any subclass of
+    <a href="api/core/index.html#org.apache.spark.serializer.Serializer"><code>org.apache.spark.Serializer</code></a>.
   </td>
 </tr>
 </table>
@@ -95,70 +95,87 @@ Apart from these, the following properties are also available, and may be useful
 <table class="table">
 <tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
 <tr>
-  <td>spark.default.parallelism</td>
-  <td>8</td>
+  <td>spark.akka.askTimeout</td>
+  <td>30</td>
   <td>
-    Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
-    <code>reduceByKey</code>, etc) when not set by user.
+    This parameter defines the timeout to use for Akka ask operations. (in seconds)
   </td>
 </tr>
 <tr>
-  <td>spark.storage.memoryFraction</td>
-  <td>0.6</td>
+  <td>spark.akka.lookupTimeout</td>
+  <td>30</td>
   <td>
-    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
-    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can increase
-    it if you configure your own old generation size.
+    This parameter defines the timeout to use for Akka lookup operations. (in seconds)
   </td>
 </tr>
 <tr>
-  <td>spark.shuffle.memoryFraction</td>
-  <td>0.3</td>
+  <td>spark.akka.batchSize</td>
+  <td>15</td>
   <td>
-    Fraction of Java heap to use for aggregation and cogroups during shuffles, if
-    <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
-    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
-    begin to spill to disk. If spills are often, consider increasing this value at the expense of
-    <code>spark.storage.memoryFraction</code>.
+    The parameter specifies defines the maximum number of messages to be processed per actor
+    before the thread jumps to the next actor. Set to 1 for as fair as possible.
   </td>
 </tr>
 <tr>
-  <td>spark.mesos.coarse</td>
+  <td>spark.akka.frameSize</td>
+  <td>10</td>
+  <td>
+    Maximum message size to allow in "control plane" communication (for serialized tasks and task
+    results), in MB. Increase this if your tasks need to send back large results to the driver
+    (e.g. using <code>collect()</code> on a large dataset).
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.logAkkaConfig</td>
   <td>false</td>
   <td>
-    If set to "true", runs over Mesos clusters in
-    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
-    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
-    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
-    duration of the Spark job.
+    This parameter controls three logging behaviours of Akka: 1) Logging the events including: DisassociatedEvent,
+    AssociatedEvent, AssociationErrorEvent, RemotingListenEvent, RemotingShutdownEvent, RemotingErrorEvent; 2) Logging
+     the dead letters during running; 3) Logging the dead letters during the shutdown.
   </td>
 </tr>
 <tr>
-  <td>spark.ui.port</td>
-  <td>4040</td>
+  <td>spark.akka.failure-detector.threshold</td>
+  <td>300.0</td>
   <td>
-    Port for your application's dashboard, which shows memory and workload data
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). This maps to akka's `akka.remote.transport-failure-detector.threshold`. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
   </td>
 </tr>
 <tr>
-  <td>spark.ui.retainedStages</td>
+  <td>spark.akka.heartbeat.interval</td>
   <td>1000</td>
   <td>
-    How many stages the Spark UI remembers before garbage collecting.
+    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those.
   </td>
 </tr>
 <tr>
-  <td>spark.shuffle.compress</td>
-  <td>true</td>
+  <td>spark.akka.heartbeat.pauses</td>
+  <td>600</td>
   <td>
-    Whether to compress map output files. Generally a good idea.
+     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold` if you need to.
   </td>
 </tr>
 <tr>
-  <td>spark.shuffle.spill.compress</td>
-  <td>true</td>
+  <td>spark.akka.timeout</td>
+  <td>100</td>
   <td>
-    Whether to compress data spilled during shuffles.
+    Communication timeout between Spark nodes, in seconds.
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.threads</td>
+  <td>4</td>
+  <td>
+    Number of actor threads to use for communication. Can be useful to increase on large clusters
+    when the driver has a lot of CPU cores.
+  </td>
+</tr>
+<tr>
+  <td>spark.broadcast.blockSize</td>
+  <td>4096</td>
+  <td>
+    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
+    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>
 <tr>
@@ -169,11 +186,176 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.rdd.compress</td>
+  <td>spark.broadcast.factory</td>
+  <td>org.apache.spark.broadcast.<br />HttpBroadcastFactory</td>
+  <td>
+    Which broadcast implementation to use.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl</td>
+  <td>(infinite)</td>
+  <td>
+    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
+    Periodic cleanups will ensure that metadata older than this duration will be forgetten. This is
+    useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
+    applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
+  </td>
+</tr>
+<tr>
+  <td>spark.closure.serializer</td>
+  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
+  <td>
+    Serializer class to use for closures. Generally Java is fine unless your distributed functions
+    (e.g. map functions) reference large objects in the driver program.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.handler.threads.min</td>
+  <td>20</td>
+  <td>
+    The number of threads to keep in the thread pool handling acceptance of the new connection, even they are
+     idle.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.handler.threads.max</td>
+  <td>60</td>
+  <td>
+    The maximum number of threads to allow in the pool handling acceptance of the new connection.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.handler.threads.keepalive</td>
+  <td>60</td>
+  <td>
+    When the number of threads in the pool handling acceptance of the new connection is greater than the core,
+    this is the maximum time that excess idle threads will wait for new tasks before terminating.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.io.threads.min</td>
+  <td>20</td>
+  <td>
+    The number of threads to keep in the thread pool handling BufferMessage receive/send, even they are
+     idle.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.io.threads.max</td>
+  <td>60</td>
+  <td>
+    The maximum number of threads to allow in the pool handling BufferMessage receive/send.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.io.threads.keepalive</td>
+  <td>60</td>
+  <td>
+    When the number of threads in the pool handling BufferMessage receive/send is greater than the core,
+    this is the maximum time that excess idle threads will wait for new tasks before terminating.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.connect.threads.min</td>
+  <td>20</td>
+  <td>
+    The number of threads to keep in the thread pool handling the establishment of the connection, even they are
+     idle.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.connect.threads.max</td>
+  <td>60</td>
+  <td>
+    The maximum number of threads to allow in the pool handling the establishment of the connection.
+  </td>
+</tr>
+<tr>
+  <td>spark.core.connection.connect.threads.keepalive</td>
+  <td>60</td>
+  <td>
+    When the number of threads in the pool handling the establishment of the connection is greater than the core,
+    this is the maximum time that excess idle threads will wait for new tasks before terminating.
+  </td>
+</tr>
+<tr>
+  <td>spark.dead.worker.persistence</td>
+  <td>15</td>
+  <td>
+    This parameter controls when Spark will remove the worker information from the UI if it is dead.
+    If it has been longer than (<code>spark.dead.worker.persistence</code> + 1) * <code> spark.worker.timeout
+    </code> seconds since the worker is dead, Spark will remove it from UI.
+  </td>
+</tr>
+<tr>
+  <td>spark.default.parallelism</td>
+  <td>8</td>
+  <td>
+    Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
+    <code>reduceByKey</code>, etc) when not set by user.
+  </td>
+</tr>
+<tr>
+  <td>spark.deploy.defaultCores</td>
+  <td>(infinite)</td>
+  <td>
+    Default number of cores to give to applications in Spark's standalone mode if they don't
+    set <code>spark.cores.max</code>. If not set, applications always get all available
+    cores unless they configure <code>spark.cores.max</code> themselves.
+    Set this lower on a shared cluster to prevent users from grabbing
+    the whole cluster by default. <br/>
+    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
+    applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
+  </td>
+</tr>
+<tr>
+  <td>spark.deploy.retainedApplications</td>
+  <td>200</td>
+  <td>
+    The maximum number of records on completed applications kept in the Master node. When the completed
+    application number exceeds the threshold, the first Max(spark.deploy.retainedApplications, 1) will be
+     discarded.
+  </td>
+</tr>
+<tr>
+  <td>spark.deploy.spreadOut</td>
+  <td>true</td>
+  <td>
+    Whether the standalone cluster manager should spread applications out across nodes or try
+    to consolidate them onto as few nodes as possible. Spreading out is usually better for
+    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
+    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
+    applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
+  </td>
+</tr>
+<tr>
+  <td>spark.diskStore.subDirectories</td>
+  <td>64</td>
+  <td>
+    Specifies how many subdirectories under each local directory. Setting more sub directories under each local directory
+     can help to avoid the fat inode.
+  </td>
+</tr>
+<tr>
+  <td>spark.driver.host</td>
+  <td>(local hostname)</td>
+  <td>
+    Hostname or IP address for the driver to listen on.
+  </td>
+</tr>
+<tr>
+  <td>spark.driver.port</td>
+  <td>(random)</td>
+  <td>
+    Port for the driver to listen on.
+  </td>
+</tr>
+<tr>
+  <td>spark.files.overwrite</td>
   <td>false</td>
   <td>
-    Whether to compress serialized RDD partitions (e.g. for <code>StorageLevel.MEMORY_ONLY_SER</code>).
-    Can save substantial space at the cost of some extra CPU time.
+    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
   </td>
 </tr>
 <tr>
@@ -192,37 +374,11 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.scheduler.mode</td>
-  <td>FIFO</td>
+  <td>spark.jars</td>
+  <td>(not set)</td>
   <td>
-    The <a href="job-scheduling.html#scheduling-within-an-application">scheduling mode</a> between
-    jobs submitted to the same SparkContext. Can be set to <code>FAIR</code>
-    to use fair sharing instead of queueing jobs one after another. Useful for
-    multi-user services.
-  </td>
-</tr>
-<tr>
-  <td>spark.scheduler.revive.interval</td>
-  <td>1000</td>
-  <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
-  </td>
-</tr>
-<tr>
-  <td>spark.reducer.maxMbInFlight</td>
-  <td>48</td>
-  <td>
-    Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
-    each output requires us to create a buffer to receive it, this represents a fixed memory overhead
-    per reduce task, so keep it small unless you have a large amount of memory.
-  </td>
-</tr>
-<tr>
-  <td>spark.closure.serializer</td>
-  <td>org.apache.spark.serializer.<br />JavaSerializer</td>
-  <td>
-    Serializer class to use for closures. Generally Java is fine unless your distributed functions
-    (e.g. map functions) reference large objects in the driver program.
+    The external jars to be propagated to the executors from the driver. Users can specify multiple jars by separating them
+     with ",".
   </td>
 </tr>
 <tr>
@@ -245,10 +401,26 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.broadcast.factory</td>
-  <td>org.apache.spark.broadcast.<br />HttpBroadcastFactory</td>
+  <td>spark.locality.wait.node</td>
+  <td>spark.locality.wait</td>
   <td>
-    Which broadcast implementation to use.
+    Customize the locality wait for node locality. For example, you can set this to 0 to skip
+    node locality and search immediately for rack locality (if your cluster has rack information).
+  </td>
+</tr>
+<tr>
+  <td>spark.locality.wait.process</td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for process locality. This affects tasks that attempt to access
+    cached data in a particular executor process.
+  </td>
+</tr>
+<tr>
+  <td>spark.locality.wait.rack</td>
+  <td>spark.locality.wait</td>
+  <td>
+    Customize the locality wait for rack locality.
   </td>
 </tr>
 <tr>
@@ -264,103 +436,231 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.locality.wait.process</td>
-  <td>spark.locality.wait</td>
+  <td>spark.logging.exceptionPrintInterval</td>
+  <td>10000</td>
   <td>
-    Customize the locality wait for process locality. This affects tasks that attempt to access
-    cached data in a particular executor process.
+    How frequently the driver reprints duplicate exceptions in full. (in milliseconds)
   </td>
 </tr>
 <tr>
-  <td>spark.locality.wait.node</td>
-  <td>spark.locality.wait</td>
+  <td>spark.logConf</td>
+  <td>false</td>
   <td>
-    Customize the locality wait for node locality. For example, you can set this to 0 to skip
-    node locality and search immediately for rack locality (if your cluster has rack information).
+    Log the supplied SparkConf as INFO at start of spark context.
   </td>
 </tr>
 <tr>
-  <td>spark.locality.wait.rack</td>
-  <td>spark.locality.wait</td>
+  <td>spark.mesos.coarse</td>
+  <td>false</td>
   <td>
-    Customize the locality wait for rack locality.
+    If set to "true", runs over Mesos clusters in
+    <a href="running-on-mesos.html#mesos-run-modes">"coarse-grained" sharing mode</a>,
+    where Spark acquires one long-lived Mesos task on each machine instead of one Mesos task per Spark task.
+    This gives lower-latency scheduling for short queries, but leaves resources in use for the whole
+    duration of the Spark job.
   </td>
 </tr>
 <tr>
-  <td>spark.worker.timeout</td>
-  <td>60</td>
+  <td>spark.mesos.extra.cores</td>
+  <td>0</td>
   <td>
-    Number of seconds after which the standalone deploy master considers a worker lost if it
-    receives no heartbeats.
+    When using Mesos, the user can specify how many cores each task can use in addition to the cores it gets from
+    the resource offer.
   </td>
 </tr>
 <tr>
-  <td>spark.akka.frameSize</td>
-  <td>10</td>
+  <td>spark.rdd.compress</td>
+  <td>false</td>
   <td>
-    Maximum message size to allow in "control plane" communication (for serialized tasks and task
-    results), in MB. Increase this if your tasks need to send back large results to the driver
-    (e.g. using <code>collect()</code> on a large dataset).
+    Whether to compress serialized RDD partitions (e.g. for <code>StorageLevel.MEMORY_ONLY_SER</code>).
+    Can save substantial space at the cost of some extra CPU time.
   </td>
 </tr>
 <tr>
-  <td>spark.akka.threads</td>
+  <td>spark.reducer.maxMbInFlight</td>
+  <td>48</td>
+  <td>
+    Maximum size (in megabytes) of map outputs to fetch simultaneously from each reduce task. Since
+    each output requires us to create a buffer to receive it, this represents a fixed memory overhead
+    per reduce task, so keep it small unless you have a large amount of memory.
+  </td>
+</tr>
+<tr>
+  <td>spark.repl.class.uri</td>
+  <td>null</td>
+  <td>
+    This parameter specifies the URI of the class defined by REPL as user-defined code.
+  </td>
+</tr>
+<tr>
+  <td>spark.resultGetter.threads</td>
   <td>4</td>
   <td>
-    Number of actor threads to use for communication. Can be useful to increase on large clusters
-    when the driver has a lot of CPU cores.
+    Set the size of thread pool in TaskScheduler to deserialize and get the task results from remote end when necessary.
+    The size of the thread pool is fixed.
   </td>
 </tr>
 <tr>
-  <td>spark.akka.timeout</td>
-  <td>100</td>
+  <td>spark.scheduler.mode</td>
+  <td>FIFO</td>
   <td>
-    Communication timeout between Spark nodes, in seconds.
+    The <a href="job-scheduling.html#scheduling-within-an-application">scheduling mode</a> between
+    jobs submitted to the same SparkContext. Can be set to <code>FAIR</code>
+    to use fair sharing instead of queueing jobs one after another. Useful for
+    multi-user services.
   </td>
 </tr>
 <tr>
-  <td>spark.akka.heartbeat.pauses</td>
-  <td>600</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). Acceptable heart beat pause in seconds for akka. This can be used to control sensitivity to gc pauses. Tune this in combination of `spark.akka.heartbeat.interval` and `spark.akka.failure-detector.threshold` if you need to.
-  </td>
-</tr>
-<tr>
-  <td>spark.akka.failure-detector.threshold</td>
-  <td>300.0</td>
-  <td>
-     This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). This maps to akka's `akka.remote.transport-failure-detector.threshold`. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.heartbeat.interval` if you need to.
-  </td>
-</tr>
-<tr>
-  <td>spark.akka.heartbeat.interval</td>
+  <td>spark.scheduler.revive.interval</td>
   <td>1000</td>
   <td>
-    This is set to a larger value to disable failure detector that comes inbuilt akka. It can be enabled again, if you plan to use this feature (Not recommended). A larger interval value in seconds reduces network overhead and a smaller value ( ~ 1 s) might be more informative for akka's failure detector. Tune this in combination of `spark.akka.heartbeat.pauses` and `spark.akka.failure-detector.threshold` if you need to. Only positive use case for using failure detector can be, a sensistive failure detector can help evict rogue executors really quick. However this is usually not the case as gc pauses and network lags are expected in a real spark cluster. Apart from that enabling this leads to a lot of exchanges of heart beats between nodes leading to flooding the network with those. 
+    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
   </td>
 </tr>
 <tr>
-  <td>spark.driver.host</td>
-  <td>(local hostname)</td>
+  <td>spark.shuffle.compress</td>
+  <td>true</td>
   <td>
-    Hostname or IP address for the driver to listen on.
+    Whether to compress map output files. Generally a good idea.
   </td>
 </tr>
 <tr>
-  <td>spark.driver.port</td>
-  <td>(random)</td>
+  <td>spark.shuffle.copier.threads</td>
+  <td>6</td>
   <td>
-    Port for the driver to listen on.
+    When using Netty, this parameter specifies the number of concurrent threads fetching the shuffle results. This parameter
+     is only valid when <code>spark.shuffle.use.netty</code> is set to true.
   </td>
 </tr>
 <tr>
-  <td>spark.cleaner.ttl</td>
-  <td>(infinite)</td>
+  <td>spark.shuffle.consolidateFiles</td>
+  <td>false</td>
   <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
-    Periodic cleanups will ensure that metadata older than this duration will be forgetten. This is
-    useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
-    applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
+    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.file.buffer.kb</td>
+  <td>100</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
+    reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.memoryFraction</td>
+  <td>0.3</td>
+  <td>
+    Fraction of Java heap to use for aggregation and cogroups during shuffles, if
+    <code>spark.shuffle.spill</code> is true. At any given time, the collective size of
+    all in-memory maps used for shuffles is bounded by this limit, beyond which the contents will
+    begin to spill to disk. If spills are often, consider increasing this value at the expense of
+    <code>spark.storage.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.netty.connect.timeout</td>
+  <td>60000</td>
+  <td>
+    This parameter sets the timeout threshold for the Netty connection when shuffling. (in milliseconds)
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.sender.port</td>
+  <td>0</td>
+  <td>
+    When using Netty to send result for shuffle, this parameter specifies the port number for data transfer.
+    This parameter is only valid when <code>spark.shuffle.use.netty</code> is set to true.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.spill</td>
+  <td>true</td>
+  <td>
+    If set to "true", limits the amount of memory used during reduces by spilling data out to disk. This spilling
+    threshold is specified by <code>spark.shuffle.memoryFraction</code>.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.spill.compress</td>
+  <td>true</td>
+  <td>
+    Whether to compress data spilled during shuffles.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.sync</td>
+  <td>false</td>
+  <td>
+    If this parameter is set to true, Spark will force all outstanding writing for the Map outputs be flushed to the disk when closing the writers.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.use.netty</td>
+  <td>false</td>
+  <td>
+    If use Netty to fetch map output in shuffle.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation</td>
+  <td>false</td>
+  <td>
+    If set to "true", performs speculative execution of tasks. This means if one or more tasks are running slowly in a stage, they will be re-launched.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation.interval</td>
+  <td>100</td>
+  <td>
+    How often Spark will check for tasks to speculate, in milliseconds.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation.multiplier</td>
+  <td>1.5</td>
+  <td>
+    How many times slower a task is than the median to be considered for speculation.
+  </td>
+</tr>
+<tr>
+  <td>spark.speculation.quantile</td>
+  <td>0.75</td>
+  <td>
+    Percentage of tasks which must be complete before speculation is enabled for a particular stage.
+  </td>
+</tr>
+<tr>
+  <td>spark.starvation.timeout</td>
+  <td>15000</td>
+  <td>
+    Threshold above which we warn user initial TaskSet may be starved. (in milliseconds)
+  </td>
+</tr>
+<tr>
+  <td>spark.storage.blockManagerSlaveTimeoutMs</td>
+  <td><code>spark.storage.blockManagerTimeoutIntervalMs</code> * 3</td>
+  <td>
+    Number of milliseconds after which the BlockManagerMasterActor considers a BlockManager running on the executor lost if it receives no heartbeats.
+  </td>
+</tr>
+<tr>
+  <td>spark.storage.blockManagerTimeoutIntervalMs</td>
+  <td>60000</td>
+  <td>
+    This parameter controls two values: First, the interval length for the BlockManagers running on the executors to send hearbeat
+    to the BlockManager running on the driver. Please note that in Spark the actual frequency is the value set with this parameter divided by 4.
+    Second, this value also controls the default timeout threshold of the slave node, which is <code>spark.storage.blockManagerTimeoutIntervalMs</code> * 3.
+    (In milliseconds)
+  </td>
+</tr>
+<tr>
+  <td>spark.storage.memoryFraction</td>
+  <td>0.6</td>
+  <td>
+    Fraction of Java heap to use for Spark's memory cache. This should not be larger than the "old"
+    generation of objects in the JVM, which by default is given 0.6 of the heap, but you can increase
+    it if you configure your own old generation size.
   </td>
 </tr>
 <tr>
@@ -380,6 +680,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.task.cpus</td>
+  <td>1</td>
+  <td>
+    CPUs to request per task
+  </td>
+</tr>
+<tr>
   <td>spark.task.maxFailures</td>
   <td>4</td>
   <td>
@@ -388,101 +695,25 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.broadcast.blockSize</td>
-  <td>4096</td>
+  <td>spark.ui.port</td>
+  <td>4040</td>
   <td>
-    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>. 
-    Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
-  </td>
-</tr>
-
-<tr>
-  <td>spark.shuffle.consolidateFiles</td>
-  <td>false</td>
-  <td>
-    If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
+    Port for your application's dashboard, which shows memory and workload data
   </td>
 </tr>
 <tr>
-  <td>spark.shuffle.file.buffer.kb</td>
-  <td>100</td>
+  <td>spark.ui.retainedStages</td>
+  <td>1000</td>
   <td>
-    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
-    reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
+    How many stages the Spark UI remembers before garbage collecting.
   </td>
 </tr>
 <tr>
-  <td>spark.shuffle.spill</td>
-  <td>true</td>
+  <td>spark.worker.timeout</td>
+  <td>60</td>
   <td>
-    If set to "true", limits the amount of memory used during reduces by spilling data out to disk. This spilling
-    threshold is specified by <code>spark.shuffle.memoryFraction</code>.
-  </td>
-</tr>
-<tr>
-  <td>spark.speculation</td>
-  <td>false</td>
-  <td>
-    If set to "true", performs speculative execution of tasks. This means if one or more tasks are running slowly in a stage, they will be re-launched.
-  </td>
-</tr>
-<tr>
-  <td>spark.speculation.interval</td>
-  <td>100</td>
-  <td>
-    How often Spark will check for tasks to speculate, in milliseconds.
-  </td>
-</tr>
-<tr>
-  <td>spark.speculation.quantile</td>
-  <td>0.75</td>
-  <td>
-    Percentage of tasks which must be complete before speculation is enabled for a particular stage.
-  </td>
-</tr>
-<tr>
-  <td>spark.speculation.multiplier</td>
-  <td>1.5</td>
-  <td>
-    How many times slower a task is than the median to be considered for speculation.
-  </td>
-</tr>
-<tr>
-  <td>spark.logConf</td>
-  <td>false</td>
-  <td>
-    Log the supplied SparkConf as INFO at start of spark context.
-  </td>
-</tr>
-<tr>
-  <td>spark.deploy.spreadOut</td>
-  <td>true</td>
-  <td>
-    Whether the standalone cluster manager should spread applications out across nodes or try
-    to consolidate them onto as few nodes as possible. Spreading out is usually better for
-    data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
-    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
-  </td>
-</tr>
-<tr>
-  <td>spark.deploy.defaultCores</td>
-  <td>(infinite)</td>
-  <td>
-    Default number of cores to give to applications in Spark's standalone mode if they don't
-    set <code>spark.cores.max</code>. If not set, applications always get all available
-    cores unless they configure <code>spark.cores.max</code> themselves.
-    Set this lower on a shared cluster to prevent users from grabbing
-    the whole cluster by default. <br/>
-    <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
-    applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
-</td>
-</tr>
-<tr>
-  <td>spark.files.overwrite</td>
-  <td>false</td>
-  <td>
-    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
+    Number of seconds after which the standalone deploy master considers a worker lost if it
+    receives no heartbeats.
   </td>
 </tr>
 </table>

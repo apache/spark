@@ -33,7 +33,7 @@ import org.objectweb.asm.Opcodes._
  * used to load classes defined by the interpreter when the REPL is used
  */
 class ExecutorClassLoader(classUri: String, parent: ClassLoader)
-extends ClassLoader(parent) {
+  extends ClassLoader(parent) {
   val uri = new URI(classUri)
   val directory = uri.getPath
 
