@@ -103,6 +103,9 @@ object EmptyRow extends Row {
  * allowed.
  */
 class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
+  /** No-arg constructor for serialization. */
+  def this() = this(null)
+
   def this(size: Int) = this(new Array[Any](size))
 
   def iterator = values.iterator
@@ -151,6 +154,8 @@ class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
 }
 
 class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
+  /** No-arg constructor for serialization. */
+  def this() = this(0)
 
   def getStringBuilder(ordinal: Int): StringBuilder = ???
 
