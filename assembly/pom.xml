@@ -28,10 +28,13 @@
   <groupId>org.apache.spark</groupId>
   <artifactId>spark-assembly_2.10</artifactId>
   <name>Spark Project Assembly</name>
-  <url>http://spark.incubator.apache.org/</url>
+  <url>http://spark.apache.org/</url>
+  <packaging>pom</packaging>
 
   <properties>
-    <spark.jar>${project.build.directory}/scala-${scala.binary.version}/${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</spark.jar>
+    <spark.jar.dir>scala-${scala.binary.version}</spark.jar.dir>
+    <spark.jar.basename>${project.artifactId}-${project.version}-hadoop${hadoop.version}.jar</spark.jar.basename>
+    <spark.jar>${project.build.directory}/${spark.jar.dir}/${spark.jar.basename}</spark.jar>
     <deb.pkg.name>spark</deb.pkg.name>
     <deb.install.path>/usr/share/spark</deb.install.path>
     <deb.user>root</deb.user>
