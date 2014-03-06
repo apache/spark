@@ -28,9 +28,10 @@ class Projection(expressions: Seq[Expression]) extends (Row => Row) {
  * be instantiated once per thread and reused.
  */
 class JoinedRow extends Row {
-  private var row1: Row = _
-  private var row2: Row = _
+  private[this] var row1: Row = _
+  private[this] var row2: Row = _
 
+  /** Updates this JoinedRow to used point at two new base rows.  Returns itself. */
   def apply(r1: Row, r2: Row): Row = {
     row1 = r1
     row2 = r2
@@ -63,4 +64,8 @@ class JoinedRow extends Row {
 
   def getByte(i: Int): Byte =
     if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
+
+  def getFloat(i: Int): Float =
+    if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
+
 }

@@ -109,6 +109,13 @@ case class InsertIntoCreatedTable(
   def output = child.output
 }
 
+case class WriteToFile(
+    path: String,
+    child: LogicalPlan) extends UnaryNode {
+  def references = Set.empty
+  def output = child.output
+}
+
 case class Sort(order: Seq[SortOrder], child: LogicalPlan) extends UnaryNode {
   def output = child.output
   def references = order.flatMap(_.references).toSet

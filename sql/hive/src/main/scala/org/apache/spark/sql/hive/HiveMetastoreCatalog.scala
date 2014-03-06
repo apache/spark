@@ -207,6 +207,8 @@ case class MetastoreRelation(databaseName: String, tableName: String, alias: Opt
     new Partition(hiveQlTable, p)
   }
 
+  override def isPartitioned = hiveQlTable.isPartitioned
+
   val tableDesc = new TableDesc(
     Class.forName(hiveQlTable.getSerializationLib).asInstanceOf[Class[Deserializer]],
     hiveQlTable.getInputFormatClass,

@@ -25,6 +25,8 @@ import catalyst.planning._
 import catalyst.plans._
 import catalyst.plans.logical.LogicalPlan
 import catalyst.plans.physical._
+import parquet.ParquetRelation
+import parquet.InsertIntoParquetTable
 
 abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
 
@@ -206,6 +208,10 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         execution.ExistingRdd(Nil, singleRowRdd) :: Nil
       case logical.Repartition(expressions, child) =>
         execution.Exchange(HashPartitioning(expressions, numPartitions), planLater(child)) :: Nil
+      case logical.WriteToFile(path, child) =>
+        val relation =
+          ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, None)
+        InsertIntoParquetTable(relation, planLater(child))(sparkContext) :: Nil
       case _ => Nil
     }
   }
