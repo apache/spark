@@ -20,7 +20,7 @@ package org.apache.spark.ui
 import org.eclipse.jetty.server.{Handler, Server}
 
 import org.apache.spark.{SparkConf, Logging, SparkContext, SparkEnv}
-import org.apache.spark.scheduler.{SparkReplayerBus, EventLoggingListener}
+import org.apache.spark.scheduler.{SparkReplayerBus, EventLoggingListener, EventLoggingInfo}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
 import org.apache.spark.ui.exec.ExecutorsUI
@@ -77,8 +77,8 @@ private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf, port: Int) e
 
   def setAppName(name: String) = appName = name
 
-  // Path to directory in which events are logged, if any
-  def eventLogDir: Option[String] = eventLogger.map { l => Some(l.logDir) }.getOrElse(None)
+  // Information needed to replay the events logged by this UI, if any
+  def eventLogInfo: Option[EventLoggingInfo] = eventLogger.map { l => Some(l.info) }.getOrElse(None)
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {

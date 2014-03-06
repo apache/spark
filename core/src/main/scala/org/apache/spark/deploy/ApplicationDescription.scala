@@ -17,6 +17,8 @@
 
 package org.apache.spark.deploy
 
+import org.apache.spark.scheduler.EventLoggingInfo
+
 private[spark] class ApplicationDescription(
     val name: String,
     val maxCores: Option[Int],
@@ -24,7 +26,7 @@ private[spark] class ApplicationDescription(
     val command: Command,
     val sparkHome: Option[String],
     var appUiUrl: String,
-    val eventLogDir: Option[String] = None)
+    val eventLogInfo: Option[EventLoggingInfo] = None)
   extends Serializable {
 
   val user = System.getProperty("user.name", "<unknown>")

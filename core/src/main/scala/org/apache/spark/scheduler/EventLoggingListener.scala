@@ -19,8 +19,9 @@ package org.apache.spark.scheduler
 
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.util.{JsonProtocol, FileLogger}
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.spark.io.CompressionCodec
+import org.apache.spark.util.{JsonProtocol, FileLogger}
 
 /**
  * A SparkListener that logs events to persistent storage.
@@ -44,6 +45,14 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
 
   private val logger =
     new FileLogger(logDir, conf, outputBufferSize, shouldCompress, shouldOverwrite)
+
+  // Information needed to replay the events logged by this listener later
+  val info = {
+    val compressionCodec = if (shouldCompress) {
+      Some(conf.get("spark.io.compression.codec", CompressionCodec.DEFAULT_COMPRESSION_CODEC))
+    } else None
+    EventLoggingInfo(logDir, compressionCodec)
+  }
 
   logInfo("Logging events to %s".format(logDir))
 
@@ -77,3 +86,6 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
 
   def stop() = logger.stop()
 }
+
+// If compression is not enabled, compressionCodec is None
+private[spark] case class EventLoggingInfo(logDir: String, compressionCodec: Option[String])

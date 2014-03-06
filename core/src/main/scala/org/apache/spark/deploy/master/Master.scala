@@ -619,11 +619,9 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       waitingApps -= app
 
       // If application events are logged, use them to rebuild the UI
-      val rebuildAppUI = app.desc.eventLogDir.isDefined
+      val rebuildAppUI = app.desc.eventLogInfo.isDefined
       if (rebuildAppUI) {
-        val appName = app.desc.name
-        val eventLogDir = app.desc.eventLogDir.get
-        val ui = startPersistedSparkUI(appName, eventLogDir)
+        val ui = startPersistedSparkUI(app)
         app.desc.appUiUrl = ui.appUIAddress
         appIdToUI(app.id) = ui
       } else {
@@ -655,9 +653,22 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     }
   }
 
-  /** Start a new SparkUI rendered from persisted storage */
-  def startPersistedSparkUI(appName: String, eventLogDir: String): SparkUI = {
-    val ui = new SparkUI(conf, nextPersistedUIPort)
+  /**
+   * Start a new SparkUI rendered from persisted storage. Assumes event logging information
+   * is available for given application.
+   */
+  def startPersistedSparkUI(app: ApplicationInfo): SparkUI = {
+    val appName = app.desc.name
+    val eventLogInfo = app.desc.eventLogInfo.get
+    val eventLogDir = eventLogInfo.logDir
+    val eventCompressionCodec = eventLogInfo.compressionCodec
+    val appConf = new SparkConf
+    eventCompressionCodec.foreach { codec =>
+      appConf.set("spark.eventLog.compress", "true")
+      appConf.set("spark.io.compression.codec", codec)
+    }
+
+    val ui = new SparkUI(appConf, nextPersistedUIPort)
     ui.setAppName(appName)
     ui.bind()
     ui.start()
