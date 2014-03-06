@@ -36,7 +36,7 @@ import scala.tools.reflect.StdRuntimeTags._
 import scala.util.control.ControlThrowable
 import util.stackTraceString
 
-import org.apache.spark.{HttpServer, SparkConf, Logging, SecurityManager}
+import org.apache.spark.{Logging, HttpServer, SecurityManager, SparkConf}
 import org.apache.spark.util.Utils
 
 // /** directory to save .class files to */
