@@ -30,15 +30,16 @@ case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends 
   def output = projectList.map(_.toAttribute)
 
   def execute() = child.execute().mapPartitions { iter =>
-    val buildProjection = new Projection(projectList)
-    iter.map(buildProjection)
+    @transient val resuableProjection = new MutableProjection(projectList)
+    iter.map(resuableProjection)
   }
 }
 
 case class Filter(condition: Expression, child: SparkPlan) extends UnaryNode {
   def output = child.output
+
   def execute() = child.execute().mapPartitions { iter =>
-    iter.filter(condition.applyBoolean)
+    iter.filter(condition.apply(_).asInstanceOf[Boolean])
   }
 }
 
@@ -64,7 +65,7 @@ case class StopAfter(limit: Int, child: SparkPlan)(@transient sc: SparkContext) 
 
   def output = child.output
 
-  override def executeCollect() = child.execute().take(limit)
+  override def executeCollect() = child.execute().map(_.copy()).take(limit)
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
@@ -80,7 +81,7 @@ case class TopK(limit: Int, sortOrder: Seq[SortOrder], child: SparkPlan)
   @transient
   lazy val ordering = new RowOrdering(sortOrder)
 
-  override def executeCollect() = child.execute().takeOrdered(limit)(ordering)
+  override def executeCollect() = child.execute().map(_.copy()).takeOrdered(limit)(ordering)
 
   // TODO: Terminal split should be implemented differently from non-terminal split.
   // TODO: Pick num splits based on |limit|.
@@ -103,7 +104,7 @@ case class Sort(
     // TODO: Optimize sorting operation?
     child.execute()
       .mapPartitions(
-        iterator => iterator.toArray.sorted(ordering).iterator,
+        iterator => iterator.map(_.copy()).toArray.sorted(ordering).iterator,
         preservesPartitioning = true)
   }
 

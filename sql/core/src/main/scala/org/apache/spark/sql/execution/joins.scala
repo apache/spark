@@ -46,12 +46,12 @@ case class SparkEquiInnerJoin(
   def execute() = attachTree(this, "execute") {
     val leftWithKeys = left.execute().mapPartitions { iter =>
       val generateLeftKeys = new Projection(leftKeys, left.output)
-      iter.map(row => (generateLeftKeys(row), row))
+      iter.map(row => (generateLeftKeys(row), row.copy()))
     }
 
     val rightWithKeys = right.execute().mapPartitions { iter =>
       val generateRightKeys = new Projection(rightKeys, right.output)
-      iter.map(row => (generateRightKeys(row), row))
+      iter.map(row => (generateRightKeys(row), row.copy()))
     }
 
     // Do the join.
@@ -73,7 +73,7 @@ case class SparkEquiInnerJoin(
 case class CartesianProduct(left: SparkPlan, right: SparkPlan) extends BinaryNode {
   def output = left.output ++ right.output
 
-  def execute() = left.execute().cartesian(right.execute()).map {
+  def execute() = left.execute().map(_.copy()).cartesian(right.execute().map(_.copy())).map {
     case (l: Row, r: Row) => buildRow(l ++ r)
   }
 }
@@ -95,17 +95,19 @@ case class BroadcastNestedLoopJoin(
   /** The Broadcast relation */
   def right = broadcast
 
+  @transient lazy val boundCondition =
+    condition
+      .map(c => BindReferences.bindReference(c, left.output ++ right.output))
+      .getOrElse(Literal(true))
+
+
   def execute() = {
-    val broadcastedRelation = sc.broadcast(broadcast.execute().collect().toIndexedSeq)
+    val broadcastedRelation = sc.broadcast(broadcast.execute().map(_.copy()).collect().toIndexedSeq)
 
     val streamedPlusMatches = streamed.execute().mapPartitions { streamedIter =>
       val matchedRows = new mutable.ArrayBuffer[Row]
       val includedBroadcastTuples =  new mutable.BitSet(broadcastedRelation.value.size)
       val joinedRow = new JoinedRow
-      val boundCondition =
-        condition
-          .map(c => BindReferences.bindReference(c, left.output ++ right.output))
-          .getOrElse(Literal(true))
 
       streamedIter.foreach { streamedRow =>
         var i = 0
@@ -114,7 +116,7 @@ case class BroadcastNestedLoopJoin(
         while (i < broadcastedRelation.value.size) {
           // TODO: One bitset per partition instead of per row.
           val broadcastedRow = broadcastedRelation.value(i)
-          if (boundCondition.applyBoolean(joinedRow(streamedRow, broadcastedRow))) {
+          if (boundCondition(joinedRow(streamedRow, broadcastedRow)).asInstanceOf[Boolean]) {
             matchedRows += buildRow(streamedRow ++ broadcastedRow)
             matched = true
             includedBroadcastTuples += i

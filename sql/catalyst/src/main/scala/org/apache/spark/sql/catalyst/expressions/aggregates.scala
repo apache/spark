@@ -170,12 +170,15 @@ case class AverageFunction(expr: Expression, base: AggregateExpression)
   def this() = this(null, null) // Required for serialization.
 
   private var count: Long = _
-  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(null))
+  private val sum = MutableLiteral(Cast(Literal(0), expr.dataType).apply(EmptyRow))
   private val sumAsDouble = Cast(sum, DoubleType)
+
+
 
   private val addFunction = Add(sum, expr)
 
-  override def apply(input: Row): Any = sumAsDouble.applyDouble(null) / count.toDouble
+  override def apply(input: Row): Any =
+    sumAsDouble.apply(EmptyRow).asInstanceOf[Double] / count.toDouble
 
   def update(input: Row): Unit = {
     count += 1

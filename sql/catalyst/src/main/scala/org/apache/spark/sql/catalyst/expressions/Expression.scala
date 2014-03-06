@@ -30,6 +30,7 @@ abstract class Expression extends TreeNode[Expression] {
   type EvaluatedType <: Any
 
   def dataType: DataType
+
   /**
    * Returns true when an expression is a candidate for static evaluation before the query is
    * executed.
@@ -52,14 +53,6 @@ abstract class Expression extends TreeNode[Expression] {
   /** Returns the result of evaluating this expression on a given input Row */
   def apply(input: Row = null): EvaluatedType =
     throw new TreeNodeException(this, s"No function to evaluate expression. type: ${this.nodeName}")
-
-  // Primitive Accessor functions that avoid boxing for performance.
-  // Note this is an Unstable API as it doesn't correctly handle null values yet.
-
-  def applyBoolean(input: Row): Boolean = apply(input).asInstanceOf[Boolean]
-  def applyInt(input: Row): Int = apply(input).asInstanceOf[Int]
-  def applyDouble(input: Row): Double = apply(input).asInstanceOf[Double]
-  def applyString(input: Row): String = apply(input).asInstanceOf[String]
 
   /**
    * Returns `true` if this expression and all its children have been resolved to a specific schema

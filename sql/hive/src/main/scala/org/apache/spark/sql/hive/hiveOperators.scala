@@ -141,7 +141,7 @@ case class HiveTableScan(
         // Only partitioned values are needed here, since the predicate has already been bound to
         // partition key attribute references.
         val row = new GenericRow(castedValues.toArray)
-        shouldKeep.applyBoolean(row)
+        shouldKeep.apply(row).asInstanceOf[Boolean]
       }
     }
   }

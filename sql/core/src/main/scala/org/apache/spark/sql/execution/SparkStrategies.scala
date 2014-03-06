@@ -154,7 +154,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
   }
 
   protected lazy val singleRowRdd =
-    sparkContext.parallelize(Seq(new GenericRow(Array()): Row), 1)
+    sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
 
   def convertToCatalyst(a: Any): Any = a match {
     case s: Seq[Any] => s.map(convertToCatalyst)

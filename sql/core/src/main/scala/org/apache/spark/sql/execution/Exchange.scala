@@ -18,17 +18,52 @@
 package org.apache.spark.sql
 package execution
 
+import java.nio.ByteBuffer
+
+import com.esotericsoftware.kryo.{Kryo, Serializer}
+import com.esotericsoftware.kryo.io.{Output, Input}
+
+import org.apache.spark.{SparkConf, RangePartitioner, HashPartitioner}
+import org.apache.spark.rdd.ShuffledRDD
+import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.util.MutablePair
+
 import catalyst.rules.Rule
 import catalyst.errors._
 import catalyst.expressions._
 import catalyst.plans.physical._
 
-import org.apache.spark.{RangePartitioner, HashPartitioner}
-import org.apache.spark.rdd.ShuffledRDD
+class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
+  override def newKryo(): Kryo = {
+    val kryo = new Kryo
+    kryo.setRegistrationRequired(true)
+    kryo.register(classOf[MutablePair[_,_]])
+    kryo.register(classOf[Array[Any]])
+    kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericRow])
+    kryo.register(classOf[org.apache.spark.sql.catalyst.expressions.GenericMutableRow])
+    kryo.register(classOf[scala.collection.mutable.ArrayBuffer[_]])
+    kryo.register(classOf[scala.math.BigDecimal], new BigDecimalSerializer)
+    kryo.setReferences(false)
+    kryo.setClassLoader(this.getClass.getClassLoader)
+    kryo
+  }
+}
+
+class BigDecimalSerializer extends Serializer[BigDecimal] {
+  def write(kryo: Kryo, output: Output, bd: math.BigDecimal) {
+    // TODO: There are probably more efficient representations than strings...
+    output.writeString(bd.toString)
+  }
+
+  def read(kryo: Kryo, input: Input, tpe: Class[BigDecimal]): BigDecimal = {
+    BigDecimal(input.readString())
+  }
+}
 
 case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends UnaryNode {
 
   override def outputPartitioning = newPartitioning
+
   def output = child.output
 
   def execute() = attachTree(this , "execute") {
@@ -36,21 +71,26 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
       case HashPartitioning(expressions, numPartitions) => {
         // TODO: Eliminate redundant expressions in grouping key and value.
         val rdd = child.execute().mapPartitions { iter =>
-          val hashExpressions = new Projection(expressions)
-          iter.map(r => (hashExpressions(r), r))
+          val hashExpressions = new MutableProjection(expressions)
+          val mutablePair = new MutablePair[Row, Row]()
+          iter.map(r => mutablePair(hashExpressions(r), r))
         }
         val part = new HashPartitioner(numPartitions)
-        val shuffled = new ShuffledRDD[Row, Row, (Row, Row)](rdd, part)
-
+        val shuffled = new ShuffledRDD[Row, Row, MutablePair[Row, Row]](rdd, part)
+        shuffled.setSerializer(classOf[SparkSqlSerializer].getName)
         shuffled.map(_._2)
       }
       case RangePartitioning(sortingExpressions, numPartitions) => {
-        // TODO: ShuffledRDD should take an Ordering.
+        // TODO: RangePartitioner should take an Ordering.
         implicit val ordering = new RowOrdering(sortingExpressions)
 
-        val rdd = child.execute().map(row => (row, null))
+        val rdd = child.execute().mapPartitions { iter =>
+          val mutablePair = new MutablePair[Row, Null](null, null)
+          iter.map(row => mutablePair(row, null))
+        }
         val part = new RangePartitioner(numPartitions, rdd, ascending = true)
-        val shuffled = new ShuffledRDD[Row, Null, (Row, Null)](rdd, part)
+        val shuffled = new ShuffledRDD[Row, Null, MutablePair[Row, Null]](rdd, part)
+        shuffled.setSerializer(classOf[SparkSqlSerializer].getName)
 
         shuffled.map(_._1)
       }

@@ -80,14 +80,14 @@ object HiveFunctionRegistry
     case c: Class[_] if c == classOf[hadoopIo.BooleanWritable] => BooleanType
     case c: Class[_] if c == classOf[java.lang.String] => StringType
     case c: Class[_] if c == java.lang.Short.TYPE => ShortType
-    case c: Class[_] if c == java.lang.Integer.TYPE => ShortType
+    case c: Class[_] if c == java.lang.Integer.TYPE => IntegerType
     case c: Class[_] if c == java.lang.Long.TYPE => LongType
     case c: Class[_] if c == java.lang.Double.TYPE => DoubleType
     case c: Class[_] if c == java.lang.Byte.TYPE => ByteType
     case c: Class[_] if c == java.lang.Float.TYPE => FloatType
     case c: Class[_] if c == java.lang.Boolean.TYPE => BooleanType
     case c: Class[_] if c == classOf[java.lang.Short] => ShortType
-    case c: Class[_] if c == classOf[java.lang.Integer] => ShortType
+    case c: Class[_] if c == classOf[java.lang.Integer] => IntegerType
     case c: Class[_] if c == classOf[java.lang.Long] => LongType
     case c: Class[_] if c == classOf[java.lang.Double] => DoubleType
     case c: Class[_] if c == classOf[java.lang.Byte] => ByteType
