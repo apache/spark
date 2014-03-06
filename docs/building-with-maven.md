@@ -56,7 +56,7 @@ Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.o
 
 The ScalaTest plugin also supports running only a specific test suite as follows:
 
-    $ mvn -Dhadoop.version=... -Dsuites=org.apache.spark.repl.ReplSuite test
+    $ mvn -Dhadoop.version=... -Dsuites=spark.repl.ReplSuite test
 
 
 ## Continuous Compilation ##

@@ -28,6 +28,8 @@ import org.apache.spark.SparkContext
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 
+import org.apache.spark.mllib.util._
+
 import org.jblas._
 
 class SVDSuite extends FunSuite with BeforeAndAfterAll {
@@ -91,6 +93,35 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
 
     // check multiplication guarantee
     assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)  
+  }
+
+ test("dense full rank matrix svd") {
+    val m = 10
+    val n = 3
+    val data = sc.makeRDD(Array.tabulate(m,n){ (a, b) =>
+      MatrixEntry(a, b, (a + 2).toDouble * (b + 1) / (1 + a + b)) }.flatten )
+
+    val a = LAUtils.spToDense(SparseMatrix(data, m, n))
+
+    val decomposed = SVD.denseSVD(a, n, true)
+    val u = LAUtils.denseToSp(decomposed.U)
+    val v = LAUtils.denseToSp(decomposed.V)
+    val s = LAUtils.denseToSp(decomposed.S)
+
+    val densea = getDenseMatrix(LAUtils.denseToSp(a))
+    val svd = Singular.sparseSVD(densea)
+
+    val retu = getDenseMatrix(u)
+    val rets = getDenseMatrix(s)
+    val retv = getDenseMatrix(v)
+
+    // check individual decomposition  
+    assertMatrixEquals(retu, svd(0))
+    assertMatrixEquals(rets, DoubleMatrix.diag(svd(1)))
+    assertMatrixEquals(retv, svd(2))
+
+    // check multiplication guarantee
+    assertMatrixEquals(retu.mmul(rets).mmul(retv.transpose), densea)
   }
 
  test("rank one matrix svd") {

@@ -29,6 +29,7 @@ import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
  */
 class SVD {
   private var k: Int = 1
+  private var computeU: Boolean = true
 
   /**
    * Set the number of top-k singular vectors to return
@@ -38,11 +39,26 @@ class SVD {
     this
   }
 
-   /**
-   * Compute SVD using the current set parameters
+  /**
+   * Should U be computed?
    */
+  def setComputeU(compU: Boolean): SVD = {
+    this.computeU = compU
+    this
+  }
+
+  /**
+  * Compute SVD using the current set parameters
+  */
   def compute(matrix: SparseMatrix) : MatrixSVD = {
     SVD.sparseSVD(matrix, k)
+  }
+
+  /**
+  * Compute SVD using the current set parameters
+  */
+  def compute(matrix: DenseMatrix) : DenseMatrixSVD = {
+    SVD.denseSVD(matrix, k, computeU)
   }
 }
 
@@ -79,13 +95,10 @@ object SVD {
  *
  * @param matrix sparse matrix to factorize
  * @param k Recover k singular values and vectors
+ * @param computeU gives the option of skipping the U computation
  * @return Three sparse matrices: U, S, V such that A = USV^T
  */
-  def sparseSVD(
-      matrix: SparseMatrix,
-      k: Int)
-    : MatrixSVD =
-  {
+  def sparseSVD(matrix: SparseMatrix, k: Int, computeU: Boolean): MatrixSVD = {
     val data = matrix.data
     val m = matrix.m
     val n = matrix.n
@@ -142,17 +155,138 @@ object SVD {
     val vsirdd = sc.makeRDD(Array.tabulate(V.rows, sigma.length)
                 { (i,j) => ((i, j), V.get(i,j) / sigma(j))  }.flatten)
 
-    // Multiply A by VS^-1
-    val aCols = data.map(entry => (entry.j, (entry.i, entry.mval)))
-    val bRows = vsirdd.map(entry => (entry._1._1, (entry._1._2, entry._2)))
-    val retUdata = aCols.join(bRows).map( {case (key, ( (rowInd, rowVal), (colInd, colVal)))
-        => ((rowInd, colInd), rowVal*colVal)}).reduceByKey(_ + _)
-          .map{ case ((row, col), mval) => MatrixEntry(row, col, mval)}
-    val retU = SparseMatrix(retUdata, m, sigma.length)
-   
-    MatrixSVD(retU, retS, retV)  
+    if (computeU) {
+      // Multiply A by VS^-1
+      val aCols = data.map(entry => (entry.j, (entry.i, entry.mval)))
+      val bRows = vsirdd.map(entry => (entry._1._1, (entry._1._2, entry._2)))
+      val retUdata = aCols.join(bRows).map {
+        case (key, ( (rowInd, rowVal), (colInd, colVal)) ) => 
+          ((rowInd, colInd), rowVal * colVal)
+      }.reduceByKey(_ + _).map{ case ((row, col), mval) => MatrixEntry(row, col, mval)}
+      
+      val retU = SparseMatrix(retUdata, m, sigma.length)
+      MatrixSVD(retU, retS, retV)  
+    } else {
+      MatrixSVD(null, retS, retV)
+    }
   }
 
+
+/**
+ * Singular Value Decomposition for Tall and Skinny matrices.
+ * Given an m x n matrix A, this will compute matrices U, S, V such that
+ * A = U * S * V'
+ * 
+ * There is no restriction on m, but we require n^2 doubles to fit in memory.
+ * Further, n should be less than m.
+ * 
+ * The decomposition is computed by first computing A'A = V S^2 V',
+ * computing svd locally on that (since n x n is small),
+ * from which we recover S and V. 
+ * Then we compute U via easy matrix multiplication
+ * as U =  A * V * S^-1
+ * 
+ * Only the k largest singular values and associated vectors are found.
+ * If there are k such values, then the dimensions of the return will be:
+ *
+ * S is k x k and diagonal, holding the singular values on diagonal
+ * U is m x k and satisfies U'U = eye(k)
+ * V is n x k and satisfies V'V = eye(k)
+ *
+ * All input and output is expected in DenseMatrix format
+ *
+ * @param matrix sparse matrix to factorize
+ * @param k Recover k singular values and vectors
+ * @param computeU gives the option of skipping the U computation
+ * @return Three sparse matrices: U, S, V such that A = USV^T
+ */
+ def denseSVD(matrix: DenseMatrix, k: Int, computeU: Boolean): DenseMatrixSVD = {
+    val rows = matrix.rows
+    val m = matrix.m
+    val n = matrix.n
+
+    if (m < n || m <= 0 || n <= 0) {
+      throw new IllegalArgumentException("Expecting a tall and skinny matrix")
+    }
+
+    if (k < 1 || k > n) {
+      throw new IllegalArgumentException("Must request up to n singular values")
+    }
+
+    // Compute A^T A
+    val fullata = matrix.rows.map(x => x.data).map{
+        row => 
+          val miniata = Array.ofDim[Double](n, n)
+          for(i <- 0 until n) for(j <- 0 until n) {
+             miniata(i)(j) += row(i) * row(j)
+          }
+        miniata 
+    }.fold(Array.ofDim[Double](n, n)){
+      (a, b) =>
+          for(i <- 0 until n) for(j <- 0 until n) {
+             a(i)(j) += b(i)(j)
+          }
+      a
+    }
+
+    // Construct jblas A^T A locally
+    val ata = new DoubleMatrix(fullata)
+
+    // Since A^T A is small, we can compute its SVD directly
+    val svd = Singular.sparseSVD(ata)
+    val V = svd(0)
+    val sigmas = MatrixFunctions.sqrt(svd(1)).toArray.filter(x => x > 1e-9)
+
+    if (sigmas.size < k) {
+      throw new Exception("Not enough singular values to return")
+    }
+
+    val sigma = sigmas.take(k)
+
+    val sc = matrix.rows.sparkContext
+
+    // prepare V for returning
+    val retVrows = sc.makeRDD(Array.tabulate(n)(i => MatrixRow(i, V.getRow(i).toArray.take(k))))
+    val retV = DenseMatrix(retVrows, n, k)
+
+    // prepare S for returning
+    val sparseS = DoubleMatrix.diag(new DoubleMatrix(sigmas))
+    val retSrows = sc.makeRDD(Array.tabulate(k)(i => MatrixRow(i, sparseS.getRow(i).toArray)))
+    val retS = DenseMatrix(retSrows, k, k)
+
+    // Compute U as U = A V S^-1
+    if (computeU) {
+      // Compute VS^-1
+      val vsinv = sc.broadcast(Array.tabulate(n, k)((i, j) => V.get(i, j) / sigma(j))).value
+     
+      val uRows = matrix.rows.map{x =>
+        val row = Array.ofDim[Double](k)
+        for(j <- 0 until k) {
+          for(i <- 0 until n) {
+            row(j) += vsinv(i)(j) * x.data(i)  
+          }
+        }
+        MatrixRow(x.i, row)
+      }
+      
+      val retU = DenseMatrix(uRows, m, k)
+      DenseMatrixSVD(retU, retS, retV)
+    } else {
+      DenseMatrixSVD(null, retS, retV)
+    }
+  }
+
+   /**
+   * Compute SVD with default parameter for computeU = true.
+   * See full paramter definition of sparseSVD for more description.
+   *
+   * @param matrix sparse matrix to factorize
+   * @param k Recover k singular values and vectors
+   * @return Three sparse matrices: U, S, V such that A = USV^T
+   */
+   def sparseSVD(matrix: SparseMatrix, k: Int): MatrixSVD = {
+     sparseSVD(matrix, k, true)
+   }
 
   def main(args: Array[String]) {
     if (args.length < 8) {
