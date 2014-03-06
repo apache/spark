@@ -73,10 +73,10 @@ trait ClientBase extends Logging {
       ((args.userJar == null && args.amClass == classOf[ApplicationMaster].getName) ->
           "Error: You must specify a user jar when running in standalone mode!"),
       (args.userClass == null) -> "Error: You must specify a user class!",
-      (args.numWorkers <= 0) -> "Error: You must specify at least 1 worker!",
+      (args.numExecutors <= 0) -> "Error: You must specify at least 1 executor!",
       (args.amMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: AM memory size must be" +
         "greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD),
-      (args.workerMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Worker memory size" +
+      (args.executorMemory <= YarnAllocationHandler.MEMORY_OVERHEAD) -> ("Error: Executor memory size" +
         "must be greater than: " + YarnAllocationHandler.MEMORY_OVERHEAD.toString)
     ).foreach { case(cond, errStr) =>
       if (cond) {
@@ -95,9 +95,9 @@ trait ClientBase extends Logging {
     logInfo("Max mem capabililty of a single resource in this cluster " + maxMem)
 
     // If we have requested more then the clusters max for a single resource then exit.
-    if (args.workerMemory > maxMem) {
-      logError("Required worker memory (%d MB), is above the max threshold (%d MB) of this cluster.".
-        format(args.workerMemory, maxMem))
+    if (args.executorMemory > maxMem) {
+      logError("Required executor memory (%d MB), is above the max threshold (%d MB) of this cluster.".
+        format(args.executorMemory, maxMem))
       System.exit(1)
     }
     val amMem = args.amMemory + YarnAllocationHandler.MEMORY_OVERHEAD
@@ -276,7 +276,7 @@ trait ClientBase extends Logging {
     env("SPARK_YARN_STAGING_DIR") = stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
 
-    // Set the environment variables to be passed on to the Workers.
+    // Set the environment variables to be passed on to the executors.
     distCacheMgr.setDistFilesEnv(env)
     distCacheMgr.setDistArchivesEnv(env)
 
@@ -360,9 +360,9 @@ trait ClientBase extends Logging {
         " --class " + args.userClass +
         " --jar " + args.userJar +
         userArgsToString(args) +
-        " --worker-memory " + args.workerMemory +
-        " --worker-cores " + args.workerCores +
-        " --num-workers " + args.numWorkers +
+        " --executor-memory " + args.executorMemory +
+        " --executor-cores " + args.executorCores +
+        " --num-executor " + args.numExecutors +
         " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
         " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 

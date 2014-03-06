@@ -34,7 +34,7 @@ import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.SplitInfo
 
-class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, sparkConf: SparkConf)
+class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sparkConf: SparkConf)
   extends Logging {
 
   def this(args: ApplicationMasterArguments, sparkConf: SparkConf) = this(args, new Configuration(), sparkConf)
@@ -89,7 +89,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     val minimumMemory = appMasterResponse.getMinimumResourceCapability().getMemory()
 
     if (minimumMemory > 0) {
-      val mem = args.workerMemory + YarnAllocationHandler.MEMORY_OVERHEAD
+      val mem = args.executorMemory + YarnAllocationHandler.MEMORY_OVERHEAD
       val numCore = (mem  / minimumMemory) + (if (0 != (mem % minimumMemory)) 1 else 0)
 
       if (numCore > 0) {
@@ -102,7 +102,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     waitForSparkMaster()
 
     // Allocate all containers
-    allocateWorkers()
+    allocateExecutors()
 
     // Launch a progress reporter thread, else app will get killed after expiration (def: 10mins) timeout
     // ensure that progress is sent before YarnConfiguration.RM_AM_EXPIRY_INTERVAL_MS elapse.
@@ -199,7 +199,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
   }
 
 
-  private def allocateWorkers() {
+  private def allocateExecutors() {
 
     // Fixme: should get preferredNodeLocationData from SparkContext, just fake a empty one for now.
     val preferredNodeLocationData: scala.collection.Map[String, scala.collection.Set[SplitInfo]] =
@@ -208,16 +208,16 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     yarnAllocator = YarnAllocationHandler.newAllocator(yarnConf, resourceManager, appAttemptId,
       args, preferredNodeLocationData, sparkConf)
 
-    logInfo("Allocating " + args.numWorkers + " workers.")
+    logInfo("Allocating " + args.numExecutors + " executors.")
     // Wait until all containers have finished
     // TODO: This is a bit ugly. Can we make it nicer?
     // TODO: Handle container failure
-    while ((yarnAllocator.getNumWorkersRunning < args.numWorkers) && (!driverClosed)) {
-      yarnAllocator.allocateContainers(math.max(args.numWorkers - yarnAllocator.getNumWorkersRunning, 0))
+    while ((yarnAllocator.getNumExecutorsRunning < args.numExecutors) && (!driverClosed)) {
+      yarnAllocator.allocateContainers(math.max(args.numExecutors - yarnAllocator.getNumExecutorsRunning, 0))
       Thread.sleep(100)
     }
 
-    logInfo("All workers have launched.")
+    logInfo("All executors have launched.")
 
   }
 
@@ -228,10 +228,10 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     val t = new Thread {
       override def run() {
         while (!driverClosed) {
-          val missingWorkerCount = args.numWorkers - yarnAllocator.getNumWorkersRunning
-          if (missingWorkerCount > 0) {
-            logInfo("Allocating " + missingWorkerCount + " containers to make up for (potentially ?) lost containers")
-            yarnAllocator.allocateContainers(missingWorkerCount)
+          val missingExecutorCount = args.numExecutors - yarnAllocator.getnumExecutorsRunning
+          if (missingExecutorCount > 0) {
+            logInfo("Allocating " + missingExecutorCount + " containers to make up for (potentially ?) lost containers")
+            yarnAllocator.allocateContainers(missingExecutorCount)
           }
           else sendProgress()
           Thread.sleep(sleepTime)
@@ -264,9 +264,9 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
 }
 
 
-object WorkerLauncher {
+object ExecutorLauncher {
   def main(argStrings: Array[String]) {
     val args = new ApplicationMasterArguments(argStrings)
-    new WorkerLauncher(args).run()
+    new ExecutorLauncher(args).run()
   }
 }
