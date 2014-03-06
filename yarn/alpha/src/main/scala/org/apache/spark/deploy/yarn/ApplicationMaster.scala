@@ -90,6 +90,12 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     addAmIpFilter()
 
     ApplicationMaster.register(this)
+
+    // Call this to force generation of secret so it gets populated into the
+    // hadoop UGI. This has to happen before the startUserClass which does a
+    // doAs in order for the credentials to be passed on to the worker containers.
+    val securityMgr = new SecurityManager(sparkConf)
+
     // Start the user's JAR
     userThread = startUserClass()
 
