@@ -245,6 +245,17 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.serializer.objectStreamReset</td>
+  <td>10000</td>
+  <td>
+    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches 
+    objects to prevent writing redundant data, however that stops garbage collection of those 
+    objects. By calling 'reset' you flush that info from the serializer, and allow old 
+    objects to be collected. To turn off this periodic reset set it to a value of <= 0. 
+    By default it will reset the serializer every 10,000 objects.
+  </td>
+</tr>
+<tr>
   <td>spark.broadcast.factory</td>
   <td>org.apache.spark.broadcast.<br />HttpBroadcastFactory</td>
   <td>
