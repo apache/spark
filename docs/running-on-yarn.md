@@ -90,9 +90,9 @@ For example:
           --worker-memory 2g \
           --worker-cores 1
 
-The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.
+The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Viewing Logs" section below for how to see driver and executor logs.
 
-Because the application is run on a remote machine where the Application Master is running, applications that involve local interaction, such as spark-shell, will not work well.
+Because the application is run on a remote machine where the Application Master is running, applications that involve local interaction, such as spark-shell, will not work.
 
 ## Launching a Spark application with yarn-client mode.
 
@@ -136,7 +136,7 @@ When log aggregation isn't turned on, logs are retained locally on each machine 
 
 See [Building Spark with Maven](building-with-maven.html) for instructions on how to build Spark using Maven.
 
-# Important Notes
+# Important notes
 
 - Before Hadoop 2.2, YARN does not support cores in container resource requests. Thus, when running against an earlier version, the numbers of cores given via command line arguments cannot be passed to YARN.  Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
 - The local directories used by Spark executors will be the local directories configured for YARN (Hadoop YARN config yarn.nodemanager.local-dirs). If the user specifies spark.local.dir, it will be ignored.

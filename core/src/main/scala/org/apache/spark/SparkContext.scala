@@ -1027,7 +1027,7 @@ class SparkContext(
  * The SparkContext object contains a number of implicit conversions and parameters for use with
  * various Spark features.
  */
-object SparkContext {
+object SparkContext extends Logging {
 
   private[spark] val SPARK_JOB_DESCRIPTION = "spark.job.description"
 
@@ -1246,6 +1246,10 @@ object SparkContext {
         scheduler
 
       case "yarn-standalone" | "yarn-cluster" =>
+        if (master == "yarn-standalone") {
+          logWarning(
+            "\"yarn-standalone\" is deprecated as of Spark 1.0. Use \"yarn-cluster\" instead.")
+        }
         val scheduler = try {
           val clazz = Class.forName("org.apache.spark.scheduler.cluster.YarnClusterScheduler")
           val cons = clazz.getConstructor(classOf[SparkContext])
