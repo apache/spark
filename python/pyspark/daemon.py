@@ -24,7 +24,7 @@ import multiprocessing
 from ctypes import c_bool
 from errno import EINTR, ECHILD
 from socket import AF_INET, SOCK_STREAM, SOMAXCONN
-from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN
+from signal import SIGHUP, SIGTERM, SIGCHLD, SIG_DFL, SIG_IGN, SIGPROF
 from pyspark.worker import main as worker_main
 from pyspark.serializers import write_int
 
@@ -73,6 +73,20 @@ def worker(listen_sock):
             elif err.errno != ECHILD:
                 raise
     signal.signal(SIGCHLD, handle_sigchld)
+
+    # Shopify added profiling signal handler
+    profiling = [False]
+    def handle_sigprof(*args):
+        import yappi
+
+        if not profiling[0]:
+            profiling[0] = True
+            yappi.start()
+        else:
+            profiling[0] = False
+            yappi.get_func_stats().print_all()
+            yappi.get_thread_stats().print_all()
+    signal.signal(SIGPROF, handle_sigprof)
 
     # Handle clients
     while not should_exit():
