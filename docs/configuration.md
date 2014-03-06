@@ -202,13 +202,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.scheduler.revive.interval</td>
-  <td>1000</td>
-  <td>
-    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
-  </td>
-</tr>
-<tr>
   <td>spark.reducer.maxMbInFlight</td>
   <td>48</td>
   <td>
@@ -354,16 +347,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.cleaner.ttl</td>
-  <td>(infinite)</td>
-  <td>
-    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
-    Periodic cleanups will ensure that metadata older than this duration will be forgetten. This is
-    useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
-    applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
-  </td>
-</tr>
-<tr>
   <td>spark.streaming.blockInterval</td>
   <td>200</td>
   <td>
@@ -483,6 +466,88 @@ Apart from these, the following properties are also available, and may be useful
   <td>false</td>
   <td>
     Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
+  </td>
+</tr>
+</table>
+
+
+The following are the properties that can be used to schedule cleanup jobs at different levels.
+The below mentioned metadata tuning parameters should be set with a lot of consideration and only where required.
+Scheduling metadata cleaning in the middle of job can result in a lot of unnecessary re-computations.
+
+<table class="table">
+<tr><th>Property Name</th><th>Default</th><th>Meaning</th></tr>
+<tr>
+  <td>spark.cleaner.ttl</td>
+  <td>(infinite)</td>
+  <td>
+    Duration (seconds) of how long Spark will remember any metadata (stages generated, tasks generated, etc.).
+    Periodic cleanups will ensure that metadata older than this duration will be forgetten. This is
+    useful for running Spark for many hours / days (for example, running 24/7 in case of Spark Streaming
+    applications). Note that any RDD that persists in memory for more than this duration will be cleared as well.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl.MAP_OUTPUT_TRACKER</td>
+  <td>spark.cleaner.ttl, with a min. value of 10 secs</td>
+  <td>
+    Cleans up the map containing the information of the mapper (the input block manager Id and the output result size) corresponding to a shuffle Id.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl.SHUFFLE_MAP_TASK</td>
+  <td>spark.cleaner.ttl, with a min. value of 10 secs</td>
+  <td>
+    Clears up the cache used for shuffled tasks (tasks present in the earlier stages of the job) - a map that maps stageId to the serialised byte array of the shuffled task.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl.RESULT_TASK</td>
+  <td>spark.cleaner.ttl, with a min. value of 10 secs</td>
+  <td>
+    Clears up the cache used to store the final tasks (tasks present in the last stage of the job) - a map that maps stageId to the serialised byte array of the final task.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl.SPARK_CONTEXT</td>
+  <td>spark.cleaner.ttl, with a min. value of 10 secs</td>
+  <td>
+    Cleans up all the old persistent (cached) RDDs.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl.HTTP_BROADCAST</td>
+  <td>spark.cleaner.ttl, with a min. value of 10 secs</td>
+  <td>
+    Cleans up all broadcast files which are timestamped older than the assigned cleanup value.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl.DAG_SCHEDULER</td>
+  <td>spark.cleaner.ttl, with a min. value of 10 secs</td>
+  <td>
+    Clears up all the maps saved inside the DAG Scheduler such as - stageIdToStage, pendingTasks, stageIdToJobIds etc which are timestamped older than the assigned cleanup value.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl.BLOCK_MANAGER</td>
+  <td>spark.cleaner.ttl, with a min. value of 10 secs</td>
+  <td>
+    Clears the old non broadcast blocks from memory.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl.BROADCAST_VARS</td>
+  <td>spark.cleaner.ttl, with a min. value of 10 secs</td>
+  <td>
+    Clears the old broadcast blocks from memory.
+  </td>
+</tr>
+<tr>
+  <td>spark.cleaner.ttl.SHUFFLE_BLOCK_MANAGER</td>
+  <td>spark.cleaner.ttl, with a min. value of 10 secs</td>
+  <td>
+   Deletes the old physical files stored on the disk created as a result of shuffling transformations/actions such as a reduce job. 
   </td>
 </tr>
 </table>
