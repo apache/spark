@@ -19,8 +19,8 @@ package org.apache.spark.storage
 
 import java.nio.ByteBuffer
 
-import scala.collection.mutable.StringBuilder
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.StringBuilder
 
 import org.apache.spark.network._
 

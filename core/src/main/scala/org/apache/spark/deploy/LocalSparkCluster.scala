@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy
 
+import scala.collection.mutable.ArrayBuffer
+
 import akka.actor.ActorSystem
 
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, Logging}
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Testing class that creates a Spark standalone process in-cluster (that is, running the

@@ -17,12 +17,12 @@
 
 package org.apache.spark.metrics
 
-import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
-
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
+
+import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
 
 import org.apache.spark.{SecurityManager, SparkConf, Logging}
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}

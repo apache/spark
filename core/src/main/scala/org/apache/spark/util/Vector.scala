@@ -18,6 +18,7 @@
 package org.apache.spark.util
 
 import scala.util.Random
+
 import org.apache.spark.util.random.XORShiftRandom
 
 class Vector(val elements: Array[Double]) extends Serializable {
@@ -135,7 +136,7 @@ object Vector {
 
   /**
    * Creates this [[org.apache.spark.util.Vector]] of given length containing random numbers 
-   * between 0.0 and 1.0. Optional [[scala.util.Random]] number generator can be provided.
+   * between 0.0 and 1.0. Optional scala.util.Random number generator can be provided.
    */
   def random(length: Int, random: Random = new XORShiftRandom()) =
     Vector(length, _ => random.nextDouble())

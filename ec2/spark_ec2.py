@@ -73,7 +73,7 @@ def parse_args():
   parser.add_option("-v", "--spark-version", default="0.9.0",
       help="Version of Spark to use: 'X.Y.Z' or a specific git hash")
   parser.add_option("--spark-git-repo",
-      default="https://github.com/apache/incubator-spark",
+      default="https://github.com/apache/spark",
       help="Github repo from which to checkout supplied commit hash")
   parser.add_option("--hadoop-major-version", default="1",
       help="Major version of Hadoop (default: 1)")
@@ -218,6 +218,12 @@ def get_spark_ami(opts):
 # Returns a tuple of EC2 reservation objects for the master and slaves
 # Fails if there already instances running in the cluster's groups.
 def launch_cluster(conn, opts, cluster_name):
+  if opts.identity_file is None:
+    print >> stderr, "ERROR: Must provide an identity file (-i) for ssh connections."
+    sys.exit(1)
+  if opts.key_pair is None:
+    print >> stderr, "ERROR: Must provide a key pair name (-k) to use on instances."
+    sys.exit(1)    
   print "Setting up security groups..."
   master_group = get_or_make_group(conn, cluster_name + "-master")
   slave_group = get_or_make_group(conn, cluster_name + "-slaves")

@@ -17,20 +17,19 @@
 
 package org.apache.spark.util
 
+import java.lang.management.ManagementFactory
+import java.lang.reflect.{Array => JArray}
 import java.lang.reflect.Field
 import java.lang.reflect.Modifier
-import java.lang.reflect.{Array => JArray}
 import java.util.IdentityHashMap
-import java.util.concurrent.ConcurrentHashMap
 import java.util.Random
-
-import javax.management.MBeanServer
-import java.lang.management.ManagementFactory
+import java.util.concurrent.ConcurrentHashMap
 
 import scala.collection.mutable.ArrayBuffer
 
 import it.unimi.dsi.fastutil.ints.IntOpenHashSet
-import org.apache.spark.{SparkEnv, SparkConf, SparkContext, Logging}
+
+import org.apache.spark.Logging
 
 /**
  * Estimates the sizes of Java objects (number of bytes of memory they occupy), for use in

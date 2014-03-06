@@ -15,18 +15,25 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark
 
-import scala.runtime.AbstractFunction1
+import java.io.File
 
 /**
- * Subclass of Function1 for ease of calling from Java. The main thing it does is re-expose the
- * apply() method as call() and declare that it can throw Exception (since AbstractFunction1.apply
- * isn't marked to allow that).
+ * Resolves paths to files added through `SparkContext.addFile()`.
  */
-private[spark] abstract class WrappedFunction1[T, R] extends AbstractFunction1[T, R] {
-  @throws(classOf[Exception])
-  def call(t: T): R
+object SparkFiles {
 
-  final def apply(t: T): R = call(t)
+  /**
+   * Get the absolute path of a file added through `SparkContext.addFile()`.
+   */
+  def get(filename: String): String =
+    new File(getRootDirectory(), filename).getAbsolutePath()
+
+  /**
+   * Get the root directory that contains files added through `SparkContext.addFile()`.
+   */
+  def getRootDirectory(): String =
+    SparkEnv.get.sparkFilesDir
+
 }

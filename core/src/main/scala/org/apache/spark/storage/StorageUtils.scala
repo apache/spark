@@ -17,8 +17,8 @@
 
 package org.apache.spark.storage
 
-import org.apache.spark.{SparkContext}
-import BlockManagerMasterActor.BlockStatus
+import org.apache.spark.SparkContext
+import org.apache.spark.storage.BlockManagerMasterActor.BlockStatus
 import org.apache.spark.util.Utils
 
 private[spark]

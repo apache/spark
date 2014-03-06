@@ -17,19 +17,11 @@
 
 package org.apache.spark.api.java.function;
 
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
-
 import java.io.Serializable;
 
 /**
  * A two-argument function that takes arguments of type T1 and T2 and returns an R.
  */
-public abstract class Function2<T1, T2, R> extends WrappedFunction2<T1, T2, R>
-  implements Serializable {
-
-  public ClassTag<R> returnType() {
-    return (ClassTag<R>) ClassTag$.MODULE$.apply(Object.class);
-  }
+public interface Function2<T1, T2, R> extends Serializable {
+  public R call(T1 v1, T2 v2) throws Exception;
 }
-

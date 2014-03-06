@@ -30,6 +30,7 @@ import org.apache.spark.deploy.master.MasterMessages.ElectedLeader
  * [[org.apache.spark.deploy.master.MasterMessages.RevokedLeadership RevokedLeadership]]
  */
 private[spark] trait LeaderElectionAgent extends Actor {
+  //TODO: LeaderElectionAgent does not necessary to be an Actor anymore, need refactoring.
   val masterActor: ActorRef
 }
 

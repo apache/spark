@@ -17,20 +17,11 @@
 
 package org.apache.spark.api.java.function;
 
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
-
 import java.io.Serializable;
 
-
 /**
- * Base class for functions whose return types do not create special RDDs. PairFunction and
- * DoubleFunction are handled separately, to allow PairRDDs and DoubleRDDs to be constructed
- * when mapping RDDs of other types.
+ * A function that returns zero or more records of type Double from each input record.
  */
-public abstract class Function<T, R> extends WrappedFunction1<T, R> implements Serializable {
-  public ClassTag<R> returnType() {
-    return ClassTag$.MODULE$.apply(Object.class);
-  }
+public interface DoubleFlatMapFunction<T> extends Serializable {
+  public Iterable<Double> call(T t) throws Exception;
 }
-

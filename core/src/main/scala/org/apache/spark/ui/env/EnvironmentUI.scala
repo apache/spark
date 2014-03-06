@@ -25,11 +25,10 @@ import scala.xml.Node
 
 import org.eclipse.jetty.servlet.ServletContextHandler
 
-import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.ui.UIUtils
-import org.apache.spark.ui.Page.Environment
 import org.apache.spark.SparkContext
-
+import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.ui.Page.Environment
+import org.apache.spark.ui.UIUtils
 
 private[spark] class EnvironmentUI(sc: SparkContext) {
 

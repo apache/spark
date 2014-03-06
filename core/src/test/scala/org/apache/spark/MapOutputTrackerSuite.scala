@@ -17,13 +17,14 @@
 
 package org.apache.spark
 
-import org.scalatest.FunSuite
+import scala.concurrent.Await
 
 import akka.actor._
+import org.scalatest.FunSuite
+
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
 import org.apache.spark.util.AkkaUtils
-import scala.concurrent.Await
 
 class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
   private val conf = new SparkConf

@@ -17,27 +17,11 @@
 
 package org.apache.spark.api.java.function;
 
-import scala.Tuple2;
-import scala.reflect.ClassTag;
-import scala.reflect.ClassTag$;
-
 import java.io.Serializable;
 
 /**
- * A function that returns zero or more key-value pair records from each input record. The
- * key-value pairs are represented as scala.Tuple2 objects.
+ * A function that takes two inputs and returns zero or more output records.
  */
-// PairFlatMapFunction does not extend FlatMapFunction because flatMap is
-// overloaded for both FlatMapFunction and PairFlatMapFunction.
-public abstract class PairFlatMapFunction<T, K, V>
-  extends WrappedFunction1<T, Iterable<Tuple2<K, V>>>
-  implements Serializable {
-
-  public ClassTag<K> keyType() {
-    return (ClassTag<K>) ClassTag$.MODULE$.apply(Object.class);
-  }
-
-  public ClassTag<V> valueType() {
-    return (ClassTag<V>) ClassTag$.MODULE$.apply(Object.class);
-  }
+public interface FlatMapFunction2<T1, T2, R> extends Serializable {
+  public Iterable<R> call(T1 t1, T2 t2) throws Exception;
 }

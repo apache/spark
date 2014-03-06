@@ -17,12 +17,12 @@
 
 package org.apache.spark.metrics.sink
 
+import java.net.InetSocketAddress
 import java.util.Properties
 import java.util.concurrent.TimeUnit
-import java.net.InetSocketAddress
 
 import com.codahale.metrics.MetricRegistry
-import com.codahale.metrics.graphite.{GraphiteReporter, Graphite}
+import com.codahale.metrics.graphite.{Graphite, GraphiteReporter}
 
 import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem

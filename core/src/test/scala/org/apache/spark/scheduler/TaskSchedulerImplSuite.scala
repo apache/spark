@@ -17,21 +17,28 @@
 
 package org.apache.spark.scheduler
 
-import org.scalatest.FunSuite
-import org.scalatest.BeforeAndAfter
+import java.util.Properties
 
-import org.apache.spark._
 import scala.collection.mutable.ArrayBuffer
 
-import java.util.Properties
+import org.scalatest.FunSuite
+
+import org.apache.spark._
+
+class FakeSchedulerBackend extends SchedulerBackend {
+  def start() {}
+  def stop() {}
+  def reviveOffers() {}
+  def defaultParallelism() = 1
+}
 
 class FakeTaskSetManager(
     initPriority: Int,
     initStageId: Int,
     initNumTasks: Int,
-    clusterScheduler: TaskSchedulerImpl,
+    taskScheduler: TaskSchedulerImpl,
     taskSet: TaskSet)
-  extends TaskSetManager(clusterScheduler, taskSet, 0) {
+  extends TaskSetManager(taskScheduler, taskSet, 0) {
 
   parent = null
   weight = 1
@@ -105,9 +112,10 @@ class FakeTaskSetManager(
   }
 }
 
-class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging {
+class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Logging {
 
-  def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: TaskSchedulerImpl, taskSet: TaskSet): FakeTaskSetManager = {
+  def createDummyTaskSetManager(priority: Int, stage: Int, numTasks: Int, cs: TaskSchedulerImpl,
+      taskSet: TaskSet): FakeTaskSetManager = {
     new FakeTaskSetManager(priority, stage, numTasks, cs , taskSet)
   }
 
@@ -133,20 +141,17 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
   }
 
   test("FIFO Scheduler Test") {
-    sc = new SparkContext("local", "ClusterSchedulerSuite")
-    val clusterScheduler = new TaskSchedulerImpl(sc)
-    var tasks = ArrayBuffer[Task[_]]()
-    val task = new FakeTask(0)
-    tasks += task
-    val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    val taskSet = FakeTask.createTaskSet(1)
 
     val rootPool = new Pool("", SchedulingMode.FIFO, 0, 0)
     val schedulableBuilder = new FIFOSchedulableBuilder(rootPool)
     schedulableBuilder.buildPools()
 
-    val taskSetManager0 = createDummyTaskSetManager(0, 0, 2, clusterScheduler, taskSet)
-    val taskSetManager1 = createDummyTaskSetManager(0, 1, 2, clusterScheduler, taskSet)
-    val taskSetManager2 = createDummyTaskSetManager(0, 2, 2, clusterScheduler, taskSet)
+    val taskSetManager0 = createDummyTaskSetManager(0, 0, 2, taskScheduler, taskSet)
+    val taskSetManager1 = createDummyTaskSetManager(0, 1, 2, taskScheduler, taskSet)
+    val taskSetManager2 = createDummyTaskSetManager(0, 2, 2, taskScheduler, taskSet)
     schedulableBuilder.addTaskSetManager(taskSetManager0, null)
     schedulableBuilder.addTaskSetManager(taskSetManager1, null)
     schedulableBuilder.addTaskSetManager(taskSetManager2, null)
@@ -160,12 +165,9 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
   }
 
   test("Fair Scheduler Test") {
-    sc = new SparkContext("local", "ClusterSchedulerSuite")
-    val clusterScheduler = new TaskSchedulerImpl(sc)
-    var tasks = ArrayBuffer[Task[_]]()
-    val task = new FakeTask(0)
-    tasks += task
-    val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    val taskSet = FakeTask.createTaskSet(1)
 
     val xmlPath = getClass.getClassLoader.getResource("fairscheduler.xml").getFile()
     System.setProperty("spark.scheduler.allocation.file", xmlPath)
@@ -189,15 +191,15 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     val properties2 = new Properties()
     properties2.setProperty("spark.scheduler.pool","2")
 
-    val taskSetManager10 = createDummyTaskSetManager(1, 0, 1, clusterScheduler, taskSet)
-    val taskSetManager11 = createDummyTaskSetManager(1, 1, 1, clusterScheduler, taskSet)
-    val taskSetManager12 = createDummyTaskSetManager(1, 2, 2, clusterScheduler, taskSet)
+    val taskSetManager10 = createDummyTaskSetManager(1, 0, 1, taskScheduler, taskSet)
+    val taskSetManager11 = createDummyTaskSetManager(1, 1, 1, taskScheduler, taskSet)
+    val taskSetManager12 = createDummyTaskSetManager(1, 2, 2, taskScheduler, taskSet)
     schedulableBuilder.addTaskSetManager(taskSetManager10, properties1)
     schedulableBuilder.addTaskSetManager(taskSetManager11, properties1)
     schedulableBuilder.addTaskSetManager(taskSetManager12, properties1)
 
-    val taskSetManager23 = createDummyTaskSetManager(2, 3, 2, clusterScheduler, taskSet)
-    val taskSetManager24 = createDummyTaskSetManager(2, 4, 2, clusterScheduler, taskSet)
+    val taskSetManager23 = createDummyTaskSetManager(2, 3, 2, taskScheduler, taskSet)
+    val taskSetManager24 = createDummyTaskSetManager(2, 4, 2, taskScheduler, taskSet)
     schedulableBuilder.addTaskSetManager(taskSetManager23, properties2)
     schedulableBuilder.addTaskSetManager(taskSetManager24, properties2)
 
@@ -217,12 +219,9 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
   }
 
   test("Nested Pool Test") {
-    sc = new SparkContext("local", "ClusterSchedulerSuite")
-    val clusterScheduler = new TaskSchedulerImpl(sc)
-    var tasks = ArrayBuffer[Task[_]]()
-    val task = new FakeTask(0)
-    tasks += task
-    val taskSet = new TaskSet(tasks.toArray,0,0,0,null)
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc)
+    val taskSet = FakeTask.createTaskSet(1)
 
     val rootPool = new Pool("", SchedulingMode.FAIR, 0, 0)
     val pool0 = new Pool("0", SchedulingMode.FAIR, 3, 1)
@@ -240,23 +239,23 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     pool1.addSchedulable(pool10)
     pool1.addSchedulable(pool11)
 
-    val taskSetManager000 = createDummyTaskSetManager(0, 0, 5, clusterScheduler, taskSet)
-    val taskSetManager001 = createDummyTaskSetManager(0, 1, 5, clusterScheduler, taskSet)
+    val taskSetManager000 = createDummyTaskSetManager(0, 0, 5, taskScheduler, taskSet)
+    val taskSetManager001 = createDummyTaskSetManager(0, 1, 5, taskScheduler, taskSet)
     pool00.addSchedulable(taskSetManager000)
     pool00.addSchedulable(taskSetManager001)
 
-    val taskSetManager010 = createDummyTaskSetManager(1, 2, 5, clusterScheduler, taskSet)
-    val taskSetManager011 = createDummyTaskSetManager(1, 3, 5, clusterScheduler, taskSet)
+    val taskSetManager010 = createDummyTaskSetManager(1, 2, 5, taskScheduler, taskSet)
+    val taskSetManager011 = createDummyTaskSetManager(1, 3, 5, taskScheduler, taskSet)
     pool01.addSchedulable(taskSetManager010)
     pool01.addSchedulable(taskSetManager011)
 
-    val taskSetManager100 = createDummyTaskSetManager(2, 4, 5, clusterScheduler, taskSet)
-    val taskSetManager101 = createDummyTaskSetManager(2, 5, 5, clusterScheduler, taskSet)
+    val taskSetManager100 = createDummyTaskSetManager(2, 4, 5, taskScheduler, taskSet)
+    val taskSetManager101 = createDummyTaskSetManager(2, 5, 5, taskScheduler, taskSet)
     pool10.addSchedulable(taskSetManager100)
     pool10.addSchedulable(taskSetManager101)
 
-    val taskSetManager110 = createDummyTaskSetManager(3, 6, 5, clusterScheduler, taskSet)
-    val taskSetManager111 = createDummyTaskSetManager(3, 7, 5, clusterScheduler, taskSet)
+    val taskSetManager110 = createDummyTaskSetManager(3, 6, 5, taskScheduler, taskSet)
+    val taskSetManager111 = createDummyTaskSetManager(3, 7, 5, taskScheduler, taskSet)
     pool11.addSchedulable(taskSetManager110)
     pool11.addSchedulable(taskSetManager111)
 
@@ -264,5 +263,36 @@ class ClusterSchedulerSuite extends FunSuite with LocalSparkContext with Logging
     checkTaskSetId(rootPool, 4)
     checkTaskSetId(rootPool, 6)
     checkTaskSetId(rootPool, 2)
+  }
+
+  test("Scheduler does not always schedule tasks on the same workers") {
+    sc = new SparkContext("local", "TaskSchedulerImplSuite")
+    val taskScheduler = new TaskSchedulerImpl(sc) 
+    taskScheduler.initialize(new FakeSchedulerBackend)
+    // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
+    var dagScheduler = new DAGScheduler(taskScheduler) {
+      override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
+      override def executorGained(execId: String, host: String) {}
+    }
+
+    val numFreeCores = 1
+    val workerOffers = Seq(new WorkerOffer("executor0", "host0", numFreeCores),
+      new WorkerOffer("executor1", "host1", numFreeCores))
+    // Repeatedly try to schedule a 1-task job, and make sure that it doesn't always
+    // get scheduled on the same executor. While there is a chance this test will fail
+    // because the task randomly gets placed on the first executor all 1000 times, the
+    // probability of that happening is 2^-1000 (so sufficiently small to be considered
+    // negligible).
+    val numTrials = 1000
+    val selectedExecutorIds = 1.to(numTrials).map { _ =>
+      val taskSet = FakeTask.createTaskSet(1)
+      taskScheduler.submitTasks(taskSet)
+      val taskDescriptions = taskScheduler.resourceOffers(workerOffers).flatten
+      assert(1 === taskDescriptions.length)
+      taskDescriptions(0).executorId
+    }
+    var count = selectedExecutorIds.count(_ == workerOffers(0).executorId)
+    assert(count > 0)
+    assert(count < numTrials)
   }
 }

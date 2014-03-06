@@ -15,28 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark;
+package org.apache.spark.api.java.function;
 
-import java.io.File;
+import java.io.Serializable;
 
 /**
- * Resolves paths to files added through `SparkContext.addFile()`.
+ * A three-argument function that takes arguments of type T1, T2 and T3 and returns an R.
  */
-public class SparkFiles {
-
-  private SparkFiles() {}
-
-  /**
-   * Get the absolute path of a file added through `SparkContext.addFile()`.
-   */
-  public static String get(String filename) {
-    return new File(getRootDirectory(), filename).getAbsolutePath();
-  }
-
-  /**
-   * Get the root directory that contains files added through `SparkContext.addFile()`.
-   */
-  public static String getRootDirectory() {
-    return SparkEnv.get().sparkFilesDir();
-  }
+public interface Function3<T1, T2, T3, R> extends Serializable {
+  public R call(T1 v1, T2 v2, T3 v3) throws Exception;
 }

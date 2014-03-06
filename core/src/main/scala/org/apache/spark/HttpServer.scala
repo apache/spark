@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import java.io.File
-import java.net.InetAddress
 
 import org.eclipse.jetty.util.security.{Constraint, Password}
 import org.eclipse.jetty.security.authentication.DigestAuthenticator
@@ -28,6 +27,7 @@ import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.server.bio.SocketConnector
 import org.eclipse.jetty.server.handler.{DefaultHandler, HandlerList, ResourceHandler}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
+
 import org.apache.spark.util.Utils
 
 

@@ -17,8 +17,6 @@
 
 package org.apache.spark.ui.storage
 
-import scala.concurrent.duration._
-
 import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.servlet.ServletContextHandler

@@ -58,11 +58,21 @@ do is as follows.
 
 <div class="codetabs">
 <div data-lang="scala"  markdown="1" >
+First, we import the names of the Spark Streaming classes, and some implicit
+conversions from StreamingContext into our environment, to add useful methods to
+other classes we need (like DStream).
 
-First, we create a
-[StreamingContext](api/streaming/index.html#org.apache.spark.streaming.StreamingContext) object,
-which is the main entry point for all streaming
-functionality. Besides Spark's configuration, we specify that any DStream will be processed
+[StreamingContext](api/streaming/index.html#org.apache.spark.streaming.StreamingContext) is the
+main entry point for all streaming functionality.
+
+{% highlight scala %}
+import org.apache.spark.streaming._
+import org.apache.spark.streaming.StreamingContext._
+{% endhighlight %}
+
+Then we create a
+[StreamingContext](api/streaming/index.html#org.apache.spark.streaming.StreamingContext) object.
+Besides Spark's configuration, we specify that any DStream will be processed
 in 1 second batches.
 
 {% highlight scala %}
@@ -98,7 +108,7 @@ val pairs = words.map(word => (word, 1))
 val wordCounts = pairs.reduceByKey(_ + _)
 
 // Print a few of the counts to the console
-wordCount.print()
+wordCounts.print()
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
@@ -178,7 +188,7 @@ JavaPairDStream<String, Integer> wordCounts = pairs.reduceByKey(
       return i1 + i2;
     }
   });
-wordCount.print();     // Print a few of the counts to the console
+wordCounts.print();     // Print a few of the counts to the console
 {% endhighlight %}
 
 The `words` DStream is further mapped (one-to-one transformation) to a DStream of `(word,
@@ -262,6 +272,24 @@ Time: 1357008430000 ms
     </td>
 </table>
 
+If you plan to run the Scala code for Spark Streaming-based use cases in the Spark
+shell, you should start the shell with the SparkConfiguration pre-configured to
+discard old batches periodically:
+
+{% highlight bash %}
+$ SPARK_JAVA_OPTS=-Dspark.cleaner.ttl=10000 bin/spark-shell
+{% endhighlight %}
+
+... and create your StreamingContext by wrapping the existing interactive shell
+SparkContext object, `sc`:
+
+{% highlight scala %}
+val ssc = new StreamingContext(sc, Seconds(1))
+{% endhighlight %}
+
+When working with the shell, you may also need to send a `^D` to your netcat session
+to force the pipeline to print the word counts to the console at the sink.
+
 ***************************************************************************************************  
 
 # Basics
@@ -275,23 +303,23 @@ To write your own Spark Streaming program, you will have to add the following de
  SBT or Maven project:
 
     groupId = org.apache.spark
-    artifactId = spark-streaming_{{site.SCALA_VERSION}}
+    artifactId = spark-streaming_{{site.SCALA_BINARY_VERSION}}
     version = {{site.SPARK_VERSION}}
 
 For ingesting data from sources like Kafka and Flume that are not present in the Spark
 Streaming core
  API, you will have to add the corresponding
-artifact `spark-streaming-xyz_{{site.SCALA_VERSION}}` to the dependencies. For example,
+artifact `spark-streaming-xyz_{{site.SCALA_BINARY_VERSION}}` to the dependencies. For example,
 some of the common ones are as follows.
 
 
 <table class="table">
 <tr><th>Source</th><th>Artifact</th></tr>
-<tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_VERSION}} </td></tr>
-<tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_VERSION}} </td></tr>
+<tr><td> Kafka </td><td> spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Flume </td><td> spark-streaming-flume_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> Twitter </td><td> spark-streaming-twitter_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> ZeroMQ </td><td> spark-streaming-zeromq_{{site.SCALA_BINARY_VERSION}} </td></tr>
+<tr><td> MQTT </td><td> spark-streaming-mqtt_{{site.SCALA_BINARY_VERSION}} </td></tr>
 <tr><td> </td><td></td></tr>
 </table>
 
@@ -410,7 +438,7 @@ Scala and [JavaStreamingContext](api/streaming/index.html#org.apache.spark.strea
 Additional functionality for creating DStreams from sources such as Kafka, Flume, and Twitter
 can be imported by adding the right dependencies as explained in an
 [earlier](#linking) section. To take the
-case of Kafka, after adding the artifact `spark-streaming-kafka_{{site.SCALA_VERSION}}` to the
+case of Kafka, after adding the artifact `spark-streaming-kafka_{{site.SCALA_BINARY_VERSION}}` to the
 project dependencies, you can create a DStream from Kafka as
 
 <div class="codetabs">

@@ -17,15 +17,14 @@
 
 package org.apache.spark.api.java.function;
 
-
 import java.io.Serializable;
 
+import scala.Tuple2;
+
 /**
- * A function that returns Doubles, and can be used to construct DoubleRDDs.
+ * A function that returns zero or more key-value pair records from each input record. The
+ * key-value pairs are represented as scala.Tuple2 objects.
  */
-// DoubleFunction does not extend Function because some UDF functions, like map,
-// are overloaded for both Function and DoubleFunction.
-public abstract class DoubleFunction<T> extends WrappedFunction1<T, Double>
-  implements Serializable {
-    // Intentionally left blank
+public interface PairFlatMapFunction<T, K, V> extends Serializable {
+  public Iterable<Tuple2<K, V>> call(T t) throws Exception;
 }

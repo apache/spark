@@ -18,8 +18,8 @@
 package org.apache.spark.metrics
 
 import org.scalatest.{BeforeAndAfter, FunSuite}
-import org.apache.spark.deploy.master.MasterSource
 import org.apache.spark.{SecurityManager, SparkConf}
+import org.apache.spark.deploy.master.MasterSource
 
 class MetricsSystemSuite extends FunSuite with BeforeAndAfter {
   var filePath: String = _

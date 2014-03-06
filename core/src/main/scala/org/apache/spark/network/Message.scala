@@ -17,11 +17,10 @@
 
 package org.apache.spark.network
 
-import java.nio.ByteBuffer
 import java.net.InetSocketAddress
+import java.nio.ByteBuffer
 
 import scala.collection.mutable.ArrayBuffer
-
 
 private[spark] abstract class Message(val typ: Long, val id: Int) {
   var senderAddress: InetSocketAddress = null

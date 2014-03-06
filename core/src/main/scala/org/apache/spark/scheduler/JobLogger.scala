@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{IOException, File, FileNotFoundException, PrintWriter}
+import java.io.{File, FileNotFoundException, IOException, PrintWriter}
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 import java.util.concurrent.LinkedBlockingQueue
@@ -25,8 +25,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -81,7 +81,7 @@ class JobLogger(val user: String, val logDirName: String)
   /**
    * Create a log file for one job
    * @param jobID ID of the job
-   * @exception FileNotFoundException Fail to create log file
+   * @throws FileNotFoundException Fail to create log file
    */
   protected def createLogWriter(jobID: Int) {
     try {
@@ -275,7 +275,6 @@ class JobLogger(val user: String, val logDirName: String)
         " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
         " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
         " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime +
-        " REMOTE_FETCH_TIME=" + metrics.remoteFetchTime +
         " REMOTE_BYTES_READ=" + metrics.remoteBytesRead
       case None => ""
     }

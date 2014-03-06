@@ -32,9 +32,8 @@ import org.apache.spark.TaskState.TaskState
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.util.{Clock, SystemClock}
 
-
 /**
- * Schedules the tasks within a single TaskSet in the ClusterScheduler. This class keeps track of
+ * Schedules the tasks within a single TaskSet in the TaskSchedulerImpl. This class keeps track of
  * each task, retries tasks if they fail (up to a limited number of times), and
  * handles locality-aware scheduling for this TaskSet via delay scheduling. The main interfaces
  * to it are resourceOffer, which asks the TaskSet whether it wants to run a task on one node,
@@ -43,7 +42,7 @@ import org.apache.spark.util.{Clock, SystemClock}
  * THREADING: This class is designed to only be called from code with a lock on the
  * TaskScheduler (e.g. its event handlers). It should not be called from other threads.
  *
- * @param sched           the ClusterScheduler associated with the TaskSetManager
+ * @param sched           the TaskSchedulerImpl associated with the TaskSetManager
  * @param taskSet         the TaskSet to manage scheduling for
  * @param maxTaskFailures if any particular task fails more than this number of times, the entire
  *                        task set will be aborted

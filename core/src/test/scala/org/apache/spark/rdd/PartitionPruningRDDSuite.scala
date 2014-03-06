@@ -18,8 +18,8 @@
 package org.apache.spark.rdd
 
 import org.scalatest.FunSuite
-import org.apache.spark.{TaskContext, Partition, SharedSparkContext}
 
+import org.apache.spark.{Partition, SharedSparkContext, TaskContext}
 
 class PartitionPruningRDDSuite extends FunSuite with SharedSparkContext {
 

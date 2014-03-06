@@ -20,7 +20,7 @@ package org.apache.spark.network.netty
 import io.netty.buffer._
 
 import org.apache.spark.Logging
-import org.apache.spark.storage.{TestBlockId, BlockId}
+import org.apache.spark.storage.{BlockId, TestBlockId}
 
 private[spark] class FileHeader (
   val fileLen: Int,

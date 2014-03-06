@@ -21,7 +21,6 @@ import java.net.InetAddress
 import java.net.InetSocketAddress
 import java.nio.ByteBuffer
 
-
 private[spark] class MessageChunkHeader(
     val typ: Long,
     val id: Int,

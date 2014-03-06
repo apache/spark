@@ -17,24 +17,25 @@
 
 package org.apache.spark.network
 
-import org.apache.spark._
-
+import java.net._
 import java.nio._
 import java.nio.channels._
 import java.nio.channels.spi._
 import java.net._
 import java.util.concurrent.atomic.AtomicInteger
+
 import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
 
-import scala.collection.mutable.HashSet
+import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.HashMap
+import scala.collection.mutable.HashSet
 import scala.collection.mutable.SynchronizedMap
 import scala.collection.mutable.SynchronizedQueue
-import scala.collection.mutable.ArrayBuffer
 
-import scala.concurrent.{Await, Promise, ExecutionContext, Future}
+import scala.concurrent.{Await, ExecutionContext, Future, Promise}
 import scala.concurrent.duration._
 
+import org.apache.spark._
 import org.apache.spark.util.{SystemClock, Utils}
 
 private[spark] class ConnectionManager(port: Int, conf: SparkConf,
@@ -750,9 +751,6 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
 
       newConnection
     }
-    // I removed the lookupKey stuff as part of merge ... should I re-add it ? We did not find it
-    // useful in our test-env ... If we do re-add it, we should consistently use it everywhere I
-    // guess ?
     val connection = connectionsById.getOrElseUpdate(connectionManagerId, startNewConnection())
     if (authEnabled) {
       checkSendAuthFirst(connectionManagerId, connection)

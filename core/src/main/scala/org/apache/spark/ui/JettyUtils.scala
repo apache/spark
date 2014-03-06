@@ -19,11 +19,10 @@ package org.apache.spark.ui
 
 import java.net.InetSocketAddress
 import java.net.URL
-import javax.servlet.http.HttpServlet
-import javax.servlet.http.{HttpServletResponse, HttpServletRequest}
+import javax.servlet.http.{HttpServlet, HttpServletResponse, HttpServletRequest}
 
 import scala.annotation.tailrec
-import scala.util.{Try, Success, Failure}
+import scala.util.{Failure, Success, Try}
 import scala.xml.Node
 
 import net.liftweb.json.{JValue, pretty, render}

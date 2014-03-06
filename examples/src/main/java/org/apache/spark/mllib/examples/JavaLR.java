@@ -34,7 +34,7 @@ import java.util.regex.Pattern;
  */
 public final class JavaLR {
 
-  static class ParsePoint extends Function<String, LabeledPoint> {
+  static class ParsePoint implements Function<String, LabeledPoint> {
     private static final Pattern COMMA = Pattern.compile(",");
     private static final Pattern SPACE = Pattern.compile(" ");
 

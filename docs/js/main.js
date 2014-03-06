@@ -1,26 +1,3 @@
-
-// From docs.scala-lang.org
-function styleCode() {
-  if (typeof disableStyleCode != "undefined") {
-    return;
-  }
-  $(".codetabs pre code").parent().each(function() {
-    if (!$(this).hasClass("prettyprint")) {
-      var lang = $(this).parent().data("lang");
-      if (lang == "python") {
-        lang = "py"
-      }
-      if (lang == "bash") {
-        lang = "bsh"
-      }
-      $(this).addClass("prettyprint lang-"+lang+" linenums");
-    }
-  });
-  console.log("runningPrettyPrint()")
-  prettyPrint();
-}
-
-
 function codeTabs() {
   var counter = 0;
   var langImages = {
@@ -97,11 +74,7 @@ function viewSolution() {
 }
 
 
-$(document).ready(function() {
+$(function() {
   codeTabs();
   viewSolution();
-  $('#chapter-toc').toc({exclude: '', context: '.container'});
-  $('#chapter-toc').prepend('<p class="chapter-toc-header">In This Chapter</p>');
-  makeCollapsable($('#global-toc'), "", "global-toc", "Show Table of Contents");
-  //styleCode();
 });

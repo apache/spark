@@ -30,6 +30,10 @@ import org.apache.spark.deploy.SparkHadoopUtil
  */
 class YarnSparkHadoopUtil extends SparkHadoopUtil {
 
+  override def transferCredentials(source: UserGroupInformation, dest: UserGroupInformation) {
+    dest.addCredentials(source.getCredentials())
+  }
+
   // Note that all params which start with SPARK are propagated all the way through, so if in yarn mode, this MUST be set to true.
   override def isYarnMode(): Boolean = { true }
 

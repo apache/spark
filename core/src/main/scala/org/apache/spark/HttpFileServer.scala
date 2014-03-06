@@ -17,8 +17,10 @@
 
 package org.apache.spark
 
-import java.io.{File}
+import java.io.File
+
 import com.google.common.io.Files
+
 import org.apache.spark.util.Utils
 
 private[spark] class HttpFileServer(securityManager: SecurityManager) extends Logging {

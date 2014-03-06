@@ -35,7 +35,8 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.{SparkConf, SparkContext, Logging, SecurityManager}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
 class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
@@ -63,6 +64,11 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
   // Default to numWorkers * 2, with minimum of 3
   private val maxNumWorkerFailures = sparkConf.getInt("spark.yarn.max.worker.failures",
     math.max(args.numWorkers * 2, 3))
+
+  private var registered = false
+
+  private val sparkUser = Option(System.getenv("SPARK_USER")).getOrElse(
+    SparkContext.SPARK_UNKNOWN_USER)
 
   def run() {
     // Setup the directories so things go to yarn approved directories rather
@@ -92,7 +98,12 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     waitForSparkContextInitialized()
 
     // Do this after spark master is up and SparkContext is created so that we can register UI Url
-    val appMasterResponse: RegisterApplicationMasterResponse = registerApplicationMaster()
+    synchronized {
+      if (!isFinished) {
+        registerApplicationMaster()
+        registered = true
+      }
+    }
 
     // Allocate all containers
     allocateWorkers()
@@ -169,7 +180,7 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
       false /* initialize */ ,
       Thread.currentThread.getContextClassLoader).getMethod("main", classOf[Array[String]])
     val t = new Thread {
-      override def run() {
+      override def run(): Unit = SparkHadoopUtil.get.runAsUser(sparkUser) { () =>
         var successed = false
         try {
           // Copy
@@ -204,7 +215,8 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         var count = 0
         val waitTime = 10000L
         val numTries = sparkConf.getInt("spark.yarn.ApplicationMaster.waitTries", 10)
-        while (ApplicationMaster.sparkContextRef.get() == null && count < numTries) {
+        while (ApplicationMaster.sparkContextRef.get() == null && count < numTries
+            && !isFinished) {
           logInfo("Waiting for spark context initialization ... " + count)
           count = count + 1
           ApplicationMaster.sparkContextRef.wait(waitTime)
@@ -337,17 +349,19 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
         return
       }
       isFinished = true
+      
+      logInfo("finishApplicationMaster with " + status)
+      if (registered) {
+        val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])
+          .asInstanceOf[FinishApplicationMasterRequest]
+        finishReq.setAppAttemptId(appAttemptId)
+        finishReq.setFinishApplicationStatus(status)
+        finishReq.setDiagnostics(diagnostics)
+        // Set tracking url to empty since we don't have a history server.
+        finishReq.setTrackingUrl("")
+        resourceManager.finishApplicationMaster(finishReq)
+      }
     }
-
-    logInfo("finishApplicationMaster with " + status)
-    val finishReq = Records.newRecord(classOf[FinishApplicationMasterRequest])
-      .asInstanceOf[FinishApplicationMasterRequest]
-    finishReq.setAppAttemptId(appAttemptId)
-    finishReq.setFinishApplicationStatus(status)
-    finishReq.setDiagnostics(diagnostics)
-    // Set tracking url to empty since we don't have a history server.
-    finishReq.setTrackingUrl("")
-    resourceManager.finishApplicationMaster(finishReq)
   }
 
   /**

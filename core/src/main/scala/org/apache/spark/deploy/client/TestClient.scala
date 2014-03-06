@@ -17,9 +17,9 @@
 
 package org.apache.spark.deploy.client
 
-import org.apache.spark.util.{Utils, AkkaUtils}
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext, Logging}
-import org.apache.spark.deploy.{Command, ApplicationDescription}
+import org.apache.spark.{SecurityManager, SparkConf, Logging}
+import org.apache.spark.deploy.{ApplicationDescription, Command}
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 private[spark] object TestClient {
 

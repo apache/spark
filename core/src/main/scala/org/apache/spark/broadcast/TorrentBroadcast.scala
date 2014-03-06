@@ -26,7 +26,6 @@ import org.apache.spark._
 import org.apache.spark.storage.{BroadcastBlockId, BroadcastHelperBlockId, StorageLevel}
 import org.apache.spark.util.Utils
 
-
 private[spark] class TorrentBroadcast[T](@transient var value_ : T, isLocal: Boolean, id: Long)
 extends Broadcast[T](id) with Logging with Serializable {
 
