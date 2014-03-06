@@ -33,9 +33,7 @@ import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.servlet.{DefaultServlet, FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
-import org.apache.spark.Logging
-import org.apache.spark.SecurityManager
-import org.apache.spark.SparkConf
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
