@@ -195,7 +195,7 @@ object SVD {
  *
  * All input and output is expected in DenseMatrix format
  *
- * @param matrix sparse matrix to factorize
+ * @param matrix dense matrix to factorize
  * @param k Recover k singular values and vectors
  * @param computeU gives the option of skipping the U computation
  * @return Three sparse matrices: U, S, V such that A = USV^T
