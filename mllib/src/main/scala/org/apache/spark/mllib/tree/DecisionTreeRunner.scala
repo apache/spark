@@ -87,7 +87,7 @@ object DecisionTreeRunner extends Logging {
     val maxBins = options.getOrElse('maxBins,"100").toString.toInt
 
     val strategy = new Strategy(algo = algo, impurity = impurity, maxDepth = maxDepth, maxBins = maxBins)
-    val model = new DecisionTree(strategy).train(trainData)
+    val model = DecisionTree.train(trainData,strategy)
 
     //Load test data
     val testData = loadLabeledData(sc, options.get('testDataDir).get.toString)
