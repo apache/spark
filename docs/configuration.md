@@ -442,6 +442,20 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.akka.askTimeout</td>
+  <td>30</td>
+  <td>
+    This parameter defines the timeout to use for Akka ask operations. (in seconds)
+  </td>
+</tr>
+<tr>
+  <td>spark.akka.lookupTimeout</td>
+  <td>30</td>
+  <td>
+    This parameter defines the timeout to use for Akka lookup operations. (in seconds)
+  </td>
+</tr>
+<tr>
   <td>spark.akka.batchSize</td>
   <td>15</td>
   <td>
