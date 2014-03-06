@@ -691,13 +691,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.deploy.recoveryDirectory</td>
-  <td>""</td>
-  <td>
-    The user can specify the directory for the master recovery file when using FileSystemPersistenceEngine.
-  </td>
-</tr>
-<tr>
   <td>spark.deploy.retainedApplications</td>
   <td>200</td>
   <td>
@@ -715,13 +708,6 @@ Apart from these, the following properties are also available, and may be useful
     data locality in HDFS, but consolidating is more efficient for compute-intensive workloads. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
     applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
-  </td>
-</tr>
-<tr>
-  <td>spark.deploy.zookeeper.url</td>
-  <td>(not set)</td>
-  <td>
-    The URL of zookeeper cluster. The user has to set this parameter explicitly when using ZooKeeper.
   </td>
 </tr>
 <tr>
