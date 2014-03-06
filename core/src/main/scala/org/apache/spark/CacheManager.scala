@@ -71,10 +71,30 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           val computedValues = rdd.computeOrReadCheckpoint(split, context)
           // Persist the result, so long as the task is not running locally
           if (context.runningLocally) { return computedValues }
-          val elements = new ArrayBuffer[Any]
-          elements ++= computedValues
-          blockManager.put(key, elements, storageLevel, tellMaster = true)
-          elements.iterator.asInstanceOf[Iterator[T]]
+          if (storageLevel.useDisk && !storageLevel.useMemory) {
+            // In the case that this RDD is to be persisted using DISK_ONLY
+            // the iterator will be passed directly to the blockManager (rather then
+            // caching it to an ArrayBuffer first), then the resulting block data iterator
+            // will be passed back to the user. If the iterator generates a lot of data,
+            // this means that it doesn't all have to be held in memory at one time.
+            // This could also apply to MEMORY_ONLY_SER storage, but we need to make sure
+            // blocks aren't dropped by the block store before enabling that.
+            blockManager.put(key, computedValues, storageLevel, tellMaster = true)
+            return blockManager.get(key) match {
+              case Some(values) =>
+                return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
+              case None =>
+                logInfo("Failure to store %s".format(key))
+                throw new Exception("Block manager failed to return persisted valued")
+            }
+          } else {
+            // In this case the RDD is cached to an array buffer. This will save the results
+            // if we're dealing with a 'one-time' iterator
+            val elements = new ArrayBuffer[Any]
+            elements ++= computedValues
+            blockManager.put(key, elements, storageLevel, tellMaster = true)
+            return elements.iterator.asInstanceOf[Iterator[T]]
+          }
         } finally {
           loading.synchronized {
             loading.remove(key)
