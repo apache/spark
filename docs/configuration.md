@@ -459,6 +459,15 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.akka.logAkkaConfig</td>
+  <td>false</td>
+  <td>
+    This parameter controls three logging behaviours of Akka: 1) Logging the events including: DisassociatedEvent,
+    AssociatedEvent, AssociationErrorEvent, RemotingListenEvent, RemotingShutdownEvent, RemotingErrorEvent; 2) Logging
+     the dead letters during running; 3) Logging the dead letters during the shutdown.
+  </td>
+</tr>
+<tr>
   <td>spark.akka.threads</td>
   <td>4</td>
   <td>
