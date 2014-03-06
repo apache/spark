@@ -442,6 +442,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.akka.batchSize</td>
+  <td>15</td>
+  <td>
+    The parameter specifies defines the maximum number of messages to be processed per actor
+    before the thread jumps to the next actor. Set to 1 for as fair as possible.
+  </td>
+</tr>
+<tr>
   <td>spark.akka.frameSize</td>
   <td>10</td>
   <td>
