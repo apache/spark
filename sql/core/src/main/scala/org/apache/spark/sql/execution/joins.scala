@@ -96,9 +96,9 @@ case class BroadcastNestedLoopJoin(
   def right = broadcast
 
   @transient lazy val boundCondition =
-      condition
-        .map(c => BindReferences.bindReference(c, left.output ++ right.output))
-        .getOrElse(Literal(true))
+    condition
+      .map(c => BindReferences.bindReference(c, left.output ++ right.output))
+      .getOrElse(Literal(true))
 
 
   def execute() = {
