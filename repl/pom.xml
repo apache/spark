@@ -158,7 +158,7 @@
               <relocations>
                 <relocation>
                   <pattern>org.objectweb.asm</pattern>
-                  <shadedPattern>shaded.org.objectweb.asm</shadedPattern>
+                  <shadedPattern>org.apache.spark.shaded.org.objectweb.asm</shadedPattern>
                 </relocation>
               </relocations>
               <filters>
