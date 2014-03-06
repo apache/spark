@@ -49,7 +49,8 @@ private[spark] class Worker(
     actorSystemName: String,
     actorName: String,
     workDirPath: String = null,
-    val conf: SparkConf)
+    val conf: SparkConf,
+    val securityMgr: SecurityManager)
   extends Actor with Logging {
   import context.dispatcher
 
@@ -92,7 +93,7 @@ private[spark] class Worker(
   var coresUsed = 0
   var memoryUsed = 0
 
-  val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf)
+  val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   val workerSource = new WorkerSource(this)
 
   def coresFree: Int = cores - coresUsed
@@ -348,10 +349,11 @@ private[spark] object Worker {
     val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
+    val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
-      conf = conf, securityManager = new SecurityManager)
+      conf = conf, securityManager = securityMgr)
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, systemName, actorName,  workDir, conf), name = actorName)
+      masterUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
     (actorSystem, boundPort)
   }
 

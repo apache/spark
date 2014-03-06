@@ -45,7 +45,8 @@ private[spark] class ExecutorsUI(val sc: SparkContext) {
   }
 
   def getHandlers = Seq[ServletContextHandler](
-    createServletHandler("/executors", (request: HttpServletRequest) => render(request))
+    createServletHandler("/executors", createServlet((request: HttpServletRequest) => render
+      (request), sc.env.securityManager))
   )
 
   def render(request: HttpServletRequest): Seq[Node] = {

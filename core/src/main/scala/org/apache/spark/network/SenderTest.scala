@@ -32,8 +32,8 @@ private[spark] object SenderTest {
     val targetHost = args(0)
     val targetPort = args(1).toInt
     val targetConnectionManagerId = new ConnectionManagerId(targetHost, targetPort)
-
-    val manager = new ConnectionManager(0, new SparkConf, new SecurityManager)
+    val conf = new SparkConf
+    val manager = new ConnectionManager(0, conf, new SecurityManager(conf))
     println("Started connection manager with id = " + manager.id)
 
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {

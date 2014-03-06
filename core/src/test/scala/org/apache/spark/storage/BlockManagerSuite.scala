@@ -41,8 +41,8 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
   var actorSystem: ActorSystem = null
   var master: BlockManagerMaster = null
   var oldArch: String = null
-  System.setProperty("spark.authenticate", "false")
-  val securityMgr = new SecurityManager()
+  conf.set("spark.authenticate", "false")
+  val securityMgr = new SecurityManager(conf)
 
   // Reuse a serializer across tests to avoid creating a new thread-local buffer on each test
   conf.set("spark.kryoserializer.buffer.mb", "1")

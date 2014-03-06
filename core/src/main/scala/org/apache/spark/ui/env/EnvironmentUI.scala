@@ -34,7 +34,8 @@ import org.apache.spark.SparkContext
 private[spark] class EnvironmentUI(sc: SparkContext) {
 
   def getHandlers = Seq[ServletContextHandler](
-    createServletHandler("/environment", (request: HttpServletRequest) => envDetails(request))
+    createServletHandler("/environment",
+      createServlet((request: HttpServletRequest) => envDetails(request), sc.env.securityManager))
   )
 
   def envDetails(request: HttpServletRequest): Seq[Node] = {

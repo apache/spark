@@ -32,7 +32,11 @@ private[spark] class BlockManagerUI(val sc: SparkContext) extends Logging {
   val rddPage = new RDDPage(this)
 
   def getHandlers = Seq[ServletContextHandler](
-    createServletHandler("/storage/rdd", (request: HttpServletRequest) => rddPage.render(request)),
-    createServletHandler("/storage", (request: HttpServletRequest) => indexPage.render(request))
+    createServletHandler("/storage/rdd",
+      createServlet((request: HttpServletRequest) => rddPage.render(request),
+      sc.env.securityManager)),
+    createServletHandler("/storage",
+      createServlet((request: HttpServletRequest) => indexPage.render(request),
+      sc.env.securityManager))
   )
 }

@@ -124,7 +124,7 @@ object SparkEnv extends Logging {
       isDriver: Boolean,
       isLocal: Boolean): SparkEnv = {
 
-    val securityManager = new SecurityManager()
+    val securityManager = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
       securityManager = securityManager)
 
@@ -197,9 +197,9 @@ object SparkEnv extends Logging {
     conf.set("spark.fileserver.uri",  httpFileServer.serverUri)
 
     val metricsSystem = if (isDriver) {
-      MetricsSystem.createMetricsSystem("driver", conf)
+      MetricsSystem.createMetricsSystem("driver", conf, securityManager)
     } else {
-      MetricsSystem.createMetricsSystem("executor", conf)
+      MetricsSystem.createMetricsSystem("executor", conf, securityManager)
     }
     metricsSystem.start()
 

@@ -38,7 +38,7 @@ import org.apache.hadoop.io._
 import org.apache.spark.serializer.{DeserializationStream, SerializationStream, SerializerInstance}
 import org.apache.spark.deploy.SparkHadoopUtil
 import java.nio.ByteBuffer
-import org.apache.spark.{SecurityManager, SparkConf, SparkEnv, SparkException, Logging}
+import org.apache.spark.{SecurityManager, SparkConf, SparkException, Logging}
 
 
 /**
@@ -259,7 +259,7 @@ private[spark] object Utils extends Logging {
    * Throws SparkException if the target file already exists and has different contents than
    * the requested file.
    */
-  def fetchFile(url: String, targetDir: File, conf: SparkConf) {
+  def fetchFile(url: String, targetDir: File, conf: SparkConf, securityMgr: SecurityManager) {
     val filename = url.split("/").last
     val tempDir = getLocalDir(conf)
     val tempFile =  File.createTempFile("fetchFileTemp", null, new File(tempDir))
@@ -271,10 +271,6 @@ private[spark] object Utils extends Logging {
         logInfo("Fetching " + url + " to " + tempFile)
 
         var uc: URLConnection = null
-        // First try to get the security Manager from the SparkEnv. If that doesn't exist, create
-        // a new one and rely on the configs being set
-        val sparkEnv = SparkEnv.get
-        val securityMgr = if (sparkEnv != null) sparkEnv.securityManager else new SecurityManager()
         if (securityMgr.isAuthenticationEnabled()) {
           logDebug("fetchFile with security enabled")
           val newuri = constructURIForAuthentication(uri, securityMgr)

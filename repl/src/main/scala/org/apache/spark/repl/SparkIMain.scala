@@ -83,15 +83,17 @@ import org.apache.spark.util.Utils
    *  @author Moez A. Abdel-Gawad
    *  @author Lex Spoon
    */
-  class SparkIMain(initialSettings: Settings, val out: JPrintWriter) extends SparkImports with Logging {
+  class SparkIMain(initialSettings: Settings, val out: JPrintWriter)
+      extends SparkImports with Logging {
     imain =>
 
-      val SPARK_DEBUG_REPL: Boolean = (System.getenv("SPARK_DEBUG_REPL") == "1")
+    val conf = new SparkConf()
 
+    val SPARK_DEBUG_REPL: Boolean = (System.getenv("SPARK_DEBUG_REPL") == "1")
       /** Local directory to save .class files too */
       val outputDir = {
         val tmp = System.getProperty("java.io.tmpdir")
-        val rootDir = new SparkConf().get("spark.repl.classdir",  tmp)
+        val rootDir = conf.get("spark.repl.classdir",  tmp)
         Utils.createTempDir(rootDir)
       }
       if (SPARK_DEBUG_REPL) {
@@ -99,7 +101,8 @@ import org.apache.spark.util.Utils
       }
 
     val virtualDirectory                              = new PlainFile(outputDir) // "directory" for classfiles
-    val classServer                                   = new HttpServer(outputDir, new SecurityManager()) /** Jetty server that will serve our classes to worker nodes */
+    val classServer                                   = new HttpServer(outputDir,
+      new SecurityManager(conf)) /** Jetty server that will serve our classes to worker nodes */
     private var currentSettings: Settings             = initialSettings
     var printResults                                  = true      // whether to print result lines
     var totalSilence                                  = false     // whether to print anything

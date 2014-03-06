@@ -153,8 +153,8 @@ Apart from these, the following properties are also available, and may be useful
   <td>
     Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
     standard javax servlet Filter. Parameters to each filter can also be specified by setting a
-    java system property of <class name of filter>.params='param1=value1,param2=value2'
-    (e.g.-Dspark.ui.filters=com.test.filter1 -Dcom.test.filter1.params='param1=foo,param2=testing')
+    java system property of spark.<class name of filter>.params='param1=value1,param2=value2'
+    (e.g.-Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
   </td>
 </tr>
 <tr>
@@ -509,8 +509,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.authenticate</td>
   <td>false</td>
   <td>
-    Whether spark authenticates its internal connections. See <code>SPARK_SECRET</code> if not
+    Whether spark authenticates its internal connections. See <code>spark.authenticate.secret</code> if not
     running on Yarn.
+  </td>
+</tr>
+<tr>  
+  <td>spark.authenticate.secret</td>
+  <td>None</td>
+  <td>
+    Set the secret key used for Spark to authenticate between components. This needs to be set if
+    not running on Yarn and authentication is enabled.
   </td>
 </tr>
 <tr>  
@@ -551,8 +559,6 @@ The following variables can be set in `spark-env.sh`:
 * `SPARK_JAVA_OPTS`, to add JVM options. This includes Java options like garbage collector settings and any system
    properties that you'd like to pass with `-D`. One use case is to set some Spark properties differently on this
    machine, e.g., `-Dspark.local.dir=/disk1,/disk2`.
-* `SPARK_SECRET`, Set the secret key used for Spark to authenticate between components. This needs to be set if
-   not running on Yarn and authentication is enabled.
 * Options for the Spark [standalone cluster scripts](spark-standalone.html#cluster-launch-scripts), such as number of cores
   to use on each machine and maximum memory.
 

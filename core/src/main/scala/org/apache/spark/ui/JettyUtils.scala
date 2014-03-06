@@ -29,13 +29,13 @@ import scala.xml.Node
 import net.liftweb.json.{JValue, pretty, render}
 
 import org.eclipse.jetty.server.{DispatcherType, Server}
-import org.eclipse.jetty.server.handler.{ResourceHandler, HandlerList, ContextHandler, AbstractHandler}
+import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.servlet.{DefaultServlet, FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 import org.apache.spark.Logging
-import org.apache.spark.SparkEnv
 import org.apache.spark.SecurityManager
+import org.apache.spark.SparkConf
 
 
 /** Utilities for launching a web server using Jetty's HTTP Server class */
@@ -45,31 +45,31 @@ private[spark] object JettyUtils extends Logging {
 
   type Responder[T] = HttpServletRequest => T
 
-  // Conversions from various types of Responder's to jetty Handlers
-  implicit def jsonResponderToServlet(responder: Responder[JValue]): HttpServlet =
-    createServlet(responder, "text/json", (in: JValue) => pretty(render(in)))
+  class ServletParams[T <% AnyRef](val responder: Responder[T],
+    val contentType: String,
+    val extractFn: T => String = (in: Any) => in.toString) {}
 
-  implicit def htmlResponderToServlet(responder: Responder[Seq[Node]]): HttpServlet =
-    createServlet(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)
+  // Conversions from various types of Responder's to appropriate servlet parameters
+  implicit def jsonResponderToServlet(responder: Responder[JValue]): ServletParams[JValue] =
+    new ServletParams(responder, "text/json", (in: JValue) => pretty(render(in)))
 
-  implicit def textResponderToServlet(responder: Responder[String]): HttpServlet =
-    createServlet(responder, "text/plain")
+  implicit def htmlResponderToServlet(responder: Responder[Seq[Node]]): ServletParams[Seq[Node]] =
+    new ServletParams(responder, "text/html", (in: Seq[Node]) => "<!DOCTYPE html>" + in.toString)
 
-  def createServlet[T <% AnyRef](responder: Responder[T], contentType: String, 
-                                 extractFn: T => String = (in: Any) => in.toString): HttpServlet = {
+  implicit def textResponderToServlet(responder: Responder[String]): ServletParams[String] =
+    new ServletParams(responder, "text/plain")
+
+  def createServlet[T <% AnyRef](servletParams: ServletParams[T],
+      securityMgr: SecurityManager): HttpServlet = {
     new HttpServlet {
       override def doGet(request: HttpServletRequest,
                  response: HttpServletResponse) {
-        // First try to get the security Manager from the SparkEnv. If that doesn't exist, create
-        // a new one and rely on the configs being set
-        val sparkEnv = SparkEnv.get
-        val securityMgr = if (sparkEnv != null) sparkEnv.securityManager else new SecurityManager()
         if (securityMgr.checkUIViewPermissions(request.getRemoteUser())) {
-          response.setContentType("%s;charset=utf-8".format(contentType))
+          response.setContentType("%s;charset=utf-8".format(servletParams.contentType))
           response.setStatus(HttpServletResponse.SC_OK)
-          val result = responder(request)
+          val result = servletParams.responder(request)
           response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-          response.getWriter().println(extractFn(result))
+          response.getWriter().println(servletParams.extractFn(result))
         } else {
           response.setStatus(HttpServletResponse.SC_UNAUTHORIZED)
           response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
@@ -120,8 +120,8 @@ private[spark] object JettyUtils extends Logging {
     contextHandler
   }
 
-  private def addFilters(handlers: Seq[ServletContextHandler]) {
-    val filters: Array[String] = System.getProperty("spark.ui.filters", "").split(',').map(_.trim())
+  private def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
+    val filters: Array[String] = conf.get("spark.ui.filters", "").split(',').map(_.trim())
     filters.foreach {
       case filter : String => 
         if (!filter.isEmpty) {
@@ -129,8 +129,8 @@ private[spark] object JettyUtils extends Logging {
           val holder : FilterHolder = new FilterHolder()
           holder.setClassName(filter)
           // get any parameters for each filter
-          val paramName = filter + ".params"
-          val params = System.getProperty(paramName, "").split(',').map(_.trim()).toSet
+          val paramName = "spark." + filter + ".params"
+          val params = conf.get(paramName, "").split(',').map(_.trim()).toSet
           params.foreach {
             case param : String =>
               if (!param.isEmpty) {
@@ -152,10 +152,10 @@ private[spark] object JettyUtils extends Logging {
    * If the desired port number is contented, continues incrementing ports until a free port is
    * found. Returns the chosen port and the jetty Server object.
    */
-  def startJettyServer(hostName: String, port: Int, handlers: Seq[ServletContextHandler]): 
-    (Server, Int) = {
+  def startJettyServer(hostName: String, port: Int, handlers: Seq[ServletContextHandler],
+      conf: SparkConf): (Server, Int) = {
 
-    addFilters(handlers)
+    addFilters(handlers, conf)
     val handlerList = new HandlerList
     handlerList.setHandlers(handlers.toArray)
 
@@ -167,7 +167,9 @@ private[spark] object JettyUtils extends Logging {
       server.setThreadPool(pool)
       server.setHandler(handlerList)
 
-      Try { server.start() } match {
+      Try {
+        server.start()
+      } match {
         case s: Success[_] =>
           (server, server.getConnectors.head.getLocalPort)
         case f: Failure[_] =>

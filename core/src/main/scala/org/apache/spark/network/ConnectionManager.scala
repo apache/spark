@@ -55,8 +55,7 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
   private val selector = SelectorProvider.provider.openSelector()
 
   // default to 30 second timeout waiting for authentication
-  private val authTimeout = System.getProperty("spark.core.connection.auth.wait.timeout",
-    "30").toInt 
+  private val authTimeout = conf.getInt("spark.core.connection.auth.wait.timeout", 30)
 
   private val handleMessageExecutor = new ThreadPoolExecutor(
     conf.getInt("spark.core.connection.handler.threads.min", 20),
@@ -773,7 +772,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
             logDebug("getAuthenticated wait connectionid: " + connection.connectionId)
             // have timeout in case remote side never responds
             connection.getAuthenticated().wait(500)
-            if (((clock.getTime() - startTime) >= (authTimeout * 1000)) && (!connection.isSaslComplete())) {
+            if (((clock.getTime() - startTime) >= (authTimeout * 1000))
+              && (!connection.isSaslComplete())) {
               // took to long to authenticate the connection, something probably went wrong
               throw new Exception("Took to long for authentication to " + connectionManagerId + 
                 ", waited " + authTimeout + "seconds, failing.")
@@ -854,7 +854,8 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf,
 private[spark] object ConnectionManager {
 
   def main(args: Array[String]) {
-    val manager = new ConnectionManager(9999, new SparkConf, new SecurityManager)
+    val conf = new SparkConf
+    val manager = new ConnectionManager(9999, conf, new SecurityManager(conf))
     manager.onReceiveMessage((msg: Message, id: ConnectionManagerId) => {
       println("Received [" + msg + "] from [" + id + "]")
       None

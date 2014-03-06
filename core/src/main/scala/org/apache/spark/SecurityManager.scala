@@ -122,9 +122,8 @@ import scala.collection.mutable.ArrayBuffer
  *  filters to do authentication. That authentication then happens via the ResourceManager Proxy
  *  and Spark will use that to do authorization against the view acls.
  * 
- *  For other Spark deployments, the shared secret must be specified via the SPARK_SECRET 
- *  environment variable. This isn't ideal but it means only the user who starts the process 
- *  has access to view that variable. 
+ *  For other Spark deployments, the shared secret must be specified via the
+ *  spark.authenticate.secret config.
  *  All the nodes (Master and Workers) and the applications need to have the same shared secret.
  *  This again is not ideal as one user could potentially affect another users application.
  *  This should be enhanced in the future to provide better protection.
@@ -133,23 +132,24 @@ import scala.collection.mutable.ArrayBuffer
  *  authorization. If not filter is in place the user is generally null and no authorization
  *  can take place.
  */
-private[spark] class SecurityManager extends Logging {
+
+private[spark] class SecurityManager(sparkConf: SparkConf) extends Logging {
 
   // key used to store the spark secret in the Hadoop UGI
   private val sparkSecretLookupKey = "sparkCookie"
 
-  private val authOn = System.getProperty("spark.authenticate", "false").toBoolean
-  private val uiAclsOn = System.getProperty("spark.ui.acls.enable", "false").toBoolean
+  private val authOn = sparkConf.getBoolean("spark.authenticate", false)
+  private val uiAclsOn = sparkConf.getBoolean("spark.ui.acls.enable", false)
 
   // always add the current user and SPARK_USER to the viewAcls
   private val aclUsers = ArrayBuffer[String](System.getProperty("user.name", ""),
     Option(System.getenv("SPARK_USER")).getOrElse(""))
-  aclUsers ++= System.getProperty("spark.ui.view.acls", "").split(',')
+  aclUsers ++= sparkConf.get("spark.ui.view.acls", "").split(',')
   private val viewAcls = aclUsers.map(_.trim()).filter(!_.isEmpty).toSet
 
   private val secretKey = generateSecretKey()
   logInfo("SecurityManager, is authentication enabled: " + authOn +
-    " are ui acls enabled: " + uiAclsOn)
+    " are ui acls enabled: " + uiAclsOn + " users with view permissions: " + viewAcls.toString())
 
   // Set our own authenticator to properly negotiate user/password for HTTP connections.
   // This is needed by the HTTP client fetching from the HttpServer. Put here so its 
@@ -176,13 +176,13 @@ private[spark] class SecurityManager extends Logging {
    * The way the key is stored depends on the Spark deployment mode. Yarn
    * uses the Hadoop UGI.
    *
-   * For non-Yarn deployments, If the environment variable is not set 
-   * we throw an exception. 
+   * For non-Yarn deployments, If the config variable is not set
+   * we throw an exception.
    */
   private def generateSecretKey(): String = {
     if (!isAuthenticationEnabled) return null
     // first check to see if the secret is already set, else generate a new one if on yarn
-    if (SparkHadoopUtil.get.isYarnMode) {
+    val sCookie = if (SparkHadoopUtil.get.isYarnMode) {
       val secretKey = SparkHadoopUtil.get.getSecretKeyFromUserCredentials(sparkSecretLookupKey)
       if (secretKey != null) {
         logDebug("in yarn mode, getting secret from credentials")
@@ -190,20 +190,19 @@ private[spark] class SecurityManager extends Logging {
       } else {
         logDebug("getSecretKey: yarn mode, secret key from credentials is null")
       }
-    }
-    val secret = System.getProperty("SPARK_SECRET", System.getenv("SPARK_SECRET")) 
-    if (secret != null && !secret.isEmpty()) return secret 
-    val sCookie = if (SparkHadoopUtil.get.isYarnMode) {
-      // generate one 
-      akka.util.Crypt.generateSecureCookie
-    } else {
-      throw new Exception("Error: a secret key must be specified via SPARK_SECRET env variable")  
-    }
-    if (SparkHadoopUtil.get.isYarnMode) {
-      // if we generated the secret then we must be the first so lets set it so t 
+      val cookie = akka.util.Crypt.generateSecureCookie
+      // if we generated the secret then we must be the first so lets set it so t
       // gets used by everyone else
-      SparkHadoopUtil.get.addSecretKeyToUserCredentials(sparkSecretLookupKey, sCookie)
+      SparkHadoopUtil.get.addSecretKeyToUserCredentials(sparkSecretLookupKey, cookie)
       logInfo("adding secret to credentials in yarn mode")
+      cookie
+    } else {
+      // user must have set spark.authenticate.secret config
+      sparkConf.getOption("spark.authenticate.secret") match {
+        case Some(value) => value
+        case None => throw new Exception("Error: a secret key must be specified via the " +
+          "spark.authenticate.secret config")
+      }
     }
     sCookie
   }

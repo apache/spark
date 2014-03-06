@@ -88,6 +88,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
     if (sparkSaslServer != null) {
       sparkSaslServer.dispose();
     }
+
     if (sparkSaslClient != null) {
       sparkSaslClient.dispose()
     }

@@ -29,9 +29,11 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.servlet.ServletContextHandler
 
+import org.apache.spark.SecurityManager
 import org.apache.spark.ui.JettyUtils
 
-class MetricsServlet(val property: Properties, val registry: MetricRegistry) extends Sink {
+class MetricsServlet(val property: Properties, val registry: MetricRegistry,
+    securityMgr: SecurityManager) extends Sink {
   val SERVLET_KEY_PATH = "path"
   val SERVLET_KEY_SAMPLE = "sample"
 
@@ -47,7 +49,9 @@ class MetricsServlet(val property: Properties, val registry: MetricRegistry) ext
 
   def getHandlers = Array[ServletContextHandler](
     JettyUtils.createServletHandler(servletPath, 
-      JettyUtils.createServlet(request => getMetricsSnapshot(request), "text/json"))
+      JettyUtils.createServlet(
+        new JettyUtils.ServletParams(request => getMetricsSnapshot(request), "text/json"),
+        securityMgr) )
   )
 
   def getMetricsSnapshot(request: HttpServletRequest): String = {

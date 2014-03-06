@@ -84,11 +84,13 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("Distributing files locally security On") {
-    System.setProperty("spark.authenticate", "true")
-    System.setProperty("SPARK_SECRET", "good")
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("spark.authenticate", "true")
+    sparkConf.set("spark.authenticate.secret", "good")
+    sc = new SparkContext("local[4]", "test", sparkConf)
 
-    sc = new SparkContext("local[4]", "test")
     sc.addFile(tmpFile.toString)
+    assert(sc.env.securityManager.isAuthenticationEnabled() === true)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
       val path = SparkFiles.get("FileServerSuite.txt")

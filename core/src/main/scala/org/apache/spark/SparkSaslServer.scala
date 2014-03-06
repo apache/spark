@@ -47,7 +47,9 @@ private[spark] class SparkSaslServer(securityMgr: SecurityManager) extends Loggi
    * @return true is complete, otherwise false
    */
   def isComplete(): Boolean = {
-    saslServer.isComplete()
+    synchronized {
+      if (saslServer != null) saslServer.isComplete() else false
+    }
   }
 
   /**
@@ -56,7 +58,9 @@ private[spark] class SparkSaslServer(securityMgr: SecurityManager) extends Loggi
    * @return response to send back to the server.
    */
   def response(token: Array[Byte]): Array[Byte] = {
-    saslServer.evaluateResponse(token)
+    synchronized {
+      if (saslServer != null) saslServer.evaluateResponse(token) else new Array[Byte](0)
+    }
   }
 
   /**
@@ -64,13 +68,15 @@ private[spark] class SparkSaslServer(securityMgr: SecurityManager) extends Loggi
    * SaslServer might be using.
    */
   def dispose() {
-    if (saslServer != null) {
-      try {
-        saslServer.dispose()
-      } catch {
-        case e: SaslException  =>  // ignore
-      } finally {
-        saslServer = null
+    synchronized {
+      if (saslServer != null) {
+        try {
+          saslServer.dispose()
+        } catch {
+          case e: SaslException => // ignore
+        } finally {
+          saslServer = null
+        }
       }
     }
   }

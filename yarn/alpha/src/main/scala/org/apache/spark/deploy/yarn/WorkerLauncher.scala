@@ -50,7 +50,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
   private var yarnAllocator: YarnAllocationHandler = _
   private var driverClosed:Boolean = false
 
-  val securityManager = new SecurityManager()
+  val securityManager = new SecurityManager(sparkConf)
   val actorSystem : ActorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
     conf = sparkConf, securityManager = securityManager)._1
   var actor: ActorRef = _

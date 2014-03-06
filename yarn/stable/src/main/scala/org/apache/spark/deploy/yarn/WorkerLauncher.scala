@@ -52,7 +52,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
 
   private var amClient: AMRMClient[ContainerRequest] = _
 
-  val securityManager = new SecurityManager()
+  val securityManager = new SecurityManager(sparkConf)
   val actorSystem: ActorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
     conf = sparkConf, securityManager = securityManager)._1
   var actor: ActorRef = _

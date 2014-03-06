@@ -24,9 +24,11 @@ import java.net.InetSocketAddress
 import com.codahale.metrics.MetricRegistry
 import com.codahale.metrics.graphite.{GraphiteReporter, Graphite}
 
+import org.apache.spark.SecurityManager
 import org.apache.spark.metrics.MetricsSystem
 
-class GraphiteSink(val property: Properties, val registry: MetricRegistry) extends Sink {
+class GraphiteSink(val property: Properties, val registry: MetricRegistry,
+    securityMgr: SecurityManager) extends Sink {
   val GRAPHITE_DEFAULT_PERIOD = 10
   val GRAPHITE_DEFAULT_UNIT = "SECONDS"
   val GRAPHITE_DEFAULT_PREFIX = ""

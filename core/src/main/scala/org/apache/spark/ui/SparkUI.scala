@@ -55,7 +55,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   /** Bind the HTTP server which backs this web interface */
   def bind() {
     try {
-      val (srv, usedPort) = JettyUtils.startJettyServer(host, port, allHandlers)
+      val (srv, usedPort) = JettyUtils.startJettyServer(host, port, allHandlers, sc.conf)
       logInfo("Started Spark Web UI at http://%s:%d".format(host, usedPort))
       server = Some(srv)
       boundPort = Some(usedPort)

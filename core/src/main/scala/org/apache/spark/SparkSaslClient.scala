@@ -52,14 +52,16 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
    * @return response to challenge if needed 
    */
   def firstToken(): Array[Byte] = {
-    val saslToken: Array[Byte] =
-      if (saslClient.hasInitialResponse()) {
-        logDebug("has initial response")
-        saslClient.evaluateChallenge(new Array[Byte](0))
-      } else {
-        new Array[Byte](0)
-      }
-    saslToken
+    synchronized {
+      val saslToken: Array[Byte] =
+        if (saslClient != null && saslClient.hasInitialResponse()) {
+          logDebug("has initial response")
+          saslClient.evaluateChallenge(new Array[Byte](0))
+        } else {
+          new Array[Byte](0)
+        }
+      saslToken
+    }
   }
 
   /**
@@ -67,7 +69,9 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
    * @return true is complete, otherwise false
    */
   def isComplete(): Boolean = {
-    saslClient.isComplete()
+    synchronized {
+      if (saslClient != null) saslClient.isComplete() else false
+    }
   }
 
   /**
@@ -76,7 +80,9 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
    * @return client's response SASL token
    */
   def saslResponse(saslTokenMessage: Array[Byte]): Array[Byte] = {
-    saslClient.evaluateChallenge(saslTokenMessage)
+    synchronized {
+      if (saslClient != null) saslClient.evaluateChallenge(saslTokenMessage) else new Array[Byte](0)
+    }
   }
 
   /**
@@ -84,13 +90,15 @@ private[spark] class SparkSaslClient(securityMgr: SecurityManager)  extends Logg
    * SaslClient might be using.
    */
   def dispose() {
-    if (saslClient != null) {
-      try {
-        saslClient.dispose()
-      } catch {
-        case e: SaslException  => // ignored
-      } finally {
-        saslClient = null
+    synchronized {
+      if (saslClient != null) {
+        try {
+          saslClient.dispose()
+        } catch {
+          case e: SaslException => // ignored
+        } finally {
+          saslClient = null
+        }
       }
     }
   }

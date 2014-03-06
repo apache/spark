@@ -34,7 +34,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[Int] = None)
-  extends Logging {
+    extends Logging {
   val timeout = AkkaUtils.askTimeout(worker.conf)
   val host = Utils.localHostName()
   val port = requestedPort.getOrElse(
@@ -49,15 +49,19 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   val handlers = metricsHandlers ++ Seq[ServletContextHandler](
     createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static/*"),
-    createServletHandler("/log", (request: HttpServletRequest) => log(request)),
-    createServletHandler("/logPage", (request: HttpServletRequest) => logPage(request)),
-    createServletHandler("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
-    createServletHandler("*", (request: HttpServletRequest) => indexPage.render(request))
+    createServletHandler("/log", createServlet((request: HttpServletRequest) => log(request),
+      worker.securityMgr)),
+    createServletHandler("/logPage", createServlet((request: HttpServletRequest) => logPage
+      (request), worker.securityMgr)),
+    createServletHandler("/json", createServlet((request: HttpServletRequest) => indexPage
+      .renderJson(request), worker.securityMgr)),
+    createServletHandler("*", createServlet((request: HttpServletRequest) => indexPage.render
+      (request), worker.securityMgr))
   )
 
   def start() {
     try {
-      val (srv, bPort) = JettyUtils.startJettyServer(host, port, handlers)
+      val (srv, bPort) = JettyUtils.startJettyServer(host, port, handlers, worker.conf)
       server = Some(srv)
       boundPort = Some(bPort)
       logInfo("Started Worker web UI at http://%s:%d".format(host, bPort))
