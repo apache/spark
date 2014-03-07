@@ -77,7 +77,7 @@ class JobLogger(val user: String, val logDirName: String)
   /**
    * Create a log file for one job
    * @param jobId ID of the job
-   * @exception FileNotFoundException Fail to create log file
+   * @throws FileNotFoundException Fail to create log file
    */
   protected def createLogWriter(jobId: Int) {
     try {
@@ -158,7 +158,6 @@ class JobLogger(val user: String, val logDirName: String)
         " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
         " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
         " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime +
-        " REMOTE_FETCH_TIME=" + metrics.remoteFetchTime +
         " REMOTE_BYTES_READ=" + metrics.remoteBytesRead
       case None => ""
     }

@@ -15,18 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import scala.runtime.AbstractFunction1
+import java.io.Serializable;
 
 /**
- * Subclass of Function1 for ease of calling from Java. The main thing it does is re-expose the
- * apply() method as call() and declare that it can throw Exception (since AbstractFunction1.apply
- * isn't marked to allow that).
+ * A function that takes two inputs and returns zero or more output records.
  */
-private[spark] abstract class WrappedFunction1[T, R] extends AbstractFunction1[T, R] {
-  @throws(classOf[Exception])
-  def call(t: T): R
-
-  final def apply(t: T): R = call(t)
+public interface FlatMapFunction2<T1, T2, R> extends Serializable {
+  public Iterable<R> call(T1 t1, T2 t2) throws Exception;
 }

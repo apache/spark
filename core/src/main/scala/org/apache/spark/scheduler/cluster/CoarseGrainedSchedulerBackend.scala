@@ -54,6 +54,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     private val executorAddress = new HashMap[String, Address]
     private val executorHost = new HashMap[String, String]
     private val freeCores = new HashMap[String, Int]
+    private val totalCores = new HashMap[String, Int]
     private val addressToExecutorId = new HashMap[Address, String]
 
     override def preStart() {
@@ -76,6 +77,7 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
           sender ! RegisteredExecutor(sparkProperties)
           executorActor(executorId) = sender
           executorHost(executorId) = Utils.parseHostPort(hostPort)._1
+          totalCores(executorId) = cores
           freeCores(executorId) = cores
           executorAddress(executorId) = sender.path.address
           addressToExecutorId(sender.path.address) = executorId
@@ -147,10 +149,12 @@ class CoarseGrainedSchedulerBackend(scheduler: TaskSchedulerImpl, actorSystem: A
     def removeExecutor(executorId: String, reason: String) {
       if (executorActor.contains(executorId)) {
         logInfo("Executor " + executorId + " disconnected, so removing it")
-        val numCores = freeCores(executorId)
-        addressToExecutorId -= executorAddress(executorId)
+        val numCores = totalCores(executorId)
         executorActor -= executorId
         executorHost -= executorId
+        addressToExecutorId -= executorAddress(executorId)
+        executorAddress -= executorId
+        totalCores -= executorId
         freeCores -= executorId
         totalCoreCount.addAndGet(-numCores)
         scheduler.executorLost(executorId, SlaveLost(reason))

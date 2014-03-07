@@ -550,9 +550,6 @@ private[spark] class ConnectionManager(port: Int, conf: SparkConf) extends Loggi
 
       newConnection
     }
-    // I removed the lookupKey stuff as part of merge ... should I re-add it ? We did not find it
-    // useful in our test-env ... If we do re-add it, we should consistently use it everywhere I
-    // guess ?
     val connection = connectionsById.getOrElseUpdate(connectionManagerId, startNewConnection())
     message.senderAddress = id.toSocketAddress()
     logDebug("Sending [" + message + "] to [" + connectionManagerId + "]")

@@ -15,16 +15,16 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import java.lang.{Double => JDouble, Iterable => JIterable}
+import java.io.Serializable;
+
+import scala.Tuple2;
 
 /**
- * A function that returns zero or more records of type Double from each input record.
+ * A function that returns zero or more key-value pair records from each input record. The
+ * key-value pairs are represented as scala.Tuple2 objects.
  */
-// DoubleFlatMapFunction does not extend FlatMapFunction because flatMap is
-// overloaded for both FlatMapFunction and DoubleFlatMapFunction.
-abstract class DoubleFlatMapFunction[T] extends WrappedFunction1[T, JIterable[JDouble]]
-   with Serializable {
-   // Intentionally left blank
+public interface PairFlatMapFunction<T, K, V> extends Serializable {
+  public Iterable<Tuple2<K, V>> call(T t) throws Exception;
 }

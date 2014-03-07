@@ -49,7 +49,7 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
     }
   }
 
-  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel) {
+  override def putBytes(blockId: BlockId, _bytes: ByteBuffer, level: StorageLevel) : PutResult = {
     // Work on a duplicate - since the original input might be used elsewhere.
     val bytes = _bytes.duplicate()
     bytes.rewind()
@@ -59,8 +59,10 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       elements ++= values
       val sizeEstimate = SizeEstimator.estimate(elements.asInstanceOf[AnyRef])
       tryToPut(blockId, elements, sizeEstimate, true)
+      PutResult(sizeEstimate, Left(values.toIterator))
     } else {
       tryToPut(blockId, bytes, bytes.limit, false)
+      PutResult(bytes.limit(), Right(bytes.duplicate()))
     }
   }
 
@@ -78,6 +80,16 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       val putAttempt = tryToPut(blockId, bytes, bytes.limit, false)
       PutResult(bytes.limit(), Right(bytes.duplicate()), putAttempt.droppedBlocks)
     }
+  }
+
+  override def putValues(
+      blockId: BlockId,
+      values: Iterator[Any],
+      level: StorageLevel,
+      returnValues: Boolean): PutResult = {
+    val valueEntries = new ArrayBuffer[Any]()
+    valueEntries ++= values
+    putValues(blockId, valueEntries, level, returnValues)
   }
 
   override def getBytes(blockId: BlockId): Option[ByteBuffer] = {

@@ -95,6 +95,13 @@ class RDD(object):
         self.is_checkpointed = False
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
+        self._id = jrdd.id()
+
+    def id(self):
+        """
+        A unique ID for this RDD (within its SparkContext).
+        """
+        return self._id
 
     def __repr__(self):
         return self._jrdd.toString()
@@ -163,7 +170,7 @@ class RDD(object):
 
     def map(self, f, preservesPartitioning=False):
         """
-        Return a new RDD containing the distinct elements in this RDD.
+        Return a new RDD by applying a function to each element of this RDD.
         """
         def func(split, iterator): return imap(f, iterator)
         return PipelinedRDD(self, func, preservesPartitioning)

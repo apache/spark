@@ -27,7 +27,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program.
-   * @param sc [[org.apache.spark.SparkContext]] to use for the program.
+   * @param sc org.apache.spark.SparkContext to use for the program.
    * @param vertices vertices of the graph represented as an RDD of (Key, Vertex) pairs. Often the
    *                 Key will be the vertex id.
    * @param messages initial set of messages represented as an RDD of (Key, Message) pairs. Often
@@ -38,10 +38,10 @@ object Bagel extends Logging {
    * @param aggregator [[org.apache.spark.bagel.Aggregator]] performs a reduce across all vertices
    *                  after each superstep and provides the result to each vertex in the next
    *                  superstep.
-   * @param partitioner [[org.apache.spark.Partitioner]] partitions values by key
+   * @param partitioner org.apache.spark.Partitioner partitions values by key
    * @param numPartitions number of partitions across which to split the graph.
    *                      Default is the default parallelism of the SparkContext
-   * @param storageLevel [[org.apache.spark.storage.StorageLevel]] to use for caching of
+   * @param storageLevel org.apache.spark.storage.StorageLevel to use for caching of
    *                    intermediate RDDs in each superstep. Defaults to caching in memory.
    * @param compute function that takes a Vertex, optional set of (possibly combined) messages to
    *                the Vertex, optional Aggregator and the current superstep,
@@ -131,7 +131,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program with no [[org.apache.spark.bagel.Aggregator]], default
-   * [[org.apache.spark.HashPartitioner]] and default storage level
+   * org.apache.spark.HashPartitioner and default storage level
    */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C: Manifest](
     sc: SparkContext,
@@ -146,7 +146,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program with no [[org.apache.spark.bagel.Aggregator]] and the
-   * default [[org.apache.spark.HashPartitioner]]
+   * default org.apache.spark.HashPartitioner
    */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest, C: Manifest](
     sc: SparkContext,
@@ -166,7 +166,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program with no [[org.apache.spark.bagel.Aggregator]],
-   * default [[org.apache.spark.HashPartitioner]],
+   * default org.apache.spark.HashPartitioner,
    * [[org.apache.spark.bagel.DefaultCombiner]] and the default storage level
    */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest](
@@ -180,7 +180,7 @@ object Bagel extends Logging {
 
   /**
    * Runs a Bagel program with no [[org.apache.spark.bagel.Aggregator]],
-   * the default [[org.apache.spark.HashPartitioner]]
+   * the default org.apache.spark.HashPartitioner
    * and [[org.apache.spark.bagel.DefaultCombiner]]
    */
   def run[K: Manifest, V <: Vertex : Manifest, M <: Message[K] : Manifest](

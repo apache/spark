@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.storage
+package org.apache.spark.api.java.function;
 
-private[spark] trait BlockFetchTracker {
-  def totalBlocks : Int
-  def numLocalBlocks: Int
-  def numRemoteBlocks: Int
-  def remoteFetchTime : Long
-  def fetchWaitTime: Long
-  def remoteBytesRead : Long
+import java.io.Serializable;
+
+/**
+ * A function with no return value.
+ */
+public interface VoidFunction<T> extends Serializable {
+  public void call(T t) throws Exception;
 }

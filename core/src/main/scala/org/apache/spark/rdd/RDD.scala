@@ -541,7 +541,8 @@ abstract class RDD[T: ClassTag](
    * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
-  def mapWith[A: ClassTag, U: ClassTag]
+  @deprecated("use mapPartitionsWithIndex", "1.0.0")
+  def mapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => U): RDD[U] = {
     mapPartitionsWithIndex((index, iter) => {
@@ -555,7 +556,8 @@ abstract class RDD[T: ClassTag](
    * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
-  def flatMapWith[A: ClassTag, U: ClassTag]
+  @deprecated("use mapPartitionsWithIndex and flatMap", "1.0.0")
+  def flatMapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => Seq[U]): RDD[U] = {
     mapPartitionsWithIndex((index, iter) => {
@@ -569,7 +571,8 @@ abstract class RDD[T: ClassTag](
    * This additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
-  def foreachWith[A: ClassTag](constructA: Int => A)(f: (T, A) => Unit) {
+  @deprecated("use mapPartitionsWithIndex and foreach", "1.0.0")
+  def foreachWith[A](constructA: Int => A)(f: (T, A) => Unit) {
     mapPartitionsWithIndex { (index, iter) =>
       val a = constructA(index)
       iter.map(t => {f(t, a); t})
@@ -581,7 +584,8 @@ abstract class RDD[T: ClassTag](
    * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
-  def filterWith[A: ClassTag](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = {
+  @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
+  def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = {
     mapPartitionsWithIndex((index, iter) => {
       val a = constructA(index)
       iter.filter(t => p(t, a))

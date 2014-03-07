@@ -63,14 +63,16 @@ class DAGScheduler(
 
   import DAGScheduler._
 
-  def this(sc: SparkContext) = {
+  def this(sc: SparkContext, taskScheduler: TaskScheduler) = {
     this(
-      sc.taskScheduler,
+      taskScheduler,
       sc.listenerBus,
       sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster],
       sc.env.blockManager.master,
       sc.env)
   }
+
+  def this(sc: SparkContext) = this(sc, sc.taskScheduler)
 
   private var eventProcessActor: ActorRef = _
 

@@ -15,13 +15,15 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import scala.reflect.ClassTag
+import java.io.Serializable;
 
 /**
- * A function that returns zero or more output records from each input record.
+ * Base interface for functions whose return types do not create special RDDs. PairFunction and
+ * DoubleFunction are handled separately, to allow PairRDDs and DoubleRDDs to be constructed
+ * when mapping RDDs of other types.
  */
-abstract class FlatMapFunction[T, R] extends Function[T, java.lang.Iterable[R]] {
-  def elementType(): ClassTag[R] = ClassTag.Any.asInstanceOf[ClassTag[R]]
+public interface Function<T1, R> extends Serializable {
+  public R call(T1 v1) throws Exception;
 }

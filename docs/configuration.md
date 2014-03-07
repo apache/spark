@@ -209,6 +209,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.scheduler.revive.interval</td>
+  <td>1000</td>
+  <td>
+    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
+  </td>
+</tr>
+<tr>
   <td>spark.reducer.maxMbInFlight</td>
   <td>48</td>
   <td>
@@ -242,6 +249,17 @@ Apart from these, the following properties are also available, and may be useful
     Maximum object size to allow within Kryo (the library needs to create a buffer at least as
     large as the largest single object you'll serialize). Increase this if you get a "buffer limit
     exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each worker.
+  </td>
+</tr>
+<tr>
+  <td>spark.serializer.objectStreamReset</td>
+  <td>10000</td>
+  <td>
+    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches 
+    objects to prevent writing redundant data, however that stops garbage collection of those 
+    objects. By calling 'reset' you flush that info from the serializer, and allow old 
+    objects to be collected. To turn off this periodic reset set it to a value of <= 0. 
+    By default it will reset the serializer every 10,000 objects.
   </td>
 </tr>
 <tr>

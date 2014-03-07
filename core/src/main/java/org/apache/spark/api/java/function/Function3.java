@@ -15,13 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import scala.reflect.ClassTag
+import java.io.Serializable;
 
 /**
- * A function that takes two inputs and returns zero or more output records.
+ * A three-argument function that takes arguments of type T1, T2 and T3 and returns an R.
  */
-abstract class FlatMapFunction2[A, B, C] extends Function2[A, B, java.lang.Iterable[C]] {
-  def elementType() : ClassTag[C] = ClassTag.Any.asInstanceOf[ClassTag[C]]
+public interface Function3<T1, T2, T3, R> extends Serializable {
+  public R call(T1 v1, T2 v2, T3 v3) throws Exception;
 }

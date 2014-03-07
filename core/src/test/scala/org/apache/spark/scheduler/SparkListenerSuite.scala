@@ -129,7 +129,6 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
           sm.localBlocksFetched should be > (0)
           sm.remoteBlocksFetched should be (0)
           sm.remoteBytesRead should be (0l)
-          sm.remoteFetchTime should be (0l)
         }
       }
     }

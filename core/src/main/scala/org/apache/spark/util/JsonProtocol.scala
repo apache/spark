@@ -221,7 +221,6 @@ private[spark] object JsonProtocol {
     ("Remote Blocks Fetched" -> shuffleReadMetrics.remoteBlocksFetched) ~
     ("Local Blocks Fetched" -> shuffleReadMetrics.localBlocksFetched) ~
     ("Fetch Wait Time" -> shuffleReadMetrics.fetchWaitTime) ~
-    ("Remote Fetch Time" -> shuffleReadMetrics.remoteFetchTime) ~
     ("Remote Bytes Read" -> shuffleReadMetrics.remoteBytesRead)
   }
 
@@ -538,7 +537,6 @@ private[spark] object JsonProtocol {
     metrics.remoteBlocksFetched = (json \ "Remote Blocks Fetched").extract[Int]
     metrics.localBlocksFetched = (json \ "Local Blocks Fetched").extract[Int]
     metrics.fetchWaitTime = (json \ "Fetch Wait Time").extract[Long]
-    metrics.remoteFetchTime = (json \ "Remote Fetch Time").extract[Long]
     metrics.remoteBytesRead = (json \ "Remote Bytes Read").extract[Long]
     metrics
   }
