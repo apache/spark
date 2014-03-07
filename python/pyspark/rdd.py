@@ -28,7 +28,6 @@ from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
-import socket
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, pack_long
@@ -859,7 +858,6 @@ class RDD(object):
             for (k, v) in iterator:
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
             for (split, items) in buckets.iteritems():
-                print >> sys.stderr, "PARTITION BY INFO FOR " + socket.gethostname() + ": " + str(split) + ":" + str(len(items))
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
         keyed = PipelinedRDD(self, add_shuffle_key)
