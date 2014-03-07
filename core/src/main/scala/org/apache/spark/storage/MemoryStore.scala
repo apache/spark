@@ -244,14 +244,9 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
           //    accessed RDD, unless this is the same RDD as the one with the
           //    new partition. In that case, we keep the old partition in memory
           //    to prevent cycling partitions from the same RDD in and out.
-          //
-          // TODO implement LRU eviction
-          rddToAdd match {
-            case Some(rddId) if rddId == getRddId(blockId) =>
-              // no-op
-            case _ =>
-              selectedBlocks += blockId
-              selectedMemory += pair.getValue.size
+          if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
+            selectedBlocks += blockId
+            selectedMemory += pair.getValue.size
           }
         }
       }
@@ -274,6 +269,8 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         }
         return true
       } else {
+        logInfo(s"Will not store $blockIdToAdd as it would require dropping another block " +
+          "from the same RDD")
         return false
       }
     }
