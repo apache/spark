@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.mllib.tree.configuration.Algo._
@@ -24,7 +25,7 @@ import org.apache.spark.rdd.RDD
  * @param topNode root node
  * @param algo algorithm type -- classification or regression
  */
-class DecisionTreeModel(val topNode : Node, val algo : Algo) extends Serializable {
+class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable {
 
   /**
    * Predict values for a single data point using the model trained.
@@ -32,7 +33,7 @@ class DecisionTreeModel(val topNode : Node, val algo : Algo) extends Serializabl
    * @param features array representing a single data point
    * @return Double prediction from the trained model
    */
-  def predict(features : Array[Double]) : Double = {
+  def predict(features: Array[Double]): Double = {
     algo match {
       case Classification => {
         if (topNode.predictIfLeaf(features) < 0.5) 0.0 else 1.0

@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.tree.impurity
 
 import javax.naming.OperationNotSupportedException
@@ -23,7 +24,8 @@ import org.apache.spark.Logging
  * Class for calculating variance during regression
  */
 object Variance extends Impurity with Logging {
-   def calculate(c0: Double, c1: Double): Double = throw new OperationNotSupportedException("Variance.calculate")
+   def calculate(c0: Double, c1: Double): Double
+   = throw new OperationNotSupportedException("Variance.calculate")
 
   /**
    * variance calculation

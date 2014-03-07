@@ -18,37 +18,35 @@
 package org.apache.spark.mllib.tree
 
 import org.apache.spark.SparkContext._
+import scala.util.control.Breaks._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.{SparkContext, Logging}
 import org.apache.spark.mllib.regression.LabeledPoint
 import org.apache.spark.mllib.tree.model.Split
-import scala.util.control.Breaks._
 import org.apache.spark.mllib.tree.configuration.Strategy
 import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
 import org.apache.spark.mllib.tree.configuration.FeatureType._
 import org.apache.spark.mllib.tree.configuration.Algo._
-import org.apache.spark.mllib.tree.impurity.Impurity
+import org.apache.spark.mllib.tree.impurity.{Variance, Entropy, Gini, Impurity}
 
 /**
-A class that implements a decision tree algorithm for classification and regression.
-It supports both continuous and categorical features.
-
-@param strategy The configuration parameters for the tree algorithm which specify the type of
-algorithm (classification,
-regression, etc.), feature type (continuous, categorical), depth of the tree,
-quantile calculation strategy, etc.
- */
-class DecisionTree private (val strategy : Strategy) extends Serializable with Logging {
+ * A class that implements a decision tree algorithm for classification and regression. It
+ * supports both continuous and categorical features.
+ * @param strategy The configuration parameters for the tree algorithm which specify the type
+ *                 of algorithm (classification, regression, etc.), feature type (continuous,
+ *                 categorical),
+ * depth of the tree, quantile calculation strategy, etc.
+  */
+class DecisionTree private(val strategy: Strategy) extends Serializable with Logging {
 
   /**
-  Method to train a decision tree model over an RDD
-
-  @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-  for DecisionTree
-  @return a DecisionTreeModel that can be used for prediction
+   * Method to train a decision tree model over an RDD
+   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
+   *              for DecisionTree
+   * @return a DecisionTreeModel that can be used for prediction
    */
-  def train(input : RDD[LabeledPoint]) : DecisionTreeModel = {
+  def train(input: RDD[LabeledPoint]): DecisionTreeModel = {
 
     //Cache input RDD for speedup during multiple passes
     input.cache()
@@ -59,7 +57,7 @@ class DecisionTree private (val strategy : Strategy) extends Serializable with L
 
     val maxDepth = strategy.maxDepth
 
-    val maxNumNodes = scala.math.pow(2,maxDepth).toInt - 1
+    val maxNumNodes = scala.math.pow(2, maxDepth).toInt - 1
     val filters = new Array[List[Filter]](maxNumNodes)
     filters(0) = List()
     val parentImpurities = new Array[Double](maxNumNodes)
@@ -70,7 +68,7 @@ class DecisionTree private (val strategy : Strategy) extends Serializable with L
     logDebug("algo = " + strategy.algo)
 
     breakable {
-      for (level <- 0 until maxDepth){
+      for (level <- 0 until maxDepth) {
 
         logDebug("#####################################")
         logDebug("level = " + level)
@@ -78,19 +76,19 @@ class DecisionTree private (val strategy : Strategy) extends Serializable with L
 
         //Find best split for all nodes at a level
         val splitsStatsForLevel = DecisionTree.findBestSplits(input, parentImpurities, strategy,
-          level, filters,splits,bins)
+          level, filters, splits, bins)
 
-        for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex){
+        for ((nodeSplitStats, index) <- splitsStatsForLevel.view.zipWithIndex) {
 
-          extractNodeInfo(nodeSplitStats, level,  index, nodes)
+          extractNodeInfo(nodeSplitStats, level, index, nodes)
           extractInfoForLowerLevels(level, index, maxDepth, nodeSplitStats, parentImpurities,
             filters)
           logDebug("final best split = " + nodeSplitStats._1)
 
         }
-        require(scala.math.pow(2,level)==splitsStatsForLevel.length)
+        require(scala.math.pow(2, level) == splitsStatsForLevel.length)
 
-        val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0 )
+        val allLeaf = splitsStatsForLevel.forall(_._2.gain <= 0)
         logDebug("all leaf = " + allLeaf)
         if (allLeaf) break
 
@@ -159,92 +157,89 @@ class DecisionTree private (val strategy : Strategy) extends Serializable with L
 object DecisionTree extends Serializable with Logging {
 
   /**
-  Method to train a decision tree model over an RDD
-
-  @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-  for DecisionTree
-  @param strategy The configuration parameters for the tree algorithm which specify the type of algorithm
-                                  (classification, regression, etc.), feature type (continuous, categorical),
-                                  depth of the tree, quantile calculation strategy, etc.
-  @return a DecisionTreeModel that can be used for prediction
+   * Method to train a decision tree model over an RDD
+   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
+   *              for DecisionTree
+   * @param strategy The configuration parameters for the tree algorithm which specify the type
+   *                 of algoritm (classification, regression, etc.), feature type (continuous,
+   *                 categorical), depth of the tree, quantile calculation strategy, etc.
+   * @return a DecisionTreeModel that can be used for prediction
   */
-  def train(input : RDD[LabeledPoint], strategy : Strategy) : DecisionTreeModel = {
-    new DecisionTree(strategy).train(input : RDD[LabeledPoint])
+  def train(input: RDD[LabeledPoint], strategy: Strategy): DecisionTreeModel = {
+    new DecisionTree(strategy).train(input: RDD[LabeledPoint])
   }
 
   /**
-  Method to train a decision tree model over an RDD
-
-  @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-  for DecisionTree
-  @param algo classification or regression
-  @param impurity criterion used for information gain calculation
-  @param maxDepth maximum depth of the tree
-  @return a DecisionTreeModel that can be used for prediction
-    */
+   * Method to train a decision tree model over an RDD
+   * @param input input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as
+   *              training data
+   * @param algo algo classification or regression
+   * @param impurity impurity criterion used for information gain calculation
+   * @param maxDepth maxDepth maximum depth of the tree
+   * @return a DecisionTreeModel that can be used for prediction
+   */
   def train(
-             input : RDD[LabeledPoint],
-             algo : Algo,
-             impurity : Impurity,
-             maxDepth : Int
-             ) : DecisionTreeModel = {
+      input: RDD[LabeledPoint],
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int
+      ): DecisionTreeModel = {
     val strategy = new Strategy(algo,impurity,maxDepth)
-    new DecisionTree(strategy).train(input : RDD[LabeledPoint])
+    new DecisionTree(strategy).train(input: RDD[LabeledPoint])
   }
 
 
   /**
-  Method to train a decision tree model over an RDD
-
-  @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-  for DecisionTree
-  @param algo classification or regression
-  @param impurity criterion used for information gain calculation
-  @param maxDepth maximum depth of the tree
-  @param maxBins maximum number of bins used for splitting features
-  @param quantileCalculationStrategy algorithm for calculating quantiles
-  @param categoricalFeaturesInfo A map storing information about the categorical variables and the number of discrete
-                                 values they take. For example, an entry (n -> k) implies the feature n is
-                                 categorical with k categories 0, 1, 2, ... , k-1. It's important to note that
-                                 features are zero-indexed.
-  @return a DecisionTreeModel that can be used for prediction
-    */
+   * Method to train a decision tree model over an RDD
+    * @param input input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as
+   *              training data for DecisionTree
+   * @param algo classification or regression
+   * @param impurity criterion used for information gain calculation
+   * @param maxDepth  maximum depth of the tree
+   * @param maxBins maximum number of bins used for splitting features
+   * @param quantileCalculationStrategy  algorithm for calculating quantiles
+   * @param categoricalFeaturesInfo A map storing information about the categorical variables and
+   *                                the number of discrete values they take. For example,
+   *                                an entry (n -> k) implies the feature n is categorical with k
+   *                                categories 0, 1, 2, ... , k-1. It's important to note that
+   *                                features are zero-indexed.
+   * @return a DecisionTreeModel that can be used for prediction
+   */
   def train(
-             input : RDD[LabeledPoint],
-             algo : Algo,
-             impurity : Impurity,
-             maxDepth : Int,
-             maxBins : Int,
-             quantileCalculationStrategy : QuantileStrategy,
-             categoricalFeaturesInfo : Map[Int,Int]
-             ) : DecisionTreeModel = {
-    val strategy = new Strategy(algo,impurity,maxDepth,maxBins,quantileCalculationStrategy,categoricalFeaturesInfo)
-    new DecisionTree(strategy).train(input : RDD[LabeledPoint])
+      input: RDD[LabeledPoint],
+      algo: Algo,
+      impurity: Impurity,
+      maxDepth: Int,
+      maxBins: Int,
+      quantileCalculationStrategy: QuantileStrategy,
+      categoricalFeaturesInfo: Map[Int,Int]
+      ): DecisionTreeModel = {
+    val strategy = new Strategy(algo, impurity, maxDepth, maxBins, quantileCalculationStrategy,
+      categoricalFeaturesInfo)
+    new DecisionTree(strategy).train(input: RDD[LabeledPoint])
   }
 
   /**
-  Returns an Array[Split] of optimal splits for all nodes at a given level
-
-  @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-                            for DecisionTree
-  @param parentImpurities Impurities for all parent nodes for the current level
-  @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
-                                 parameters for construction the DecisionTree
-  @param level Level of the tree
-  @param filters Filter for all nodes at a given level
-  @param splits possible splits for all features
-  @param bins possible bins for all features
-
-  @return Array[Split] instance for best splits for all nodes at a given level.
-    */
+   * Returns an array of optimal splits for all nodes at a given level
+   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
+   *              for DecisionTree
+   * @param parentImpurities Impurities for all parent nodes for the current level
+   * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
+   *                parameters for construction the DecisionTree
+   * @param level Level of the tree
+   * @param filters Filters for all nodes at a given level
+   * @param splits possible splits for all features
+   * @param bins possible bins for all features
+   * @return array of splits with best splits for all nodes at a given level.
+   */
   def findBestSplits(
-                      input : RDD[LabeledPoint],
-                      parentImpurities : Array[Double],
-                      strategy: Strategy,
-                      level: Int,
-                      filters : Array[List[Filter]],
-                      splits : Array[Array[Split]],
-                      bins : Array[Array[Bin]]) : Array[(Split, InformationGainStats)] = {
+      input: RDD[LabeledPoint],
+      parentImpurities: Array[Double],
+      strategy: Strategy,
+      level: Int,
+      filters: Array[List[Filter]],
+      splits: Array[Array[Split]],
+      bins: Array[Array[Bin]]): Array[(Split, InformationGainStats)] = {
 
     //Common calculations for multiple nested methods
     val numNodes = scala.math.pow(2, level).toInt
@@ -266,8 +261,8 @@ object DecisionTree extends Serializable with Logging {
     }
 
     /**
-    Find whether the sample is valid input for the current node.
-    In other words, does it pass through all the filters for the current node.
+     * Find whether the sample is valid input for the current node. In other words,
+     * does it pass through all the filters for the current node.
     */
     def isSampleValid(parentFilters: List[Filter], labeledPoint: LabeledPoint): Boolean = {
 
@@ -302,9 +297,12 @@ object DecisionTree extends Serializable with Logging {
     }
 
     /**
-    Finds the right bin for the given feature
+     * Finds the right bin for the given feature
     */
-    def findBin(featureIndex: Int, labeledPoint: LabeledPoint, isFeatureContinuous : Boolean) : Int = {
+    def findBin(
+        featureIndex: Int,
+        labeledPoint: LabeledPoint,
+        isFeatureContinuous: Boolean): Int = {
 
       if (isFeatureContinuous){
         for (binIndex <- 0 until strategy.numBins) {
@@ -334,16 +332,18 @@ object DecisionTree extends Serializable with Logging {
     }
 
     /**
-     Finds bins for all nodes (and all features) at a given level
-     k features, l nodes (level = log2(l))
-     Storage label, b11, b12, b13, .., bk, b21, b22, .. ,bl1, bl2, .. ,blk
-     Denotes invalid sample for tree by noting bin for feature 1 as -1
+     * Finds bins for all nodes (and all features) at a given level k features,
+     * l nodes (level = log2(l)).
+     * Storage label, b11, b12, b13, .., b1k,
+     * b21, b22, .. , b2k,
+     * bl1, bl2, .. , blk
+     * Denotes invalid sample for tree by noting bin for feature 1 as -1
     */
-    def findBinsForLevel(labeledPoint : LabeledPoint) : Array[Double] = {
+    def findBinsForLevel(labeledPoint: LabeledPoint): Array[Double] = {
 
 
       // calculating bin index and label per feature per node
-      val arr = new Array[Double](1+(numFeatures * numNodes))
+      val arr = new Array[Double](1 + (numFeatures * numNodes))
       arr(0) = labeledPoint.label
       for (nodeIndex <- 0 until numNodes) {
         val parentFilters = findParentFilters(nodeIndex)
@@ -354,7 +354,7 @@ object DecisionTree extends Serializable with Logging {
           //Add to invalid bin index -1
           breakable {
             for (featureIndex <- 0 until numFeatures) {
-              arr(shift+featureIndex) = -1
+              arr(shift + featureIndex) = -1
               //Breaking since marking one bin is sufficient
               break()
             }
@@ -440,20 +440,19 @@ object DecisionTree extends Serializable with Logging {
     }
 
     /**
-    Performs a sequential aggregation over a partition.
-
-    for p bins, k features, l nodes (level = log2(l)) storage is of the form:
-    b111_left_count,b111_right_count, .... , ..
-    .. bpk1_left_count, bpk1_right_count, .... , ..
-    .. bpkl_left_count, bpkl_right_count
-
-    @param agg Array[Double] storing aggregate calculation of size 2*numSplits*numFeatures*numNodes for classification
-                          and 3*numSplits*numFeatures*numNodes for regression
-    @param arr Array[Double] of size 1+(numFeatures*numNodes)
-    @return Array[Double] storing aggregate calculation of size 2*numSplits*numFeatures*numNodes for classification
-                    and 3*numSplits*numFeatures*numNodes for regression
-    */
-    def binSeqOp(agg : Array[Double], arr: Array[Double]) : Array[Double] = {
+     * Performs a sequential aggregation over a partition.
+     * for p bins, k features, l nodes (level = log2(l)) storage is of the form:
+     * b111_left_count,b111_right_count, .... , ....
+     * bpk1_left_count, bpk1_right_count, .... , ...., bpkl_left_count, bpkl_right_count
+     * @param agg Array[Double] storing aggregate calculation of size
+     *            2*numSplits*numFeatures*numNodes for classification and
+     *            3*numSplits*numFeatures*numNodes for regression
+     * @param arr Array[Double] of size 1+(numFeatures*numNodes)
+     * @return Array[Double] storing aggregate calculation of size
+     *         2*numSplits*numFeatures*numNodes for classification and
+     *         3*numSplits*numFeatures*numNodes for regression
+     */
+    def binSeqOp(agg: Array[Double], arr: Array[Double]): Array[Double] = {
       strategy.algo match {
         case Classification => classificationBinSeqOp(arr, agg)
         case Regression => regressionBinSeqOp(arr, agg)
@@ -468,13 +467,12 @@ object DecisionTree extends Serializable with Logging {
     logDebug("binAggregateLength = " + binAggregateLength)
 
     /**
-    Combines the aggregates from partitions
-    @param agg1 Array containing aggregates from one or more partitions
-    @param agg2 Array containing aggregates from one or more partitions
-
-    @return Combined aggregate from agg1 and agg2
+     * Combines the aggregates from partitions
+     * @param agg1 Array containing aggregates from one or more partitions
+     * @param agg2 Array containing aggregates from one or more partitions
+     * @return Combined aggregate from agg1 and agg2
      */
-    def binCombOp(agg1 : Array[Double], agg2: Array[Double]) : Array[Double] = {
+    def binCombOp(agg1: Array[Double], agg2: Array[Double]): Array[Double] = {
       strategy.algo match {
         case Classification => {
           val combinedAggregate = new Array[Double](binAggregateLength)
@@ -513,11 +511,13 @@ object DecisionTree extends Serializable with Logging {
      * @param topImpurity impurity of the parent node
      * @return information gain and statistics for all splits
      */
-    def calculateGainForSplit(leftNodeAgg: Array[Array[Double]],
-                              featureIndex: Int,
-                              splitIndex: Int,
-                              rightNodeAgg: Array[Array[Double]],
-                              topImpurity: Double) : InformationGainStats = {
+    def calculateGainForSplit(
+        leftNodeAgg: Array[Array[Double]],
+        featureIndex: Int,
+        splitIndex: Int,
+        rightNodeAgg: Array[Array[Double]],
+        topImpurity: Double): InformationGainStats = {
+
       strategy.algo match {
         case Classification => {
 
@@ -606,19 +606,18 @@ object DecisionTree extends Serializable with Logging {
             }
           }
 
-          val predict = (leftSum + rightSum)/(leftCount+rightCount)
-          new InformationGainStats(gain,impurity,leftImpurity,rightImpurity,predict)
+          val predict = (leftSum + rightSum)/(leftCount + rightCount)
+          new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict)
 
         }
       }
     }
 
-    /**
-    Extracts left and right split aggregates
-
-    @param binData Array[Double] of size 2*numFeatures*numSplits
-    @return (leftNodeAgg, rightNodeAgg) tuple of type (Array[Double], Array[Double]) where
-    each array is of size(numFeature,2*(numSplits-1))
+   /**
+     * Extracts left and right split aggregates
+     * @param binData  Array[Double] of size 2*numFeatures*numSplits
+     * @return (leftNodeAgg, rightNodeAgg) tuple of type (Array[Double],
+     *         Array[Double]) where each array is of size(numFeature,2*(numSplits-1))
      */
     def extractLeftRightNodeAggregates(
         binData: Array[Double]): (Array[Array[Double]], Array[Array[Double]]) = {
@@ -696,8 +695,7 @@ object DecisionTree extends Serializable with Logging {
     def calculateGainsForAllNodeSplits(
         leftNodeAgg: Array[Array[Double]],
         rightNodeAgg: Array[Array[Double]],
-        nodeImpurity: Double)
-    : Array[Array[InformationGainStats]] = {
+        nodeImpurity: Double): Array[Array[InformationGainStats]] = {
 
       val gains = Array.ofDim[InformationGainStats](numFeatures, numBins - 1)
 
@@ -710,14 +708,15 @@ object DecisionTree extends Serializable with Logging {
       gains
     }
 
-    /**
-    Find the best split for a node given bin aggregate data
-
-    @param binData Array[Double] of size 2*numSplits*numFeatures
-    */
+     /**
+     * Find the best split for a node given bin aggregate data
+     * @param binData Array[Double] of size 2*numSplits*numFeatures
+     * @param nodeImpurity impurity of the top node
+     * @return
+     */
     def binsToBestSplit(
-        binData : Array[Double],
-        nodeImpurity : Double) : (Split, InformationGainStats) = {
+        binData: Array[Double],
+        nodeImpurity: Double): (Split, InformationGainStats) = {
 
       logDebug("node impurity = " + nodeImpurity)
       val (leftNodeAgg, rightNodeAgg) = extractLeftRightNodeAggregates(binData)
@@ -771,24 +770,24 @@ object DecisionTree extends Serializable with Logging {
       logDebug("node impurity = " + parentNodeImpurity)
       bestSplits(node) = binsToBestSplit(binsForNode, parentNodeImpurity)
     }
-
     bestSplits
   }
 
-  /**
-  Returns split and bins for decision tree calculation.
 
-  @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
-  for DecisionTree
-  @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
-  parameters for construction the DecisionTree
-  @return a tuple of (splits,bins) where splits is an Array of [org.apache.spark.mllib.tree.model.Split] of
-                  size (numFeatures,numSplits-1) and bins is an Array of [org.apache.spark.mllib.tree.model.Bin] of
-                  size (numFeatures,numSplits1)
+
+  /**
+   * Returns split and bins for decision tree calculation.
+   * @param input RDD of [[org.apache.spark.mllib.regression.LabeledPoint]] used as training data
+   *              for DecisionTree
+   * @param strategy [[org.apache.spark.mllib.tree.configuration.Strategy]] instance containing
+   *                parameters for construction the DecisionTree
+   * @return a tuple of (splits,bins) where splits is an Array of [org.apache.spark.mllib.tree
+   *         .model.Split] of size (numFeatures,numSplits-1) and bins is an Array of [org.apache
+   *         .spark.mllib.tree.model.Bin] of size (numFeatures,numSplits1)
    */
   def findSplitsBins(
-      input : RDD[LabeledPoint],
-      strategy : Strategy): (Array[Array[Split]], Array[Array[Bin]]) = {
+      input: RDD[LabeledPoint],
+      strategy: Strategy): (Array[Array[Split]], Array[Array[Bin]]) = {
 
     val count = input.count()
 
@@ -807,7 +806,7 @@ object DecisionTree extends Serializable with Logging {
     val sampledInput = input.sample(false, fraction, 42).collect()
     val numSamples = sampledInput.length
 
-    val stride : Double = numSamples.toDouble/numBins
+    val stride: Double = numSamples.toDouble/numBins
     logDebug("stride = " + stride)
 
     strategy.quantileCalculationStrategy match {
@@ -821,11 +820,11 @@ object DecisionTree extends Serializable with Logging {
           if (isFeatureContinuous) {
             val featureSamples  = sampledInput.map(lp => lp.features(featureIndex)).sorted
 
-            val stride : Double = numSamples.toDouble/numBins
+            val stride: Double = numSamples.toDouble/numBins
             logDebug("stride = " + stride)
             for (index <- 0 until numBins-1) {
-              val sampleIndex = (index+1)*stride.toInt
-              val split = new Split(featureIndex,featureSamples(sampleIndex),Continuous, List())
+              val sampleIndex = (index + 1)*stride.toInt
+              val split = new Split(featureIndex, featureSamples(sampleIndex), Continuous, List())
               splits(featureIndex)(index) = split
             }
           } else {
@@ -856,17 +855,17 @@ object DecisionTree extends Serializable with Logging {
             var categoriesForSplit = List[Double]()
             categoriesSortedByCentriod.iterator.zipWithIndex foreach {
               case((key, value), index) => {
-                categoriesForSplit = key :: categoriesForSplit
-                splits(featureIndex)(index) = new Split(featureIndex,Double.MinValue,Categorical,
+                categoriesForSplit = key:: categoriesForSplit
+                splits(featureIndex)(index) = new Split(featureIndex, Double.MinValue, Categorical,
                   categoriesForSplit)
                 bins(featureIndex)(index) = {
                   if(index == 0) {
-                    new Bin(new DummyCategoricalSplit(featureIndex,Categorical),
-                      splits(featureIndex)(0),Categorical,key)
+                    new Bin(new DummyCategoricalSplit(featureIndex, Categorical),
+                      splits(featureIndex)(0), Categorical, key)
                   }
                   else {
-                    new Bin(splits(featureIndex)(index-1),splits(featureIndex)(index),
-                      Categorical,key)
+                    new Bin(splits(featureIndex)(index-1), splits(featureIndex)(index),
+                      Categorical, key)
                   }
                 }
               }
@@ -882,19 +881,19 @@ object DecisionTree extends Serializable with Logging {
               = new Bin(new DummyLowSplit(featureIndex, Continuous),splits(featureIndex)(0),
               Continuous,Double.MinValue)
             for (index <- 1 until numBins - 1){
-              val bin = new Bin(splits(featureIndex)(index-1),splits(featureIndex)(index),
-                Continuous,Double.MinValue)
+              val bin = new Bin(splits(featureIndex)(index-1), splits(featureIndex)(index),
+                Continuous, Double.MinValue)
               bins(featureIndex)(index) = bin
             }
             bins(featureIndex)(numBins-1)
               = new Bin(splits(featureIndex)(numBins-2),new DummyHighSplit(featureIndex,
-              Continuous),Continuous,Double.MinValue)
+              Continuous), Continuous, Double.MinValue)
           } else {
             val maxFeatureValue = strategy.categoricalFeaturesInfo(featureIndex)
             for (i <- maxFeatureValue until numBins){
               bins(featureIndex)(i)
-                = new Bin(new DummyCategoricalSplit(featureIndex,Categorical),
-                new DummyCategoricalSplit(featureIndex,Categorical),Categorical,Double.MaxValue)
+                = new Bin(new DummyCategoricalSplit(featureIndex, Categorical),
+                new DummyCategoricalSplit(featureIndex, Categorical), Categorical, Double.MaxValue)
             }
           }
         }
@@ -906,8 +905,124 @@ object DecisionTree extends Serializable with Logging {
       case ApproxHist => {
         throw new UnsupportedOperationException("approximate histogram not supported yet.")
       }
-
     }
+  }
+
+
+  val usage = """
+    Usage: DecisionTreeRunner<master>[slices] --algo <Classification,
+    Regression> --trainDataDir path --testDataDir path --maxDepth num [--impurity <Gini,Entropy,
+    Variance>] [--maxBins num]
+              """
+
+
+  def main(args: Array[String]) {
+
+    if (args.length < 2) {
+      System.err.println(usage)
+      System.exit(1)
+    }
+
+    val sc = new SparkContext(args(0), "DecisionTree")
+
+
+    val arglist = args.toList.drop(1)
+    type OptionMap = Map[Symbol, Any]
+
+    def nextOption(map : OptionMap, list: List[String]): OptionMap = {
+      def isSwitch(s : String) = (s(0) == '-')
+      list match {
+        case Nil => map
+        case "--algo" :: string :: tail => nextOption(map ++ Map('algo -> string), tail)
+        case "--impurity" :: string :: tail => nextOption(map ++ Map('impurity -> string), tail)
+        case "--maxDepth" :: string :: tail => nextOption(map ++ Map('maxDepth -> string), tail)
+        case "--maxBins" :: string :: tail => nextOption(map ++ Map('maxBins -> string), tail)
+        case "--trainDataDir" :: string :: tail => nextOption(map ++ Map('trainDataDir -> string)
+          , tail)
+        case "--testDataDir" :: string :: tail => nextOption(map ++ Map('testDataDir -> string),
+          tail)
+        case string :: Nil =>  nextOption(map ++ Map('infile -> string), list.tail)
+        case option :: tail => logError("Unknown option " + option)
+          sys.exit(1)
+      }
+    }
+    val options = nextOption(Map(),arglist)
+    logDebug(options.toString())
+    //TODO: Add validation for input parameters
+
+    //Load training data
+    val trainData = loadLabeledData(sc, options.get('trainDataDir).get.toString)
+
+    //Figure out the type of algorithm
+    val algoStr =  options.get('algo).get.toString
+    val algo = algoStr match {
+      case "Classification" => Classification
+      case "Regression" => Regression
+    }
+
+    //Identify the type of impurity
+    val impurityStr = options.getOrElse('impurity,
+      if (algo == Classification) "Gini" else "Variance").toString
+    val impurity = impurityStr match {
+      case "Gini" => Gini
+      case "Entropy" => Entropy
+      case "Variance" => Variance
+    }
+
+    val maxDepth = options.getOrElse('maxDepth,"1").toString.toInt
+    val maxBins = options.getOrElse('maxBins,"100").toString.toInt
+
+    val strategy = new Strategy(algo = algo, impurity = impurity, maxDepth = maxDepth,
+      maxBins = maxBins)
+    val model = DecisionTree.train(trainData,strategy)
+
+    //Load test data
+    val testData = loadLabeledData(sc, options.get('testDataDir).get.toString)
+
+    //Measure algorithm accuracy
+    val accuracy = accuracyScore(model, testData)
+    logDebug("accuracy = " + accuracy)
+
+    val mse = meanSquaredError(model,testData)
+    logDebug("mean square error = " + mse)
+
+    sc.stop()
+  }
+
+  /**
+   * Load labeled data from a file. The data format used here is
+   * <L>, <f1> <f2> ...
+   * where <f1>, <f2> are feature values in Double and <L> is the corresponding label as Double.
+   *
+   * @param sc SparkContext
+   * @param dir Directory to the input data files.
+   * @return An RDD of LabeledPoint. Each labeled point has two elements: the first element is
+   *         the label, and the second element represents the feature values (an array of Double).
+   */
+  def loadLabeledData(sc: SparkContext, dir: String): RDD[LabeledPoint] = {
+    sc.textFile(dir).map { line =>
+      val parts = line.trim().split(",")
+      val label = parts(0).toDouble
+      val features = parts.slice(1,parts.length).map(_.toDouble)
+      LabeledPoint(label, features)
+    }
+  }
+
+  //TODO: Port them to a metrics package
+  def accuracyScore(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
+    val correctCount = data.filter(y => model.predict(y.features) == y.label).count()
+    val count = data.count()
+    logDebug("correct prediction count = " +  correctCount)
+    logDebug("data count = " + count)
+    correctCount.toDouble / count
+  }
+
+  //TODO: Make these generic MLTable metrics
+  def meanSquaredError(tree: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
+    val meanSumOfSquares =
+      data.map(y => (tree.predict(y.features) - y.label)*(tree.predict(y.features) - y.label))
+        .mean()
+    meanSumOfSquares
   }
 
 

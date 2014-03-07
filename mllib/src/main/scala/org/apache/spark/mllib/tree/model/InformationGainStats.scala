@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.tree.model
 
 /**
@@ -25,11 +26,11 @@ package org.apache.spark.mllib.tree.model
  * @param predict predicted value
  */
 class InformationGainStats(
-    val gain : Double,
+    val gain: Double,
     val impurity: Double,
-    val leftImpurity : Double,
-    val rightImpurity : Double,
-    val predict : Double) extends Serializable {
+    val leftImpurity: Double,
+    val rightImpurity: Double,
+    val predict: Double) extends Serializable {
 
   override def toString = {
     "gain = %f, impurity = %f, left impurity = %f, right impurity = %f, predict = %f"

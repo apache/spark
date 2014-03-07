@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.tree.configuration
 
 import org.apache.spark.mllib.tree.impurity.Impurity
@@ -34,13 +35,13 @@ import org.apache.spark.mllib.tree.configuration.QuantileStrategy._
  *                                zero-indexed.
  */
 class Strategy  (
-                val algo : Algo,
-                val impurity : Impurity,
-                val maxDepth : Int,
-                val maxBins : Int = 100,
-                val quantileCalculationStrategy : QuantileStrategy = Sort,
-                val categoricalFeaturesInfo : Map[Int,Int] = Map[Int,Int]()) extends Serializable {
+                val algo: Algo,
+                val impurity: Impurity,
+                val maxDepth: Int,
+                val maxBins: Int = 100,
+                val quantileCalculationStrategy: QuantileStrategy = Sort,
+                val categoricalFeaturesInfo: Map[Int,Int] = Map[Int,Int]()) extends Serializable {
 
-  var numBins : Int  = Int.MinValue
+  var numBins: Int  = Int.MinValue
 
 }

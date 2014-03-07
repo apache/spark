@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.tree
 
 import scala.util.Random
@@ -393,7 +394,7 @@ class DecisionTreeSuite extends FunSuite with BeforeAndAfterAll {
 
 object DecisionTreeSuite {
 
-  def generateOrderedLabeledPointsWithLabel0() : Array[LabeledPoint] = {
+  def generateOrderedLabeledPointsWithLabel0(): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
     for (i <- 0 until 1000){
       val lp = new LabeledPoint(0.0,Array(i.toDouble,1000.0-i))
@@ -403,7 +404,7 @@ object DecisionTreeSuite {
   }
 
 
-  def generateOrderedLabeledPointsWithLabel1() : Array[LabeledPoint] = {
+  def generateOrderedLabeledPointsWithLabel1(): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
     for (i <- 0 until 1000){
       val lp = new LabeledPoint(1.0,Array(i.toDouble,999.0-i))
@@ -412,7 +413,7 @@ object DecisionTreeSuite {
     arr
   }
 
-  def generateCategoricalDataPoints() : Array[LabeledPoint] = {
+  def generateCategoricalDataPoints(): Array[LabeledPoint] = {
     val arr = new Array[LabeledPoint](1000)
     for (i <- 0 until 1000){
       if (i < 600){

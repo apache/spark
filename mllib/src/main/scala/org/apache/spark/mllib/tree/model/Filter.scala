@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.tree.model
 
 /**
@@ -21,7 +22,7 @@ package org.apache.spark.mllib.tree.model
  * @param split split specifying the feature index, type and threshold
  * @param comparison integer specifying <,=,>
  */
-case class Filter(split : Split, comparison : Int) {
+case class Filter(split: Split, comparison: Int) {
   // Comparison -1,0,1 signifies <.=,>
   override def toString = " split = " + split + "comparison = " + comparison
 }

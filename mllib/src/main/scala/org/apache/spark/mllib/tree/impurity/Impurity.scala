@@ -14,12 +14,29 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.tree.impurity
 
+/**
+ * Trail for calculating information gain
+ */
 trait Impurity extends Serializable {
 
+  /**
+   * information calculation for binary classification
+   * @param c0 count of instances with label 0
+   * @param c1 count of instances with label 1
+   * @return information value
+   */
   def calculate(c0 : Double, c1 : Double): Double
 
-  def calculate(count : Double, sum : Double, sumSquares : Double) : Double
+  /**
+   * information calculation for regression
+   * @param count number of instances
+   * @param sum sum of labels
+   * @param sumSquares summation of squares of the labels
+   * @return information value
+   */
+  def calculate(count: Double, sum: Double, sumSquares: Double): Double
 
 }

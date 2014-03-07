@@ -14,6 +14,7 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
+
 package org.apache.spark.mllib.tree.model
 
 import org.apache.spark.Logging
@@ -30,19 +31,23 @@ import org.apache.spark.mllib.tree.configuration.FeatureType._
  * @param rightNode right child
  * @param stats information gain stats
  */
-class Node ( val id : Int,
-             val predict : Double,
-             val isLeaf : Boolean,
-             val split : Option[Split],
-             var leftNode : Option[Node],
-             var rightNode : Option[Node],
-             val stats : Option[InformationGainStats]
-             ) extends Serializable with Logging{
+class Node (
+    val id: Int,
+    val predict: Double,
+    val isLeaf: Boolean,
+    val split: Option[Split],
+    var leftNode: Option[Node],
+    var rightNode: Option[Node],
+    val stats: Option[InformationGainStats]) extends Serializable with Logging{
 
   override def toString = "id = " + id + ", isLeaf = " + isLeaf + ", predict = " + predict + ", " +
     "split = " + split + ", stats = " + stats
 
-  def build(nodes : Array[Node]) : Unit = {
+  /**
+   * build the left node and right nodes if not leaf
+   * @param nodes array of nodes
+   */
+  def build(nodes : Array[Node]): Unit = {
 
     logDebug("building node " + id + " at level " +
       (scala.math.log(id + 1)/scala.math.log(2)).toInt )
@@ -59,6 +64,11 @@ class Node ( val id : Int,
     }
   }
 
+  /**
+   * predict value if node is not leaf
+   * @param feature feature value
+   * @return predicted value
+   */
   def predictIfLeaf(feature : Array[Double]) : Double = {
     if (isLeaf) {
       predict
