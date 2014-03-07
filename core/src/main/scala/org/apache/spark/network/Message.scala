@@ -27,6 +27,7 @@ private[spark] abstract class Message(val typ: Long, val id: Int) {
   var started = false
   var startTime = -1L
   var finishTime = -1L
+  var isSecurityNeg = false
 
   def size: Int
 
