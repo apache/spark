@@ -26,7 +26,6 @@ import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 
-import org.apache.hadoop.mapred.FileSplit
 import org.apache.spark.{Partition, SparkEnv, TaskContext}
 
 
@@ -65,14 +64,7 @@ class PipedRDD[T: ClassTag](
     // so the user code can access the input filename
     if (split.isInstanceOf[HadoopPartition]) {
       val hadoopSplit = split.asInstanceOf[HadoopPartition]
-
-      if (hadoopSplit.inputSplit.value.isInstanceOf[FileSplit]) {
-        val is: FileSplit = hadoopSplit.inputSplit.value.asInstanceOf[FileSplit]
-        // map.input.file is deprecated in favor of mapreduce.map.input.file but set both
-        // since its not removed yet
-        currentEnvVars.put("map_input_file", is.getPath().toString())
-        currentEnvVars.put("mapreduce_map_input_file", is.getPath().toString())
-      }
+      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars())
     }
 
     val proc = pb.start()
