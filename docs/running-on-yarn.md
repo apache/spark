@@ -29,7 +29,7 @@ If you want to test out the YARN deployment mode, you can use the current Spark 
 
 # Configuration
 
-Most of the configs are the same for Spark on YARN as other deploys. See the Configuration page for more information on those.  These are configs that are specific to SPARK on YARN.
+Most of the configs are the same for Spark on YARN as for other deployment modes. See the Configuration page for more information on those.  These are configs that are specific to Spark on YARN.
 
 Environment variables:
 
@@ -41,28 +41,30 @@ System Properties:
 * `spark.yarn.submit.file.replication`, the HDFS replication level for the files uploaded into HDFS for the application. These include things like the spark jar, the app jar, and any distributed cache files/archives.
 * `spark.yarn.preserve.staging.files`, set to true to preserve the staged files(spark jar, app jar, distributed cache files) at the end of the job rather then delete them.
 * `spark.yarn.scheduler.heartbeat.interval-ms`, the interval in ms in which the Spark application master heartbeats into the YARN ResourceManager. Default is 5 seconds. 
-* `spark.yarn.max.worker.failures`, the maximum number of worker failures before failing the application. Default is the number of workers requested times 2 with minimum of 3.
+* `spark.yarn.max.worker.failures`, the maximum number of executor failures before failing the application. Default is the number of executors requested times 2 with minimum of 3.
 
 # Launching Spark on YARN
 
-Ensure that HADOOP_CONF_DIR or YARN_CONF_DIR points to the directory which contains the (client side) configuration files for the hadoop cluster.
-This would be used to connect to the cluster, write to the dfs and submit jobs to the resource manager.
+Ensure that HADOOP_CONF_DIR or YARN_CONF_DIR points to the directory which contains the (client side) configuration files for the Hadoop cluster.
+These configs are used to connect to the cluster, write to the dfs, and connect to the YARN ResourceManager.
 
-There are two scheduler mode that can be used to launch spark application on YARN.
+There are two scheduler modes that can be used to launch Spark applications on YARN. In yarn-cluster mode, the Spark driver runs inside an application master process which is managed by YARN on the cluster, and the client can go away after initiating the application. In yarn-client mode, the driver runs in the client process, and the application master is only used for requesting resources from YARN.
 
-## Launch spark application by YARN Client with yarn-standalone mode.
+Unlike in Spark standalone and Mesos mode, in which the master's address is specified in the "master" parameter, in YARN mode the ResourceManager's address is picked up from the Hadoop configuration.  Thus, the master parameter is simply "yarn-client" or "yarn-cluster".
 
-The command to launch the YARN Client is as follows:
+## Launching a Spark application with yarn-cluster mode.
+
+The command to launch the Spark application on the cluster is as follows:
 
     SPARK_JAR=<SPARK_ASSEMBLY_JAR_FILE> ./bin/spark-class org.apache.spark.deploy.yarn.Client \
       --jar <YOUR_APP_JAR_FILE> \
       --class <APP_MAIN_CLASS> \
       --args <APP_MAIN_ARGUMENTS> \
-      --num-workers <NUMBER_OF_WORKER_MACHINES> \
+      --num-workers <NUMBER_OF_EXECUTORS> \
       --master-class <ApplicationMaster_CLASS>
       --master-memory <MEMORY_FOR_MASTER> \
-      --worker-memory <MEMORY_PER_WORKER> \
-      --worker-cores <CORES_PER_WORKER> \
+      --worker-memory <MEMORY_PER_EXECUTOR> \
+      --worker-cores <CORES_PER_EXECUTOR> \
       --name <application_name> \
       --queue <queue_name> \
       --addJars <any_local_files_used_in_SparkContext.addJar> \
@@ -82,35 +84,30 @@ For example:
         ./bin/spark-class org.apache.spark.deploy.yarn.Client \
           --jar examples/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
           --class org.apache.spark.examples.SparkPi \
-          --args yarn-standalone \
+          --args yarn-cluster \
           --num-workers 3 \
           --master-memory 4g \
           --worker-memory 2g \
           --worker-cores 1
 
-    # Examine the output (replace $YARN_APP_ID in the following with the "application identifier" output by the previous command)
-    # (Note: YARN_APP_LOGS_DIR is usually /tmp/logs or $HADOOP_HOME/logs/userlogs depending on the Hadoop version.)
-    $ cat $YARN_APP_LOGS_DIR/$YARN_APP_ID/container*_000001/stdout
-    Pi is roughly 3.13794
+The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Viewing Logs" section below for how to see driver and executor logs.
 
-The above starts a YARN Client programs which start the default Application Master. Then SparkPi will be run as a child thread of Application Master, YARN Client will  periodically polls the Application Master for status updates and displays them in the console. The client will exit once your application has finished running.
+Because the application is run on a remote machine where the Application Master is running, applications that involve local interaction, such as spark-shell, will not work.
 
-With this mode, your application is actually run on the remote machine where the Application Master is run upon. Thus application that involve local interaction will not work well, e.g. spark-shell.
+## Launching a Spark application with yarn-client mode.
 
-## Launch spark application with yarn-client mode.
-
-With yarn-client mode, the application will be launched locally. Just like running application or spark-shell on Local / Mesos / Standalone mode. The launch method is also the similar with them, just make sure that when you need to specify a master url, use "yarn-client" instead. And you also need to export the env value for SPARK_JAR.
+With yarn-client mode, the application will be launched locally, just like running an application or spark-shell on Local / Mesos / Standalone client mode. The launch method is also the same, just make sure to specify the master URL as "yarn-client". You also need to export the env value for SPARK_JAR.
 
 Configuration in yarn-client mode:
 
-In order to tune worker core/number/memory etc. You need to export environment variables or add them to the spark configuration file (./conf/spark_env.sh). The following are the list of options.
+In order to tune worker cores/number/memory etc., you need to export environment variables or add them to the spark configuration file (./conf/spark_env.sh). The following are the list of options.
 
-* `SPARK_WORKER_INSTANCES`, Number of workers to start (Default: 2)
-* `SPARK_WORKER_CORES`, Number of cores for the workers (Default: 1).
-* `SPARK_WORKER_MEMORY`, Memory per Worker (e.g. 1000M, 2G) (Default: 1G)
+* `SPARK_WORKER_INSTANCES`, Number of executors to start (Default: 2)
+* `SPARK_WORKER_CORES`, Number of cores per executor (Default: 1).
+* `SPARK_WORKER_MEMORY`, Memory per executor (e.g. 1000M, 2G) (Default: 1G)
 * `SPARK_MASTER_MEMORY`, Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)
 * `SPARK_YARN_APP_NAME`, The name of your application (Default: Spark)
-* `SPARK_YARN_QUEUE`, The hadoop queue to use for allocation requests (Default: 'default')
+* `SPARK_YARN_QUEUE`, The YARN queue to use for allocation requests (Default: 'default')
 * `SPARK_YARN_DIST_FILES`, Comma separated list of files to be distributed with the job.
 * `SPARK_YARN_DIST_ARCHIVES`, Comma separated list of archives to be distributed with the job.
 
@@ -125,13 +122,23 @@ or
     MASTER=yarn-client ./bin/spark-shell
 
 
+## Viewing logs
+
+In YARN terminology, executors and application masters run inside "containers". YARN has two modes for handling container logs after an application has completed. If log aggregation is turned on (with the yarn.log-aggregation-enable config), container logs are copied to HDFS and deleted on the local machine. These logs can be viewed from anywhere on the cluster with the "yarn logs" command.
+
+    yarn logs -applicationId <app ID>
+    
+will print out the contents of all log files from all containers from the given application.
+
+When log aggregation isn't turned on, logs are retained locally on each machine under YARN_APP_LOGS_DIR, which is usually configured to /tmp/logs or $HADOOP_HOME/logs/userlogs depending on the Hadoop version and installation. Viewing logs for a container requires going to the host that contains them and looking in this directory.  Subdirectories organize log files by application ID and container ID.
+
 # Building Spark for Hadoop/YARN 2.2.x
 
-See [Building Spark with Maven](building-with-maven.html) for instructions on how to build Spark using the Maven process.
+See [Building Spark with Maven](building-with-maven.html) for instructions on how to build Spark using Maven.
 
-# Important Notes
+# Important notes
 
 - Before Hadoop 2.2, YARN does not support cores in container resource requests. Thus, when running against an earlier version, the numbers of cores given via command line arguments cannot be passed to YARN.  Whether core requests are honored in scheduling decisions depends on which scheduler is in use and how it is configured.
-- The local directories used for spark will be the local directories configured for YARN (Hadoop Yarn config yarn.nodemanager.local-dirs). If the user specifies spark.local.dir, it will be ignored.
-- The --files and --archives options support specifying file names with the # similar to Hadoop. For example you can specify: --files localtest.txt#appSees.txt and this will upload the file you have locally named localtest.txt into HDFS but this will be linked to by the name appSees.txt and your application should use the name as appSees.txt to reference it when running on YARN.
+- The local directories used by Spark executors will be the local directories configured for YARN (Hadoop YARN config yarn.nodemanager.local-dirs). If the user specifies spark.local.dir, it will be ignored.
+- The --files and --archives options support specifying file names with the # similar to Hadoop. For example you can specify: --files localtest.txt#appSees.txt and this will upload the file you have locally named localtest.txt into HDFS but this will be linked to by the name appSees.txt, and your application should use the name as appSees.txt to reference it when running on YARN.
 - The --addJars option allows the SparkContext.addJar function to work if you are using it with local files. It does not need to be used if you are using it with HDFS, HTTP, HTTPS, or FTP files.
