@@ -278,6 +278,10 @@ private[spark] object Utils extends Logging {
           uc = new URL(url).openConnection()
         }
 
+        val timeout = conf.getInt("spark.files.fetchTimeout",60) * 1000
+        uc.setConnectTimeout(timeout)
+        uc.setReadTimeout(timeout)
+        uc.connect()
         val in = uc.getInputStream();
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
