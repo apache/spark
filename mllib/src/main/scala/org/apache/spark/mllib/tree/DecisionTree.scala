@@ -17,8 +17,8 @@
 
 package org.apache.spark.mllib.tree
 
-import org.apache.spark.SparkContext._
 import scala.util.control.Breaks._
+import org.apache.spark.SparkContext._
 import org.apache.spark.rdd.RDD
 import org.apache.spark.mllib.tree.model._
 import org.apache.spark.{SparkContext, Logging}
@@ -101,7 +101,6 @@ class DecisionTree private(val strategy: Strategy) extends Serializable with Log
     val decisionTreeModel = {
       return new DecisionTreeModel(topNode, strategy.algo)
     }
-
     return decisionTreeModel
   }
 
@@ -538,10 +537,10 @@ object DecisionTree extends Serializable with Logging {
           }
 
           if (leftCount == 0) {
-            return new InformationGainStats(0,topImpurity,Double.MinValue,topImpurity,1)
+            return new InformationGainStats(0, topImpurity, Double.MinValue, topImpurity,1)
           }
           if (rightCount == 0) {
-            return new InformationGainStats(0,topImpurity,topImpurity,Double.MinValue,0)
+            return new InformationGainStats(0, topImpurity, topImpurity, Double.MinValue,0)
           }
 
           val leftImpurity = strategy.impurity.calculate(left0Count, left1Count)
@@ -561,7 +560,7 @@ object DecisionTree extends Serializable with Logging {
           //val predict = leftCount / (leftCount + rightCount)
           val predict = (left1Count + right1Count) / (leftCount + rightCount)
 
-          new InformationGainStats(gain,impurity,leftImpurity,rightImpurity,predict)
+          new InformationGainStats(gain, impurity, leftImpurity, rightImpurity, predict)
         }
         case Regression => {
           val leftCount = leftNodeAgg(featureIndex)(3 * splitIndex)
@@ -584,12 +583,12 @@ object DecisionTree extends Serializable with Logging {
           }
 
           if (leftCount == 0) {
-            return new InformationGainStats(0,topImpurity,Double.MinValue,topImpurity,
+            return new InformationGainStats(0, topImpurity, Double.MinValue, topImpurity,
               rightSum/rightCount)
           }
           if (rightCount == 0) {
-            return new InformationGainStats(0,topImpurity,topImpurity,
-              Double.MinValue,leftSum/leftCount)
+            return new InformationGainStats(0, topImpurity ,topImpurity,
+              Double.MinValue, leftSum/leftCount)
           }
 
           val leftImpurity = strategy.impurity.calculate(leftCount, leftSum, leftSumSquares)
@@ -1024,7 +1023,4 @@ object DecisionTree extends Serializable with Logging {
         .mean()
     meanSumOfSquares
   }
-
-
-
 }
