@@ -79,7 +79,9 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
     logEvent(event, flushLogger = true)
   override def onJobEnd(event: SparkListenerJobEnd) =
     logEvent(event, flushLogger = true)
-  override def onExecutorsStateChange(event: SparkListenerExecutorsStateChange) =
+  override def onBlockManagerGained(event: SparkListenerBlockManagerGained) =
+    logEvent(event, flushLogger = true)
+  override def onBlockManagerLost(event: SparkListenerBlockManagerLost) =
     logEvent(event, flushLogger = true)
   override def onUnpersistRDD(event: SparkListenerUnpersistRDD) =
     logEvent(event, flushLogger = true)

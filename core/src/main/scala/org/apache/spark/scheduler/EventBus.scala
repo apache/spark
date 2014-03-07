@@ -36,38 +36,30 @@ private[spark] trait EventBus {
   /**
    * Post an event to all attached listeners. Return true if the shutdown event is posted.
    */
-  protected def postToAll(event: SparkListenerEvent): Boolean = {
-    postToListeners(event, sparkListeners)
-  }
-
-  /**
-   * Post an event to a given list of listeners. Return true if the shutdown event is posted.
-   */
-  protected def postToListeners(
-      event: SparkListenerEvent,
-      listeners: Seq[SparkListener]): Boolean = {
-
+  def postToAll(event: SparkListenerEvent): Boolean = {
     event match {
       case stageSubmitted: SparkListenerStageSubmitted =>
-        listeners.foreach(_.onStageSubmitted(stageSubmitted))
+        sparkListeners.foreach(_.onStageSubmitted(stageSubmitted))
       case stageCompleted: SparkListenerStageCompleted =>
-        listeners.foreach(_.onStageCompleted(stageCompleted))
+        sparkListeners.foreach(_.onStageCompleted(stageCompleted))
       case jobStart: SparkListenerJobStart =>
-        listeners.foreach(_.onJobStart(jobStart))
+        sparkListeners.foreach(_.onJobStart(jobStart))
       case jobEnd: SparkListenerJobEnd =>
-        listeners.foreach(_.onJobEnd(jobEnd))
+        sparkListeners.foreach(_.onJobEnd(jobEnd))
       case taskStart: SparkListenerTaskStart =>
-        listeners.foreach(_.onTaskStart(taskStart))
+        sparkListeners.foreach(_.onTaskStart(taskStart))
       case taskGettingResult: SparkListenerTaskGettingResult =>
-        listeners.foreach(_.onTaskGettingResult(taskGettingResult))
+        sparkListeners.foreach(_.onTaskGettingResult(taskGettingResult))
       case taskEnd: SparkListenerTaskEnd =>
-        listeners.foreach(_.onTaskEnd(taskEnd))
+        sparkListeners.foreach(_.onTaskEnd(taskEnd))
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
-        listeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
-      case executorsStateChange: SparkListenerExecutorsStateChange =>
-        listeners.foreach(_.onExecutorsStateChange(executorsStateChange))
+        sparkListeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
+      case blockManagerGained: SparkListenerBlockManagerGained =>
+        sparkListeners.foreach(_.onBlockManagerGained(blockManagerGained))
+      case blockManagerLost: SparkListenerBlockManagerLost =>
+        sparkListeners.foreach(_.onBlockManagerLost(blockManagerLost))
       case unpersistRDD: SparkListenerUnpersistRDD =>
-        listeners.foreach(_.onUnpersistRDD(unpersistRDD))
+        sparkListeners.foreach(_.onUnpersistRDD(unpersistRDD))
       case SparkListenerShutdown =>
         return true
       case _ =>

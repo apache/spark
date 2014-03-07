@@ -208,7 +208,8 @@ class SparkContext(
   @volatile private[spark] var dagScheduler = new DAGScheduler(this)
   dagScheduler.start()
 
-  postEnvironmentUpdateEvent()
+  postEnvironmentUpdate()
+  listenForBlockManagerUpdates()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
@@ -642,7 +643,7 @@ class SparkContext(
     Utils.fetchFile(path, new File(SparkFiles.getRootDirectory), conf)
 
     logInfo("Added file " + path + " at " + key + " with timestamp " + addedFiles(key))
-    postEnvironmentUpdateEvent()
+    postEnvironmentUpdate()
   }
 
   def addSparkListener(listener: SparkListener) {
@@ -791,7 +792,7 @@ class SparkContext(
         logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
       }
     }
-    postEnvironmentUpdateEvent()
+    postEnvironmentUpdate()
   }
 
   /**
@@ -1039,7 +1040,7 @@ class SparkContext(
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
   /** Post the environment update event if the listener bus is ready */
-  private def postEnvironmentUpdateEvent() {
+  private def postEnvironmentUpdate() {
     Option(listenerBus).foreach { bus =>
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
@@ -1049,6 +1050,11 @@ class SparkContext(
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
       bus.post(environmentUpdate)
     }
+  }
+
+  /** Start listening for block manager status update events */
+  private def listenForBlockManagerUpdates() {
+    env.blockManager.master.listener.map(_.setListenerBus(listenerBus))
   }
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */

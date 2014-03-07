@@ -28,7 +28,9 @@ private[ui] trait UISparkListener extends SparkListener
  * A SparkListener that maintains executor storage status
  */
 private[ui] class StorageStatusSparkListener extends UISparkListener {
-  var storageStatusList = Seq[StorageStatus]()
+  val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
+
+  def storageStatusList = executorIdToStorageStatus.values.toSeq
 
   /** Update storage status list to reflect updated block statuses */
   def updateStorageStatus(execId: String, updatedBlocks: Seq[(BlockId, BlockStatus)]) {
@@ -68,8 +70,17 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
     updateStorageStatus(unpersistRDD.rddId)
   }
 
-  override def onExecutorsStateChange(executorsStateChange: SparkListenerExecutorsStateChange) {
-    storageStatusList = executorsStateChange.storageStatusList
+  override def onBlockManagerGained(blockManagerGained: SparkListenerBlockManagerGained) {
+    val blockManagerId = blockManagerGained.blockManagerId
+    val executorId = blockManagerId.executorId
+    val maxMem = blockManagerGained.maxMem
+    val storageStatus = new StorageStatus(blockManagerId, maxMem)
+    executorIdToStorageStatus(executorId) = storageStatus
+  }
+
+  override def onBlockManagerLost(blockManagerLost: SparkListenerBlockManagerLost) {
+    val executorId = blockManagerLost.blockManagerId.executorId
+    executorIdToStorageStatus.remove(executorId)
   }
 
   /**
@@ -81,6 +92,7 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
   protected def formatExecutorId(execId: String): String = {
     if (execId == "localhost") "<driver>" else execId
   }
+
 }
 
 /**
@@ -120,4 +132,5 @@ private[ui] class RDDInfoSparkListener extends StorageStatusSparkListener {
     super.onUnpersistRDD(unpersistRDD)
     updateRDDInfo()
   }
+
 }

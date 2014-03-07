@@ -150,9 +150,6 @@ class DAGScheduler(
           }
       }
     }))
-
-    // Start listening for block manager registration
-    blockManagerMaster.registrationListener.foreach(_.setListenerBus(listenerBus))
   }
 
   // Called by TaskScheduler to report task's starting.
@@ -194,7 +191,7 @@ class DAGScheduler(
 
   private def getCacheLocs(rdd: RDD[_]): Array[Seq[TaskLocation]] = {
     if (!cacheLocs.contains(rdd.id)) {
-      val blockIds = rdd.partitions.indices.map(index=> RDDBlockId(rdd.id, index)).toArray[BlockId]
+      val blockIds = rdd.partitions.indices.map(index => RDDBlockId(rdd.id, index)).toArray[BlockId]
       val locs = BlockManager.blockIdsToBlockManagers(blockIds, env, blockManagerMaster)
       cacheLocs(rdd.id) = blockIds.map { id =>
         locs.getOrElse(id, Nil).map(bm => TaskLocation(bm.host, bm.executorId))
@@ -973,11 +970,6 @@ class DAGScheduler(
       logDebug("Additional executor lost message for " + execId +
                "(epoch " + currentEpoch + ")")
     }
-    // Block manager master actor should not be null except during tests
-    if (blockManagerMaster.driverActor != null) {
-      val storageStatusList = blockManagerMaster.getStorageStatus
-      listenerBus.post(SparkListenerExecutorsStateChange(storageStatusList))
-    }
   }
 
   private def handleExecutorGained(execId: String, host: String) {
@@ -986,8 +978,6 @@ class DAGScheduler(
       logInfo("Host gained which was in lost list earlier: " + host)
       failedEpoch -= execId
     }
-    // Do not trigger SparkListenerExecutorsStateChange, because it is already triggered in
-    // blockManagerMaster.registrationListener when a new BlockManager registers with the master
   }
 
   private def handleJobCancellation(jobId: Int) {

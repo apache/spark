@@ -167,17 +167,19 @@ object SparkEnv extends Logging {
       }
     }
 
-    // Listen for block manager registration
-    val blockManagerListener = new BlockManagerRegistrationListener
+    val blockManagerStatusListener = new BlockManagerStatusListener
+
+    // Lazy because an akka actor cannot be instantiated outside of Props
     lazy val blockManagerMasterActor = {
       val actor = new BlockManagerMasterActor(isLocal, conf)
-      actor.registerListener(blockManagerListener)
+      actor.registerListener(blockManagerStatusListener)
       actor
     }
 
-    val blockManagerMaster =
-      new BlockManagerMaster(registerOrLookup("BlockManagerMaster", blockManagerMasterActor), conf)
-    blockManagerMaster.registrationListener = Some(blockManagerListener)
+    val blockManagerMaster = new BlockManagerMaster(
+      registerOrLookup("BlockManagerMaster", blockManagerMasterActor),
+      conf,
+      blockManagerStatusListener)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
       serializer, conf)

@@ -22,6 +22,7 @@ import javax.servlet.http.HttpServletRequest
 
 import org.eclipse.jetty.server.Handler
 
+import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.SparkUI
@@ -42,7 +43,8 @@ private[ui] class JobProgressUI(parent: SparkUI) {
   private var _listener: Option[JobProgressListener] = None
 
   def start() {
-    _listener = Some(new JobProgressListener(sc, live))
+    val conf = if (live) sc.conf else new SparkConf
+    _listener = Some(new JobProgressListener(conf))
   }
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)

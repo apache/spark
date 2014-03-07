@@ -19,11 +19,12 @@ package org.apache.spark.ui.jobs
 
 import scala.collection.mutable.{ListBuffer, HashMap}
 
-import org.apache.spark.{ExceptionFailure, SparkContext, Success}
+import org.apache.spark.{ExceptionFailure, SparkConf, SparkContext, Success}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler._
-import org.apache.spark.ui.StorageStatusSparkListener
+import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.ui.UISparkListener
 
 /**
  * Tracks task-level information to be displayed in the UI.
@@ -32,21 +33,12 @@ import org.apache.spark.ui.StorageStatusSparkListener
  * class, since the UI thread and the DAGScheduler event loop may otherwise
  * be reading/updating the internal data structures concurrently.
  */
-private[ui] class JobProgressListener(sc: SparkContext, live: Boolean)
-  extends StorageStatusSparkListener {
+private[ui] class JobProgressListener(conf: SparkConf) extends UISparkListener {
 
   import JobProgressListener._
 
   // How many stages to remember
-  val retainedStages = if (live) {
-    sc.conf.getInt("spark.ui.retainedStages", DEFAULT_RETAINED_STAGES)
-  } else {
-    DEFAULT_RETAINED_STAGES
-  }
-
-  val stageIdToPool = new HashMap[Int, String]()
-  val stageIdToDescription = new HashMap[Int, String]()
-  val poolToActiveStages = new HashMap[String, HashMap[Int, StageInfo]]()
+  val retainedStages = conf.getInt("spark.ui.retainedStages", DEFAULT_RETAINED_STAGES)
 
   val activeStages = HashMap[Int, StageInfo]()
   val completedStages = ListBuffer[StageInfo]()
@@ -67,8 +59,15 @@ private[ui] class JobProgressListener(sc: SparkContext, live: Boolean)
   val stageIdToTasksFailed = HashMap[Int, Int]()
   val stageIdToTaskInfos = HashMap[Int, HashMap[Long, TaskUIData]]()
   val stageIdToExecutorSummaries = HashMap[Int, HashMap[String, ExecutorSummary]]()
+  val stageIdToPool = HashMap[Int, String]()
+  val stageIdToDescription = HashMap[Int, String]()
+  val poolToActiveStages = HashMap[String, HashMap[Int, StageInfo]]()
+
+  val executorIdToBlockManagerId = HashMap[String, BlockManagerId]()
 
   var schedulingMode: Option[SchedulingMode] = None
+
+  def blockManagerIds = executorIdToBlockManagerId.values.toSeq
 
   override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) = synchronized {
     val stage = stageCompleted.stageInfo
@@ -232,7 +231,7 @@ private[ui] class JobProgressListener(sc: SparkContext, live: Boolean)
     }
   }
 
-  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) = {
+  override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
     val schedulingModeName =
       environmentUpdate.environmentDetails("Spark Properties").toMap.get("spark.scheduler.mode")
     schedulingMode = schedulingModeName match {
@@ -240,6 +239,18 @@ private[ui] class JobProgressListener(sc: SparkContext, live: Boolean)
       case None => None
     }
   }
+
+  override def onBlockManagerGained(blockManagerGained: SparkListenerBlockManagerGained) {
+    val blockManagerId = blockManagerGained.blockManagerId
+    val executorId = blockManagerId.executorId
+    executorIdToBlockManagerId(executorId) = blockManagerId
+  }
+
+  override def onBlockManagerLost(blockManagerLost: SparkListenerBlockManagerLost) {
+    val executorId = blockManagerLost.blockManagerId.executorId
+    executorIdToBlockManagerId.remove(executorId)
+  }
+
 }
 
 private[ui] case class TaskUIData(

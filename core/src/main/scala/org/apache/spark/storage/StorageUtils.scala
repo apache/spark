@@ -28,7 +28,7 @@ private[spark]
 class StorageStatus(
     val blockManagerId: BlockManagerId,
     val maxMem: Long,
-    val blocks: mutable.Map[BlockId, BlockStatus]) {
+    val blocks: mutable.Map[BlockId, BlockStatus] = mutable.Map.empty) {
 
   def memUsed() = blocks.values.map(_.memSize).reduceOption(_ + _).getOrElse(0L)
 

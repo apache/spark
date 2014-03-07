@@ -57,8 +57,10 @@ private[spark] object JsonProtocol {
         jobEndToJson(jobEnd)
       case environmentUpdate: SparkListenerEnvironmentUpdate =>
         environmentUpdateToJson(environmentUpdate)
-      case executorsStateChange: SparkListenerExecutorsStateChange =>
-        executorsStateChangeToJson(executorsStateChange)
+      case blockManagerGained: SparkListenerBlockManagerGained =>
+        blockManagerGainedToJson(blockManagerGained)
+      case blockManagerLost: SparkListenerBlockManagerLost =>
+        blockManagerLostToJson(blockManagerLost)
       case unpersistRDD: SparkListenerUnpersistRDD =>
         unpersistRDDToJson(unpersistRDD)
       case SparkListenerShutdown =>
@@ -137,12 +139,17 @@ private[spark] object JsonProtocol {
     ("Classpath Entries" -> classpathEntries)
   }
 
-  def executorsStateChangeToJson(executorsStateChange: SparkListenerExecutorsStateChange)
-      : JValue = {
-    val storageStatusList =
-      JArray(executorsStateChange.storageStatusList.map(storageStatusToJson).toList)
-    ("Event" -> Utils.getFormattedClassName(executorsStateChange)) ~
-    ("Storage Status List" -> storageStatusList)
+  def blockManagerGainedToJson(blockManagerGained: SparkListenerBlockManagerGained): JValue = {
+    val blockManagerId = blockManagerIdToJson(blockManagerGained.blockManagerId)
+    ("Event" -> Utils.getFormattedClassName(blockManagerGained)) ~
+    ("Block Manager ID" -> blockManagerId) ~
+    ("Maximum Memory" -> blockManagerGained.maxMem)
+  }
+
+  def blockManagerLostToJson(blockManagerLost: SparkListenerBlockManagerLost): JValue = {
+    val blockManagerId = blockManagerIdToJson(blockManagerLost.blockManagerId)
+    ("Event" -> Utils.getFormattedClassName(blockManagerLost)) ~
+    ("Block Manager ID" -> blockManagerId)
   }
 
   def unpersistRDDToJson(unpersistRDD: SparkListenerUnpersistRDD): JValue = {
@@ -382,7 +389,8 @@ private[spark] object JsonProtocol {
     val jobStart = Utils.getFormattedClassName(SparkListenerJobStart)
     val jobEnd = Utils.getFormattedClassName(SparkListenerJobEnd)
     val environmentUpdate = Utils.getFormattedClassName(SparkListenerEnvironmentUpdate)
-    val executorsStateChanged = Utils.getFormattedClassName(SparkListenerExecutorsStateChange)
+    val blockManagerGained = Utils.getFormattedClassName(SparkListenerBlockManagerGained)
+    val blockManagerLost = Utils.getFormattedClassName(SparkListenerBlockManagerLost)
     val unpersistRDD = Utils.getFormattedClassName(SparkListenerUnpersistRDD)
     val shutdown = Utils.getFormattedClassName(SparkListenerShutdown)
 
@@ -395,7 +403,8 @@ private[spark] object JsonProtocol {
       case `jobStart` => jobStartFromJson(json)
       case `jobEnd` => jobEndFromJson(json)
       case `environmentUpdate` => environmentUpdateFromJson(json)
-      case `executorsStateChanged` => executorsStateChangeFromJson(json)
+      case `blockManagerGained` => blockManagerGainedFromJson(json)
+      case `blockManagerLost` => blockManagerLostFromJson(json)
       case `unpersistRDD` => unpersistRDDFromJson(json)
       case `shutdown` => SparkListenerShutdown
     }
@@ -454,10 +463,15 @@ private[spark] object JsonProtocol {
     SparkListenerEnvironmentUpdate(environmentDetails)
   }
 
-  def executorsStateChangeFromJson(json: JValue): SparkListenerExecutorsStateChange = {
-    val storageStatusList =
-      (json \ "Storage Status List").extract[List[JValue]].map(storageStatusFromJson)
-    SparkListenerExecutorsStateChange(storageStatusList)
+  def blockManagerGainedFromJson(json: JValue): SparkListenerBlockManagerGained = {
+    val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
+    val maxMem = (json \ "Maximum Memory").extract[Long]
+    SparkListenerBlockManagerGained(blockManagerId, maxMem)
+  }
+
+  def blockManagerLostFromJson(json: JValue): SparkListenerBlockManagerLost = {
+    val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
+    SparkListenerBlockManagerLost(blockManagerId)
   }
 
   def unpersistRDDFromJson(json: JValue): SparkListenerUnpersistRDD = {

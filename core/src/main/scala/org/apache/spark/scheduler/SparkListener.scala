@@ -24,7 +24,7 @@ import scala.collection.Map
 import org.apache.spark.util.{Utils, Distribution}
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.storage.StorageStatus
+import org.apache.spark.storage.{BlockManagerId, StorageStatus}
 
 sealed trait SparkListenerEvent
 
@@ -48,8 +48,10 @@ case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkLi
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent
 
-case class SparkListenerExecutorsStateChange(storageStatusList: Seq[StorageStatus])
+case class SparkListenerBlockManagerGained(blockManagerId: BlockManagerId, maxMem: Long)
   extends SparkListenerEvent
+
+case class SparkListenerBlockManagerLost(blockManagerId: BlockManagerId) extends SparkListenerEvent
 
 case class SparkListenerUnpersistRDD(rddId: Int) extends SparkListenerEvent
 
@@ -103,9 +105,14 @@ trait SparkListener {
   def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) { }
 
   /**
-   * Called when a new executor has joined, or an existing executor is lost
+   * Called when a new block manager has joined
    */
-  def onExecutorsStateChange(executorsStateChange: SparkListenerExecutorsStateChange) { }
+  def onBlockManagerGained(blockManagerGained: SparkListenerBlockManagerGained) { }
+
+  /**
+   * Called when an existing block manager has been lost
+   */
+  def onBlockManagerLost(blockManagerLost: SparkListenerBlockManagerLost) { }
 
   /**
    * Called when an RDD is manually unpersisted by the application
