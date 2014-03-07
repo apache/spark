@@ -278,7 +278,7 @@ private[spark] object Utils extends Logging {
           uc = new URL(url).openConnection()
         }
 
-        val timeout = conf.getInt("spark.files.fetchTimeout",60) * 1000
+        val timeout = conf.getInt("spark.files.fetchTimeout", 60) * 1000
         uc.setConnectTimeout(timeout)
         uc.setReadTimeout(timeout)
         uc.connect()
