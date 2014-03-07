@@ -48,9 +48,8 @@ private[spark] class SparkDeploySchedulerBackend(
     val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{WORKER_URL}}")
     val command = Command(
       "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs)
-    val sparkHome = sc.getSparkHome()
     val appDesc = new ApplicationDescription(appName, maxCores, sc.executorMemory, command,
-      sparkHome, "http://" + sc.ui.appUIAddress)
+      "http://" + sc.ui.appUIAddress)
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
