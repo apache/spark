@@ -236,14 +236,6 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
         while (maxMemory - (currentMemory - selectedMemory) < space && iterator.hasNext) {
           val pair = iterator.next()
           val blockId = pair.getKey
-          // Apply the same-RDD rule for cache replacement. Quoted from the
-          // original RDD paper:
-          //
-          //    When a new RDD partition is computed but there is not enough
-          //    space to store it, we evict a partition from the least recently
-          //    accessed RDD, unless this is the same RDD as the one with the
-          //    new partition. In that case, we keep the old partition in memory
-          //    to prevent cycling partitions from the same RDD in and out.
           if (rddToAdd.isEmpty || rddToAdd != getRddId(blockId)) {
             selectedBlocks += blockId
             selectedMemory += pair.getValue.size
