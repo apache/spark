@@ -103,6 +103,7 @@ For this version of Spark (0.8.1) Hadoop 2.2.x (or newer) users will have to bui
 
 * [Configuration](configuration.html): customize Spark via its configuration system
 * [Tuning Guide](tuning.html): best practices to optimize performance and memory use
+* [Security](security.html): Spark security support
 * [Hardware Provisioning](hardware-provisioning.html): recommendations for cluster hardware
 * [Job Scheduling](job-scheduling.html): scheduling resources across and within Spark applications
 * [Building Spark with Maven](building-with-maven.html): build Spark using the Maven system
