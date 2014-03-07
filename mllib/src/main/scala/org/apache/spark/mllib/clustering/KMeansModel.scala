@@ -19,8 +19,6 @@ package org.apache.spark.mllib.clustering
 
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.util.MLUtils
-
 
 /**
  * A clustering model for K-means. Each point belongs to the cluster with the closest center.
@@ -39,6 +37,6 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable
    * model on the given data.
    */
   def computeCost(data: RDD[Array[Double]]): Double = {
-    data.map(p => KMeans.pointCost(clusterCenters, p)).sum
+    data.map(p => KMeans.pointCost(clusterCenters, p)).sum()
   }
 }

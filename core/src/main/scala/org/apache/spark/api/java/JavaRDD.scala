@@ -20,12 +20,12 @@ package org.apache.spark.api.java
 import scala.reflect.ClassTag
 
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.api.java.function.{Function => JFunction}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
-class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T]) extends
-JavaRDDLike[T, JavaRDD[T]] {
+class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
+  extends JavaRDDLike[T, JavaRDD[T]] {
 
   override def wrapRDD(rdd: RDD[T]): JavaRDD[T] = JavaRDD.fromRDD(rdd)
 
@@ -70,7 +70,7 @@ JavaRDDLike[T, JavaRDD[T]] {
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: JFunction[T, java.lang.Boolean]): JavaRDD[T] =
-    wrapRDD(rdd.filter((x => f(x).booleanValue())))
+    wrapRDD(rdd.filter((x => f.call(x).booleanValue())))
 
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
@@ -125,6 +125,8 @@ JavaRDDLike[T, JavaRDD[T]] {
    */
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
+
+  def generator: String = rdd.generator
 
   override def toString = rdd.toString
 

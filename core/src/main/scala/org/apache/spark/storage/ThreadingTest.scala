@@ -17,12 +17,14 @@
 
 package org.apache.spark.storage
 
-import akka.actor._
-
 import java.util.concurrent.ArrayBlockingQueue
+
+import akka.actor._
 import util.Random
+
+import org.apache.spark.SparkConf
 import org.apache.spark.serializer.KryoSerializer
-import org.apache.spark.{SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf}
 
 /**
  * This class tests the BlockManager and MemoryStore for thread safety and
@@ -97,7 +99,8 @@ private[spark] object ThreadingTest {
     val blockManagerMaster = new BlockManagerMaster(
       actorSystem.actorOf(Props(new BlockManagerMasterActor(true, conf))), conf)
     val blockManager = new BlockManager(
-      "<driver>", actorSystem, blockManagerMaster, serializer, 1024 * 1024, conf)
+      "<driver>", actorSystem, blockManagerMaster, serializer, 1024 * 1024, conf,
+      new SecurityManager(conf))
     val producers = (1 to numProducers).map(i => new ProducerThread(blockManager, i))
     val consumers = producers.map(p => new ConsumerThread(blockManager, p.queue))
     producers.foreach(_.start)

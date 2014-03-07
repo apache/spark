@@ -17,18 +17,16 @@
 
 package org.apache.spark.api.python
 
-import org.scalatest.FunSuite
-import org.scalatest.matchers.ShouldMatchers
-import org.apache.spark.api.python.PythonRDD
-
 import java.io.{ByteArrayOutputStream, DataOutputStream}
+
+import org.scalatest.FunSuite
 
 class PythonRDDSuite extends FunSuite {
 
     test("Writing large strings to the worker") {
-        val input = "a"*100000
+        val input: List[String] = List("a"*100000)
         val buffer = new DataOutputStream(new ByteArrayOutputStream)
-        PythonRDD.writeToStream(input, buffer)
+        PythonRDD.writeIteratorToStream(input.iterator, buffer)
     }
 
 }

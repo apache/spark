@@ -17,8 +17,8 @@
 
 package org.apache.spark.metrics
 
+import java.io.{FileInputStream, InputStream}
 import java.util.Properties
-import java.io.{File, FileInputStream, InputStream, IOException}
 
 import scala.collection.mutable
 import scala.util.matching.Regex
@@ -80,7 +80,7 @@ private[spark] class MetricsConfig(val configFile: Option[String]) extends Loggi
     val subProperties = new mutable.HashMap[String, Properties]
     import scala.collection.JavaConversions._
     prop.foreach { kv =>
-      if (regex.findPrefixOf(kv._1) != None) {
+      if (regex.findPrefixOf(kv._1).isDefined) {
         val regex(prefix, suffix) = kv._1
         subProperties.getOrElseUpdate(prefix, new Properties).setProperty(suffix, kv._2)
       }

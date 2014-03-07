@@ -17,7 +17,6 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.Seq
 import scala.collection.mutable.{ListBuffer, HashMap, HashSet}
 
 import org.apache.spark.{ExceptionFailure, SparkContext, Success}

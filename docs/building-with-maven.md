@@ -17,13 +17,15 @@ You'll need to configure Maven to use more memory than usual by setting `MAVEN_O
 
 If you don't run this, you may see errors like the following:
 
-    [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_VERSION}}/classes...
+    [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
     [ERROR] PermGen space -> [Help 1]
 
-    [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_VERSION}}/classes...
+    [INFO] Compiling 203 Scala sources and 9 Java sources to /Users/me/Development/spark/core/target/scala-{{site.SCALA_BINARY_VERSION}}/classes...
     [ERROR] Java heap space -> [Help 1]
 
 You can fix this by setting the `MAVEN_OPTS` variable as discussed before.
+
+*Note: For Java 1.8 and above this step is not required.*
 
 ## Specifying the Hadoop version ##
 
@@ -54,7 +56,7 @@ Tests are run by default via the [ScalaTest Maven plugin](http://www.scalatest.o
 
 The ScalaTest plugin also supports running only a specific test suite as follows:
 
-    $ mvn -Dhadoop.version=... -Dsuites=spark.repl.ReplSuite test
+    $ mvn -Dhadoop.version=... -Dsuites=org.apache.spark.repl.ReplSuite test
 
 
 ## Continuous Compilation ##
@@ -71,8 +73,18 @@ This setup works fine in IntelliJ IDEA 11.1.4. After opening the project via the
 
 ## Building Spark Debian Packages ##
 
-It includes support for building a Debian package containing a 'fat-jar' which includes the repl, the examples and bagel. This can be created by specifying the following profiles:
+The maven build includes support for building a Debian package containing the assembly 'fat-jar', PySpark, and the necessary scripts and configuration files. This can be created by specifying the following:
 
-    $ mvn -Prepl-bin -Pdeb clean package
+    $ mvn -Pdeb -DskipTests clean package
 
-The debian package can then be found under repl/target. We added the short commit hash to the file name so that we can distinguish individual packages build for SNAPSHOT versions.
+The debian package can then be found under assembly/target. We added the short commit hash to the file name so that we can distinguish individual packages built for SNAPSHOT versions.
+
+## Running java 8 test suites.
+
+Running only java 8 tests and nothing else.
+
+    $ mvn install -DskipTests -Pjava8-tests
+    
+Java 8 tests are run when -Pjava8-tests profile is enabled, they will run in spite of -DskipTests. 
+For these tests to run your system must have a JDK 8 installation. 
+If you have JDK 8 installed but it is not the system default, you can set JAVA_HOME to point to JDK 8 before running the tests.

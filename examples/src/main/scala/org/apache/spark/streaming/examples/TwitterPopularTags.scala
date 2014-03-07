@@ -69,5 +69,6 @@ object TwitterPopularTags {
     })
 
     ssc.start()
+    ssc.awaitTermination()
   }
 }

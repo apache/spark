@@ -35,7 +35,7 @@ object StronglyConnectedComponents {
    *
    * @return a graph with vertex attributes containing the smallest vertex id in each SCC
    */
-  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int): Graph[VertexID, ED] = {
+  def run[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED], numIter: Int): Graph[VertexId, ED] = {
 
     // the graph we update with final SCC ids, and the graph we return at the end
     var sccGraph = graph.mapVertices { case (vid, _) => vid }
@@ -71,7 +71,7 @@ object StronglyConnectedComponents {
 
       // collect min of all my neighbor's scc values, update if it's smaller than mine
       // then notify any neighbors with scc values larger than mine
-      sccWorkGraph = Pregel[(VertexID, Boolean), ED, VertexID](
+      sccWorkGraph = Pregel[(VertexId, Boolean), ED, VertexId](
         sccWorkGraph, Long.MaxValue, activeDirection = EdgeDirection.Out)(
         (vid, myScc, neighborScc) => (math.min(myScc._1, neighborScc), myScc._2),
         e => {
@@ -85,7 +85,7 @@ object StronglyConnectedComponents {
 
       // start at root of SCCs. Traverse values in reverse, notify all my neighbors
       // do not propagate if colors do not match!
-      sccWorkGraph = Pregel[(VertexID, Boolean), ED, Boolean](
+      sccWorkGraph = Pregel[(VertexId, Boolean), ED, Boolean](
         sccWorkGraph, false, activeDirection = EdgeDirection.In)(
         // vertex is final if it is the root of a color
         // or it has the same color as a neighbor that is final

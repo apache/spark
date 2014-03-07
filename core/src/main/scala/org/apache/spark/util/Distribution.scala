@@ -20,7 +20,8 @@ package org.apache.spark.util
 import java.io.PrintStream
 
 /**
- * Util for getting some stats from a small sample of numeric values, with some handy summary functions.
+ * Util for getting some stats from a small sample of numeric values, with some handy
+ * summary functions.
  *
  * Entirely in memory, not intended as a good way to compute stats over large data sets.
  *
@@ -68,10 +69,11 @@ class Distribution(val data: Array[Double], val startIdx: Int, val endIdx: Int) 
 object Distribution {
 
   def apply(data: Traversable[Double]): Option[Distribution] = {
-    if (data.size > 0)
+    if (data.size > 0) {
       Some(new Distribution(data))
-    else
+    } else {
       None
+    }
   }
 
   def showQuantiles(out: PrintStream = System.out, quantiles: Traversable[Double]) {

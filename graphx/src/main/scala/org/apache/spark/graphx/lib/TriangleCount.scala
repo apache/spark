@@ -61,7 +61,7 @@ object TriangleCount {
       (vid, _, optSet) => optSet.getOrElse(null)
     }
     // Edge function computes intersection of smaller vertex with larger vertex
-    def edgeFunc(et: EdgeTriplet[VertexSet, ED]): Iterator[(VertexID, Int)] = {
+    def edgeFunc(et: EdgeTriplet[VertexSet, ED]): Iterator[(VertexId, Int)] = {
       assert(et.srcAttr != null)
       assert(et.dstAttr != null)
       val (smallSet, largeSet) = if (et.srcAttr.size < et.dstAttr.size) {

@@ -20,18 +20,15 @@ package org.apache.spark
 import scala.collection.JavaConverters._
 import scala.collection.mutable.HashMap
 
-import com.typesafe.config.ConfigFactory
-
 /**
  * Configuration for a Spark application. Used to set various Spark parameters as key-value pairs.
  *
  * Most of the time, you would create a SparkConf object with `new SparkConf()`, which will load
- * values from both the `spark.*` Java system properties and any `spark.conf` on your application's
- * classpath (if it has one). In this case, system properties take priority over `spark.conf`, and
- * any parameters you set directly on the `SparkConf` object take priority over both of those.
+ * values from any `spark.*` Java system properties set in your application as well. In this case,
+ * parameters you set directly on the `SparkConf` object take priority over system properties.
  *
  * For unit tests, you can also call `new SparkConf(false)` to skip loading external settings and
- * get the same configuration no matter what is on the classpath.
+ * get the same configuration no matter what the system properties are.
  *
  * All setter methods in this class support chaining. For example, you can write
  * `new SparkConf().setMaster("local").setAppName("My app")`.
@@ -39,9 +36,9 @@ import com.typesafe.config.ConfigFactory
  * Note that once a SparkConf object is passed to Spark, it is cloned and can no longer be modified
  * by the user. Spark does not support modifying the configuration at runtime.
  *
- * @param loadDefaults whether to load values from the system properties and classpath
+ * @param loadDefaults whether to also load values from Java system properties
  */
-class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with Logging {
+class SparkConf(loadDefaults: Boolean) extends Cloneable with Logging {
 
   /** Create a SparkConf that loads defaults from system properties and the classpath */
   def this() = this(true)
@@ -49,11 +46,9 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with 
   private val settings = new HashMap[String, String]()
 
   if (loadDefaults) {
-    ConfigFactory.invalidateCaches()
-    val typesafeConfig = ConfigFactory.systemProperties()
-      .withFallback(ConfigFactory.parseResources("spark.conf"))
-    for (e <- typesafeConfig.entrySet().asScala if e.getKey.startsWith("spark.")) {
-      settings(e.getKey) = e.getValue.unwrapped.toString
+    // Load any spark.* system properties
+    for ((k, v) <- System.getProperties.asScala if k.startsWith("spark.")) {
+      settings(k) = v
     }
   }
 
@@ -195,7 +190,15 @@ class SparkConf(loadDefaults: Boolean) extends Serializable with Cloneable with 
   }
 
   /** Get all akka conf variables set on this SparkConf */
-  def getAkkaConf: Seq[(String, String)] =  getAll.filter {case (k, v) => k.startsWith("akka.")}
+  def getAkkaConf: Seq[(String, String)] =
+    /* This is currently undocumented. If we want to make this public we should consider
+     * nesting options under the spark namespace to avoid conflicts with user akka options.
+     * Otherwise users configuring their own akka code via system properties could mess up
+     * spark's akka options.
+     *
+     *   E.g. spark.akka.option.x.y.x = "value"
+     */
+    getAll.filter {case (k, v) => k.startsWith("akka.")}
 
   /** Does the configuration contain a given parameter? */
   def contains(key: String): Boolean = settings.contains(key)

@@ -22,29 +22,27 @@ import java.util.Random
 import scala.collection.Map
 import scala.collection.JavaConversions.mapAsScalaMap
 import scala.collection.mutable.ArrayBuffer
-
 import scala.reflect.{classTag, ClassTag}
 
+import com.clearspring.analytics.stream.cardinality.HyperLogLog
+import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 import org.apache.hadoop.io.BytesWritable
 import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.io.NullWritable
 import org.apache.hadoop.io.Text
 import org.apache.hadoop.mapred.TextOutputFormat
 
-import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
-import com.clearspring.analytics.stream.cardinality.HyperLogLog
-
+import org.apache.spark._
 import org.apache.spark.Partitioner._
+import org.apache.spark.SparkContext._
 import org.apache.spark.api.java.JavaRDD
 import org.apache.spark.partial.BoundedDouble
 import org.apache.spark.partial.CountEvaluator
 import org.apache.spark.partial.GroupedCountEvaluator
 import org.apache.spark.partial.PartialResult
 import org.apache.spark.storage.StorageLevel
-import org.apache.spark.util.{Utils, BoundedPriorityQueue, SerializableHyperLogLog}
-
-import org.apache.spark.SparkContext._
-import org.apache.spark._
+import org.apache.spark.util.{BoundedPriorityQueue, SerializableHyperLogLog, Utils}
+import org.apache.spark.util.random.{BernoulliSampler, PoissonSampler}
 
 /**
  * A Resilient Distributed Dataset (RDD), the basic abstraction in Spark. Represents an immutable,
@@ -319,8 +317,29 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
-    new SampledRDD(this, withReplacement, fraction, seed)
+  def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] = {
+    if (withReplacement) {
+      new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), seed)
+    } else {
+      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](fraction), seed)
+    }
+  }
+
+  /**
+   * Randomly splits this RDD with the provided weights.
+   *
+   * @param weights weights for splits, will be normalized if they don't sum to 1
+   * @param seed random seed, default to System.nanoTime
+   *
+   * @return split RDDs in an array
+   */
+  def randomSplit(weights: Array[Double], seed: Long = System.nanoTime): Array[RDD[T]] = {
+    val sum = weights.sum
+    val normalizedCumWeights = weights.map(_ / sum).scanLeft(0.0d)(_ + _)
+    normalizedCumWeights.sliding(2).map { x =>
+      new PartitionwiseSampledRDD[T, T](this, new BernoulliSampler[T](x(0), x(1)), seed)
+    }.toArray
+  }
 
   def takeSample(withReplacement: Boolean, num: Int, seed: Int): Array[T] = {
     var fraction = 0.0
@@ -370,6 +389,43 @@ abstract class RDD[T: ClassTag](
    * times (use `.distinct()` to eliminate them).
    */
   def ++(other: RDD[T]): RDD[T] = this.union(other)
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   */
+  def intersection(other: RDD[T]): RDD[T] =
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)))
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
+        .keys
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   *
+   * @param partitioner Partitioner to use for the resulting RDD
+   */
+  def intersection(other: RDD[T], partitioner: Partitioner): RDD[T] =
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)), partitioner)
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
+        .keys
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.  Performs a hash partition across the cluster
+   *
+   * Note that this method performs a shuffle internally.
+   *
+   * @param numPartitions How many partitions to use in the resulting RDD
+   */
+  def intersection(other: RDD[T], numPartitions: Int): RDD[T] =
+    this.map(v => (v, null)).cogroup(other.map(v => (v, null)), new HashPartitioner(numPartitions))
+        .filter { case (_, (leftGroup, rightGroup)) => leftGroup.nonEmpty && rightGroup.nonEmpty }
+        .keys
 
   /**
    * Return an RDD created by coalescing all elements within each partition into an array.
@@ -487,7 +543,8 @@ abstract class RDD[T: ClassTag](
    * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
-  def mapWith[A: ClassTag, U: ClassTag]
+  @deprecated("use mapPartitionsWithIndex", "1.0.0")
+  def mapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => U): RDD[U] = {
     mapPartitionsWithIndex((index, iter) => {
@@ -501,7 +558,8 @@ abstract class RDD[T: ClassTag](
    * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
-  def flatMapWith[A: ClassTag, U: ClassTag]
+  @deprecated("use mapPartitionsWithIndex and flatMap", "1.0.0")
+  def flatMapWith[A, U: ClassTag]
       (constructA: Int => A, preservesPartitioning: Boolean = false)
       (f: (T, A) => Seq[U]): RDD[U] = {
     mapPartitionsWithIndex((index, iter) => {
@@ -515,7 +573,8 @@ abstract class RDD[T: ClassTag](
    * This additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
-  def foreachWith[A: ClassTag](constructA: Int => A)(f: (T, A) => Unit) {
+  @deprecated("use mapPartitionsWithIndex and foreach", "1.0.0")
+  def foreachWith[A](constructA: Int => A)(f: (T, A) => Unit) {
     mapPartitionsWithIndex { (index, iter) =>
       val a = constructA(index)
       iter.map(t => {f(t, a); t})
@@ -527,7 +586,8 @@ abstract class RDD[T: ClassTag](
    * additional parameter is produced by constructA, which is called in each
    * partition with the index of that partition.
    */
-  def filterWith[A: ClassTag](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = {
+  @deprecated("use mapPartitionsWithIndex and filter", "1.0.0")
+  def filterWith[A](constructA: Int => A)(p: (T, A) => Boolean): RDD[T] = {
     mapPartitionsWithIndex((index, iter) => {
       val a = constructA(index)
       iter.filter(t => p(t, a))
@@ -666,7 +726,7 @@ abstract class RDD[T: ClassTag](
     }
     var jobResult: Option[T] = None
     val mergeResult = (index: Int, taskResult: Option[T]) => {
-      if (taskResult != None) {
+      if (taskResult.isDefined) {
         jobResult = jobResult match {
           case Some(value) => Some(f(value, taskResult.get))
           case None => taskResult
@@ -716,18 +776,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return the number of elements in the RDD.
    */
-  def count(): Long = {
-    sc.runJob(this, (iter: Iterator[T]) => {
-      // Use a while loop to count the number of elements rather than iter.size because
-      // iter.size uses a for loop, which is slightly slower in current version of Scala.
-      var result = 0L
-      while (iter.hasNext) {
-        result += 1L
-        iter.next()
-      }
-      result
-    }).sum
-  }
+  def count(): Long = sc.runJob(this, Utils.getIteratorSize _).sum
 
   /**
    * (Experimental) Approximate version of count() that returns a potentially incomplete result
@@ -808,6 +857,29 @@ abstract class RDD[T: ClassTag](
   def countApproxDistinct(relativeSD: Double = 0.05): Long = {
     val zeroCounter = new SerializableHyperLogLog(new HyperLogLog(relativeSD))
     aggregate(zeroCounter)(_.add(_), _.merge(_)).value.cardinality()
+  }
+
+  /**
+   * Zips this RDD with its element indices. The ordering is first based on the partition index
+   * and then the ordering of items within each partition. So the first item in the first
+   * partition gets index 0, and the last item in the last partition receives the largest index.
+   * This is similar to Scala's zipWithIndex but it uses Long instead of Int as the index type.
+   * This method needs to trigger a spark job when this RDD contains more than one partitions.
+   */
+  def zipWithIndex(): RDD[(T, Long)] = new ZippedWithIndexRDD(this)
+
+  /**
+   * Zips this RDD with generated unique Long ids. Items in the kth partition will get ids k, n+k,
+   * 2*n+k, ..., where n is the number of partitions. So there may exist gaps, but this method
+   * won't trigger a spark job, which is different from [[org.apache.spark.rdd.RDD#zipWithIndex]].
+   */
+  def zipWithUniqueId(): RDD[(T, Long)] = {
+    val n = this.partitions.size.toLong
+    this.mapPartitionsWithIndex { case (k, iter) =>
+      iter.zipWithIndex.map { case (item, i) =>
+        (item, i * n + k)
+      }
+    }
   }
 
   /**

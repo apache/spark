@@ -48,14 +48,16 @@ private[spark] object UIUtils {
       case _ => <li><a href={prependBaseUri("/environment")}>Environment</a></li>
     }
     val executors = page match {
-      case Executors => <li class="active"><a href={prependBaseUri("/executors")}>Executors</a></li>
+      case Executors =>
+        <li class="active"><a href={prependBaseUri("/executors")}>Executors</a></li>
       case _ => <li><a href={prependBaseUri("/executors")}>Executors</a></li>
     }
 
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css" />
+        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
+              type="text/css" />
         <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
         <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{sc.appName} - {title}</title>
@@ -63,7 +65,9 @@ private[spark] object UIUtils {
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href={prependBaseUri("/")} class="brand"><img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}  /></a>
+            <a href={prependBaseUri("/")} class="brand">
+              <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+            </a>
             <ul class="nav">
               {jobs}
               {storage}
@@ -93,7 +97,8 @@ private[spark] object UIUtils {
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")} type="text/css" />
+        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
+              type="text/css" />
         <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
         <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{title}</title>
@@ -103,7 +108,8 @@ private[spark] object UIUtils {
           <div class="row-fluid">
             <div class="span12">
               <h3 style="vertical-align: middle; display: inline-block;">
-                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} style="margin-right: 15px;" />
+                <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")}
+                     style="margin-right: 15px;" />
                 {title}
               </h3>
             </div>

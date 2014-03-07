@@ -17,11 +17,9 @@
 
 package org.apache.spark.scheduler.cluster
 
-import scala.collection.mutable.HashMap
-
 import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.deploy.{Command, ApplicationDescription}
+import org.apache.spark.deploy.client.{AppClient, AppClientListener}
 import org.apache.spark.scheduler.{ExecutorExited, ExecutorLossReason, SlaveLost, TaskSchedulerImpl}
 import org.apache.spark.util.Utils
 
@@ -50,9 +48,9 @@ private[spark] class SparkDeploySchedulerBackend(
     val args = Seq(driverUrl, "{{EXECUTOR_ID}}", "{{HOSTNAME}}", "{{CORES}}", "{{WORKER_URL}}")
     val command = Command(
       "org.apache.spark.executor.CoarseGrainedExecutorBackend", args, sc.executorEnvs)
-    val sparkHome = sc.getSparkHome().getOrElse(null)
+    val sparkHome = sc.getSparkHome()
     val appDesc = new ApplicationDescription(appName, maxCores, sc.executorMemory, command,
-        "http://" + sc.ui.appUIAddress)
+      sparkHome, "http://" + sc.ui.appUIAddress)
 
     client = new AppClient(sc.env.actorSystem, masters, appDesc, this, conf)
     client.start()
@@ -84,7 +82,8 @@ private[spark] class SparkDeploySchedulerBackend(
     }
   }
 
-  override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int, memory: Int) {
+  override def executorAdded(fullId: String, workerId: String, hostPort: String, cores: Int,
+    memory: Int) {
     logInfo("Granted executor ID %s on hostPort %s with %d cores, %s RAM".format(
       fullId, hostPort, cores, Utils.megabytesToString(memory)))
   }

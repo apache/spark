@@ -58,13 +58,12 @@ public final class JavaQueueStream {
     }
 
     for (int i = 0; i < 30; i++) {
-      rddQueue.add(ssc.sc().parallelize(list));
+      rddQueue.add(ssc.sparkContext().parallelize(list));
     }
-
 
     // Create the QueueInputDStream and use it do some processing
     JavaDStream<Integer> inputStream = ssc.queueStream(rddQueue);
-    JavaPairDStream<Integer, Integer> mappedStream = inputStream.map(
+    JavaPairDStream<Integer, Integer> mappedStream = inputStream.mapToPair(
         new PairFunction<Integer, Integer, Integer>() {
           @Override
           public Tuple2<Integer, Integer> call(Integer i) {
@@ -81,5 +80,6 @@ public final class JavaQueueStream {
 
     reducedStream.print();
     ssc.start();
+    ssc.awaitTermination();
   }
 }

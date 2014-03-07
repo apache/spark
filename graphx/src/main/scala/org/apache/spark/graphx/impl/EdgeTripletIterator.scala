@@ -41,7 +41,7 @@ class EdgeTripletIterator[VD: ClassTag, ED: ClassTag](
   // allocating too many temporary Java objects.
   private val triplet = new EdgeTriplet[VD, ED]
 
-  private val vmap = new PrimitiveKeyOpenHashMap[VertexID, VD](vidToIndex, vertexArray)
+  private val vmap = new PrimitiveKeyOpenHashMap[VertexId, VD](vidToIndex, vertexArray)
 
   override def hasNext: Boolean = pos < edgePartition.size
 

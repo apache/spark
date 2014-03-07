@@ -20,9 +20,9 @@ package org.apache.spark.scheduler
 import java.io.{FileInputStream, InputStream}
 import java.util.{NoSuchElementException, Properties}
 
-import org.apache.spark.{SparkConf, Logging}
-
 import scala.xml.XML
+
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * An interface to build Schedulable tree
@@ -148,6 +148,6 @@ private[spark] class FairSchedulableBuilder(val rootPool: Pool, conf: SparkConf)
       }
     }
     parentPool.addSchedulable(manager)
-    logInfo("Added task set " + manager.name + " tasks to pool "+poolName)
+    logInfo("Added task set " + manager.name + " tasks to pool " + poolName)
   }
 }

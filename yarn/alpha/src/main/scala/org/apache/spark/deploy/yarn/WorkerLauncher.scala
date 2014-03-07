@@ -29,7 +29,7 @@ import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 import akka.actor._
 import akka.remote._
 import akka.actor.Terminated
-import org.apache.spark.{SparkConf, SparkContext, Logging}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.util.{Utils, AkkaUtils}
 import org.apache.spark.scheduler.cluster.CoarseGrainedSchedulerBackend
 import org.apache.spark.scheduler.SplitInfo
@@ -50,8 +50,9 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
   private var yarnAllocator: YarnAllocationHandler = _
   private var driverClosed:Boolean = false
 
+  val securityManager = new SecurityManager(sparkConf)
   val actorSystem : ActorSystem = AkkaUtils.createActorSystem("sparkYarnAM", Utils.localHostName, 0,
-    conf = sparkConf)._1
+    conf = sparkConf, securityManager = securityManager)._1
   var actor: ActorRef = _
 
   // This actor just working as a monitor to watch on Driver Actor.
@@ -110,6 +111,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     // we want to be reasonably responsive without causing too many requests to RM.
     val schedulerInterval =
       System.getProperty("spark.yarn.scheduler.heartbeat.interval-ms", "5000").toLong
+
     // must be <= timeoutInterval / 2.
     val interval = math.min(timeoutInterval / 2, schedulerInterval)
 
@@ -210,7 +212,7 @@ class WorkerLauncher(args: ApplicationMasterArguments, conf: Configuration, spar
     // Wait until all containers have finished
     // TODO: This is a bit ugly. Can we make it nicer?
     // TODO: Handle container failure
-    while(yarnAllocator.getNumWorkersRunning < args.numWorkers) {
+    while ((yarnAllocator.getNumWorkersRunning < args.numWorkers) && (!driverClosed)) {
       yarnAllocator.allocateContainers(math.max(args.numWorkers - yarnAllocator.getNumWorkersRunning, 0))
       Thread.sleep(100)
     }

@@ -22,10 +22,9 @@ import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.ShuffleSuite.NonJavaSerializableClass
-import org.apache.spark.rdd.{RDD, SubtractedRDD, CoGroupedRDD, OrderedRDDFunctions, ShuffledRDD}
-import org.apache.spark.util.MutablePair
+import org.apache.spark.rdd.{CoGroupedRDD, OrderedRDDFunctions, RDD, ShuffledRDD, SubtractedRDD}
 import org.apache.spark.serializer.KryoSerializer
-
+import org.apache.spark.util.MutablePair
 
 class ShuffleSuite extends FunSuite with ShouldMatchers with LocalSparkContext {
   test("groupByKey without compression") {

@@ -27,11 +27,10 @@ import scala.concurrent.duration._
 import akka.actor._
 import akka.remote.{DisassociatedEvent, RemotingLifecycleEvent}
 
-import org.apache.spark.{Logging, SparkConf, SparkException}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkException}
 import org.apache.spark.deploy.{ExecutorDescription, ExecutorState}
 import org.apache.spark.deploy.DeployMessages._
 import org.apache.spark.deploy.master.{DriverState, Master}
-import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.worker.ui.WorkerWebUI
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -49,7 +48,8 @@ private[spark] class Worker(
     actorSystemName: String,
     actorName: String,
     workDirPath: String = null,
-    val conf: SparkConf)
+    val conf: SparkConf,
+    val securityMgr: SecurityManager)
   extends Actor with Logging {
   import context.dispatcher
 
@@ -76,7 +76,7 @@ private[spark] class Worker(
   @volatile var registered = false
   @volatile var connected = false
   val workerId = generateWorkerId()
-  var sparkHome: File = null
+  val sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
   var workDir: File = null
   val executors = new HashMap[String, ExecutorRunner]
   val finishedExecutors = new HashMap[String, ExecutorRunner]
@@ -92,7 +92,7 @@ private[spark] class Worker(
   var coresUsed = 0
   var memoryUsed = 0
 
-  val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf)
+  val metricsSystem = MetricsSystem.createMetricsSystem("worker", conf, securityMgr)
   val workerSource = new WorkerSource(this)
 
   def coresFree: Int = cores - coresUsed
@@ -120,7 +120,6 @@ private[spark] class Worker(
     assert(!registered)
     logInfo("Starting Spark worker %s:%d with %d cores, %s RAM".format(
       host, port, cores, Utils.megabytesToString(memory)))
-    sparkHome = new File(Option(System.getenv("SPARK_HOME")).getOrElse("."))
     logInfo("Spark home: " + sparkHome)
     createWorkDir()
     webUi = new WorkerWebUI(this, workDir, Some(webUiPort))
@@ -212,18 +211,30 @@ private[spark] class Worker(
       if (masterUrl != activeMasterUrl) {
         logWarning("Invalid Master (" + masterUrl + ") attempted to launch executor.")
       } else {
-        logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
-        // TODO (pwendell): We shuld make sparkHome an Option[String] in
-        // ApplicationDescription to be more explicit about this.
-        val effectiveSparkHome = sparkHome.getAbsolutePath
-        val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
-          self, workerId, host, new File(effectiveSparkHome), workDir, akkaUrl, ExecutorState.RUNNING)
-        executors(appId + "/" + execId) = manager
-        manager.start()
-        coresUsed += cores_
-        memoryUsed += memory_
-        masterLock.synchronized {
-          master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
+        try {
+          logInfo("Asked to launch executor %s/%d for %s".format(appId, execId, appDesc.name))
+          val manager = new ExecutorRunner(appId, execId, appDesc, cores_, memory_,
+            self, workerId, host,
+            appDesc.sparkHome.map(userSparkHome => new File(userSparkHome)).getOrElse(sparkHome),
+            workDir, akkaUrl, ExecutorState.RUNNING)
+          executors(appId + "/" + execId) = manager
+          manager.start()
+          coresUsed += cores_
+          memoryUsed += memory_
+          masterLock.synchronized {
+            master ! ExecutorStateChanged(appId, execId, manager.state, None, None)
+          }
+        } catch {
+          case e: Exception => {
+            logError("Failed to launch exector %s/%d for %s".format(appId, execId, appDesc.name))
+            if (executors.contains(appId + "/" + execId)) {
+              executors(appId + "/" + execId).kill()
+              executors -= appId + "/" + execId
+            }
+            masterLock.synchronized {
+              master ! ExecutorStateChanged(appId, execId, ExecutorState.FAILED, None, None)
+            }
+          }
         }
       }
 
@@ -318,6 +329,7 @@ private[spark] class Worker(
 
   override def postStop() {
     executors.values.foreach(_.kill())
+    drivers.values.foreach(_.kill())
     webUi.stop()
     metricsSystem.stop()
   }
@@ -340,10 +352,11 @@ private[spark] object Worker {
     val conf = new SparkConf
     val systemName = "sparkWorker" + workerNumber.map(_.toString).getOrElse("")
     val actorName = "Worker"
+    val securityMgr = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port,
-      conf = conf)
+      conf = conf, securityManager = securityMgr)
     actorSystem.actorOf(Props(classOf[Worker], host, boundPort, webUiPort, cores, memory,
-      masterUrls, systemName, actorName,  workDir, conf), name = actorName)
+      masterUrls, systemName, actorName,  workDir, conf, securityMgr), name = actorName)
     (actorSystem, boundPort)
   }
 

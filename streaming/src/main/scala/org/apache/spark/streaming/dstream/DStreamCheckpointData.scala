@@ -19,7 +19,7 @@ package org.apache.spark.streaming.dstream
 
 import scala.collection.mutable.HashMap
 import scala.reflect.ClassTag
-import java.io.{ObjectInputStream, IOException}
+import java.io.{ObjectOutputStream, ObjectInputStream, IOException}
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.fs.FileSystem
 import org.apache.spark.Logging
@@ -114,11 +114,36 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   }
 
   override def toString() = {
-    "[\n" + currentCheckpointFiles.size + " checkpoint files \n" + currentCheckpointFiles.mkString("\n") + "\n]"
+    "[\n" + currentCheckpointFiles.size + " checkpoint files \n" +
+      currentCheckpointFiles.mkString("\n") + "\n]"
+  }
+
+  @throws(classOf[IOException])
+  private def writeObject(oos: ObjectOutputStream) {
+    logDebug(this.getClass().getSimpleName + ".writeObject used")
+    if (dstream.context.graph != null) {
+      dstream.context.graph.synchronized {
+        if (dstream.context.graph.checkpointInProgress) {
+          oos.defaultWriteObject()
+        } else {
+          val msg = "Object of " + this.getClass.getName + " is being serialized " +
+            " possibly as a part of closure of an RDD operation. This is because " +
+            " the DStream object is being referred to from within the closure. " +
+            " Please rewrite the RDD operation inside this DStream to avoid this. " +
+            " This has been enforced to avoid bloating of Spark tasks " +
+            " with unnecessary objects."
+          throw new java.io.NotSerializableException(msg)
+        }
+      }
+    } else {
+      throw new java.io.NotSerializableException(
+        "Graph is unexpectedly null when DStream is being serialized.")
+    }
   }
 
   @throws(classOf[IOException])
   private def readObject(ois: ObjectInputStream) {
+    logDebug(this.getClass().getSimpleName + ".readObject used")
     ois.defaultReadObject()
     timeToOldestCheckpointFileTime = new HashMap[Time, Time]
     timeToCheckpointFile = new HashMap[Time, String]

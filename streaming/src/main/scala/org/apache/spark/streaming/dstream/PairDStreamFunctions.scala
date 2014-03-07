@@ -18,20 +18,17 @@
 package org.apache.spark.streaming.dstream
 
 import org.apache.spark.streaming.StreamingContext._
-import org.apache.spark.streaming.dstream._
 
 import org.apache.spark.{Partitioner, HashPartitioner}
 import org.apache.spark.SparkContext._
-import org.apache.spark.rdd.{ClassTags, RDD, PairRDDFunctions}
-import org.apache.spark.storage.StorageLevel
+import org.apache.spark.rdd.RDD
 
 import scala.collection.mutable.ArrayBuffer
-import scala.reflect.{ClassTag, classTag}
+import scala.reflect.ClassTag
 
-import org.apache.hadoop.mapred.{JobConf, OutputFormat}
+import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat}
 import org.apache.hadoop.mapred.OutputFormat
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.conf.Configuration
 import org.apache.spark.streaming.{Time, Duration}
 
@@ -41,11 +38,12 @@ import org.apache.spark.streaming.{Time, Duration}
  * these functions.
  */
 class PairDStreamFunctions[K: ClassTag, V: ClassTag](self: DStream[(K,V)])
-extends Serializable {
+  extends Serializable {
 
   private[streaming] def ssc = self.ssc
 
-  private[streaming] def defaultPartitioner(numPartitions: Int = self.ssc.sc.defaultParallelism) = {
+  private[streaming] def defaultPartitioner(numPartitions: Int = self.ssc.sc.defaultParallelism)
+  = {
     new HashPartitioner(numPartitions)
   }
 
@@ -66,8 +64,8 @@ extends Serializable {
   }
 
   /**
-   * Return a new DStream by applying `groupByKey` on each RDD. The supplied [[org.apache.spark.Partitioner]]
-   * is used to control the partitioning of each RDD.
+   * Return a new DStream by applying `groupByKey` on each RDD. The supplied
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    */
   def groupByKey(partitioner: Partitioner): DStream[(K, Seq[V])] = {
     val createCombiner = (v: V) => ArrayBuffer[V](v)
@@ -97,8 +95,8 @@ extends Serializable {
 
   /**
    * Return a new DStream by applying `reduceByKey` to each RDD. The values for each key are
-   * merged using the supplied reduce function. [[org.apache.spark.Partitioner]] is used to control the
-   * partitioning of each RDD.
+   * merged using the supplied reduce function. org.apache.spark.Partitioner is used to control
+   * the partitioning of each RDD.
    */
   def reduceByKey(reduceFunc: (V, V) => V, partitioner: Partitioner): DStream[(K, V)] = {
     val cleanedReduceFunc = ssc.sc.clean(reduceFunc)
@@ -108,7 +106,7 @@ extends Serializable {
   /**
    * Combine elements of each key in DStream's RDDs using custom functions. This is similar to the
    * combineByKey for RDDs. Please refer to combineByKey in
-   * [[org.apache.spark.rdd.PairRDDFunctions]] for more information.
+   * org.apache.spark.rdd.PairRDDFunctions in the Spark core documentation for more information.
    */
   def combineByKey[C: ClassTag](
     createCombiner: V => C,
@@ -116,7 +114,8 @@ extends Serializable {
     mergeCombiner: (C, C) => C,
     partitioner: Partitioner,
     mapSideCombine: Boolean = true): DStream[(K, C)] = {
-    new ShuffledDStream[K, V, C](self, createCombiner, mergeValue, mergeCombiner, partitioner, mapSideCombine)
+    new ShuffledDStream[K, V, C](self, createCombiner, mergeValue, mergeCombiner, partitioner,
+      mapSideCombine)
   }
 
   /**
@@ -141,7 +140,8 @@ extends Serializable {
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
    */
-  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration): DStream[(K, Seq[V])] = {
+  def groupByKeyAndWindow(windowDuration: Duration, slideDuration: Duration): DStream[(K, Seq[V])] =
+  {
     groupByKeyAndWindow(windowDuration, slideDuration, defaultPartitioner())
   }
 
@@ -173,7 +173,8 @@ extends Serializable {
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
-   * @param partitioner    partitioner for controlling the partitioning of each RDD in the new DStream.
+   * @param partitioner    partitioner for controlling the partitioning of each RDD in the new
+   *                       DStream.
    */
   def groupByKeyAndWindow(
       windowDuration: Duration,
@@ -242,7 +243,8 @@ extends Serializable {
       slideDuration: Duration,
       numPartitions: Int
     ): DStream[(K, V)] = {
-    reduceByKeyAndWindow(reduceFunc, windowDuration, slideDuration, defaultPartitioner(numPartitions))
+    reduceByKeyAndWindow(reduceFunc, windowDuration, slideDuration,
+      defaultPartitioner(numPartitions))
   }
 
   /**
@@ -318,7 +320,8 @@ extends Serializable {
    * @param slideDuration  sliding interval of the window (i.e., the interval after which
    *                       the new DStream will generate RDDs); must be a multiple of this
    *                       DStream's batching interval
-   * @param partitioner    partitioner for controlling the partitioning of each RDD in the new DStream.
+   * @param partitioner    partitioner for controlling the partitioning of each RDD in the new
+   *                       DStream.
    * @param filterFunc     Optional function to filter expired key-value pairs;
    *                       only pairs that satisfy the function are retained
    */
@@ -373,10 +376,11 @@ extends Serializable {
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of the key.
-   * [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    * @param updateFunc State update function. If `this` function returns None, then
    *                   corresponding state key-value pair will be eliminated.
-   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new DStream.
+   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
+   *                    DStream.
    * @tparam S State type
    */
   def updateStateByKey[S: ClassTag](
@@ -392,13 +396,14 @@ extends Serializable {
   /**
    * Return a new "state" DStream where the state for each key is updated by applying
    * the given function on the previous state of the key and the new values of each key.
-   * [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    * @param updateFunc State update function. If `this` function returns None, then
    *                   corresponding state key-value pair will be eliminated. Note, that
    *                   this function may generate a different a tuple with a different key
    *                   than the input key. It is up to the developer to decide whether to
    *                   remember the partitioner despite the key being changed.
-   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new DStream.
+   * @param partitioner Partitioner for controlling the partitioning of each RDD in the new
+   *                    DStream
    * @param rememberPartitioner Whether to remember the paritioner object in the generated RDDs.
    * @tparam S State type
    */
@@ -441,13 +446,14 @@ extends Serializable {
    * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
    * Hash partitioning is used to generate the RDDs with `numPartitions` partitions.
    */
-  def cogroup[W: ClassTag](other: DStream[(K, W)], numPartitions: Int): DStream[(K, (Seq[V], Seq[W]))] = {
+  def cogroup[W: ClassTag](other: DStream[(K, W)], numPartitions: Int)
+  : DStream[(K, (Seq[V], Seq[W]))] = {
     cogroup(other, defaultPartitioner(numPartitions))
   }
 
   /**
    * Return a new DStream by applying 'cogroup' between RDDs of `this` DStream and `other` DStream.
-   * The supplied [[org.apache.spark.Partitioner]] is used to partition the generated RDDs.
+   * The supplied org.apache.spark.Partitioner is used to partition the generated RDDs.
    */
   def cogroup[W: ClassTag](
       other: DStream[(K, W)],
@@ -477,7 +483,7 @@ extends Serializable {
 
   /**
    * Return a new DStream by applying 'join' between RDDs of `this` DStream and `other` DStream.
-   * The supplied [[org.apache.spark.Partitioner]] is used to control the partitioning of each RDD.
+   * The supplied org.apache.spark.Partitioner is used to control the partitioning of each RDD.
    */
   def join[W: ClassTag](
       other: DStream[(K, W)],
@@ -512,7 +518,7 @@ extends Serializable {
 
   /**
    * Return a new DStream by applying 'left outer join' between RDDs of `this` DStream and
-   * `other` DStream. The supplied [[org.apache.spark.Partitioner]] is used to control
+   * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
    */
   def leftOuterJoin[W: ClassTag](
@@ -548,7 +554,7 @@ extends Serializable {
 
   /**
    * Return a new DStream by applying 'right outer join' between RDDs of `this` DStream and
-   * `other` DStream. The supplied [[org.apache.spark.Partitioner]] is used to control
+   * `other` DStream. The supplied org.apache.spark.Partitioner is used to control
    * the partitioning of each RDD.
    */
   def rightOuterJoin[W: ClassTag](
@@ -569,7 +575,8 @@ extends Serializable {
       prefix: String,
       suffix: String
     )(implicit fm: ClassTag[F]) {
-    saveAsHadoopFiles(prefix, suffix, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
+    saveAsHadoopFiles(prefix, suffix, getKeyClass, getValueClass,
+      fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**
@@ -583,7 +590,7 @@ extends Serializable {
       valueClass: Class[_],
       outputFormatClass: Class[_ <: OutputFormat[_, _]],
       conf: JobConf = new JobConf
-    ) {  
+    ) {
     val saveFunc = (rdd: RDD[(K, V)], time: Time) => {
       val file = rddToFileName(prefix, suffix, time)
       rdd.saveAsHadoopFile(file, keyClass, valueClass, outputFormatClass, conf)
@@ -599,7 +606,8 @@ extends Serializable {
       prefix: String,
       suffix: String
     )(implicit fm: ClassTag[F])  {
-    saveAsNewAPIHadoopFiles(prefix, suffix, getKeyClass, getValueClass, fm.runtimeClass.asInstanceOf[Class[F]])
+    saveAsNewAPIHadoopFiles(prefix, suffix, getKeyClass, getValueClass,
+      fm.runtimeClass.asInstanceOf[Class[F]])
   }
 
   /**

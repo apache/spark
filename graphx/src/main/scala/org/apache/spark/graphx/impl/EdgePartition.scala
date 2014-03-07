@@ -34,10 +34,10 @@ import org.apache.spark.graphx.util.collection.PrimitiveKeyOpenHashMap
  */
 private[graphx]
 class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) ED: ClassTag](
-    val srcIds: Array[VertexID],
-    val dstIds: Array[VertexID],
+    val srcIds: Array[VertexId],
+    val dstIds: Array[VertexId],
     val data: Array[ED],
-    val index: PrimitiveKeyOpenHashMap[VertexID, Int]) extends Serializable {
+    val index: PrimitiveKeyOpenHashMap[VertexId, Int]) extends Serializable {
 
   /**
    * Reverse all the edges in this partition.
@@ -118,8 +118,8 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    */
   def groupEdges(merge: (ED, ED) => ED): EdgePartition[ED] = {
     val builder = new EdgePartitionBuilder[ED]
-    var currSrcId: VertexID = null.asInstanceOf[VertexID]
-    var currDstId: VertexID = null.asInstanceOf[VertexID]
+    var currSrcId: VertexId = null.asInstanceOf[VertexId]
+    var currDstId: VertexId = null.asInstanceOf[VertexId]
     var currAttr: ED = null.asInstanceOf[ED]
     var i = 0
     while (i < size) {
@@ -153,7 +153,7 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    */
   def innerJoin[ED2: ClassTag, ED3: ClassTag]
       (other: EdgePartition[ED2])
-      (f: (VertexID, VertexID, ED, ED2) => ED3): EdgePartition[ED3] = {
+      (f: (VertexId, VertexId, ED, ED2) => ED3): EdgePartition[ED3] = {
     val builder = new EdgePartitionBuilder[ED3]
     var i = 0
     var j = 0
@@ -210,14 +210,14 @@ class EdgePartition[@specialized(Char, Int, Boolean, Byte, Long, Float, Double) 
    * iterator is generated using an index scan, so it is efficient at skipping edges that don't
    * match srcIdPred.
    */
-  def indexIterator(srcIdPred: VertexID => Boolean): Iterator[Edge[ED]] =
+  def indexIterator(srcIdPred: VertexId => Boolean): Iterator[Edge[ED]] =
     index.iterator.filter(kv => srcIdPred(kv._1)).flatMap(Function.tupled(clusterIterator))
 
   /**
    * Get an iterator over the cluster of edges in this partition with source vertex id `srcId`. The
    * cluster must start at position `index`.
    */
-  private def clusterIterator(srcId: VertexID, index: Int) = new Iterator[Edge[ED]] {
+  private def clusterIterator(srcId: VertexId, index: Int) = new Iterator[Edge[ED]] {
     private[this] val edge = new Edge[ED]
     private[this] var pos = index
 

@@ -17,27 +17,13 @@
 
 package org.apache.spark.mllib.clustering
 
-import scala.util.Random
 
 import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
-import org.apache.spark.SparkContext
-import org.apache.spark.SparkContext._
+import org.apache.spark.mllib.util.LocalSparkContext
 
-import org.jblas._
-
-class KMeansSuite extends FunSuite with BeforeAndAfterAll {
-  @transient private var sc: SparkContext = _
-
-  override def beforeAll() {
-    sc = new SparkContext("local", "test")
-  }
-
-  override def afterAll() {
-    sc.stop()
-    System.clearProperty("spark.driver.port")
-  }
+class KMeansSuite extends FunSuite with LocalSparkContext {
 
   val EPSILON = 1e-4
 

@@ -37,47 +37,56 @@ object ReceiverSupervisorStrategy {
 
   val defaultStrategy = OneForOneStrategy(maxNrOfRetries = 10, withinTimeRange =
     15 millis) {
-    case _: RuntimeException ⇒ Restart
-    case _: Exception ⇒ Escalate
+    case _: RuntimeException => Restart
+    case _: Exception => Escalate
   }
 }
 
 /**
  * A receiver trait to be mixed in with your Actor to gain access to
- * pushBlock API.
+ * the API for pushing received data into Spark Streaming for being processed.
  *
  * Find more details at: http://spark-project.org/docs/latest/streaming-custom-receivers.html
  * 
  * @example {{{
  *  class MyActor extends Actor with Receiver{
  *      def receive {
- *          case anything :String => pushBlock(anything)
+ *          case anything: String => pushBlock(anything)
  *      }
  *  }
- *  //Can be plugged in actorStream as follows
+ *
+ *  // Can be used with an actorStream as follows
  *  ssc.actorStream[String](Props(new MyActor),"MyActorReceiver")
  *
  * }}}
  *
- * @note An important point to note:
- *       Since Actor may exist outside the spark framework, It is thus user's responsibility
+ * @note Since Actor may exist outside the spark framework, It is thus user's responsibility
  *       to ensure the type safety, i.e parametrized type of push block and InputDStream
  *       should be same.
- *
  */
-trait Receiver { self: Actor ⇒
+trait Receiver {
+
+  self: Actor => // to ensure that this can be added to Actor classes only
+
+  /**
+   * Push an iterator received data into Spark Streaming for processing
+   */
   def pushBlock[T: ClassTag](iter: Iterator[T]) {
     context.parent ! Data(iter)
   }
 
+  /**
+   * Push a single item of received data into Spark Streaming for processing
+   */
   def pushBlock[T: ClassTag](data: T) {
     context.parent ! Data(data)
   }
-
 }
 
 /**
- * Statistics for querying the supervisor about state of workers
+ * Statistics for querying the supervisor about state of workers. Used in
+ * conjunction with `StreamingContext.actorStream` and
+ * [[org.apache.spark.streaming.receivers.Receiver]].
  */
 case class Statistics(numberOfMsgs: Int,
   numberOfWorkers: Int,
@@ -96,17 +105,15 @@ private[streaming] case class Data[T: ClassTag](data: T)
  * his own Actor to run as receiver for Spark Streaming input source.
  *
  * This starts a supervisor actor which starts workers and also provides
- *  [http://doc.akka.io/docs/akka/2.0.5/scala/fault-tolerance.html fault-tolerance].
+ * [http://doc.akka.io/docs/akka/snapshot/scala/fault-tolerance.html fault-tolerance].
  *
- *  Here's a way to start more supervisor/workers as its children.
+ * Here's a way to start more supervisor/workers as its children.
  *
  * @example {{{
  *  context.parent ! Props(new Supervisor)
  * }}} OR {{{
- *  context.parent ! Props(new Worker,"Worker")
+ *  context.parent ! Props(new Worker, "Worker")
  * }}}
- *
- *
  */
 private[streaming] class ActorReceiver[T: ClassTag](
   props: Props,
@@ -132,25 +139,25 @@ private[streaming] class ActorReceiver[T: ClassTag](
 
     def receive = {
 
-      case Data(iter: Iterator[_]) ⇒ pushBlock(iter.asInstanceOf[Iterator[T]])
+      case Data(iter: Iterator[_]) => pushBlock(iter.asInstanceOf[Iterator[T]])
 
-      case Data(msg) ⇒
+      case Data(msg) =>
         blocksGenerator += msg.asInstanceOf[T]
         n.incrementAndGet
 
-      case props: Props ⇒
+      case props: Props =>
         val worker = context.actorOf(props)
         logInfo("Started receiver worker at:" + worker.path)
         sender ! worker
 
-      case (props: Props, name: String) ⇒
+      case (props: Props, name: String) =>
         val worker = context.actorOf(props, name)
         logInfo("Started receiver worker at:" + worker.path)
         sender ! worker
 
       case _: PossiblyHarmful => hiccups.incrementAndGet()
 
-      case _: Statistics ⇒
+      case _: Statistics =>
         val workers = context.children
         sender ! Statistics(n.get, workers.size, hiccups.get, workers.mkString("\n"))
 

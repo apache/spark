@@ -82,7 +82,7 @@ object Analytics extends Logging {
 
         val pr = graph.pageRank(tol).vertices.cache()
 
-        println("GRAPHX: Total rank: " + pr.map(_._2).reduce(_+_))
+        println("GRAPHX: Total rank: " + pr.map(_._2).reduce(_ + _))
 
         if (!outFname.isEmpty) {
           logWarning("Saving pageranks of pages to " + outFname)

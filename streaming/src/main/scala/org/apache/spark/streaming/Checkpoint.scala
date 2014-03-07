@@ -42,11 +42,13 @@ class Checkpoint(@transient ssc: StreamingContext, val checkpointTime: Time)
   val checkpointDuration = ssc.checkpointDuration
   val pendingTimes = ssc.scheduler.getPendingTimes().toArray
   val delaySeconds = MetadataCleaner.getDelaySeconds(ssc.conf)
-  val sparkConf = ssc.conf
+  val sparkConfPairs = ssc.conf.getAll
 
-  // These should be unset when a checkpoint is deserialized,
-  // otherwise the SparkContext won't initialize correctly.
-  sparkConf.remove("spark.driver.host").remove("spark.driver.port")
+  def sparkConf = {
+    new SparkConf(false).setAll(sparkConfPairs)
+      .remove("spark.driver.host")
+      .remove("spark.driver.port")
+  }
 
   def validate() {
     assert(master != null, "Checkpoint.master is null")
@@ -126,7 +128,8 @@ class CheckpointWriter(
       while (attempts < MAX_ATTEMPTS && !stopped) {
         attempts += 1
         try {
-          logInfo("Saving checkpoint for time " + checkpointTime + " to file '" + checkpointFile + "'")
+          logInfo("Saving checkpoint for time " + checkpointTime + " to file '" + checkpointFile
+            + "'")
 
           // Write checkpoint to temp file
           fs.delete(tempFile, true)   // just in case it exists
@@ -165,11 +168,13 @@ class CheckpointWriter(
           return
         } catch {
           case ioe: IOException =>
-            logWarning("Error in attempt " + attempts + " of writing checkpoint to " + checkpointFile, ioe)
+            logWarning("Error in attempt " + attempts + " of writing checkpoint to "
+              + checkpointFile, ioe)
             reset()
         }
       }
-      logWarning("Could not write checkpoint for time " + checkpointTime + " to file " + checkpointFile + "'")
+      logWarning("Could not write checkpoint for time " + checkpointTime + " to file "
+        + checkpointFile + "'")
     }
   }
 
@@ -218,7 +223,8 @@ class CheckpointWriter(
 private[streaming]
 object CheckpointReader extends Logging {
 
-  def read(checkpointDir: String, conf: SparkConf, hadoopConf: Configuration): Option[Checkpoint] = {
+  def read(checkpointDir: String, conf: SparkConf, hadoopConf: Configuration): Option[Checkpoint] =
+  {
     val checkpointPath = new Path(checkpointDir)
     def fs = checkpointPath.getFileSystem(hadoopConf)
     

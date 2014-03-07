@@ -18,8 +18,8 @@
 package org.apache.spark.partial
 
 import org.apache.spark._
-import org.apache.spark.scheduler.JobListener
 import org.apache.spark.rdd.RDD
+import org.apache.spark.scheduler.JobListener
 
 /**
  * A JobListener for an approximate single-result action, such as count() or non-parallel reduce().
@@ -71,7 +71,7 @@ private[spark] class ApproximateActionListener[T, U, R](
     val finishTime = startTime + timeout
     while (true) {
       val time = System.currentTimeMillis()
-      if (failure != None) {
+      if (failure.isDefined) {
         throw failure.get
       } else if (finishedTasks == totalTasks) {
         return new PartialResult(evaluator.currentResult(), true)

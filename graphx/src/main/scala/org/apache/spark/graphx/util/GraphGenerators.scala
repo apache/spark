@@ -37,11 +37,7 @@ object GraphGenerators {
 
   val RMATa = 0.45
   val RMATb = 0.15
-  val RMATc = 0.15
   val RMATd = 0.25
-
-  // Right now it just generates a bunch of edges where
-  // the edge data is the weight (default 1)
   /**
    * Generate a graph whose vertex out degree is log normal.
    */
@@ -50,7 +46,7 @@ object GraphGenerators {
     val mu = 4
     val sigma = 1.3
 
-    val vertices: RDD[(VertexID, Int)] = sc.parallelize(0 until numVertices).map{
+    val vertices: RDD[(VertexId, Int)] = sc.parallelize(0 until numVertices).map{
       src => (src, sampleLogNormal(mu, sigma, numVertices))
     }
     val edges = vertices.flatMap { v =>
@@ -59,15 +55,20 @@ object GraphGenerators {
     Graph(vertices, edges, 0)
   }
 
-  def generateRandomEdges(src: Int, numEdges: Int, maxVertexID: Int): Array[Edge[Int]] = {
+  // Right now it just generates a bunch of edges where
+  // the edge data is the weight (default 1)
+  val RMATc = 0.15
+
+  def generateRandomEdges(src: Int, numEdges: Int, maxVertexId: Int): Array[Edge[Int]] = {
     val rand = new Random()
-    Array.fill(maxVertexID) { Edge[Int](src, rand.nextInt(maxVertexID), 1) }
+    Array.fill(maxVertexId) { Edge[Int](src, rand.nextInt(maxVertexId), 1) }
   }
 
   /**
-   * Randomly samples from a log normal distribution whose corresponding normal distribution has the
-   * the given mean and standard deviation. It uses the formula `X = exp(m+s*Z)` where `m`, `s` are
-   * the mean, standard deviation of the lognormal distribution and `Z ~ N(0, 1)`. In this function,
+   * Randomly samples from a log normal distribution whose corresponding normal distribution has
+   * the given mean and standard deviation. It uses the formula `X = exp(m+s*Z)` where `m`,
+   * `s` are the mean, standard deviation of the lognormal distribution and
+   * `Z ~ N(0, 1)`. In this function,
    * `m = e^(mu+sigma^2/2)` and `s = sqrt[(e^(sigma^2) - 1)(e^(2*mu+sigma^2))]`.
    *
    * @param mu the mean of the normal distribution
@@ -76,7 +77,7 @@ object GraphGenerators {
    */
   private def sampleLogNormal(mu: Double, sigma: Double, maxVal: Int): Int = {
     val rand = new Random()
-    val m = math.exp(mu+(sigma*sigma)/2.0)
+    val m = math.exp(mu + (sigma * sigma) / 2.0)
     val s = math.sqrt((math.exp(sigma*sigma) - 1) * math.exp(2*mu + sigma*sigma))
     // Z ~ N(0, 1)
     var X: Double = maxVal
@@ -169,9 +170,9 @@ object GraphGenerators {
       val newT = math.round(t.toFloat/2.0).toInt
       pickQuadrant(RMATa, RMATb, RMATc, RMATd) match {
         case 0 => chooseCell(x, y, newT)
-        case 1 => chooseCell(x+newT, y, newT)
-        case 2 => chooseCell(x, y+newT, newT)
-        case 3 => chooseCell(x+newT, y+newT, newT)
+        case 1 => chooseCell(x + newT, y, newT)
+        case 2 => chooseCell(x, y + newT, newT)
+        case 3 => chooseCell(x + newT, y + newT, newT)
       }
     }
   }
@@ -179,8 +180,8 @@ object GraphGenerators {
   // TODO(crankshaw) turn result into an enum (or case class for pattern matching}
   private def pickQuadrant(a: Double, b: Double, c: Double, d: Double): Int = {
     if (a + b + c + d != 1.0) {
-      throw new IllegalArgumentException(
-        "R-MAT probability parameters sum to " + (a+b+c+d) + ", should sum to 1.0")
+      throw new IllegalArgumentException("R-MAT probability parameters sum to " + (a + b + c + d)
+        + ", should sum to 1.0")
     }
     val rand = new Random()
     val result = rand.nextDouble()
@@ -206,14 +207,14 @@ object GraphGenerators {
    */
   def gridGraph(sc: SparkContext, rows: Int, cols: Int): Graph[(Int,Int), Double] = {
     // Convert row column address into vertex ids (row major order)
-    def sub2ind(r: Int, c: Int): VertexID = r * cols + c
+    def sub2ind(r: Int, c: Int): VertexId = r * cols + c
 
-    val vertices: RDD[(VertexID, (Int,Int))] =
+    val vertices: RDD[(VertexId, (Int,Int))] =
       sc.parallelize(0 until rows).flatMap( r => (0 until cols).map( c => (sub2ind(r,c), (r,c)) ) )
     val edges: RDD[Edge[Double]] =
       vertices.flatMap{ case (vid, (r,c)) =>
-        (if (r+1 < rows) { Seq( (sub2ind(r, c), sub2ind(r+1, c))) } else { Seq.empty }) ++
-        (if (c+1 < cols) { Seq( (sub2ind(r, c), sub2ind(r, c+1))) } else { Seq.empty })
+        (if (r + 1 < rows) { Seq( (sub2ind(r, c), sub2ind(r + 1, c))) } else { Seq.empty }) ++
+        (if (c + 1 < cols) { Seq( (sub2ind(r, c), sub2ind(r, c + 1))) } else { Seq.empty })
       }.map{ case (src, dst) => Edge(src, dst, 1.0) }
     Graph(vertices, edges)
   } // end of gridGraph
@@ -228,7 +229,7 @@ object GraphGenerators {
    * being the center vertex.
    */
   def starGraph(sc: SparkContext, nverts: Int): Graph[Int, Int] = {
-    val edges: RDD[(VertexID, VertexID)] = sc.parallelize(1 until nverts).map(vid => (vid, 0))
+    val edges: RDD[(VertexId, VertexId)] = sc.parallelize(1 until nverts).map(vid => (vid, 0))
     Graph.fromEdgeTuples(edges, 1)
   } // end of starGraph
 

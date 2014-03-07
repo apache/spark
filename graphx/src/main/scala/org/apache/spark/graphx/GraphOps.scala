@@ -18,11 +18,11 @@
 package org.apache.spark.graphx
 
 import scala.reflect.ClassTag
-
 import org.apache.spark.SparkContext._
 import org.apache.spark.SparkException
 import org.apache.spark.graphx.lib._
 import org.apache.spark.rdd.RDD
+import scala.util.Random
 
 /**
  * Contains additional functionality for [[Graph]]. All operations are expressed in terms of the
@@ -80,19 +80,19 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @return the set of neighboring ids for each vertex
    */
-  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexID]] = {
+  def collectNeighborIds(edgeDirection: EdgeDirection): VertexRDD[Array[VertexId]] = {
     val nbrs =
       if (edgeDirection == EdgeDirection.Either) {
-        graph.mapReduceTriplets[Array[VertexID]](
+        graph.mapReduceTriplets[Array[VertexId]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId)), (et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _
         )
       } else if (edgeDirection == EdgeDirection.Out) {
-        graph.mapReduceTriplets[Array[VertexID]](
+        graph.mapReduceTriplets[Array[VertexId]](
           mapFunc = et => Iterator((et.srcId, Array(et.dstId))),
           reduceFunc = _ ++ _)
       } else if (edgeDirection == EdgeDirection.In) {
-        graph.mapReduceTriplets[Array[VertexID]](
+        graph.mapReduceTriplets[Array[VertexId]](
           mapFunc = et => Iterator((et.dstId, Array(et.srcId))),
           reduceFunc = _ ++ _)
       } else {
@@ -100,7 +100,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
           "direction. (EdgeDirection.Both is not supported; use EdgeDirection.Either instead.)")
       }
     graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
-      nbrsOpt.getOrElse(Array.empty[VertexID])
+      nbrsOpt.getOrElse(Array.empty[VertexId])
     }
   } // end of collectNeighborIds
 
@@ -116,8 +116,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @return the vertex set of neighboring vertex attributes for each vertex
    */
-  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexID, VD)]] = {
-    val nbrs = graph.mapReduceTriplets[Array[(VertexID,VD)]](
+  def collectNeighbors(edgeDirection: EdgeDirection): VertexRDD[Array[(VertexId, VD)]] = {
+    val nbrs = graph.mapReduceTriplets[Array[(VertexId,VD)]](
       edge => {
         val msgToSrc = (edge.srcId, Array((edge.dstId, edge.dstAttr)))
         val msgToDst = (edge.dstId, Array((edge.srcId, edge.srcAttr)))
@@ -133,10 +133,46 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       (a, b) => a ++ b)
 
     graph.vertices.leftZipJoin(nbrs) { (vid, vdata, nbrsOpt) =>
-      nbrsOpt.getOrElse(Array.empty[(VertexID, VD)])
+      nbrsOpt.getOrElse(Array.empty[(VertexId, VD)])
     }
   } // end of collectNeighbor
 
+  /**
+   * Returns an RDD that contains for each vertex v its local edges,
+   * i.e., the edges that are incident on v, in the user-specified direction.
+   * Warning: note that singleton vertices, those with no edges in the given
+   * direction will not be part of the return value.
+   *
+   * @note This function could be highly inefficient on power-law
+   * graphs where high degree vertices may force a large amount of
+   * information to be collected to a single location.
+   *
+   * @param edgeDirection the direction along which to collect
+   * the local edges of vertices
+   *
+   * @return the local edges for each vertex
+   */
+  def collectEdges(edgeDirection: EdgeDirection): VertexRDD[Array[Edge[ED]]] = {
+    edgeDirection match {
+      case EdgeDirection.Either =>
+        graph.mapReduceTriplets[Array[Edge[ED]]](
+          edge => Iterator((edge.srcId, Array(new Edge(edge.srcId, edge.dstId, edge.attr))),
+                           (edge.dstId, Array(new Edge(edge.srcId, edge.dstId, edge.attr)))),
+          (a, b) => a ++ b)
+      case EdgeDirection.In =>
+        graph.mapReduceTriplets[Array[Edge[ED]]](
+          edge => Iterator((edge.dstId, Array(new Edge(edge.srcId, edge.dstId, edge.attr)))),
+          (a, b) => a ++ b)
+      case EdgeDirection.Out =>
+        graph.mapReduceTriplets[Array[Edge[ED]]](
+          edge => Iterator((edge.srcId, Array(new Edge(edge.srcId, edge.dstId, edge.attr)))),
+          (a, b) => a ++ b)
+      case EdgeDirection.Both =>
+        throw new SparkException("collectEdges does not support EdgeDirection.Both. Use" +
+          "EdgeDirection.Either instead.")
+    }
+  }
+ 
   /**
    * Join the vertices with an RDD and then apply a function from the
    * the vertex and RDD entry to a new vertex value.  The input table
@@ -164,9 +200,9 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    * }}}
    *
    */
-  def joinVertices[U: ClassTag](table: RDD[(VertexID, U)])(mapFunc: (VertexID, VD, U) => VD)
+  def joinVertices[U: ClassTag](table: RDD[(VertexId, U)])(mapFunc: (VertexId, VD, U) => VD)
     : Graph[VD, ED] = {
-    val uf = (id: VertexID, data: VD, o: Option[U]) => {
+    val uf = (id: VertexId, data: VD, o: Option[U]) => {
       o match {
         case Some(u) => mapFunc(id, data, u)
         case None => data
@@ -197,7 +233,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *     val degrees: VertexRDD[Int] = graph.outDegrees
    *     graph.outerJoinVertices(degrees) {(vid, data, deg) => deg.getOrElse(0)}
    *   },
-   *   vpred = (vid: VertexID, deg:Int) => deg > 0
+   *   vpred = (vid: VertexId, deg:Int) => deg > 0
    * )
    * }}}
    *
@@ -205,8 +241,29 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
   def filter[VD2: ClassTag, ED2: ClassTag](
       preprocess: Graph[VD, ED] => Graph[VD2, ED2],
       epred: (EdgeTriplet[VD2, ED2]) => Boolean = (x: EdgeTriplet[VD2, ED2]) => true,
-      vpred: (VertexID, VD2) => Boolean = (v:VertexID, d:VD2) => true): Graph[VD, ED] = {
+      vpred: (VertexId, VD2) => Boolean = (v:VertexId, d:VD2) => true): Graph[VD, ED] = {
     graph.mask(preprocess(graph).subgraph(epred, vpred))
+  }
+
+  /**
+   * Picks a random vertex from the graph and returns its ID.
+   */
+  def pickRandomVertex(): VertexId = {
+    val probability = 50 / graph.numVertices
+    var found = false
+    var retVal: VertexId = null.asInstanceOf[VertexId]
+    while (!found) {
+      val selectedVertices = graph.vertices.flatMap { vidVvals =>
+        if (Random.nextDouble() < probability) { Some(vidVvals._1) }
+        else { None }
+      }
+      if (selectedVertices.count > 1) {
+        found = true
+        val collectedVertices = selectedVertices.collect()
+        retVal = collectedVertices(Random.nextInt(collectedVertices.size))
+      }
+    }
+   retVal
   }
 
   /**
@@ -260,8 +317,8 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
       initialMsg: A,
       maxIterations: Int = Int.MaxValue,
       activeDirection: EdgeDirection = EdgeDirection.Either)(
-      vprog: (VertexID, VD, A) => VD,
-      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexID,A)],
+      vprog: (VertexId, VD, A) => VD,
+      sendMsg: EdgeTriplet[VD, ED] => Iterator[(VertexId,A)],
       mergeMsg: (A, A) => A)
     : Graph[VD, ED] = {
     Pregel(graph, initialMsg, maxIterations, activeDirection)(vprog, sendMsg, mergeMsg)
@@ -293,7 +350,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @see [[org.apache.spark.graphx.lib.ConnectedComponents$#run]]
    */
-  def connectedComponents(): Graph[VertexID, ED] = {
+  def connectedComponents(): Graph[VertexId, ED] = {
     ConnectedComponents.run(graph)
   }
 
@@ -312,7 +369,7 @@ class GraphOps[VD: ClassTag, ED: ClassTag](graph: Graph[VD, ED]) extends Seriali
    *
    * @see [[org.apache.spark.graphx.lib.StronglyConnectedComponents$#run]]
    */
-  def stronglyConnectedComponents(numIter: Int): Graph[VertexID, ED] = {
+  def stronglyConnectedComponents(numIter: Int): Graph[VertexId, ED] = {
     StronglyConnectedComponents.run(graph, numIter)
   }
 } // end of GraphOps

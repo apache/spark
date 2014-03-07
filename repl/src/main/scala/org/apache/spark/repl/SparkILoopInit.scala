@@ -1,3 +1,5 @@
+// scalastyle:off
+
 /* NSC -- new Scala compiler
  * Copyright 2005-2013 LAMP/EPFL
  * @author Paul Phillips
@@ -24,7 +26,7 @@ trait SparkILoopInit {
       ____              __
      / __/__  ___ _____/ /__
     _\ \/ _ \/ _ `/ __/  '_/
-   /___/ .__/\_,_/_/ /_/\_\   version 0.9.0-SNAPSHOT
+   /___/ .__/\_,_/_/ /_/\_\   version 1.0.0-SNAPSHOT
       /_/
 """)
     import Properties._

@@ -32,7 +32,7 @@ import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
 import org.apache.spark.util.Utils
 
 /**
- * Spark executor used with Mesos and the standalone scheduler.
+ * Spark executor used with Mesos, YARN, and the standalone scheduler.
  */
 private[spark] class Executor(
     executorId: String,
@@ -68,11 +68,6 @@ private[spark] class Executor(
   {
     conf.set("spark.local.dir", getYarnLocalDirs())
   }
-
-  // Create our ClassLoader and set it on this thread
-  private val urlClassLoader = createClassLoader()
-  private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
-  Thread.currentThread.setContextClassLoader(replClassLoader)
 
   if (!isLocal) {
     // Setup an uncaught exception handler for non-local mode.
@@ -116,6 +111,12 @@ private[spark] class Executor(
       SparkEnv.get
     }
   }
+
+  // Create our ClassLoader and set it on this thread
+  // do this after SparkEnv creation so can access the SecurityManager
+  private val urlClassLoader = createClassLoader()
+  private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
+  Thread.currentThread.setContextClassLoader(replClassLoader)
 
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
@@ -205,7 +206,7 @@ private[spark] class Executor(
         }
 
         attemptedTask = Some(task)
-        logDebug("Task " + taskId +"'s epoch is " + task.epoch)
+        logDebug("Task " + taskId + "'s epoch is " + task.epoch)
         env.mapOutputTracker.updateEpoch(task.epoch)
 
         // Run the actual task and measure its runtime.
@@ -233,7 +234,8 @@ private[spark] class Executor(
 
         val accumUpdates = Accumulators.values
 
-        val directResult = new DirectTaskResult(valueBytes, accumUpdates, task.metrics.getOrElse(null))
+        val directResult = new DirectTaskResult(valueBytes, accumUpdates,
+          task.metrics.getOrElse(null))
         val serializedDirectResult = ser.serialize(directResult)
         logInfo("Serialized size of result for " + taskId + " is " + serializedDirectResult.limit)
         val serializedResult = {
@@ -337,12 +339,12 @@ private[spark] class Executor(
       // Fetch missing dependencies
       for ((name, timestamp) <- newFiles if currentFiles.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
         currentFiles(name) = timestamp
       }
       for ((name, timestamp) <- newJars if currentJars.getOrElse(name, -1L) < timestamp) {
         logInfo("Fetching " + name + " with timestamp " + timestamp)
-        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf)
+        Utils.fetchFile(name, new File(SparkFiles.getRootDirectory), conf, env.securityManager)
         currentJars(name) = timestamp
         // Add it to our class loader
         val localName = name.split("/").last

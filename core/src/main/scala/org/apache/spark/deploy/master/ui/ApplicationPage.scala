@@ -17,12 +17,14 @@
 
 package org.apache.spark.deploy.master.ui
 
+import javax.servlet.http.HttpServletRequest
+
 import scala.concurrent.Await
 import scala.xml.Node
 
 import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
-import net.liftweb.json.JsonAST.JValue
+import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
@@ -67,7 +69,7 @@ private[spark] class ApplicationPage(parent: MasterWebUI) {
               <li><strong>User:</strong> {app.desc.user}</li>
               <li><strong>Cores:</strong>
                 {
-                if (app.desc.maxCores == None) {
+                if (app.desc.maxCores.isEmpty) {
                   "Unlimited (%s granted)".format(app.coresGranted)
                 } else {
                   "%s (%s granted, %s left)".format(

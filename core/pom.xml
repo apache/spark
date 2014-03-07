@@ -21,7 +21,7 @@
     <parent>
         <groupId>org.apache.spark</groupId>
         <artifactId>spark-parent</artifactId>
-        <version>0.9.0-incubating-SNAPSHOT</version>
+        <version>1.0.0-SNAPSHOT</version>
         <relativePath>../pom.xml</relativePath>
     </parent>
 
@@ -29,7 +29,21 @@
     <artifactId>spark-core_2.10</artifactId>
     <packaging>jar</packaging>
     <name>Spark Project Core</name>
-    <url>http://spark.incubator.apache.org/</url>
+    <url>http://spark.apache.org/</url>
+
+    <!-- SPARK-1121: SPARK-1121: Adds an explicit dependency on Avro to work around
+         a Hadoop 0.23.X issue -->
+    <profiles>
+      <profile>
+        <id>yarn-alpha</id>
+        <dependencies>
+           <dependency>
+             <groupId>org.apache.avro</groupId>
+             <artifactId>avro</artifactId>
+           </dependency>
+        </dependencies>
+      </profile>
+    </profiles>
 
     <dependencies>
         <dependency>
@@ -39,18 +53,28 @@
         <dependency>
             <groupId>net.java.dev.jets3t</groupId>
             <artifactId>jets3t</artifactId>
+            <exclusions>
+                <exclusion>
+                    <groupId>commons-logging</groupId>
+                    <artifactId>commons-logging</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro</artifactId>
+            <groupId>org.apache.curator</groupId>
+            <artifactId>curator-recipes</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.apache.avro</groupId>
-            <artifactId>avro-ipc</artifactId>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-plus</artifactId>
         </dependency>
         <dependency>
-            <groupId>org.apache.zookeeper</groupId>
-            <artifactId>zookeeper</artifactId>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.eclipse.jetty</groupId>
+            <artifactId>jetty-util</artifactId>
         </dependency>
         <dependency>
             <groupId>org.eclipse.jetty</groupId>
@@ -67,6 +91,22 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jul-to-slf4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>jcl-over-slf4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>log4j</groupId>
+            <artifactId>log4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-log4j12</artifactId>
         </dependency>
         <dependency>
             <groupId>com.ning</groupId>
@@ -91,6 +131,10 @@
             <version>0.3.1</version>
         </dependency>
         <dependency>
+            <groupId>commons-net</groupId>
+            <artifactId>commons-net</artifactId>
+        </dependency>
+        <dependency>
             <groupId>${akka.group}</groupId>
             <artifactId>akka-remote_${scala.binary.version}</artifactId>
         </dependency>
@@ -108,8 +152,18 @@
             <artifactId>scala-library</artifactId>
         </dependency>
         <dependency>
-            <groupId>net.liftweb</groupId>
-            <artifactId>lift-json_${scala.binary.version}</artifactId>
+            <groupId>org.json4s</groupId>
+            <artifactId>json4s-jackson_${scala.binary.version}</artifactId>
+            <version>3.2.6</version>
+            <!-- see also exclusion for lift-json; this is necessary since it depends on
+                 scala-library and scalap 2.10.0, but we use 2.10.3, and only override
+                 scala-library -->
+            <exclusions>
+              <exclusion>
+                <groupId>org.scala-lang</groupId>
+                <artifactId>scalap</artifactId>
+              </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>it.unimi.dsi</groupId>
@@ -126,10 +180,6 @@
         <dependency>
             <groupId>io.netty</groupId>
             <artifactId>netty-all</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>log4j</groupId>
-            <artifactId>log4j</artifactId>
         </dependency>
         <dependency>
             <groupId>com.clearspring.analytics</groupId>
@@ -190,11 +240,6 @@
             <artifactId>junit-interface</artifactId>
             <scope>test</scope>
         </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-log4j12</artifactId>
-            <scope>test</scope>
-        </dependency>
     </dependencies>
     <build>
         <outputDirectory>target/scala-${scala.binary.version}/classes</outputDirectory>
@@ -211,7 +256,7 @@
                         </goals>
                         <configuration>
                             <exportAntProperties>true</exportAntProperties>
-                            <tasks>
+                            <target>
                                 <property name="spark.classpath" refid="maven.test.classpath" />
                                 <property environment="env" />
                                 <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">
@@ -224,7 +269,7 @@
                                         </not>
                                     </condition>
                                 </fail>
-                            </tasks>
+                            </target>
                         </configuration>
                     </execution>
                 </executions>

@@ -17,16 +17,15 @@
 
 package org.apache.spark
 
-import network.ConnectionManagerId
 import org.scalatest.BeforeAndAfter
-import org.scalatest.concurrent.Timeouts._
 import org.scalatest.FunSuite
+import org.scalatest.concurrent.Timeouts._
 import org.scalatest.matchers.ShouldMatchers
-import org.scalatest.time.{Span, Millis}
+import org.scalatest.time.{Millis, Span}
 
-import SparkContext._
+import org.apache.spark.SparkContext._
+import org.apache.spark.network.ConnectionManagerId
 import org.apache.spark.storage.{BlockManagerWorker, GetBlock, RDDBlockId, StorageLevel}
-
 
 class NotSerializableClass
 class NotSerializableExn(val notSer: NotSerializableClass) extends Throwable() {}
@@ -123,6 +122,23 @@ class DistributedSuite extends FunSuite with ShouldMatchers with BeforeAndAfter
     }
     assert(thrown.getClass === classOf[SparkException])
     assert(thrown.getMessage.contains("failed 4 times"))
+  }
+
+  test("repeatedly failing task that crashes JVM") {
+    // Ensures that if a task fails in a way that crashes the JVM, the job eventually fails rather
+    // than hanging due to retrying the failed task infinitely many times (eventually the
+    // standalone scheduler will remove the application, causing the job to hang waiting to
+    // reconnect to the master).
+    sc = new SparkContext(clusterUrl, "test")
+    failAfter(Span(100000, Millis)) {
+      val thrown = intercept[SparkException] {
+        // One of the tasks always fails.
+        sc.parallelize(1 to 10, 2).foreach { x => if (x == 1) System.exit(42) }
+      }
+      assert(thrown.getClass === classOf[SparkException])
+      System.out.println(thrown.getMessage)
+      assert(thrown.getMessage.contains("failed 4 times"))
+    }
   }
 
   test("caching") {
