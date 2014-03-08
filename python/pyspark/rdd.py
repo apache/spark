@@ -321,10 +321,10 @@ class RDD(object):
 
     def intersection(self, other):
         """
-        Return the intersection of this RDD and another one.
-
-        Note: The output will not contain any duplicate elements, even if the
-        input RDDs did.
+        Return the intersection of this RDD and another one. The output will not 
+        contain any duplicate elements, even if the input RDDs did.
+        
+        Note that this method performs a shuffle internally.
 
         >>> rdd1 = sc.parallelize([1, 10, 2, 3, 4, 5])
         >>> rdd2 = sc.parallelize([1, 6, 2, 3, 7, 8])

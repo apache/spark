@@ -110,6 +110,8 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   /**
    * Return the intersection of this RDD and another one. The output will not contain any duplicate
    * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
    */
   def intersection(other: JavaRDD[T]): JavaRDD[T] = wrapRDD(rdd.intersection(other.rdd))
 
