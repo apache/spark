@@ -126,6 +126,16 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
   def union(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.union(other.rdd))
 
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   */
+  def intersection(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
+    new JavaPairRDD[K, V](rdd.intersection(other.rdd))
+
+
   // first() has to be overridden here so that the generated method has the signature
   // 'public scala.Tuple2 first()'; if the trait's definition is used,
   // then the method has the signature 'public java.lang.Object first()',
