@@ -17,6 +17,8 @@
 
 package org.apache.spark.rdd
 
+import java.text.SimpleDateFormat
+import java.util.Date
 import java.io.EOFException
 import scala.collection.immutable.Map
 
@@ -27,12 +29,16 @@ import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
 import org.apache.hadoop.mapred.RecordReader
 import org.apache.hadoop.mapred.Reporter
+import org.apache.hadoop.mapred.JobID
+import org.apache.hadoop.mapred.TaskAttemptID
+import org.apache.hadoop.mapred.TaskID
 import org.apache.hadoop.util.ReflectionUtils
 
 import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.NextIterator
+
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -111,6 +117,9 @@ class HadoopRDD[K, V](
 
   protected val inputFormatCacheKey = "rdd_%d_input_format".format(id)
 
+  //used to build JT ID
+  protected val createTime = new Date()
+
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
   protected def getJobConf(): JobConf = {
     val conf: Configuration = broadcastedConf.value.value
@@ -165,12 +174,29 @@ class HadoopRDD[K, V](
 
   override def compute(theSplit: Partition, context: TaskContext) = {
     val iter = new NextIterator[(K, V)] {
+
+      private def localizeConfiguration(conf: JobConf) {
+        //generate job id
+        val stageId = context.stageId
+        val dummyJobTrackerID = new SimpleDateFormat("yyyyMMddHHmm").format(createTime)
+        val jobId = new JobID(dummyJobTrackerID, stageId)
+        val splitID = theSplit.index
+        val attemptId = (context.attemptId % Int.MaxValue).toInt
+        val taId = new TaskAttemptID(new TaskID(jobId, true, splitID), attemptId)
+
+        conf.set("mapred.tip.id", taId.getTaskID.toString)
+        conf.set("mapred.task.id", taId.toString)
+        conf.setBoolean("mapred.task.is.map", true)
+        conf.setInt("mapred.task.partition", splitID)
+        conf.set("mapred.job.id", jobId.toString)
+      }
+
       val split = theSplit.asInstanceOf[HadoopPartition]
       logInfo("Input split: " + split.inputSplit)
       var reader: RecordReader[K, V] = null
-
       val jobConf = getJobConf()
       val inputFormat = getInputFormat(jobConf)
+      localizeConfiguration(jobConf)
       reader = inputFormat.getRecordReader(split.inputSplit.value, jobConf, Reporter.NULL)
 
       // Register an on-task-completion callback to close the input stream.

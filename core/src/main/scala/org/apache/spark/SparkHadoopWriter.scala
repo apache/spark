@@ -181,7 +181,7 @@ private[apache]
 object SparkHadoopWriter {
   def createJobID(time: Date, id: Int): JobID = {
     val formatter = new SimpleDateFormat("yyyyMMddHHmm")
-    val jobtrackerID = formatter.format(new Date())
+    val jobtrackerID = formatter.format(time)
     new JobID(jobtrackerID, id)
   }
   
