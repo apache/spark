@@ -113,8 +113,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    * Add an element to the set. This one differs from add in that it doesn't trigger rehashing.
    * The caller is responsible for calling rehashIfNeeded.
    *
-   * Use (retval & POSITION_MASK) to get the actual position, and
-   * (retval & NONEXISTENCE_MASK) != 0 for prior existence.
+   * Use (retval & _mask) to get the actual position, and
+   * (retval & NONEXISTENCE_MASK) == 0 for prior existence.
    *
    * @return The position where the key is placed, plus the highest order bit is set if the key
    *         exists previously.
