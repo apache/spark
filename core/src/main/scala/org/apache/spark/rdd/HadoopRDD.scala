@@ -117,7 +117,7 @@ class HadoopRDD[K, V](
 
   protected val inputFormatCacheKey = "rdd_%d_input_format".format(id)
 
-  //used to build JT ID
+  // used to build JT ID
   protected val createTime = new Date()
 
   // Returns a JobConf that will be used on slaves to obtain input splits for Hadoop reads.
