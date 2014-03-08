@@ -662,4 +662,18 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
       assert(store.getSingle("a1") == None, "a1 should not be in store")
     }
   }
+
+  test("SPARK-1194 regression: fix the same-RDD rule for cache replacement") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf, securityMgr)
+    store.putSingle(rdd(0, 0), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
+    store.putSingle(rdd(1, 0), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
+    // Access rdd_1_0 to ensure it's not least recently used.
+    assert(store.getSingle(rdd(1, 0)).isDefined, "rdd_1_0 was not in store")
+    // According to the same-RDD rule, rdd_1_0 should be replaced here.
+    store.putSingle(rdd(0, 1), new Array[Byte](400), StorageLevel.MEMORY_ONLY)
+    // rdd_1_0 should have been replaced, even it's not least recently used.
+    assert(store.memoryStore.contains(rdd(0, 0)), "rdd_0_0 was not in store")
+    assert(store.memoryStore.contains(rdd(0, 1)), "rdd_0_1 was not in store")
+    assert(!store.memoryStore.contains(rdd(1, 0)), "rdd_1_0 was in store")
+  }
 }
