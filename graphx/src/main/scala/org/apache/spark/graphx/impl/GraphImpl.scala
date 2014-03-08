@@ -391,14 +391,18 @@ object GraphImpl {
       partitioner: Partitioner): RDD[(VertexId, Int)] = {
     new ShuffledRDD[VertexId, Int, (VertexId, Int)](
       edges.collectVertexIds.mapPartitions { vids =>
-        val present = new OpenHashSet[VertexId](vids.size)
+        val present = new OpenHashSet[VertexId]()
         vids.filter{ vid => 
           // This is a bit ugly but we can't just call add since add is of type unit
-          val isPresent = ((present.addWithoutResize(vid) & OpenHashSet.NONEXISTENCE_MASK) != 0)
-          present.rehashIfNeeded(vid)
-          isPresent
+          val isPresent = ((present.addWithoutResize(vid) & OpenHashSet.NONEXISTENCE_MASK) == 0)
+          if (!isPresent) {
+            present.rehashIfNeeded(vid)
+            true
+          } else {
+            false
+          }
         }.map(vid => (vid, 0))
-      },
+       },
       partitioner)
       .setSerializer(classOf[VertexIdMsgSerializer].getName)
   }
