@@ -423,7 +423,7 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
    * Return the key-value pairs in this RDD to the master as a Map.
    */
   def collectAsMap(): Map[K, V] = {
-    val data = self.toArray()
+    val data = self.collect()
     val map = new mutable.HashMap[K, V]
     map.sizeHint(data.length)
     data.foreach { case (k, v) => map.put(k, v) }

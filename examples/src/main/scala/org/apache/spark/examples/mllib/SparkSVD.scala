@@ -54,6 +54,6 @@ object SparkSVD {
     val s = decomposed.S.data
     val v = decomposed.V.data
 
-    println("singular values = " + s.toArray.mkString)
+    println("singular values = " + s.collect().mkString)
   }
 }
