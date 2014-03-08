@@ -19,8 +19,8 @@ package org.apache.spark.deploy.worker.ui
 
 import java.io.File
 import javax.servlet.http.HttpServletRequest
-
-import org.eclipse.jetty.server.{Handler, Server}
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
@@ -33,7 +33,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[Int] = None)
-  extends Logging {
+    extends Logging {
   val timeout = AkkaUtils.askTimeout(worker.conf)
   val host = Utils.localHostName()
   val port = requestedPort.getOrElse(
@@ -46,17 +46,21 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 
   val metricsHandlers = worker.metricsSystem.getServletHandlers
 
-  val handlers = metricsHandlers ++ Array[(String, Handler)](
-    ("/static", createStaticHandler(WorkerWebUI.STATIC_RESOURCE_DIR)),
-    ("/log", (request: HttpServletRequest) => log(request)),
-    ("/logPage", (request: HttpServletRequest) => logPage(request)),
-    ("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
-    ("*", (request: HttpServletRequest) => indexPage.render(request))
+  val handlers = metricsHandlers ++ Seq[ServletContextHandler](
+    createStaticHandler(WorkerWebUI.STATIC_RESOURCE_BASE, "/static/*"),
+    createServletHandler("/log", createServlet((request: HttpServletRequest) => log(request),
+      worker.securityMgr)),
+    createServletHandler("/logPage", createServlet((request: HttpServletRequest) => logPage
+      (request), worker.securityMgr)),
+    createServletHandler("/json", createServlet((request: HttpServletRequest) => indexPage
+      .renderJson(request), worker.securityMgr)),
+    createServletHandler("*", createServlet((request: HttpServletRequest) => indexPage.render
+      (request), worker.securityMgr))
   )
 
   def start() {
     try {
-      val (srv, bPort) = JettyUtils.startJettyServer(host, port, handlers)
+      val (srv, bPort) = JettyUtils.startJettyServer(host, port, handlers, worker.conf)
       server = Some(srv)
       boundPort = Some(bPort)
       logInfo("Started Worker web UI at http://%s:%d".format(host, bPort))
@@ -198,6 +202,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 }
 
 private[spark] object WorkerWebUI {
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+  val STATIC_RESOURCE_BASE = "org/apache/spark/ui"
   val DEFAULT_PORT="8081"
 }
