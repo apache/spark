@@ -17,6 +17,8 @@
 
 package org.apache.spark.graphx.impl
 
+import java.util.HashSet
+
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.util.collection.PrimitiveVector
@@ -389,8 +391,10 @@ object GraphImpl {
       edges: EdgeRDD[_],
       partitioner: Partitioner): RDD[(VertexId, Int)] = {
     new ShuffledRDD[VertexId, Int, (VertexId, Int)](
-      edges.collectVertexIds.mapPartitions(
-        (vids => vids.map(vid => (vid, 0)).toStream.distinct.toIterator)),
+      edges.collectVertexIds.mapPartitions { vids =>
+        val present = new HashSet[VertexId]()
+        vids.filter(vid => present.add(vid)).map(vid => (vid, 0))
+      }),
         partitioner)
       .setSerializer(classOf[VertexIdMsgSerializer].getName)
   }
