@@ -15,13 +15,11 @@
  * limitations under the License.
  */
 
-package org.apache.spark.graphx.util
+package org.apache.spark.util
 
 import java.io.{ByteArrayInputStream, ByteArrayOutputStream}
 
 import scala.collection.mutable.HashSet
-
-import org.apache.spark.util.Utils
 
 import org.objectweb.asm.{ClassReader, ClassVisitor, MethodVisitor}
 import org.objectweb.asm.Opcodes._
@@ -31,7 +29,7 @@ import org.objectweb.asm.Opcodes._
  * Includes an utility function to test whether a function accesses a specific attribute
  * of an object.
  */
-private[graphx] object BytecodeUtils {
+private[spark] object BytecodeUtils {
 
   /**
    * Test whether the given closure invokes the specified method in the specified class.

@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.graphx.util
+package org.apache.spark.util
 
 import org.scalatest.FunSuite
 
