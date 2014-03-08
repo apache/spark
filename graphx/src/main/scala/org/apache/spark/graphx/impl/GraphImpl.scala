@@ -394,8 +394,8 @@ object GraphImpl {
       edges.collectVertexIds.mapPartitions { vids =>
         val present = new HashSet[VertexId]()
         vids.filter(vid => present.add(vid)).map(vid => (vid, 0))
-      }),
-        partitioner)
+      },
+      partitioner)
       .setSerializer(classOf[VertexIdMsgSerializer].getName)
   }
 } // end of object GraphImpl
