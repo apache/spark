@@ -73,12 +73,12 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * Return a new RDD by applying a function to each partition of this RDD, while tracking the index
    * of the original partition.
    */
-  def mapPartitionsWithIndex[R](f: MapPartitionsWithIndexFunction[T, R],
+  def mapPartitionsWithIndex[R: ClassTag](f: MapPartitionsWithIndexFunction[T, R],
     preservesPartitioning: Boolean = false): JavaRDD[R] = {
     import scala.collection.JavaConverters._
-    def fn = (a: Int, b: Iterator[T]) => f.apply(a, asJavaIterator(b)).asScala
-    val newRdd = rdd.mapPartitionsWithIndex(fn, preservesPartitioning)(f.elementType())
-    new JavaRDD(newRdd)(f.elementType())
+    def fn = (a: Int, b: Iterator[T]) => f.call(a, asJavaIterator(b)).asScala
+    val newRdd = rdd.mapPartitionsWithIndex(fn, preservesPartitioning)
+    new JavaRDD(newRdd)(fakeClassTag)
   }
 
   /**

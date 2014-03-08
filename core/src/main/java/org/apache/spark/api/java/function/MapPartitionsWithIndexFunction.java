@@ -15,16 +15,13 @@
  * limitations under the License.
  */
 
-package org.apache.spark.api.java.function
+package org.apache.spark.api.java.function;
 
-import scala.reflect.ClassTag
-
-import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
+import java.io.Serializable;
 
 /**
  * A function that takes the a partition 
  */
-abstract class MapPartitionsWithIndexFunction[A, B] extends Function2[Integer,
-  java.util.Iterator[A], java.util.Iterator[B]] {
-  def elementType() : ClassTag[B] = fakeClassTag
+public interface MapPartitionsWithIndexFunction<A, B> extends Function2<Integer,
+  java.util.Iterator<A>, java.util.Iterator<B>> {
 }
