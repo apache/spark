@@ -19,7 +19,6 @@ package org.apache.spark.api.java
 
 import java.util.{Comparator, List => JList}
 
-import scala.Tuple2
 import scala.collection.JavaConversions._
 import scala.reflect.ClassTag
 
@@ -500,8 +499,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def name(): String = rdd.name
 
-  /** Reset generator */
-  def setGenerator(_generator: String) = {
-    rdd.setGenerator(_generator)
-  }
+  /**
+   * @deprecated The 'generator' field was removed in Spark 1.0.0. Use sc.setJobGroup.
+   */
+  @Deprecated
+  def setGenerator(_generator: String) = {  }
 }

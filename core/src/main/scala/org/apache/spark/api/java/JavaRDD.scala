@@ -135,7 +135,11 @@ class JavaRDD[T](val rdd: RDD[T])(implicit val classTag: ClassTag[T])
   def subtract(other: JavaRDD[T], p: Partitioner): JavaRDD[T] =
     wrapRDD(rdd.subtract(other, p))
 
-  def generator: String = rdd.generator
+  /**
+   * @deprecated The 'generator' field was removed in Spark 1.0.0. Use sc.setJobGroup.
+   */
+  @Deprecated
+  def generator: String = ""
 
   override def toString = rdd.toString
 

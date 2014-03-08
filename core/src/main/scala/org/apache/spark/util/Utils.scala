@@ -717,8 +717,8 @@ private[spark] object Utils extends Logging {
     new CallSiteInfo(lastSparkMethod, firstUserFile, firstUserLine, firstUserClass)
   }
 
-  def formatSparkCallSite = {
-    val callSiteInfo = getCallSiteInfo
+  /** Returns a printable version of the call site info suitable for logs. */
+  def formatCallSiteInfo(callSiteInfo: CallSiteInfo = Utils.getCallSiteInfo) = {
     "%s at %s:%s".format(callSiteInfo.lastSparkMethod, callSiteInfo.firstUserFile,
                          callSiteInfo.firstUserLine)
   }
