@@ -17,11 +17,10 @@
 
 package org.apache.spark.graphx.impl
 
-import java.util.HashSet
-
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.util.collection.PrimitiveVector
+import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
@@ -392,8 +391,13 @@ object GraphImpl {
       partitioner: Partitioner): RDD[(VertexId, Int)] = {
     new ShuffledRDD[VertexId, Int, (VertexId, Int)](
       edges.collectVertexIds.mapPartitions { vids =>
-        val present = new HashSet[VertexId]()
-        vids.filter(vid => present.add(vid)).map(vid => (vid, 0))
+        val present = new OpenHashSet[VertexId](vids.size)
+        vids.filter{ vid => 
+          // This is a bit ugly but we can't just call add since add is of type unit
+          val isPresent = ((present.addWithoutResize(vid) & OpenHashSet.NONEXISTENCE_MASK) != 0)
+          present.rehashIfNeeded(vid)
+          isPresent
+        }.map(vid => (vid, 0))
       },
       partitioner)
       .setSerializer(classOf[VertexIdMsgSerializer].getName)

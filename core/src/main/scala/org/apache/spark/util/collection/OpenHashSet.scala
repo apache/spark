@@ -114,7 +114,7 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    * The caller is responsible for calling rehashIfNeeded.
    *
    * Use (retval & POSITION_MASK) to get the actual position, and
-   * (retval & EXISTENCE_MASK) != 0 for prior existence.
+   * (retval & NONEXISTENCE_MASK) != 0 for prior existence.
    *
    * @return The position where the key is placed, plus the highest order bit is set if the key
    *         exists previously.
@@ -151,7 +151,8 @@ class OpenHashSet[@specialized(Long, Int) T: ClassTag](
    * @param moveFunc Callback invoked when we move the key from one position (in the old data array)
    *                 to a new position (in the new data array).
    */
-  def rehashIfNeeded(k: T, allocateFunc: (Int) => Unit, moveFunc: (Int, Int) => Unit) {
+  def rehashIfNeeded(k: T, allocateFunc: (Int) => Unit = grow,
+    moveFunc: (Int, Int) => Unit = move) {
     if (_size > _growThreshold) {
       rehash(k, allocateFunc, moveFunc)
     }
