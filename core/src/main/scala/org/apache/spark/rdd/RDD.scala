@@ -666,7 +666,7 @@ abstract class RDD[T: ClassTag](
   /**
    * Return an array that contains all of the elements in this RDD.
    */
-  @deprecated
+  @deprecated("use collect", "1.0.0")
   def toArray(): Array[T] = collect()
 
   /**
