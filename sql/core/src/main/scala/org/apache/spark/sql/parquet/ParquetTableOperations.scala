@@ -15,34 +15,37 @@
  * limitations under the License.
  */
 
-package org.apache.spark.sql
-package parquet
+package org.apache.spark.sql.parquet
 
-import _root_.parquet.io.InvalidRecordException
-import _root_.parquet.schema.MessageType
-import _root_.parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
-import _root_.parquet.hadoop.util.ContextUtil
+import parquet.io.InvalidRecordException
+import parquet.schema.MessageType
+import parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
+import parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.api.java.JavaPairRDD
-import org.apache.spark.SparkContext
+//import org.apache.spark.api.java.JavaPairRDD
+import org.apache.spark.{TaskContext, SerializableWritable, SparkContext}
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute, Expression}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode, LeafNode}
 
-import org.apache.hadoop.mapreduce.Job
+import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
+import org.apache.hadoop.mapreduce._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import java.io.IOException
+import org.apache.spark.util.MutablePair
+import java.text.SimpleDateFormat
+import java.util.Date
 
 /**
  * Parquet table scan operator. Imports the file that backs the given
  * [[ParquetRelation]] as a RDD[Row].
  */
 case class ParquetTableScan(
-    output: Seq[Attribute],
-    relation: ParquetRelation,
-    columnPruningPred: Option[Expression])(
+    @transient output: Seq[Attribute],
+    @transient relation: ParquetRelation,
+    @transient columnPruningPred: Option[Expression])(
     @transient val sc: SparkContext)
   extends LeafNode {
 
@@ -56,6 +59,12 @@ case class ParquetTableScan(
         RowReadSupport.PARQUET_ROW_REQUESTED_SCHEMA,
         ParquetTypesConverter.convertFromAttributes(output).toString)
     // TODO: think about adding record filters
+    /* Comments regarding record filters: it would be nice to push down as much filtering
+      to Parquet as possible. However, currently it seems we cannot pass enough information
+      to materialize an (arbitrary) Catalyst [[Predicate]] inside Parquet's
+      ``FilteredRecordReader`` (via Configuration, for example). Simple
+      filter-rows-by-column-values however should be supported.
+    */
     sc.newAPIHadoopFile(
       relation.path,
       classOf[ParquetInputFormat[Row]],
@@ -72,7 +81,7 @@ case class ParquetTableScan(
    */
   def pruneColumns(prunedAttributes: Seq[Attribute]): ParquetTableScan = {
     val success = validateProjection(prunedAttributes)
-    if(success) {
+    if (success) {
       ParquetTableScan(prunedAttributes, relation, columnPruningPred)(sc)
     } else {
       sys.error("Warning: Could not validate Parquet schema projection in pruneColumns")
@@ -102,10 +111,10 @@ case class ParquetTableScan(
 }
 
 case class InsertIntoParquetTable(
-    relation: ParquetRelation,
-    child: SparkPlan)(
+    @transient relation: ParquetRelation,
+    @transient child: SparkPlan)(
     @transient val sc: SparkContext)
-  extends UnaryNode {
+  extends UnaryNode with SparkHadoopMapReduceUtil {
 
   /**
    * Inserts all the rows in the Parquet file. Note that OVERWRITE is implicit, since
@@ -142,18 +151,64 @@ case class InsertIntoParquetTable(
           s"Unable to clear output directory ${fspath.toString} prior"
           + s" to InsertIntoParquetTable:\n${e.toString}")
     }
-
-    JavaPairRDD.fromRDD(childRdd.map(Tuple2(null, _))).saveAsNewAPIHadoopFile(
-      relation.path.toString,
-      classOf[Void],
-      classOf[ParquetRelation.RowType],
-      classOf[_root_.parquet.hadoop.ParquetOutputFormat[ParquetRelation.RowType]],
-      conf)
+    saveAsHadoopFile(childRdd, relation.path.toString, conf)
 
     // We return the child RDD to allow chaining (alternatively, one could return nothing).
     childRdd
   }
 
   override def output = child.output
+
+  // based on ``saveAsNewAPIHadoopFile`` in [[PairRDDFunctions]]
+  // TODO: Maybe PairRDDFunctions should use MutablePair instead of Tuple2?
+  // .. then we could use the default one and could use [[MutablePair]]
+  // instead of ``Tuple2``
+  private def saveAsHadoopFile(
+      rdd: RDD[Row],
+      path: String,
+      conf: Configuration) {
+    val job = new Job(conf)
+    val keyType = classOf[Void]
+    val outputFormatType = classOf[parquet.hadoop.ParquetOutputFormat[Row]]
+    job.setOutputKeyClass(keyType)
+    job.setOutputValueClass(classOf[Row])
+    val wrappedConf = new SerializableWritable(job.getConfiguration)
+    NewFileOutputFormat.setOutputPath(job, new Path(path))
+    val formatter = new SimpleDateFormat("yyyyMMddHHmm")
+    val jobtrackerID = formatter.format(new Date())
+    val stageId = sc.newRddId()
+
+    def writeShard(context: TaskContext, iter: Iterator[Row]): Int = {
+      // Hadoop wants a 32-bit task attempt ID, so if ours is bigger than Int.MaxValue, roll it
+      // around by taking a mod. We expect that no task will be attempted 2 billion times.
+      val attemptNumber = (context.attemptId % Int.MaxValue).toInt
+      /* "reduce task" <split #> <attempt # = spark task #> */
+      val attemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = false, context.partitionId,
+        attemptNumber)
+      val hadoopContext = newTaskAttemptContext(wrappedConf.value, attemptId)
+      val format = outputFormatType.newInstance
+      val committer = format.getOutputCommitter(hadoopContext)
+      committer.setupTask(hadoopContext)
+      val writer = format.getRecordWriter(hadoopContext)
+      while (iter.hasNext) {
+        val row = iter.next()
+        writer.write(null, row)
+      }
+      writer.close(hadoopContext)
+      committer.commitTask(hadoopContext)
+      return 1
+    }
+    val jobFormat = outputFormatType.newInstance
+    /* apparently we need a TaskAttemptID to construct an OutputCommitter;
+     * however we're only going to use this local OutputCommitter for
+     * setupJob/commitJob, so we just use a dummy "map" task.
+     */
+    val jobAttemptId = newTaskAttemptID(jobtrackerID, stageId, isMap = true, 0, 0)
+    val jobTaskContext = newTaskAttemptContext(wrappedConf.value, jobAttemptId)
+    val jobCommitter = jobFormat.getOutputCommitter(jobTaskContext)
+    jobCommitter.setupJob(jobTaskContext)
+    sc.runJob(rdd, writeShard _)
+    jobCommitter.commitJob(jobTaskContext)
+  }
 }
 

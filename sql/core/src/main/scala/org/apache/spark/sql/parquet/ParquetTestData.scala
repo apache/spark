@@ -17,8 +17,6 @@
 
 package org.apache.spark.sql.parquet
 
-import java.io.File
-
 import org.apache.hadoop.fs.Path
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.mapreduce.Job
@@ -26,6 +24,8 @@ import org.apache.hadoop.mapreduce.Job
 import parquet.schema.{MessageTypeParser, MessageType}
 import parquet.hadoop.util.ContextUtil
 import parquet.hadoop.ParquetWriter
+
+import org.apache.spark.sql.catalyst.util.getTempFilePath
 
 object ParquetTestData {
 
@@ -39,6 +39,16 @@ object ParquetTestData {
       |optional double mydouble;
       |}""".stripMargin
 
+  // field names for test assertion error messages
+  val testSchemaFieldNames = Seq(
+    "myboolean:Boolean",
+    "mtint:Int",
+    "mystring:String",
+    "mylong:Long",
+    "myfloat:Float",
+    "mydouble:Double"
+  )
+
   val subTestSchema =
     """
       |message myrecord {
@@ -47,7 +57,13 @@ object ParquetTestData {
       |}
     """.stripMargin
 
-  val testFile = new File("/tmp/testParquetFile").getAbsoluteFile
+  // field names for test assertion error messages
+  val subTestSchemaFieldNames = Seq(
+    "myboolean:Boolean",
+    "mylong:Long"
+  )
+
+  val testFile = getTempFilePath("testParquetFile").getCanonicalFile
 
   lazy val testData = new ParquetRelation("testData", testFile.toURI.toString)
 
@@ -63,12 +79,12 @@ object ParquetTestData {
     val writer = new ParquetWriter(path, writeSupport)
     for(i <- 0 until 15) {
       val data = new Array[Any](6)
-      if(i % 3 ==0) {
+      if (i % 3 == 0) {
         data.update(0, true)
       } else {
         data.update(0, false)
       }
-      if(i % 5 == 0) {
+      if (i % 5 == 0) {
         data.update(1, 5)
       } else {
         data.update(1, null) // optional

@@ -39,9 +39,7 @@ import org.apache.spark.sql.catalyst.types._
 class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterializer[Row] {
 
   def this(parquetSchema: MessageType) =
-    this(
-      new CatalystGroupConverter(
-        ParquetTypesConverter.convertToAttributes(parquetSchema)))
+    this(new CatalystGroupConverter(ParquetTypesConverter.convertToAttributes(parquetSchema)))
 
   override def getCurrentRecord: Row = root.getCurrentRecord
 
@@ -106,11 +104,7 @@ class RowWriteSupport extends WriteSupport[Row] with Logging {
   private var attributes: Seq[Attribute] = null
 
   override def init(configuration: Configuration): WriteSupport.WriteContext = {
-    schema = if(schema == null) {
-      getSchema(configuration)
-    } else {
-      schema
-    }
+    schema = if (schema == null) getSchema(configuration) else schema
     attributes = ParquetTypesConverter.convertToAttributes(schema)
     new WriteSupport.WriteContext(
       schema,
@@ -123,16 +117,16 @@ class RowWriteSupport extends WriteSupport[Row] with Logging {
 
   // TODO: add groups (nested fields)
   override def write(record: Row): Unit = {
+    var index = 0
     writer.startMessage()
-    // TODO: compare performance of the various ways of looping over a row
-    for(pair <- attributes.zipWithIndex) {
-      val (attribute, index) = pair
-        // null values indicate optional fields but we do not check currently
-      if(record(index) != null && record(index) != Nil) {
-        writer.startField(attribute.name, index)
-        ParquetTypesConverter.consumeType(writer, attribute.dataType, record, index)
-        writer.endField(attribute.name, index)
+    while(index < attributes.size) {
+      // null values indicate optional fields but we do not check currently
+      if (record(index) != null && record(index) != Nil) {
+        writer.startField(attributes(index).name, index)
+        ParquetTypesConverter.consumeType(writer, attributes(index).dataType, record, index)
+        writer.endField(attributes(index).name, index)
       }
+      index = index + 1
     }
     writer.endMessage()
   }
