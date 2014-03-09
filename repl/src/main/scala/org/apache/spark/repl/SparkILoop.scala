@@ -910,6 +910,7 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
     addThunk(printWelcome())
     addThunk(initializeSpark())
+    addThunk(runShellRC())
 
     // it is broken on startup; go ahead and exit
     if (intp.reporter.hasErrors)
@@ -956,6 +957,17 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
     sparkContext
+  }
+
+  def runShellRC() {
+    if (System.getenv("SPARKSHELL_RC") != null) {
+      loadCommand(System.getenv("SPARKSHELL_RC"))
+    } else {
+      val rc_file = File(System.getProperty("user.home"))/".spark_shell_rc"
+      if (rc_file.exists) {
+        loadCommand(rc_file.toString())
+      }
+    }
   }
 
   private def getMaster(): String = {
