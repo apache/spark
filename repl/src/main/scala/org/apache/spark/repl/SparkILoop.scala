@@ -960,8 +960,8 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
   }
 
   def runShellRC() {
-    if (System.getenv("SPARKSHELL_RC") != null) {
-      loadCommand(System.getenv("SPARKSHELL_RC"))
+    if (System.getenv("SPARK_SHELL_RC") != null) {
+      loadCommand(System.getenv("SPARK_SHELL_RC"))
     } else {
       val rc_file = File(System.getProperty("user.home"))/".spark_shell_rc"
       if (rc_file.exists) {
