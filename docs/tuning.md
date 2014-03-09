@@ -163,7 +163,7 @@ their work directories), *not* on your driver program.
 **Cache Size Tuning**
 
 One important configuration parameter for GC is the amount of memory that should be used for caching RDDs.
-By default, Spark uses 60% of the configured executor memory (`spark.executor.memory` or `SPARK_MEM`) to
+By default, Spark uses 60% of the configured executor memory (`spark.executor.memory`) to
 cache RDDs. This means that 40% of memory is available for any objects created during task execution.
 
 In case your tasks slow down and you find that your JVM is garbage-collecting frequently or running out of
