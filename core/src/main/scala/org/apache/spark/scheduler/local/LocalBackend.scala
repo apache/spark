@@ -127,8 +127,5 @@ private[spark] object LocalBackend {
         retCores
       }
     }
-
-
-
   }
 }

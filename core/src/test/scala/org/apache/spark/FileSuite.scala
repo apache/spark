@@ -33,7 +33,7 @@ import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 class FileSuite extends FunSuite with LocalSparkContext {
 
   test("text files") {
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[1]", "test")
     val tempDir = Files.createTempDir()
     val outputDir = new File(tempDir, "output").getAbsolutePath
     val nums = sc.makeRDD(1 to 4)
@@ -175,7 +175,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
 
   test("write SequenceFile using new Hadoop API") {
     import org.apache.hadoop.mapreduce.lib.output.SequenceFileOutputFormat
-    sc = new SparkContext("local", "test")
+    sc = new SparkContext("local[1]", "test")
     val tempDir = Files.createTempDir()
     val outputDir = new File(tempDir, "output").getAbsolutePath
     val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), new Text("a" * x)))

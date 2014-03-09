@@ -1204,7 +1204,7 @@ object SparkContext extends Logging {
     master match {
       case "local" =>
         val scheduler = new TaskSchedulerImpl(sc, MAX_LOCAL_TASK_FAILURES, isLocal = true)
-        val backend = new LocalBackend(scheduler, 1)
+        val backend = new LocalBackend(scheduler)
         scheduler.initialize(backend)
         scheduler
 
