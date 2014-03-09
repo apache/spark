@@ -6,7 +6,7 @@ title: Python Programming Guide
 
 The Spark Python API (PySpark) exposes the Spark programming model to Python.
 To learn the basics of Spark, we recommend reading through the
-[Scala programming guide](scala-programming-guide.html) first; it should be
+[Scala programming guide](scala-programming-guide.md) first; it should be
 easy to follow even if you don't know Scala.
 This guide will show how to use the Spark features described there in Python.
 
@@ -21,31 +21,31 @@ There are a few key differences between the Python and Scala APIs:
 In PySpark, RDDs support the same methods as their Scala counterparts but take Python functions and return Python collection types.
 Short functions can be passed to RDD methods using Python's [`lambda`](http://www.diveintopython.net/power_of_introspection/lambda_functions.html) syntax:
 
-{% highlight python %}
-logData = sc.textFile(logFile).cache()
+```python
+logData = sc.textFile(logFile).cache() 
 errors = logData.filter(lambda line: "ERROR" in line)
-{% endhighlight %}
+```
 
 You can also pass functions that are defined with the `def` keyword; this is useful for longer functions that can't be expressed using `lambda`:
 
-{% highlight python %}
+```python
 def is_error(line):
     return "ERROR" in line
 errors = logData.filter(is_error)
-{% endhighlight %}
+```
 
 Functions can access objects in enclosing scopes, although modifications to those objects within RDD methods will not be propagated back:
 
-{% highlight python %}
+```python
 error_keywords = ["Exception", "Error"]
 def is_error(line):
     return any(keyword in line for keyword in error_keywords)
 errors = logData.filter(is_error)
-{% endhighlight %}
+```
 
 PySpark will automatically ship these functions to workers, along with any objects that they reference.
 Instances of classes will be serialized and shipped to workers by PySpark, but classes themselves cannot be automatically distributed to workers.
-The [Standalone Use](#standalone-use) section describes how to ship code dependencies to workers.
+The [Standalone Use](#standalone-programs) section describes how to ship code dependencies to workers.
 
 In addition, PySpark fully supports interactive use---simply run `./bin/pyspark` to launch an interactive shell.
 
@@ -68,33 +68,33 @@ The script automatically adds the `bin/pyspark` package to the `PYTHONPATH`.
 
 The `bin/pyspark` script launches a Python interpreter that is configured to run PySpark applications. To use `pyspark` interactively, first build Spark, then launch it directly from the command line without any options:
 
-{% highlight bash %}
+```bash
 $ sbt/sbt assembly
 $ ./bin/pyspark
-{% endhighlight %}
+```
 
 The Python shell can be used explore data interactively and is a simple way to learn the API:
 
-{% highlight python %}
+```python
 >>> words = sc.textFile("/usr/share/dict/words")
 >>> words.filter(lambda w: w.startswith("spar")).take(5)
 [u'spar', u'sparable', u'sparada', u'sparadrap', u'sparagrass']
 >>> help(pyspark) # Show all pyspark functions
-{% endhighlight %}
+```
 
 By default, the `bin/pyspark` shell creates SparkContext that runs applications locally on a single core.
 To connect to a non-local cluster, or use multiple cores, set the `MASTER` environment variable.
-For example, to use the `bin/pyspark` shell with a [standalone Spark cluster](spark-standalone.html):
+For example, to use the `bin/pyspark` shell with a [standalone Spark cluster](spark-standalone.md):
 
-{% highlight bash %}
+```bash
 $ MASTER=spark://IP:PORT ./bin/pyspark
-{% endhighlight %}
+```
 
 Or, to use four cores on the local machine:
 
-{% highlight bash %}
+```bash
 $ MASTER=local[4] ./bin/pyspark
-{% endhighlight %}
+```
 
 
 ## IPython
@@ -103,16 +103,16 @@ It is also possible to launch PySpark in [IPython](http://ipython.org), the
 enhanced Python interpreter. PySpark works with IPython 1.0.0 and later. To 
 use IPython, set the `IPYTHON` variable to `1` when running `bin/pyspark`:
 
-{% highlight bash %}
+```bash
 $ IPYTHON=1 ./bin/pyspark
-{% endhighlight %}
+```
 
 Alternatively, you can customize the `ipython` command by setting `IPYTHON_OPTS`. For example, to launch
 the [IPython Notebook](http://ipython.org/notebook.html) with PyLab graphing support:
 
-{% highlight bash %}
+```bash
 $ IPYTHON_OPTS="notebook --pylab inline" ./bin/pyspark
-{% endhighlight %}
+```
 
 IPython also works on a cluster or on multiple cores if you set the `MASTER` environment variable.
 
@@ -120,29 +120,29 @@ IPython also works on a cluster or on multiple cores if you set the `MASTER` env
 # Standalone Programs
 
 PySpark can also be used from standalone Python scripts by creating a SparkContext in your script and running the script using `bin/pyspark`.
-The Quick Start guide includes a [complete example](quick-start.html#a-standalone-app-in-python) of a standalone Python application.
+The Quick Start guide includes a [complete example](quick-start.md#a-standalone-app-in-python) of a standalone Python application.
 
 Code dependencies can be deployed by listing them in the `pyFiles` option in the SparkContext constructor:
 
-{% highlight python %}
+```python
 from pyspark import SparkContext
 sc = SparkContext("local", "App Name", pyFiles=['MyFile.py', 'lib.zip', 'app.egg'])
-{% endhighlight %}
+```
 
 Files listed here will be added to the `PYTHONPATH` and shipped to remote worker machines.
 Code dependencies can be added to an existing SparkContext using its `addPyFile()` method.
 
-You can set [configuration properties](configuration.html#spark-properties) by passing a
-[SparkConf](api/pyspark/pyspark.conf.SparkConf-class.html) object to SparkContext:
+You can set [configuration properties](configuration.md#spark-properties) by passing a
+[SparkConf](http://spark.apache.org/docs/latest/api/pyspark/pyspark.conf.SparkConf-class.html) object to SparkContext:
 
-{% highlight python %}
+```python
 from pyspark import SparkConf, SparkContext
 conf = (SparkConf()
          .setMaster("local")
          .setAppName("My app")
          .set("spark.executor.memory", "1g"))
 sc = SparkContext(conf = conf)
-{% endhighlight %}
+```
 
 # API Docs
 
