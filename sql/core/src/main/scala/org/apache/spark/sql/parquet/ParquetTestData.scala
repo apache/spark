@@ -26,6 +26,8 @@ import parquet.hadoop.util.ContextUtil
 import parquet.hadoop.ParquetWriter
 
 import org.apache.spark.sql.catalyst.util.getTempFilePath
+import org.apache.spark.sql.catalyst.expressions.GenericRow
+import java.nio.charset.Charset
 
 object ParquetTestData {
 
@@ -93,7 +95,7 @@ object ParquetTestData {
       data.update(3, 1L<<33)
       data.update(4, 2.5F)
       data.update(5, 4.5D)
-      writer.write(new ParquetRelation.RowType(data.toArray))
+      writer.write(new GenericRow(data.toArray))
     }
     writer.close()
   }

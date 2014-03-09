@@ -42,22 +42,26 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
 
   test("Import of simple Parquet file") {
     val result = getRDD(ParquetTestData.testData).collect()
-    val allChecks: Boolean = result.zipWithIndex.forall {
+    result.zipWithIndex.foreach {
       case (row, index) => {
         val checkBoolean =
           if (index % 3 == 0)
             row(0) == true
           else
             row(0) == false
+        assert(checkBoolean)
         val checkInt = ((index % 5) != 0) || (row(1) == 5)
+        assert(checkInt)
         val checkString = row(2) == "abc"
+        assert(checkString)
         val checkLong = row(3) == (1L<<33)
+        assert(checkLong)
         val checkFloat = row(4) == 2.5F
+        assert(checkFloat)
         val checkDouble = row(5) == 4.5D
-        checkBoolean && checkInt && checkString && checkLong && checkFloat && checkDouble
+        assert(checkDouble)
       }
     }
-    assert(allChecks)
   }
 
   test("Projection of simple Parquet file") {
@@ -70,18 +74,19 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
       .parseMessageType(ParquetTestData.subTestSchema)))
     assert(projected.output.size === 2)
     val result = projected.execute().collect()
-    val allChecks: Boolean = result.zipWithIndex.forall {
+    result.zipWithIndex.foreach {
       case (row, index) => {
         val checkBoolean =
           if (index % 3 == 0)
             row(0) == true
           else
             row(0) == false
+        assert(checkBoolean)
         val checkLong = row(1) == (1L<<33)
-        checkBoolean && checkLong && (row.size == 2)
+        assert(checkLong)
+        assert(row.size === 2, "number of columns in projection is incorrect")
       }
     }
-    assert(allChecks)
   }
 
   test("Writing metadata from scratch for table CREATE") {

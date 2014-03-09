@@ -41,7 +41,8 @@ class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterial
   def this(parquetSchema: MessageType) =
     this(new CatalystGroupConverter(ParquetTypesConverter.convertToAttributes(parquetSchema)))
 
-  override def getCurrentRecord: Row = root.getCurrentRecord
+  // Note: return a copy of the Row
+  override def getCurrentRecord: Row = root.getCurrentRecord.copy()
 
   override def getRootConverter: GroupConverter = root
 }
@@ -144,9 +145,7 @@ object RowWriteSupport {
  */
 class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
   type RowType = ParquetRelation.RowType
-  var current: RowType = new RowType(Array[Any]())
-  // initialization may not strictly be required
-  val currentData: Array[Any] = new Array[Any](schema.length)
+  private val current: RowType = new RowType(schema.length)
 
   val converters: Array[Converter] = schema.map {
     a => a.dataType match {
@@ -161,18 +160,17 @@ class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
-  def getCurrentRecord: RowType = current
+  private[parquet] def getCurrentRecord: RowType = current
 
   override def start(): Unit = {
-    for (i <- 0 until schema.length) {
-      currentData.update(i, Nil)
+    var i = 0
+    while (i < schema.length) {
+      current.setNullAt(i)
+      i = i + 1
     }
   }
 
-  override def end(): Unit = {
-    // TODO: think about reusing the row versus reusing the underlying array
-    current = new RowType(currentData.clone())
-  }
+  override def end(): Unit = {}
 }
 
 /**
@@ -186,22 +184,22 @@ class CatalystPrimitiveConverter(
     fieldIndex: Int) extends PrimitiveConverter {
   // TODO: consider refactoring these together with ParquetTypesConverter
   override def addBinary(value: Binary): Unit =
-    parent.currentData.update(fieldIndex, value.getBytes)
+    parent.getCurrentRecord.setBinary(fieldIndex, value.getBytes)
 
   override def addBoolean(value: Boolean): Unit =
-    parent.currentData.update(fieldIndex, value)
+    parent.getCurrentRecord.setBoolean(fieldIndex, value)
 
   override def addDouble(value: Double): Unit =
-    parent.currentData.update(fieldIndex, value)
+    parent.getCurrentRecord.setDouble(fieldIndex, value)
 
   override def addFloat(value: Float): Unit =
-    parent.currentData.update(fieldIndex, value)
+    parent.getCurrentRecord.setFloat(fieldIndex, value)
 
   override def addInt(value: Int): Unit =
-    parent.currentData.update(fieldIndex, value)
+    parent.getCurrentRecord.setInt(fieldIndex, value)
 
   override def addLong(value: Long): Unit =
-    parent.currentData.update(fieldIndex, value)
+    parent.getCurrentRecord.setLong(fieldIndex, value)
 }
 
 /**
@@ -215,6 +213,6 @@ class CatalystPrimitiveStringConverter(
     parent: CatalystGroupConverter,
     fieldIndex: Int) extends CatalystPrimitiveConverter(parent, fieldIndex) {
   override def addBinary(value: Binary): Unit =
-    parent.currentData.update(fieldIndex, value.toStringUsingUTF8)
+    parent.getCurrentRecord.setString(fieldIndex, value.toStringUsingUTF8)
 }
 

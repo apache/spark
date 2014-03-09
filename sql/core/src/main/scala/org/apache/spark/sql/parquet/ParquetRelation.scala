@@ -119,7 +119,7 @@ case class ParquetRelation(val tableName: String, val path: String) extends Base
 object ParquetRelation {
 
   // The element type for the RDDs that this relation maps to.
-  type RowType = org.apache.spark.sql.catalyst.expressions.GenericRow
+  type RowType = org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
   /**
    * Creates a new ParquetRelation and underlying Parquetfile for the given

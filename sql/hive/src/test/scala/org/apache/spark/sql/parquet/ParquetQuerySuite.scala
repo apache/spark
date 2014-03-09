@@ -152,6 +152,8 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
     var counter = 0
     (rddOne, rddTwo).zipped.foreach {
       (a,b) => (a,b).zipped.toArray.zipWithIndex.foreach {
+        case ((value_1:Array[Byte], value_2:Array[Byte]), index) =>
+          assert(new String(value_1) === new String(value_2), s"table $tableName row ${counter} field ${fieldNames(index)} don't match")
         case ((value_1, value_2), index) =>
           assert(value_1 === value_2, s"table $tableName row ${counter} field ${fieldNames(index)} don't match")
       }
