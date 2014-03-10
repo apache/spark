@@ -309,10 +309,10 @@ object KMeans {
       initializationMode: String
   )(implicit d: DummyImplicit): KMeansModel = {
     new KMeans().setK(k)
-                .setMaxIterations(maxIterations)
-                .setRuns(runs)
-                .setInitializationMode(initializationMode)
-                .run(data)
+      .setMaxIterations(maxIterations)
+      .setRuns(runs)
+      .setInitializationMode(initializationMode)
+      .run(data)
   }
 
   def train(data: RDD[Vector], k: Int, maxIterations: Int, runs: Int)
