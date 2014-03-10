@@ -499,9 +499,4 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   def name(): String = rdd.name
 
-  /**
-   * @deprecated The 'generator' field was removed in Spark 1.0.0. Use sc.setJobGroup.
-   */
-  @Deprecated
-  def setGenerator(_generator: String) = {  }
 }

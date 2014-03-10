@@ -126,9 +126,6 @@ abstract class RDD[T: ClassTag](
     this
   }
 
-  @deprecated("The 'generator' field has been removed, use sc.setJobGroup.", "1.0.0")
-  def setGenerator(_generator: String) = { }
-
   /**
    * Set this RDD's storage level to persist its values across operations after the first time
    * it is computed. This can only be used to assign a new storage level if the RDD does not
@@ -1027,9 +1024,9 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** Info about the function call site where this was created (e.g. `textFile`, `parallelize`). */
-  @transient private[spark] val callSite = Utils.getCallSiteInfo
+  @transient private[spark] val callSiteInfo = Utils.getCallSiteInfo
 
-  private[spark] def getCallSiteString = Utils.formatCallSiteInfo(callSite)
+  private[spark] def getCallSite = Utils.formatCallSiteInfo(callSiteInfo)
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 
@@ -1092,7 +1089,7 @@ abstract class RDD[T: ClassTag](
   }
 
   override def toString: String = "%s%s[%d] at %s".format(
-    Option(name).map(_ + " ").getOrElse(""), getClass.getSimpleName, id, getCallSiteString)
+    Option(name).map(_ + " ").getOrElse(""), getClass.getSimpleName, id, getCallSite)
 
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)

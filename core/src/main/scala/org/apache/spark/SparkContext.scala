@@ -820,20 +820,20 @@ class SparkContext(
    * Support function for API backtraces.
    */
   def setCallSite(site: String) {
-    setLocalProperty("externalCallSiteString", site)
+    setLocalProperty("externalCallSite", site)
   }
 
   /**
    * Support function for API backtraces.
    */
   def clearCallSite() {
-    setLocalProperty("externalCallSiteString", null)
+    setLocalProperty("externalCallSite", null)
   }
 
   /** Capture the current user callsite and return a formatted version for printing. If the user
     * has overridden the call site, this will return the user's version. */
-  private[spark] def getCallSiteString(): String = {
-    Option(getLocalProperty("externalCallSiteString")).getOrElse(Utils.formatCallSiteInfo())
+  private[spark] def getCallSite(): String = {
+    Option(getLocalProperty("externalCallSite")).getOrElse(Utils.formatCallSiteInfo())
   }
 
   /**
@@ -848,7 +848,7 @@ class SparkContext(
       partitions: Seq[Int],
       allowLocal: Boolean,
       resultHandler: (Int, U) => Unit) {
-    val callSite = getCallSiteString
+    val callSite = getCallSite
     val cleanedFunc = clean(func)
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
@@ -932,7 +932,7 @@ class SparkContext(
       func: (TaskContext, Iterator[T]) => U,
       evaluator: ApproximateEvaluator[U, R],
       timeout: Long): PartialResult[R] = {
-    val callSite = getCallSiteString
+    val callSite = getCallSite
     logInfo("Starting job: " + callSite)
     val start = System.nanoTime
     val result = dagScheduler.runApproximateJob(rdd, func, evaluator, callSite, timeout,
@@ -952,7 +952,7 @@ class SparkContext(
       resultFunc: => R): SimpleFutureAction[R] =
   {
     val cleanF = clean(processPartition)
-    val callSite = getCallSiteString
+    val callSite = getCallSite
     val waiter = dagScheduler.submitJob(
       rdd,
       (context: TaskContext, iter: Iterator[T]) => cleanF(iter),
