@@ -376,6 +376,14 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.files.fetchTimeout</td>
+  <td>false</td>
+  <td>
+    Communication timeout to use when fetching files added through SparkContext.addFile() from
+    the driver.
+  </td>
+</tr>
+<tr>
   <td>spark.files.overwrite</td>
   <td>false</td>
   <td>
