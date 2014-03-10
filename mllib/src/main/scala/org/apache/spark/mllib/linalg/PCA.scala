@@ -80,8 +80,8 @@ class PCA {
     
     val data = matrix.rows.map{
       x => for(i <- 0 until n) {
-        x.data(i) = (x.data(i) - colSums(i) / m) / Math.sqrt(n - 1)
-      }
+             x.data(i) = (x.data(i) - colSums(i) / m) / Math.sqrt(n - 1)
+           }
       x
     }           
    
