@@ -29,7 +29,7 @@ import scala.xml.Node
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 
-import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.server.{NetworkConnector, Server}
 import org.eclipse.jetty.server.handler.HandlerList
 import org.eclipse.jetty.servlet.{DefaultServlet, FilterHolder, ServletContextHandler, ServletHolder}
 import org.eclipse.jetty.util.thread.QueuedThreadPool
@@ -173,7 +173,7 @@ private[spark] object JettyUtils extends Logging {
         server.start()
       } match {
         case s: Success[_] =>
-          (server, currentPort)
+          (server, server.getConnectors.head.asInstanceOf[NetworkConnector].getLocalPort)
         case f: Failure[_] =>
           server.stop()
           logInfo("Failed to create UI at port, %s. Trying again.".format(currentPort))
