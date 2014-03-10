@@ -141,13 +141,6 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.persisted.ui.port</td>
-  <td>14040</td>
-  <td>
-    Port on which a Spark UI rebuilt from persisted storage is hosted.
-  </td>
-</tr>
-<tr>
   <td>spark.ui.retainedStages</td>
   <td>1000</td>
   <td>

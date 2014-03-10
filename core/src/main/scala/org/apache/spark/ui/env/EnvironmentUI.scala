@@ -28,10 +28,11 @@ import org.apache.spark.ui.Page.Environment
 import org.apache.spark.ui._
 
 private[ui] class EnvironmentUI(parent: SparkUI) {
-  lazy val appName = parent.appName
-  lazy val listener = _listener.get
-
+  private val appName = parent.appName
+  private val basePath = parent.basePath
   private var _listener: Option[EnvironmentListener] = None
+
+  lazy val listener = _listener.get
 
   def start() {
     _listener = Some(new EnvironmentListener())
@@ -58,7 +59,7 @@ private[ui] class EnvironmentUI(parent: SparkUI) {
         <h4>Classpath Entries</h4> {classpathEntriesTable}
       </span>
 
-    UIUtils.headerSparkPage(content, appName, "Environment", Environment)
+    UIUtils.headerSparkPage(content, basePath, appName, "Environment", Environment)
   }
 
   private def propertyHeader = Seq("Name", "Value")

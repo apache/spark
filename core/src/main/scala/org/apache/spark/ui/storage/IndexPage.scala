@@ -28,14 +28,15 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of RDD's currently stored in the cluster */
 private[ui] class IndexPage(parent: BlockManagerUI) {
-  private lazy val appName = parent.appName
+  private val appName = parent.appName
+  private val basePath = parent.basePath
   private lazy val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
     // Calculate macro-level statistics
     val rdds = listener.rddInfoList
     val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
-    UIUtils.headerSparkPage(content, appName, "Storage ", Storage)
+    UIUtils.headerSparkPage(content, basePath, appName, "Storage ", Storage)
   }
 
   /** Header fields for the RDD table */
@@ -51,7 +52,7 @@ private[ui] class IndexPage(parent: BlockManagerUI) {
   private def rddRow(rdd: RDDInfo): Seq[Node] = {
     <tr>
       <td>
-        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(),rdd.id)}>
+        <a href={"%s/storage/rdd?id=%s".format(UIUtils.prependBaseUri(basePath), rdd.id)}>
           {rdd.name}
         </a>
       </td>

@@ -26,11 +26,12 @@ import org.apache.spark.ui.UIUtils
 
 /** Page showing list of all ongoing and recently finished stages and pools*/
 private[ui] class IndexPage(parent: JobProgressUI) {
-  private lazy val appName = parent.appName
-  private lazy val isFairScheduler = parent.isFairScheduler
-  private lazy val listener = parent.listener
+  private val appName = parent.appName
+  private val basePath = parent.basePath
   private val live = parent.live
   private val sc = parent.sc
+  private lazy val listener = parent.listener
+  private lazy val isFairScheduler = parent.isFairScheduler
 
   def render(request: HttpServletRequest): Seq[Node] = {
     listener.synchronized {
@@ -90,7 +91,7 @@ private[ui] class IndexPage(parent: JobProgressUI) {
         <h4 id ="failed">Failed Stages ({failedStages.size})</h4> ++
         failedStagesTable.toNodeSeq
 
-      UIUtils.headerSparkPage(content, appName, "Spark Stages", Stages)
+      UIUtils.headerSparkPage(content, basePath, appName, "Spark Stages", Stages)
     }
   }
 }

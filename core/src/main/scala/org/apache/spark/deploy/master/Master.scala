@@ -51,9 +51,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   val REAPER_ITERATIONS = conf.getInt("spark.dead.worker.persistence", 15)
   val RECOVERY_DIR = conf.get("spark.deploy.recoveryDirectory", "")
   val RECOVERY_MODE = conf.get("spark.deploy.recoveryMode", "NONE")
-  val MAX_NUM_PERSISTED_UI = conf.getInt("spark.persisted.ui.maxConcurrent", 25)
-  val PERSISTED_SPARK_UI_PORT =
-    conf.get("spark.persisted.ui.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt
 
   val workers = new HashSet[WorkerInfo]
   val idToWorker = new HashMap[String, WorkerInfo]
@@ -68,7 +65,6 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   var nextAppNumber = 0
 
   val appIdToUI = new HashMap[String, SparkUI]
-  var nextPersistedUIPort = PERSISTED_SPARK_UI_PORT
 
   val drivers = new HashSet[DriverInfo]
   val completedDrivers = new ArrayBuffer[DriverInfo]
@@ -112,7 +108,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
     logInfo("Starting Spark master at " + masterUrl)
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
-    webUi.start()
+    webUi.bind()
     masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort.get
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
 
@@ -616,27 +612,17 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
         })
         completedApps.trimStart(toRemove)
       }
+      completedApps += app // Remember it in our history
       waitingApps -= app
 
       // If application events are logged, use them to rebuild the UI
-      val rebuildAppUI = app.desc.eventLogInfo.isDefined
-      if (rebuildAppUI) {
-        val ui = startPersistedSparkUI(app)
-        app.desc.appUiUrl = ui.appUIAddress
+      startPersistedSparkUI(app).map { ui =>
+        app.desc.appUiUrl = ui.basePath
+        webUi.attachUI(ui)
         appIdToUI(app.id) = ui
-      } else {
-        // Avoid broken links
+      }.getOrElse {
+        // Avoid broken links if the UI is not reconstructed
         app.desc.appUiUrl = ""
-      }
-      completedApps += app
-
-      // Cap the number of UIs concurrently running
-      if (appIdToUI.size > MAX_NUM_PERSISTED_UI) {
-        val oldCompletedApp = completedApps.find { oldApp => appIdToUI.contains(oldApp.id) }
-        oldCompletedApp.foreach { oldApp =>
-          completedApps -= oldApp
-          appIdToUI.remove(oldApp.id).foreach(_.stop())
-        }
       }
 
       for (exec <- app.executors.values) {
@@ -654,12 +640,12 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   }
 
   /**
-   * Start a new SparkUI rendered from persisted storage. Assumes event logging information
-   * is available for given application.
+   * Start a new SparkUI rendered from persisted storage. If unsuccessful for any reason,
+   * return None. Otherwise return the reconstructed UI.
    */
-  def startPersistedSparkUI(app: ApplicationInfo): SparkUI = {
+  def startPersistedSparkUI(app: ApplicationInfo): Option[SparkUI] = {
     val appName = app.desc.name
-    val eventLogInfo = app.desc.eventLogInfo.get
+    val eventLogInfo = app.desc.eventLogInfo.getOrElse { return None }
     val eventLogDir = eventLogInfo.logDir
     val eventCompressionCodec = eventLogInfo.compressionCodec
     val appConf = new SparkConf
@@ -667,14 +653,14 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       appConf.set("spark.eventLog.compress", "true")
       appConf.set("spark.io.compression.codec", codec)
     }
-
-    val ui = new SparkUI(appConf, nextPersistedUIPort)
-    ui.setAppName(appName)
-    ui.bind()
+    val ui = new SparkUI(appConf, appName, "/history/%s".format(app.id))
+    // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
-    ui.renderFromPersistedStorage(eventLogDir)
-    nextPersistedUIPort += 1
-    ui
+    val success = ui.renderFromPersistedStorage(eventLogDir)
+    if (!success) {
+      ui.stop()
+      None
+    } else Some(ui)
   }
 
   /** Generate a new app ID given a app's submission date */
@@ -760,9 +746,11 @@ private[spark] object Master {
     }
   }
 
-  def startSystemAndActor(host: String, port: Int, webUiPort: Int, conf: SparkConf)
-      : (ActorSystem, Int, Int) =
-  {
+  def startSystemAndActor(
+      host: String,
+      port: Int,
+      webUiPort: Int,
+      conf: SparkConf): (ActorSystem, Int, Int) = {
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem(systemName, host, port, conf = conf)
     val actor = actorSystem.actorOf(Props(classOf[Master], host, boundPort, webUiPort), actorName)
     val timeout = AkkaUtils.askTimeout(conf)

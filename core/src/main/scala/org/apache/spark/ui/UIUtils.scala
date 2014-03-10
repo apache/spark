@@ -27,44 +27,51 @@ private[spark] object UIUtils {
   private[spark] val uiRoot : String = Option(System.getenv("APPLICATION_WEB_PROXY_BASE")).
     getOrElse("")
 
-  def prependBaseUri(resource: String = "") = uiRoot + resource
+  def prependBaseUri(basePath: String = "", resource: String = "") = uiRoot + basePath + resource
 
   /** Returns a spark page with correctly formatted headers */
-  def headerSparkPage(content: => Seq[Node], appName: String, title: String, page: Page.Value)
-  : Seq[Node] = {
+  def headerSparkPage(
+      content: => Seq[Node],
+      basePath: String,
+      appName: String,
+      title: String,
+      page: Page.Value) : Seq[Node] = {
     val jobs = page match {
-      case Stages => <li class="active"><a href={prependBaseUri("/stages")}>Stages</a></li>
-      case _ => <li><a href={prependBaseUri("/stages")}>Stages</a></li>
+      case Stages =>
+        <li class="active"><a href={prependBaseUri(basePath, "/stages")}>Stages</a></li>
+      case _ => <li><a href={prependBaseUri(basePath, "/stages")}>Stages</a></li>
     }
     val storage = page match {
-      case Storage => <li class="active"><a href={prependBaseUri("/storage")}>Storage</a></li>
-      case _ => <li><a href={prependBaseUri("/storage")}>Storage</a></li>
+      case Storage =>
+        <li class="active"><a href={prependBaseUri(basePath, "/storage")}>Storage</a></li>
+      case _ => <li><a href={prependBaseUri(basePath, "/storage")}>Storage</a></li>
     }
     val environment = page match {
       case Environment => 
-        <li class="active"><a href={prependBaseUri("/environment")}>Environment</a></li>
-      case _ => <li><a href={prependBaseUri("/environment")}>Environment</a></li>
+        <li class="active"><a href={prependBaseUri(basePath, "/environment")}>Environment</a></li>
+      case _ => <li><a href={prependBaseUri(basePath, "/environment")}>Environment</a></li>
     }
     val executors = page match {
       case Executors =>
-        <li class="active"><a href={prependBaseUri("/executors")}>Executors</a></li>
-      case _ => <li><a href={prependBaseUri("/executors")}>Executors</a></li>
+        <li class="active"><a href={prependBaseUri(basePath, "/executors")}>Executors</a></li>
+      case _ => <li><a href={prependBaseUri(basePath, "/executors")}>Executors</a></li>
     }
 
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
+        <link rel="stylesheet" href={prependBaseUri(basePath, "/static/bootstrap.min.css")}
               type="text/css" />
-        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}  type="text/css" />
-        <script src={prependBaseUri("/static/sorttable.js")} ></script>
+        <link rel="stylesheet"
+              href={prependBaseUri(basePath, "/static/webui.css")} type="text/css" />
+        <script src={prependBaseUri(basePath, "/static/sorttable.js")} ></script>
         <title>{appName} - {title}</title>
       </head>
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
-            <a href={prependBaseUri("/")} class="brand">
-              <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
+            <a href={prependBaseUri(basePath, "/")} class="brand">
+              <img src={prependBaseUri(basePath, "/static/spark-logo-77x50px-hd.png")} />
             </a>
             <ul class="nav">
               {jobs}

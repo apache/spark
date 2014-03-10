@@ -28,9 +28,10 @@ import org.apache.spark.util.Utils
 
 /** Page showing list of all ongoing and recently finished stages */
 private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
+  private val basePath = parent.basePath
   private val dateFmt = parent.dateFmt
-  private def isFairScheduler = parent.isFairScheduler
-  private def listener = parent.listener
+  private lazy val listener = parent.listener
+  private lazy val isFairScheduler = parent.isFairScheduler
 
   def toNodeSeq: Seq[Node] = {
     listener.synchronized {
@@ -75,7 +76,9 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
   private def stageRow(s: StageInfo): Seq[Node] = {
     val poolName = listener.stageIdToPool.get(s.stageId)
     val nameLink =
-      <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(),s.stageId)}>{s.name}</a>
+      <a href={"%s/stages/stage?id=%s".format(UIUtils.prependBaseUri(basePath), s.stageId)}>
+        {s.name}
+      </a>
     val description = listener.stageIdToDescription.get(s.stageId)
       .map(d => <div><em>{d}</em></div><div>{nameLink}</div>).getOrElse(nameLink)
     val submissionTime = s.submissionTime match {
@@ -107,7 +110,8 @@ private[ui] class StageTable(stages: Seq[StageInfo], parent: JobProgressUI) {
       <td>{s.stageId}</td>
       {if (isFairScheduler) {
         <td>
-          <a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(),poolName.get)}>
+          <a href={"%s/stages/pool?poolname=%s"
+            .format(UIUtils.prependBaseUri(basePath), poolName.get)}>
             {poolName.get}
           </a>
         </td>

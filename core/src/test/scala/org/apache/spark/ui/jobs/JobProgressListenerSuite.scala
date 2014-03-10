@@ -27,7 +27,7 @@ import org.apache.spark.util.Utils
 class JobProgressListenerSuite extends FunSuite with LocalSparkContext {
   test("test executor id to summary") {
     val sc = new SparkContext("local", "test")
-    val listener = new JobProgressListener(sc, true)
+    val listener = new JobProgressListener(sc.conf)
     val taskMetrics = new TaskMetrics()
     val shuffleReadMetrics = new ShuffleReadMetrics()
 

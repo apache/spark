@@ -23,7 +23,7 @@ import org.eclipse.jetty.server.{Handler, Server}
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.ui.JettyUtils
+import org.apache.spark.ui.{JettyUtils, SparkUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -32,21 +32,34 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
-  val timeout = AkkaUtils.askTimeout(master.conf)
-  val host = Utils.localHostName()
-  val port = requestedPort
+  private val host = Utils.localHostName()
+  private val port = requestedPort
 
   val masterActorRef = master.self
-
+  val timeout = AkkaUtils.askTimeout(master.conf)
   var server: Option[Server] = None
   var boundPort: Option[Int] = None
 
-  val applicationPage = new ApplicationPage(this)
-  val indexPage = new IndexPage(this)
+  private val applicationPage = new ApplicationPage(this)
+  private val indexPage = new IndexPage(this)
 
-  def start() {
+  private val handlers: Seq[(String, Handler)] = {
+    master.masterMetricsSystem.getServletHandlers ++
+    master.applicationMetricsSystem.getServletHandlers ++
+    Seq[(String, Handler)](
+      ("/static", JettyUtils.createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)),
+      ("/app/json", (request: HttpServletRequest) => applicationPage.renderJson(request)),
+      ("/app", (request: HttpServletRequest) => applicationPage.render(request)),
+      ("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
+      ("/", (request: HttpServletRequest) => indexPage.render(request))
+    )
+  }
+
+  private val rootHandler = JettyUtils.createContextHandlerCollection(handlers)
+
+  def bind() {
     try {
-      val (srv, bPort) = JettyUtils.startJettyServer(host, port, handlers)
+      val (srv, bPort) = JettyUtils.startJettyServer(host, port, rootHandler)
       server = Some(srv)
       boundPort = Some(bPort)
       logInfo("Started Master web UI at http://%s:%d".format(host, boundPort.get))
@@ -57,16 +70,13 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
     }
   }
 
-  val metricsHandlers = master.masterMetricsSystem.getServletHandlers ++
-    master.applicationMetricsSystem.getServletHandlers
-
-  val handlers = metricsHandlers ++ Array[(String, Handler)](
-    ("/static", createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)),
-    ("/app/json", (request: HttpServletRequest) => applicationPage.renderJson(request)),
-    ("/app", (request: HttpServletRequest) => applicationPage.render(request)),
-    ("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
-    ("*", (request: HttpServletRequest) => indexPage.render(request))
-  )
+  def attachUI(ui: SparkUI) {
+    val childHandler = ui.rootHandler
+    rootHandler.addHandler(childHandler)
+    if (!childHandler.isStarted) {
+      childHandler.start()
+    }
+  }
 
   def stop() {
     server.foreach(_.stop())

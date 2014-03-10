@@ -27,7 +27,7 @@ import scala.xml.Node
 import org.json4s.JValue
 import org.json4s.jackson.JsonMethods.{pretty, render}
 import org.eclipse.jetty.server.{Handler, Request, Server}
-import org.eclipse.jetty.server.handler.{AbstractHandler, ContextHandler, HandlerList, ResourceHandler}
+import org.eclipse.jetty.server.handler._
 import org.eclipse.jetty.util.thread.QueuedThreadPool
 
 import org.apache.spark.Logging
@@ -55,29 +55,31 @@ private[spark] object JettyUtils extends Logging {
       extractFn: T => String = (in: Any) => in.toString): Handler = {
 
     new AbstractHandler {
-      def handle(target: String,
-                 baseRequest: Request,
-                 request: HttpServletRequest,
-                 response: HttpServletResponse) {
+      def handle(
+          target: String,
+          baseRequest: Request,
+          request: HttpServletRequest,
+          response: HttpServletResponse) {
         response.setContentType("%s;charset=utf-8".format(contentType))
         response.setStatus(HttpServletResponse.SC_OK)
         baseRequest.setHandled(true)
         val result = responder(request)
         response.setHeader("Cache-Control", "no-cache, no-store, must-revalidate")
-        response.getWriter().println(extractFn(result))
+        response.getWriter.println(extractFn(result))
       }
     }
   }
 
   /** Creates a handler that always redirects the user to a given path */
-  def createRedirectHandler(newPath: String): Handler = {
+  def createRedirectHandler(newPath: String, basePath: String = ""): Handler = {
     new AbstractHandler {
-      def handle(target: String,
-                 baseRequest: Request,
-                 request: HttpServletRequest,
-                 response: HttpServletResponse) {
+      def handle(
+          target: String,
+          baseRequest: Request,
+          request: HttpServletRequest,
+          response: HttpServletResponse) {
         response.setStatus(302)
-        response.setHeader("Location", baseRequest.getRootURL + newPath)
+        response.setHeader("Location", baseRequest.getRootURL + basePath + newPath)
         baseRequest.setHandled(true)
       }
     }
@@ -95,9 +97,38 @@ private[spark] object JettyUtils extends Logging {
     staticHandler
   }
 
+  /** Creates a context handler from the given path */
+  def createContextHandler(path: String, handler: Handler): ContextHandler = {
+    val contextHandler = new ContextHandler(path)
+    contextHandler.setHandler(handler)
+    contextHandler
+  }
+
   /**
-   * Attempts to start a Jetty server at the supplied hostName:port which uses the supplied
-   * handlers.
+   * Creates a ContextHandlerCollection from the given context handler representations.
+   *
+   * This is a mutable collection of context handlers that performs longest prefix matching
+   * to decide which handler to direct the request to. This allows us to add a new context
+   * handler whose path is within the prefix of an existing handler. To add a handler:
+   *
+   *   contextHandlerCollection.addHandler(contextHandler)
+   *   contextHandler.start()
+   *
+   * The second line is necessary only if the context handler is not attached to any server
+   * that has already started.
+   */
+  def createContextHandlerCollection(handlers: Seq[(String, Handler)]): ContextHandlerCollection = {
+    val contextHandlers = handlers.map { case (path, handler) =>
+      createContextHandler(path, handler)
+    }
+    val contextHandlerCollection = new ContextHandlerCollection
+    contextHandlerCollection.setHandlers(contextHandlers.toArray)
+    contextHandlerCollection
+  }
+
+  /**
+   * Attempts to start a Jetty server bound to the supplied hostName:port using the given
+   * context handlers.
    *
    * If the desired port number is contented, continues incrementing ports until a free port is
    * found. Returns the chosen port and the jetty Server object.
@@ -106,23 +137,24 @@ private[spark] object JettyUtils extends Logging {
       hostName: String,
       port: Int,
       handlers: Seq[(String, Handler)]): (Server, Int) = {
+    val contextHandlerCollection = createContextHandlerCollection(handlers)
+    startJettyServer(hostName, port, contextHandlerCollection)
+  }
 
-    val handlersToRegister = handlers.map { case(path, handler) =>
-      val contextHandler = new ContextHandler(path)
-      contextHandler.setHandler(handler)
-      contextHandler.asInstanceOf[org.eclipse.jetty.server.Handler]
-    }
-
-    val handlerList = new HandlerList
-    handlerList.setHandlers(handlersToRegister.toArray)
-
+  /**
+   * Attempts to start a Jetty server bound to the supplied hostName:port using the given handler.
+   *
+   * If the desired port number is contented, continues incrementing ports until a free port is
+   * found. Returns the chosen port and the jetty Server object.
+   */
+  def startJettyServer(hostName: String, port: Int, handler: Handler): (Server, Int) = {
     @tailrec
     def connect(currentPort: Int): (Server, Int) = {
       val server = new Server(new InetSocketAddress(hostName, currentPort))
       val pool = new QueuedThreadPool
       pool.setDaemon(true)
       server.setThreadPool(pool)
-      server.setHandler(handlerList)
+      server.setHandler(handler)
 
       Try { server.start() } match {
         case s: Success[_] =>

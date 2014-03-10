@@ -32,10 +32,11 @@ import org.apache.spark.ui._
 import org.apache.spark.util.Utils
 
 private[ui] class ExecutorsUI(parent: SparkUI) {
-  lazy val appName = parent.appName
-  lazy val listener = _listener.get
-
+  private val appName = parent.appName
+  private val basePath = parent.basePath
   private var _listener: Option[ExecutorsListener] = None
+
+  lazy val listener = _listener.get
 
   def start() {
     _listener = Some(new ExecutorsListener())
@@ -71,7 +72,8 @@ private[ui] class ExecutorsUI(parent: SparkUI) {
           </div>
         </div>;
 
-    UIUtils.headerSparkPage(content, appName, "Executors (" + execInfo.size + ")", Executors)
+    UIUtils.headerSparkPage(
+      content, basePath, appName, "Executors (" + execInfo.size + ")", Executors)
   }
 
   /** Header fields for the executors table */

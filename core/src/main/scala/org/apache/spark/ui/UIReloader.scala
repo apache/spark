@@ -29,10 +29,9 @@ object UIReloader {
       System.exit(1)
     }
 
-    val port = if (args.length == 2) args(1).toInt else 14040
     val conf = new SparkConf()
-    val ui = new SparkUI(conf, port)
-    ui.setAppName("Reloaded Application")
+    conf.set("spark.ui.port", "14040")
+    val ui = new SparkUI(conf, "Reloaded Application")
     ui.bind()
     ui.start()
     val success = ui.renderFromPersistedStorage(args(0))

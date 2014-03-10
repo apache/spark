@@ -51,7 +51,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
     ("/log", (request: HttpServletRequest) => log(request)),
     ("/logPage", (request: HttpServletRequest) => logPage(request)),
     ("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
-    ("*", (request: HttpServletRequest) => indexPage.render(request))
+    ("/", (request: HttpServletRequest) => indexPage.render(request))
   )
 
   def start() {

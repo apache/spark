@@ -18,9 +18,10 @@
 package org.apache.spark.ui
 
 import org.eclipse.jetty.server.{Handler, Server}
+import org.eclipse.jetty.server.handler.ContextHandlerCollection
 
-import org.apache.spark.{SparkConf, Logging, SparkContext, SparkEnv}
-import org.apache.spark.scheduler.{SparkReplayerBus, EventLoggingListener, EventLoggingInfo}
+import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
+import org.apache.spark.scheduler.{EventLoggingListener, EventLoggingInfo, SparkReplayerBus}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
 import org.apache.spark.ui.exec.ExecutorsUI
@@ -29,22 +30,23 @@ import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.util.Utils
 
 /** Top level user interface for Spark. */
-private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf, port: Int) extends Logging {
+private[spark] class SparkUI(
+    val sc: SparkContext,
+    conf: SparkConf,
+    val appName: String,
+    val basePath: String = "")
+  extends Logging {
 
-  def this(sc: SparkContext) =
-    this(sc, sc.conf, sc.conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt)
-
-  // Persisted UI constructors
-  def this(conf: SparkConf, port: Int) = this(null, conf, port)
-  def this(conf: SparkConf) =
-    this(conf, conf.get("spark.persisted.ui.port", SparkUI.DEFAULT_PERSISTED_PORT).toInt)
-  def this() = this(new SparkConf())
+  def this(sc: SparkContext) = this(sc, sc.conf, sc.appName)
+  def this(conf: SparkConf, appName: String) = this(null, conf, appName)
+  def this(conf: SparkConf, appName: String, basePath: String) =
+    this(null, conf, appName, basePath)
 
   // If SparkContext is not provided, assume this UI is rendered from persisted storage
   val live = sc != null
-  var appName = if (live) sc.appName else ""
 
   private val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
+  private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
   private var boundPort: Option[Int] = None
   private var server: Option[Server] = None
   private var started = false
@@ -54,20 +56,32 @@ private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf, port: Int) e
   private val env = new EnvironmentUI(this)
   private val exec = new ExecutorsUI(this)
 
-  private val handlers = Seq[(String, Handler)](
-    ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
-    ("/", createRedirectHandler("/stages"))
-  )
-
-  // Add MetricsServlet handlers by default
-  private val metricsServletHandlers = if (live) {
-    SparkEnv.get.metricsSystem.getServletHandlers
-  } else {
-    Array[(String, Handler)]()
+  private val handlers: Seq[(String, Handler)] = {
+    val metricsServletHandlers = if (live) {
+      SparkEnv.get.metricsSystem.getServletHandlers
+    } else {
+      Array[(String, Handler)]()
+    }
+    storage.getHandlers ++
+    jobs.getHandlers ++
+    env.getHandlers ++
+    exec.getHandlers ++
+    metricsServletHandlers ++
+    Seq[(String, Handler)](
+      ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
+      ("/", createRedirectHandler("/stages", basePath))
+    )
   }
 
-  private val allHandlers = storage.getHandlers ++ jobs.getHandlers ++ env.getHandlers ++
-    exec.getHandlers ++ metricsServletHandlers ++ handlers
+  // The root handler that encapsulates all children handlers of this UI
+  val rootHandler: ContextHandlerCollection = {
+    val prefixedHandlers = handlers.map { case (relativePath, handler) =>
+      JettyUtils.createContextHandler(basePath + relativePath.stripSuffix("/"), handler)
+    }
+    val collection = new ContextHandlerCollection
+    collection.setHandlers(prefixedHandlers.toArray)
+    collection
+  }
 
   // Only log events if this SparkUI is live
   private var eventLogger: Option[EventLoggingListener] = None
@@ -75,15 +89,14 @@ private[spark] class SparkUI(val sc: SparkContext, conf: SparkConf, port: Int) e
   // Only replay events if this SparkUI is not live
   private var replayerBus: Option[SparkReplayerBus] = None
 
-  def setAppName(name: String) = appName = name
-
   // Information needed to replay the events logged by this UI, if any
-  def eventLogInfo: Option[EventLoggingInfo] = eventLogger.map { l => Some(l.info) }.getOrElse(None)
+  def eventLogInfo: Option[EventLoggingInfo] =
+    eventLogger.map { l => Some(l.info) }.getOrElse(None)
 
   /** Bind the HTTP server which backs this web interface */
   def bind() {
     try {
-      val (srv, usedPort) = JettyUtils.startJettyServer(host, port, allHandlers)
+      val (srv, usedPort) = JettyUtils.startJettyServer(host, port, rootHandler)
       logInfo("Started Spark Web UI at http://%s:%d".format(host, usedPort))
       server = Some(srv)
       boundPort = Some(usedPort)
