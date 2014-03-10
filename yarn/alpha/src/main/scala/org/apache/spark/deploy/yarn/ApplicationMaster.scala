@@ -79,6 +79,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     // other spark processes running on the same box
     System.setProperty("spark.ui.port", "0")
 
+    // when running the AM, the Spark master is always "yarn-cluster"
+    System.setProperty("spark.master", "yarn-cluster")
+
     // Use priority 30 as its higher then HDFS. Its same priority as MapReduce is using.
     ShutdownHookManager.get().addShutdownHook(new AppMasterShutdownHook(this), 30)
 
