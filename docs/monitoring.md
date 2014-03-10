@@ -60,9 +60,9 @@ licensing restrictions:
 To install the `GangliaSink` you'll need to perform a custom build of Spark. _**Note that
 by embedding this library you will include [LGPL](http://www.gnu.org/copyleft/lesser.html)-licensed 
 code in your Spark package**_. For sbt users, set the 
-`SPARK_GANGLIA_LGPL` environment varaible before building. For Maven users, enable 
-the `-Pspark-ganglia-lgpl` profile. For users linking applications against Spark, link 
-include the `spark-ganglia-lgpl` artifact as a dependency.
+`SPARK_GANGLIA_LGPL` environment variable before building. For Maven users, enable 
+the `-Pspark-ganglia-lgpl` profile. In addition to modifying the cluster's Spark build
+user applications will need to link to the `spark-ganglia-lgpl` artifact.
 
 The syntax of the metrics configuration file is defined in an example configuration file, 
 `$SPARK_HOME/conf/metrics.properties.template`.
