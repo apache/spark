@@ -350,7 +350,8 @@ object SparkBuild extends Build {
   def mllibSettings = sharedSettings ++ Seq(
     name := "spark-mllib",
     libraryDependencies ++= Seq(
-      "org.jblas" % "jblas" % "1.2.3"
+      "org.jblas" % "jblas" % "1.2.3",
+      "org.scalanlp" %% "breeze" % "0.7-SNAPSHOT"
     )
   )
 

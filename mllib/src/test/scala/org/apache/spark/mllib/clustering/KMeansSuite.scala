@@ -17,11 +17,10 @@
 
 package org.apache.spark.mllib.clustering
 
-
-import org.scalatest.BeforeAndAfterAll
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 
 class KMeansSuite extends FunSuite with LocalSparkContext {
 
@@ -129,6 +128,45 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
 
     model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
     assertSetsEqual(model.clusterCenters, Array(Array(1.0, 3.0, 4.0)))
+  }
+
+  test("single cluster with sparse data") {
+    val n = 1000
+    val smallData = Array(
+      Vectors.sparse(n, Seq((0, 1.0), (1, 2.0), (2, 6.0))),
+      Vectors.sparse(n, Seq((0, 1.0), (1, 3.0))),
+      Vectors.sparse(n, Seq((0, 1.0), (1, 4.0), (2, 6.0)))
+    )
+    val data = sc.parallelize((1 to 100).flatMap(_ => smallData), 4)
+
+    // No matter how many runs or iterations we use, we should get one cluster,
+    // centered at the mean of the points
+
+    val center = new Array[Double](n)
+    center(0) = 1.0
+    center(1) = 3.0
+    center(2) = 4.0
+
+    var model = KMeans.train(data, k=1, maxIterations=1)
+    assertSetsEqual(model.clusterCenters, Array(center))
+
+    model = KMeans.train(data, k=1, maxIterations=2)
+    assertSetsEqual(model.clusterCenters, Array(center))
+
+    model = KMeans.train(data, k=1, maxIterations=5)
+    assertSetsEqual(model.clusterCenters, Array(center))
+
+    model = KMeans.train(data, k=1, maxIterations=1, runs=5)
+    assertSetsEqual(model.clusterCenters, Array(center))
+
+    model = KMeans.train(data, k=1, maxIterations=1, runs=5)
+    assertSetsEqual(model.clusterCenters, Array(center))
+
+    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=RANDOM)
+    assertSetsEqual(model.clusterCenters, Array(center))
+
+    model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
+    assertSetsEqual(model.clusterCenters, Array(center))
   }
 
   test("k-means|| initialization") {

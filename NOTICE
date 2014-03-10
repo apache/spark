@@ -3,3 +3,18 @@ Copyright 2013 The Apache Software Foundation.
 
 This product includes software developed at
 The Apache Software Foundation (http://www.apache.org/).
+
+Numerical linear algebra support in MLlib is provided by the breeze package, 
+which depends on the following packages that are not distributed under 
+Apache authorized licenses:
+
+- netlib-core, which is open source software written by Samuel Halliday, 
+  and copyright by the University of Tennessee, the University of Tennessee 
+  Research Foundation, the University of California at Berkeley, and the
+  University of Colorado at Denver. The original software is available from
+    https://github.com/fommil/netlib-java
+
+- JTransforms, which is open source software written by Piotr Wendykier, 
+  and distributed under the the terms of the MPL/LGPL/GPL tri-license. 
+  The original software is available from
+    https://sites.google.com/site/piotrwendykier/software/jtransforms
