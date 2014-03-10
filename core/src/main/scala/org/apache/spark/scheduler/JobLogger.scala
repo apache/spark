@@ -216,7 +216,7 @@ class JobLogger(val user: String, val logDirName: String)
     val cacheStr = if (rdd.getStorageLevel != StorageLevel.NONE) "CACHED" else "NONE"
     val rddInfo =
       s"RDD_ID=$rdd.id ${getRddName(rdd)} $cacheStr " +
-      s"${rdd.getCallSite} ${rdd.callSiteInfo.firstUserClass}"
+      s"${rdd.getCreationSite} ${rdd.creationSiteInfo.firstUserClass}"
     jobLogInfo(jobID, indentString(indent) + rddInfo, false)
     rdd.dependencies.foreach {
       case shufDep: ShuffleDependency[_, _] =>

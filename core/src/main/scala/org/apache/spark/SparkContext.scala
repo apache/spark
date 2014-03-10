@@ -830,8 +830,10 @@ class SparkContext(
     setLocalProperty("externalCallSite", null)
   }
 
-  /** Capture the current user callsite and return a formatted version for printing. If the user
-    * has overridden the call site, this will return the user's version. */
+  /**
+   * Capture the current user callsite and return a formatted version for printing. If the user
+   * has overridden the call site, this will return the user's version.
+   */
   private[spark] def getCallSite(): String = {
     Option(getLocalProperty("externalCallSite")).getOrElse(Utils.formatCallSiteInfo())
   }

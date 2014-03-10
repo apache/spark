@@ -1023,10 +1023,8 @@ abstract class RDD[T: ClassTag](
 
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
-  /** Info about the function call site where this was created (e.g. `textFile`, `parallelize`). */
-  @transient private[spark] val callSiteInfo = Utils.getCallSiteInfo
-
-  private[spark] def getCallSite = Utils.formatCallSiteInfo(callSiteInfo)
+  /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
+  private[spark] def getCreationSite = sc.getCallSite()
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 
@@ -1089,7 +1087,7 @@ abstract class RDD[T: ClassTag](
   }
 
   override def toString: String = "%s%s[%d] at %s".format(
-    Option(name).map(_ + " ").getOrElse(""), getClass.getSimpleName, id, getCallSite)
+    Option(name).map(_ + " ").getOrElse(""), getClass.getSimpleName, id, getCreationSite)
 
   def toJavaRDD() : JavaRDD[T] = {
     new JavaRDD(this)(elementClassTag)
