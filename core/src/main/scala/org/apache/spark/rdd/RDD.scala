@@ -1024,7 +1024,8 @@ abstract class RDD[T: ClassTag](
   private var storageLevel: StorageLevel = StorageLevel.NONE
 
   /** User code that created this RDD (e.g. `textFile`, `parallelize`). */
-  private[spark] def getCreationSite = sc.getCallSite()
+  @transient private[spark] val creationSiteInfo = Utils.getCallSiteInfo
+  private[spark] def getCreationSite = Utils.formatCallSiteInfo(creationSiteInfo)
 
   private[spark] def elementClassTag: ClassTag[T] = classTag[T]
 
