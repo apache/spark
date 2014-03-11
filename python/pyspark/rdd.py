@@ -626,7 +626,7 @@ class RDD(object):
         return buckets
 
     def histogram(self, bucketCount, buckets=None):
-                """
+        """
         Compute a histogram of the data using bucketCount number of buckets
         evenly spaced between the min and max of the RDD.
 
