@@ -91,9 +91,6 @@ class JoinedRow extends Row {
   def getByte(i: Int): Byte =
     if (i < row1.size) row1.getByte(i) else row2.getByte(i - row1.size)
 
-  def getBinary(i: Int): Array[Byte] =
-    if (i < row1.size) row1.getBinary(i) else row2.getBinary(i - row1.size)
-
   def getFloat(i: Int): Float =
     if (i < row1.size) row1.getFloat(i) else row2.getFloat(i - row1.size)
 

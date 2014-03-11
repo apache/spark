@@ -41,8 +41,7 @@ class RowRecordMaterializer(root: CatalystGroupConverter) extends RecordMaterial
   def this(parquetSchema: MessageType) =
     this(new CatalystGroupConverter(ParquetTypesConverter.convertToAttributes(parquetSchema)))
 
-  // Note: return a copy of the Row
-  override def getCurrentRecord: Row = root.getCurrentRecord.copy()
+  override def getCurrentRecord: Row = root.getCurrentRecord
 
   override def getRootConverter: GroupConverter = root
 }
@@ -184,7 +183,8 @@ class CatalystPrimitiveConverter(
     fieldIndex: Int) extends PrimitiveConverter {
   // TODO: consider refactoring these together with ParquetTypesConverter
   override def addBinary(value: Binary): Unit =
-    parent.getCurrentRecord.setBinary(fieldIndex, value.getBytes)
+    // TODO: fix this once a setBinary will become available in MutableRow
+    parent.getCurrentRecord.setByte(fieldIndex, value.getBytes.apply(0))
 
   override def addBoolean(value: Boolean): Unit =
     parent.getCurrentRecord.setBoolean(fieldIndex, value)

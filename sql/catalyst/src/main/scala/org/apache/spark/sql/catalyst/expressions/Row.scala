@@ -40,7 +40,6 @@ trait Row extends Seq[Any] with Serializable {
   def getBoolean(i: Int): Boolean
   def getShort(i: Int): Short
   def getByte(i: Int): Byte
-  def getBinary(i: Int): Array[Byte]
   def getString(i: Int): String
 
   override def toString() =
@@ -64,7 +63,6 @@ trait MutableRow extends Row {
   def setBoolean(ordinal: Int, value: Boolean)
   def setShort(ordinal: Int, value: Short)
   def setByte(ordinal: Int, value: Byte)
-  def setBinary(ordinal: Int, value: Array[Byte])
   def setFloat(ordinal: Int, value: Float)
   def setString(ordinal: Int, value: String)
 
@@ -95,7 +93,6 @@ object EmptyRow extends Row {
   def getBoolean(i: Int): Boolean = throw new UnsupportedOperationException
   def getShort(i: Int): Short = throw new UnsupportedOperationException
   def getByte(i: Int): Byte = throw new UnsupportedOperationException
-  def getBinary(i: Int): Array[Byte] = throw new UnsupportedOperationException
   def getString(i: Int): String = throw new UnsupportedOperationException
 
   def copy() = this
@@ -155,13 +152,8 @@ class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
     values(i).asInstanceOf[Byte]
   }
 
-  def getBinary(i: Int): Array[Byte] = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive byte array value.")
-    values(i).asInstanceOf[Array[Byte]]
-  }
-
   def getString(i: Int): String = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive byte value.")
+    if (values(i) == null) sys.error("Failed to check null bit for primitive String value.")
     values(i).asInstanceOf[String]
   }
 
@@ -176,7 +168,6 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
 
   override def setBoolean(ordinal: Int,value: Boolean): Unit = { values(ordinal) = value }
   override def setByte(ordinal: Int,value: Byte): Unit = { values(ordinal) = value }
-  override def setBinary(ordinal: Int,value: Array[Byte]): Unit = { values(ordinal) = value }
   override def setDouble(ordinal: Int,value: Double): Unit = { values(ordinal) = value }
   override def setFloat(ordinal: Int,value: Float): Unit = { values(ordinal) = value }
   override def setInt(ordinal: Int,value: Int): Unit = { values(ordinal) = value }

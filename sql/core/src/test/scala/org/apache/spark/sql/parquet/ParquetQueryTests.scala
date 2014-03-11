@@ -69,7 +69,10 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
       .convertToAttributes(MessageTypeParser
       .parseMessageType(ParquetTestData.subTestSchema)))
     assert(projected.output.size === 2)
-    val result = projected.execute().collect()
+    val result = projected
+      .execute()
+      .map(_.copy())
+      .collect()
     result.zipWithIndex.foreach {
       case (row, index) => {
           if (index % 3 == 0)
@@ -115,7 +118,9 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
       parquetRelation.output,
       parquetRelation,
       None)(TestSqlContext.sparkContext)
-    scanner.execute
+    scanner
+      .execute
+      .map(_.copy())
   }
 }
 
