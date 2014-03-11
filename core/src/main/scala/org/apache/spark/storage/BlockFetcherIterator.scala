@@ -284,7 +284,7 @@ object BlockFetcherIterator {
               }
             } catch {
               case x: InterruptedException => logInfo("Copier Interrupted")
-              //case _ => throw new SparkException("Exception Throw in Shuffle Copier")
+              // case _ => throw new SparkException("Exception Throw in Shuffle Copier")
             }
           }
         }

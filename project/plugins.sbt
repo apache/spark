@@ -2,7 +2,13 @@ scalaVersion := "2.10.3"
 
 resolvers += Resolver.url("artifactory", url("http://scalasbt.artifactoryonline.com/scalasbt/sbt-plugin-releases"))(Resolver.ivyStylePatterns)
 
+resolvers += "sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots/"
+
 resolvers += "Typesafe Repository" at "http://repo.typesafe.com/typesafe/releases/"
+
+libraryDependencies ++= Seq(
+  "org.scalastyle" %% "scalastyle" % "0.5.0-SNAPSHOT"
+)
 
 addSbtPlugin("com.eed3si9n" % "sbt-assembly" % "0.10.2")
 
@@ -22,3 +28,4 @@ addSbtPlugin("org.scalastyle" %% "scalastyle-sbt-plugin" % "0.4.0")
 addSbtPlugin("com.typesafe" % "sbt-mima-plugin" % "0.1.6")
 
 addSbtPlugin("com.alpinenow" % "junit_xml_listener" % "0.5.0")
+
