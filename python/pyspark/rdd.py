@@ -47,6 +47,7 @@ from pyspark.shuffle import Aggregator, InMemoryMerger, ExternalMerger, \
     get_used_memory
 
 from py4j.java_collections import ListConverter, MapConverter
+from bisect import bisect_left
 
 __all__ = ["RDD"]
 
@@ -902,66 +903,87 @@ class RDD(object):
         1.0
         """
         return self.stats().sampleVariance()
-
-    def _getBuckets(self, bucketCount):
-        #use the statscounter as a quick way of getting max and min
-        mm_stats = self.stats()
-        min = mm_stats.min()
-        max = mm_stats.max()
-
-        increment = (max-min)/bucketCount
-        buckets = range(min,min)
-        if increment != 0:
-            buckets = range(min,max, increment)
-
-        return {"min":min, "max":max, "buckets":buckets}
-
-    def histogram(self, bucketCount, buckets=None):
+    
+    def histogram(self, buckets=None, evenBuckets=False, bucketCount=None):
         """
-        Compute a histogram of the data using bucketCount number of buckets
-        evenly spaced between the min and max of the RDD.
+        Compute a histogram using the provided buckets. The buckets are all open
+        to the left except for the last which is closed e.g. for the array 
+        [1, 10, 20, 50] the buckets are [1, 10) [10, 20) [20, 50] i.e. 1<=x<10,
+        10<=x<20, 20<=x<=50. And on the input of 1 and 50 we would have a
+        histogram of 1, 0, 1.
 
-        >>> sc.parallelize([1,49, 23, 100, 12, 13, 20, 22, 75, 50]).histogram(3)
-        defaultdict(<type 'int'>, {(67, 100): 2, (1, 33): 6, (34, 66): 2})
+        If bucketCount is supplied, evenly-spaced buckets are automatically 
+        constructed using the minimum and maximum of the RDD. For example if the
+        min value is 0 and the max is 100 and there are two buckets the resulting
+        buckets will be [0, 50) [50, 100]. bucketCount must be at least 1.
+        Exactly one of buckets and bucketCount must be provided.
+
+        Note: if your histogram is evenly spaced (e.g. [0, 10, 20, 30]) this can
+        be switched from an O(log n) computation to O(1) per element (where n is
+        the number of buckets) if you set evenBuckets to true.
+        buckets must be sorted and not contain any duplicates.
+        buckets array must be at least two elements 
+
+        >>> a = sc.parallelize(range(100))
+        >>> a.histogram([0, 10, 20, 30, 40, 50, 60, 70, 80, 90], evenBuckets=True)
+        [10, 10, 10, 10, 10, 10, 10, 10, 11]
+        >>> a.histogram([0, 10, 20, 30, 40, 50, 60, 70, 80, 90])
+        [10, 10, 10, 10, 10, 10, 10, 10, 11]
+        >>> a.histogram([0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 99])
+        [10, 10, 10, 10, 10, 10, 10, 10, 10, 10]
         """
-        min = float("-inf")
-        max = float("inf")
-        evenBuckets = False
-        if not buckets:
-            b = self._getBuckets(bucketCount)
-            buckets = b["buckets"]
-            min = b["min"]
-            max = b["max"]
-        
-        if len(buckets) < 2:
-            raise ValueError("requires more than 1 bucket")
-        if len(buckets) % 2 == 0:
-            evenBuckets = True
-        # histogram partition
+
+        if (buckets and bucketCount) or (not buckets and not bucketCount):
+            raise ValueError("Pass either buckets or bucketCount but not both")
+
+        if bucketCount <= 0:
+            raise ValueError("bucketCount must be positive")
+
+        def getBuckets():
+            #use the statscounter as a quick way of getting max and min
+            mm_stats = self.stats()
+            min = mm_stats.min()
+            max = mm_stats.max()
+            increment = (max - min) / bucketCount
+            if increment != 0:
+                buckets = range(min, max, increment)
+            else:
+                buckets = [min, max]
+            return buckets
+
         def histogramPartition(iterator):
-            counters = defaultdict(int)
-            for obj in iterator:
-                k = bisect_right(buckets, obj)
-                if k < len(buckets) and k > 0:
-                    key = (buckets[k-1], buckets[k]-1)
-                elif k == len(buckets):
-                    key = (buckets[k-1], max)
-                elif k == 0:
-                    key = (min, buckets[k]-1)
-                print obj, k, key
-                counters[key] += 1
-            yield counters
-            
-        # merge counters
-        def mergeCounters(d1, d2):
-            for k in d2.keys():
-                if k in d1:
-                    d1[k] += d2[k]
-            return d1
-        
-        #map partitions(histogram_partition(bucketFunction)).reduce(mergeCounters)
-        return self.mapPartitions(histogramPartition).reduce(mergeCounters)
+            counters = [0 for i in range(len(buckets) - 1)]
+            for i in iterator:
+                if evenBuckets:
+                    t = fastBucketFunction(buckets[0], buckets[1] - buckets[0], len(buckets), i)
+                else:
+                    t = basicBucketFunction(i)
+                if t:
+                    counters[t] += 1
+            return [counters]
 
+        def mergeCounters(a1, a2):
+            for i in range(len(a1)):
+                a1[i] = a1[i] + a2[i]
+            return a1
+
+        def basicBucketFunction(e):
+            loc = bisect_left(buckets, e, 0, len(buckets))
+            if loc > 0 and loc < len(buckets):
+                return loc - 1
+            else:
+                return None
+
+        def fastBucketFunction(minimum, inc, count, e):
+            bucketNumber = (e - minimum) // inc
+            if (bucketNumber >= count or bucketNumber < 0):
+                return None
+            return min(bucketNumber, count -1)
+
+        if bucketCount:
+            evenBuckets = True
+            buckets = getBuckets()
+        return self.mapPartitions(lambda x: histogramPartition(x)).reduce(mergeCounters)
 
     def countByValue(self):
         """
