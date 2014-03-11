@@ -394,12 +394,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
-  <td>spark.driver.add-dynamic-jars</td>
+  <td>spark.driver.loadAddedJars</td>
   <td>false</td>
   <td>
-    If true, the SparkContext uses a class loader to make jars added via `addJar` available to the SparkContext.
-    The default behavior is that jars added via `addJar` are only made available to executors, and Spark apps
-    must include all its jars in the application CLASSPATH even if `addJar` is used.
+    If true, the SparkContext uses a class loader to make jars added via `addJar` available to 
+    the SparkContext. The default behavior is that jars added via `addJar` are only made 
+    available to executors, and Spark apps must include all its jars in the driver's 
+    CLASSPATH even if `addJar` is used.
   </td>
 </tr>
 <tr>

@@ -127,7 +127,7 @@ object SparkEnv extends Logging {
 
     val securityManager = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
-      securityManager = securityManager, classLoader = classLoader)
+      securityManager = securityManager)
 
     // Bit of a hack: If this is the driver and our port was 0 (meaning bind to any free port),
     // figure out which port number Akka actually bound to and set spark.driver.port to it.
