@@ -44,6 +44,11 @@ class RidgeRegressionModel(
 
 /**
  * Train a regression model with L2-regularization using Stochastic Gradient Descent.
+ * This solves the l1-regularized least squares regression formulation
+ *          f(weights) = 1/n ||A weights-y||^2  + regParam/2 ||weights||^2
+ * Here the data matrix has n rows, and the input RDD holds the set of rows of A, each with
+ * its corresponding right hand side label y.
+ * See also the documentation for the precise formulation.
  */
 class RidgeRegressionWithSGD private (
     var stepSize: Double,
@@ -53,7 +58,7 @@ class RidgeRegressionWithSGD private (
     extends GeneralizedLinearAlgorithm[RidgeRegressionModel]
   with Serializable {
 
-  val gradient = new SquaredGradient()
+  val gradient = new LeastSquaresGradient()
   val updater = new SquaredL2Updater()
 
   @transient val optimizer = new GradientDescent(gradient, updater).setStepSize(stepSize)
@@ -114,8 +119,8 @@ object RidgeRegressionWithSGD {
   /**
    * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate the gradient. The weights used in
-   * gradient descent are initialized using the initial weights provided.
+   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient. The weights used
+   * in gradient descent are initialized using the initial weights provided.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -141,7 +146,7 @@ object RidgeRegressionWithSGD {
   /**
    * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. Each iteration uses
-   * `miniBatchFraction` fraction of the data to calculate the gradient.
+   * `miniBatchFraction` fraction of the data to calculate a stochastic gradient.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.
@@ -163,7 +168,7 @@ object RidgeRegressionWithSGD {
   /**
    * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using the specified step size. We use the entire data set to
-   * update the gradient in each iteration.
+   * compute the true gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param stepSize Step size to be used for each iteration of Gradient Descent.
@@ -184,7 +189,7 @@ object RidgeRegressionWithSGD {
   /**
    * Train a RidgeRegression model given an RDD of (label, features) pairs. We run a fixed number
    * of iterations of gradient descent using a step size of 1.0. We use the entire data set to
-   * update the gradient in each iteration.
+   * compute the true gradient in each iteration.
    *
    * @param input RDD of (label, array of features) pairs.
    * @param numIterations Number of iterations of gradient descent to run.

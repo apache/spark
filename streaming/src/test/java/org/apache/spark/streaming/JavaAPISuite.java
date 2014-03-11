@@ -19,7 +19,6 @@ package org.apache.spark.streaming;
 
 import scala.Tuple2;
 
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import java.io.*;
@@ -30,7 +29,6 @@ import com.google.common.collect.Lists;
 import com.google.common.io.Files;
 import com.google.common.collect.Sets;
 
-import org.apache.spark.SparkConf;
 import org.apache.spark.HashPartitioner;
 import org.apache.spark.api.java.JavaPairRDD;
 import org.apache.spark.api.java.JavaRDD;
@@ -38,6 +36,7 @@ import org.apache.spark.api.java.JavaSparkContext;
 import org.apache.spark.api.java.function.*;
 import org.apache.spark.storage.StorageLevel;
 import org.apache.spark.streaming.api.java.JavaDStream;
+import org.apache.spark.streaming.api.java.JavaDStreamLike;
 import org.apache.spark.streaming.api.java.JavaPairDStream;
 import org.apache.spark.streaming.api.java.JavaStreamingContext;
 
@@ -45,6 +44,8 @@ import org.apache.spark.streaming.api.java.JavaStreamingContext;
 // serialized, as an alternative to converting these anonymous classes to static inner classes;
 // see http://stackoverflow.com/questions/758570/.
 public class JavaAPISuite extends LocalJavaStreamingContext implements Serializable {
+
+  @SuppressWarnings("unchecked")
   @Test
   public void testCount() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -64,6 +65,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testMap() {
     List<List<String>> inputData = Arrays.asList(
@@ -87,6 +89,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testWindow() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -108,6 +111,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testWindowWithSlideDuration() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -132,6 +136,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testFilter() {
     List<List<String>> inputData = Arrays.asList(
@@ -155,13 +160,16 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testRepartitionMorePartitions() {
     List<List<Integer>> inputData = Arrays.asList(
       Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
       Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
-    JavaDStream stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 2);
-    JavaDStream repartitioned = stream.repartition(4);
+    JavaDStream<Integer> stream =
+        JavaTestUtils.attachTestInputStream(ssc, inputData, 2);
+    JavaDStreamLike<Integer,JavaDStream<Integer>,JavaRDD<Integer>> repartitioned =
+        stream.repartition(4);
     JavaTestUtils.attachTestOutputStream(repartitioned);
     List<List<List<Integer>>> result = JavaTestUtils.runStreamsWithPartitions(ssc, 2, 2);
     Assert.assertEquals(2, result.size());
@@ -172,13 +180,16 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testRepartitionFewerPartitions() {
     List<List<Integer>> inputData = Arrays.asList(
       Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10),
       Arrays.asList(1, 2, 3, 4, 5, 6, 7, 8, 9, 10));
-    JavaDStream stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 4);
-    JavaDStream repartitioned = stream.repartition(2);
+    JavaDStream<Integer> stream =
+        JavaTestUtils.attachTestInputStream(ssc, inputData, 4);
+    JavaDStreamLike<Integer,JavaDStream<Integer>,JavaRDD<Integer>> repartitioned =
+        stream.repartition(2);
     JavaTestUtils.attachTestOutputStream(repartitioned);
     List<List<List<Integer>>> result = JavaTestUtils.runStreamsWithPartitions(ssc, 2, 2);
     Assert.assertEquals(2, result.size());
@@ -188,6 +199,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testGlom() {
     List<List<String>> inputData = Arrays.asList(
@@ -206,6 +218,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testMapPartitions() {
     List<List<String>> inputData = Arrays.asList(
@@ -217,36 +230,38 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList("YANKEESRED SOCKS"));
 
     JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaDStream<String> mapped = stream.mapPartitions(new FlatMapFunction<Iterator<String>, String>() {
-      @Override
-      public Iterable<String> call(Iterator<String> in) {
-        String out = "";
-        while (in.hasNext()) {
-          out = out + in.next().toUpperCase();
-        }
-        return Lists.newArrayList(out);
-      }
-    });
+    JavaDStream<String> mapped = stream.mapPartitions(
+        new FlatMapFunction<Iterator<String>, String>() {
+          @Override
+          public Iterable<String> call(Iterator<String> in) {
+            String out = "";
+            while (in.hasNext()) {
+              out = out + in.next().toUpperCase();
+            }
+            return Lists.newArrayList(out);
+          }
+        });
     JavaTestUtils.attachTestOutputStream(mapped);
     List<List<String>> result = JavaTestUtils.runStreams(ssc, 2, 2);
 
     Assert.assertEquals(expected, result);
   }
 
-  private class IntegerSum extends Function2<Integer, Integer, Integer> {
+  private class IntegerSum implements Function2<Integer, Integer, Integer> {
     @Override
     public Integer call(Integer i1, Integer i2) throws Exception {
       return i1 + i2;
     }
   }
 
-  private class IntegerDifference extends Function2<Integer, Integer, Integer> {
+  private class IntegerDifference implements Function2<Integer, Integer, Integer> {
     @Override
     public Integer call(Integer i1, Integer i2) throws Exception {
       return i1 - i2;
     }
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testReduce() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -267,6 +282,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testReduceByWindow() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -289,6 +305,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testQueueStream() {
     List<List<Integer>> expected = Arrays.asList(
@@ -312,6 +329,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testTransform() {
     List<List<Integer>> inputData = Arrays.asList(
@@ -344,6 +362,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testVariousTransform() {
     // tests whether all variations of transform can be called from Java
@@ -373,7 +392,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
       }
     );
 
-    JavaPairDStream<String, Integer> transformed3 = stream.transform(
+    JavaPairDStream<String, Integer> transformed3 = stream.transformToPair(
         new Function<JavaRDD<Integer>, JavaPairRDD<String, Integer>>() {
           @Override public JavaPairRDD<String, Integer> call(JavaRDD<Integer> in) throws Exception {
             return null;
@@ -381,7 +400,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         }
     );
 
-    JavaPairDStream<String, Integer> transformed4 = stream.transform(
+    JavaPairDStream<String, Integer> transformed4 = stream.transformToPair(
         new Function2<JavaRDD<Integer>, Time, JavaPairRDD<String, Integer>>() {
           @Override public JavaPairRDD<String, Integer> call(JavaRDD<Integer> in, Time time) throws Exception {
             return null;
@@ -405,7 +424,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         }
     );
 
-    JavaPairDStream<String, String> pairTransformed3 = pairStream.transform(
+    JavaPairDStream<String, String> pairTransformed3 = pairStream.transformToPair(
         new Function<JavaPairRDD<String, Integer>, JavaPairRDD<String, String>>() {
           @Override public JavaPairRDD<String, String> call(JavaPairRDD<String, Integer> in) throws Exception {
             return null;
@@ -413,7 +432,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         }
     );
 
-    JavaPairDStream<String, String> pairTransformed4 = pairStream.transform(
+    JavaPairDStream<String, String> pairTransformed4 = pairStream.transformToPair(
         new Function2<JavaPairRDD<String, Integer>, Time, JavaPairRDD<String, String>>() {
           @Override public JavaPairRDD<String, String> call(JavaPairRDD<String, Integer> in, Time time) throws Exception {
             return null;
@@ -423,6 +442,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testTransformWith() {
     List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
@@ -462,7 +482,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         ssc, stringStringKVStream2, 1);
     JavaPairDStream<String, String> pairStream2 = JavaPairDStream.fromJavaDStream(stream2);
 
-    JavaPairDStream<String, Tuple2<String, String>> joined = pairStream1.transformWith(
+    JavaPairDStream<String, Tuple2<String, String>> joined = pairStream1.transformWithToPair(
         pairStream2,
         new Function3<
             JavaPairRDD<String, String>,
@@ -492,6 +512,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   }
 
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testVariousTransformWith() {
     // tests whether all variations of transformWith can be called from Java
@@ -530,7 +551,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         }
     );
 
-    JavaPairDStream<Double, Double> transformed3 = stream1.transformWith(
+    JavaPairDStream<Double, Double> transformed3 = stream1.transformWithToPair(
         stream2,
         new Function3<JavaRDD<Integer>, JavaRDD<String>, Time, JavaPairRDD<Double, Double>>() {
           @Override
@@ -540,7 +561,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         }
     );
 
-    JavaPairDStream<Double, Double> transformed4 = stream1.transformWith(
+    JavaPairDStream<Double, Double> transformed4 = stream1.transformWithToPair(
         pairStream1,
         new Function3<JavaRDD<Integer>, JavaPairRDD<String, Integer>, Time, JavaPairRDD<Double, Double>>() {
           @Override
@@ -570,7 +591,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         }
     );
 
-    JavaPairDStream<Double, Double> pairTransformed3 = pairStream1.transformWith(
+    JavaPairDStream<Double, Double> pairTransformed3 = pairStream1.transformWithToPair(
         stream2,
         new Function3<JavaPairRDD<String, Integer>, JavaRDD<String>, Time, JavaPairRDD<Double, Double>>() {
           @Override
@@ -580,7 +601,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         }
     );
 
-    JavaPairDStream<Double, Double> pairTransformed4 = pairStream1.transformWith(
+    JavaPairDStream<Double, Double> pairTransformed4 = pairStream1.transformWithToPair(
         pairStream2,
         new Function3<JavaPairRDD<String, Integer>, JavaPairRDD<Double, Character>, Time, JavaPairRDD<Double, Double>>() {
           @Override
@@ -591,6 +612,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     );
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testStreamingContextTransform(){
     List<List<Integer>> stream1input = Arrays.asList(
@@ -634,7 +656,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     List<JavaDStream<?>> listOfDStreams2 =
         Arrays.<JavaDStream<?>>asList(stream1, stream2, pairStream1.toJavaDStream());
 
-    JavaPairDStream<Integer, Tuple2<Integer, String>> transformed2 = ssc.transform(
+    JavaPairDStream<Integer, Tuple2<Integer, String>> transformed2 = ssc.transformToPair(
       listOfDStreams2,
       new Function2<List<JavaRDD<?>>, Time, JavaPairRDD<Integer, Tuple2<Integer, String>>>() {
         public JavaPairRDD<Integer, Tuple2<Integer, String>> call(List<JavaRDD<?>> listOfRDDs, Time time) {
@@ -649,7 +671,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
               return new Tuple2<Integer, Integer>(i, i);
             }
           };
-          return rdd1.union(rdd2).map(mapToTuple).join(prdd3);
+          return rdd1.union(rdd2).mapToPair(mapToTuple).join(prdd3);
         }
       }
     );
@@ -658,6 +680,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testFlatMap() {
     List<List<String>> inputData = Arrays.asList(
@@ -683,6 +706,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     assertOrderInvariantEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairFlatMap() {
     List<List<String>> inputData = Arrays.asList(
@@ -718,22 +742,24 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
             new Tuple2<Integer, String>(9, "s")));
 
     JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaPairDStream<Integer,String> flatMapped = stream.flatMap(new PairFlatMapFunction<String, Integer, String>() {
-      @Override
-      public Iterable<Tuple2<Integer, String>> call(String in) throws Exception {
-        List<Tuple2<Integer, String>> out = Lists.newArrayList();
-        for (String letter: in.split("(?!^)")) {
-          out.add(new Tuple2<Integer, String>(in.length(), letter));
+    JavaPairDStream<Integer, String> flatMapped = stream.flatMapToPair(
+      new PairFlatMapFunction<String, Integer, String>() {
+        @Override
+        public Iterable<Tuple2<Integer, String>> call(String in) throws Exception {
+          List<Tuple2<Integer, String>> out = Lists.newArrayList();
+          for (String letter: in.split("(?!^)")) {
+            out.add(new Tuple2<Integer, String>(in.length(), letter));
+          }
+          return out;
         }
-        return out;
-      }
-    });
+      });
     JavaTestUtils.attachTestOutputStream(flatMapped);
     List<List<Tuple2<Integer, String>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testUnion() {
     List<List<Integer>> inputData1 = Arrays.asList(
@@ -778,6 +804,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
 
   // PairDStream Functions
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairFilter() {
     List<List<String>> inputData = Arrays.asList(
@@ -789,7 +816,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         Arrays.asList(new Tuple2<String, Integer>("yankees", 7)));
 
     JavaDStream<String> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
-    JavaPairDStream<String, Integer> pairStream = stream.map(
+    JavaPairDStream<String, Integer> pairStream = stream.mapToPair(
         new PairFunction<String, String, Integer>() {
           @Override
           public Tuple2<String, Integer> call(String in) throws Exception {
@@ -810,7 +837,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
-  List<List<Tuple2<String, String>>> stringStringKVStream = Arrays.asList(
+  @SuppressWarnings("unchecked")
+  private List<List<Tuple2<String, String>>> stringStringKVStream = Arrays.asList(
       Arrays.asList(new Tuple2<String, String>("california", "dodgers"),
           new Tuple2<String, String>("california", "giants"),
           new Tuple2<String, String>("new york", "yankees"),
@@ -820,7 +848,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
           new Tuple2<String, String>("new york", "rangers"),
           new Tuple2<String, String>("new york", "islanders")));
 
-  List<List<Tuple2<String, Integer>>> stringIntKVStream = Arrays.asList(
+  @SuppressWarnings("unchecked")
+  private List<List<Tuple2<String, Integer>>> stringIntKVStream = Arrays.asList(
       Arrays.asList(
           new Tuple2<String, Integer>("california", 1),
           new Tuple2<String, Integer>("california", 3),
@@ -832,6 +861,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
           new Tuple2<String, Integer>("new york", 3),
           new Tuple2<String, Integer>("new york", 1)));
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairMap() { // Maps pair -> pair of different type
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -850,7 +880,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
-    JavaPairDStream<Integer, String> reversed = pairStream.map(
+    JavaPairDStream<Integer, String> reversed = pairStream.mapToPair(
         new PairFunction<Tuple2<String, Integer>, Integer, String>() {
           @Override
           public Tuple2<Integer, String> call(Tuple2<String, Integer> in) throws Exception {
@@ -864,6 +894,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairMapPartitions() { // Maps pair -> pair of different type
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -882,7 +913,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
     JavaDStream<Tuple2<String, Integer>> stream = JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
-    JavaPairDStream<Integer, String> reversed = pairStream.mapPartitions(
+    JavaPairDStream<Integer, String> reversed = pairStream.mapPartitionsToPair(
         new PairFlatMapFunction<Iterator<Tuple2<String, Integer>>, Integer, String>() {
           @Override
           public Iterable<Tuple2<Integer, String>> call(Iterator<Tuple2<String, Integer>> in) throws Exception {
@@ -901,6 +932,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairMap2() { // Maps pair -> single
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -925,6 +957,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairToPairFlatMapWithChangingTypes() { // Maps pair -> pair
     List<List<Tuple2<String, Integer>>> inputData = Arrays.asList(
@@ -950,7 +983,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaDStream<Tuple2<String, Integer>> stream =
         JavaTestUtils.attachTestInputStream(ssc, inputData, 1);
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
-    JavaPairDStream<Integer, String> flatMapped = pairStream.flatMap(
+    JavaPairDStream<Integer, String> flatMapped = pairStream.flatMapToPair(
         new PairFlatMapFunction<Tuple2<String, Integer>, Integer, String>() {
           @Override
           public Iterable<Tuple2<Integer, String>> call(Tuple2<String, Integer> in) throws Exception {
@@ -967,6 +1000,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairGroupByKey() {
     List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
@@ -989,6 +1023,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairReduceByKey() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1013,6 +1048,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testCombineByKey() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1043,6 +1079,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testCountByValue() {
     List<List<String>> inputData = Arrays.asList(
@@ -1068,6 +1105,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testGroupByKeyAndWindow() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1113,6 +1151,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     return new Tuple2<String, HashSet<Integer>>(tuple._1(), new HashSet<Integer>(tuple._2()));
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testReduceByKeyAndWindow() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1136,6 +1175,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testUpdateStateByKey() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1171,6 +1211,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testReduceByKeyAndWindowWithInverse() {
     List<List<Tuple2<String, Integer>>> inputData = stringIntKVStream;
@@ -1187,13 +1228,15 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     JavaPairDStream<String, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
     JavaPairDStream<String, Integer> reduceWindowed =
-        pairStream.reduceByKeyAndWindow(new IntegerSum(), new IntegerDifference(), new Duration(2000), new Duration(1000));
+        pairStream.reduceByKeyAndWindow(new IntegerSum(), new IntegerDifference(),
+          new Duration(2000), new Duration(1000));
     JavaTestUtils.attachTestOutputStream(reduceWindowed);
     List<List<Tuple2<String, Integer>>> result = JavaTestUtils.runStreams(ssc, 3, 3);
 
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testCountByValueAndWindow() {
     List<List<String>> inputData = Arrays.asList(
@@ -1227,6 +1270,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, unorderedResult);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairTransform() {
     List<List<Tuple2<Integer, Integer>>> inputData = Arrays.asList(
@@ -1257,7 +1301,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
         ssc, inputData, 1);
     JavaPairDStream<Integer, Integer> pairStream = JavaPairDStream.fromJavaDStream(stream);
 
-    JavaPairDStream<Integer, Integer> sorted = pairStream.transform(
+    JavaPairDStream<Integer, Integer> sorted = pairStream.transformToPair(
         new Function<JavaPairRDD<Integer, Integer>, JavaPairRDD<Integer, Integer>>() {
           @Override
           public JavaPairRDD<Integer, Integer> call(JavaPairRDD<Integer, Integer> in) throws Exception {
@@ -1271,6 +1315,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testPairToNormalRDDTransform() {
     List<List<Tuple2<Integer, Integer>>> inputData = Arrays.asList(
@@ -1312,6 +1357,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
+  @Test
   public void testMapValues() {
     List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
 
@@ -1342,6 +1389,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testFlatMapValues() {
     List<List<Tuple2<String, String>>> inputData = stringStringKVStream;
@@ -1386,6 +1434,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testCoGroup() {
     List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
@@ -1429,6 +1478,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testJoin() {
     List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
@@ -1472,6 +1522,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testLeftOuterJoin() {
     List<List<Tuple2<String, String>>> stringStringKVStream1 = Arrays.asList(
@@ -1503,6 +1554,7 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
     Assert.assertEquals(expected, result);
   }
 
+  @SuppressWarnings("unchecked")
   @Test
   public void testCheckpointMasterRecovery() throws InterruptedException {
     List<List<String>> inputData = Arrays.asList(
@@ -1541,7 +1593,8 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
   }
 
 
-  /** TEST DISABLED: Pending a discussion about checkpoint() semantics with TD
+  /* TEST DISABLED: Pending a discussion about checkpoint() semantics with TD
+  @SuppressWarnings("unchecked")
   @Test
   public void testCheckpointofIndividualStream() throws InterruptedException {
     List<List<String>> inputData = Arrays.asList(
@@ -1580,17 +1633,16 @@ public class JavaAPISuite extends LocalJavaStreamingContext implements Serializa
 
   @Test
   public void testSocketString() {
-    class Converter extends Function<InputStream, Iterable<String>> {
-      public Iterable<String> call(InputStream in) {
+  
+    class Converter implements Function<InputStream, Iterable<String>> {
+      public Iterable<String> call(InputStream in) throws IOException {
         BufferedReader reader = new BufferedReader(new InputStreamReader(in));
         List<String> out = new ArrayList<String>();
-        try {
-          while (true) {
-            String line = reader.readLine();
-            if (line == null) { break; }
-            out.add(line);
-          }
-        } catch (IOException e) { }
+        while (true) {
+          String line = reader.readLine();
+          if (line == null) { break; }
+          out.add(line);
+        }
         return out;
       }
     }

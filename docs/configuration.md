@@ -148,6 +148,34 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.ui.filters</td>
+  <td>None</td>
+  <td>
+    Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
+    standard javax servlet Filter. Parameters to each filter can also be specified by setting a
+    java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
+    (e.g.-Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
+  </td>
+</tr>
+<tr>
+  <td>spark.ui.acls.enable</td>
+  <td>false</td>
+  <td>
+    Whether spark web ui acls should are enabled. If enabled, this checks to see if the user has 
+    access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
+    Also note this requires the user to be known, if the user comes across as null no checks
+    are done. Filters can be used to authenticate and set the user.
+  </td>
+</tr>
+<tr>  
+  <td>spark.ui.view.acls</td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users that have view access to the spark web ui. By default only the
+    user that started the Spark job has view access.
+  </td>
+</tr>
+<tr>
   <td>spark.shuffle.compress</td>
   <td>true</td>
   <td>
@@ -202,6 +230,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.scheduler.revive.interval</td>
+  <td>1000</td>
+  <td>
+    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
+  </td>
+</tr>
+<tr>
   <td>spark.reducer.maxMbInFlight</td>
   <td>48</td>
   <td>
@@ -235,6 +270,17 @@ Apart from these, the following properties are also available, and may be useful
     Maximum object size to allow within Kryo (the library needs to create a buffer at least as
     large as the largest single object you'll serialize). Increase this if you get a "buffer limit
     exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each worker.
+  </td>
+</tr>
+<tr>
+  <td>spark.serializer.objectStreamReset</td>
+  <td>10000</td>
+  <td>
+    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches 
+    objects to prevent writing redundant data, however that stops garbage collection of those 
+    objects. By calling 'reset' you flush that info from the serializer, and allow old 
+    objects to be collected. To turn off this periodic reset set it to a value of <= 0. 
+    By default it will reset the serializer every 10,000 objects.
   </td>
 </tr>
 <tr>
@@ -469,13 +515,45 @@ Apart from these, the following properties are also available, and may be useful
     the whole cluster by default. <br/>
     <b>Note:</b> this setting needs to be configured in the standalone cluster master, not in individual
     applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
-</td>
+  </td>
 </tr>
 <tr>
   <td>spark.files.overwrite</td>
   <td>false</td>
   <td>
     Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
+  </td>
+</tr>
+<tr>
+  <td>spark.files.fetchTimeout</td>
+  <td>false</td>
+  <td>
+    Communication timeout to use when fetching files added through SparkContext.addFile() from
+    the driver.
+  </td>
+</tr>
+<tr>  
+  <td>spark.authenticate</td>
+  <td>false</td>
+  <td>
+    Whether spark authenticates its internal connections. See <code>spark.authenticate.secret</code> if not
+    running on Yarn.
+  </td>
+</tr>
+<tr>  
+  <td>spark.authenticate.secret</td>
+  <td>None</td>
+  <td>
+    Set the secret key used for Spark to authenticate between components. This needs to be set if
+    not running on Yarn and authentication is enabled.
+  </td>
+</tr>
+<tr>  
+  <td>spark.core.connection.auth.wait.timeout</td>
+  <td>30</td>
+  <td>
+    Number of seconds for the connection to wait for authentication to occur before timing
+    out and giving up. 
   </td>
 </tr>
 </table>

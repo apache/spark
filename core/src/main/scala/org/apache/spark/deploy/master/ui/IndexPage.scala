@@ -17,13 +17,14 @@
 
 package org.apache.spark.deploy.master.ui
 
+import javax.servlet.http.HttpServletRequest
+
 import scala.concurrent.Await
-import scala.concurrent.duration._
 import scala.xml.Node
 
 import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
-import net.liftweb.json.JsonAST.JValue
+import org.json4s.JValue
 
 import org.apache.spark.deploy.{DeployWebUI, JsonProtocol}
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, RequestMasterState}
@@ -57,7 +58,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     val completedApps = state.completedApps.sortBy(_.endTime).reverse
     val completedAppsTable = UIUtils.listingTable(appHeaders, appRow, completedApps)
 
-    val driverHeaders = Seq("ID", "Submitted Time", "Worker", "State", "Cores", "Memory", "Main Class")
+    val driverHeaders = Seq("ID", "Submitted Time", "Worker", "State", "Cores", "Memory",
+      "Main Class")
     val activeDrivers = state.activeDrivers.sortBy(_.startTime).reverse
     val activeDriversTable = UIUtils.listingTable(driverHeaders, driverRow, activeDrivers)
     val completedDrivers = state.completedDrivers.sortBy(_.startTime).reverse
@@ -84,6 +86,7 @@ private[spark] class IndexPage(parent: MasterWebUI) {
               <li><strong>Drivers:</strong>
                 {state.activeDrivers.size} Running,
                 {state.completedDrivers.size} Completed </li>
+              <li><strong>Status:</strong> {state.status}</li>
             </ul>
           </div>
         </div>
@@ -103,13 +106,14 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         </div>
 
         <div>
-          {if (hasDrivers)
-          <div class="row-fluid">
-            <div class="span12">
-              <h4> Running Drivers </h4>
-              {activeDriversTable}
-            </div>
-          </div>
+          {if (hasDrivers) {
+             <div class="row-fluid">
+               <div class="span12">
+                 <h4> Running Drivers </h4>
+                 {activeDriversTable}
+               </div>
+             </div>
+           }
           }
         </div>
 
@@ -121,13 +125,15 @@ private[spark] class IndexPage(parent: MasterWebUI) {
         </div>
 
         <div>
-          {if (hasDrivers)
-          <div class="row-fluid">
-            <div class="span12">
-              <h4> Completed Drivers </h4>
-              {completedDriversTable}
-            </div>
-          </div>
+          {
+            if (hasDrivers) {
+              <div class="row-fluid">
+                <div class="span12">
+                  <h4> Completed Drivers </h4>
+                  {completedDriversTable}
+                </div>
+              </div>
+            }
           }
         </div>;
 
@@ -175,7 +181,8 @@ private[spark] class IndexPage(parent: MasterWebUI) {
     <tr>
       <td>{driver.id} </td>
       <td>{driver.submitDate}</td>
-      <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}</td>
+      <td>{driver.worker.map(w => <a href={w.webUiAddress}>{w.id.toString}</a>).getOrElse("None")}
+      </td>
       <td>{driver.state}</td>
       <td sorttable_customkey={driver.desc.cores.toString}>
         {driver.desc.cores}

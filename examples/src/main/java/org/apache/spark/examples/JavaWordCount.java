@@ -49,7 +49,7 @@ public final class JavaWordCount {
       }
     });
     
-    JavaPairRDD<String, Integer> ones = words.map(new PairFunction<String, String, Integer>() {
+    JavaPairRDD<String, Integer> ones = words.mapToPair(new PairFunction<String, String, Integer>() {
       @Override
       public Tuple2<String, Integer> call(String s) {
         return new Tuple2<String, Integer>(s, 1);

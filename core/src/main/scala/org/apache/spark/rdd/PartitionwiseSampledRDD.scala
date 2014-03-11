@@ -21,7 +21,7 @@ import java.util.Random
 
 import scala.reflect.ClassTag
 
-import org.apache.spark.{TaskContext, Partition}
+import org.apache.spark.{Partition, TaskContext}
 import org.apache.spark.util.random.RandomSampler
 
 private[spark]
@@ -45,7 +45,7 @@ class PartitionwiseSampledRDDPartition(val prev: Partition, val seed: Long)
 class PartitionwiseSampledRDD[T: ClassTag, U: ClassTag](
     prev: RDD[T],
     sampler: RandomSampler[T, U],
-    seed: Long = System.nanoTime)
+    @transient seed: Long = System.nanoTime)
   extends RDD[U](prev) {
 
   override def getPartitions: Array[Partition] = {

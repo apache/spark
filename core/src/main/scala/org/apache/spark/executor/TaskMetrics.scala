@@ -64,7 +64,8 @@ class TaskMetrics extends Serializable {
   var shuffleReadMetrics: Option[ShuffleReadMetrics] = None
 
   /**
-   * If this task writes to shuffle output, metrics on the written shuffle data will be collected here
+   * If this task writes to shuffle output, metrics on the written shuffle data will be collected
+   * here
    */
   var shuffleWriteMetrics: Option[ShuffleWriteMetrics] = None
 }
@@ -101,13 +102,6 @@ class ShuffleReadMetrics extends Serializable {
    * still not finished processing block A, it is not considered to be blocking on block B.
    */
   var fetchWaitTime: Long = _
-
-  /**
-   * Total time spent fetching remote shuffle blocks. This aggregates the time spent fetching all
-   * input blocks. Since block fetches are both pipelined and parallelized, this can
-   * exceed fetchWaitTime and executorRunTime.
-   */
-  var remoteFetchTime: Long = _
 
   /**
    * Total number of remote bytes read from the shuffle by this task

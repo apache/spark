@@ -17,11 +17,11 @@
 
 package org.apache.spark.ui.jobs
 
+import scala.collection.mutable
 import scala.xml.Node
 
 import org.apache.spark.scheduler.SchedulingMode
 import org.apache.spark.util.Utils
-import scala.collection.mutable
 
 /** Page showing executor summary */
 private[spark] class ExecutorTable(val parent: JobProgressUI, val stageId: Int) {

@@ -23,7 +23,8 @@ import java.util.concurrent.LinkedBlockingQueue
 
 /** Asynchronously passes StreamingListenerEvents to registered StreamingListeners. */
 private[spark] class StreamingListenerBus() extends Logging {
-  private val listeners = new ArrayBuffer[StreamingListener]() with SynchronizedBuffer[StreamingListener]
+  private val listeners = new ArrayBuffer[StreamingListener]()
+    with SynchronizedBuffer[StreamingListener]
 
   /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
    * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */

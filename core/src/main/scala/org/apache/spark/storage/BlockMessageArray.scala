@@ -25,7 +25,8 @@ import org.apache.spark._
 import org.apache.spark.network._
 
 private[spark]
-class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockMessage] with Logging {
+class BlockMessageArray(var blockMessages: Seq[BlockMessage])
+  extends Seq[BlockMessage] with Logging {
   
   def this(bm: BlockMessage) = this(Array(bm))
 
@@ -65,7 +66,8 @@ class BlockMessageArray(var blockMessages: Seq[BlockMessage]) extends Seq[BlockM
       buffer.position(buffer.position() + size)
     }
     val finishTime = System.currentTimeMillis
-    logDebug("Converted block message array from buffer message in " + (finishTime - startTime) / 1000.0  + " s")
+    logDebug("Converted block message array from buffer message in " +
+      (finishTime - startTime) / 1000.0  + " s")
     this.blockMessages = newBlockMessages 
   }
   

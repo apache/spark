@@ -18,14 +18,12 @@
 package org.apache.spark.partial
 
 import java.util.{HashMap => JHashMap}
-import java.util.{Map => JMap}
 
+import scala.collection.JavaConversions.mapAsScalaMap
 import scala.collection.Map
 import scala.collection.mutable.HashMap
-import scala.collection.JavaConversions.mapAsScalaMap
 
 import cern.jet.stat.Probability
-
 import it.unimi.dsi.fastutil.objects.{Object2LongOpenHashMap => OLMap}
 
 /**

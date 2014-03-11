@@ -24,9 +24,9 @@
 
         <link rel="stylesheet" href="css/pygments-default.css">
 
+        {% production %}
         <!-- Google analytics script -->
         <script type="text/javascript">
-          /*
           var _gaq = _gaq || [];
           _gaq.push(['_setAccount', 'UA-32518208-1']);
           _gaq.push(['_trackPageview']);
@@ -36,8 +36,8 @@
             ga.src = ('https:' == document.location.protocol ? 'https://ssl' : 'http://www') + '.google-analytics.com/ga.js';
             var s = document.getElementsByTagName('script')[0]; s.parentNode.insertBefore(ga, s);
           })();
-          */
         </script>
+        {% endproduction %}
 
     </head>
     <body>
@@ -159,16 +159,6 @@
 
             <hr>-->
 
-            <footer>
-              <hr>
-              <p style="text-align: center; veritcal-align: middle; color: #999;">
-                Apache Spark is an effort undergoing incubation at the Apache Software Foundation.
-                <a href="http://incubator.apache.org">
-                  <img style="margin-left: 20px;" src="img/incubator-logo.png" />
-                </a>
-              </p>
-            </footer>
-
         </div> <!-- /container -->
 
         <script src="js/vendor/jquery-1.8.0.min.js"></script>
@@ -195,4 +185,22 @@
         </script>
 
     </body>
+    <!-- MathJax Section -->
+    <script type="text/x-mathjax-config">
+	  MathJax.Hub.Config({
+	    TeX: { equationNumbers: { autoNumber: "AMS" } }
+	  });
+	</script>
+    <script type="text/javascript"
+     src="http://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML"></script>
+    <script>
+      MathJax.Hub.Config({
+        tex2jax: {
+          inlineMath: [ ["$", "$"], ["\\\\(","\\\\)"] ],
+          displayMath: [ ["$$","$$"], ["\\[", "\\]"] ], 
+          processEscapes: true,
+          skipTags: ['script', 'noscript', 'style', 'textarea', 'pre']
+        }
+      });
+    </script>
 </html>

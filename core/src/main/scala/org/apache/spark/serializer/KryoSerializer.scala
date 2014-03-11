@@ -17,13 +17,13 @@
 
 package org.apache.spark.serializer
 
-import java.nio.ByteBuffer
 import java.io.{EOFException, InputStream, OutputStream}
+import java.nio.ByteBuffer
 
-import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
-import com.esotericsoftware.kryo.{KryoException, Kryo}
+import com.esotericsoftware.kryo.{Kryo, KryoException}
 import com.esotericsoftware.kryo.io.{Input => KryoInput, Output => KryoOutput}
-import com.twitter.chill.{EmptyScalaKryoInstantiator, AllScalaRegistrar}
+import com.esotericsoftware.kryo.serializers.{JavaSerializer => KryoJavaSerializer}
+import com.twitter.chill.{AllScalaRegistrar, EmptyScalaKryoInstantiator}
 
 import org.apache.spark._
 import org.apache.spark.broadcast.HttpBroadcast
@@ -60,7 +60,8 @@ class KryoSerializer(conf: SparkConf) extends org.apache.spark.serializer.Serial
     try {
       for (regCls <- conf.getOption("spark.kryo.registrator")) {
         logDebug("Running user registrator: " + regCls)
-        val reg = Class.forName(regCls, true, classLoader).newInstance().asInstanceOf[KryoRegistrator]
+        val reg = Class.forName(regCls, true, classLoader).newInstance()
+          .asInstanceOf[KryoRegistrator]
         reg.registerClasses(kryo)
       }
     } catch {

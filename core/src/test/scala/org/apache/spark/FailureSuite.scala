@@ -19,7 +19,7 @@ package org.apache.spark
 
 import org.scalatest.FunSuite
 
-import SparkContext._
+import org.apache.spark.SparkContext._
 import org.apache.spark.util.NonSerializable
 
 // Common state shared by FailureSuite-launched tasks. We use a global object
@@ -79,6 +79,19 @@ class FailureSuite extends FunSuite with LocalSparkContext {
     }
     assert(results.toSet === Set((1, 1), (2, 4), (3, 9)))
     FailureSuiteState.clear()
+  }
+
+  // Run a map-reduce job in which the map stage always fails.
+  test("failure in a map stage") {
+    sc = new SparkContext("local", "test")
+    val data = sc.makeRDD(1 to 3).map(x => { throw new Exception; (x, x) }).groupByKey(3)
+    intercept[SparkException] {
+      data.collect()
+    }
+    // Make sure that running new jobs with the same map stage also fails
+    intercept[SparkException] {
+      data.collect()
+    }
   }
 
   test("failure because task results are not serializable") {

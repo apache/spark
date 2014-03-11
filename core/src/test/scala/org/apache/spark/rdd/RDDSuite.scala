@@ -18,13 +18,15 @@
 package org.apache.spark.rdd
 
 import scala.collection.mutable.HashMap
+import scala.collection.parallel.mutable
+
 import org.scalatest.FunSuite
 import org.scalatest.concurrent.Timeouts._
-import org.scalatest.time.{Span, Millis}
+import org.scalatest.time.{Millis, Span}
+
+import org.apache.spark._
 import org.apache.spark.SparkContext._
 import org.apache.spark.rdd._
-import scala.collection.parallel.mutable
-import org.apache.spark._
 
 class RDDSuite extends FunSuite with SharedSparkContext {
 
@@ -524,5 +526,31 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
     assert(a.intersection(b).collect.sorted === intersection)
     assert(b.intersection(a).collect.sorted === intersection)
+  }
+
+  test("zipWithIndex") {
+    val n = 10
+    val data = sc.parallelize(0 until n, 3)
+    val ranked = data.zipWithIndex()
+    ranked.collect().foreach { x =>
+      assert(x._1 === x._2)
+    }
+  }
+
+  test("zipWithIndex with a single partition") {
+    val n = 10
+    val data = sc.parallelize(0 until n, 1)
+    val ranked = data.zipWithIndex()
+    ranked.collect().foreach { x =>
+      assert(x._1 === x._2)
+    }
+  }
+
+  test("zipWithUniqueId") {
+    val n = 10
+    val data = sc.parallelize(0 until n, 3)
+    val ranked = data.zipWithUniqueId()
+    val ids = ranked.map(_._1).distinct().collect()
+    assert(ids.length === n)
   }
 }

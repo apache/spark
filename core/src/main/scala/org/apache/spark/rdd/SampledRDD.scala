@@ -17,8 +17,9 @@
 
 package org.apache.spark.rdd
 
-import scala.reflect.ClassTag
 import java.util.Random
+
+import scala.reflect.ClassTag
 
 import cern.jet.random.Poisson
 import cern.jet.random.engine.DRand

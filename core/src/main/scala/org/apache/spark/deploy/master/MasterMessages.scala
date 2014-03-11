@@ -28,10 +28,6 @@ private[master] object MasterMessages {
 
   case object RevokedLeadership
 
-  // Actor System to LeaderElectionAgent
-
-  case object CheckLeader
-
   // Actor System to Master
 
   case object CheckForWorkerTimeOut

@@ -20,13 +20,13 @@ package org.apache.spark.rdd
 import java.io.PrintWriter
 import java.util.StringTokenizer
 
-import scala.collection.Map
 import scala.collection.JavaConversions._
+import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
 import scala.io.Source
 import scala.reflect.ClassTag
 
-import org.apache.spark.{SparkEnv, Partition, TaskContext}
+import org.apache.spark.{Partition, SparkEnv, TaskContext}
 
 
 /**
@@ -59,6 +59,13 @@ class PipedRDD[T: ClassTag](
     // Add the environmental variables to the process.
     val currentEnvVars = pb.environment()
     envVars.foreach { case (variable, value) => currentEnvVars.put(variable, value) }
+
+    // for compatibility with Hadoop which sets these env variables
+    // so the user code can access the input filename
+    if (split.isInstanceOf[HadoopPartition]) {
+      val hadoopSplit = split.asInstanceOf[HadoopPartition]
+      currentEnvVars.putAll(hadoopSplit.getPipeEnvVars())
+    }
 
     val proc = pb.start()
     val env = SparkEnv.get

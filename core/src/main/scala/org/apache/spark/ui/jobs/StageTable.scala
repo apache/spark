@@ -19,13 +19,12 @@ package org.apache.spark.ui.jobs
 
 import java.util.Date
 
-import scala.xml.Node
 import scala.collection.mutable.HashSet
+import scala.xml.Node
 
 import org.apache.spark.scheduler.{SchedulingMode, StageInfo, TaskInfo}
 import org.apache.spark.ui.UIUtils
 import org.apache.spark.util.Utils
-
 
 /** Page showing list of all ongoing and recently finished stages */
 private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgressUI) {
@@ -59,7 +58,8 @@ private[spark] class StageTable(val stages: Seq[StageInfo], val parent: JobProgr
     </table>
   }
 
-  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] = {
+  private def makeProgressBar(started: Int, completed: Int, failed: String, total: Int): Seq[Node] =
+  {
     val completeWidth = "width: %s%%".format((completed.toDouble/total)*100)
     val startWidth = "width: %s%%".format((started.toDouble/total)*100)
 

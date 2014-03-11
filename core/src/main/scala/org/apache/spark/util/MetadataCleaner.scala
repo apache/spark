@@ -17,9 +17,9 @@
 
 package org.apache.spark.util
 
-import java.util.{TimerTask, Timer}
-import org.apache.spark.{SparkConf, Logging}
+import java.util.{Timer, TimerTask}
 
+import org.apache.spark.{Logging, SparkConf}
 
 /**
  * Runs a timer task to periodically clean up metadata (e.g. old files or hashtable entries)
@@ -67,7 +67,8 @@ private[spark] object MetadataCleanerType extends Enumeration {
 
   type MetadataCleanerType = Value
 
-  def systemProperty(which: MetadataCleanerType.MetadataCleanerType) = "spark.cleaner.ttl." + which.toString
+  def systemProperty(which: MetadataCleanerType.MetadataCleanerType) =
+      "spark.cleaner.ttl." + which.toString
 }
 
 // TODO: This mutates a Conf to set properties right now, which is kind of ugly when used in the

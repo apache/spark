@@ -17,14 +17,14 @@
 
 package org.apache.spark.deploy
 
+import scala.collection.mutable.ArrayBuffer
+
 import akka.actor.ActorSystem
 
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.deploy.worker.Worker
 import org.apache.spark.deploy.master.Master
 import org.apache.spark.util.Utils
-import org.apache.spark.{SparkConf, Logging}
-
-import scala.collection.mutable.ArrayBuffer
 
 /**
  * Testing class that creates a Spark standalone process in-cluster (that is, running the
@@ -33,7 +33,8 @@ import scala.collection.mutable.ArrayBuffer
  * fault recovery without spinning up a lot of processes.
  */
 private[spark]
-class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: Int) extends Logging {
+class LocalSparkCluster(numWorkers: Int, coresPerWorker: Int, memoryPerWorker: Int)
+  extends Logging {
 
   private val localHostname = Utils.localHostName()
   private val masterActorSystems = ArrayBuffer[ActorSystem]()

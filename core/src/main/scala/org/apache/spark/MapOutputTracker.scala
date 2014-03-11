@@ -24,12 +24,15 @@ import scala.concurrent.Await
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
+import scala.collection.mutable.HashSet
+import scala.concurrent.Await
+
 import akka.actor._
 import akka.pattern.ask
 
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util._
+import org.apache.spark.util.{AkkaUtils, TimeStampedHashMap, BoundedHashMap}
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)

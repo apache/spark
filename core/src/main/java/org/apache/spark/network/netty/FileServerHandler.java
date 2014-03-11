@@ -23,11 +23,11 @@ import java.io.FileInputStream;
 import io.netty.channel.ChannelHandlerContext;
 import io.netty.channel.SimpleChannelInboundHandler;
 import io.netty.channel.DefaultFileRegion;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import org.apache.spark.storage.BlockId;
 import org.apache.spark.storage.FileSegment;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
 class FileServerHandler extends SimpleChannelInboundHandler<String> {
 
