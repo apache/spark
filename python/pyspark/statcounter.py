@@ -26,7 +26,9 @@ class StatCounter(object):
         self.n = 0L    # Running count of our values
         self.mu = 0.0  # Running mean of our values
         self.m2 = 0.0  # Running variance numerator (sum of (x - mean)^2)
-
+        self.max_v = float("-inf")
+        self.min_v = float("inf")
+        
         for v in values:
             self.merge(v)
             
@@ -36,6 +38,11 @@ class StatCounter(object):
         self.n += 1
         self.mu += delta / self.n
         self.m2 += delta * (value - self.mu)
+        if self.max_v < value:
+            self.max_v = value
+        if self.min_v > value:
+            self.min_v = value
+            
         return self
 
     # Merge another StatCounter into this one, adding up the internal statistics.
@@ -49,7 +56,10 @@ class StatCounter(object):
             if self.n == 0:
                 self.mu = other.mu
                 self.m2 = other.m2
-                self.n = other.n       
+                self.n = other.n
+                self.max_v = other.max_v
+                self.min_v = other.min_v
+                
             elif other.n != 0:        
                 delta = other.mu - self.mu
                 if other.n * 10 < self.n:
@@ -58,6 +68,9 @@ class StatCounter(object):
                     self.mu = other.mu - (delta * self.n) / (self.n + other.n)
                 else:
                     self.mu = (self.mu * self.n + other.mu * other.n) / (self.n + other.n)
+                
+                    self.max_v = max(self.max_v, other.max_v)
+                    self.min_v = min(self.min_v, other.min_v)
         
                 self.m2 += other.m2 + (delta * delta * self.n * other.n) / (self.n + other.n)
                 self.n += other.n
@@ -76,6 +89,12 @@ class StatCounter(object):
     def sum(self):
         return self.n * self.mu
 
+    def min(self):
+        return self.min_v
+
+    def max(self):
+        return self.max_v
+    
     # Return the variance of the values.
     def variance(self):
         if self.n == 0:
