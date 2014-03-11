@@ -21,19 +21,18 @@ import scala.collection.mutable.{ListBuffer, HashMap}
 
 import org.apache.spark.{ExceptionFailure, SparkConf, SparkContext, Success}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.scheduler._
+import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.ui.UISparkListener
 
 /**
  * Tracks task-level information to be displayed in the UI.
  *
  * All access to the data structures in this class must be synchronized on the
- * class, since the UI thread and the DAGScheduler event loop may otherwise
- * be reading/updating the internal data structures concurrently.
+ * class, since the UI thread and the EventBus loop may otherwise be reading and
+ * updating the internal data structures concurrently.
  */
-private[ui] class JobProgressListener(conf: SparkConf) extends UISparkListener {
+private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
 
   import JobProgressListener._
 
@@ -57,7 +56,7 @@ private[ui] class JobProgressListener(conf: SparkConf) extends UISparkListener {
   val stageIdToTasksActive = HashMap[Int, HashMap[Long, TaskInfo]]()
   val stageIdToTasksComplete = HashMap[Int, Int]()
   val stageIdToTasksFailed = HashMap[Int, Int]()
-  val stageIdToTaskInfos = HashMap[Int, HashMap[Long, TaskUIData]]()
+  val stageIdToTaskData = HashMap[Int, HashMap[Long, TaskUIData]]()
   val stageIdToExecutorSummaries = HashMap[Int, HashMap[String, ExecutorSummary]]()
   val stageIdToPool = HashMap[Int, String]()
   val stageIdToDescription = HashMap[Int, String]()
@@ -84,7 +83,7 @@ private[ui] class JobProgressListener(conf: SparkConf) extends UISparkListener {
     if (stages.size > retainedStages) {
       val toRemove = retainedStages / 10
       stages.takeRight(toRemove).foreach( s => {
-        stageIdToTaskInfos.remove(s.stageId)
+        stageIdToTaskData.remove(s.stageId)
         stageIdToTime.remove(s.stageId)
         stageIdToShuffleRead.remove(s.stageId)
         stageIdToShuffleWrite.remove(s.stageId)
@@ -125,14 +124,13 @@ private[ui] class JobProgressListener(conf: SparkConf) extends UISparkListener {
     if (taskInfo != null) {
       val tasksActive = stageIdToTasksActive.getOrElseUpdate(sid, new HashMap[Long, TaskInfo]())
       tasksActive(taskInfo.taskId) = taskInfo
-      val taskMap = stageIdToTaskInfos.getOrElse(sid, HashMap[Long, TaskUIData]())
+      val taskMap = stageIdToTaskData.getOrElse(sid, HashMap[Long, TaskUIData]())
       taskMap(taskInfo.taskId) = new TaskUIData(taskInfo)
-      stageIdToTaskInfos(sid) = taskMap
+      stageIdToTaskData(sid) = taskMap
     }
   }
 
-  override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult)
-      = synchronized {
+  override def onTaskGettingResult(taskGettingResult: SparkListenerTaskGettingResult) {
     // Do nothing: because we don't do a deep copy of the TaskInfo, the TaskInfo in
     // stageToTaskInfos already has the updated status.
   }
@@ -211,9 +209,9 @@ private[ui] class JobProgressListener(conf: SparkConf) extends UISparkListener {
       val diskBytesSpilled = metrics.map(m => m.diskBytesSpilled).getOrElse(0L)
       stageIdToDiskBytesSpilled(sid) += diskBytesSpilled
 
-      val taskMap = stageIdToTaskInfos.getOrElse(sid, HashMap[Long, TaskUIData]())
+      val taskMap = stageIdToTaskData.getOrElse(sid, HashMap[Long, TaskUIData]())
       taskMap(info.taskId) = new TaskUIData(info, metrics, failureInfo)
-      stageIdToTaskInfos(sid) = taskMap
+      stageIdToTaskData(sid) = taskMap
     }
   }
 
@@ -232,23 +230,29 @@ private[ui] class JobProgressListener(conf: SparkConf) extends UISparkListener {
   }
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
-    val schedulingModeName =
-      environmentUpdate.environmentDetails("Spark Properties").toMap.get("spark.scheduler.mode")
-    schedulingMode = schedulingModeName match {
-      case Some(name) => Some(SchedulingMode.withName(name))
-      case None => None
+    synchronized {
+      val schedulingModeName =
+        environmentUpdate.environmentDetails("Spark Properties").toMap.get("spark.scheduler.mode")
+      schedulingMode = schedulingModeName match {
+        case Some(name) => Some(SchedulingMode.withName(name))
+        case None => None
+      }
     }
   }
 
   override def onBlockManagerGained(blockManagerGained: SparkListenerBlockManagerGained) {
-    val blockManagerId = blockManagerGained.blockManagerId
-    val executorId = blockManagerId.executorId
-    executorIdToBlockManagerId(executorId) = blockManagerId
+    synchronized {
+      val blockManagerId = blockManagerGained.blockManagerId
+      val executorId = blockManagerId.executorId
+      executorIdToBlockManagerId(executorId) = blockManagerId
+    }
   }
 
   override def onBlockManagerLost(blockManagerLost: SparkListenerBlockManagerLost) {
-    val executorId = blockManagerLost.blockManagerId.executorId
-    executorIdToBlockManagerId.remove(executorId)
+    synchronized {
+      val executorId = blockManagerLost.blockManagerId.executorId
+      executorIdToBlockManagerId.remove(executorId)
+    }
   }
 
 }

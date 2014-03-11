@@ -20,12 +20,13 @@ package org.apache.spark.ui.env
 import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
+
 import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.scheduler._
+import org.apache.spark.ui._
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Environment
-import org.apache.spark.ui._
 
 private[ui] class EnvironmentUI(parent: SparkUI) {
   private val appName = parent.appName
@@ -72,17 +73,19 @@ private[ui] class EnvironmentUI(parent: SparkUI) {
 /**
  * A SparkListener that prepares information to be displayed on the EnvironmentUI
  */
-private[ui] class EnvironmentListener extends UISparkListener {
+private[ui] class EnvironmentListener extends SparkListener {
   var jvmInformation: Seq[(String, String)] = Seq()
   var sparkProperties: Seq[(String, String)] = Seq()
   var systemProperties: Seq[(String, String)] = Seq()
   var classpathEntries: Seq[(String, String)] = Seq()
 
   override def onEnvironmentUpdate(environmentUpdate: SparkListenerEnvironmentUpdate) {
-    val environmentDetails = environmentUpdate.environmentDetails
-    jvmInformation = environmentDetails("JVM Information")
-    sparkProperties = environmentDetails("Spark Properties")
-    systemProperties = environmentDetails("System Properties")
-    classpathEntries = environmentDetails("Classpath Entries")
+    synchronized {
+      val environmentDetails = environmentUpdate.environmentDetails
+      jvmInformation = environmentDetails("JVM Information")
+      sparkProperties = environmentDetails("Spark Properties")
+      systemProperties = environmentDetails("System Properties")
+      classpathEntries = environmentDetails("Classpath Entries")
+    }
   }
 }

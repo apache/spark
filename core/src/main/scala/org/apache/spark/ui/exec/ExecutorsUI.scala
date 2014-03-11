@@ -26,6 +26,7 @@ import org.eclipse.jetty.server.Handler
 
 import org.apache.spark.ExceptionFailure
 import org.apache.spark.scheduler._
+import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Executors
 import org.apache.spark.ui._
@@ -39,7 +40,7 @@ private[ui] class ExecutorsUI(parent: SparkUI) {
   lazy val listener = _listener.get
 
   def start() {
-    _listener = Some(new ExecutorsListener())
+    _listener = Some(new ExecutorsListener(parent.storageStatusListener))
   }
 
   def getHandlers = Seq[(String, Handler)](
@@ -160,7 +161,9 @@ private[ui] class ExecutorsUI(parent: SparkUI) {
 /**
  * A SparkListener that prepares information to be displayed on the ExecutorsUI
  */
-private[ui] class ExecutorsListener extends StorageStatusSparkListener {
+private[ui] class ExecutorsListener(storageStatusListener: StorageStatusListener)
+  extends SparkListener {
+
   val executorToTasksActive = HashMap[String, Int]()
   val executorToTasksComplete = HashMap[String, Int]()
   val executorToTasksFailed = HashMap[String, Int]()
@@ -168,12 +171,14 @@ private[ui] class ExecutorsListener extends StorageStatusSparkListener {
   val executorToShuffleRead = HashMap[String, Long]()
   val executorToShuffleWrite = HashMap[String, Long]()
 
-  override def onTaskStart(taskStart: SparkListenerTaskStart) {
+  def storageStatusList = storageStatusListener.storageStatusList
+
+  override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
     val eid = formatExecutorId(taskStart.taskInfo.executorId)
     executorToTasksActive(eid) = executorToTasksActive.getOrElse(eid, 0) + 1
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val info = taskEnd.taskInfo
     if (info != null) {
       val eid = formatExecutorId(info.executorId)
@@ -198,7 +203,9 @@ private[ui] class ExecutorsListener extends StorageStatusSparkListener {
             executorToShuffleWrite.getOrElse(eid, 0L) + shuffleWrite.shuffleBytesWritten
         }
       }
-      super.onTaskEnd(taskEnd)
     }
   }
+
+  // This addresses executor ID inconsistencies in the local mode
+  private def formatExecutorId(execId: String) = storageStatusListener.formatExecutorId(execId)
 }

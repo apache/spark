@@ -20,7 +20,6 @@ package org.apache.spark.storage
 import java.util.{HashMap => JHashMap}
 
 import scala.collection.mutable
-import scala.collection.mutable.ArrayBuffer
 import scala.collection.JavaConversions._
 import scala.concurrent.Future
 import scala.concurrent.duration._
@@ -51,7 +50,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
 
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
 
-  private val listeners = new ArrayBuffer[BlockManagerStatusListener]
+  // Post block manager status updates to SparkContext through a listener
+  private var statusListener: Option[BlockManagerStatusListener] = None
 
   val slaveTimeout = conf.get("spark.storage.blockManagerSlaveTimeoutMs",
     "" + (BlockManager.getHeartBeatFrequency(conf) * 3)).toLong
@@ -71,7 +71,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
   }
 
   def registerListener(listener: BlockManagerStatusListener) {
-    listeners += listener
+    statusListener = Some(listener)
   }
 
   def receive = {
@@ -168,7 +168,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
       }
     }
     val blockManagerLost = SparkListenerBlockManagerLost(blockManagerId)
-    listeners.foreach(_.onBlockManagerLost(blockManagerLost))
+    statusListener.foreach(_.onBlockManagerLost(blockManagerLost))
   }
 
   private def expireDeadHosts() {
@@ -246,7 +246,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
         maxMemSize, slaveActor)
     }
     val blockManagerGained = SparkListenerBlockManagerGained(id, maxMemSize)
-    listeners.foreach(_.onBlockManagerGained(blockManagerGained))
+    statusListener.foreach(_.onBlockManagerGained(blockManagerGained))
   }
 
   private def updateBlockInfo(

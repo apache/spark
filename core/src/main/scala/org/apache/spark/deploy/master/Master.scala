@@ -653,7 +653,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       appConf.set("spark.eventLog.compress", "true")
       appConf.set("spark.io.compression.codec", codec)
     }
-    val ui = new SparkUI(appConf, appName, "/history/%s".format(app.id))
+    val ui = new SparkUI(appConf, "%s (finished)".format(appName), "/history/%s".format(app.id))
     // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
     val success = ui.renderFromPersistedStorage(eventLogDir)

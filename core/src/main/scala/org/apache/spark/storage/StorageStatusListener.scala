@@ -15,20 +15,17 @@
  * limitations under the License.
  */
 
-package org.apache.spark.ui
+package org.apache.spark.storage
 
 import scala.collection.mutable
 
 import org.apache.spark.scheduler._
-import org.apache.spark.storage._
-
-private[ui] trait UISparkListener extends SparkListener
 
 /**
  * A SparkListener that maintains executor storage status
  */
-private[ui] class StorageStatusSparkListener extends UISparkListener {
-  val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
+private[spark] class StorageStatusListener extends SparkListener {
+  private val executorIdToStorageStatus = mutable.Map[String, StorageStatus]()
 
   def storageStatusList = executorIdToStorageStatus.values.toSeq
 
@@ -52,7 +49,7 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
     }
   }
 
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
+  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) = synchronized {
     val info = taskEnd.taskInfo
     if (info != null) {
       val execId = formatExecutorId(info.executorId)
@@ -66,71 +63,34 @@ private[ui] class StorageStatusSparkListener extends UISparkListener {
     }
   }
 
-  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) {
+  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) = synchronized {
     updateStorageStatus(unpersistRDD.rddId)
   }
 
   override def onBlockManagerGained(blockManagerGained: SparkListenerBlockManagerGained) {
-    val blockManagerId = blockManagerGained.blockManagerId
-    val executorId = blockManagerId.executorId
-    val maxMem = blockManagerGained.maxMem
-    val storageStatus = new StorageStatus(blockManagerId, maxMem)
-    executorIdToStorageStatus(executorId) = storageStatus
+    synchronized {
+      val blockManagerId = blockManagerGained.blockManagerId
+      val executorId = blockManagerId.executorId
+      val maxMem = blockManagerGained.maxMem
+      val storageStatus = new StorageStatus(blockManagerId, maxMem)
+      executorIdToStorageStatus(executorId) = storageStatus
+    }
   }
 
   override def onBlockManagerLost(blockManagerLost: SparkListenerBlockManagerLost) {
-    val executorId = blockManagerLost.blockManagerId.executorId
-    executorIdToStorageStatus.remove(executorId)
+    synchronized {
+      val executorId = blockManagerLost.blockManagerId.executorId
+      executorIdToStorageStatus.remove(executorId)
+    }
   }
 
   /**
    * In the local mode, there is a discrepancy between the executor ID according to the
-   * task ("localhost") and that according to SparkEnv ("<driver>"). This results in
-   * duplicate rows for the same executor. Thus, in this mode, we aggregate these two
-   * rows and use the executor ID of "<driver>" to be consistent.
+   * task ("localhost") and that according to SparkEnv ("<driver>"). In the UI, this
+   * results in duplicate rows for the same executor. Thus, in this mode, we aggregate
+   * these two rows and use the executor ID of "<driver>" to be consistent.
    */
-  protected def formatExecutorId(execId: String): String = {
+  def formatExecutorId(execId: String): String = {
     if (execId == "localhost") "<driver>" else execId
   }
-
-}
-
-/**
- * A SparkListener that maintains RDD information
- */
-private[ui] class RDDInfoSparkListener extends StorageStatusSparkListener {
-  private val _rddInfoMap = mutable.Map[Int, RDDInfo]()
-
-  /** Filter RDD info to include only those with cached partitions */
-  def rddInfoList = _rddInfoMap.values.filter(_.numCachedPartitions > 0).toSeq
-
-  /** Update each RDD's info to reflect any updates to the RDD's storage status */
-  private def updateRDDInfo() {
-    val updatedRDDInfoList = StorageUtils.rddInfoFromStorageStatus(storageStatusList, _rddInfoMap)
-    updatedRDDInfoList.foreach { info => _rddInfoMap(info.id) = info }
-  }
-
-  override def onTaskEnd(taskEnd: SparkListenerTaskEnd) {
-    super.onTaskEnd(taskEnd)
-    val metrics = taskEnd.taskMetrics
-    if (metrics != null && metrics.updatedBlocks.isDefined) {
-      updateRDDInfo()
-    }
-  }
-
-  override def onStageSubmitted(stageSubmitted: SparkListenerStageSubmitted) {
-    val rddInfo = stageSubmitted.stageInfo.rddInfo
-    _rddInfoMap(rddInfo.id) = rddInfo
-  }
-
-  override def onStageCompleted(stageCompleted: SparkListenerStageCompleted) {
-    // Remove all partitions that are no longer cached
-    _rddInfoMap.retain { case (id, info) => info.numCachedPartitions > 0 }
-  }
-
-  override def onUnpersistRDD(unpersistRDD: SparkListenerUnpersistRDD) {
-    super.onUnpersistRDD(unpersistRDD)
-    updateRDDInfo()
-  }
-
 }

@@ -20,7 +20,7 @@ package org.apache.spark.ui
 import org.apache.spark.SparkConf
 
 /**
- * A simple example that reloads a persisted UI independently from a SparkContext
+ * Reload a persisted UI independently from a SparkContext.
  */
 object UIReloader {
   def main(args: Array[String]) {

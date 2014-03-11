@@ -35,12 +35,10 @@ import org.apache.spark.scheduler._
  * event should be buffered.
  */
 private[spark] class BlockManagerStatusListener extends SparkListener {
-
   private var _listenerBus: Option[SparkListenerBus] = None
 
   // Buffer any events received before the listener bus is ready
   private val bufferedEvents = new ArrayBuffer[SparkListenerEvent]
-    with mutable.SynchronizedBuffer[SparkListenerEvent]
 
   /**
    * Set the listener bus. If there are buffered events, post them all to the listener bus.

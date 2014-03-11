@@ -37,7 +37,7 @@ private[ui] class StagePage(parent: JobProgressUI) {
     listener.synchronized {
       val stageId = request.getParameter("id").toInt
 
-      if (!listener.stageIdToTaskInfos.contains(stageId)) {
+      if (!listener.stageIdToTaskData.contains(stageId)) {
         val content =
           <div>
             <h4>Summary Metrics</h4> No tasks have started yet
@@ -47,7 +47,7 @@ private[ui] class StagePage(parent: JobProgressUI) {
           content, basePath, appName, "Details for Stage %s".format(stageId), Stages)
       }
 
-      val tasks = listener.stageIdToTaskInfos(stageId).values.toSeq.sortBy(_.taskInfo.launchTime)
+      val tasks = listener.stageIdToTaskData(stageId).values.toSeq.sortBy(_.taskInfo.launchTime)
 
       val numCompleted = tasks.count(_.taskInfo.finished)
       val shuffleReadBytes = listener.stageIdToShuffleRead.getOrElse(stageId, 0L)

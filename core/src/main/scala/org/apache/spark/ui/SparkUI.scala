@@ -22,6 +22,7 @@ import org.eclipse.jetty.server.handler.ContextHandlerCollection
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
 import org.apache.spark.scheduler.{EventLoggingListener, EventLoggingInfo, SparkReplayerBus}
+import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
 import org.apache.spark.ui.exec.ExecutorsUI
@@ -83,6 +84,9 @@ private[spark] class SparkUI(
     collection
   }
 
+  // Maintain executor storage status through Spark events
+  val storageStatusListener = new StorageStatusListener
+
   // Only log events if this SparkUI is live
   private var eventLogger: Option[EventLoggingListener] = None
 
@@ -109,10 +113,6 @@ private[spark] class SparkUI(
 
   /** Initialize all components of the server */
   def start() {
-    // NOTE: This is decoupled from bind() because of the following dependency cycle:
-    //  DAGScheduler() requires that the port of this server is known
-    //  This server must register all handlers, including JobProgressUI, before binding
-    //  JobProgressUI registers a listener with SparkContext, which requires sc to initialize
     storage.start()
     jobs.start()
     env.start()
@@ -131,6 +131,9 @@ private[spark] class SparkUI(
       replayerBus = Some(new SparkReplayerBus(conf))
       replayerBus.get
     }
+
+    // Storage status listener must receive events first, as other listeners depend on its state
+    eventBus.addListener(storageStatusListener)
     eventBus.addListener(storage.listener)
     eventBus.addListener(jobs.listener)
     eventBus.addListener(env.listener)

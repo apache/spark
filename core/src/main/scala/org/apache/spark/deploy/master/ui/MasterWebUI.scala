@@ -71,10 +71,11 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
   }
 
   def attachUI(ui: SparkUI) {
-    val childHandler = ui.rootHandler
-    rootHandler.addHandler(childHandler)
-    if (!childHandler.isStarted) {
-      childHandler.start()
+    for (handler <- ui.rootHandler.getHandlers) {
+      rootHandler.addHandler(handler)
+      if (!handler.isStarted) {
+        handler.start()
+      }
     }
   }
 
