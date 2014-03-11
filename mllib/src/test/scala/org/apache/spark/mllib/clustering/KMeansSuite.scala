@@ -131,13 +131,20 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
   }
 
   test("single cluster with sparse data") {
-    val n = 1000
-    val smallData = Array(
-      Vectors.sparse(n, Seq((0, 1.0), (1, 2.0), (2, 6.0))),
-      Vectors.sparse(n, Seq((0, 1.0), (1, 3.0))),
-      Vectors.sparse(n, Seq((0, 1.0), (1, 4.0), (2, 6.0)))
-    )
-    val data = sc.parallelize((1 to 100).flatMap(_ => smallData), 4)
+    val n = 1000000
+    val data = sc.parallelize((1 to 100).flatMap { i =>
+      val x = i / 1000.0
+      Array(
+        Vectors.sparse(n, Seq((0, 1.0 + x), (1, 2.0), (2, 6.0))),
+        Vectors.sparse(n, Seq((0, 1.0 - x), (1, 2.0), (2, 6.0))),
+        Vectors.sparse(n, Seq((0, 1.0), (1, 3.0 + x))),
+        Vectors.sparse(n, Seq((0, 1.0), (1, 3.0 - x))),
+        Vectors.sparse(n, Seq((0, 1.0), (1, 4.0), (2, 6.0 + x))),
+        Vectors.sparse(n, Seq((0, 1.0), (1, 4.0), (2, 6.0 - x)))
+      )
+    }, 4)
+
+    data.persist()
 
     // No matter how many runs or iterations we use, we should get one cluster,
     // centered at the mean of the points
@@ -167,6 +174,8 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
 
     model = KMeans.train(data, k=1, maxIterations=1, runs=1, initializationMode=K_MEANS_PARALLEL)
     assertSetsEqual(model.clusterCenters, Array(center))
+
+    data.unpersist()
   }
 
   test("k-means|| initialization") {
