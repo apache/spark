@@ -30,7 +30,7 @@ private[spark] trait CleanerListener {
 }
 
 /**
- * Cleans RDDs and shuffle data. This should be instantiated only on the driver.
+ * Cleans RDDs and shuffle data.
  */
 private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
 
@@ -62,12 +62,13 @@ private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
     cleaningThread.interrupt()
   }
 
-  /** Clean all data and metadata related to a RDD, including shuffle files and metadata */
+  /** Clean (unpersist) RDD data. */
   def cleanRDD(rdd: RDD[_]) {
     enqueue(CleanRDD(rdd.sparkContext, rdd.id))
     logDebug("Enqueued RDD " + rdd + " for cleaning up")
   }
 
+  /** Clean shuffle data. */
   def cleanShuffle(shuffleId: Int) {
     enqueue(CleanShuffle(shuffleId))
     logDebug("Enqueued shuffle " + shuffleId + " for cleaning up")
@@ -102,16 +103,16 @@ private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
 
   /** Perform RDD cleaning */
   private def doCleanRDD(sc: SparkContext, rddId: Int) {
-    logDebug("Cleaning rdd "+ rddId)
+    logDebug("Cleaning rdd " + rddId)
     sc.env.blockManager.master.removeRdd(rddId, false)
     sc.persistentRdds.remove(rddId)
     listeners.foreach(_.rddCleaned(rddId))
-    logInfo("Cleaned rdd "+ rddId)
+    logInfo("Cleaned rdd " + rddId)
   }
 
   /** Perform shuffle cleaning */
   private def doCleanShuffle(shuffleId: Int) {
-    logDebug("Cleaning shuffle "+ shuffleId)
+    logDebug("Cleaning shuffle " + shuffleId)
     mapOutputTrackerMaster.unregisterShuffle(shuffleId)
     blockManager.master.removeShuffle(shuffleId)
     listeners.foreach(_.shuffleCleaned(shuffleId))

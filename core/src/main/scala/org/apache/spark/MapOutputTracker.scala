@@ -54,6 +54,11 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
   }
 }
 
+/**
+ * Class that keeps track of the location of the location of the mapt output of
+ * a stage. This is abstract because different versions of MapOutputTracker
+ * (driver and worker) use different HashMap to store its metadata.
+ */
 private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging {
 
   private val timeout = AkkaUtils.askTimeout(conf)
@@ -181,6 +186,10 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
   }
 }
 
+/**
+ * MapOutputTracker for the workers. This uses BoundedHashMap to keep track of
+ * a limited number of most recently used map output information.
+ */
 private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
 
   /**
@@ -192,7 +201,10 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   protected val mapStatuses = new BoundedHashMap[Int, Array[MapStatus]](MAX_MAP_STATUSES, true)
 }
 
-
+/**
+ * MapOutputTracker for the driver. This uses TimeStampedHashMap to keep track of map
+ * output information, which allows old output information based on a TTL.
+ */
 private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   extends MapOutputTracker(conf) {
 

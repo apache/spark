@@ -33,7 +33,7 @@ private[util] case class TimeStampedWeakValue[T](timestamp: Long, weakValue: Wea
  * A map that stores the timestamp of when a key was inserted along with the value,
  * while ensuring that the values are weakly referenced. If the value is garbage collected and
  * the weak reference is null, get() operation returns the key be non-existent. However,
- * the key is actually not remmoved in the current implementation. Key-value pairs whose
+ * the key is actually not removed in the current implementation. Key-value pairs whose
  * timestamps are older than a particular threshold time can then be removed using the
  * clearOldValues method. It exposes a scala.collection.mutable.Map interface to allow it to be a
  * drop-in replacement for Scala HashMaps.

@@ -50,7 +50,8 @@ private[spark] class TimeStampedHashMap[A, B](updateTimeStampOnGet: Boolean = fa
   override def get(key: A): Option[B] = {
     val timeStampedValue = internalMap.get(key)
     if (updateTimeStampOnGet && timeStampedValue != null) {
-      internalJavaMap.replace(key, timeStampedValue, TimeStampedValue(currentTime, timeStampedValue.value))
+      internalJavaMap.replace(key, timeStampedValue,
+        TimeStampedValue(currentTime, timeStampedValue.value))
     }
     Option(timeStampedValue).map(_.value)
   }
