@@ -108,8 +108,8 @@ and `addFile`.
 - **hdfs:**, **http:**, **https:**, **ftp:** - these pull down files and JARs from the URI as expected
 - **local:** - a URI starting with local:/ is expected to exist as a local file on each worker node.  This
   means that no network IO will be incurred, and works well for large files/JARs that are pushed to each worker,
-  or shared via NFS, GlusterFS, etc.  Note that if `spark.driver.add-dynamic-jars` is set, then the file
-  must be visible to the node running the SparkContext as well.
+  or shared via NFS, GlusterFS, etc.  Note that if `spark.driver.loadAddedJars` is set, 
+  then the file must be visible to the node running the SparkContext as well.
 
 Note that JARs and files are copied to the working directory for each SparkContext on the executor nodes.
 Over time this can use up a significant amount of space and will need to be cleaned up.

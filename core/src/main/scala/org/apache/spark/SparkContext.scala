@@ -141,7 +141,7 @@ class SparkContext(
   // driver.  Do this before all other initialization so that any thread pools created for this
   // SparkContext uses the class loader.
   // Note that this is config-enabled as classloaders can introduce subtle side effects
-  private[spark] val classLoader = if (conf.getBoolean("spark.driver.add-dynamic-jars", false)) {
+  private[spark] val classLoader = if (conf.getBoolean("spark.driver.loadAddedJars", false)) {
     val loader = new SparkURLClassLoader(Array.empty[URL], this.getClass.getClassLoader)
     Thread.currentThread.setContextClassLoader(loader)
     Some(loader)
