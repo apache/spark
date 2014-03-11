@@ -23,7 +23,6 @@ import parquet.hadoop.{ParquetOutputFormat, ParquetInputFormat}
 import parquet.hadoop.util.ContextUtil
 
 import org.apache.spark.rdd.RDD
-//import org.apache.spark.api.java.JavaPairRDD
 import org.apache.spark.{TaskContext, SerializableWritable, SparkContext}
 import org.apache.spark.sql.catalyst.expressions.{Row, Attribute, Expression}
 import org.apache.spark.sql.execution.{SparkPlan, UnaryNode, LeafNode}
@@ -34,7 +33,6 @@ import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.Path
 
 import java.io.IOException
-import org.apache.spark.util.MutablePair
 import java.text.SimpleDateFormat
 import java.util.Date
 
@@ -70,7 +68,7 @@ case class ParquetTableScan(
       classOf[ParquetInputFormat[Row]],
       classOf[Void], classOf[Row],
       conf)
-      .map(_._2)
+    .map(_._2)
   }
 
   /**
@@ -160,7 +158,7 @@ case class InsertIntoParquetTable(
   override def output = child.output
 
   // based on ``saveAsNewAPIHadoopFile`` in [[PairRDDFunctions]]
-  // TODO: Maybe PairRDDFunctions should use MutablePair instead of Tuple2?
+  // TODO: Maybe PairRDDFunctions should use Product2 instead of Tuple2?
   // .. then we could use the default one and could use [[MutablePair]]
   // instead of ``Tuple2``
   private def saveAsHadoopFile(

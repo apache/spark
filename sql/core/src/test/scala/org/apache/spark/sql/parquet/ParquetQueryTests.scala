@@ -42,6 +42,7 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
 
   test("Import of simple Parquet file") {
     val result = getRDD(ParquetTestData.testData).collect()
+    assert(result.size === 15)
     result.zipWithIndex.foreach {
       case (row, index) => {
         val checkBoolean =
@@ -49,17 +50,12 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
             row(0) == true
           else
             row(0) == false
-        assert(checkBoolean)
-        val checkInt = ((index % 5) != 0) || (row(1) == 5)
-        assert(checkInt)
-        val checkString = row(2) == "abc"
-        assert(checkString)
-        val checkLong = row(3) == (1L<<33)
-        assert(checkLong)
-        val checkFloat = row(4) == 2.5F
-        assert(checkFloat)
-        val checkDouble = row(5) == 4.5D
-        assert(checkDouble)
+        assert(checkBoolean === true, s"boolean field value in line $index did not match")
+        if (index % 5 == 0) assert(row(1) === 5, s"int field value in line $index did not match")
+        assert(row(2) === "abc", s"string field value in line $index did not match")
+        assert(row(3) === (index.toLong << 33), s"long value in line $index did not match")
+        assert(row(4) === 2.5F, s"float field value in line $index did not match")
+        assert(row(5) === 4.5D, s"double field value in line $index did not match")
       }
     }
   }
@@ -76,15 +72,12 @@ class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
     val result = projected.execute().collect()
     result.zipWithIndex.foreach {
       case (row, index) => {
-        val checkBoolean =
           if (index % 3 == 0)
-            row(0) == true
+            assert(row(0) === true, s"boolean field value in line $index did not match (every third row)")
           else
-            row(0) == false
-        assert(checkBoolean)
-        val checkLong = row(1) == (1L<<33)
-        assert(checkLong)
-        assert(row.size === 2, "number of columns in projection is incorrect")
+            assert(row(0) === false, s"boolean field value in line $index did not match")
+        assert(row(1) === (index.toLong << 33), s"long field value in line $index did not match")
+        assert(row.size === 2, s"number of columns in projection in line $index is incorrect")
       }
     }
   }

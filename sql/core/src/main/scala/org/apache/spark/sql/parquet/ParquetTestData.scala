@@ -92,7 +92,7 @@ object ParquetTestData {
         data.update(1, null) // optional
       }
       data.update(2, "abc")
-      data.update(3, 1L<<33)
+      data.update(3, i.toLong << 33)
       data.update(4, 2.5F)
       data.update(5, 4.5D)
       writer.write(new GenericRow(data.toArray))

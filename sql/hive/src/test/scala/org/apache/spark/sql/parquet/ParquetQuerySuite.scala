@@ -63,8 +63,6 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
    */
   def resolveParquetTable(tableName: String, filename: String, plan: LogicalPlan): LogicalPlan = {
     TestHive.loadTestTable("src") // may not be loaded now
-    TestHive.loadTestTable("src1")
-    TestHive.loadTestTable("src2")
     plan.transform {
       case relation @ UnresolvedRelation(databaseName, name, alias) =>
         if (name == tableName)
@@ -155,7 +153,7 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
         case ((value_1:Array[Byte], value_2:Array[Byte]), index) =>
           assert(new String(value_1) === new String(value_2), s"table $tableName row ${counter} field ${fieldNames(index)} don't match")
         case ((value_1, value_2), index) =>
-          assert(value_1 === value_2, s"table $tableName row ${counter} field ${fieldNames(index)} don't match")
+          assert(value_1 === value_2, s"table $tableName row $counter field ${fieldNames(index)} don't match")
       }
     counter = counter + 1
     }

@@ -143,9 +143,9 @@ object RowWriteSupport {
  *
  * @param schema The corresponding Shark schema in the form of a list of attributes.
  */
-class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
-  type RowType = ParquetRelation.RowType
-  private val current: RowType = new RowType(schema.length)
+class CatalystGroupConverter(schema: Seq[Attribute], protected[parquet] val current: ParquetRelation.RowType) extends GroupConverter {
+
+  def this(schema: Seq[Attribute]) = this(schema, new ParquetRelation.RowType(schema.length))
 
   val converters: Array[Converter] = schema.map {
     a => a.dataType match {
@@ -160,7 +160,7 @@ class CatalystGroupConverter(schema: Seq[Attribute]) extends GroupConverter {
 
   override def getConverter(fieldIndex: Int): Converter = converters(fieldIndex)
 
-  private[parquet] def getCurrentRecord: RowType = current
+  private[parquet] def getCurrentRecord: ParquetRelation.RowType = current
 
   override def start(): Unit = {
     var i = 0
