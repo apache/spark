@@ -273,7 +273,7 @@ trait ClientBase extends Logging {
 
     ClientBase.populateClasspath(yarnConf, sparkConf, log4jConfLocalRes != null, env)
     env("SPARK_YARN_MODE") = "true"
-    env("SPARK_YARN_STAGING_DIR") = stagingDir
+    env("SPARK_YARN_STAGING_DIR") = FileSystem.get(conf).getHomeDirectory() + Path.SEPARATOR + stagingDir
     env("SPARK_USER") = UserGroupInformation.getCurrentUser().getShortUserName()
 
     // Set the environment variables to be passed on to the executors.
