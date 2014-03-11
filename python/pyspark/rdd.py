@@ -18,6 +18,7 @@
 from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
+from collections import namedtuple
 from itertools import chain, ifilter, imap
 import operator
 import os
@@ -30,7 +31,7 @@ from threading import Thread
 import warnings
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
-    BatchedSerializer, CloudPickleSerializer, pack_long
+    BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -42,12 +43,14 @@ from py4j.java_collections import ListConverter, MapConverter
 __all__ = ["RDD"]
 
 def _extract_concise_traceback():
+    """
+    This function returns the traceback info for a callsite, returns a dict
+    with function name, file name and line number
+    """
     tb = traceback.extract_stack()
+    callsite = namedtuple("Callsite", "function file linenum")
     if len(tb) == 0:
-        return "I'm lost!"
-    # HACK:  This function is in a file called 'rdd.py' in the top level of
-    # everything PySpark.  Just trim off the directory name and assume
-    # everything in that tree is PySpark guts.
+        return None
     file, line, module, what = tb[len(tb) - 1]
     sparkpath = os.path.dirname(file)
     first_spark_frame = len(tb) - 1
@@ -58,16 +61,20 @@ def _extract_concise_traceback():
             break
     if first_spark_frame == 0:
         file, line, fun, what = tb[0]
-        return "%s at %s:%d" % (fun, file, line)
+        return callsite(function=fun, file=file, linenum=line)
     sfile, sline, sfun, swhat = tb[first_spark_frame]
     ufile, uline, ufun, uwhat = tb[first_spark_frame-1]
-    return "%s at %s:%d" % (sfun, ufile, uline)
+    return callsite(function=sfun, file=ufile, linenum=uline)
 
 _spark_stack_depth = 0
 
 class _JavaStackTrace(object):
     def __init__(self, sc):
-        self._traceback = _extract_concise_traceback()
+        tb = _extract_concise_traceback()
+        if tb is not None:
+            self._traceback = "%s at %s:%s" % (tb.function, tb.file, tb.linenum)
+        else:
+            self._traceback = "Error! Could not extract traceback info"
         self._context = sc
 
     def __enter__(self):
@@ -939,7 +946,21 @@ class RDD(object):
                     combiners[k] = mergeCombiners(combiners[k], v)
             return combiners.iteritems()
         return shuffled.mapPartitions(_mergeCombiners)
+    
+    def foldByKey(self, zeroValue, func, numPartitions=None):
+        """
+        Merge the values for each key using an associative function "func" and a neutral "zeroValue"
+        which may be added to the result an arbitrary number of times, and must not change 
+        the result (e.g., 0 for addition, or 1 for multiplication.).                
 
+        >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
+        >>> from operator import add
+        >>> rdd.foldByKey(0, add).collect()
+        [('a', 2), ('b', 1)]
+        """
+        return self.combineByKey(lambda v: func(zeroValue, v), func, func, numPartitions)
+    
+    
     # TODO: support variant with custom partitioner
     def groupByKey(self, numPartitions=None):
         """
@@ -1080,6 +1101,24 @@ class RDD(object):
         """
         jrdd = self._jrdd.coalesce(numPartitions)
         return RDD(jrdd, self.ctx, self._jrdd_deserializer)
+
+    def zip(self, other):
+        """
+        Zips this RDD with another one, returning key-value pairs with the first element in each RDD
+        second element in each RDD, etc. Assumes that the two RDDs have the same number of
+        partitions and the same number of elements in each partition (e.g. one was made through
+        a map on the other).
+
+        >>> x = sc.parallelize(range(0,5))
+        >>> y = sc.parallelize(range(1000, 1005))
+        >>> x.zip(y).collect()
+        [(0, 1000), (1, 1001), (2, 1002), (3, 1003), (4, 1004)]
+        """
+        pairRDD = self._jrdd.zip(other._jrdd)
+        deserializer = PairDeserializer(self._jrdd_deserializer,
+                                             other._jrdd_deserializer)
+        return RDD(pairRDD, self.ctx, deserializer)
+
 
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the
