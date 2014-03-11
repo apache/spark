@@ -743,11 +743,9 @@
         <hadoop.version>0.23.7</hadoop.version>
         <!--<hadoop.version>2.0.5-alpha</hadoop.version> -->
       </properties>
-
       <modules>
         <module>yarn</module>
       </modules>
-
     </profile>
 
     <profile>
@@ -760,7 +758,15 @@
       <modules>
         <module>yarn</module>
       </modules>
-
     </profile>
+    
+    <!-- Ganglia integration is not included by default due to LGPL-licensed code -->
+    <profile>
+      <id>spark-ganglia-lgpl</id>
+      <modules>
+        <module>extras/spark-ganglia-lgpl</module>
+      </modules>
+    </profile>
+
   </profiles>
 </project>
