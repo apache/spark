@@ -21,7 +21,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 /**
- * A SparkListenerEvent bus that relays events to its listeners.
+ * A SparkListenerEvent bus that relays events to its listeners
  */
 private[spark] trait EventBus {
 

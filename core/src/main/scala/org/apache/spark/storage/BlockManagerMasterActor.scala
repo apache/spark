@@ -242,8 +242,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
         case None =>
           blockManagerIdByExecutor(id.executorId) = id
       }
-      blockManagerInfo(id) = new BlockManagerInfo(id, System.currentTimeMillis(),
-        maxMemSize, slaveActor)
+      blockManagerInfo(id) =
+        new BlockManagerInfo(id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
     val blockManagerGained = SparkListenerBlockManagerGained(id, maxMemSize)
     statusListener.foreach(_.onBlockManagerGained(blockManagerGained))

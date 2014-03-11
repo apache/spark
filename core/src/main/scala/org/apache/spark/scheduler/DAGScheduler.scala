@@ -553,11 +553,11 @@ class DAGScheduler(
         val activeInGroup = activeJobs.filter(activeJob =>
           groupId == activeJob.properties.get(SparkContext.SPARK_JOB_GROUP_ID))
         val jobIds = activeInGroup.map(_.jobId)
-        jobIds.foreach { handleJobCancellation }
+        jobIds.foreach(handleJobCancellation)
 
       case AllJobsCancelled =>
         // Cancel all running jobs.
-        runningStages.map(_.jobId).foreach { handleJobCancellation }
+        runningStages.map(_.jobId).foreach(handleJobCancellation)
         activeJobs.clear()      // These should already be empty by this point,
         stageIdToActiveJob.clear()   // but just in case we lost track of some jobs...
 
@@ -1094,11 +1094,11 @@ class DAGScheduler(
       "stageToInfos" -> stageToInfos,
       "jobIdToStageIds" -> jobIdToStageIds,
       "stageIdToJobIds" -> stageIdToJobIds).
-      foreach { case(s, t) => {
-      val sizeBefore = t.size
-      t.clearOldValues(cleanupTime)
-      logInfo("%s %d --> %d".format(s, sizeBefore, t.size))
-    }}
+      foreach { case(s, t) =>
+        val sizeBefore = t.size
+        t.clearOldValues(cleanupTime)
+        logInfo("%s %d --> %d".format(s, sizeBefore, t.size))
+      }
   }
 
   def stop() {

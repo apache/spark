@@ -33,7 +33,6 @@ import org.apache.spark.serializer.{Serializer, SerializerManager}
 import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
-
 /**
  * Holds all the runtime environment objects for a running Spark instance (either master or worker),
  * including the serializer, Akka actor system, block manager, map output tracker, etc. Currently
@@ -251,7 +250,7 @@ object SparkEnv extends Logging {
   /**
    * Return a map representation of jvm information, Spark properties, system properties, and
    * class paths. Map keys define the category, and map values represent the corresponding
-   * attributes as a sequence of KV pairs.
+   * attributes as a sequence of KV pairs. This is used mainly for SparkListenerEnvironmentUpdate.
    */
   private[spark]
   def environmentDetails(
@@ -274,12 +273,11 @@ object SparkEnv extends Logging {
     }
     val sparkProperties = conf.getAll.sorted ++ additionalFields
 
+    // System properties that are not java classpaths
     val systemProperties = System.getProperties.iterator.toSeq
     val classPathProperty = systemProperties.find { case (k, v) =>
       k == "java.class.path"
     }.getOrElse(("", ""))
-
-    // System properties that are not java classpaths
     val otherProperties = systemProperties.filter { case (k, v) =>
       k != "java.class.path" && !k.startsWith("spark.")
     }.sorted

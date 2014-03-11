@@ -17,12 +17,11 @@
 
 package org.apache.spark.storage
 
-import scala.collection.mutable
 import scala.collection.Map
+import scala.collection.mutable
 
 import org.apache.spark.SparkContext
 import org.apache.spark.util.Utils
-
 
 private[spark]
 class StorageStatus(
@@ -74,7 +73,7 @@ object StorageUtils {
   /** Returns RDD-level information from a list of StorageStatus objects and SparkContext */
   def rddInfoFromStorageStatus(
       storageStatusList: Seq[StorageStatus],
-      sc: SparkContext) : Array[RDDInfo] = {
+      sc: SparkContext): Array[RDDInfo] = {
     val blockStatusMap = blockStatusMapFromStorageStatus(storageStatusList)
     val rddInfoList = rddInfoFromSparkContext(blockStatusMap.keys.toSeq, sc)
     val rddInfoMap = rddInfoList.map { info => (info.id, info) }.toMap

@@ -21,6 +21,7 @@ import scala.xml.Node
 
 /** Utility functions for generating XML pages with spark content. */
 private[spark] object UIUtils {
+
   import Page._
 
   // Yarn has to go through a proxy so the base uri is provided and has to be on all links
@@ -62,8 +63,8 @@ private[spark] object UIUtils {
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
         <link rel="stylesheet" href={prependBaseUri(basePath, "/static/bootstrap.min.css")}
               type="text/css" />
-        <link rel="stylesheet"
-              href={prependBaseUri(basePath, "/static/webui.css")} type="text/css" />
+        <link rel="stylesheet" href={prependBaseUri(basePath, "/static/webui.css")}
+              type="text/css" />
         <script src={prependBaseUri(basePath, "/static/sorttable.js")} ></script>
         <title>{appName} - {title}</title>
       </head>

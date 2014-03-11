@@ -25,13 +25,13 @@ import org.apache.spark.SparkConf
 object UIReloader {
   def main(args: Array[String]) {
     if (args.length < 1) {
-      println("Usage: ./bin/spark-class org.apache.spark.ui.UIReloader [log path] [port]")
+      println("Usage: ./bin/spark-class org.apache.spark.ui.UIReloader [log path]")
       System.exit(1)
     }
 
     val conf = new SparkConf()
     conf.set("spark.ui.port", "14040")
-    val ui = new SparkUI(conf, "Reloaded Application")
+    val ui = new SparkUI(conf, "My Application")
     ui.bind()
     ui.start()
     val success = ui.renderFromPersistedStorage(args(0))

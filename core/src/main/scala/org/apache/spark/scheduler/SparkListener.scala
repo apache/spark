@@ -21,10 +21,10 @@ import java.util.Properties
 
 import scala.collection.Map
 
-import org.apache.spark.util.{Utils, Distribution}
+import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
-import org.apache.spark.storage.{BlockManagerId, StorageStatus}
+import org.apache.spark.storage.BlockManagerId
 
 sealed trait SparkListenerEvent
 
@@ -37,8 +37,13 @@ case class SparkListenerTaskStart(stageId: Int, taskInfo: TaskInfo) extends Spar
 
 case class SparkListenerTaskGettingResult(taskInfo: TaskInfo) extends SparkListenerEvent
 
-case class SparkListenerTaskEnd(stageId: Int, taskType: String, reason: TaskEndReason,
-  taskInfo: TaskInfo, taskMetrics: TaskMetrics) extends SparkListenerEvent
+case class SparkListenerTaskEnd(
+    stageId: Int,
+    taskType: String,
+    reason: TaskEndReason,
+    taskInfo: TaskInfo,
+    taskMetrics: TaskMetrics)
+  extends SparkListenerEvent
 
 case class SparkListenerJobStart(jobId: Int, stageIds: Seq[Int], properties: Properties = null)
   extends SparkListenerEvent

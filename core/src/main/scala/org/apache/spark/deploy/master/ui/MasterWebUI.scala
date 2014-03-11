@@ -32,14 +32,13 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 private[spark]
 class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
-  private val host = Utils.localHostName()
-  private val port = requestedPort
-
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)
   var server: Option[Server] = None
   var boundPort: Option[Int] = None
 
+  private val host = Utils.localHostName()
+  private val port = requestedPort
   private val applicationPage = new ApplicationPage(this)
   private val indexPage = new IndexPage(this)
 

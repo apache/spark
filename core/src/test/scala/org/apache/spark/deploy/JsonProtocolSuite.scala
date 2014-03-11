@@ -20,12 +20,9 @@ package org.apache.spark.deploy
 import java.io.File
 import java.util.Date
 
-import org.json4s._
-
-import org.json4s.JValue
-import org.json4s.jackson.JsonMethods
 import com.fasterxml.jackson.core.JsonParseException
-
+import org.json4s._
+import org.json4s.jackson.JsonMethods
 import org.scalatest.FunSuite
 
 import org.apache.spark.deploy.DeployMessages.{MasterStateResponse, WorkerStateResponse}

@@ -20,7 +20,7 @@ package org.apache.spark.storage
 import java.io.{File, InputStream, OutputStream}
 import java.nio.{ByteBuffer, MappedByteBuffer}
 
-import scala.collection.mutable.{HashMap, ArrayBuffer}
+import scala.collection.mutable.{ArrayBuffer, HashMap}
 import scala.concurrent.{Await, Future}
 import scala.concurrent.duration._
 import scala.util.Random
@@ -122,11 +122,11 @@ private[spark] class BlockManager(
    * Construct a BlockManager with a memory limit set based on system properties.
    */
   def this(
-    execId: String,
-    actorSystem: ActorSystem,
-    master: BlockManagerMaster,
-    serializer: Serializer,
-    conf: SparkConf) = {
+      execId: String,
+      actorSystem: ActorSystem,
+      master: BlockManagerMaster,
+      serializer: Serializer,
+      conf: SparkConf) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf), conf)
   }
 

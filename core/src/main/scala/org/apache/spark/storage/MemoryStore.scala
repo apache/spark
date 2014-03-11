@@ -284,5 +284,6 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
   }
 }
 
-private case class ResultWithDroppedBlocks(success: Boolean,
-  droppedBlocks: Seq[(BlockId, BlockStatus)])
+private case class ResultWithDroppedBlocks(
+    success: Boolean,
+    droppedBlocks: Seq[(BlockId, BlockStatus)])

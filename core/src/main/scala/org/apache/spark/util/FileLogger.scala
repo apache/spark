@@ -18,14 +18,14 @@
 package org.apache.spark.util
 
 import java.io._
-import java.text.SimpleDateFormat
 import java.net.URI
+import java.text.SimpleDateFormat
 import java.util.Date
 
 import it.unimi.dsi.fastutil.io.FastBufferedOutputStream
 import org.apache.hadoop.fs.{FSDataOutputStream, Path}
 
-import org.apache.spark.{SparkConf, Logging}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.io.CompressionCodec
 
 /**
@@ -38,7 +38,7 @@ import org.apache.spark.io.CompressionCodec
  */
 class FileLogger(
     logDir: String,
-    conf: SparkConf = new SparkConf(),
+    conf: SparkConf = new SparkConf,
     outputBufferSize: Int = 8 * 1024,
     compress: Boolean = false,
     overwrite: Boolean = true)

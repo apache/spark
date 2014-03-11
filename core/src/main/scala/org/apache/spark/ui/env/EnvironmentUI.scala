@@ -36,7 +36,7 @@ private[ui] class EnvironmentUI(parent: SparkUI) {
   lazy val listener = _listener.get
 
   def start() {
-    _listener = Some(new EnvironmentListener())
+    _listener = Some(new EnvironmentListener)
   }
 
   def getHandlers = Seq[(String, Handler)](

@@ -29,7 +29,7 @@ import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.Page.Executors
-import org.apache.spark.ui._
+import org.apache.spark.ui.{SparkUI, UIUtils}
 import org.apache.spark.util.Utils
 
 private[ui] class ExecutorsUI(parent: SparkUI) {
@@ -67,11 +67,11 @@ private[ui] class ExecutorsUI(parent: SparkUI) {
           </ul>
         </div>
       </div>
-        <div class = "row">
-          <div class="span12">
-            {execTable}
-          </div>
-        </div>;
+      <div class = "row">
+        <div class="span12">
+          {execTable}
+        </div>
+      </div>;
 
     UIUtils.headerSparkPage(
       content, basePath, appName, "Executors (" + execInfo.size + ")", Executors)

@@ -21,7 +21,7 @@ import org.eclipse.jetty.server.{Handler, Server}
 import org.eclipse.jetty.server.handler.ContextHandlerCollection
 
 import org.apache.spark.{Logging, SparkConf, SparkContext, SparkEnv}
-import org.apache.spark.scheduler.{EventLoggingListener, EventLoggingInfo, SparkReplayerBus}
+import org.apache.spark.scheduler.{EventLoggingInfo, EventLoggingListener, SparkReplayerBus}
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
@@ -38,6 +38,8 @@ private[spark] class SparkUI(
     val basePath: String = "")
   extends Logging {
 
+  import SparkUI._
+
   def this(sc: SparkContext) = this(sc, sc.conf, sc.appName)
   def this(conf: SparkConf, appName: String) = this(null, conf, appName)
   def this(conf: SparkConf, appName: String, basePath: String) =
@@ -47,7 +49,7 @@ private[spark] class SparkUI(
   val live = sc != null
 
   private val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
-  private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
+  private val port = conf.get("spark.ui.port", DEFAULT_PORT).toInt
   private var boundPort: Option[Int] = None
   private var server: Option[Server] = None
   private var started = false
@@ -69,7 +71,7 @@ private[spark] class SparkUI(
     exec.getHandlers ++
     metricsServletHandlers ++
     Seq[(String, Handler)](
-      ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
+      ("/static", createStaticHandler(STATIC_RESOURCE_DIR)),
       ("/", createRedirectHandler("/stages", basePath))
     )
   }
@@ -165,6 +167,5 @@ private[spark] class SparkUI(
 
 private[spark] object SparkUI {
   val DEFAULT_PORT = "4040"
-  val DEFAULT_PERSISTED_PORT = "14040"
   val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 }

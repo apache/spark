@@ -32,8 +32,7 @@ class StageInfo(
     val name: String,
     val numTasks: Int,
     val rddInfo: RDDInfo,
-    val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] =
-      mutable.Buffer[(TaskInfo, TaskMetrics)]()) {
+    val taskInfos: mutable.Buffer[(TaskInfo, TaskMetrics)] = mutable.Buffer.empty) {
 
   /** When this stage was submitted from the DAGScheduler to a TaskScheduler. */
   var submissionTime: Option[Long] = None

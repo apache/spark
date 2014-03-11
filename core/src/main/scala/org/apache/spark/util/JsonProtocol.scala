@@ -17,17 +17,17 @@
 
 package org.apache.spark.util
 
-import java.util.{UUID, Properties}
+import java.util.{Properties, UUID}
 
 import scala.collection.JavaConverters._
 import scala.collection.Map
 import scala.collection.mutable
 
+import org.json4s.DefaultFormats
 import org.json4s.JsonDSL._
 import org.json4s.JsonAST._
-import org.json4s.DefaultFormats
 
-import org.apache.spark.executor.{ShuffleWriteMetrics, ShuffleReadMetrics, TaskMetrics}
+import org.apache.spark.executor.{ShuffleReadMetrics, ShuffleWriteMetrics, TaskMetrics}
 import org.apache.spark.scheduler._
 import org.apache.spark.storage._
 import org.apache.spark._
@@ -36,7 +36,7 @@ private[spark] object JsonProtocol {
   private implicit val format = DefaultFormats
 
   /**
-   * JSON serialization methods for SparkListenerEvent's
+   * JSON serialization methods for SparkListenerEvents
    */
 
   def sparkEventToJson(event: SparkListenerEvent): JValue = {
@@ -162,7 +162,7 @@ private[spark] object JsonProtocol {
   }
 
   /**
-   * JSON serialization methods for classes SparkListenerEvent's depend on
+   * JSON serialization methods for classes SparkListenerEvents depend on
    */
 
   def stageInfoToJson(stageInfo: StageInfo): JValue = {
@@ -377,7 +377,7 @@ private[spark] object JsonProtocol {
   }
 
   /**
-   * JSON deserialization methods for SparkListenerEvent's
+   * JSON deserialization methods for SparkListenerEvents
    */
 
   def sparkEventFromJson(json: JValue): SparkListenerEvent = {
@@ -479,7 +479,7 @@ private[spark] object JsonProtocol {
   }
 
   /**
-   * JSON deserialization methods for classes SparkListenerEvent's depend on
+   * JSON deserialization methods for classes SparkListenerEvents depend on
    */
 
   def stageInfoFromJson(json: JValue): StageInfo = {

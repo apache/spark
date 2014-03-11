@@ -33,7 +33,6 @@ private[ui] class IndexPage(parent: BlockManagerUI) {
   private lazy val listener = parent.listener
 
   def render(request: HttpServletRequest): Seq[Node] = {
-    // Calculate macro-level statistics
     val rdds = listener.rddInfoList
     val content = UIUtils.listingTable(rddHeader, rddRow, rdds)
     UIUtils.headerSparkPage(content, basePath, appName, "Storage ", Storage)

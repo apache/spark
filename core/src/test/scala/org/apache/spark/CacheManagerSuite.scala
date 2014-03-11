@@ -23,8 +23,8 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.mock.EasyMockSugar
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.storage.{BlockManager, RDDBlockId, StorageLevel}
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.storage._
 
 // TODO: Test the CacheManager's thread-safety aspects
 class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar {
@@ -55,7 +55,7 @@ class CacheManagerSuite extends FunSuite with BeforeAndAfter with EasyMockSugar 
     expecting {
       blockManager.get(RDDBlockId(0, 0)).andReturn(None)
       blockManager.put(RDDBlockId(0, 0), ArrayBuffer[Any](1, 2, 3, 4), StorageLevel.MEMORY_ONLY,
-        true).andStubReturn(Seq())
+        true).andStubReturn(Seq[(BlockId, BlockStatus)]())
     }
 
     whenExecuting(blockManager) {

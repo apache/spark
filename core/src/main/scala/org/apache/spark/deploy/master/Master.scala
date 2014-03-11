@@ -618,8 +618,8 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
       // If application events are logged, use them to rebuild the UI
       startPersistedSparkUI(app).map { ui =>
         app.desc.appUiUrl = ui.basePath
-        webUi.attachUI(ui)
         appIdToUI(app.id) = ui
+        webUi.attachUI(ui)
       }.getOrElse {
         // Avoid broken links if the UI is not reconstructed
         app.desc.appUiUrl = ""
@@ -640,7 +640,7 @@ private[spark] class Master(host: String, port: Int, webUiPort: Int) extends Act
   }
 
   /**
-   * Start a new SparkUI rendered from persisted storage. If unsuccessful for any reason,
+   * Start a new SparkUI rendered from persisted storage. If this is unsuccessful for any reason,
    * return None. Otherwise return the reconstructed UI.
    */
   def startPersistedSparkUI(app: ApplicationInfo): Option[SparkUI] = {

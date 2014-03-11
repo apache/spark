@@ -28,7 +28,7 @@ import org.scalatest.{BeforeAndAfter, FunSuite}
 import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.SparkContext._
-import org.apache.spark.scheduler.{SparkListenerTaskStart, SparkListener}
+import org.apache.spark.scheduler.{SparkListener, SparkListenerTaskStart}
 
 /**
  * Test suite for cancelling running jobs. We run the cancellation tasks for single job action

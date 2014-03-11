@@ -19,8 +19,9 @@ package org.apache.spark.ui.jobs
 
 import javax.servlet.http.HttpServletRequest
 
-import scala.xml.{NodeSeq, Node}
+import scala.xml.{Node, NodeSeq}
 
+import org.apache.spark.scheduler.Schedulable
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils
 
@@ -45,8 +46,8 @@ private[ui] class IndexPage(parent: JobProgressUI) {
         new StageTable(completedStages.sortBy(_.submissionTime).reverse, parent)
       val failedStagesTable = new StageTable(failedStages.sortBy(_.submissionTime).reverse, parent)
 
-      // For now, pool information is only accessible in live UI's
-      val pools = if (live) sc.getAllPools else Seq()
+      // For now, pool information is only accessible in live UIs
+      val pools = if (live) sc.getAllPools else Seq[Schedulable]()
       val poolTable = new PoolTable(pools, parent)
 
       val summary: NodeSeq =
@@ -82,7 +83,7 @@ private[ui] class IndexPage(parent: JobProgressUI) {
         {if (live && isFairScheduler) {
           <h4>{pools.size} Fair Scheduler Pools</h4> ++ poolTable.toNodeSeq
         } else {
-          Seq()
+          Seq[Node]()
         }} ++
         <h4 id="active">Active Stages ({activeStages.size})</h4> ++
         activeStagesTable.toNodeSeq ++

@@ -66,20 +66,20 @@ private[ui] class ExecutorTable(stageId: Int, parent: JobProgressUI) {
     executorIdToSummary match {
       case Some(x) =>
         x.toSeq.sortBy(_._1).map { case (k, v) => {
-            <tr>
-              <td>{k}</td>
-              <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
-              <td>{parent.formatDuration(v.taskTime)}</td>
-              <td>{v.failedTasks + v.succeededTasks}</td>
-              <td>{v.failedTasks}</td>
-              <td>{v.succeededTasks}</td>
-              <td>{Utils.bytesToString(v.shuffleRead)}</td>
-              <td>{Utils.bytesToString(v.shuffleWrite)}</td>
-              <td>{Utils.bytesToString(v.memoryBytesSpilled)}</td>
-              <td>{Utils.bytesToString(v.diskBytesSpilled)}</td>
-            </tr>
-          }
+          <tr>
+            <td>{k}</td>
+            <td>{executorIdToAddress.getOrElse(k, "CANNOT FIND ADDRESS")}</td>
+            <td>{parent.formatDuration(v.taskTime)}</td>
+            <td>{v.failedTasks + v.succeededTasks}</td>
+            <td>{v.failedTasks}</td>
+            <td>{v.succeededTasks}</td>
+            <td>{Utils.bytesToString(v.shuffleRead)}</td>
+            <td>{Utils.bytesToString(v.shuffleWrite)}</td>
+            <td>{Utils.bytesToString(v.memoryBytesSpilled)}</td>
+            <td>{Utils.bytesToString(v.diskBytesSpilled)}</td>
+          </tr>
         }
+      }
       case _ => Seq[Node]()
     }
   }

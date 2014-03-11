@@ -37,8 +37,7 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressUI) {
 
   private def poolTable(
       makeRow: (Schedulable, HashMap[String, HashMap[Int, StageInfo]]) => Seq[Node],
-      rows: Seq[Schedulable])
-    : Seq[Node] = {
+      rows: Seq[Schedulable]) : Seq[Node] = {
     <table class="table table-bordered table-striped table-condensed sortable table-fixed">
       <thead>
         <th>Pool Name</th>
@@ -62,8 +61,7 @@ private[ui] class PoolTable(pools: Seq[Schedulable], parent: JobProgressUI) {
     }
     <tr>
       <td>
-        <a href={"%s/stages/pool?poolname=%s"
-          .format(UIUtils.prependBaseUri(basePath), p.name)}>
+        <a href={"%s/stages/pool?poolname=%s".format(UIUtils.prependBaseUri(basePath), p.name)}>
           {p.name}
         </a>
       </td>

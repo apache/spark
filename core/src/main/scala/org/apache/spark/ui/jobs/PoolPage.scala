@@ -21,6 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
+import org.apache.spark.scheduler.{Schedulable, StageInfo}
 import org.apache.spark.ui.Page._
 import org.apache.spark.ui.UIUtils
 
@@ -38,16 +39,17 @@ private[ui] class PoolPage(parent: JobProgressUI) {
       val poolToActiveStages = listener.poolToActiveStages
       val activeStages = poolToActiveStages.get(poolName) match {
         case Some(s) => s.values.toSeq
-        case None => Seq()
+        case None => Seq[StageInfo]()
       }
       val activeStagesTable = new StageTable(activeStages.sortBy(_.submissionTime).reverse, parent)
 
-      // For now, pool information is only accessible in live UI's
-      val pools = if (live) Seq(sc.getPoolForName(poolName).get) else Seq()
+      // For now, pool information is only accessible in live UIs
+      val pools = if (live) Seq(sc.getPoolForName(poolName).get) else Seq[Schedulable]()
       val poolTable = new PoolTable(pools, parent)
 
-      val content = <h4>Summary </h4> ++ poolTable.toNodeSeq ++
-                    <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq
+      val content =
+        <h4>Summary </h4> ++ poolTable.toNodeSeq ++
+        <h4>{activeStages.size} Active Stages</h4> ++ activeStagesTable.toNodeSeq
 
       UIUtils.headerSparkPage(
         content, basePath, appName, "Fair Scheduler Pool: " + poolName, Stages)

@@ -25,12 +25,12 @@ import it.unimi.dsi.fastutil.io.FastBufferedInputStream
 import org.apache.hadoop.fs.{Path, FileSystem}
 import org.json4s.jackson.JsonMethods._
 
-import org.apache.spark.{SparkConf, Logging}
-import org.apache.spark.util.{Utils, JsonProtocol}
+import org.apache.spark.{Logging, SparkConf}
 import org.apache.spark.io.CompressionCodec
+import org.apache.spark.util.{JsonProtocol, Utils}
 
 /**
- * An EventBus that replays logged events from persisted storage.
+ * An EventBus that replays logged events from persisted storage
  */
 private[spark] class SparkReplayerBus(conf: SparkConf) extends EventBus with Logging {
   private val compressed = conf.getBoolean("spark.eventLog.compress", false)

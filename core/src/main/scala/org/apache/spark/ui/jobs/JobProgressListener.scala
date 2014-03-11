@@ -17,7 +17,7 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.collection.mutable.{ListBuffer, HashMap}
+import scala.collection.mutable.{HashMap, ListBuffer}
 
 import org.apache.spark.{ExceptionFailure, SparkConf, SparkContext, Success}
 import org.apache.spark.executor.TaskMetrics
@@ -185,28 +185,27 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
         }
 
       stageIdToTime.getOrElseUpdate(sid, 0L)
-      val time = metrics.map(m => m.executorRunTime).getOrElse(0L)
+      val time = metrics.map(_.executorRunTime).getOrElse(0L)
       stageIdToTime(sid) += time
       totalTime += time
 
       stageIdToShuffleRead.getOrElseUpdate(sid, 0L)
-      val shuffleRead = metrics.flatMap(m => m.shuffleReadMetrics).map(s =>
-        s.remoteBytesRead).getOrElse(0L)
+      val shuffleRead = metrics.flatMap(_.shuffleReadMetrics).map(_.remoteBytesRead).getOrElse(0L)
       stageIdToShuffleRead(sid) += shuffleRead
       totalShuffleRead += shuffleRead
 
       stageIdToShuffleWrite.getOrElseUpdate(sid, 0L)
-      val shuffleWrite = metrics.flatMap(m => m.shuffleWriteMetrics).map(s =>
-        s.shuffleBytesWritten).getOrElse(0L)
+      val shuffleWrite =
+        metrics.flatMap(_.shuffleWriteMetrics).map(_.shuffleBytesWritten).getOrElse(0L)
       stageIdToShuffleWrite(sid) += shuffleWrite
       totalShuffleWrite += shuffleWrite
 
       stageIdToMemoryBytesSpilled.getOrElseUpdate(sid, 0L)
-      val memoryBytesSpilled = metrics.map(m => m.memoryBytesSpilled).getOrElse(0L)
+      val memoryBytesSpilled = metrics.map(_.memoryBytesSpilled).getOrElse(0L)
       stageIdToMemoryBytesSpilled(sid) += memoryBytesSpilled
 
       stageIdToDiskBytesSpilled.getOrElseUpdate(sid, 0L)
-      val diskBytesSpilled = metrics.map(m => m.diskBytesSpilled).getOrElse(0L)
+      val diskBytesSpilled = metrics.map(_.diskBytesSpilled).getOrElse(0L)
       stageIdToDiskBytesSpilled(sid) += diskBytesSpilled
 
       val taskMap = stageIdToTaskData.getOrElse(sid, HashMap[Long, TaskUIData]())
@@ -263,6 +262,6 @@ private[ui] case class TaskUIData(
     exception: Option[ExceptionFailure] = None)
 
 private object JobProgressListener {
-  val DEFAULT_RETAINED_STAGES = 1000
   val DEFAULT_POOL_NAME = "default"
+  val DEFAULT_RETAINED_STAGES = 1000
 }
