@@ -29,8 +29,31 @@ import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext._
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
+import scala.util.Try
 
 class FileSuite extends FunSuite with LocalSparkContext {
+  test("adding jars to classpath at the driver") {
+    val tmpDir = Files.createTempDir()
+    val classFile = TestUtils.createCompiledClass("HelloSpark", tmpDir)
+    val jarFile = new File(tmpDir, "test.jar")
+    TestUtils.createJar(Seq(classFile), jarFile)
+
+    def canLoadClass(clazz: String) =
+      Try(Class.forName(clazz, true, Thread.currentThread().getContextClassLoader)).isSuccess
+
+    val driverLoadedBefore = canLoadClass("HelloSpark")
+
+    val conf = new SparkConf().setMaster("local-cluster[1,1,512]").setAppName("test")
+      .set("spark.driver.loadAddedJars", "true")
+
+    val sc = new SparkContext(conf)
+    sc.addJar(jarFile.getAbsolutePath)
+
+    val driverLoadedAfter = canLoadClass("HelloSpark")
+
+    assert(false === driverLoadedBefore, "Class visible before being added")
+    assert(true === driverLoadedAfter, "Class was not visible after being added")
+  }
 
   test("text files") {
     sc = new SparkContext("local", "test")
