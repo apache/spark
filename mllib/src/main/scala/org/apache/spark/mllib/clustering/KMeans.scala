@@ -28,6 +28,9 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
+private[clustering]
+case class BreezeVectorWithSquaredNorm(vector: BV[Double], squaredNorm: Double)
+
 /**
  * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
  * mode (the k-means|| algorithm by Bahmani et al). When multiple concurrent runs are requested,
@@ -353,6 +356,28 @@ object KMeans {
     var i = 0
     centers.foreach { v =>
       val distance: Double = breezeSquaredDistance(v, point)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestIndex = i
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
+  }
+
+  /**
+   * Returns the index of the closest center to the given point, as well as the squared distance.
+   */
+  private[mllib] def findClosest(
+      centers: TraversableOnce[BreezeVectorWithSquaredNorm],
+      point: BreezeVectorWithSquaredNorm): (Int, Double) = {
+    var bestDistance = Double.PositiveInfinity
+    var bestIndex = 0
+    var i = 0
+    centers.foreach { center =>
+      val distance: Double = MLUtils.fastSquaredDistance(
+        center.vector, center.squaredNorm, point.vector, point.squaredNorm
+      )
       if (distance < bestDistance) {
         bestDistance = distance
         bestIndex = i
