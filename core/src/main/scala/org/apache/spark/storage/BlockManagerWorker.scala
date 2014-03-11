@@ -19,7 +19,7 @@ package org.apache.spark.storage
 
 import java.nio.ByteBuffer
 
-import org.apache.spark.{Logging}
+import org.apache.spark.Logging
 import org.apache.spark.network._
 import org.apache.spark.util.Utils
 
@@ -111,7 +111,7 @@ private[spark] object BlockManagerWorker extends Logging {
     val blockMessageArray = new BlockMessageArray(blockMessage)
     val resultMessage = connectionManager.sendMessageReliablySync(
         toConnManagerId, blockMessageArray.toBufferMessage)
-    resultMessage != None
+    resultMessage.isDefined
   }
 
   def syncGetBlock(msg: GetBlock, toConnManagerId: ConnectionManagerId): ByteBuffer = {

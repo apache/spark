@@ -17,8 +17,7 @@
 
 package org.apache.spark.rdd
 
-
-import org.apache.spark.{TaskContext, Partition}
+import org.apache.spark.{Partition, TaskContext}
 
 private[spark]
 class MappedValuesRDD[K, V, U](prev: RDD[_ <: Product2[K, V]], f: V => U)

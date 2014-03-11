@@ -59,7 +59,8 @@ class VertexRDD[@specialized VD: ClassTag](
 
   /**
    * Construct a new VertexRDD that is indexed by only the visible vertices. The resulting
-   * VertexRDD will be based on a different index and can no longer be quickly joined with this RDD.
+   * VertexRDD will be based on a different index and can no longer be quickly joined with this
+   * RDD.
    */
   def reindex(): VertexRDD[VD] = new VertexRDD(partitionsRDD.map(_.reindex()))
 
@@ -101,7 +102,8 @@ class VertexRDD[@specialized VD: ClassTag](
   /**
    * Applies a function to each `VertexPartition` of this RDD and returns a new VertexRDD.
    */
-  private[graphx] def mapVertexPartitions[VD2: ClassTag](f: VertexPartition[VD] => VertexPartition[VD2])
+  private[graphx] def mapVertexPartitions[VD2: ClassTag](
+    f: VertexPartition[VD] => VertexPartition[VD2])
     : VertexRDD[VD2] = {
     val newPartitionsRDD = partitionsRDD.mapPartitions(_.map(f), preservesPartitioning = true)
     new VertexRDD(newPartitionsRDD)
@@ -159,8 +161,9 @@ class VertexRDD[@specialized VD: ClassTag](
   }
 
   /**
-   * Left joins this RDD with another VertexRDD with the same index. This function will fail if both
-   * VertexRDDs do not share the same index. The resulting vertex set contains an entry for each
+   * Left joins this RDD with another VertexRDD with the same index. This function will fail if
+   * both VertexRDDs do not share the same index. The resulting vertex set contains an entry for
+   * each
    * vertex in `this`. If `other` is missing any vertex in this VertexRDD, `f` is passed `None`.
    *
    * @tparam VD2 the attribute type of the other VertexRDD
@@ -187,8 +190,8 @@ class VertexRDD[@specialized VD: ClassTag](
    * Left joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
    * backed by a VertexRDD with the same index then the efficient [[leftZipJoin]] implementation is
    * used. The resulting VertexRDD contains an entry for each vertex in `this`. If `other` is
-   * missing any vertex in this VertexRDD, `f` is passed `None`. If there are duplicates, the vertex
-   * is picked arbitrarily.
+   * missing any vertex in this VertexRDD, `f` is passed `None`. If there are duplicates,
+   * the vertex is picked arbitrarily.
    *
    * @tparam VD2 the attribute type of the other VertexRDD
    * @tparam VD3 the attribute type of the resulting VertexRDD
@@ -238,14 +241,14 @@ class VertexRDD[@specialized VD: ClassTag](
 
   /**
    * Inner joins this VertexRDD with an RDD containing vertex attribute pairs. If the other RDD is
-   * backed by a VertexRDD with the same index then the efficient [[innerZipJoin]] implementation is
-   * used.
+   * backed by a VertexRDD with the same index then the efficient [[innerZipJoin]] implementation
+   * is used.
    *
    * @param other an RDD containing vertices to join. If there are multiple entries for the same
    * vertex, one is picked arbitrarily. Use [[aggregateUsingIndex]] to merge multiple entries.
    * @param f the join function applied to corresponding values of `this` and `other`
-   * @return a VertexRDD co-indexed with `this`, containing only vertices that appear in both `this`
-   * and `other`, with values supplied by `f`
+   * @return a VertexRDD co-indexed with `this`, containing only vertices that appear in both
+   *         `this` and `other`, with values supplied by `f`
    */
   def innerJoin[U: ClassTag, VD2: ClassTag](other: RDD[(VertexId, U)])
       (f: (VertexId, VD, U) => VD2): VertexRDD[VD2] = {

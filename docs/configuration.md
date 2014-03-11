@@ -18,8 +18,8 @@ Spark provides three locations to configure the system:
 Spark properties control most application settings and are configured separately for each application.
 The preferred way to set them is by passing a [SparkConf](api/core/index.html#org.apache.spark.SparkConf)
 class to your SparkContext constructor.
-Alternatively, Spark will also load them from Java system properties (for compatibility with old versions
-of Spark) and from a [`spark.conf` file](#configuration-files) on your classpath.
+Alternatively, Spark will also load them from Java system properties, for compatibility with old versions
+of Spark.
 
 SparkConf lets you configure most of the common properties to initialize a cluster (e.g., master URL and
 application name), as well as arbitrary key-value pairs through the `set()` method. For example, we could
@@ -98,7 +98,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.default.parallelism</td>
   <td>8</td>
   <td>
-    Default number of tasks to use for distributed shuffle operations (<code>groupByKey</code>,
+    Default number of tasks to use across the cluster for distributed shuffle operations (<code>groupByKey</code>,
     <code>reduceByKey</code>, etc) when not set by user.
   </td>
 </tr>
@@ -146,6 +146,34 @@ Apart from these, the following properties are also available, and may be useful
   <td>1000</td>
   <td>
     How many stages the Spark UI remembers before garbage collecting.
+  </td>
+</tr>
+<tr>
+  <td>spark.ui.filters</td>
+  <td>None</td>
+  <td>
+    Comma separated list of filter class names to apply to the Spark web ui. The filter should be a
+    standard javax servlet Filter. Parameters to each filter can also be specified by setting a
+    java system property of spark.&lt;class name of filter&gt;.params='param1=value1,param2=value2'
+    (e.g.-Dspark.ui.filters=com.test.filter1 -Dspark.com.test.filter1.params='param1=foo,param2=testing')
+  </td>
+</tr>
+<tr>
+  <td>spark.ui.acls.enable</td>
+  <td>false</td>
+  <td>
+    Whether spark web ui acls should are enabled. If enabled, this checks to see if the user has 
+    access permissions to view the web ui. See <code>spark.ui.view.acls</code> for more details.
+    Also note this requires the user to be known, if the user comes across as null no checks
+    are done. Filters can be used to authenticate and set the user.
+  </td>
+</tr>
+<tr>  
+  <td>spark.ui.view.acls</td>
+  <td>Empty</td>
+  <td>
+    Comma separated list of users that have view access to the spark web ui. By default only the
+    user that started the Spark job has view access.
   </td>
 </tr>
 <tr>
@@ -203,6 +231,13 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.scheduler.revive.interval</td>
+  <td>1000</td>
+  <td>
+    The interval length for the scheduler to revive the worker resource offers to run tasks. (in milliseconds)
+  </td>
+</tr>
+<tr>
   <td>spark.reducer.maxMbInFlight</td>
   <td>48</td>
   <td>
@@ -236,6 +271,17 @@ Apart from these, the following properties are also available, and may be useful
     Maximum object size to allow within Kryo (the library needs to create a buffer at least as
     large as the largest single object you'll serialize). Increase this if you get a "buffer limit
     exceeded" exception inside Kryo. Note that there will be one buffer <i>per core</i> on each worker.
+  </td>
+</tr>
+<tr>
+  <td>spark.serializer.objectStreamReset</td>
+  <td>10000</td>
+  <td>
+    When serializing using org.apache.spark.serializer.JavaSerializer, the serializer caches 
+    objects to prevent writing redundant data, however that stops garbage collection of those 
+    objects. By calling 'reset' you flush that info from the serializer, and allow old 
+    objects to be collected. To turn off this periodic reset set it to a value of <= 0. 
+    By default it will reset the serializer every 10,000 objects.
   </td>
 </tr>
 <tr>
@@ -370,7 +416,16 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.streaming.blockInterval</td>
   <td>200</td>
   <td>
-    Duration (milliseconds) of how long to batch new objects coming from network receivers.
+    Duration (milliseconds) of how long to batch new objects coming from network receivers used
+    in Spark Streaming.
+  </td>
+</tr>
+<tr>
+  <td>spark.streaming.unpersist</td>
+  <td>false</td>
+  <td>
+    Force RDDs generated and persisted by Spark Streaming to be automatically unpersisted from
+    Spark's memory. Setting this to true is likely to reduce Spark's RDD memory usage.
   </td>
 </tr>
 <tr>
@@ -389,19 +444,20 @@ Apart from these, the following properties are also available, and may be useful
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>
-<tr>
-  <td>akka.x.y....</td>
-  <td>value</td>
-  <td>
-    An arbitrary akka configuration can be set directly on spark conf and it is applied for all the ActorSystems created spark wide for that SparkContext and its assigned executors as well.
-  </td>
-</tr>
 
 <tr>
   <td>spark.shuffle.consolidateFiles</td>
   <td>false</td>
   <td>
     If set to "true", consolidates intermediate files created during a shuffle. Creating fewer files can improve filesystem performance for shuffles with large numbers of reduce tasks. It is recommended to set this to "true" when using ext4 or xfs filesystems. On ext3, this option might degrade performance on machines with many (>8) cores due to filesystem limitations.
+  </td>
+</tr>
+<tr>
+  <td>spark.shuffle.file.buffer.kb</td>
+  <td>100</td>
+  <td>
+    Size of the in-memory buffer for each shuffle file output stream, in kilobytes. These buffers
+    reduce the number of disk seeks and system calls made in creating intermediate shuffle files.
   </td>
 </tr>
 <tr>
@@ -471,36 +527,51 @@ Apart from these, the following properties are also available, and may be useful
     applications; you can set it through <code>SPARK_JAVA_OPTS</code> in <code>spark-env.sh</code>.
   </td>
 </tr>
+<tr>
+  <td>spark.files.overwrite</td>
+  <td>false</td>
+  <td>
+    Whether to overwrite files added through SparkContext.addFile() when the target file exists and its contents do not match those of the source.
+  </td>
+</tr>
+<tr>
+  <td>spark.files.fetchTimeout</td>
+  <td>false</td>
+  <td>
+    Communication timeout to use when fetching files added through SparkContext.addFile() from
+    the driver.
+  </td>
+</tr>
+<tr>  
+  <td>spark.authenticate</td>
+  <td>false</td>
+  <td>
+    Whether spark authenticates its internal connections. See <code>spark.authenticate.secret</code> if not
+    running on Yarn.
+  </td>
+</tr>
+<tr>  
+  <td>spark.authenticate.secret</td>
+  <td>None</td>
+  <td>
+    Set the secret key used for Spark to authenticate between components. This needs to be set if
+    not running on Yarn and authentication is enabled.
+  </td>
+</tr>
+<tr>  
+  <td>spark.core.connection.auth.wait.timeout</td>
+  <td>30</td>
+  <td>
+    Number of seconds for the connection to wait for authentication to occur before timing
+    out and giving up. 
+  </td>
+</tr>
 </table>
 
 ## Viewing Spark Properties
 
 The application web UI at `http://<driver>:4040` lists Spark properties in the "Environment" tab.
 This is a useful place to check to make sure that your properties have been set correctly.
-
-## Configuration Files
-
-You can also configure Spark properties through a `spark.conf` file on your Java classpath.
-Because these properties are usually application-specific, we recommend putting this fine *only* on your
-application's classpath, and not in a global Spark classpath.
-
-The `spark.conf` file uses Typesafe Config's [HOCON format](https://github.com/typesafehub/config#json-superset),
-which is a superset of Java properties files and JSON. For example, the following is a simple config file:
-
-{% highlight awk %}
-# Comments are allowed
-spark.executor.memory = 512m
-spark.serializer = org.apache.spark.serializer.KryoSerializer
-{% endhighlight %}
-
-The format also allows hierarchical nesting, as follows:
-
-{% highlight awk %}
-spark.akka {
-  threads = 8
-  timeout = 200
-}
-{% endhighlight %}
 
 # Environment Variables
 

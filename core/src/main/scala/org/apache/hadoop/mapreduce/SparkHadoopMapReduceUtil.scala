@@ -17,7 +17,8 @@
 
 package org.apache.hadoop.mapreduce
 
-import java.lang.{Integer => JInteger, Boolean => JBoolean}
+import java.lang.{Boolean => JBoolean, Integer => JInteger}
+
 import org.apache.hadoop.conf.Configuration
 
 private[apache]

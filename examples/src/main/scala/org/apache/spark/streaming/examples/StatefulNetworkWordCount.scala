@@ -19,18 +19,21 @@ package org.apache.spark.streaming.examples
 
 import org.apache.spark.streaming._
 import org.apache.spark.streaming.StreamingContext._
-
+// scalastyle:off
 /**
- * Counts words cumulatively in UTF8 encoded, '\n' delimited text received from the network every second.
+ * Counts words cumulatively in UTF8 encoded, '\n' delimited text received from the network every
+ * second.
  * Usage: StatefulNetworkWordCount <master> <hostname> <port>
  *   <master> is the Spark master URL. In local mode, <master> should be 'local[n]' with n > 1.
- *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive data.
+ *   <hostname> and <port> describe the TCP server that Spark Streaming would connect to receive
+ *   data.
  *
  * To run this on your local machine, you need to first run a Netcat server
  *    `$ nc -lk 9999`
  * and then run the example
  *    `$ ./bin/run-example org.apache.spark.streaming.examples.StatefulNetworkWordCount local[2] localhost 9999`
  */
+// scalastyle:on
 object StatefulNetworkWordCount {
   def main(args: Array[String]) {
     if (args.length < 3) {
@@ -50,8 +53,8 @@ object StatefulNetworkWordCount {
     }
 
     // Create the context with a 1 second batch size
-    val ssc = new StreamingContext(args(0), "NetworkWordCumulativeCountUpdateStateByKey", Seconds(1),
-      System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
+    val ssc = new StreamingContext(args(0), "NetworkWordCumulativeCountUpdateStateByKey",
+      Seconds(1), System.getenv("SPARK_HOME"), StreamingContext.jarOfClass(this.getClass))
     ssc.checkpoint(".")
 
     // Create a NetworkInputDStream on target ip:port and count the
@@ -65,5 +68,6 @@ object StatefulNetworkWordCount {
     val stateDstream = wordDstream.updateStateByKey[Int](updateFunc)
     stateDstream.print()
     ssc.start()
+    ssc.awaitTermination()
   }
 }

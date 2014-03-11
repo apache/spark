@@ -17,11 +17,11 @@
 
 package org.apache.spark.rdd
 
-import org.apache.spark.{OneToOneDependency, SparkContext, Partition, TaskContext}
-
-import java.io.{ObjectOutputStream, IOException}
+import java.io.{IOException, ObjectOutputStream}
 
 import scala.reflect.ClassTag
+
+import org.apache.spark.{OneToOneDependency, Partition, SparkContext, TaskContext}
 
 private[spark] class ZippedPartition[T: ClassTag, U: ClassTag](
     idx: Int,

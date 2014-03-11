@@ -69,7 +69,7 @@ public final class JavaNetworkWordCount {
         return Lists.newArrayList(SPACE.split(x));
       }
     });
-    JavaPairDStream<String, Integer> wordCounts = words.map(
+    JavaPairDStream<String, Integer> wordCounts = words.mapToPair(
       new PairFunction<String, String, Integer>() {
         @Override
         public Tuple2<String, Integer> call(String s) {
@@ -84,5 +84,6 @@ public final class JavaNetworkWordCount {
 
     wordCounts.print();
     ssc.start();
+    ssc.awaitTermination();
   }
 }

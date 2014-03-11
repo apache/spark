@@ -24,10 +24,10 @@ import org.jblas.DoubleMatrix
  */
 abstract class Gradient extends Serializable {
   /**
-   * Compute the gradient and loss given features of a single data point.
+   * Compute the gradient and loss given the features of a single data point.
    *
-   * @param data - Feature values for one data point. Column matrix of size nx1
-   *               where n is the number of features.
+   * @param data - Feature values for one data point. Column matrix of size dx1
+   *               where d is the number of features.
    * @param label - Label for this data item.
    * @param weights - Column matrix containing weights for every feature.
    *
@@ -40,7 +40,8 @@ abstract class Gradient extends Serializable {
 }
 
 /**
- * Compute gradient and loss for a logistic loss function.
+ * Compute gradient and loss for a logistic loss function, as used in binary classification.
+ * See also the documentation for the precise formulation.
  */
 class LogisticGradient extends Gradient {
   override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
@@ -61,22 +62,26 @@ class LogisticGradient extends Gradient {
 }
 
 /**
- * Compute gradient and loss for a Least-squared loss function.
+ * Compute gradient and loss for a Least-squared loss function, as used in linear regression.
+ * This is correct for the averaged least squares loss function (mean squared error)
+ *              L = 1/n ||A weights-y||^2
+ * See also the documentation for the precise formulation.
  */
-class SquaredGradient extends Gradient {
+class LeastSquaresGradient extends Gradient {
   override def compute(data: DoubleMatrix, label: Double, weights: DoubleMatrix): 
       (DoubleMatrix, Double) = {
     val diff: Double = data.dot(weights) - label
 
-    val loss = 0.5 * diff * diff
-    val gradient = data.mul(diff)
+    val loss = diff * diff
+    val gradient =  data.mul(2.0 * diff)
 
     (gradient, loss)
   }
 }
 
 /**
- * Compute gradient and loss for a Hinge loss function.
+ * Compute gradient and loss for a Hinge loss function, as used in SVM binary classification.
+ * See also the documentation for the precise formulation.
  * NOTE: This assumes that the labels are {0,1}
  */
 class HingeGradient extends Gradient {

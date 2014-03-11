@@ -22,7 +22,7 @@ import scala.xml.Node
 
 import akka.pattern.ask
 import javax.servlet.http.HttpServletRequest
-import net.liftweb.json.JsonAST.JValue
+import org.json4s.JValue
 
 import org.apache.spark.deploy.JsonProtocol
 import org.apache.spark.deploy.DeployMessages.{RequestWorkerState, WorkerStateResponse}
@@ -84,7 +84,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
             {runningExecutorTable}
           </div>
         </div>
-
+        // scalastyle:off
         <div>
           {if (hasDrivers)
             <div class="row-fluid"> <!-- Running Drivers -->
@@ -113,7 +113,7 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
             </div>
           }
         </div>;
-
+    // scalastyle:on
     UIUtils.basicSparkPage(content, "Spark Worker at %s:%s".format(
       workerState.host, workerState.port))
   }
@@ -133,10 +133,10 @@ private[spark] class IndexPage(parent: WorkerWebUI) {
         </ul>
       </td>
       <td>
-	 <a href={"logPage?appId=%s&executorId=%s&logType=stdout"
-          .format(executor.appId, executor.execId)}>stdout</a>
-	 <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
-          .format(executor.appId, executor.execId)}>stderr</a>
+     <a href={"logPage?appId=%s&executorId=%s&logType=stdout"
+        .format(executor.appId, executor.execId)}>stdout</a>
+     <a href={"logPage?appId=%s&executorId=%s&logType=stderr"
+        .format(executor.appId, executor.execId)}>stderr</a>
       </td> 
     </tr>
 

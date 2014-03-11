@@ -19,11 +19,11 @@ package org.apache.spark.rdd
 
 import scala.collection.immutable.NumericRange
 
-import org.scalatest.FunSuite
-import org.scalatest.prop.Checkers
 import org.scalacheck.Arbitrary._
 import org.scalacheck.Gen
 import org.scalacheck.Prop._
+import org.scalatest.FunSuite
+import org.scalatest.prop.Checkers
 
 class ParallelCollectionSplitSuite extends FunSuite with Checkers {
   test("one element per slice") {

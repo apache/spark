@@ -18,11 +18,10 @@
 package org.apache.spark.rdd
 
 import java.io.EOFException
+import scala.collection.immutable.Map
 
-import scala.reflect.ClassTag
-
-import org.apache.hadoop.conf.{Configuration, Configurable}
-import org.apache.hadoop.io.Writable
+import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
@@ -34,8 +33,6 @@ import org.apache.spark._
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.NextIterator
-import org.apache.spark.util.Utils.cloneWritables
-
 
 /**
  * A Spark split class that wraps around a Hadoop InputSplit.
@@ -48,6 +45,23 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
   override def hashCode(): Int = 41 * (41 + rddId) + idx
 
   override val index: Int = idx
+
+  /**
+   * Get any environment variables that should be added to the users environment when running pipes
+   * @return a Map with the environment variables and corresponding values, it could be empty
+   */
+  def getPipeEnvVars(): Map[String, String] = {
+    val envVars: Map[String, String] = if (inputSplit.value.isInstanceOf[FileSplit]) {
+      val is: FileSplit = inputSplit.value.asInstanceOf[FileSplit]
+      // map_input_file is deprecated in favor of mapreduce_map_input_file but set both
+      // since its not removed yet
+      Map("map_input_file" -> is.getPath().toString(),
+        "mapreduce_map_input_file" -> is.getPath().toString())
+    } else {
+      Map()
+    }
+    envVars
+  }
 }
 
 /**
@@ -64,21 +78,15 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
  * @param keyClass Class of the key associated with the inputFormatClass.
  * @param valueClass Class of the value associated with the inputFormatClass.
  * @param minSplits Minimum number of Hadoop Splits (HadoopRDD partitions) to generate.
- * @param cloneRecords If true, Spark will clone the records produced by Hadoop RecordReader.
- *                     Most RecordReader implementations reuse wrapper objects across multiple
- *                     records, and can cause problems in RDD collect or aggregation operations.
- *                     By default the records are cloned in Spark. However, application
- *                     programmers can explicitly disable the cloning for better performance.
  */
-class HadoopRDD[K: ClassTag, V: ClassTag](
+class HadoopRDD[K, V](
     sc: SparkContext,
     broadcastedConf: Broadcast[SerializableWritable[Configuration]],
     initLocalJobConfFuncOpt: Option[JobConf => Unit],
     inputFormatClass: Class[_ <: InputFormat[K, V]],
     keyClass: Class[K],
     valueClass: Class[V],
-    minSplits: Int,
-    cloneRecords: Boolean = true)
+    minSplits: Int)
   extends RDD[(K, V)](sc, Nil) with Logging {
 
   def this(
@@ -87,8 +95,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
       inputFormatClass: Class[_ <: InputFormat[K, V]],
       keyClass: Class[K],
       valueClass: Class[V],
-      minSplits: Int,
-      cloneRecords: Boolean) = {
+      minSplits: Int) = {
     this(
       sc,
       sc.broadcast(new SerializableWritable(conf))
@@ -97,8 +104,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
       inputFormatClass,
       keyClass,
       valueClass,
-      minSplits,
-      cloneRecords)
+      minSplits)
   }
 
   protected val jobConfCacheKey = "rdd_%d_job_conf".format(id)
@@ -170,9 +176,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
       // Register an on-task-completion callback to close the input stream.
       context.addOnCompleteCallback{ () => closeIfNeeded() }
       val key: K = reader.createKey()
-      val keyCloneFunc = cloneWritables[K](jobConf)
       val value: V = reader.createValue()
-      val valueCloneFunc = cloneWritables[V](jobConf)
       override def getNext() = {
         try {
           finished = !reader.next(key, value)
@@ -180,11 +184,7 @@ class HadoopRDD[K: ClassTag, V: ClassTag](
           case eof: EOFException =>
             finished = true
         }
-        if (cloneRecords) {
-          (keyCloneFunc(key.asInstanceOf[Writable]), valueCloneFunc(value.asInstanceOf[Writable]))
-        } else {
-          (key, value)
-        }
+        (key, value)
       }
 
       override def close() {

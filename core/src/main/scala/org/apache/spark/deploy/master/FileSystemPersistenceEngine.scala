@@ -20,6 +20,7 @@ package org.apache.spark.deploy.master
 import java.io._
 
 import akka.serialization.Serialization
+
 import org.apache.spark.Logging
 
 /**

@@ -25,7 +25,8 @@ private[spark] class FetchFailedException(
     cause: Throwable)
   extends Exception {
 
-  def this (bmAddress: BlockManagerId, shuffleId: Int, mapId: Int, reduceId: Int, cause: Throwable) =
+  def this (bmAddress: BlockManagerId, shuffleId: Int, mapId: Int, reduceId: Int,
+      cause: Throwable) =
     this(FetchFailed(bmAddress, shuffleId, mapId, reduceId),
       "Fetch failed: %s %d %d %d".format(bmAddress, shuffleId, mapId, reduceId),
       cause)

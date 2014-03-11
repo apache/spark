@@ -17,23 +17,16 @@
 
 package org.apache.spark.ui.jobs
 
-import scala.concurrent.duration._
-
 import java.text.SimpleDateFormat
-
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
-
 import scala.Seq
-import scala.collection.mutable.{HashSet, ListBuffer, HashMap, ArrayBuffer}
 
+import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
+
+import org.apache.spark.SparkContext
 import org.apache.spark.ui.JettyUtils._
-import org.apache.spark.{ExceptionFailure, SparkContext, Success}
-import org.apache.spark.scheduler._
-import collection.mutable
-import org.apache.spark.scheduler.SchedulingMode
-import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
 import org.apache.spark.util.Utils
 
 /** Web UI showing progress status of all jobs in the given SparkContext. */
@@ -53,9 +46,15 @@ private[spark] class JobProgressUI(val sc: SparkContext) {
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)
 
-  def getHandlers = Seq[(String, Handler)](
-    ("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),
-    ("/stages/pool", (request: HttpServletRequest) => poolPage.render(request)),
-    ("/stages", (request: HttpServletRequest) => indexPage.render(request))
+  def getHandlers = Seq[ServletContextHandler](
+    createServletHandler("/stages/stage",
+      createServlet((request: HttpServletRequest) => stagePage.render(request),
+        sc.env.securityManager)),
+    createServletHandler("/stages/pool",
+      createServlet((request: HttpServletRequest) => poolPage.render(request),
+        sc.env.securityManager)),
+    createServletHandler("/stages",
+      createServlet((request: HttpServletRequest) => indexPage.render(request),
+        sc.env.securityManager))
   )
 }

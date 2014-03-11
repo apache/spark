@@ -19,14 +19,15 @@ package org.apache.spark.ui
 
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.{Handler, Server}
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
+import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
 import org.apache.spark.ui.exec.ExecutorsUI
-import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.ui.jobs.JobProgressUI
-import org.apache.spark.ui.JettyUtils._
+import org.apache.spark.ui.storage.BlockManagerUI
 import org.apache.spark.util.Utils
 
 /** Top level user interface for Spark */
@@ -36,9 +37,9 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   var boundPort: Option[Int] = None
   var server: Option[Server] = None
 
-  val handlers = Seq[(String, Handler)](
-    ("/static", createStaticHandler(SparkUI.STATIC_RESOURCE_DIR)),
-    ("/", createRedirectHandler("/stages"))
+  val handlers = Seq[ServletContextHandler] (
+    createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static/*"),
+    createRedirectHandler("/stages", "/")
   )
   val storage = new BlockManagerUI(sc)
   val jobs = new JobProgressUI(sc)
@@ -54,7 +55,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   /** Bind the HTTP server which backs this web interface */
   def bind() {
     try {
-      val (srv, usedPort) = JettyUtils.startJettyServer("0.0.0.0", port, allHandlers)
+      val (srv, usedPort) = JettyUtils.startJettyServer(host, port, allHandlers, sc.conf)
       logInfo("Started Spark Web UI at http://%s:%d".format(host, usedPort))
       server = Some(srv)
       boundPort = Some(usedPort)
@@ -85,5 +86,5 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
 
 private[spark] object SparkUI {
   val DEFAULT_PORT = "4040"
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+  val STATIC_RESOURCE_DIR = "org/apache/spark/ui"
 }

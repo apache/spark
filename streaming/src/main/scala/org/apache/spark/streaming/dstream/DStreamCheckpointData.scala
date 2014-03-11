@@ -114,7 +114,8 @@ class DStreamCheckpointData[T: ClassTag] (dstream: DStream[T])
   }
 
   override def toString() = {
-    "[\n" + currentCheckpointFiles.size + " checkpoint files \n" + currentCheckpointFiles.mkString("\n") + "\n]"
+    "[\n" + currentCheckpointFiles.size + " checkpoint files \n" +
+      currentCheckpointFiles.mkString("\n") + "\n]"
   }
 
   @throws(classOf[IOException])

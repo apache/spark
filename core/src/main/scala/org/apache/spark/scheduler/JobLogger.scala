@@ -17,7 +17,7 @@
 
 package org.apache.spark.scheduler
 
-import java.io.{IOException, File, FileNotFoundException, PrintWriter}
+import java.io.{File, FileNotFoundException, IOException, PrintWriter}
 import java.text.SimpleDateFormat
 import java.util.{Date, Properties}
 import java.util.concurrent.LinkedBlockingQueue
@@ -25,8 +25,8 @@ import java.util.concurrent.LinkedBlockingQueue
 import scala.collection.mutable.{HashMap, HashSet, ListBuffer}
 
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.StorageLevel
 
 /**
@@ -45,10 +45,11 @@ class JobLogger(val user: String, val logDirName: String)
     String.valueOf(System.currentTimeMillis()))
 
   private val logDir =
-    if (System.getenv("SPARK_LOG_DIR") != null)
+    if (System.getenv("SPARK_LOG_DIR") != null) {
       System.getenv("SPARK_LOG_DIR")
-    else
+    } else {
       "/tmp/spark-%s".format(user)
+    }
 
   private val jobIDToPrintWriter = new HashMap[Int, PrintWriter]
   private val stageIDToJobID = new HashMap[Int, Int]
@@ -80,7 +81,7 @@ class JobLogger(val user: String, val logDirName: String)
   /**
    * Create a log file for one job
    * @param jobID ID of the job
-   * @exception FileNotFoundException Fail to create log file
+   * @throws FileNotFoundException Fail to create log file
    */
   protected def createLogWriter(jobID: Int) {
     try {
@@ -116,7 +117,7 @@ class JobLogger(val user: String, val logDirName: String)
     var writeInfo = info
     if (withTime) {
       val date = new Date(System.currentTimeMillis())
-      writeInfo = DATE_FORMAT.format(date) + ": " +info
+      writeInfo = DATE_FORMAT.format(date) + ": " + info
     }
     jobIDToPrintWriter.get(jobID).foreach(_.println(writeInfo))
   }
@@ -212,14 +213,10 @@ class JobLogger(val user: String, val logDirName: String)
    * @param indent Indent number before info
    */
   protected def recordRddInStageGraph(jobID: Int, rdd: RDD[_], indent: Int) {
+    val cacheStr = if (rdd.getStorageLevel != StorageLevel.NONE) "CACHED" else "NONE"
     val rddInfo =
-      if (rdd.getStorageLevel != StorageLevel.NONE) {
-        "RDD_ID=" + rdd.id + " " + getRddName(rdd) + " CACHED" + " " +
-                rdd.origin + " " + rdd.generator
-      } else {
-        "RDD_ID=" + rdd.id + " " + getRddName(rdd) + " NONE" + " " +
-                rdd.origin + " " + rdd.generator
-      }
+      s"RDD_ID=$rdd.id ${getRddName(rdd)} $cacheStr " +
+      s"${rdd.getCreationSite} ${rdd.creationSiteInfo.firstUserClass}"
     jobLogInfo(jobID, indentString(indent) + rddInfo, false)
     rdd.dependencies.foreach {
       case shufDep: ShuffleDependency[_, _] =>
@@ -235,7 +232,8 @@ class JobLogger(val user: String, val logDirName: String)
    * @param stage Root stage of the job
    * @param indent Indent number before info, default is 0
    */
-  protected def recordStageDepGraph(jobID: Int, stage: Stage, idSet: HashSet[Int], indent: Int = 0) {
+  protected def recordStageDepGraph(jobID: Int, stage: Stage, idSet: HashSet[Int], indent: Int = 0)
+  {
     val stageInfo = if (stage.isShuffleMap) {
       "STAGE_ID=" + stage.id + " MAP_STAGE SHUFFLE_ID=" + stage.shuffleDep.get.shuffleId
     } else {
@@ -273,7 +271,6 @@ class JobLogger(val user: String, val logDirName: String)
         " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
         " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
         " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime +
-        " REMOTE_FETCH_TIME=" + metrics.remoteFetchTime +
         " REMOTE_BYTES_READ=" + metrics.remoteBytesRead
       case None => ""
     }

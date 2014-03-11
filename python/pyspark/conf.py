@@ -61,14 +61,12 @@ class SparkConf(object):
 
     Most of the time, you would create a SparkConf object with
     C{SparkConf()}, which will load values from C{spark.*} Java system
-    properties and any C{spark.conf} on your Spark classpath. In this
-    case, system properties take priority over C{spark.conf}, and any
-    parameters you set directly on the C{SparkConf} object take priority
-    over both of those.
+    properties as well. In this case, any parameters you set directly on
+    the C{SparkConf} object take priority over system properties.
 
     For unit tests, you can also call C{SparkConf(false)} to skip
     loading external settings and get the same configuration no matter
-    what is on the classpath.
+    what the system properties are.
 
     All setter methods in this class support chaining. For example,
     you can write C{conf.setMaster("local").setAppName("My app")}.
@@ -77,19 +75,24 @@ class SparkConf(object):
     and can no longer be modified by the user.
     """
 
-    def __init__(self, loadDefaults=True, _jvm=None):
+    def __init__(self, loadDefaults=True, _jvm=None, _jconf=None):
         """
         Create a new Spark configuration.
 
         @param loadDefaults: whether to load values from Java system
-               properties and classpath (True by default)
+               properties (True by default)
         @param _jvm: internal parameter used to pass a handle to the
                Java VM; does not need to be set by users
+        @param _jconf: Optionally pass in an existing SparkConf handle
+               to use its parameters
         """
-        from pyspark.context import SparkContext
-        SparkContext._ensure_initialized()
-        _jvm = _jvm or SparkContext._jvm
-        self._jconf = _jvm.SparkConf(loadDefaults)
+        if _jconf:
+            self._jconf = _jconf
+        else:
+            from pyspark.context import SparkContext
+            SparkContext._ensure_initialized()
+            _jvm = _jvm or SparkContext._jvm
+            self._jconf = _jvm.SparkConf(loadDefaults)
 
     def set(self, key, value):
         """Set a configuration property."""

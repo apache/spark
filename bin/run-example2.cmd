@@ -49,7 +49,7 @@ if "x%SPARK_EXAMPLES_JAR%"=="x" (
 
 rem Compute Spark classpath using external script
 set DONT_PRINT_CLASSPATH=1
-call "%FWDIR%sbin\compute-classpath.cmd"
+call "%FWDIR%bin\compute-classpath.cmd"
 set DONT_PRINT_CLASSPATH=0
 set CLASSPATH=%SPARK_EXAMPLES_JAR%;%CLASSPATH%
 

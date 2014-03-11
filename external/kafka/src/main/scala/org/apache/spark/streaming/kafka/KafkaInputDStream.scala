@@ -37,7 +37,8 @@ import org.apache.spark.streaming.dstream._
 /**
  * Input stream that pulls messages from a Kafka Broker.
  *
- * @param kafkaParams Map of kafka configuration paramaters. See: http://kafka.apache.org/configuration.html
+ * @param kafkaParams Map of kafka configuration paramaters.
+ *                    See: http://kafka.apache.org/configuration.html
  * @param topics Map of (topic_name -> numPartitions) to consume. Each partition is consumed
  * in its own thread.
  * @param storageLevel RDD storage level.
@@ -134,12 +135,15 @@ class KafkaReceiver[
     }
   }
 
-  // It is our responsibility to delete the consumer group when specifying autooffset.reset. This is because
-  // Kafka 0.7.2 only honors this param when the group is not in zookeeper.
+  // It is our responsibility to delete the consumer group when specifying autooffset.reset. This
+  // is because Kafka 0.7.2 only honors this param when the group is not in zookeeper.
   //
-  // The kafka high level consumer doesn't expose setting offsets currently, this is a trick copied from Kafkas'
-  // ConsoleConsumer. See code related to 'autooffset.reset' when it is set to 'smallest'/'largest':
+  // The kafka high level consumer doesn't expose setting offsets currently, this is a trick copied
+  // from Kafkas' ConsoleConsumer. See code related to 'autooffset.reset' when it is set to
+  // 'smallest'/'largest':
+  // scalastyle:off
   // https://github.com/apache/kafka/blob/0.7.2/core/src/main/scala/kafka/consumer/ConsoleConsumer.scala
+  // scalastyle:on
   private def tryZookeeperConsumerGroupCleanup(zkUrl: String, groupId: String) {
     try {
       val dir = "/consumers/" + groupId

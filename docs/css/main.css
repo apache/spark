@@ -87,20 +87,62 @@ a:hover code {
   max-width: 914px;
 }
 
+.dropdown-menu {
+  /* Remove the default 2px top margin which causes a small
+    gap between the hover trigger area and the popup menu */
+  margin-top: 0;
+  /* Avoid too much whitespace at the right for shorter menu items */
+  min-width: 50px;
+}
+
 /**
  * Make dropdown menus in nav bars show on hover instead of click
  * using solution at http://stackoverflow.com/questions/8878033/how-
  * to-make-twitter-bootstrap-menu-dropdown-on-hover-rather-than-click
  **/
-.dropdown-menu {
-  /* Remove the default 2px top margin which causes a small
-    gap between the hover trigger area and the popup menu */
-  margin-top: 0;
-}
 ul.nav li.dropdown:hover ul.dropdown-menu{
   display: block;
 }
+
 a.menu:after, .dropdown-toggle:after {
   content: none;
 }
 
+/** Make the submenus open on hover on the parent menu item */
+ul.nav li.dropdown ul.dropdown-menu li.dropdown-submenu:hover ul.dropdown-menu {
+  display: block;
+}
+
+/** Make the submenus be invisible until the parent menu item is hovered upon */
+ul.nav li.dropdown ul.dropdown-menu li.dropdown-submenu ul.dropdown-menu {
+  display: none;
+}
+
+/**
+ * Made the navigation bar buttons not grey out when clicked.
+ * Essentially making nav bar buttons not react to clicks, only hover events.
+ */
+.navbar .nav li.dropdown.open > .dropdown-toggle {
+  background-color: transparent;
+}
+
+/**
+ * Made the active tab caption blue. Otherwise the active tab is black, and inactive tab is blue.
+ * That looks weird. Changed the colors to active - blue, inactive - black, and
+ * no color change on hover.
+ */
+.nav-tabs > .active > a, .nav-tabs > .active > a:hover {
+  color: #08c;
+}
+
+.nav-tabs > li > a, .nav-tabs > li > a:hover {
+  color: #333;
+}
+
+/**
+ * MathJax (embedded latex formulas)
+ */
+.MathJax .mo { color: inherit }
+.MathJax .mi { color: inherit }
+.MathJax .mf { color: inherit }
+.MathJax .mh { color: inherit }

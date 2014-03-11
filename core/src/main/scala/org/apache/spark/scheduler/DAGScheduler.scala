@@ -28,9 +28,9 @@ import scala.reflect.ClassTag
 import akka.actor._
 
 import org.apache.spark._
-import org.apache.spark.rdd.RDD
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
+import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
 import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 
@@ -155,7 +155,6 @@ class DAGScheduler(
   val failed = new HashSet[Stage]  // Stages that must be resubmitted due to fetch failures
   // Missing tasks from each stage
   val pendingTasks = new TimeStampedHashMap[Stage, HashSet[Task[_]]]
-  var lastFetchFailureTime: Long = 0  // Used to wait a bit to avoid repeated resubmits
 
   val activeJobs = new HashSet[ActiveJob]
   val resultStageToJob = new HashMap[Stage, ActiveJob]
@@ -177,22 +176,6 @@ class DAGScheduler(
   def start() {
     eventProcessActor = env.actorSystem.actorOf(Props(new Actor {
       /**
-       * A handle to the periodical task, used to cancel the task when the actor is stopped.
-       */
-      var resubmissionTask: Cancellable = _
-
-      override def preStart() {
-        import context.dispatcher
-        /**
-         * A message is sent to the actor itself periodically to remind the actor to resubmit failed
-         * stages.  In this way, stage resubmission can be done within the same thread context of
-         * other event processing logic to avoid unnecessary synchronization overhead.
-         */
-        resubmissionTask = context.system.scheduler.schedule(
-          RESUBMIT_TIMEOUT, RESUBMIT_TIMEOUT, self, ResubmitFailedStages)
-      }
-
-      /**
        * The main event loop of the DAG scheduler.
        */
       def receive = {
@@ -207,7 +190,6 @@ class DAGScheduler(
           if (!processEvent(event)) {
             submitWaitingStages()
           } else {
-            resubmissionTask.cancel()
             context.stop(self)
           }
       }
@@ -290,12 +272,14 @@ class DAGScheduler(
     if (mapOutputTracker.has(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
-      for (i <- 0 until locs.size) stage.outputLocs(i) = List(locs(i))
-      stage.numAvailableOutputs = locs.size
+      for (i <- 0 until locs.size) {
+        stage.outputLocs(i) = Option(locs(i)).toList   // locs(i) will be null if missing
+      }
+      stage.numAvailableOutputs = locs.count(_ != null)
     } else {
       // Kind of ugly: need to register RDDs with the cache and map output tracker here
       // since we can't do it in the RDD constructor because # of partitions is unknown
-      logInfo("Registering RDD " + rdd.id + " (" + rdd.origin + ")")
+      logInfo("Registering RDD " + rdd.id + " (" + rdd.getCreationSite + ")")
       mapOutputTracker.registerShuffle(shuffleDep.shuffleId, rdd.partitions.size)
     }
     stage
@@ -391,25 +375,26 @@ class DAGScheduler(
           } else {
             def removeStage(stageId: Int) {
               // data structures based on Stage
-              stageIdToStage.get(stageId).foreach { s =>
-                if (running.contains(s)) {
+              for (stage <- stageIdToStage.get(stageId)) {
+                if (running.contains(stage)) {
                   logDebug("Removing running stage %d".format(stageId))
-                  running -= s
+                  running -= stage
                 }
-                stageToInfos -= s
-                shuffleToMapStage.keys.filter(shuffleToMapStage(_) == s).foreach(shuffleId =>
-                  shuffleToMapStage.remove(shuffleId))
-                if (pendingTasks.contains(s) && !pendingTasks(s).isEmpty) {
+                stageToInfos -= stage
+                for ((k, v) <- shuffleToMapStage.find(_._2 == stage)) {
+                  shuffleToMapStage.remove(k)
+                }
+                if (pendingTasks.contains(stage) && !pendingTasks(stage).isEmpty) {
                   logDebug("Removing pending status for stage %d".format(stageId))
                 }
-                pendingTasks -= s
-                if (waiting.contains(s)) {
+                pendingTasks -= stage
+                if (waiting.contains(stage)) {
                   logDebug("Removing stage %d from waiting set.".format(stageId))
-                  waiting -= s
+                  waiting -= stage
                 }
-                if (failed.contains(s)) {
+                if (failed.contains(stage)) {
                   logDebug("Removing stage %d from failed set.".format(stageId))
-                  failed -= s
+                  failed -= stage
                 }
               }
               // data structures based on StageId
@@ -620,6 +605,8 @@ class DAGScheduler(
 
       case ResubmitFailedStages =>
         if (failed.size > 0) {
+          // Failed stages may be removed by job cancellation, so failed might be empty even if
+          // the ResubmitFailedStages event has been scheduled.
           resubmitFailedStages()
         }
 
@@ -877,7 +864,7 @@ class DAGScheduler(
               logInfo("running: " + running)
               logInfo("waiting: " + waiting)
               logInfo("failed: " + failed)
-              if (stage.shuffleDep != None) {
+              if (stage.shuffleDep.isDefined) {
                 // We supply true to increment the epoch number here in case this is a
                 // recomputation of the map outputs. In that case, some nodes may have cached
                 // locations with holes (from when we detected the error) and will need the
@@ -926,7 +913,6 @@ class DAGScheduler(
         // Mark the stage that the reducer was in as unrunnable
         val failedStage = stageIdToStage(task.stageId)
         running -= failedStage
-        failed += failedStage
         // TODO: Cancel running tasks in the stage
         logInfo("Marking " + failedStage + " (" + failedStage.name +
           ") for resubmision due to a fetch failure")
@@ -938,10 +924,16 @@ class DAGScheduler(
         }
         logInfo("The failed fetch was from " + mapStage + " (" + mapStage.name +
           "); marking it for resubmission")
+        if (failed.isEmpty && eventProcessActor != null) {
+          // Don't schedule an event to resubmit failed stages if failed isn't empty, because
+          // in that case the event will already have been scheduled. eventProcessActor may be
+          // null during unit tests.
+          import env.actorSystem.dispatcher
+          env.actorSystem.scheduler.scheduleOnce(
+            RESUBMIT_TIMEOUT, eventProcessActor, ResubmitFailedStages)
+        }
+        failed += failedStage
         failed += mapStage
-        // Remember that a fetch failed now; this is used to resubmit the broken
-        // stages later, after a small wait (to give other tasks the chance to fail)
-        lastFetchFailureTime = System.currentTimeMillis() // TODO: Use pluggable clock
         // TODO: mark the executor as failed only if there were lots of fetch failures on it
         if (bmAddress != null) {
           handleExecutorLost(bmAddress.executorId, Some(task.epoch))
@@ -954,8 +946,8 @@ class DAGScheduler(
         // Do nothing here; the TaskScheduler handles these failures and resubmits the task.
 
       case other =>
-        // Unrecognized failure - abort all jobs depending on this stage
-        abortStage(stageIdToStage(task.stageId), task + " failed: " + other)
+        // Unrecognized failure - also do nothing. If the task fails repeatedly, the TaskScheduler
+        // will abort the job.
     }
   }
 
@@ -1093,8 +1085,9 @@ class DAGScheduler(
       case n: NarrowDependency[_] =>
         for (inPart <- n.getParents(partition)) {
           val locs = getPreferredLocs(n.rdd, inPart)
-          if (locs != Nil)
+          if (locs != Nil) {
             return locs
+          }
         }
       case _ =>
     }

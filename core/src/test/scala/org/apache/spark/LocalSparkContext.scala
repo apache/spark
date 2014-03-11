@@ -17,12 +17,11 @@
 
 package org.apache.spark
 
-import org.scalatest.Suite
-import org.scalatest.BeforeAndAfterEach
-import org.scalatest.BeforeAndAfterAll
-
 import org.jboss.netty.logging.InternalLoggerFactory
 import org.jboss.netty.logging.Slf4JLoggerFactory
+import org.scalatest.BeforeAndAfterAll
+import org.scalatest.BeforeAndAfterEach
+import org.scalatest.Suite
 
 /** Manages a local `sc` {@link SparkContext} variable, correctly stopping it after each test. */
 trait LocalSparkContext extends BeforeAndAfterEach with BeforeAndAfterAll { self: Suite =>

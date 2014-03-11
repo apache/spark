@@ -18,6 +18,7 @@
 from base64 import standard_b64encode as b64enc
 import copy
 from collections import defaultdict
+from collections import namedtuple
 from itertools import chain, ifilter, imap
 import operator
 import os
@@ -27,9 +28,10 @@ import traceback
 from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
+import warnings
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
-    BatchedSerializer, CloudPickleSerializer, pack_long
+    BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
 from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
@@ -41,12 +43,14 @@ from py4j.java_collections import ListConverter, MapConverter
 __all__ = ["RDD"]
 
 def _extract_concise_traceback():
+    """
+    This function returns the traceback info for a callsite, returns a dict
+    with function name, file name and line number
+    """
     tb = traceback.extract_stack()
+    callsite = namedtuple("Callsite", "function file linenum")
     if len(tb) == 0:
-        return "I'm lost!"
-    # HACK:  This function is in a file called 'rdd.py' in the top level of
-    # everything PySpark.  Just trim off the directory name and assume
-    # everything in that tree is PySpark guts.
+        return None
     file, line, module, what = tb[len(tb) - 1]
     sparkpath = os.path.dirname(file)
     first_spark_frame = len(tb) - 1
@@ -57,16 +61,20 @@ def _extract_concise_traceback():
             break
     if first_spark_frame == 0:
         file, line, fun, what = tb[0]
-        return "%s at %s:%d" % (fun, file, line)
+        return callsite(function=fun, file=file, linenum=line)
     sfile, sline, sfun, swhat = tb[first_spark_frame]
     ufile, uline, ufun, uwhat = tb[first_spark_frame-1]
-    return "%s at %s:%d" % (sfun, ufile, uline)
+    return callsite(function=sfun, file=ufile, linenum=uline)
 
 _spark_stack_depth = 0
 
 class _JavaStackTrace(object):
     def __init__(self, sc):
-        self._traceback = _extract_concise_traceback()
+        tb = _extract_concise_traceback()
+        if tb is not None:
+            self._traceback = "%s at %s:%s" % (tb.function, tb.file, tb.linenum)
+        else:
+            self._traceback = "Error! Could not extract traceback info"
         self._context = sc
 
     def __enter__(self):
@@ -94,6 +102,13 @@ class RDD(object):
         self.is_checkpointed = False
         self.ctx = ctx
         self._jrdd_deserializer = jrdd_deserializer
+        self._id = jrdd.id()
+
+    def id(self):
+        """
+        A unique ID for this RDD (within its SparkContext).
+        """
+        return self._id
 
     def __repr__(self):
         return self._jrdd.toString()
@@ -162,7 +177,7 @@ class RDD(object):
 
     def map(self, f, preservesPartitioning=False):
         """
-        Return a new RDD containing the distinct elements in this RDD.
+        Return a new RDD by applying a function to each element of this RDD.
         """
         def func(split, iterator): return imap(f, iterator)
         return PipelinedRDD(self, func, preservesPartitioning)
@@ -179,7 +194,7 @@ class RDD(object):
         [(2, 2), (2, 2), (3, 3), (3, 3), (4, 4), (4, 4)]
         """
         def func(s, iterator): return chain.from_iterable(imap(f, iterator))
-        return self.mapPartitionsWithSplit(func, preservesPartitioning)
+        return self.mapPartitionsWithIndex(func, preservesPartitioning)
 
     def mapPartitions(self, f, preservesPartitioning=False):
         """
@@ -191,10 +206,24 @@ class RDD(object):
         [3, 7]
         """
         def func(s, iterator): return f(iterator)
-        return self.mapPartitionsWithSplit(func)
+        return self.mapPartitionsWithIndex(func)
+
+    def mapPartitionsWithIndex(self, f, preservesPartitioning=False):
+        """
+        Return a new RDD by applying a function to each partition of this RDD,
+        while tracking the index of the original partition.
+
+        >>> rdd = sc.parallelize([1, 2, 3, 4], 4)
+        >>> def f(splitIndex, iterator): yield splitIndex
+        >>> rdd.mapPartitionsWithIndex(f).sum()
+        6
+        """
+        return PipelinedRDD(self, f, preservesPartitioning)
 
     def mapPartitionsWithSplit(self, f, preservesPartitioning=False):
         """
+        Deprecated: use mapPartitionsWithIndex instead.
+
         Return a new RDD by applying a function to each partition of this RDD,
         while tracking the index of the original partition.
 
@@ -203,7 +232,9 @@ class RDD(object):
         >>> rdd.mapPartitionsWithSplit(f).sum()
         6
         """
-        return PipelinedRDD(self, f, preservesPartitioning)
+        warnings.warn("mapPartitionsWithSplit is deprecated; "
+            "use mapPartitionsWithIndex instead", DeprecationWarning, stacklevel=2)
+        return self.mapPartitionsWithIndex(f, preservesPartitioning)
 
     def filter(self, f):
         """
@@ -235,7 +266,7 @@ class RDD(object):
         >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
         [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
         """
-        return self.mapPartitionsWithSplit(RDDSampler(withReplacement, fraction, seed).func, True)
+        return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
     def takeSample(self, withReplacement, num, seed):
@@ -301,6 +332,23 @@ class RDD(object):
             other_copy = other._reserialize()
             return RDD(self_copy._jrdd.union(other_copy._jrdd), self.ctx,
                        self.ctx.serializer)
+
+    def intersection(self, other):
+        """
+        Return the intersection of this RDD and another one. The output will not 
+        contain any duplicate elements, even if the input RDDs did.
+        
+        Note that this method performs a shuffle internally.
+
+        >>> rdd1 = sc.parallelize([1, 10, 2, 3, 4, 5])
+        >>> rdd2 = sc.parallelize([1, 6, 2, 3, 7, 8])
+        >>> rdd1.intersection(rdd2).collect()
+        [1, 2, 3]
+        """
+        return self.map(lambda v: (v, None)) \
+            .cogroup(other.map(lambda v: (v, None))) \
+            .filter(lambda x: (len(x[1][0]) != 0) and (len(x[1][1]) != 0)) \
+            .keys()
 
     def _reserialize(self):
         if self._jrdd_deserializer == self.ctx.serializer:
@@ -438,6 +486,18 @@ class RDD(object):
             yield None
         self.mapPartitions(processPartition).collect()  # Force evaluation
 
+    def foreachPartition(self, f):
+        """
+        Applies a function to each partition of this RDD.
+
+        >>> def f(iterator): 
+        ...      for x in iterator: 
+        ...           print x 
+        ...      yield None
+        >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartition(f)
+        """
+        self.mapPartitions(f).collect()  # Force evaluation
+        
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
@@ -678,6 +738,24 @@ class RDD(object):
         """
         return dict(self.collect())
 
+    def keys(self):
+        """
+        Return an RDD with the keys of each tuple.
+        >>> m = sc.parallelize([(1, 2), (3, 4)]).keys()
+        >>> m.collect()
+        [1, 3]
+        """
+        return self.map(lambda (k, v): k)
+
+    def values(self):
+        """
+        Return an RDD with the values of each tuple.
+        >>> m = sc.parallelize([(1, 2), (3, 4)]).values()
+        >>> m.collect()
+        [2, 4]
+        """
+        return self.map(lambda (k, v): v)
+
     def reduceByKey(self, func, numPartitions=None):
         """
         Merge the values for each key using an associative reduce function.
@@ -868,7 +946,21 @@ class RDD(object):
                     combiners[k] = mergeCombiners(combiners[k], v)
             return combiners.iteritems()
         return shuffled.mapPartitions(_mergeCombiners)
+    
+    def foldByKey(self, zeroValue, func, numPartitions=None):
+        """
+        Merge the values for each key using an associative function "func" and a neutral "zeroValue"
+        which may be added to the result an arbitrary number of times, and must not change 
+        the result (e.g., 0 for addition, or 1 for multiplication.).                
 
+        >>> rdd = sc.parallelize([("a", 1), ("b", 1), ("a", 1)])
+        >>> from operator import add
+        >>> rdd.foldByKey(0, add).collect()
+        [('a', 2), ('b', 1)]
+        """
+        return self.combineByKey(lambda v: func(zeroValue, v), func, func, numPartitions)
+    
+    
     # TODO: support variant with custom partitioner
     def groupByKey(self, numPartitions=None):
         """
@@ -899,6 +991,11 @@ class RDD(object):
         Pass each value in the key-value pair RDD through a flatMap function
         without changing the keys; this also retains the original RDD's
         partitioning.
+
+        >>> x = sc.parallelize([("a", ["x", "y", "z"]), ("b", ["p", "r"])])
+        >>> def f(x): return x
+        >>> x.flatMapValues(f).collect()
+        [('a', 'x'), ('a', 'y'), ('a', 'z'), ('b', 'p'), ('b', 'r')]
         """
         flat_map_fn = lambda (k, v): ((k, x) for x in f(v))
         return self.flatMap(flat_map_fn, preservesPartitioning=True)
@@ -908,6 +1005,11 @@ class RDD(object):
         Pass each value in the key-value pair RDD through a map function
         without changing the keys; this also retains the original RDD's
         partitioning.
+
+        >>> x = sc.parallelize([("a", ["apple", "banana", "lemon"]), ("b", ["grapes"])])
+        >>> def f(x): return len(x)
+        >>> x.mapValues(f).collect()
+        [('a', 3), ('b', 1)]
         """
         map_values_fn = lambda (k, v): (k, f(v))
         return self.map(map_values_fn, preservesPartitioning=True)
@@ -969,6 +1071,54 @@ class RDD(object):
         [(0, ([0], [0])), (1, ([1], [1])), (2, ([], [2])), (3, ([], [3])), (4, ([2], [4]))]
         """
         return self.map(lambda x: (f(x), x))
+
+    def repartition(self, numPartitions):
+        """
+         Return a new RDD that has exactly numPartitions partitions.
+          
+         Can increase or decrease the level of parallelism in this RDD. Internally, this uses
+         a shuffle to redistribute data.
+         If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
+         which can avoid performing a shuffle.
+         >>> rdd = sc.parallelize([1,2,3,4,5,6,7], 4)
+         >>> sorted(rdd.glom().collect())
+         [[1], [2, 3], [4, 5], [6, 7]]
+         >>> len(rdd.repartition(2).glom().collect())
+         2
+         >>> len(rdd.repartition(10).glom().collect())
+         10
+        """
+        jrdd = self._jrdd.repartition(numPartitions)
+        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
+
+    def coalesce(self, numPartitions, shuffle=False):
+        """
+        Return a new RDD that is reduced into `numPartitions` partitions.
+        >>> sc.parallelize([1, 2, 3, 4, 5], 3).glom().collect()
+        [[1], [2, 3], [4, 5]]
+        >>> sc.parallelize([1, 2, 3, 4, 5], 3).coalesce(1).glom().collect()
+        [[1, 2, 3, 4, 5]]
+        """
+        jrdd = self._jrdd.coalesce(numPartitions)
+        return RDD(jrdd, self.ctx, self._jrdd_deserializer)
+
+    def zip(self, other):
+        """
+        Zips this RDD with another one, returning key-value pairs with the first element in each RDD
+        second element in each RDD, etc. Assumes that the two RDDs have the same number of
+        partitions and the same number of elements in each partition (e.g. one was made through
+        a map on the other).
+
+        >>> x = sc.parallelize(range(0,5))
+        >>> y = sc.parallelize(range(1000, 1005))
+        >>> x.zip(y).collect()
+        [(0, 1000), (1, 1001), (2, 1002), (3, 1003), (4, 1004)]
+        """
+        pairRDD = self._jrdd.zip(other._jrdd)
+        deserializer = PairDeserializer(self._jrdd_deserializer,
+                                             other._jrdd_deserializer)
+        return RDD(pairRDD, self.ctx, deserializer)
+
 
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the

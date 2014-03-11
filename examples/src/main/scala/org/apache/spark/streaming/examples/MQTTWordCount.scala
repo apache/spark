@@ -64,6 +64,7 @@ object MQTTPublisher {
   }
 }
 
+// scalastyle:off
 /**
  * A sample wordcount with MqttStream stream
  *
@@ -71,7 +72,8 @@ object MQTTPublisher {
  * Mosquitto (http://mosquitto.org/) is an open source Mqtt Broker
  * In ubuntu mosquitto can be installed using the command  `$ sudo apt-get install mosquitto`
  * Eclipse paho project provides Java library for Mqtt Client http://www.eclipse.org/paho/
- * Example Java code for Mqtt Publisher and Subscriber can be found here https://bitbucket.org/mkjinesh/mqttclient
+ * Example Java code for Mqtt Publisher and Subscriber can be found here
+ * https://bitbucket.org/mkjinesh/mqttclient
  * Usage: MQTTWordCount <master> <MqttbrokerUrl> <topic>
  * In local mode, <master> should be 'local[n]' with n > 1
  *   <MqttbrokerUrl> and <topic> describe where Mqtt publisher is running.
@@ -81,6 +83,7 @@ object MQTTPublisher {
  * and run the example as
  *    `$ ./bin/run-example org.apache.spark.streaming.examples.MQTTWordCount local[2] tcp://localhost:1883 foo`
  */
+// scalastyle:on
 object MQTTWordCount {
 
   def main(args: Array[String]) {
@@ -93,7 +96,7 @@ object MQTTWordCount {
 
     val Seq(master, brokerUrl, topic) = args.toSeq
 
-    val ssc = new StreamingContext(master, "MqttWordCount", Seconds(2), System.getenv("SPARK_HOME"), 
+    val ssc = new StreamingContext(master, "MqttWordCount", Seconds(2), System.getenv("SPARK_HOME"),
     StreamingContext.jarOfClass(this.getClass))
     val lines = MQTTUtils.createStream(ssc, brokerUrl, topic, StorageLevel.MEMORY_ONLY_SER_2)
 
@@ -101,5 +104,6 @@ object MQTTWordCount {
     val wordCounts = words.map(x => (x, 1)).reduceByKey(_ + _)
     wordCounts.print()
     ssc.start()
+    ssc.awaitTermination()
   }
 }

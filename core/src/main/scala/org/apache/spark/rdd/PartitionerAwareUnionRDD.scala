@@ -17,14 +17,15 @@
 
 package org.apache.spark.rdd
 
-import scala.reflect.ClassTag
-import java.io.{ObjectOutputStream, IOException}
-import org.apache.spark.{TaskContext, OneToOneDependency, SparkContext, Partition}
+import java.io.{IOException, ObjectOutputStream}
 
+import scala.reflect.ClassTag
+
+import org.apache.spark.{OneToOneDependency, Partition, SparkContext, TaskContext}
 
 /**
- * Class representing partitions of PartitionerAwareUnionRDD, which maintains the list of corresponding partitions
- * of parent RDDs.
+ * Class representing partitions of PartitionerAwareUnionRDD, which maintains the list of
+ * corresponding partitions of parent RDDs.
  */
 private[spark]
 class PartitionerAwareUnionRDDPartition(

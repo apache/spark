@@ -17,8 +17,6 @@
 
 package org.apache.spark.scheduler
 
-import org.apache.spark.util.Utils
-
 /**
  * Information about a running task attempt inside a TaskSet.
  */
@@ -70,16 +68,17 @@ class TaskInfo(
   def running: Boolean = !finished
 
   def status: String = {
-    if (running)
+    if (running) {
       "RUNNING"
-    else if (gettingResult)
+    } else if (gettingResult) {
       "GET RESULT"
-    else if (failed)
+    } else if (failed) {
       "FAILED"
-    else if (successful)
+    } else if (successful) {
       "SUCCESS"
-    else
+    } else {
       "UNKNOWN"
+    }
   }
 
   def duration: Long = {

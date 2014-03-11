@@ -20,6 +20,7 @@ import shutil
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
+from collections import namedtuple
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -27,8 +28,9 @@ from pyspark.broadcast import Broadcast
 from pyspark.conf import SparkConf
 from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
-from pyspark.serializers import PickleSerializer, BatchedSerializer, MUTF8Deserializer
+from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
+from pyspark import rdd
 from pyspark.rdd import RDD
 
 from py4j.java_collections import ListConverter
@@ -51,7 +53,8 @@ class SparkContext(object):
 
 
     def __init__(self, master=None, appName=None, sparkHome=None, pyFiles=None,
-        environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None):
+        environment=None, batchSize=1024, serializer=PickleSerializer(), conf=None,
+        gateway=None):
         """
         Create a new SparkContext. At least the master and app name should be set,
         either through the named parameters here or through C{conf}.
@@ -70,6 +73,8 @@ class SparkContext(object):
                unlimited batch size.
         @param serializer: The serializer for RDDs.
         @param conf: A L{SparkConf} object setting Spark properties.
+        @param gateway: Use an existing gateway and JVM, otherwise a new JVM
+               will be instatiated.
 
 
         >>> from pyspark.context import SparkContext
@@ -80,7 +85,12 @@ class SparkContext(object):
             ...
         ValueError:...
         """
-        SparkContext._ensure_initialized(self)
+        if rdd._extract_concise_traceback() is not None:
+            self._callsite = rdd._extract_concise_traceback()
+        else:
+            tempNamedTuple = namedtuple("Callsite", "function file linenum")
+            self._callsite = tempNamedTuple(function=None, file=None, linenum=None)
+        SparkContext._ensure_initialized(self, gateway=gateway)
 
         self.environment = environment or {}
         self._conf = conf or SparkConf(_jvm=self._jvm)
@@ -120,7 +130,7 @@ class SparkContext(object):
                 self.environment[varName] = v
 
         # Create the Java SparkContext through Py4J
-        self._jsc = self._jvm.JavaSparkContext(self._conf._jconf)
+        self._jsc = self._initialize_context(self._conf._jconf)
 
         # Create a single Accumulator in Java that we'll send all our updates through;
         # they will be passed back to us through a TCP server
@@ -152,17 +162,28 @@ class SparkContext(object):
         self._temp_dir = \
             self._jvm.org.apache.spark.util.Utils.createTempDir(local_dir).getAbsolutePath()
 
+    # Initialize SparkContext in function to allow subclass specific initialization
+    def _initialize_context(self, jconf):
+        return self._jvm.JavaSparkContext(jconf)
+
     @classmethod
-    def _ensure_initialized(cls, instance=None):
+    def _ensure_initialized(cls, instance=None, gateway=None):
         with SparkContext._lock:
             if not SparkContext._gateway:
-                SparkContext._gateway = launch_gateway()
+                SparkContext._gateway = gateway or launch_gateway()
                 SparkContext._jvm = SparkContext._gateway.jvm
                 SparkContext._writeToFile = SparkContext._jvm.PythonRDD.writeToFile
 
             if instance:
                 if SparkContext._active_spark_context and SparkContext._active_spark_context != instance:
-                    raise ValueError("Cannot run multiple SparkContexts at once")
+                    currentMaster = SparkContext._active_spark_context.master
+                    currentAppName = SparkContext._active_spark_context.appName
+                    callsite = SparkContext._active_spark_context._callsite
+
+                    # Raise error if there is already a running Spark context
+                    raise ValueError("Cannot run multiple SparkContexts at once; existing SparkContext(app=%s, master=%s)" \
+                        " created by %s at %s:%s " \
+                        % (currentAppName, currentMaster, callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
 
@@ -234,7 +255,7 @@ class SparkContext(object):
         """
         minSplits = minSplits or min(self.defaultParallelism, 2)
         return RDD(self._jsc.textFile(name, minSplits), self,
-                   MUTF8Deserializer())
+                   UTF8Deserializer())
 
     def _checkpointFile(self, name, input_deserializer):
         jrdd = self._jsc.checkpointFile(name)
@@ -364,6 +385,37 @@ class SparkContext(object):
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
         return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
             storageLevel.deserialized, storageLevel.replication)
+
+    def setJobGroup(self, groupId, description):
+        """
+        Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+        different value or cleared.
+
+        Often, a unit of execution in an application consists of multiple Spark actions or jobs.
+        Application programmers can use this method to group all those jobs together and give a
+        group description. Once set, the Spark web UI will associate such jobs with this group.
+        """
+        self._jsc.setJobGroup(groupId, description)
+
+    def setLocalProperty(self, key, value):
+        """
+        Set a local property that affects jobs submitted from this thread, such as the
+        Spark fair scheduler pool.
+        """
+        self._jsc.setLocalProperty(key, value)
+
+    def getLocalProperty(self, key):
+        """
+        Get a local property set in this thread, or null if it is missing. See
+        L{setLocalProperty}
+        """
+        return self._jsc.getLocalProperty(key)
+
+    def sparkUser(self):
+        """
+        Get SPARK_USER for user who is running SparkContext.
+        """
+        return self._jsc.sc().sparkUser()
 
 def _test():
     import atexit

@@ -18,7 +18,6 @@
 package org.apache.spark
 
 import org.scalatest.FunSuite
-import org.apache.spark.SparkContext._
 
 class SparkContextInfoSuite extends FunSuite with LocalSparkContext {
   test("getPersistentRDDs only returns RDDs that are marked as cached") {

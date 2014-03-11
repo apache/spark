@@ -17,14 +17,14 @@
 
 package org.apache.spark.metrics
 
-import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
-
 import java.util.Properties
 import java.util.concurrent.TimeUnit
 
 import scala.collection.mutable
 
-import org.apache.spark.{SparkConf, Logging}
+import com.codahale.metrics.{Metric, MetricFilter, MetricRegistry}
+
+import org.apache.spark.{Logging, SecurityManager, SparkConf}
 import org.apache.spark.metrics.sink.{MetricsServlet, Sink}
 import org.apache.spark.metrics.source.Source
 
@@ -56,14 +56,15 @@ import org.apache.spark.metrics.source.Source
  * wild card "*" can be used to replace instance name, which means all the instances will have
  * this property.
  *
- * [sink|source] means this property belongs to source or sink. This field can only be source or sink.
+ * [sink|source] means this property belongs to source or sink. This field can only be
+ * source or sink.
  *
  * [name] specify the name of sink or source, it is custom defined.
  *
  * [options] is the specific property of this source or sink.
  */
 private[spark] class MetricsSystem private (val instance: String,
-    conf: SparkConf) extends Logging {
+    conf: SparkConf, securityMgr: SecurityManager) extends Logging {
 
   val confFile = conf.get("spark.metrics.conf", null)
   val metricsConfig = new MetricsConfig(Option(confFile))
@@ -130,8 +131,8 @@ private[spark] class MetricsSystem private (val instance: String,
       val classPath = kv._2.getProperty("class")
       try {
         val sink = Class.forName(classPath)
-          .getConstructor(classOf[Properties], classOf[MetricRegistry])
-          .newInstance(kv._2, registry)
+          .getConstructor(classOf[Properties], classOf[MetricRegistry], classOf[SecurityManager])
+          .newInstance(kv._2, registry, securityMgr)
         if (kv._1 == "servlet") {
            metricsServlet = Some(sink.asInstanceOf[MetricsServlet])
         } else {
@@ -159,6 +160,7 @@ private[spark] object MetricsSystem {
     }
   }
 
-  def createMetricsSystem(instance: String, conf: SparkConf): MetricsSystem =
-    new MetricsSystem(instance, conf)
+  def createMetricsSystem(instance: String, conf: SparkConf,
+      securityMgr: SecurityManager): MetricsSystem =
+    new MetricsSystem(instance, conf, securityMgr)
 }

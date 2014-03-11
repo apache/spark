@@ -31,24 +31,24 @@ import org.apache.spark.streaming.receivers._
  */
 private[streaming] class ZeroMQReceiver[T: ClassTag](publisherUrl: String,
   subscribe: Subscribe,
-  bytesToObjects: Seq[ByteString] ⇒ Iterator[T])
+  bytesToObjects: Seq[ByteString] => Iterator[T])
   extends Actor with Receiver with Logging {
 
-  override def preStart() = ZeroMQExtension(context.system).newSocket(SocketType.Sub, Listener(self),
-    Connect(publisherUrl), subscribe)
+  override def preStart() = ZeroMQExtension(context.system)
+    .newSocket(SocketType.Sub, Listener(self), Connect(publisherUrl), subscribe)
 
   def receive: Receive = {
 
-    case Connecting ⇒ logInfo("connecting ...")
+    case Connecting => logInfo("connecting ...")
 
-    case m: ZMQMessage ⇒
+    case m: ZMQMessage =>
       logDebug("Received message for:" + m.frame(0))
 
       //We ignore first frame for processing as it is the topic
       val bytes = m.frames.tail
       pushBlock(bytesToObjects(bytes))
 
-    case Closed ⇒ logInfo("received closed ")
+    case Closed => logInfo("received closed ")
 
   }
 }
