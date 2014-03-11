@@ -20,6 +20,7 @@ package org.apache.spark
 import java.io.{File, FileWriter}
 
 import scala.io.Source
+import scala.util.Try
 
 import com.google.common.io.Files
 import org.apache.hadoop.io._
@@ -32,6 +33,28 @@ import org.scalatest.FunSuite
 import org.apache.spark.SparkContext._
 
 class FileSuite extends FunSuite with LocalSparkContext {
+  test("adding jars to classpath at the driver") {
+    val tmpDir = Files.createTempDir()
+    val classFile = TestUtils.createCompiledClass("HelloSpark", tmpDir)
+    val jarFile = new File(tmpDir, "test.jar")
+    TestUtils.createJar(Seq(classFile), jarFile)
+
+    def canLoadClass(clazz: String) =
+      Try(Class.forName(clazz, true, Thread.currentThread().getContextClassLoader)).isSuccess
+
+    val driverLoadedBefore = canLoadClass("HelloSpark")
+
+    val conf = new SparkConf().setMaster("local-cluster[1,1,512]").setAppName("test")
+      .set("spark.driver.loadAddedJars", "true")
+
+    val sc = new SparkContext(conf)
+    sc.addJar(jarFile.getAbsolutePath)
+
+    val driverLoadedAfter = canLoadClass("HelloSpark")
+
+    assert(false === driverLoadedBefore, "Class visible before being added")
+    assert(true === driverLoadedAfter, "Class was not visible after being added")
+  }
 
   test("text files") {
     sc = new SparkContext("local", "test")
@@ -106,7 +129,7 @@ class FileSuite extends FunSuite with LocalSparkContext {
     sc = new SparkContext("local", "test")
     val tempDir = Files.createTempDir()
     val outputDir = new File(tempDir, "output").getAbsolutePath
-    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), "a" * x)) 
+    val nums = sc.makeRDD(1 to 3).map(x => (new IntWritable(x), "a" * x))
     nums.saveAsSequenceFile(outputDir)
     // Try reading the output back as a SequenceFile
     val output = sc.sequenceFile[IntWritable, Text](outputDir)

@@ -33,11 +33,12 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   override def beforeEach() {
     super.beforeEach()
     resetSparkContext()
-    System.setProperty("spark.authenticate", "false")
   }
 
   override def beforeAll() {
     super.beforeAll()
+    System.setProperty("spark.authenticate", "false")
+
     val tmpDir = new File(Files.createTempDir(), "test")
     tmpDir.mkdir()
 
@@ -47,27 +48,10 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     pw.close()
     
     val jarFile = new File(tmpDir, "test.jar")
-    val jarStream = new FileOutputStream(jarFile)
-    val jar = new JarOutputStream(jarStream, new java.util.jar.Manifest())
-    System.setProperty("spark.authenticate", "false")
-
-    val jarEntry = new JarEntry(textFile.getName)
-    jar.putNextEntry(jarEntry)
-    
-    val in = new FileInputStream(textFile)
-    val buffer = new Array[Byte](10240)
-    var nRead = 0
-    while (nRead <= 0) {
-      nRead = in.read(buffer, 0, buffer.length)
-      jar.write(buffer, 0, nRead)
-    }
-
-    in.close()
-    jar.close()
-    jarStream.close()
+    val jarUrl = TestUtils.createJar(Seq(textFile), jarFile)
 
     tmpFile = textFile
-    tmpJarUrl = jarFile.toURI.toURL.toString
+    tmpJarUrl = jarUrl.toString
   }
 
   test("Distributing files locally") {
