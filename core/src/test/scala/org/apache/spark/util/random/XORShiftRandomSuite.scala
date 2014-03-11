@@ -72,4 +72,8 @@ class XORShiftRandomSuite extends FunSuite with ShouldMatchers {
 
   }
 
+  test ("XORShift with zero seed") {
+    val random = new XORShiftRandom(0L)
+    assert(random.nextInt() != 0)
+  }
 }

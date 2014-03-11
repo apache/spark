@@ -50,7 +50,7 @@ public final class JavaTC {
     return new ArrayList<Tuple2<Integer, Integer>>(edges);
   }
 
-  static class ProjectFn extends PairFunction<Tuple2<Integer, Tuple2<Integer, Integer>>,
+  static class ProjectFn implements PairFunction<Tuple2<Integer, Tuple2<Integer, Integer>>,
       Integer, Integer> {
     static final ProjectFn INSTANCE = new ProjectFn();
 
@@ -77,7 +77,7 @@ public final class JavaTC {
     // the graph to obtain the path (x, z).
 
     // Because join() joins on keys, the edges are stored in reversed order.
-    JavaPairRDD<Integer, Integer> edges = tc.map(
+    JavaPairRDD<Integer, Integer> edges = tc.mapToPair(
       new PairFunction<Tuple2<Integer, Integer>, Integer, Integer>() {
         @Override
         public Tuple2<Integer, Integer> call(Tuple2<Integer, Integer> e) {
@@ -91,7 +91,7 @@ public final class JavaTC {
       oldCount = nextCount;
       // Perform the join, obtaining an RDD of (y, (z, x)) pairs,
       // then project the result to obtain the new (x, z) paths.
-      tc = tc.union(tc.join(edges).map(ProjectFn.INSTANCE)).distinct().cache();
+      tc = tc.union(tc.join(edges).mapToPair(ProjectFn.INSTANCE)).distinct().cache();
       nextCount = tc.count();
     } while (nextCount != oldCount);
 

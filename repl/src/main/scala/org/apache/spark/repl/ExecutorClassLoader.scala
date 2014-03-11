@@ -18,14 +18,18 @@
 package org.apache.spark.repl
 
 import java.io.{ByteArrayOutputStream, InputStream}
-import java.net.{URI, URL, URLClassLoader, URLEncoder}
+import java.net.{URI, URL, URLEncoder}
 import java.util.concurrent.{Executors, ExecutorService}
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 
-import org.objectweb.asm._
-import org.objectweb.asm.Opcodes._
+import org.apache.spark.SparkEnv
+import org.apache.spark.util.Utils
+
+
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm._
+import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
 
 /**
@@ -53,7 +57,13 @@ extends ClassLoader(parent) {
         if (fileSystem != null) {
           fileSystem.open(new Path(directory, pathInDirectory))
         } else {
-          new URL(classUri + "/" + urlEncode(pathInDirectory)).openStream()
+          if (SparkEnv.get.securityManager.isAuthenticationEnabled()) {
+            val uri = new URI(classUri + "/" + urlEncode(pathInDirectory))
+            val newuri = Utils.constructURIForAuthentication(uri, SparkEnv.get.securityManager)
+            newuri.toURL().openStream()
+          } else {
+            new URL(classUri + "/" + urlEncode(pathInDirectory)).openStream()
+          }
         }
       }
       val bytes = readAndTransformClass(name, inputStream)

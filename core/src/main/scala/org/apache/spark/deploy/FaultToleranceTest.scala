@@ -27,21 +27,26 @@ import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 import scala.sys.process._
 
-import net.liftweb.json.JsonParser
+import org.json4s._
+import org.json4s.jackson.JsonMethods
 
-import org.apache.spark.{Logging, SparkContext}
-import org.apache.spark.deploy.master.RecoveryState
+import org.apache.spark.{Logging, SparkConf, SparkContext}
+import org.apache.spark.deploy.master.{RecoveryState, SparkCuratorUtil}
 
 /**
  * This suite tests the fault tolerance of the Spark standalone scheduler, mainly the Master.
  * In order to mimic a real distributed cluster more closely, Docker is used.
  * Execute using
- * ./spark-class org.apache.spark.deploy.FaultToleranceTest
+ * ./bin/spark-class org.apache.spark.deploy.FaultToleranceTest
  *
- * Make sure that that the environment includes the following properties in SPARK_DAEMON_JAVA_OPTS:
+ * Make sure that that the environment includes the following properties in SPARK_DAEMON_JAVA_OPTS
+ * *and* SPARK_JAVA_OPTS:
  *   - spark.deploy.recoveryMode=ZOOKEEPER
  *   - spark.deploy.zookeeper.url=172.17.42.1:2181
  * Note that 172.17.42.1 is the default docker ip for the host and 2181 is the default ZK port.
+ *
+ * In case of failure, make sure to kill off prior docker containers before restarting:
+ *   docker kill $(docker ps -q)
  *
  * Unfortunately, due to the Docker dependency this suite cannot be run automatically without a
  * working installation of Docker. In addition to having Docker, the following are assumed:
@@ -50,9 +55,15 @@ import org.apache.spark.deploy.master.RecoveryState
  *     docker/ directory. Run 'docker/spark-test/build' to generate these.
  */
 private[spark] object FaultToleranceTest extends App with Logging {
+
+  val conf = new SparkConf()
+  val ZK_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark")
+
   val masters = ListBuffer[TestMasterInfo]()
   val workers = ListBuffer[TestWorkerInfo]()
   var sc: SparkContext = _
+
+  val zk =  SparkCuratorUtil.newClient(conf)
 
   var numPassed = 0
   var numFailed = 0
@@ -71,6 +82,10 @@ private[spark] object FaultToleranceTest extends App with Logging {
       sc = null
     }
     terminateCluster()
+
+    // Clear ZK directories in between tests (for speed purposes)
+    SparkCuratorUtil.deleteRecursive(zk, ZK_DIR + "/spark_leader")
+    SparkCuratorUtil.deleteRecursive(zk, ZK_DIR + "/master_status")
   }
 
   test("sanity-basic") {
@@ -167,26 +182,34 @@ private[spark] object FaultToleranceTest extends App with Logging {
     try {
       fn
       numPassed += 1
+      logInfo("==============================================")
       logInfo("Passed: " + name)
+      logInfo("==============================================")
     } catch {
       case e: Exception =>
         numFailed += 1
+        logInfo("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
         logError("FAILED: " + name, e)
+        logInfo("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+        sys.exit(1)
     }
     afterEach()
   }
 
   def addMasters(num: Int) {
+    logInfo(s">>>>> ADD MASTERS $num <<<<<")
     (1 to num).foreach { _ => masters += SparkDocker.startMaster(dockerMountDir) }
   }
 
   def addWorkers(num: Int) {
+    logInfo(s">>>>> ADD WORKERS $num <<<<<")
     val masterUrls = getMasterUrls(masters)
     (1 to num).foreach { _ => workers += SparkDocker.startWorker(dockerMountDir, masterUrls) }
   }
 
   /** Creates a SparkContext, which constructs a Client to interact with our cluster. */
   def createClient() = {
+    logInfo(">>>>> CREATE CLIENT <<<<<")
     if (sc != null) { sc.stop() }
     // Counter-hack: Because of a hack in SparkEnv#create() that changes this
     // property, we need to reset it.
@@ -205,6 +228,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
   }
 
   def killLeader(): Unit = {
+    logInfo(">>>>> KILL LEADER <<<<<")
     masters.foreach(_.readState())
     val leader = getLeader
     masters -= leader
@@ -214,6 +238,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
   def delay(secs: Duration = 5.seconds) = Thread.sleep(secs.toMillis)
 
   def terminateCluster() {
+    logInfo(">>>>> TERMINATE CLUSTER <<<<<")
     masters.foreach(_.kill())
     workers.foreach(_.kill())
     masters.clear()
@@ -244,6 +269,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
    * are all alive in a proper configuration (e.g., only one leader).
    */
   def assertValidClusterState() = {
+    logInfo(">>>>> ASSERT VALID CLUSTER STATE <<<<<")
     assertUsable()
     var numAlive = 0
     var numStandby = 0
@@ -311,7 +337,7 @@ private[spark] object FaultToleranceTest extends App with Logging {
 private[spark] class TestMasterInfo(val ip: String, val dockerId: DockerId, val logFile: File)
   extends Logging  {
 
-  implicit val formats = net.liftweb.json.DefaultFormats
+  implicit val formats = org.json4s.DefaultFormats
   var state: RecoveryState.Value = _
   var liveWorkerIPs: List[String] = _
   var numLiveApps = 0
@@ -321,11 +347,15 @@ private[spark] class TestMasterInfo(val ip: String, val dockerId: DockerId, val 
   def readState() {
     try {
       val masterStream = new InputStreamReader(new URL("http://%s:8080/json".format(ip)).openStream)
-      val json = JsonParser.parse(masterStream, closeAutomatically = true)
+      val json = JsonMethods.parse(masterStream)
 
       val workers = json \ "workers"
       val liveWorkers = workers.children.filter(w => (w \ "state").extract[String] == "ALIVE")
-      liveWorkerIPs = liveWorkers.map(w => (w \ "host").extract[String])
+      // Extract the worker IP from "webuiaddress" (rather than "host") because the host name
+      // on containers is a weird hash instead of the actual IP address.
+      liveWorkerIPs = liveWorkers.map {
+        w => (w \ "webuiaddress").extract[String].stripPrefix("http://").stripSuffix(":8081")
+      }
 
       numLiveApps = (json \ "activeapps").children.size
 
@@ -349,7 +379,7 @@ private[spark] class TestMasterInfo(val ip: String, val dockerId: DockerId, val 
 private[spark] class TestWorkerInfo(val ip: String, val dockerId: DockerId, val logFile: File)
   extends Logging {
 
-  implicit val formats = net.liftweb.json.DefaultFormats
+  implicit val formats = org.json4s.DefaultFormats
 
   logDebug("Created worker: " + this)
 
@@ -402,7 +432,7 @@ private[spark] object Docker extends Logging {
   def makeRunCmd(imageTag: String, args: String = "", mountDir: String = ""): ProcessBuilder = {
     val mountCmd = if (mountDir != "") { " -v " + mountDir } else ""
 
-    val cmd = "docker run %s %s %s".format(mountCmd, imageTag, args)
+    val cmd = "docker run -privileged %s %s %s".format(mountCmd, imageTag, args)
     logDebug("Run command: " + cmd)
     cmd
   }

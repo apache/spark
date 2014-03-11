@@ -35,7 +35,7 @@ private case class KillTask(taskId: Long)
 /**
  * Calls to LocalBackend are all serialized through LocalActor. Using an actor makes the calls on
  * LocalBackend asynchronous, which is necessary to prevent deadlock between LocalBackend
- * and the ClusterScheduler.
+ * and the TaskSchedulerImpl.
  */
 private[spark] class LocalActor(
   scheduler: TaskSchedulerImpl,
@@ -76,7 +76,7 @@ private[spark] class LocalActor(
 
 /**
  * LocalBackend is used when running a local version of Spark where the executor, backend, and
- * master all run in the same JVM. It sits behind a ClusterScheduler and handles launching tasks
+ * master all run in the same JVM. It sits behind a TaskSchedulerImpl and handles launching tasks
  * on a single Executor (created by the LocalBackend) running locally.
  */
 private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)

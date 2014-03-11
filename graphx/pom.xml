@@ -21,7 +21,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-incubating-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -30,6 +30,20 @@
   <packaging>jar</packaging>
   <name>Spark Project GraphX</name>
   <url>http://spark-project.org/</url>
+
+  <profiles>
+    <profile>
+      <!-- SPARK-1121: SPARK-1121: Adds an explicit dependency on Avro to work around
+           a Hadoop 0.23.X issue -->
+      <id>yarn-alpha</id>
+      <dependencies>
+        <dependency>
+          <groupId>org.apache.avro</groupId>
+          <artifactId>avro</artifactId>
+        </dependency>
+      </dependencies>
+    </profile>
+  </profiles>
 
   <dependencies>
     <dependency>

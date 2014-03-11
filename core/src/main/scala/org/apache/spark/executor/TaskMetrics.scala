@@ -104,13 +104,6 @@ class ShuffleReadMetrics extends Serializable {
   var fetchWaitTime: Long = _
 
   /**
-   * Total time spent fetching remote shuffle blocks. This aggregates the time spent fetching all
-   * input blocks. Since block fetches are both pipelined and parallelized, this can
-   * exceed fetchWaitTime and executorRunTime.
-   */
-  var remoteFetchTime: Long = _
-
-  /**
    * Total number of remote bytes read from the shuffle by this task
    */
   var remoteBytesRead: Long = _

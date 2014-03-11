@@ -17,9 +17,10 @@
 
 package org.apache.spark.streaming.util
 
-import org.scalatest.FunSuite
 import java.io.ByteArrayOutputStream
 import java.util.concurrent.TimeUnit._
+
+import org.scalatest.FunSuite
 
 class RateLimitedOutputStreamSuite extends FunSuite {
 
@@ -32,9 +33,11 @@ class RateLimitedOutputStreamSuite extends FunSuite {
   test("write") {
     val underlying = new ByteArrayOutputStream
     val data = "X" * 41000
-    val stream = new RateLimitedOutputStream(underlying, 10000)
+    val stream = new RateLimitedOutputStream(underlying, desiredBytesPerSec = 10000)
     val elapsedNs = benchmark { stream.write(data.getBytes("UTF-8")) }
-    assert(SECONDS.convert(elapsedNs, NANOSECONDS) == 4)
-    assert(underlying.toString("UTF-8") == data)
+
+    // We accept anywhere from 4.0 to 4.99999 seconds since the value is rounded down.
+    assert(SECONDS.convert(elapsedNs, NANOSECONDS) === 4)
+    assert(underlying.toString("UTF-8") === data)
   }
 }

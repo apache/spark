@@ -30,6 +30,12 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   @transient var tmpFile: File = _
   @transient var tmpJarUrl: String = _
 
+  override def beforeEach() {
+    super.beforeEach()
+    resetSparkContext()
+    System.setProperty("spark.authenticate", "false")
+  }
+
   override def beforeAll() {
     super.beforeAll()
     val tmpDir = new File(Files.createTempDir(), "test")
@@ -43,6 +49,7 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
     val jarFile = new File(tmpDir, "test.jar")
     val jarStream = new FileOutputStream(jarFile)
     val jar = new JarOutputStream(jarStream, new java.util.jar.Manifest())
+    System.setProperty("spark.authenticate", "false")
 
     val jarEntry = new JarEntry(textFile.getName)
     jar.putNextEntry(jarEntry)
@@ -66,6 +73,25 @@ class FileServerSuite extends FunSuite with LocalSparkContext {
   test("Distributing files locally") {
     sc = new SparkContext("local[4]", "test")
     sc.addFile(tmpFile.toString)
+    val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
+    val result = sc.parallelize(testData).reduceByKey {
+      val path = SparkFiles.get("FileServerSuite.txt")
+      val in = new BufferedReader(new FileReader(path))
+      val fileVal = in.readLine().toInt
+      in.close()
+      _ * fileVal + _ * fileVal
+    }.collect()
+    assert(result.toSet === Set((1,200), (2,300), (3,500)))
+  }
+
+  test("Distributing files locally security On") {
+    val sparkConf = new SparkConf(false)
+    sparkConf.set("spark.authenticate", "true")
+    sparkConf.set("spark.authenticate.secret", "good")
+    sc = new SparkContext("local[4]", "test", sparkConf)
+
+    sc.addFile(tmpFile.toString)
+    assert(sc.env.securityManager.isAuthenticationEnabled() === true)
     val testData = Array((1,1), (1,1), (2,1), (3,5), (2,2), (3,0))
     val result = sc.parallelize(testData).reduceByKey {
       val path = SparkFiles.get("FileServerSuite.txt")

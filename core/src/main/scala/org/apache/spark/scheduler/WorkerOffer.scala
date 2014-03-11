@@ -21,4 +21,4 @@ package org.apache.spark.scheduler
  * Represents free resources available on an executor.
  */
 private[spark]
-class WorkerOffer(val executorId: String, val host: String, val cores: Int)
+case class WorkerOffer(executorId: String, host: String, cores: Int)
