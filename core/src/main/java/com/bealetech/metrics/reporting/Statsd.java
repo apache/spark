@@ -71,20 +71,20 @@ public class Statsd implements Closeable {
         String source = parts.remove(0);
         if (source.equals("executor")) { // "spark.executor.0.filesystem.file.largeRead_ops" (ExecutorSource)
             String executorId = parts.remove(0);
-            tags = String.format("#%s:%s", "executorId", executorId);
+            tags = String.format("#executor:%s", executorId);
             name = String.format("%s.%s.", prefix, source) + String.format("%s_%s_%s", parts.toArray());
         } else if (source.equals("application")) { // "spark.application.Apriori.1394489355680.runtime_ms" (ApplicationSource)
             String applicationName = parts.remove(0);
             String currentTime = parts.remove(0);
             String metricName = parts.remove(0);
-            tags = String.format("#%s:%s_%s", "applicationId", applicationName, currentTime);
+            tags = String.format("#application:%s", applicationName);
             name = String.format("%s.%s.", prefix, source) + metricName;
         } else {
             String realSource = parts.remove(0);
             // "spark.OrdersModel.DAGScheduler.stage.failedStages" (DAGSchedulerSource)
             // "spark.OrdersModel.BlockManager.memory.maxMem_MB" (BlockManagerSource)
             if (realSource.equals("DAGScheduler") || realSource.equals("BlockManager")) {
-                tags = String.format("#%s:%s", "applicationName", source);
+                tags = String.format("#application:%s", source);
                 name = String.format("%s.application.%s.", prefix, realSource) + String.format("%s_%s", parts.toArray());
             }
         }
