@@ -18,6 +18,8 @@
 package org.apache.spark.sql
 package execution
 
+import scala.reflect.runtime.universe.TypeTag
+
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext
 
@@ -25,6 +27,7 @@ import catalyst.errors._
 import catalyst.expressions._
 import catalyst.plans.physical.{UnspecifiedDistribution, OrderedDistribution}
 import catalyst.plans.logical.LogicalPlan
+import catalyst.ScalaReflection
 
 case class Project(projectList: Seq[NamedExpression], child: SparkPlan) extends UnaryNode {
   def output = projectList.map(_.toAttribute)
@@ -109,6 +112,35 @@ case class Sort(
   }
 
   def output = child.output
+}
+
+object ExistingRdd {
+  def convertToCatalyst(a: Any): Any = a match {
+    case s: Seq[Any] => s.map(convertToCatalyst)
+    case p: Product => new GenericRow(p.productIterator.map(convertToCatalyst).toArray)
+    case other => other
+  }
+
+  def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
+    data.mapPartitions { iter =>
+      var currentCaseClass: A = null.asInstanceOf[A]
+      var mutableRow: MutableRow = null
+
+      if(iter.hasNext) {
+        currentCaseClass = iter.next()
+        mutableRow = new GenericMutableRow(currentCaseClass.productIterator.size)
+      }
+
+      ???
+
+    }
+
+    data.map(r => new GenericRow(r.productIterator.map(convertToCatalyst).toArray): Row)
+  }
+
+  def fromProductRdd[A <: Product : TypeTag](productRdd: RDD[A]) = {
+    ExistingRdd(ScalaReflection.attributesFor[A], productToRowRdd(productRdd))
+  }
 }
 
 case class ExistingRdd(output: Seq[Attribute], rdd: RDD[Row]) extends LeafNode {

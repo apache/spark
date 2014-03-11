@@ -18,11 +18,13 @@
 package org.apache.spark.sql
 
 import scala.language.implicitConversions
+import scala.reflect.runtime.universe.TypeTag
 
 import org.apache.spark.{SparkContext, SparkConf}
 import org.apache.spark.rdd.RDD
 
 import catalyst.analysis._
+import catalyst.dsl
 import catalyst.expressions.BindReferences
 import catalyst.optimizer.Optimizer
 import catalyst.planning.QueryPlanner
@@ -49,20 +51,28 @@ object TestSqlContext
 class SparkSqlContext(val sparkContext: SparkContext) extends Logging {
   self =>
 
-  val catalog: Catalog = EmptyCatalog
+  val catalog: Catalog = new SimpleCatalog
   val analyzer: Analyzer = new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = true)
   val optimizer = Optimizer
+  val parser = new catalyst.SqlParser
 
-  def parseSql(sql: String): LogicalPlan = ???
+  def parseSql(sql: String): LogicalPlan = parser(sql)
   def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
   def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
   implicit def logicalPlanToSparkQuery(plan: LogicalPlan) = executePlan(plan)
 
-  implicit def logicalDsl(q: ExecutedQuery) = new catalyst.dsl.DslLogicalPlan(q.logicalPlan)
+  implicit def logicalDsl(q: ExecutedQuery) = new dsl.DslLogicalPlan(q.logicalPlan)
 
   implicit def toRdd(q: ExecutedQuery) = q.rdd
+
+  implicit class TableRdd[A <: Product: TypeTag](rdd: RDD[A]) {
+    def registerAsTable(tableName: String) = {
+      catalog.registerTable(
+        None, tableName, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)) )
+    }
+  }
 
   def sql(sqlText: String): ExecutedQuery = {
     val queryWorkflow = executeSql(sqlText)

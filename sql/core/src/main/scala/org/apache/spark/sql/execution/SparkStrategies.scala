@@ -212,6 +212,7 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val relation =
           ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, None)
         InsertIntoParquetTable(relation, planLater(child))(sparkContext) :: Nil
+      case SparkLogicalPlan(existingPlan) => existingPlan :: Nil
       case _ => Nil
     }
   }

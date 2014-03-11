@@ -30,6 +30,29 @@ trait Catalog {
     databaseName: Option[String],
     tableName: String,
     alias: Option[String] = None): LogicalPlan
+
+  def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit
+}
+
+class SimpleCatalog extends Catalog {
+  val tables = new mutable.HashMap[String, LogicalPlan]()
+
+  def registerTable(databaseName: Option[String],tableName: String, plan: LogicalPlan): Unit = {
+    tables += ((tableName, plan))
+  }
+
+  def dropTable(tableName: String) = tables -= tableName
+
+  def lookupRelation(
+      databaseName: Option[String],
+      tableName: String,
+      alias: Option[String] = None): LogicalPlan = {
+    val table = tables.get(tableName).getOrElse(sys.error(s"Table Not Found: $tableName"))
+
+    // If an alias was specified by the lookup, wrap the plan in a subquery so that attributes are
+    // properly qualified with this alias.
+    alias.map(a => Subquery(a.toLowerCase, table)).getOrElse(table)
+  }
 }
 
 /**
@@ -58,8 +81,9 @@ trait OverrideCatalog extends Catalog {
     withAlias.getOrElse(super.lookupRelation(databaseName, tableName, alias))
   }
 
-  def overrideTable(databaseName: Option[String], tableName: String, plan: LogicalPlan) =
+  override def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = {
     overrides.put((databaseName, tableName), plan)
+  }
 }
 
 /**
@@ -71,6 +95,10 @@ object EmptyCatalog extends Catalog {
     databaseName: Option[String],
     tableName: String,
     alias: Option[String] = None) = {
+    throw new UnsupportedOperationException
+  }
+
+  def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = {
     throw new UnsupportedOperationException
   }
 }

@@ -98,7 +98,7 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
     // write test data
     ParquetTestData.writeFile
     // Override initial Parquet test table
-    TestHive.catalog.overrideTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
+    TestHive.catalog.registerTable(Some[String]("parquet"), "testsource", ParquetTestData.testData)
   }
 
   override def afterAll() {

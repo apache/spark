@@ -21,6 +21,7 @@ package execution
 import org.apache.spark.rdd.RDD
 
 import catalyst.plans.QueryPlan
+import catalyst.plans.logical
 import catalyst.plans.physical._
 import catalyst.trees
 
@@ -46,6 +47,15 @@ abstract class SparkPlan extends QueryPlan[SparkPlan] with Logging {
 
   protected def buildRow(values: Seq[Any]): Row =
     new catalyst.expressions.GenericRow(values.toArray)
+}
+
+/**
+ * Allows already planned SparkQueries to be linked into logical query plans.
+ */
+case class SparkLogicalPlan(alreadyPlanned: SparkPlan) extends logical.LogicalPlan {
+  def output = alreadyPlanned.output
+  def references = Set.empty
+  def children = Nil
 }
 
 trait LeafNode extends SparkPlan with trees.LeafNode[SparkPlan] {
