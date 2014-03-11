@@ -801,6 +801,7 @@
 
     </profile>
     
+   <!-- Build without Hadoop dependencies that are included in some runtime environments. -->
     <profile>
       <id>hadoop-provided</id>
       <activation>

@@ -383,16 +383,45 @@ object ClientBase {
   def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) {
     val classpathEntries = Option(conf.getStrings(
       YarnConfiguration.YARN_APPLICATION_CLASSPATH)).getOrElse(
-        YarnConfiguration.DEFAULT_YARN_APPLICATION_CLASSPATH)
+        getDefaultYarnApplicationClasspath())
     for (c <- classpathEntries) {
       Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
     }
 
     val mrClasspathEntries = Option(conf.getStrings(
-      MRJobConfig.MAPREDUCE_APPLICATION_CLASSPATH)).getOrElse(
-        StringUtils.getStrings(MRJobConfig.DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH))
-    for (c <- mrClasspathEntries) {
-      Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
+      "mapreduce.application.classpath")).getOrElse(
+        getDefaultMRApplicationClasspath())
+    if (mrClasspathEntries != null) {
+      for (c <- mrClasspathEntries) {
+        Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
+      }
+    }
+  }
+
+  def getDefaultYarnApplicationClasspath(): Array[String] = {
+    try {
+      val field = classOf[MRJobConfig].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
+      field.get(null).asInstanceOf[Array[String]]
+    } catch {
+      case err: NoSuchFieldError => null
+    }
+  }
+
+  /**
+   * In Hadoop 0.23, the MR application classpath comes with the YARN application
+   * classpath.  In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
+   * So we need to use reflection to retrieve it.
+   */
+  def getDefaultMRApplicationClasspath(): Array[String] = {
+    try {
+      val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
+      if (field.getType == classOf[String]) {
+        StringUtils.getStrings(field.get(null).asInstanceOf[String])
+      } else {
+        field.get(null).asInstanceOf[Array[String]]
+      }
+    } catch {
+      case err: NoSuchFieldError => null
     }
   }
 
