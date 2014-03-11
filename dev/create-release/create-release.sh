@@ -49,14 +49,14 @@ mvn -DskipTests \
   -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
   -Dusername=$GIT_USERNAME -Dpassword=$GIT_PASSWORD \
   -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-  -Pyarn \
+  -Pyarn -Pspark-ganglia-lgpl \
   -Dtag=$GIT_TAG -DautoVersionSubmodules=true \
   --batch-mode release:prepare
 
 mvn -DskipTests \
   -Darguments="-DskipTests=true -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 -Dgpg.passphrase=${GPG_PASSPHRASE}" \
   -Dhadoop.version=2.2.0 -Dyarn.version=2.2.0 \
-  -Pyarn \
+  -Pyarn -Pspark-ganglia-lgpl\
   release:perform
 
 rm -rf spark
