@@ -321,7 +321,7 @@ object DecisionTree extends Serializable with Logging {
 
     /**
      * Finds the right bin for the given feature
-    */
+     */
     def findBin(
         featureIndex: Int,
         labeledPoint: LabeledPoint,
@@ -362,7 +362,7 @@ object DecisionTree extends Serializable with Logging {
      * b21, b22, .. , b2k,
      * bl1, bl2, .. , blk
      * Denotes invalid sample for tree by noting bin for feature 1 as -1
-    */
+     */
     def findBinsForLevel(labeledPoint: LabeledPoint): Array[Double] = {
 
       // calculating bin index and label per feature per node
