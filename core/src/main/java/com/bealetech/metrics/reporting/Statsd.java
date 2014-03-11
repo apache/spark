@@ -4,11 +4,12 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.io.*;
+import java.util.*;
+import java.util.regex.Pattern;
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
 import java.net.SocketException;
-import java.util.regex.Pattern;
 
 /**
  * A client to a StatsD server.
@@ -63,16 +64,44 @@ public class Statsd implements Closeable {
                 statTypeStr = "ms";
                 break;
         }
+        name = sanitizeString(name);
+        String tags = null;
+        List<String> parts = new ArrayList<String>(Arrays.asList(name.split("\\.")));
+        String prefix = parts.remove(0);
+        String source = parts.remove(0);
+        if (source.equals("executor")) { // "spark.executor.0.filesystem.file.largeRead_ops" (ExecutorSource)
+            String executorId = parts.remove(0);
+            tags = String.format("#executor:%s", executorId);
+            name = String.format("%s.%s.", prefix, source) + String.format("%s_%s_%s", parts.toArray());
+        } else if (source.equals("application")) { // "spark.application.Apriori.1394489355680.runtime_ms" (ApplicationSource)
+            String applicationName = parts.remove(0);
+            String currentTime = parts.remove(0);
+            String metricName = parts.remove(0);
+            tags = String.format("#application:%s", applicationName);
+            name = String.format("%s.%s.", prefix, source) + metricName;
+        } else {
+            String realSource = parts.remove(0);
+            // "spark.OrdersModel.DAGScheduler.stage.failedStages" (DAGSchedulerSource)
+            // "spark.OrdersModel.BlockManager.memory.maxMem_MB" (BlockManagerSource)
+            if (realSource.equals("DAGScheduler") || realSource.equals("BlockManager")) {
+                tags = String.format("#application:%s", source);
+                name = String.format("%s.application.%s.", prefix, realSource) + String.format("%s_%s", parts.toArray());
+            }
+        }
 
         try {
             if (prependNewline) {
                 writer.write("\n");
             }
-            writer.write(sanitizeString(name));
+            writer.write(name);
             writer.write(":");
             writer.write(value);
             writer.write("|");
             writer.write(statTypeStr);
+            if (tags != null) {
+              writer.write("|");
+              writer.write(tags);
+            }
             prependNewline = true;
             writer.flush();
         } catch (IOException e) {

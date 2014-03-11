@@ -17,6 +17,7 @@ conf/java-opts
 conf/spark-env.sh
 conf/streaming-env.sh
 conf/log4j.properties
+conf/metrics.properties
 docs/_site
 docs/api
 target/
