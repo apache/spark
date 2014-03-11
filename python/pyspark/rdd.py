@@ -613,14 +613,6 @@ class RDD(object):
         return self.stats().sampleVariance()
 
     def getBuckets(self, bucketCount):
-        """
-        Compute a histogram of the data using bucketCount number of buckets
-        evenly spaced between the min and max of the RDD.
-
-        >>> sc.parallelize([1,49, 23, 100, 75, 50]).histogram()
-        {(0,49):3, (50, 100):3}
-        """
-
         #use the statscounter as a quick way of getting max and min
         mm_stats = self.stats()
         min = mm_stats.min()
@@ -634,6 +626,14 @@ class RDD(object):
         return buckets
 
     def histogram(self, bucketCount, buckets=None):
+                """
+        Compute a histogram of the data using bucketCount number of buckets
+        evenly spaced between the min and max of the RDD.
+
+        >>> sc.parallelize([1,49, 23, 100, 12, 13, 20, 22, 75, 50]).histogram(3)
+        defaultdict(<type 'int'>, {(67, inf): 2, (1, 33): 6, (34, 66): 2})
+        """
+
         evenBuckets = False
         if not buckets:
             buckets = self.getBuckets(bucketCount)
