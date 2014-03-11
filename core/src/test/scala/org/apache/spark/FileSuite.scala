@@ -28,6 +28,8 @@ import org.apache.hadoop.mapred.FileAlreadyExistsException
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkContext._
+import org.apache.hadoop.hbase.util.Bytes
+import org.apache.hadoop.hbase.{HConstants, HBaseTestingUtility}
 import org.apache.hadoop.mapreduce.lib.output.TextOutputFormat
 
 class FileSuite extends FunSuite with LocalSparkContext {
@@ -195,6 +197,27 @@ class FileSuite extends FunSuite with LocalSparkContext {
     val output =
         sc.newAPIHadoopFile[IntWritable, Text, SequenceFileInputFormat[IntWritable, Text]](outputDir)
     assert(output.map(_.toString).collect().toList === List("(1,a)", "(2,aa)", "(3,aaa)"))
+  }
+
+  test("write SequenceFile using HBase") {
+    sc = new SparkContext("local", "test")
+    val nums = sc.makeRDD(1 to 3).map(x => (x, new Text("a" + x + " 1.0")))
+
+    val table = "test"
+    val rowkeyType = HBaseType.String
+    val cfBytes = Bytes.toBytes("cf")
+    val columns = List[HBaseColumn](new HBaseColumn(cfBytes, Bytes.toBytes("qual0"), HBaseType.Float))
+    val delimiter = ' '
+
+    val util = new HBaseTestingUtility()
+    util.startMiniCluster()
+    util.createTable(Bytes.toBytes(table), cfBytes)
+    val conf = util.getConfiguration
+    val zkHost = conf.get(HConstants.ZOOKEEPER_QUORUM)
+    val zkPort = conf.get(HConstants.ZOOKEEPER_CLIENT_PORT)
+    val zkNode = conf.get(HConstants.ZOOKEEPER_ZNODE_PARENT)
+
+    nums.saveAsHBaseTable(zkHost, zkPort, zkNode, table, rowkeyType, columns, delimiter)
   }
 
   test("file caching") {
