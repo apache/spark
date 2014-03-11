@@ -91,6 +91,8 @@ object SparkBuild extends Build {
   lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
   val maybeAvro = if (hadoopVersion.startsWith("0.23.") && isYarnEnabled) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
 
+  lazy val hbaseVersion = Properties.envOrElse("SPARK_HBASE_VERSION", HBASE_VERSION)
+
   // Conditionally include the java 8 sub-project
   lazy val javaVersion = System.getProperty("java.specification.version")
   lazy val isJava8Enabled = javaVersion.toDouble >= "1.8".toDouble
@@ -292,6 +294,9 @@ object SparkBuild extends Build {
         "net.java.dev.jets3t"        % "jets3t"           % "0.7.1" excludeAll(excludeCommonsLogging),
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
         "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm),
+        "org.apache.hadoop"          % "hadoop-test"      % hadoopVersion                  % "test",
+        "org.apache.hbase"           % "hbase"            % hbaseVersion,
+        "org.apache.hbase"           % "hbase"            % hbaseVersion                   % "test" classifier "tests",
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeNetty),
         "com.codahale.metrics"       % "metrics-core"     % "3.0.0",
         "com.codahale.metrics"       % "metrics-jvm"      % "3.0.0",

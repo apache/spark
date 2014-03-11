@@ -36,6 +36,7 @@ import org.apache.hadoop.io.compress.CompressionCodec
 import org.apache.hadoop.mapred.{FileOutputCommitter, FileOutputFormat, JobConf, OutputFormat}
 import org.apache.hadoop.mapreduce.{OutputFormat => NewOutputFormat, Job => NewAPIHadoopJob, RecordWriter => NewRecordWriter, JobContext, SparkHadoopMapReduceUtil}
 import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutputFormat}
+import org.apache.hadoop.io.Text
 
 // SparkHadoopWriter and SparkHadoopMapReduceUtil are actually source files defined in Spark.
 import org.apache.hadoop.mapred.SparkHadoopWriter
@@ -744,6 +745,23 @@ class PairRDDFunctions[K: ClassTag, V: ClassTag](self: RDD[(K, V)])
 
     self.context.runJob(self, writeToFile _)
     writer.commitJob()
+  }
+
+  def saveAsHBaseTable(zkHost: String, zkPort: String, zkNode: String,
+                       table: String, rowkeyType: String, columns: List[HBaseColumn], delimiter: Char) {
+    val conf = new HBaseConf(zkHost, zkPort, zkNode, table, rowkeyType, columns, delimiter)
+
+    def writeToHBase(context: TaskContext, iter: Iterator[(K, V)]) {
+      val writer = new SparkHBaseWriter(conf)
+      writer.setup()
+
+      while(iter.hasNext) {
+        val record = iter.next()
+        writer.write(record._2.asInstanceOf[Text])
+      }
+    }
+
+    self.context.runJob(self, writeToHBase _)
   }
 
   /**
