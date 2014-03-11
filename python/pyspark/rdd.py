@@ -623,7 +623,7 @@ class RDD(object):
         if increment != 0:
             buckets = range(min,max, increment)
 
-        return buckets
+        return {"min":min, "max":max, "buckets":buckets}
 
     def histogram(self, bucketCount, buckets=None):
         """
@@ -633,10 +633,15 @@ class RDD(object):
         >>> sc.parallelize([1,49, 23, 100, 12, 13, 20, 22, 75, 50]).histogram(3)
         defaultdict(<type 'int'>, {(67, inf): 2, (1, 33): 6, (34, 66): 2})
         """
-
+        min = float("-inf")
+        max = float("inf")
         evenBuckets = False
         if not buckets:
-            buckets = self.getBuckets(bucketCount)
+            b = self.getBuckets(bucketCount)
+            buckets = b["buckets"]
+            min = b["min"]
+            max = b["max"]
+            
         if len(buckets) < 2:
             raise ValueError("requires more than 1 bucket")
         if len(buckets) % 2 == 0:
@@ -649,9 +654,9 @@ class RDD(object):
                 if k < len(buckets) and k > 0:
                     key = (buckets[k-1], buckets[k]-1)
                 elif k == len(buckets):
-                    key = (buckets[k-1], float("inf"))
+                    key = (buckets[k-1], max)
                 elif k == 0:
-                    key = (float("-inf"), buckets[k]-1)
+                    key = (min, buckets[k]-1)
                 counters[key] += 1
             yield counters
             
