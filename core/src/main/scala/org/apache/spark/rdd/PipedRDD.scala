@@ -65,9 +65,9 @@ class PipedRDD[T: ClassTag](
    * A FilenameFilter that accepts anything that isn't equal to the name passed in.
    * @param name of file or directory to leave out
    */
-  class NotEqualsFileNameFilter(name: String) extends FilenameFilter {
+  class NotEqualsFileNameFilter(filterName: String) extends FilenameFilter {
     def accept(dir: File, name: String): Boolean = {
-      !name.equals(name)
+      !name.equals(filterName)
     }
   }
 
@@ -92,7 +92,7 @@ class PipedRDD[T: ClassTag](
     logDebug("taskDirectory = " + taskDirectory)
     if (separateWorkingDir == true) {
       val currentDir = new File(".")
-      logDebug("currentDir = " + currentDir)
+      logDebug("currentDir = " + currentDir.getAbsolutePath())
       val taskDirFile = new File(taskDirectory)
       taskDirFile.mkdirs()
 
