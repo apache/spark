@@ -99,16 +99,16 @@ With this mode, your application is actually run on the remote machine where the
 
 ## Launch spark application with yarn-client mode.
 
-With yarn-client mode, the application will be launched locally. Just like running application or spark-shell on Local / Mesos / Standalone mode. The launch method is also the similar with them, just make sure that when you need to specify a master url, use "yarn-client" instead. And you also need to export the env value for SPARK_JAR.
+With yarn-client mode, the application will be launched locally, as when running the application or spark-shell on Local / Mesos / Standalone mode. The method to launch is similar as with those modes, except you should specify "yarn-client" as the master URL. You also need to export the env value for SPARK_JAR.
 
 Configuration in yarn-client mode:
 
-In order to tune worker core/number/memory etc. You need to export environment variables or add them to the spark configuration file (./conf/spark_env.sh). The following are the list of options.
+In order to tune worker core/number/memory etc. you need to export environment variables or add them to the spark configuration file (./conf/spark_env.sh). The following are the list of options.
 
 * `SPARK_WORKER_INSTANCES`, Number of workers to start (Default: 2)
-* `SPARK_WORKER_CORES`, Number of cores for the workers (Default: 1).
+* `SPARK_WORKER_CORES`, Number of cores for the workers (Default: 1)
 * `SPARK_WORKER_MEMORY`, Memory per Worker (e.g. 1000M, 2G) (Default: 1G)
-* `SPARK_MASTER_MEMORY`, Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)
+* `SPARK_MASTER_MEMORY`, Memory for Master (e.g. 1000M, 2G) (Default: 512 M)
 * `SPARK_YARN_APP_NAME`, The name of your application (Default: Spark)
 * `SPARK_YARN_QUEUE`, The hadoop queue to use for allocation requests (Default: 'default')
 * `SPARK_YARN_DIST_FILES`, Comma separated list of files to be distributed with the job.
