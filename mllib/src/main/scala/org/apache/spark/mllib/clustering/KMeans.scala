@@ -195,11 +195,11 @@ class KMeans private (
         val counts = Array.fill(runs, k)(0L)
 
         points.foreach { point =>
-          activeRuns.foreach { r =>
-            val (bestCenter, cost) = KMeans.findClosest(centers(r), point)
-            costAccums(r) += cost
-            sums(r)(bestCenter) += point.vector
-            counts(r)(bestCenter) += 1
+          (0 until runs).foreach { i =>
+            val (bestCenter, cost) = KMeans.findClosest(activeCenters(i), point)
+            costAccums(i) += cost
+            sums(i)(bestCenter) += point.vector
+            counts(i)(bestCenter) += 1
           }
         }
 
@@ -210,7 +210,7 @@ class KMeans private (
       }.reduceByKey(mergeContribs).collectAsMap()
 
       // Update the cluster centers and costs for each active run
-      for ((run, i) <- activeRuns.view.zipWithIndex) {
+      for ((run, i) <- activeRuns.zipWithIndex) {
         var changed = false
         var j = 0
         while (j < k) {
@@ -242,10 +242,13 @@ class KMeans private (
     if (iteration == maxIterations) {
       logInfo(s"KMeans reached the max number of iterations: $maxIterations.")
     } else {
-      logInfo(s"Kmeans converged in $iteration iterations.")
+      logInfo(s"KMeans converged in $iteration iterations.")
     }
 
-    val bestRun = costs.zipWithIndex.min._2
+    val (minCost, bestRun) = costs.zipWithIndex.min
+
+    logInfo(s"The cost for the best run is $minCost.")
+
     new KMeansModel(centers(bestRun).map { v =>
       v.vector.toArray
     })
