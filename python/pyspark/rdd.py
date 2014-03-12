@@ -38,6 +38,7 @@ from pyspark.rddsampler import RDDSampler
 
 from py4j.java_collections import ListConverter, MapConverter
 
+from statsd import DogStatsd as statsd
 
 __all__ = ["RDD"]
 
@@ -853,13 +854,20 @@ class RDD(object):
         outputSerializer = self.ctx._unbatched_serializer
         def add_shuffle_key(split, iterator):
 
+            client = statsd()
             buckets = defaultdict(list)
+            chunk_size = 0
 
             for (k, v) in iterator:
+                chunk_size += 1
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
+            client.gauge('spark.partition_metric.partition_chunk_size', chunk_size)
+
             for (split, items) in buckets.iteritems():
+                client.gauge('spark.partition_metric.partition_{}'.format(split), len(items))
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
+
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
         with _JavaStackTrace(self.context) as st:
