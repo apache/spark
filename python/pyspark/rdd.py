@@ -861,16 +861,18 @@ class RDD(object):
             buckets = defaultdict(list)
             chunk_size = 0
 
-
             for (k, v) in iterator:
                 chunk_size += 1
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
             client.gauge('spark.partition_metric.partition_chunk_size', chunk_size, tags=[app_name])
 
             for (split, items) in buckets.iteritems():
-                statsd_tags = [app_name, "partition_{}".format(split)]
+                statsd_tags = [app_name, "partition:{}".format(split)]
                 if len(items) > 0:
-                    client.set('spark.partition_metric.item_size', sys.getsizeof(items[0], -1), tags=statsd_tags)
+                    client.set(
+                        'spark.partition_metric.item_size',
+                        sys.getsizeof(items[0], -1),
+                        tags=statsd_tags)
 
                 client.gauge(
                     'spark.partition_metric.partition_size',
