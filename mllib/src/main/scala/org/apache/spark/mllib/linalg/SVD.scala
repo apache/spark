@@ -109,7 +109,7 @@ object SVD {
 
     // Construct jblas A^T A locally
     val ata = DoubleMatrix.zeros(n, n)
-    for (entry <- emits.toArray) {
+    for (entry <- emits.collect()) {
       ata.put(entry._1._1, entry._1._2, entry._2)
     }
 
@@ -178,7 +178,7 @@ object SVD {
     val s = decomposed.S.data
     val v = decomposed.V.data
     
-    println("Computed " + s.toArray.length + " singular values and vectors")
+    println("Computed " + s.collect().length + " singular values and vectors")
     u.saveAsTextFile(output_u)
     s.saveAsTextFile(output_s)
     v.saveAsTextFile(output_v)
