@@ -62,7 +62,7 @@ The command to launch the Spark application on the cluster is as follows:
       --args <APP_MAIN_ARGUMENTS> \
       --num-executors <NUMBER_OF_EXECUTOR_PROCESSES> \
       --am-class <ApplicationMaster_CLASS>
-      --am-memory <MEMORY_FOR_ApplicationMaster> \
+      --driver-memory <MEMORY_FOR_ApplicationMaster> \
       --executor-memory <MEMORY_PER_EXECUTOR> \
       --executor-cores <CORES_PER_EXECUTOR> \
       --name <application_name> \
@@ -86,7 +86,7 @@ For example:
           --class org.apache.spark.examples.SparkPi \
           --args yarn-cluster \
           --num-executors 3 \
-          --am-memory 4g \
+          --driver-memory 4g \
           --executor-memory 2g \
           --executor-cores 1
 
@@ -105,7 +105,7 @@ In order to tune executor cores/number/memory etc., you need to export environme
 * `SPARK_EXECUTOR_INSTANCES`, Number of executors to start (Default: 2)
 * `SPARK_EXECUTOR_CORES`, Number of cores per executor (Default: 1).
 * `SPARK_EXECUTOR_MEMORY`, Memory per executor (e.g. 1000M, 2G) (Default: 1G)
-* `SPARK_AM_MEMORY`, Memory for application master (e.g. 1000M, 2G) (Default: 512 Mb)
+* `SPARK_DRIVER_MEMORY`, Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)
 * `SPARK_YARN_APP_NAME`, The name of your application (Default: Spark)
 * `SPARK_YARN_QUEUE`, The YARN queue to use for allocation requests (Default: 'default')
 * `SPARK_YARN_DIST_FILES`, Comma separated list of files to be distributed with the job.

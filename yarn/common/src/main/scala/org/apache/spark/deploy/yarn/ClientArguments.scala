@@ -74,9 +74,9 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           amClass = value
           args = tail
 
-        case ("--master-memory" | "--am-memory") :: MemoryParam(value) :: tail =>
+        case ("--master-memory" | "--driver-memory") :: MemoryParam(value) :: tail =>
           if (args(0) == "--master-memory") {
-            println("--master-memory is deprecated. Use --am-memory instead.")
+            println("--master-memory is deprecated. Use --driver-memory instead.")
           }
           amMemory = value
           args = tail
@@ -151,7 +151,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
       "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
       "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +
       "  --am-class CLASS_NAME      Class Name for application master (Default: spark.deploy.yarn.ApplicationMaster)\n" +
-      "  --am-memory MEM            Memory for application master (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
+      "  --driver-memory MEM        Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
       "  --executor-memory MEM      Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n" +
       "  --name NAME                The name of your application (Default: Spark)\n" +
       "  --queue QUEUE              The hadoop queue to use for allocation requests (Default: 'default')\n" +

@@ -58,8 +58,8 @@ private[spark] class YarnClientSchedulerBackend(
 
     // process any optional arguments, use the defaults already defined in ClientArguments 
     // if things aren't specified
-    Map("SPARK_MASTER_MEMORY" -> "--master-memory",
-      "SPARK_AM_MEMORY" -> "--am-memory",
+    Map("SPARK_MASTER_MEMORY" -> "--driver-memory",
+      "SPARK_DRIVER_MEMORY" -> "--driver-memory",
       "SPARK_WORKER_INSTANCES" -> "--num-executors",
       "SPARK_WORKER_MEMORY" -> "--executor-memory",
       "SPARK_WORKER_CORES" -> "--executor-cores",
