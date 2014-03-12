@@ -340,8 +340,8 @@ object DecisionTree extends Serializable with Logging {
         }
         throw new UnknownError("no bin was found for continuous variable.")
       } else {
-
-        for (binIndex <- 0 until strategy.numBins) {
+        val numCategoricalBins = strategy.categoricalFeaturesInfo(featureIndex)
+        for (binIndex <- 0 until numCategoricalBins) {
           val bin = bins(featureIndex)(binIndex)
           val category = bin.category
           val features = labeledPoint.features
@@ -917,13 +917,6 @@ object DecisionTree extends Serializable with Logging {
             bins(featureIndex)(numBins-1)
               = new Bin(splits(featureIndex)(numBins-2),new DummyHighSplit(featureIndex,
               Continuous), Continuous, Double.MinValue)
-          } else {
-            val maxFeatureValue = strategy.categoricalFeaturesInfo(featureIndex)
-            for (i <- maxFeatureValue until numBins){
-              bins(featureIndex)(i)
-                = new Bin(new DummyCategoricalSplit(featureIndex, Categorical),
-                new DummyCategoricalSplit(featureIndex, Categorical), Categorical, Double.MaxValue)
-            }
           }
         }
         (splits,bins)
