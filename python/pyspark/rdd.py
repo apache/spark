@@ -853,8 +853,6 @@ class RDD(object):
         # to Java.  Each object is a (splitNumber, [objects]) pair.
         outputSerializer = self.ctx._unbatched_serializer
 
-        app_name = "app_name:{}".format(self.ctx._conf.get("spark.app.name"))
-
         def add_shuffle_key(split, iterator):
 
             client = statsd()
@@ -864,27 +862,21 @@ class RDD(object):
             for (k, v) in iterator:
                 chunk_size += 1
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
-            client.gauge('spark.partition_metric.partition_chunk_size', chunk_size, tags=[app_name])
+            client.set('spark.partition_metric.partition_chunk_size', chunk_size)
+
+            max_partition_size = None
+            min_partition_size = None
 
             for (split, items) in buckets.iteritems():
-                statsd_tags = [app_name, "partition:{}".format(split)]
-
-                item_size = 0
-                if len(items) > 0:
-                    item_size = sys.getsizeof(items[0], -1)
-
-                client.set(
-                    'spark.partition_metric.item_size',
-                    item_size,
-                    tags=statsd_tags)
-
-                client.gauge(
-                    'spark.partition_metric.partition_size',
-                    len(items),
-                    tags=statsd_tags)
-
+                if max_partition_size is None or max_partition_size < len(items):
+                    max_partition_size = len(items)
+                if min_partition_size is None or min_partition_size > len(items):
+                    min_partition_size = len(items)
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
+
+            client.set('spark.partition_metric.partition_max_size', max_partition_size)
+            client.set('spark.partition_metric.partition_min_size', min_partition_size)
 
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
