@@ -404,6 +404,7 @@ object ClientBase {
       field.get(null).asInstanceOf[Array[String]]
     } catch {
       case err: NoSuchFieldError => null
+      case err: NoSuchFieldException => null
     }
   }
 
@@ -422,6 +423,7 @@ object ClientBase {
       }
     } catch {
       case err: NoSuchFieldError => null
+      case err: NoSuchFieldException => null
     }
   }
 
