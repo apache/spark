@@ -26,6 +26,7 @@ import java.util.concurrent.{ConcurrentHashMap, Executors, ThreadPoolExecutor}
 import scala.collection.JavaConversions._
 import scala.collection.Map
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.mutable.SortedSet
 import scala.io.Source
 import scala.reflect.ClassTag
 
@@ -895,4 +896,24 @@ private[spark] object Utils extends Logging {
     }
     count
   }
+
+  /**
+   * Creates a symlink. Note jdk1.7 has Files.createSymbolicLink but not used here
+   * for jdk1.6 support.  Doesn't support windows or any other platform without 'ln'.
+   * @param src absolute path to the source
+   * @param dst relative path for the destination
+   */
+  def symlink(src: File, dst: File) {
+    if (!src.isAbsolute()) {
+      throw new IOException("Source must be absolute")
+    }
+    if (dst.isAbsolute()) {
+      throw new IOException("Destination must be relative")
+    }
+    import scala.sys.process._
+    ("ln -sf " + src.getAbsolutePath() + " " + dst.getPath()) lines_! ProcessLogger(line =>
+      (logInfo(line)))
+  }
+
+
 }

@@ -123,6 +123,28 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
     }
   }
 
+  test("basic pipe with separate working directory") {
+    if (testCommandAvailable("cat")) {
+      val nums = sc.makeRDD(Array(1, 2, 3, 4), 2)
+
+      val piped = nums.pipe(Seq("cat"), separateWorkingDir = true)
+
+      val c = piped.collect()
+      assert(c.size === 4)
+      assert(c(0) === "1")
+      assert(c(1) === "2")
+      assert(c(2) === "3")
+      assert(c(3) === "4")
+      val pipedPwd = nums.pipe(Seq("pwd"), separateWorkingDir = true)
+      val collectPwd = pipedPwd.collect()
+      println("collect pwd is: " + collectPwd(0))
+      assert(collectPwd(0).contains("tasks/"))
+      assert(collectPwd(0).matches("tasks/"))
+    } else {
+      assert(true)
+    }
+  }
+
   test("test pipe exports map_input_file") {
     testExportInputFile("map_input_file")
   }
