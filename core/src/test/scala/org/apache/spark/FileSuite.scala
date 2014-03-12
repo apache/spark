@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import java.io.{File, FileWriter}
+import java.util.concurrent.Semaphore
 
 import scala.io.Source
 import scala.util.Try
@@ -42,18 +43,46 @@ class FileSuite extends FunSuite with LocalSparkContext {
     def canLoadClass(clazz: String) =
       Try(Class.forName(clazz, true, Thread.currentThread().getContextClassLoader)).isSuccess
 
-    val driverLoadedBefore = canLoadClass("HelloSpark")
+    val loadedBefore = canLoadClass("HelloSpark")
 
     val conf = new SparkConf().setMaster("local-cluster[1,1,512]").setAppName("test")
       .set("spark.driver.loadAddedJars", "true")
 
-    val sc = new SparkContext(conf)
-    sc.addJar(jarFile.getAbsolutePath)
+    var driverLoadedAfter = false
+    var childLoadedAfter = false
 
-    val driverLoadedAfter = canLoadClass("HelloSpark")
+    val sem = new Semaphore(1)
+    sem.acquire()
 
-    assert(false === driverLoadedBefore, "Class visible before being added")
+    new Thread() {
+      override def run() {
+        val sc = new SparkContext(conf)
+        sc.addJar(jarFile.getAbsolutePath)
+        driverLoadedAfter = canLoadClass("HelloSpark")
+
+        // Test visibility in a child thread
+        val childSem = new Semaphore(1)
+        childSem.acquire()
+        new Thread() {
+          override def run() {
+            childLoadedAfter = canLoadClass("HelloSpark")
+            childSem.release()
+          }
+        }.start()
+
+        childSem.acquire()
+        sem.release()
+      }
+    }.start()
+    sem.acquire()
+
+    // Test visibility in a parent thread
+    val parentLoadedAfter = canLoadClass("HelloSpark")
+
+    assert(false === loadedBefore, "Class visible before being added")
     assert(true === driverLoadedAfter, "Class was not visible after being added")
+    assert(true === childLoadedAfter, "Class was not visible to child thread after being added")
+    assert(false === parentLoadedAfter, "Class was visible to parent thread after being added")
   }
 
   test("text files") {
