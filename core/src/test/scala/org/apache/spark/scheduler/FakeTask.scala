@@ -39,4 +39,15 @@ object FakeTask {
     }
     new TaskSet(tasks, 0, 0, 0, null)
   }
+
+  def createTaskSet(numTasks: Int, stageId: Int, attempt: Int,
+                    prefLocs: Seq[TaskLocation]*): TaskSet = {
+    if (prefLocs.size != 0 && prefLocs.size != numTasks) {
+      throw new IllegalArgumentException("Wrong number of task locations")
+    }
+    val tasks = Array.tabulate[Task[_]](numTasks) { i =>
+      new FakeTask(i, if (prefLocs.size != 0) prefLocs(i) else Nil)
+    }
+    new TaskSet(tasks, stageId, attempt, 0, null)
+  }
 }
