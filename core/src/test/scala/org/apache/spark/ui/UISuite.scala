@@ -22,10 +22,10 @@ import java.net.ServerSocket
 import scala.util.{Failure, Success, Try}
 
 import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.servlet.ServletContextHandler
 import org.scalatest.FunSuite
 
 import org.apache.spark.SparkConf
-import org.eclipse.jetty.servlet.ServletContextHandler
 
 class UISuite extends FunSuite {
   test("jetty port increases under contention") {

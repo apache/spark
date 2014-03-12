@@ -143,7 +143,7 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
       // create executor summary map if necessary
       val executorSummaryMap = stageIdToExecutorSummaries.getOrElseUpdate(key = sid,
         op = new HashMap[String, ExecutorSummary]())
-      executorSummaryMap.getOrElseUpdate(key = info.executorId, op = new ExecutorSummary())
+      executorSummaryMap.getOrElseUpdate(key = info.executorId, op = new ExecutorSummary)
 
       val executorSummary = executorSummaryMap.get(info.executorId)
       executorSummary match {

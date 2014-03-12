@@ -21,10 +21,10 @@ import java.util.Properties
 
 import scala.collection.Map
 
-import org.apache.spark.util.{Distribution, Utils}
 import org.apache.spark.{Logging, TaskEndReason}
 import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.storage.BlockManagerId
+import org.apache.spark.util.{Distribution, Utils}
 
 sealed trait SparkListenerEvent
 

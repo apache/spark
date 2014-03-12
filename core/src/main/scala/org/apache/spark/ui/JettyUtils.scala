@@ -180,7 +180,7 @@ private[spark] object JettyUtils extends Logging {
    * context handlers.
    *
    * If the desired port number is contended, continues incrementing ports until a free port is
-   * found. Returns the jetty Server object, the chosen port, and a mutable collection of handlers.
+   * found. Return the jetty Server object, the chosen port, and a mutable collection of handlers.
    */
   def startJettyServer(
       hostName: String,
