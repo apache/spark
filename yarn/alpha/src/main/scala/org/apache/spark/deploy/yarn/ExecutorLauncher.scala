@@ -228,7 +228,7 @@ class ExecutorLauncher(args: ApplicationMasterArguments, conf: Configuration, sp
     val t = new Thread {
       override def run() {
         while (!driverClosed) {
-          val missingExecutorCount = args.numExecutors - yarnAllocator.getnumExecutorsRunning
+          val missingExecutorCount = args.numExecutors - yarnAllocator.getNumExecutorsRunning
           if (missingExecutorCount > 0) {
             logInfo("Allocating " + missingExecutorCount + " containers to make up for (potentially ?) lost containers")
             yarnAllocator.allocateContainers(missingExecutorCount)

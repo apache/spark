@@ -362,7 +362,7 @@ trait ClientBase extends Logging {
         userArgsToString(args) +
         " --executor-memory " + args.executorMemory +
         " --executor-cores " + args.executorCores +
-        " --num-executor " + args.numExecutors +
+        " --num-executors " + args.numExecutors +
         " 1> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stdout" +
         " 2> " + ApplicationConstants.LOG_DIR_EXPANSION_VAR + "/stderr")
 

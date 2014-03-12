@@ -61,7 +61,6 @@ The command to launch the Spark application on the cluster is as follows:
       --class <APP_MAIN_CLASS> \
       --args <APP_MAIN_ARGUMENTS> \
       --num-executors <NUMBER_OF_EXECUTOR_PROCESSES> \
-      --am-class <ApplicationMaster_CLASS>
       --driver-memory <MEMORY_FOR_ApplicationMaster> \
       --executor-memory <MEMORY_PER_EXECUTOR> \
       --executor-cores <CORES_PER_EXECUTOR> \
