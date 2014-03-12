@@ -29,6 +29,10 @@ import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
 
+/**
+ * A breeze vector with its squared norm for fast distance computation.
+ * See [[org.apache.spark.mllib.clustering.KMeans.fastSquaredDistance()]].
+ */
 private[clustering]
 class BreezeVectorWithSquaredNorm(val vector: BV[Double], val squaredNorm: Double)
   extends Serializable {
@@ -130,6 +134,7 @@ class KMeans private (
    * performance, because this is an iterative algorithm.
    */
   def run(data: RDD[Vector])(implicit d: DummyImplicit): KMeansModel = {
+    // Compute squared norms and cache them.
     val squaredNorms = data.map { v =>
       val nrm = breezeNorm(v.toBreeze, 2.0)
       nrm * nrm
@@ -144,7 +149,7 @@ class KMeans private (
   }
 
   /**
-   * Implementation using Breeze.
+   * Implementation of K-Means using breeze.
    */
   private def runBreeze(data: RDD[BreezeVectorWithSquaredNorm]): KMeansModel = {
 
