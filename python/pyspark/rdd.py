@@ -864,7 +864,10 @@ class RDD(object):
             client.gauge('spark.partition_metric.partition_chunk_size', chunk_size)
 
             for (split, items) in buckets.iteritems():
-                client.gauge('spark.partition_metric.partition_{}'.format(split), len(items))
+                client.gauge(
+                    'spark.partition_metric.partition_size'.format(split),
+                    len(items),
+                    tags=["partition_{}".format(split)])
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
 
