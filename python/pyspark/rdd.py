@@ -869,14 +869,14 @@ class RDD(object):
             for (split, items) in buckets.iteritems():
                 statsd_tags = ["partition:{}".format(split)]
 
-                item_size = 0
-                if len(items) > 0:
-                    item_size = sys.getsizeof(items[0], -1)
+                #item_size = 0
+                #if len(items) > 0:
+                #    item_size = sys.getsizeof(items[0], -1)
 
-                client.set(
-                    'spark.partition_metric.item_size',
-                    item_size,
-                    tags=statsd_tags)
+                #client.set(
+                #    'spark.partition_metric.item_size',
+                #    item_size,
+                #    tags=statsd_tags)
 
                 client.gauge(
                     'spark.partition_metric.partition_size',
