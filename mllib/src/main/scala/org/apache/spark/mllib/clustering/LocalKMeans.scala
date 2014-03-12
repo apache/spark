@@ -21,11 +21,13 @@ import scala.util.Random
 
 import breeze.linalg.{Vector => BV, DenseVector => BDV, norm => breezeNorm}
 
+import org.apache.spark.Logging
+
 /**
  * An utility object to run K-means locally. This is private to the ML package because it's used
  * in the initialization of KMeans but not meant to be publicly exposed.
  */
-private[mllib] object LocalKMeans {
+private[mllib] object LocalKMeans extends Logging {
 
   def kMeansPlusPlus(
       seed: Int,
@@ -63,7 +65,7 @@ private[mllib] object LocalKMeans {
     for (i <- 1 until k) {
       // Pick the next center with a probability proportional to cost under current centers
       val curCenters = centers.view.take(i)
-      val sum = points.zip(weights).map { case (p, w) =>
+      val sum = points.view.zip(weights).map { case (p, w) =>
         w * KMeans.pointCost(curCenters, p)
       }.sum
       val r = rand.nextDouble() * sum
@@ -82,11 +84,13 @@ private[mllib] object LocalKMeans {
     var moved = true
     while (moved && iteration < maxIterations) {
       moved = false
+      val counts = Array.fill(k)(0.0)
       val sums = Array.fill(k)(
         BDV.zeros[Double](dimensions).asInstanceOf[BV[Double]]
       )
-      val counts = Array.fill(k)(0.0)
-      for ((p, i) <- points.zipWithIndex) {
+      var i = 0
+      while (i < points.length) {
+        val p = points(i)
         val index = KMeans.findClosest(centers, p)._1
         breeze.linalg.axpy(weights(i), p.vector, sums(index))
         counts(index) += weights(i)
@@ -94,18 +98,27 @@ private[mllib] object LocalKMeans {
           moved = true
           oldClosest(i) = index
         }
+        i += 1
       }
       // Update centers
-      for (i <- 0 until k) {
-        if (counts(i) == 0.0) {
+      var j = 0
+      while (j < k) {
+        if (counts(j) == 0.0) {
           // Assign center to a random point
-          centers(i) = points(rand.nextInt(points.length)).toDense
+          centers(j) = points(rand.nextInt(points.length)).toDense
         } else {
-          sums(i) /= counts(i)
-          centers(i) = new BreezeVectorWithSquaredNorm(sums(i))
+          sums(j) /= counts(j)
+          centers(j) = new BreezeVectorWithSquaredNorm(sums(j))
         }
+        j += 1
       }
       iteration += 1
+    }
+
+    if (iteration == maxIterations) {
+      logInfo(s"Local KMeans++ reached the max number of iterations: $maxIterations.")
+    } else {
+      logInfo(s"Local KMeans++ converged in $iteration iterations.")
     }
 
     centers

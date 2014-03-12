@@ -150,17 +150,25 @@ class KMeans private (
 
     val sc = data.sparkContext
 
+    val initStartTime = System.nanoTime()
+
     val centers = if (initializationMode == KMeans.RANDOM) {
       initRandom(data)
     } else {
       initKMeansParallel(data)
     }
 
+    val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
+    logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
+      " seconds.")
+
     val active = Array.fill(runs)(true)
     val costs = Array.fill(runs)(0.0)
 
     var activeRuns = new ArrayBuffer[Int] ++ (0 until runs)
     var iteration = 0
+
+    val iterationStartTime = System.nanoTime()
 
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
@@ -181,11 +189,13 @@ class KMeans private (
         val sums = Array.fill(runs, k)(BDV.zeros[Double](dims).asInstanceOf[BV[Double]])
         val counts = Array.fill(runs, k)(0L)
 
-        for (point <- points; (centers, runIndex) <- activeCenters.zipWithIndex) {
-          val (bestCenter, cost) = KMeans.findClosest(centers, point)
-          costAccums(runIndex) += cost
-          sums(runIndex)(bestCenter) += point.vector
-          counts(runIndex)(bestCenter) += 1
+        points.foreach { point =>
+          activeRuns.foreach { r =>
+            val (bestCenter, cost) = KMeans.findClosest(centers(r), point)
+            costAccums(r) += cost
+            sums(r)(bestCenter) += point.vector
+            counts(r)(bestCenter) += 1
+          }
         }
 
         val contribs = for (i <- 0 until runs; j <- 0 until k) yield {
@@ -195,9 +205,10 @@ class KMeans private (
       }.reduceByKey(mergeContribs).collectAsMap()
 
       // Update the cluster centers and costs for each active run
-      for ((run, i) <- activeRuns.zipWithIndex) {
+      for ((run, i) <- activeRuns.view.zipWithIndex) {
         var changed = false
-        for (j <- 0 until k) {
+        var j = 0
+        while (j < k) {
           val (sum, count) = totalContribs((i, j))
           if (count != 0) {
             sum /= count.toDouble
@@ -207,6 +218,7 @@ class KMeans private (
             }
             centers(run)(j) = newCenter
           }
+          j += 1
         }
         if (!changed) {
           active(run) = false
@@ -217,6 +229,15 @@ class KMeans private (
 
       activeRuns = activeRuns.filter(active(_))
       iteration += 1
+    }
+
+    val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
+    logInfo(s"Iterations took " + "%.3f".format(iterationTimeInSeconds) + " seconds.")
+
+    if (iteration == maxIterations) {
+      logInfo(s"KMeans reached the max number of iterations: $maxIterations.")
+    } else {
+      logInfo(s"Kmeans converged in $iteration iterations.")
     }
 
     val bestRun = costs.zipWithIndex.min._2
@@ -255,28 +276,34 @@ class KMeans private (
 
     // On each step, sample 2 * k points on average for each run with probability proportional
     // to their squared distance from that run's current centers
-    for (step <- 0 until initializationSteps) {
+    var step = 0
+    while (step < initializationSteps) {
       val sumCosts = data.flatMap { point =>
-        for (r <- 0 until runs) yield (r, KMeans.pointCost(centers(r), point))
+        (0 until runs).map { r =>
+          (r, KMeans.pointCost(centers(r), point))
+        }
       }.reduceByKey(_ + _).collectAsMap()
       val chosen = data.mapPartitionsWithIndex { (index, points) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
-        for {
-          p <- points
-          r <- 0 until runs
-          if rand.nextDouble() < KMeans.pointCost(centers(r), p) * 2 * k / sumCosts(r)
-        } yield (r, p)
+        points.flatMap { p =>
+          (0 until runs).filter { r =>
+            rand.nextDouble() < 2.0 * KMeans.pointCost(centers(r), p) * k / sumCosts(r)
+          }.map((_, p))
+        }
       }.collect()
-      for ((r, p) <- chosen) {
+      chosen.foreach { case (r, p) =>
         centers(r) += p.toDense
       }
+      step += 1
     }
 
     // Finally, we might have a set of more than k candidate centers for each run; weigh each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
     // on the weighted centers to pick just k of them
     val weightMap = data.flatMap { p =>
-      for (r <- 0 until runs) yield ((r, KMeans.findClosest(centers(r), p)._1), 1.0)
+      (0 until runs).map { r =>
+        ((r, KMeans.findClosest(centers(r), p)._1), 1.0)
+      }
     }.reduceByKey(_ + _).collectAsMap()
     val finalCenters = (0 until runs).map { r =>
       val myCenters = centers(r).toArray

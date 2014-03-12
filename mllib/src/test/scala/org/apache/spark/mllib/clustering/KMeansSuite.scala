@@ -131,7 +131,8 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
   }
 
   test("single cluster with sparse data") {
-    val n = 1000000
+
+    val n = 10000
     val data = sc.parallelize((1 to 100).flatMap { i =>
       val x = i / 1000.0
       Array(
