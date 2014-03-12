@@ -213,14 +213,10 @@ class JobLogger(val user: String, val logDirName: String)
    * @param indent Indent number before info
    */
   protected def recordRddInStageGraph(jobID: Int, rdd: RDD[_], indent: Int) {
+    val cacheStr = if (rdd.getStorageLevel != StorageLevel.NONE) "CACHED" else "NONE"
     val rddInfo =
-      if (rdd.getStorageLevel != StorageLevel.NONE) {
-        "RDD_ID=" + rdd.id + " " + getRddName(rdd) + " CACHED" + " " +
-                rdd.origin + " " + rdd.generator
-      } else {
-        "RDD_ID=" + rdd.id + " " + getRddName(rdd) + " NONE" + " " +
-                rdd.origin + " " + rdd.generator
-      }
+      s"RDD_ID=$rdd.id ${getRddName(rdd)} $cacheStr " +
+      s"${rdd.getCreationSite} ${rdd.creationSiteInfo.firstUserClass}"
     jobLogInfo(jobID, indentString(indent) + rddInfo, false)
     rdd.dependencies.foreach {
       case shufDep: ShuffleDependency[_, _] =>
