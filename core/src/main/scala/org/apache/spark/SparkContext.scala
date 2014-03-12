@@ -823,17 +823,18 @@ class SparkContext(
             path
         }
 
-        // Add jar to driver class loader so it is available for driver, even if it is not on the classpath
+        // Add jar to driver class loader so it is available for driver,
+        // even if it is not on the classpath
         uri.getScheme match {
           case null | "file" | "local" =>
-            // Assume file exists on current (driver) node as well.  Unlike executors, driver doesn't need to
-            // download the jar since it's local.
+            // Assume file exists on current (driver) node as well.  Unlike executors, driver
+            // doesn't need to download the jar since it's local.
             addUrlToDriverLoader(new URL("file:" + uri.getPath))
           case "http" | "https" | "ftp" =>
             // Should be handled by the URLClassLoader, pass along entire URL
             addUrlToDriverLoader(new URL(path))
           case other =>
-            logWarning("This URI scheme for URI " + path + " is not supported by the driver class loader")
+            logWarning(s"This URI scheme for URI $path is not supported by the driver class loader")
         }
       }
       if (key != null) {
