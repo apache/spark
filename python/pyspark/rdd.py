@@ -36,6 +36,7 @@ from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler
+from pyspark.storagelevel import StorageLevel
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -1119,6 +1120,47 @@ class RDD(object):
                                              other._jrdd_deserializer)
         return RDD(pairRDD, self.ctx, deserializer)
 
+    def name(self):
+        """
+        Return the name of this RDD.
+        """
+        name_ = self._jrdd.name()
+        if not name_:
+            return None
+        return name_.encode('utf-8')
+
+    def setName(self, name):
+        """
+        Assign a name to this RDD.
+        >>> rdd1 = sc.parallelize([1,2])
+        >>> rdd1.setName('RDD1')
+        >>> rdd1.name()
+        'RDD1'
+        """
+        self._jrdd.setName(name)
+
+    def toDebugString(self):
+        """
+        A description of this RDD and its recursive dependencies for debugging.
+        """
+        debug_string = self._jrdd.toDebugString()
+        if not debug_string:
+            return None
+        return debug_string.encode('utf-8')
+
+    def getStorageLevel(self):
+        """
+        Get the RDD's current storage level.
+        >>> rdd1 = sc.parallelize([1,2])
+        >>> rdd1.getStorageLevel()
+        StorageLevel(False, False, False, 1)
+        """
+        java_storage_level = self._jrdd.getStorageLevel()
+        storage_level = StorageLevel(java_storage_level.useDisk(),
+                                     java_storage_level.useMemory(),
+                                     java_storage_level.deserialized(),
+                                     java_storage_level.replication())
+        return storage_level
 
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the
