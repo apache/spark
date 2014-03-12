@@ -79,11 +79,8 @@ private[spark] class LocalActor(
  * master all run in the same JVM. It sits behind a TaskSchedulerImpl and handles launching tasks
  * on a single Executor (created by the LocalBackend) running locally.
  */
-private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, toUseCores: Int = Int.MaxValue)
+private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, val totalCores: Int)
   extends SchedulerBackend with ExecutorBackend {
-
-  val totalCores = LocalBackend.getMaxCores(
-    scheduler.sc.conf.getOption("spark.cores.max").map(_.toInt), toUseCores)
 
   var localActor: ActorRef = null
 
@@ -108,24 +105,5 @@ private[spark] class LocalBackend(scheduler: TaskSchedulerImpl, toUseCores: Int 
 
   override def statusUpdate(taskId: Long, state: TaskState, serializedData: ByteBuffer) {
     localActor ! StatusUpdate(taskId, state, serializedData)
-  }
-}
-
-private[spark] object LocalBackend {
-  private def getMaxCores(confMaxCores: Option[Int], toUseCores: Int) : Int = {
-    if (toUseCores != Int.MaxValue) {
-      // This indicates that if user explicitly pass in the desired cores,
-      // we should use it instead of default cores from spark.cores.max
-      toUseCores
-    } else {
-      val retCores = confMaxCores.getOrElse(toUseCores)
-      val realCores = Runtime.getRuntime.availableProcessors()
-      if (retCores > realCores) {
-        // If spark.cores.max specified cores is larger than logical cores, use logical cores
-        realCores
-      } else {
-        retCores
-      }
-    }
   }
 }
