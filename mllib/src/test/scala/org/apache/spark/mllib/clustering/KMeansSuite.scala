@@ -20,7 +20,7 @@ package org.apache.spark.mllib.clustering
 import org.scalatest.FunSuite
 
 import org.apache.spark.mllib.util.LocalSparkContext
-import org.apache.spark.mllib.linalg.{Vectors, Vector}
+import org.apache.spark.mllib.linalg.Vectors
 
 class KMeansSuite extends FunSuite with LocalSparkContext {
 
@@ -203,5 +203,30 @@ class KMeansSuite extends FunSuite with LocalSparkContext {
     // Neither should more runs
     model = KMeans.train(rdd, k=5, maxIterations=10, runs=5)
     assertSetsEqual(model.clusterCenters, points)
+  }
+
+  test("two clusters") {
+    val points = Array(
+      Array(0.0, 0.0),
+      Array(0.0, 0.1),
+      Array(0.1, 0.0),
+      Array(9.0, 0.0),
+      Array(9.0, 0.2),
+      Array(9.2, 0.0)
+    ).map(Vectors.dense)
+    val rdd = sc.parallelize(points, 3)
+
+    for (initMode <- Seq(RANDOM, K_MEANS_PARALLEL)) {
+      // Two iterations are sufficient no matter where the initial centers are.
+      val model = KMeans.train(rdd, k = 2, maxIterations = 2, runs = 1, initMode)
+
+      val predicts = model.predict(rdd).collect()
+
+      assert(predicts(0) === predicts(1))
+      assert(predicts(0) === predicts(2))
+      assert(predicts(3) === predicts(4))
+      assert(predicts(3) === predicts(5))
+      assert(predicts(0) != predicts(3))
+    }
   }
 }

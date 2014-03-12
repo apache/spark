@@ -28,10 +28,6 @@ import org.apache.spark.mllib.linalg.Vector
  */
 class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable {
 
-  private val breezeClusterCenters = clusterCenters.map { v =>
-    new BreezeDenseVector[Double](v)
-  }
-
   /** Total number of clusters. */
   def k: Int = clusterCenters.length
 
@@ -40,8 +36,16 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable
     KMeans.findClosest(clusterCenters, point)._1
   }
 
+  /** Returns the cluster index that a given point belongs to. */
   def predict(point: Vector): Int = {
+    val breezeClusterCenters = clusterCenters.view.map(new BreezeDenseVector[Double](_))
     KMeans.findClosest(breezeClusterCenters, point.toBreeze)._1
+  }
+
+  /** Maps given points to their cluster indices. */
+  def predict(points: RDD[Vector]): RDD[Int] = {
+    val breezeClusterCenters = clusterCenters.map(new BreezeDenseVector[Double](_))
+    points.map(p => KMeans.findClosest(breezeClusterCenters, p.toBreeze)._1)
   }
 
   /**
@@ -57,6 +61,7 @@ class KMeansModel(val clusterCenters: Array[Array[Double]]) extends Serializable
    * model on the given data.
    */
   def computeCost(data: RDD[Vector])(implicit d: DummyImplicit): Double = {
+    val breezeClusterCenters = clusterCenters.map(new BreezeDenseVector[Double](_))
     data.map(p => KMeans.pointCost(breezeClusterCenters, p.toBreeze)).sum()
   }
 }
