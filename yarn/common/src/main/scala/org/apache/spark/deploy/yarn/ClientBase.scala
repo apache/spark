@@ -29,8 +29,10 @@ import org.apache.hadoop.fs._
 import org.apache.hadoop.fs.permission.FsPermission;
 import org.apache.hadoop.io.DataOutputBuffer
 import org.apache.hadoop.mapred.Master
+import org.apache.hadoop.mapreduce.MRJobConfig
 import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
+import org.apache.hadoop.util.StringUtils
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.ApplicationConstants.Environment
 import org.apache.hadoop.yarn.api.protocolrecords._
@@ -379,8 +381,47 @@ object ClientBase {
 
   // Based on code from org.apache.hadoop.mapreduce.v2.util.MRApps
   def populateHadoopClasspath(conf: Configuration, env: HashMap[String, String]) {
-    for (c <- conf.getStrings(YarnConfiguration.YARN_APPLICATION_CLASSPATH)) {
+    val classpathEntries = Option(conf.getStrings(
+      YarnConfiguration.YARN_APPLICATION_CLASSPATH)).getOrElse(
+        getDefaultYarnApplicationClasspath())
+    for (c <- classpathEntries) {
       Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
+    }
+
+    val mrClasspathEntries = Option(conf.getStrings(
+      "mapreduce.application.classpath")).getOrElse(
+        getDefaultMRApplicationClasspath())
+    if (mrClasspathEntries != null) {
+      for (c <- mrClasspathEntries) {
+        Apps.addToEnvironment(env, Environment.CLASSPATH.name, c.trim)
+      }
+    }
+  }
+
+  def getDefaultYarnApplicationClasspath(): Array[String] = {
+    try {
+      val field = classOf[MRJobConfig].getField("DEFAULT_YARN_APPLICATION_CLASSPATH")
+      field.get(null).asInstanceOf[Array[String]]
+    } catch {
+      case err: NoSuchFieldError => null
+    }
+  }
+
+  /**
+   * In Hadoop 0.23, the MR application classpath comes with the YARN application
+   * classpath.  In Hadoop 2.0, it's an array of Strings, and in 2.2+ it's a String.
+   * So we need to use reflection to retrieve it.
+   */
+  def getDefaultMRApplicationClasspath(): Array[String] = {
+    try {
+      val field = classOf[MRJobConfig].getField("DEFAULT_MAPREDUCE_APPLICATION_CLASSPATH")
+      if (field.getType == classOf[String]) {
+        StringUtils.getStrings(field.get(null).asInstanceOf[String])
+      } else {
+        field.get(null).asInstanceOf[Array[String]]
+      }
+    } catch {
+      case err: NoSuchFieldError => null
     }
   }
 
