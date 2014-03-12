@@ -69,7 +69,7 @@ private[spark] class TaskResultGetter(sparkEnv: SparkEnv, scheduler: TaskSchedul
         } catch {
           case cnf: ClassNotFoundException =>
             val loader = Thread.currentThread.getContextClassLoader
-            taskSetManager.abort("ClassNotFound [" + cnf.getMessage + "] with classloader: " + loader)
+            taskSetManager.abort(s"ClassNotFound [${cnf.getMessage}] with classloader: " + loader)
           case ex: Throwable =>
             taskSetManager.abort("Exception while deserializing and fetching task: %s".format(ex))
         }
