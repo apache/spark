@@ -19,14 +19,29 @@ package org.apache.spark.mllib.clustering
 
 import scala.collection.mutable.ArrayBuffer
 
-import breeze.linalg.{DenseVector => BDV, Vector => BV, squaredDistance => breezeSquaredDistance}
+import breeze.linalg.{DenseVector => BDV, Vector => BV, squaredDistance => breezeSquaredDistance,
+  norm => breezeNorm}
 
 import org.apache.spark.{Logging, SparkContext}
 import org.apache.spark.SparkContext._
-import org.apache.spark.mllib.linalg.Vector
+import org.apache.spark.mllib.linalg.{Vectors, Vector}
 import org.apache.spark.mllib.util.MLUtils
 import org.apache.spark.rdd.RDD
 import org.apache.spark.util.random.XORShiftRandom
+
+/**
+ * A breeze vector with its squared norm for fast distance computation.
+ * See [[org.apache.spark.mllib.clustering.KMeans.fastSquaredDistance()]].
+ */
+private[clustering]
+class BreezeVectorWithSquaredNorm(val vector: BV[Double], val squaredNorm: Double)
+  extends Serializable {
+  def this(vector: BV[Double]) = {
+    this(vector, {val nrm = breezeNorm(vector, 2.0); nrm * nrm})
+  }
+  /** Converts the vector to a dense vector. */
+  def toDense = new BreezeVectorWithSquaredNorm(vector.toDenseVector, squaredNorm)
+}
 
 /**
  * K-means clustering with support for multiple parallel runs and a k-means++ like initialization
@@ -111,8 +126,7 @@ class KMeans private (
    * performance, because this is an iterative algorithm.
    */
   def run(data: RDD[Array[Double]]): KMeansModel = {
-    val breezeData = data.map(v => new BDV[Double](v).asInstanceOf[BV[Double]])
-    runBreeze(breezeData)
+    run(data.map(v => Vectors.dense(v)))
   }
 
   /**
@@ -120,17 +134,28 @@ class KMeans private (
    * performance, because this is an iterative algorithm.
    */
   def run(data: RDD[Vector])(implicit d: DummyImplicit): KMeansModel = {
-    val breezeData = data.map(v => v.toBreeze)
-    runBreeze(breezeData)
+    // Compute squared norms and cache them.
+    val squaredNorms = data.map { v =>
+      val nrm = breezeNorm(v.toBreeze, 2.0)
+      nrm * nrm
+    }
+    squaredNorms.persist()
+    val breezeData = data.map(_.toBreeze).zip(squaredNorms).map { case (v, squaredNorm) =>
+      new BreezeVectorWithSquaredNorm(v, squaredNorm)
+    }
+    val model = runBreeze(breezeData)
+    squaredNorms.unpersist()
+    model
   }
 
   /**
-   * Implementation using Breeze.
+   * Implementation of K-Means using breeze.
    */
-  private def runBreeze(data: RDD[BV[Double]]): KMeansModel = {
-    // TODO: check whether data is persistent; this needs RDD.storageLevel to be publicly readable
+  private def runBreeze(data: RDD[BreezeVectorWithSquaredNorm]): KMeansModel = {
 
     val sc = data.sparkContext
+
+    val initStartTime = System.nanoTime()
 
     val centers = if (initializationMode == KMeans.RANDOM) {
       initRandom(data)
@@ -138,15 +163,21 @@ class KMeans private (
       initKMeansParallel(data)
     }
 
+    val initTimeInSeconds = (System.nanoTime() - initStartTime) / 1e9
+    logInfo(s"Initialization with $initializationMode took " + "%.3f".format(initTimeInSeconds) +
+      " seconds.")
+
     val active = Array.fill(runs)(true)
     val costs = Array.fill(runs)(0.0)
 
     var activeRuns = new ArrayBuffer[Int] ++ (0 until runs)
     var iteration = 0
 
+    val iterationStartTime = System.nanoTime()
+
     // Execute iterations of Lloyd's algorithm until all runs have converged
     while (iteration < maxIterations && !activeRuns.isEmpty) {
-      type WeightedPoint = (BDV[Double], Long)
+      type WeightedPoint = (BV[Double], Long)
       def mergeContribs(p1: WeightedPoint, p2: WeightedPoint): WeightedPoint = {
         (p1._1 += p2._1, p1._2 + p2._2)
       }
@@ -158,16 +189,18 @@ class KMeans private (
       val totalContribs = data.mapPartitions { points =>
         val runs = activeCenters.length
         val k = activeCenters(0).length
-        val dims = activeCenters(0)(0).length
+        val dims = activeCenters(0)(0).vector.length
 
-        val sums = Array.fill(runs, k)(BDV.zeros[Double](dims))
+        val sums = Array.fill(runs, k)(BDV.zeros[Double](dims).asInstanceOf[BV[Double]])
         val counts = Array.fill(runs, k)(0L)
 
-        for (point <- points; (centers, runIndex) <- activeCenters.zipWithIndex) {
-          val (bestCenter, cost) = KMeans.findClosest(centers, point)
-          costAccums(runIndex) += cost
-          sums(runIndex)(bestCenter) += point
-          counts(runIndex)(bestCenter) += 1
+        points.foreach { point =>
+          activeRuns.foreach { r =>
+            val (bestCenter, cost) = KMeans.findClosest(centers(r), point)
+            costAccums(r) += cost
+            sums(r)(bestCenter) += point.vector
+            counts(r)(bestCenter) += 1
+          }
         }
 
         val contribs = for (i <- 0 until runs; j <- 0 until k) yield {
@@ -177,18 +210,20 @@ class KMeans private (
       }.reduceByKey(mergeContribs).collectAsMap()
 
       // Update the cluster centers and costs for each active run
-      for ((run, i) <- activeRuns.zipWithIndex) {
+      for ((run, i) <- activeRuns.view.zipWithIndex) {
         var changed = false
-        for (j <- 0 until k) {
+        var j = 0
+        while (j < k) {
           val (sum, count) = totalContribs((i, j))
           if (count != 0) {
             sum /= count.toDouble
-            val newCenter = sum
-            if (breezeSquaredDistance(newCenter, centers(run)(j)) > epsilon * epsilon) {
+            val newCenter = new BreezeVectorWithSquaredNorm(sum)
+            if (KMeans.fastSquaredDistance(newCenter, centers(run)(j)) > epsilon * epsilon) {
               changed = true
             }
             centers(run)(j) = newCenter
           }
+          j += 1
         }
         if (!changed) {
           active(run) = false
@@ -201,20 +236,30 @@ class KMeans private (
       iteration += 1
     }
 
+    val iterationTimeInSeconds = (System.nanoTime() - iterationStartTime) / 1e9
+    logInfo(s"Iterations took " + "%.3f".format(iterationTimeInSeconds) + " seconds.")
+
+    if (iteration == maxIterations) {
+      logInfo(s"KMeans reached the max number of iterations: $maxIterations.")
+    } else {
+      logInfo(s"Kmeans converged in $iteration iterations.")
+    }
+
     val bestRun = costs.zipWithIndex.min._2
     new KMeansModel(centers(bestRun).map { v =>
-      v.toArray
+      v.vector.toArray
     })
   }
 
   /**
    * Initialize `runs` sets of cluster centers at random.
    */
-  private def initRandom(data: RDD[BV[Double]]): Array[Array[BV[Double]]] = {
+  private def initRandom(data: RDD[BreezeVectorWithSquaredNorm])
+  : Array[Array[BreezeVectorWithSquaredNorm]] = {
     // Sample all the cluster centers in one pass to avoid repeated scans
     val sample = data.takeSample(true, runs * k, new XORShiftRandom().nextInt()).toSeq
     Array.tabulate(runs)(r => sample.slice(r * k, (r + 1) * k).map { v =>
-      v.toDenseVector
+      new BreezeVectorWithSquaredNorm(v.vector.toDenseVector, v.squaredNorm)
     }.toArray)
   }
 
@@ -227,39 +272,46 @@ class KMeans private (
    *
    * The original paper can be found at http://theory.stanford.edu/~sergei/papers/vldb12-kmpar.pdf.
    */
-  private def initKMeansParallel(data: RDD[BV[Double]]): Array[Array[BV[Double]]] = {
+  private def initKMeansParallel(data: RDD[BreezeVectorWithSquaredNorm])
+  : Array[Array[BreezeVectorWithSquaredNorm]] = {
     // Initialize each run's center to a random point
     val seed = new XORShiftRandom().nextInt()
     val sample = data.takeSample(true, runs, seed).toSeq
-    val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDenseVector))
+    val centers = Array.tabulate(runs)(r => ArrayBuffer(sample(r).toDense))
 
     // On each step, sample 2 * k points on average for each run with probability proportional
     // to their squared distance from that run's current centers
-    for (step <- 0 until initializationSteps) {
+    var step = 0
+    while (step < initializationSteps) {
       val sumCosts = data.flatMap { point =>
-        for (r <- 0 until runs) yield (r, KMeans.pointCost(centers(r), point))
+        (0 until runs).map { r =>
+          (r, KMeans.pointCost(centers(r), point))
+        }
       }.reduceByKey(_ + _).collectAsMap()
       val chosen = data.mapPartitionsWithIndex { (index, points) =>
         val rand = new XORShiftRandom(seed ^ (step << 16) ^ index)
-        for {
-          p <- points
-          r <- 0 until runs
-          if rand.nextDouble() < KMeans.pointCost(centers(r), p) * 2 * k / sumCosts(r)
-        } yield (r, p)
+        points.flatMap { p =>
+          (0 until runs).filter { r =>
+            rand.nextDouble() < 2.0 * KMeans.pointCost(centers(r), p) * k / sumCosts(r)
+          }.map((_, p))
+        }
       }.collect()
-      for ((r, p) <- chosen) {
-        centers(r) += p.toDenseVector
+      chosen.foreach { case (r, p) =>
+        centers(r) += p.toDense
       }
+      step += 1
     }
 
     // Finally, we might have a set of more than k candidate centers for each run; weigh each
     // candidate by the number of points in the dataset mapping to it and run a local k-means++
     // on the weighted centers to pick just k of them
     val weightMap = data.flatMap { p =>
-      for (r <- 0 until runs) yield ((r, KMeans.findClosest(centers(r), p)._1), 1.0)
+      (0 until runs).map { r =>
+        ((r, KMeans.findClosest(centers(r), p)._1), 1.0)
+      }
     }.reduceByKey(_ + _).collectAsMap()
     val finalCenters = (0 until runs).map { r =>
-      val myCenters = centers(r).toArray.asInstanceOf[Array[BV[Double]]]
+      val myCenters = centers(r).toArray
       val myWeights = (0 until myCenters.length).map(i => weightMap.getOrElse((r, i), 0.0)).toArray
       LocalKMeans.kMeansPlusPlus(r, myCenters, myWeights, k, 30)
     }
@@ -363,6 +415,26 @@ object KMeans {
   }
 
   /**
+   * Returns the index of the closest center to the given point, as well as the squared distance.
+   */
+  private[mllib] def findClosest(
+      centers: TraversableOnce[BreezeVectorWithSquaredNorm],
+      point: BreezeVectorWithSquaredNorm): (Int, Double) = {
+    var bestDistance = Double.PositiveInfinity
+    var bestIndex = 0
+    var i = 0
+    centers.foreach { center =>
+      val distance: Double = fastSquaredDistance(center, point)
+      if (distance < bestDistance) {
+        bestDistance = distance
+        bestIndex = i
+      }
+      i += 1
+    }
+    (bestIndex, bestDistance)
+  }
+
+  /**
    * Return the K-means cost of a given point against the given cluster centers.
    */
   private[mllib] def pointCost(centers: Array[Array[Double]], point: Array[Double]): Double = {
@@ -381,6 +453,24 @@ object KMeans {
    */
   private[mllib] def pointCost(centers: TraversableOnce[BV[Double]], point: BV[Double]): Double =
     findClosest(centers, point)._2
+
+  /**
+   * Returns the K-means cost of a given point against the given cluster centers.
+   */
+  private[mllib] def pointCost(
+      centers: TraversableOnce[BreezeVectorWithSquaredNorm],
+      point: BreezeVectorWithSquaredNorm): Double =
+    findClosest(centers, point)._2
+
+  /**
+   * Returns the squared Euclidean distance between two vectors computed by
+   * [[org.apache.spark.mllib.util.MLUtils.fastSquaredDistance()]].
+   */
+  private[clustering]
+  def fastSquaredDistance(v1: BreezeVectorWithSquaredNorm, v2: BreezeVectorWithSquaredNorm)
+  : Double = {
+    MLUtils.fastSquaredDistance(v1.vector, v1.squaredNorm, v2.vector, v2.squaredNorm)
+  }
 
   def main(args: Array[String]) {
     if (args.length < 4) {
