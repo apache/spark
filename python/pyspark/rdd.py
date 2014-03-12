@@ -38,7 +38,7 @@ from pyspark.rddsampler import RDDSampler
 
 from py4j.java_collections import ListConverter, MapConverter
 
-from statsd import DogStatsd
+from statsd import DogStatsd as statsd
 
 
 __all__ = ["RDD"]
@@ -66,9 +66,6 @@ def _extract_concise_traceback():
     return "%s at %s:%d" % (sfun, ufile, uline)
 
 _spark_stack_depth = 0
-
-def statsd():
-    return DogStatsd()
 
 class _JavaStackTrace(object):
     def __init__(self, sc):
@@ -863,7 +860,7 @@ class RDD(object):
             for (k, v) in iterator:
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
             for (split, items) in buckets.iteritems():
-                statsd().gauge('spark.partition_metric.partition_' + str(split), len(items))
+                statsd().gauge('spark.partition_metric.partition_{}'.format(split), len(items))
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
         keyed = PipelinedRDD(self, add_shuffle_key)
