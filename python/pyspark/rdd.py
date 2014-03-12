@@ -853,7 +853,7 @@ class RDD(object):
         # to Java.  Each object is a (splitNumber, [objects]) pair.
         outputSerializer = self.ctx._unbatched_serializer
 
-        app_name = "app_name:{}".format(self.ctx._conf.get("spark.app.name"))
+        #app_name = "app_name:{}".format(self.ctx._conf.get("spark.app.name"))
 
         def add_shuffle_key(split, iterator):
 
@@ -864,15 +864,19 @@ class RDD(object):
             for (k, v) in iterator:
                 chunk_size += 1
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
-            client.gauge('spark.partition_metric.partition_chunk_size', chunk_size, tags=[app_name])
+            client.gauge('spark.partition_metric.partition_chunk_size', chunk_size)
 
             for (split, items) in buckets.iteritems():
-                statsd_tags = [app_name, "partition:{}".format(split)]
+                statsd_tags = ["partition:{}".format(split)]
+
+                item_size = 0
                 if len(items) > 0:
-                    client.set(
-                        'spark.partition_metric.item_size',
-                        sys.getsizeof(items[0], -1),
-                        tags=statsd_tags)
+                    item_size = sys.getsizeof(items[0], -1)
+
+                client.set(
+                    'spark.partition_metric.item_size',
+                    item_size,
+                    tags=statsd_tags)
 
                 client.gauge(
                     'spark.partition_metric.partition_size',
