@@ -612,7 +612,7 @@ class RDD(object):
         """
         return self.stats().sampleVariance()
 
-    def getBuckets(self, bucketCount):
+    def _getBuckets(self, bucketCount):
         #use the statscounter as a quick way of getting max and min
         mm_stats = self.stats()
         min = mm_stats.min()
@@ -637,7 +637,7 @@ class RDD(object):
         max = float("inf")
         evenBuckets = False
         if not buckets:
-            b = self.getBuckets(bucketCount)
+            b = self._getBuckets(bucketCount)
             buckets = b["buckets"]
             min = b["min"]
             max = b["max"]
