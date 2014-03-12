@@ -163,7 +163,7 @@ class PipedRDD[T: ClassTag](
           }
 
           // cleanup task working directory if used
-          if(workInTaskDirectory == true) {
+          if (workInTaskDirectory == true) {
             FileUtils.deleteQuietly(new File(taskDirectory))
             logDebug("Removed task working directory " + taskDirectory)
           }

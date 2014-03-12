@@ -139,7 +139,6 @@ class PipedRDDSuite extends FunSuite with SharedSparkContext {
       val collectPwd = pipedPwd.collect()
       println("collect pwd is: " + collectPwd(0))
       assert(collectPwd(0).contains("tasks/"))
-      assert(collectPwd(0).matches("tasks/"))
     } else {
       assert(true)
     }
