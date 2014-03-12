@@ -1026,6 +1026,7 @@ abstract class RDD[T: ClassTag](
   }
 
   def cleanup() {
+    logInfo("Cleanup called on RDD " + id)
     sc.cleaner.cleanRDD(this)
     dependencies.filter(_.isInstanceOf[ShuffleDependency[_, _]])
                 .map(_.asInstanceOf[ShuffleDependency[_, _]].shuffleId)
@@ -1112,6 +1113,19 @@ abstract class RDD[T: ClassTag](
   }
 
   override def finalize() {
-    cleanup()
+    try {
+      cleanup()
+    } catch {
+      case t: Throwable =>
+        // Paranoia - If logError throws error as well, report to stderr.
+        try {
+          logError("Error in finalize", t)
+        } catch {
+          case _ =>
+            System.err.println("Error in finalize (and could not write to logError): " + t)
+        }
+    } finally {
+      super.finalize()
+    }
   }
 }

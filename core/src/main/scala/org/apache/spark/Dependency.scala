@@ -49,13 +49,26 @@ class ShuffleDependency[K, V](
     @transient rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
     val serializerClass: String = null)
-  extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
+  extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) with Logging {
 
   val shuffleId: Int = rdd.context.newShuffleId()
 
   override def finalize() {
-    if (rdd != null) {
-      rdd.sparkContext.cleaner.cleanShuffle(shuffleId)
+    try {
+      if (rdd != null) {
+        rdd.sparkContext.cleaner.cleanShuffle(shuffleId)
+      }
+    } catch {
+      case t: Throwable =>
+        // Paranoia - If logError throws error as well, report to stderr.
+        try {
+          logError("Error in finalize", t)
+        } catch {
+          case _ =>
+            System.err.println("Error in finalize (and could not write to logError): " + t)
+        }
+    } finally {
+      super.finalize()
     }
   }
 }

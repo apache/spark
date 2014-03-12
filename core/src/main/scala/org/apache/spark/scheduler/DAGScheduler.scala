@@ -123,17 +123,17 @@ class DAGScheduler(
 
   private val nextStageId = new AtomicInteger(0)
 
-  private[scheduler] val jobIdToStageIds = new TimeStampedHashMap[Int, HashSet[Int]]
+  private[scheduler] val jobIdToStageIds = new HashMap[Int, HashSet[Int]]
 
-  private[scheduler] val stageIdToJobIds = new TimeStampedHashMap[Int, HashSet[Int]]
+  private[scheduler] val stageIdToJobIds = new HashMap[Int, HashSet[Int]]
 
-  private[scheduler] val stageIdToStage = new TimeStampedHashMap[Int, Stage]
+  private[scheduler] val stageIdToStage = new HashMap[Int, Stage]
 
-  private[scheduler] val shuffleToMapStage = new TimeStampedHashMap[Int, Stage]
+  private[scheduler] val shuffleToMapStage = new HashMap[Int, Stage]
 
-  private[spark] val stageToInfos = new TimeStampedHashMap[Stage, StageInfo]
+  private[spark] val stageToInfos = new HashMap[Stage, StageInfo]
 
-  // An async scheduler event bus. The bus should be stopped when DAGSCheduler is stopped.
+  // An async scheduler event bus. The bus should be stopped when DAGScheduler is stopped.
   private[spark] val listenerBus = new SparkListenerBus
 
   // Contains the locations that each RDD's partitions are cached on
@@ -158,9 +158,6 @@ class DAGScheduler(
 
   val activeJobs = new HashSet[ActiveJob]
   val resultStageToJob = new HashMap[Stage, ActiveJob]
-
-  val metadataCleaner = new MetadataCleaner(
-    MetadataCleanerType.DAG_SCHEDULER, this.cleanup, env.conf)
 
   /**
    * Starts the event processing actor.  The actor has two responsibilities:
@@ -1094,26 +1091,10 @@ class DAGScheduler(
     Nil
   }
 
-  private def cleanup(cleanupTime: Long) {
-    Map(
-      "stageIdToStage" -> stageIdToStage,
-      "shuffleToMapStage" -> shuffleToMapStage,
-      "pendingTasks" -> pendingTasks,
-      "stageToInfos" -> stageToInfos,
-      "jobIdToStageIds" -> jobIdToStageIds,
-      "stageIdToJobIds" -> stageIdToJobIds).
-      foreach { case(s, t) => {
-      val sizeBefore = t.size
-      t.clearOldValues(cleanupTime)
-      logInfo("%s %d --> %d".format(s, sizeBefore, t.size))
-    }}
-  }
-
   def stop() {
     if (eventProcessActor != null) {
       eventProcessActor ! StopDAGScheduler
     }
-    metadataCleaner.cancel()
     taskSched.stop()
     listenerBus.stop()
   }

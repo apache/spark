@@ -19,7 +19,7 @@ package org.apache.spark
 
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 
-import java.util.concurrent.{ArrayBlockingQueue, TimeUnit}
+import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
 import org.apache.spark.rdd.RDD
 
@@ -40,8 +40,7 @@ private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
   private case class CleanShuffle(id: Int) extends CleaningTask
   // TODO: add CleanBroadcast
 
-  private val QUEUE_CAPACITY = 1000
-  private val queue = new ArrayBlockingQueue[CleaningTask](QUEUE_CAPACITY)
+  private val queue = new LinkedBlockingQueue[CleaningTask]
 
   protected val listeners = new ArrayBuffer[CleanerListener]
     with SynchronizedBuffer[CleanerListener]
