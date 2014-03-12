@@ -47,7 +47,8 @@ class UISuite extends FunSuite {
   }
 
   test("jetty binds to port 0 correctly") {
-    val (jettyServer, boundPort) = JettyUtils.startJettyServer("0.0.0.0", 0, Seq(), new SparkConf)
+    val (jettyServer, boundPort, _) = JettyUtils.startJettyServer(
+      "0.0.0.0", 0, Seq[ServletContextHandler](), new SparkConf)
     assert(jettyServer.getState === "STARTED")
     assert(boundPort != 0)
     Try {new ServerSocket(boundPort)} match {
