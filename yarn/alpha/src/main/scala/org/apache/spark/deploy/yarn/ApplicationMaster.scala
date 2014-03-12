@@ -27,7 +27,6 @@ import scala.collection.JavaConversions._
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.hadoop.net.NetUtils
-import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.util.ShutdownHookManager
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
@@ -36,7 +35,7 @@ import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
 import org.apache.hadoop.yarn.util.{ConverterUtils, Records}
 
-import org.apache.spark.{SparkConf, SparkContext, Logging}
+import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext}
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.util.Utils
 
@@ -80,6 +79,9 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     // other spark processes running on the same box
     System.setProperty("spark.ui.port", "0")
 
+    // when running the AM, the Spark master is always "yarn-cluster"
+    System.setProperty("spark.master", "yarn-cluster")
+
     // Use priority 30 as its higher then HDFS. Its same priority as MapReduce is using.
     ShutdownHookManager.get().addShutdownHook(new AppMasterShutdownHook(this), 30)
 
@@ -87,27 +89,16 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     isLastAMRetry = appAttemptId.getAttemptId() >= maxAppAttempts
     resourceManager = registerWithResourceManager()
 
-    // Workaround until hadoop moves to something which has
-    // https://issues.apache.org/jira/browse/HADOOP-8406 - fixed in (2.0.2-alpha but no 0.23 line)
-    // ignore result.
-    // This does not, unfortunately, always work reliably ... but alleviates the bug a lot of times
-    // Hence args.workerCores = numCore disabled above. Any better option?
-
-    // Compute number of threads for akka
-    //val minimumMemory = appMasterResponse.getMinimumResourceCapability().getMemory()
-    //if (minimumMemory > 0) {
-    //  val mem = args.workerMemory + YarnAllocationHandler.MEMORY_OVERHEAD
-    //  val numCore = (mem  / minimumMemory) + (if (0 != (mem % minimumMemory)) 1 else 0)
-
-    //  if (numCore > 0) {
-        // do not override - hits https://issues.apache.org/jira/browse/HADOOP-8406
-        // TODO: Uncomment when hadoop is on a version which has this fixed.
-        // args.workerCores = numCore
-    //  }
-    //}
-    // org.apache.hadoop.io.compress.CompressionCodecFactory.getCodecClasses(conf)
+    // setup AmIpFilter for the SparkUI - do this before we start the UI
+    addAmIpFilter()
 
     ApplicationMaster.register(this)
+
+    // Call this to force generation of secret so it gets populated into the
+    // hadoop UGI. This has to happen before the startUserClass which does a
+    // doAs in order for the credentials to be passed on to the worker containers.
+    val securityMgr = new SecurityManager(sparkConf)
+
     // Start the user's JAR
     userThread = startUserClass()
 
@@ -130,6 +121,20 @@ class ApplicationMaster(args: ApplicationMasterArguments, conf: Configuration,
     userThread.join()
 
     System.exit(0)
+  }
+
+  // add the yarn amIpFilter that Yarn requires for properly securing the UI
+  private def addAmIpFilter() {
+    val amFilter = "org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter"
+    System.setProperty("spark.ui.filters", amFilter)
+    val proxy = YarnConfiguration.getProxyHostAndPort(conf)
+    val parts : Array[String] = proxy.split(":")
+    val uriBase = "http://" + proxy +
+      System.getenv(ApplicationConstants.APPLICATION_WEB_PROXY_BASE_ENV)
+
+    val params = "PROXY_HOST=" + parts(0) + "," + "PROXY_URI_BASE=" + uriBase
+    System.setProperty("spark.org.apache.hadoop.yarn.server.webproxy.amfilter.AmIpFilter.params",
+      params)
   }
 
   /** Get the Yarn approved local directories. */

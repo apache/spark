@@ -20,7 +20,7 @@ package org.apache.spark.ui.jobs
 import java.text.SimpleDateFormat
 import javax.servlet.http.HttpServletRequest
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.SparkConf
 import org.apache.spark.scheduler.SchedulingMode
@@ -51,9 +51,12 @@ private[ui] class JobProgressUI(parent: SparkUI) {
 
   def formatDuration(ms: Long) = Utils.msDurationToString(ms)
 
-  def getHandlers = Seq[(String, Handler)](
-    ("/stages/stage", (request: HttpServletRequest) => stagePage.render(request)),
-    ("/stages/pool", (request: HttpServletRequest) => poolPage.render(request)),
-    ("/stages", (request: HttpServletRequest) => indexPage.render(request))
+  def getHandlers = Seq[ServletContextHandler](
+    createServletHandler("/stages/stage",
+      (request: HttpServletRequest) => stagePage.render(request), parent.securityManager, basePath),
+    createServletHandler("/stages/pool",
+      (request: HttpServletRequest) => poolPage.render(request), parent.securityManager, basePath),
+    createServletHandler("/stages",
+      (request: HttpServletRequest) => indexPage.render(request), parent.securityManager, basePath)
   )
 }

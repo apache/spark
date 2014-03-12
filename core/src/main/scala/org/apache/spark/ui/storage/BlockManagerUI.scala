@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.collection.mutable
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.ui._
 import org.apache.spark.ui.JettyUtils._
@@ -43,9 +43,11 @@ private[ui] class BlockManagerUI(parent: SparkUI) {
     _listener = Some(new BlockManagerListener(parent.storageStatusListener))
   }
 
-  def getHandlers = Seq[(String, Handler)](
-    ("/storage/rdd", (request: HttpServletRequest) => rddPage.render(request)),
-    ("/storage", (request: HttpServletRequest) => indexPage.render(request))
+  def getHandlers = Seq[ServletContextHandler](
+    createServletHandler("/storage/rdd",
+      (request: HttpServletRequest) => rddPage.render(request), parent.securityManager, basePath),
+    createServletHandler("/storage",
+      (request: HttpServletRequest) => indexPage.render(request), parent.securityManager, basePath)
   )
 }
 

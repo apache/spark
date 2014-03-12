@@ -95,6 +95,10 @@ class SparkContextSchedulerCreationSuite
     }
   }
 
+  test("yarn-cluster") {
+    testYarn("yarn-cluster", "org.apache.spark.scheduler.cluster.YarnClusterScheduler")
+  }
+
   test("yarn-standalone") {
     testYarn("yarn-standalone", "org.apache.spark.scheduler.cluster.YarnClusterScheduler")
   }

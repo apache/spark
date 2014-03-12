@@ -22,7 +22,7 @@ import javax.servlet.http.HttpServletRequest
 import scala.collection.mutable.HashMap
 import scala.xml.Node
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.ExceptionFailure
 import org.apache.spark.scheduler._
@@ -43,8 +43,9 @@ private[ui] class ExecutorsUI(parent: SparkUI) {
     _listener = Some(new ExecutorsListener(parent.storageStatusListener))
   }
 
-  def getHandlers = Seq[(String, Handler)](
-    ("/executors", (request: HttpServletRequest) => render(request))
+  def getHandlers = Seq[ServletContextHandler](
+    createServletHandler("/executors",
+      (request: HttpServletRequest) => render(request), parent.securityManager, basePath)
   )
 
   def render(request: HttpServletRequest): Seq[Node] = {

@@ -157,6 +157,21 @@
     <dependencies>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-util</artifactId>
+        <version>7.6.8.v20121106</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-security</artifactId>
+        <version>7.6.8.v20121106</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
+        <artifactId>jetty-plus</artifactId>
+        <version>7.6.8.v20121106</version>
+      </dependency>
+      <dependency>
+        <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
         <version>7.6.8.v20121106</version>
       </dependency>
@@ -207,11 +222,6 @@
         <version>1.0.5</version>
       </dependency>
       <dependency>
-        <groupId>org.ow2.asm</groupId>
-        <artifactId>asm</artifactId>
-        <version>4.0</version>
-      </dependency>
-      <dependency>
         <groupId>com.clearspring.analytics</groupId>
         <artifactId>stream</artifactId>
         <version>2.4.0</version>
@@ -230,11 +240,31 @@
         <groupId>com.twitter</groupId>
         <artifactId>chill_${scala.binary.version}</artifactId>
         <version>0.3.1</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-commons</artifactId>
+         </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>com.twitter</groupId>
         <artifactId>chill-java</artifactId>
         <version>0.3.1</version>
+        <exclusions>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm-commons</artifactId>
+         </exclusion>
+        </exclusions>
       </dependency>
       <dependency>
         <groupId>${akka.group}</groupId>
@@ -294,6 +324,11 @@
         <groupId>org.apache.mesos</groupId>
         <artifactId>mesos</artifactId>
         <version>${mesos.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>commons-net</groupId>
+        <artifactId>commons-net</artifactId>
+        <version>2.2</version>
       </dependency>
       <dependency>
         <groupId>io.netty</groupId>
@@ -416,6 +451,10 @@
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
@@ -455,6 +494,10 @@
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
+            <groupId>org.ow2.asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
             <groupId>org.jboss.netty</groupId>
             <artifactId>netty</artifactId>
           </exclusion>
@@ -467,6 +510,10 @@
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>
@@ -483,6 +530,10 @@
         <exclusions>
           <exclusion>
             <groupId>asm</groupId>
+            <artifactId>asm</artifactId>
+          </exclusion>
+          <exclusion>
+            <groupId>org.ow2.asm</groupId>
             <artifactId>asm</artifactId>
           </exclusion>
           <exclusion>

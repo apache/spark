@@ -18,12 +18,13 @@
 package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
-
-import org.eclipse.jetty.server.{Handler, Server}
+import org.eclipse.jetty.server.Server
+import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.server.handler.ContextHandlerCollection
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.ui.{JettyUtils, SparkUI}
+import org.apache.spark.ui.SparkUI
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -36,31 +37,35 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
   val timeout = AkkaUtils.askTimeout(master.conf)
   var server: Option[Server] = None
   var boundPort: Option[Int] = None
+  var rootHandler: Option[ContextHandlerCollection] = None
 
   private val host = Utils.localHostName()
   private val port = requestedPort
   private val applicationPage = new ApplicationPage(this)
   private val indexPage = new IndexPage(this)
 
-  private val handlers: Seq[(String, Handler)] = {
+  private val handlers: Seq[ServletContextHandler] = {
     master.masterMetricsSystem.getServletHandlers ++
     master.applicationMetricsSystem.getServletHandlers ++
-    Seq[(String, Handler)](
-      ("/static", JettyUtils.createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR)),
-      ("/app/json", (request: HttpServletRequest) => applicationPage.renderJson(request)),
-      ("/app", (request: HttpServletRequest) => applicationPage.render(request)),
-      ("/json", (request: HttpServletRequest) => indexPage.renderJson(request)),
-      ("/", (request: HttpServletRequest) => indexPage.render(request))
+    Seq[ServletContextHandler](
+      createStaticHandler(MasterWebUI.STATIC_RESOURCE_DIR, "/static/*"),
+      createServletHandler("/app/json",
+        (request: HttpServletRequest) => applicationPage.renderJson(request), master.securityMgr),
+      createServletHandler("/app",
+        (request: HttpServletRequest) => applicationPage.render(request), master.securityMgr),
+      createServletHandler("/json",
+        (request: HttpServletRequest) => indexPage.renderJson(request), master.securityMgr),
+      createServletHandler("/",
+        (request: HttpServletRequest) => indexPage.render (request), master.securityMgr)
     )
   }
 
-  private val rootHandler = JettyUtils.createContextHandlerCollection(handlers)
-
   def bind() {
     try {
-      val (srv, bPort) = JettyUtils.startJettyServer(host, port, rootHandler)
+      val (srv, bPort, handlerCollection) = startJettyServer(host, port, handlers, master.conf)
       server = Some(srv)
       boundPort = Some(bPort)
+      rootHandler = Some(handlerCollection)
       logInfo("Started Master web UI at http://%s:%d".format(host, boundPort.get))
     } catch {
       case e: Exception =>
@@ -69,11 +74,17 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
     }
   }
 
+  /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
   def attachUI(ui: SparkUI) {
-    for (handler <- ui.rootHandler.getHandlers) {
-      rootHandler.addHandler(handler)
-      if (!handler.isStarted) {
-        handler.start()
+    rootHandler.foreach { root =>
+      // Redirect all requests for static resources
+      val staticHandler = createStaticRedirectHandler("/static", ui.basePath)
+      val handlersToRegister = ui.handlers ++ Seq(staticHandler)
+      for (handler <- handlersToRegister) {
+        root.addHandler(handler)
+        if (!handler.isStarted) {
+          handler.start()
+        }
       }
     }
   }
@@ -84,5 +95,5 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
 }
 
 private[spark] object MasterWebUI {
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
+  val STATIC_RESOURCE_DIR = "org/apache/spark/ui"
 }

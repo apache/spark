@@ -21,7 +21,7 @@ import javax.servlet.http.HttpServletRequest
 
 import scala.xml.Node
 
-import org.eclipse.jetty.server.Handler
+import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.scheduler._
 import org.apache.spark.ui._
@@ -39,8 +39,9 @@ private[ui] class EnvironmentUI(parent: SparkUI) {
     _listener = Some(new EnvironmentListener)
   }
 
-  def getHandlers = Seq[(String, Handler)](
-    ("/environment", (request: HttpServletRequest) => render(request))
+  def getHandlers = Seq[ServletContextHandler](
+    createServletHandler("/environment",
+      (request: HttpServletRequest) => render(request), parent.securityManager, basePath)
   )
 
   def render(request: HttpServletRequest): Seq[Node] = {

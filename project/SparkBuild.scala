@@ -226,6 +226,9 @@ object SparkBuild extends Build {
     libraryDependencies ++= Seq(
         "io.netty"          % "netty-all"       % "4.0.17.Final",
         "org.eclipse.jetty" % "jetty-server"    % "7.6.8.v20121106",
+        "org.eclipse.jetty" % "jetty-util" % "7.6.8.v20121106",
+        "org.eclipse.jetty" % "jetty-plus" % "7.6.8.v20121106",
+        "org.eclipse.jetty" % "jetty-security" % "7.6.8.v20121106",
         /** Workaround for SPARK-959. Dependency used by org.eclipse.jetty. Fixed in ivy 2.3.0. */
         "org.eclipse.jetty.orbit" % "javax.servlet" % "2.5.0.v201103041518" artifacts Artifact("javax.servlet", "jar", "jar"),
         "org.scalatest"    %% "scalatest"       % "1.9.1"  % "test",
@@ -254,7 +257,8 @@ object SparkBuild extends Build {
   val slf4jVersion = "1.7.5"
 
   val excludeNetty = ExclusionRule(organization = "org.jboss.netty")
-  val excludeAsm = ExclusionRule(organization = "asm")
+  val excludeAsm = ExclusionRule(organization = "org.ow2.asm")
+  val excludeOldAsm = ExclusionRule(organization = "asm")
   val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
   val excludeSLF4J = ExclusionRule(organization = "org.slf4j")
   val excludeScalap = ExclusionRule(organization = "org.scala-lang", artifact = "scalap")
@@ -277,7 +281,6 @@ object SparkBuild extends Build {
         "commons-daemon"             % "commons-daemon"   % "1.0.10", // workaround for bug HADOOP-9407
         "com.ning"                   % "compress-lzf"     % "1.0.0",
         "org.xerial.snappy"          % "snappy-java"      % "1.0.5",
-        "org.ow2.asm"                % "asm"              % "4.0",
         "org.spark-project.akka"    %% "akka-remote"      % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
         "org.spark-project.akka"    %% "akka-slf4j"       % "2.2.3-shaded-protobuf"  excludeAll(excludeNetty),
         "org.spark-project.akka"    %% "akka-testkit"     % "2.2.3-shaded-protobuf" % "test",
@@ -285,17 +288,18 @@ object SparkBuild extends Build {
         "it.unimi.dsi"               % "fastutil"         % "6.4.4",
         "colt"                       % "colt"             % "1.2.0",
         "org.apache.mesos"           % "mesos"            % "0.13.0",
+        "commons-net"                % "commons-net"      % "2.2",
         "net.java.dev.jets3t"        % "jets3t"           % "0.7.1" excludeAll(excludeCommonsLogging),
         "org.apache.derby"           % "derby"            % "10.4.2.0"                     % "test",
-        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J),
+        "org.apache.hadoop"          % hadoopClient       % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging, excludeSLF4J, excludeOldAsm),
         "org.apache.curator"         % "curator-recipes"  % "2.4.0" excludeAll(excludeNetty),
         "com.codahale.metrics"       % "metrics-core"     % "3.0.0",
         "com.codahale.metrics"       % "metrics-jvm"      % "3.0.0",
         "com.codahale.metrics"       % "metrics-json"     % "3.0.0",
         "com.codahale.metrics"       % "metrics-ganglia"  % "3.0.0",
         "com.codahale.metrics"       % "metrics-graphite" % "3.0.0",
-        "com.twitter"               %% "chill"            % "0.3.1",
-        "com.twitter"                % "chill-java"       % "0.3.1",
+        "com.twitter"               %% "chill"            % "0.3.1" excludeAll(excludeAsm),
+        "com.twitter"                % "chill-java"       % "0.3.1" excludeAll(excludeAsm),
         "com.clearspring.analytics"  % "stream"           % "2.5.1"
       ),
     libraryDependencies ++= maybeAvro
@@ -316,7 +320,7 @@ object SparkBuild extends Build {
     name := "spark-examples",
     libraryDependencies ++= Seq(
       "com.twitter"          %% "algebird-core"   % "0.1.11",
-      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm, excludeCommonsLogging),
+      "org.apache.hbase" % "hbase" % HBASE_VERSION excludeAll(excludeNetty, excludeAsm, excludeOldAsm, excludeCommonsLogging),
       "org.apache.cassandra" % "cassandra-all" % "1.2.6"
         exclude("com.google.guava", "guava")
         exclude("com.googlecode.concurrentlinkedhashmap", "concurrentlinkedhashmap-lru")
@@ -393,10 +397,10 @@ object SparkBuild extends Build {
   def yarnEnabledSettings = Seq(
     libraryDependencies ++= Seq(
       // Exclude rule required for all ?
-      "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeNetty, excludeAsm),
-      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeNetty, excludeAsm),
-      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeNetty, excludeAsm),
-      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeNetty, excludeAsm)
+      "org.apache.hadoop" % hadoopClient         % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeOldAsm),
+      "org.apache.hadoop" % "hadoop-yarn-api"    % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeOldAsm),
+      "org.apache.hadoop" % "hadoop-yarn-common" % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeOldAsm),
+      "org.apache.hadoop" % "hadoop-yarn-client" % hadoopVersion excludeAll(excludeNetty, excludeAsm, excludeOldAsm)
     )
   )
 

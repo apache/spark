@@ -17,6 +17,11 @@
 
 package org.apache.spark.network
 
+import org.apache.spark._
+import org.apache.spark.SparkSaslServer
+
+import scala.collection.mutable.{HashMap, Queue, ArrayBuffer}
+
 import java.net._
 import java.nio._
 import java.nio.channels._
@@ -27,13 +32,16 @@ import org.apache.spark._
 
 private[spark]
 abstract class Connection(val channel: SocketChannel, val selector: Selector,
-    val socketRemoteConnectionManagerId: ConnectionManagerId)
+    val socketRemoteConnectionManagerId: ConnectionManagerId, val connectionId: ConnectionId)
   extends Logging {
 
-  def this(channel_ : SocketChannel, selector_ : Selector) = {
+  var sparkSaslServer: SparkSaslServer = null
+  var sparkSaslClient: SparkSaslClient = null
+
+  def this(channel_ : SocketChannel, selector_ : Selector, id_ : ConnectionId) = {
     this(channel_, selector_,
       ConnectionManagerId.fromSocketAddress(
-        channel_.socket.getRemoteSocketAddress().asInstanceOf[InetSocketAddress]))
+        channel_.socket.getRemoteSocketAddress().asInstanceOf[InetSocketAddress]), id_)
   }
 
   channel.configureBlocking(false)
@@ -48,6 +56,16 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
   var onKeyInterestChangeCallback: (Connection, Int) => Unit = null
 
   val remoteAddress = getRemoteAddress()
+
+  /**
+   * Used to synchronize client requests: client's work-related requests must
+   * wait until SASL authentication completes.
+   */
+  private val authenticated = new Object()
+
+  def getAuthenticated(): Object = authenticated
+
+  def isSaslComplete(): Boolean
 
   def resetForceReregister(): Boolean
 
@@ -68,6 +86,16 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
   // On receiving a read event, should we change the interest for this channel or not ?
   // Will be true for ReceivingConnection, false for SendingConnection.
   def changeInterestForRead(): Boolean
+
+  private def disposeSasl() {
+    if (sparkSaslServer != null) {
+      sparkSaslServer.dispose();
+    }
+
+    if (sparkSaslClient != null) {
+      sparkSaslClient.dispose()
+    }
+  }
 
   // On receiving a write event, should we change the interest for this channel or not ?
   // Will be false for ReceivingConnection, true for SendingConnection.
@@ -101,6 +129,7 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
       k.cancel()
     }
     channel.close()
+    disposeSasl()
     callOnCloseCallback()
   }
 
@@ -168,8 +197,12 @@ abstract class Connection(val channel: SocketChannel, val selector: Selector,
 
 private[spark]
 class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
-    remoteId_ : ConnectionManagerId)
-  extends Connection(SocketChannel.open, selector_, remoteId_) {
+    remoteId_ : ConnectionManagerId, id_ : ConnectionId)
+  extends Connection(SocketChannel.open, selector_, remoteId_, id_) {
+
+  def isSaslComplete(): Boolean = {
+    if (sparkSaslClient != null) sparkSaslClient.isComplete() else false
+  }
 
   private class Outbox {
     val messages = new Queue[Message]()
@@ -226,6 +259,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
     data as detailed in https://github.com/mesos/spark/pull/791
    */
   private var needForceReregister = false
+
   val currentBuffers = new ArrayBuffer[ByteBuffer]()
 
   /*channel.socket.setSendBufferSize(256 * 1024)*/
@@ -316,6 +350,7 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
                 // If we have 'seen' pending messages, then reset flag - since we handle that as
                 // normal registering of event (below)
                 if (needForceReregister && buffers.exists(_.remaining() > 0)) resetForceReregister()
+
                 currentBuffers ++= buffers
               }
               case None => {
@@ -384,8 +419,15 @@ class SendingConnection(val address: InetSocketAddress, selector_ : Selector,
 
 
 // Must be created within selector loop - else deadlock
-private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : Selector)
-  extends Connection(channel_, selector_) {
+private[spark] class ReceivingConnection(
+    channel_ : SocketChannel,
+    selector_ : Selector,
+    id_ : ConnectionId)
+    extends Connection(channel_, selector_, id_) {
+
+  def isSaslComplete(): Boolean = {
+    if (sparkSaslServer != null) sparkSaslServer.isComplete() else false
+  }
 
   class Inbox() {
     val messages = new HashMap[Int, BufferMessage]()
@@ -396,6 +438,7 @@ private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : S
         val newMessage = Message.create(header).asInstanceOf[BufferMessage]
         newMessage.started = true
         newMessage.startTime = System.currentTimeMillis
+        newMessage.isSecurityNeg = header.securityNeg == 1
         logDebug(
           "Starting to receive [" + newMessage + "] from [" + getRemoteConnectionManagerId() + "]")
         messages += ((newMessage.id, newMessage))
@@ -441,7 +484,7 @@ private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : S
 
   val inbox = new Inbox()
   val headerBuffer: ByteBuffer = ByteBuffer.allocate(MessageChunkHeader.HEADER_SIZE)
-  var onReceiveCallback: (Connection , Message) => Unit = null
+  var onReceiveCallback: (Connection, Message) => Unit = null
   var currentChunk: MessageChunk = null
 
   channel.register(selector, SelectionKey.OP_READ)
@@ -516,7 +559,7 @@ private[spark] class ReceivingConnection(channel_ : SocketChannel, selector_ : S
         }
       }
     } catch {
-      case e: Exception  => {
+      case e: Exception => {
         logWarning("Error reading from connection to " + getRemoteConnectionManagerId(), e)
         callOnExceptionCallback(e)
         close()
