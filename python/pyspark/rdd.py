@@ -28,6 +28,7 @@ from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
+from heapq import heappush, heappop, heappushpop
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, pack_long
@@ -616,6 +617,30 @@ class RDD(object):
                 m1[k] += v
             return m1
         return self.mapPartitions(countPartition).reduce(mergeMaps)
+    
+    def top(self, num):
+        """
+        Get the top N elements from a RDD.
+
+        Note: It returns the list sorted in ascending order.
+        >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
+        [12]
+        >>> sc.parallelize([2, 3, 4, 5, 6]).cache().top(2)
+        [5, 6]
+        """
+        def topIterator(iterator):
+            q = []
+            for k in iterator:
+                if len(q) < num:
+                    heappush(q, k)
+                else:
+                    heappushpop(q, k)
+            yield q
+
+        def merge(a, b):
+            return next(topIterator(a + b))
+
+        return sorted(self.mapPartitions(topIterator).reduce(merge))
 
     def take(self, num):
         """
