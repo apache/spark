@@ -857,26 +857,18 @@ class RDD(object):
 
             client = statsd()
             buckets = defaultdict(list)
-            chunk_size = 0
+            record_count = 0
 
             for (k, v) in iterator:
-                chunk_size += 1
+                record_count += 1
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
-            client.set('spark.partition_metric.partition_chunk_size', chunk_size)
-
-            max_partition_size = None
-            min_partition_size = None
+            client.histogram('spark.partition_metric.record_count', record_count)
+            client.histogram('spark.partition_metric.partition_count', len(buckets))
 
             for (split, items) in buckets.iteritems():
-                if max_partition_size is None or max_partition_size < len(items):
-                    max_partition_size = len(items)
-                if min_partition_size is None or min_partition_size > len(items):
-                    min_partition_size = len(items)
+                client.histogram('spark.partition_metric.partition_size', len(items))
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
-
-            client.set('spark.partition_metric.partition_max_size', max_partition_size)
-            client.set('spark.partition_metric.partition_min_size', min_partition_size)
 
         keyed = PipelinedRDD(self, add_shuffle_key)
         keyed._bypass_serializer = True
