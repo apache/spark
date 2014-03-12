@@ -467,14 +467,14 @@ class RDD(object):
         """
         Applies a function to each partition of this RDD.
 
-        >>> def f(iterator): 
-        ...      for x in iterator: 
-        ...           print x 
+        >>> def f(iterator):
+        ...      for x in iterator:
+        ...           print x
         ...      yield None
         >>> sc.parallelize([1, 2, 3, 4, 5]).foreachPartition(f)
         """
         self.mapPartitions(f).collect()  # Force evaluation
-        
+
     def collect(self):
         """
         Return a list that contains all of the elements in this RDD.
@@ -658,8 +658,8 @@ class RDD(object):
         # Take only up to num elements from each partition we try
         mapped = self.mapPartitions(takeUpToNum)
         items = []
-        # TODO(shivaram): Similar to the scala implementation, update the take 
-        # method to scan multiple splits based on an estimate of how many elements 
+        # TODO(shivaram): Similar to the scala implementation, update the take
+        # method to scan multiple splits based on an estimate of how many elements
         # we have per-split.
         with _JavaStackTrace(self.context) as st:
             for partition in range(mapped._jrdd.splits().size()):
@@ -852,22 +852,31 @@ class RDD(object):
         # form the hash buckets in Python, transferring O(numPartitions) objects
         # to Java.  Each object is a (splitNumber, [objects]) pair.
         outputSerializer = self.ctx._unbatched_serializer
+
+        app_name = "app_name:{}".format(self.ctx._conf.get("spark.app.name"))
+
         def add_shuffle_key(split, iterator):
 
             client = statsd()
             buckets = defaultdict(list)
             chunk_size = 0
 
+
             for (k, v) in iterator:
                 chunk_size += 1
                 buckets[partitionFunc(k) % numPartitions].append((k, v))
-            client.gauge('spark.partition_metric.partition_chunk_size', chunk_size)
+            client.gauge('spark.partition_metric.partition_chunk_size', chunk_size, tags=[app_name])
 
             for (split, items) in buckets.iteritems():
+                statsd_tags = [app_name, "partition_{}".format(split)]
+                if len(items) > 0:
+                    client.set('spark.partition_metric.item_size', sys.getsizeof(items[0], -1), tags=statsd_tags)
+
                 client.gauge(
-                    'spark.partition_metric.partition_size'.format(split),
+                    'spark.partition_metric.partition_size',
                     len(items),
-                    tags=["partition_{}".format(split)])
+                    tags=statsd_tags)
+
                 yield pack_long(split)
                 yield outputSerializer.dumps(items)
 
@@ -1048,7 +1057,7 @@ class RDD(object):
     def repartition(self, numPartitions):
         """
          Return a new RDD that has exactly numPartitions partitions.
-          
+
          Can increase or decrease the level of parallelism in this RDD. Internally, this uses
          a shuffle to redistribute data.
          If you are decreasing the number of partitions in this RDD, consider using `coalesce`,
