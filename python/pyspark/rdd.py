@@ -914,7 +914,9 @@ class RDD(object):
             numPartitions = self.ctx.defaultParallelism
         def combineLocally(iterator):
             combiners = {}
+            client = statsd()
             for x in iterator:
+                client.increment('spark.combine_by_key_metric.combine_locally_count')
                 (k, v) = x
                 if k not in combiners:
                     combiners[k] = createCombiner(v)
