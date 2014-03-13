@@ -64,7 +64,7 @@ class LocalHiveContext(sc: SparkContext)
  * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
  * Configuration for Hive is read from hive-site.xml on the classpath.
  */
-class HiveContext(sc: SparkContext) extends SparkSqlContext(sc) {
+class HiveContext(sc: SparkContext) extends SqlContext(sc) {
   self =>
 
   override def parseSql(sql: String): LogicalPlan = HiveQl.parseSql(sql)

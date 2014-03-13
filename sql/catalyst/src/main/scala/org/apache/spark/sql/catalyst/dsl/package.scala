@@ -157,56 +157,61 @@ package object dsl {
     def required = a.withNullability(false)
   }
 
-  implicit class DslLogicalPlan(plan: LogicalPlan) {
-    def select(exprs: NamedExpression*) = Project(exprs, plan)
+  implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends LogicalPlanFunctions
 
-    def where(condition: Expression) = Filter(condition, plan)
+  abstract class LogicalPlanFunctions {
+    def logicalPlan: LogicalPlan
+
+    def select(exprs: NamedExpression*) = Project(exprs, logicalPlan)
+
+    def where(condition: Expression) = Filter(condition, logicalPlan)
 
     def join(
         otherPlan: LogicalPlan,
         joinType: JoinType = Inner,
         condition: Option[Expression] = None) =
-      Join(plan, otherPlan, joinType, condition)
+      Join(logicalPlan, otherPlan, joinType, condition)
 
-    def orderBy(sortExprs: SortOrder*) = Sort(sortExprs, plan)
+    def orderBy(sortExprs: SortOrder*) = Sort(sortExprs, logicalPlan)
 
     def groupBy(groupingExprs: Expression*)(aggregateExprs: Expression*) = {
       val aliasedExprs = aggregateExprs.map {
         case ne: NamedExpression => ne
         case e => Alias(e, e.toString)()
       }
-      Aggregate(groupingExprs, aliasedExprs, plan)
+      Aggregate(groupingExprs, aliasedExprs, logicalPlan)
     }
 
-    def subquery(alias: Symbol) = Subquery(alias.name, plan)
+    def subquery(alias: Symbol) = Subquery(alias.name, logicalPlan)
 
-    def unionAll(otherPlan: LogicalPlan) = Union(plan, otherPlan)
+    def unionAll(otherPlan: LogicalPlan) = Union(logicalPlan, otherPlan)
 
     def sfilter[T1](arg1: Symbol)(udf: (T1) => Boolean) =
-      Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), plan)
+      Filter(ScalaUdf(udf, BooleanType, Seq(UnresolvedAttribute(arg1.name))), logicalPlan)
 
     def sfilter(dynamicUdf: (DynamicRow) => Boolean) =
-      Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(plan.output))), plan)
+      Filter(ScalaUdf(dynamicUdf, BooleanType, Seq(WrapDynamic(logicalPlan.output))), logicalPlan)
 
     def sample(
         fraction: Double,
         withReplacement: Boolean = true,
         seed: Int = (math.random * 1000).toInt) =
-      Sample(fraction, withReplacement, seed, plan)
+      Sample(fraction, withReplacement, seed, logicalPlan)
 
     def generate(
         generator: Generator,
         join: Boolean = false,
         outer: Boolean = false,
         alias: Option[String] = None) =
-      Generate(generator, join, outer, None, plan)
+      Generate(generator, join, outer, None, logicalPlan)
 
     def insertInto(tableName: String, overwrite: Boolean = false) =
-      InsertIntoTable(analysis.UnresolvedRelation(None, tableName), Map.empty, plan, overwrite)
+      InsertIntoTable(
+        analysis.UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite)
 
-    def analyze = analysis.SimpleAnalyzer(plan)
+    def analyze = analysis.SimpleAnalyzer(logicalPlan)
 
-    def writeToFile(path: String) = WriteToFile(path, plan)
+    def writeToFile(path: String) = WriteToFile(path, logicalPlan)
 
     // TODO: for a loadFromFile it would be good to have a Catalog that knows
     // how to resolve ParquetTables

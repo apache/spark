@@ -33,6 +33,11 @@ import catalyst.rules.RuleExecutor
 
 import execution._
 
+/**
+ * The result of executing a query using SparkSQL.  This class acts as an RDD of the through
+ * implicit conversions.  It also allows access to the executed plan for DML queries, similar to an
+ * EXPLAIN command in standard SQL.
+ */
 case class ExecutedQuery(
     sql: String,
     logicalPlan: LogicalPlan,
@@ -46,34 +51,49 @@ case class ExecutedQuery(
 }
 
 object TestSqlContext
-  extends SparkSqlContext(new SparkContext("local", "TestSqlContext", new SparkConf()))
+  extends SqlContext(new SparkContext("local", "TestSqlContext", new SparkConf()))
 
-class SparkSqlContext(val sparkContext: SparkContext) extends Logging {
+/**
+ * The entry point for running relational queries using Spark.  Uses the provided spark context
+ * to execute relational operators.
+ */
+class SqlContext(val sparkContext: SparkContext) extends Logging {
   self =>
 
-  lazy val catalog: Catalog = new SimpleCatalog
-  lazy val analyzer: Analyzer = new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = true)
-  val optimizer = Optimizer
-  val parser = new catalyst.SqlParser
+  protected[sql] lazy val catalog: Catalog = new SimpleCatalog
+  protected[sql] lazy val analyzer: Analyzer =
+    new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = true)
+  protected[sql] val optimizer = Optimizer
+  protected[sql] val parser = new catalyst.SqlParser
 
-  def parseSql(sql: String): LogicalPlan = parser(sql)
-  def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
-  def executePlan(plan: LogicalPlan): this.QueryExecution =
+  protected[sql] def parseSql(sql: String): LogicalPlan = parser(sql)
+  protected[sql] def executeSql(sql: String): this.QueryExecution = executePlan(parseSql(sql))
+  protected[sql] def executePlan(plan: LogicalPlan): this.QueryExecution =
     new this.QueryExecution { val logical = plan }
 
   implicit def logicalPlanToSparkQuery(plan: LogicalPlan) = executePlan(plan)
 
   implicit def logicalDsl(q: ExecutedQuery) = new dsl.DslLogicalPlan(q.logicalPlan)
 
+  /** Allows the results of sql queries to be used as RDDs */
   implicit def toRdd(q: ExecutedQuery) = q.rdd
 
-  implicit class TableRdd[A <: Product: TypeTag](rdd: RDD[A]) {
+  /**
+   * Implicitly adds a `registerAsTable` to RDDs of case classes and allows the Query DSL to be
+   * used on them.
+   */
+  implicit class TableRdd[A <: Product: TypeTag](rdd: RDD[A]) extends dsl.LogicalPlanFunctions {
+    def logicalPlan = SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))
+
     def registerAsTable(tableName: String) = {
-      catalog.registerTable(
-        None, tableName, SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd)) )
+      catalog.registerTable(None, tableName, logicalPlan)
     }
   }
 
+  /**
+   * Executes a SQL query using Spark, returning the result as an RDD as well as the plan used
+   * for execution.
+   */
   def sql(sqlText: String): ExecutedQuery = {
     val queryWorkflow = executeSql(sqlText)
     val executedPlan = queryWorkflow.analyzed match {
@@ -83,7 +103,7 @@ class SparkSqlContext(val sparkContext: SparkContext) extends Logging {
     ExecutedQuery(sqlText, queryWorkflow.analyzed, executedPlan, queryWorkflow.toRdd)
   }
 
-  class SparkPlanner extends SparkStrategies {
+  protected[sql] class SparkPlanner extends SparkStrategies {
     val sparkContext = self.sparkContext
 
     val strategies: Seq[Strategy] =
@@ -95,13 +115,13 @@ class SparkSqlContext(val sparkContext: SparkContext) extends Logging {
       BroadcastNestedLoopJoin :: Nil
   }
 
-  val planner = new SparkPlanner
+  protected[sql] val planner = new SparkPlanner
 
   /**
    * Prepares a planned SparkPlan for execution by binding references to specific ordinals, and
    * inserting shuffle operations as needed.
    */
-  object PrepareForExecution extends RuleExecutor[SparkPlan] {
+  protected[sql] object PrepareForExecution extends RuleExecutor[SparkPlan] {
     val batches =
       Batch("Add exchange", Once, AddExchange) ::
       Batch("Prepare Expressions", Once, new BindReferences[SparkPlan]) :: Nil
@@ -112,7 +132,7 @@ class SparkSqlContext(val sparkContext: SparkContext) extends Logging {
    * access to the intermediate phases of query execution for developers.  Most users should
    * use [[ExecutedQuery]] to interact with query results.
    */
-  abstract class QueryExecution {
+  protected abstract class QueryExecution {
     def logical: LogicalPlan
 
     lazy val analyzed = analyzer(logical)

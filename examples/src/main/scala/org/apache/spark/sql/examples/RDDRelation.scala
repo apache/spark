@@ -1,7 +1,7 @@
 package org.apache.spark.sql.examples
 
 import org.apache.spark.SparkContext
-import org.apache.spark.sql.SparkSqlContext
+import org.apache.spark.sql.SqlContext
 
 // One method for defining the schema of an RDD is to make a case class with the desired column
 // names and types.
@@ -10,7 +10,7 @@ case class Record(key: Int, value: String)
 object RDDRelation {
   def main(args: Array[String]) {
     val sc = new SparkContext("local", "RDDRelation")
-    val sqlContext = new SparkSqlContext(sc)
+    val sqlContext = new SqlContext(sc)
 
     // Importing the SQL contexts give access to all the SQL functions and implicit conversions.
     import sqlContext._

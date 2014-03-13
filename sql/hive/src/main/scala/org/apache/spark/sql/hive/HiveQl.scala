@@ -48,6 +48,7 @@ case class AddJar(jarPath: String) extends Command
 
 case class AddFile(filePath: String) extends Command
 
+/** Provides a mapping from HiveQL statments to catalyst logical plans and expression trees. */
 object HiveQl {
   protected val nativeCommands = Seq(
     "TOK_DESCFUNCTION",
@@ -203,6 +204,7 @@ object HiveQl {
    */
   def getAst(sql: String): ASTNode = ParseUtils.findRootNonNullToken((new ParseDriver).parse(sql))
 
+  /** Returns a LogicalPlan for a given HiveQL string. */
   def parseSql(sql: String): LogicalPlan = {
     try {
       if (sql.toLowerCase.startsWith("set")) {
