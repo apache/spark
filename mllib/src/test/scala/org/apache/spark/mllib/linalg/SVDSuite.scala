@@ -85,7 +85,8 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val retu = getDenseMatrix(u)
     val rets = getDenseMatrix(s)
     val retv = getDenseMatrix(v)
-  
+ 
+ 
     // check individual decomposition  
     assertMatrixEquals(retu, svd(0))
     assertMatrixEquals(rets, DoubleMatrix.diag(svd(1)))
@@ -114,6 +115,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val retu = getDenseMatrix(u)
     val rets = getDenseMatrix(s)
     val retv = getDenseMatrix(v)
+
 
     // check individual decomposition  
     assertMatrixEquals(retu, svd(0))
