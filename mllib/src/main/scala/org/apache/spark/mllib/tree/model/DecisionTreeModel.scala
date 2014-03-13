@@ -34,14 +34,7 @@ class DecisionTreeModel(val topNode: Node, val algo: Algo) extends Serializable 
    * @return Double prediction from the trained model
    */
   def predict(features: Array[Double]): Double = {
-    algo match {
-      case Classification => {
-        if (topNode.predictIfLeaf(features) < 0.5) 0.0 else 1.0
-      }
-      case Regression => {
-        topNode.predictIfLeaf(features)
-      }
-    }
+    topNode.predictIfLeaf(features)
   }
 
   /**

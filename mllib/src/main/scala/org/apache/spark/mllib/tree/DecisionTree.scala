@@ -1034,8 +1034,12 @@ object DecisionTree extends Serializable with Logging {
   /**
    * Calculates the classifier accuracy.
    */
-  def accuracyScore(model: DecisionTreeModel, data: RDD[LabeledPoint]): Double = {
-    val correctCount = data.filter(y => model.predict(y.features) == y.label).count()
+  def accuracyScore(model: DecisionTreeModel, data: RDD[LabeledPoint],
+                    threshold: Double = 0.5): Double = {
+    def predictedValue(features: Array[Double]) = {
+      if (model.predict(features) < threshold) 0.0 else 1.0
+    }
+    val correctCount = data.filter(y => predictedValue(y.features) == y.label).count()
     val count = data.count()
     logDebug("correct prediction count = " +  correctCount)
     logDebug("data count = " + count)
