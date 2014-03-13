@@ -26,6 +26,8 @@ import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.{ClassReader, Cl
 import com.esotericsoftware.reflectasm.shaded.org.objectweb.asm.Opcodes._
 
 import org.apache.spark.Logging
+import org.apache.spark.SparkEnv
+import org.apache.spark.SparkException
 
 private[spark] object ClosureCleaner extends Logging {
   // Get an ASM class reader for a given class from the JAR that loaded it
@@ -101,7 +103,7 @@ private[spark] object ClosureCleaner extends Logging {
     }
   }
   
-  def clean(func: AnyRef) {
+  def clean(func: AnyRef, checkSerializable: Boolean = true) {
     // TODO: cache outerClasses / innerClasses / accessedFields
     val outerClasses = getOuterClasses(func)
     val innerClasses = getInnerClasses(func)
@@ -149,6 +151,18 @@ private[spark] object ClosureCleaner extends Logging {
       val field = func.getClass.getDeclaredField("$outer")
       field.setAccessible(true)
       field.set(func, outer)
+    }
+    
+    if (checkSerializable) {
+      ensureSerializable(func)
+    }
+  }
+
+  private def ensureSerializable(func: AnyRef) {
+    try {
+      SparkEnv.get.closureSerializer.newInstance().serialize(func)
+    } catch {
+      case ex: Exception => throw new SparkException("Task not serializable: " + ex.toString)
     }
   }
   
