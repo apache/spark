@@ -17,13 +17,14 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.{Buffer, HashSet}
+import scala.collection.mutable
 
 import org.scalatest.{BeforeAndAfter, BeforeAndAfterAll, FunSuite}
 import org.scalatest.matchers.ShouldMatchers
 
 import org.apache.spark.{LocalSparkContext, SparkContext}
 import org.apache.spark.SparkContext._
+import org.apache.spark.executor.TaskMetrics
 
 class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatchers
     with BeforeAndAfter with BeforeAndAfterAll {
@@ -39,42 +40,42 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
   }
 
   test("basic creation of StageInfo") {
-    val listener = new SaveStageInfo
+    val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
-    val rdd2 = rdd1.map(x => x.toString)
+    val rdd2 = rdd1.map(_.toString)
     rdd2.setName("Target RDD")
     rdd2.count
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
     listener.stageInfos.size should be {1}
-    val first = listener.stageInfos.head
-    first.rddInfo.name should be {"Target RDD"}
-    first.numTasks should be {4}
-    first.rddInfo.numPartitions should be {4}
-    first.submissionTime should be ('defined)
-    first.completionTime should be ('defined)
-    first.taskInfos.length should be {4}
+    val (stageInfo, taskInfoMetrics) = listener.stageInfos.head
+    stageInfo.rddInfo.name should be {"Target RDD"}
+    stageInfo.numTasks should be {4}
+    stageInfo.rddInfo.numPartitions should be {4}
+    stageInfo.submissionTime should be ('defined)
+    stageInfo.completionTime should be ('defined)
+    taskInfoMetrics.length should be {4}
   }
 
   test("StageInfo with fewer tasks than partitions") {
-    val listener = new SaveStageInfo
+    val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     val rdd1 = sc.parallelize(1 to 100, 4)
-    val rdd2 = rdd1.map(x => x.toString)
+    val rdd2 = rdd1.map(_.toString)
     sc.runJob(rdd2, (items: Iterator[String]) => items.size, Seq(0, 1), true)
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
 
     listener.stageInfos.size should be {1}
-    val first = listener.stageInfos.head
-    first.numTasks should be {2}
-    first.rddInfo.numPartitions should be {4}
+    val (stageInfo, _) = listener.stageInfos.head
+    stageInfo.numTasks should be {2}
+    stageInfo.rddInfo.numPartitions should be {4}
   }
 
   test("local metrics") {
-    val listener = new SaveStageInfo
+    val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
     sc.addSparkListener(new StatsReportListener)
     //just to make sure some of the tasks take a noticeable amount of time
@@ -84,39 +85,39 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
       i
     }
 
-    val d = sc.parallelize(0 to 1e4.toInt, 64).map{i => w(i)}
+    val d = sc.parallelize(0 to 1e4.toInt, 64).map(w)
     d.count()
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (1)
 
-    val d2 = d.map{i => w(i) -> i * 2}.setName("shuffle input 1")
-
-    val d3 = d.map{i => w(i) -> (0 to (i % 5))}.setName("shuffle input 2")
-
-    val d4 = d2.cogroup(d3, 64).map{case(k,(v1,v2)) => w(k) -> (v1.size, v2.size)}
+    val d2 = d.map { i => w(i) -> i * 2 }.setName("shuffle input 1")
+    val d3 = d.map { i => w(i) -> (0 to (i % 5)) }.setName("shuffle input 2")
+    val d4 = d2.cogroup(d3, 64).map { case (k, (v1, v2)) =>
+      w(k) -> (v1.size, v2.size)
+    }
     d4.setName("A Cogroup")
-
     d4.collectAsMap()
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
     listener.stageInfos.size should be (4)
-    listener.stageInfos.foreach { stageInfo =>
-      /* small test, so some tasks might take less than 1 millisecond, but average should be greater
-       * than 0 ms. */
-      checkNonZeroAvg(stageInfo.taskInfos.map{_._1.duration}, stageInfo + " duration")
+    listener.stageInfos.foreach { case (stageInfo, taskInfoMetrics) =>
+      /**
+       * Small test, so some tasks might take less than 1 millisecond, but average should be greater
+       * than 0 ms.
+       */
       checkNonZeroAvg(
-        stageInfo.taskInfos.map{_._2.executorRunTime},
+        taskInfoMetrics.map(_._2.executorRunTime),
         stageInfo + " executorRunTime")
       checkNonZeroAvg(
-        stageInfo.taskInfos.map{_._2.executorDeserializeTime},
+        taskInfoMetrics.map(_._2.executorDeserializeTime),
         stageInfo + " executorDeserializeTime")
       if (stageInfo.rddInfo.name == d4.name) {
         checkNonZeroAvg(
-          stageInfo.taskInfos.map{_._2.shuffleReadMetrics.get.fetchWaitTime},
+          taskInfoMetrics.map(_._2.shuffleReadMetrics.get.fetchWaitTime),
           stageInfo + " fetchWaitTime")
       }
 
-      stageInfo.taskInfos.foreach { case (taskInfo, taskMetrics) =>
+      taskInfoMetrics.foreach { case (taskInfo, taskMetrics) =>
         taskMetrics.resultSize should be > (0l)
         if (stageInfo.rddInfo.name == d2.name || stageInfo.rddInfo.name == d3.name) {
           taskMetrics.shuffleWriteMetrics should be ('defined)
@@ -142,7 +143,9 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     System.setProperty("spark.akka.frameSize", "1")
     val akkaFrameSize =
       sc.env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size").toInt
-    val result = sc.parallelize(Seq(1), 1).map(x => 1.to(akkaFrameSize).toArray).reduce((x,y) => x)
+    val result = sc.parallelize(Seq(1), 1)
+      .map { x => 1.to(akkaFrameSize).toArray }
+      .reduce { case (x, y) => x }
     assert(result === 1.to(akkaFrameSize).toArray)
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
@@ -157,7 +160,7 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     sc.addSparkListener(listener)
  
     // Make a task whose result is larger than the akka frame size
-    val result = sc.parallelize(Seq(1), 1).map(x => 2 * x).reduce((x, y) => x)
+    val result = sc.parallelize(Seq(1), 1).map(2 * _).reduce { case (x, y) => x }
     assert(result === 2)
 
     assert(sc.listenerBus.waitUntilEmpty(WAIT_TIMEOUT_MILLIS))
@@ -204,17 +207,28 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     assert(m.sum / m.size.toDouble > 0.0, msg)
   }
 
-  class SaveStageInfo extends SparkListener {
-    val stageInfos = Buffer[StageInfo]()
+  class SaveStageAndTaskInfo extends SparkListener {
+    val stageInfos = mutable.Map[StageInfo, Seq[(TaskInfo, TaskMetrics)]]()
+    var taskInfoMetrics = mutable.Buffer[(TaskInfo, TaskMetrics)]()
+
+    override def onTaskEnd(task: SparkListenerTaskEnd) {
+      val info = task.taskInfo
+      val metrics = task.taskMetrics
+      if (info != null && metrics != null) {
+        taskInfoMetrics += ((info, metrics))
+      }
+    }
+
     override def onStageCompleted(stage: SparkListenerStageCompleted) {
-      stageInfos += stage.stageInfo
+      stageInfos(stage.stageInfo) = taskInfoMetrics
+      taskInfoMetrics = mutable.Buffer.empty
     }
   }
 
   class SaveTaskEvents extends SparkListener {
-    val startedTasks = new HashSet[Int]()
-    val startedGettingResultTasks = new HashSet[Int]()
-    val endedTasks = new HashSet[Int]()
+    val startedTasks = new mutable.HashSet[Int]()
+    val startedGettingResultTasks = new mutable.HashSet[Int]()
+    val endedTasks = new mutable.HashSet[Int]()
 
     override def onTaskStart(taskStart: SparkListenerTaskStart) = synchronized {
       startedTasks += taskStart.taskInfo.index

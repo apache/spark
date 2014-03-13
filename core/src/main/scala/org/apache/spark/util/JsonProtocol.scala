@@ -167,19 +167,12 @@ private[spark] object JsonProtocol {
 
   def stageInfoToJson(stageInfo: StageInfo): JValue = {
     val rddInfo = rddInfoToJson(stageInfo.rddInfo)
-    val taskInfos = JArray(stageInfo.taskInfos.map { case (info, metrics) =>
-      val metricsJson = if (metrics != null) taskMetricsToJson(metrics) else JNothing
-      val infoJson = if (info != null) taskInfoToJson(info) else JNothing
-      ("Task Info" -> infoJson) ~
-      ("Task Metrics" -> metricsJson)
-    }.toList)
     val submissionTime = stageInfo.submissionTime.map(JInt(_)).getOrElse(JNothing)
     val completionTime = stageInfo.completionTime.map(JInt(_)).getOrElse(JNothing)
     ("Stage ID" -> stageInfo.stageId) ~
     ("Stage Name" -> stageInfo.name) ~
     ("Number of Tasks" -> stageInfo.numTasks) ~
     ("RDD Info" -> rddInfo) ~
-    ("Task Infos" -> taskInfos) ~
     ("Submission Time" -> submissionTime) ~
     ("Completion Time" -> completionTime) ~
     ("Emitted Task Size Warning" -> stageInfo.emittedTaskSizeWarning)
@@ -487,14 +480,11 @@ private[spark] object JsonProtocol {
     val stageName = (json \ "Stage Name").extract[String]
     val numTasks = (json \ "Number of Tasks").extract[Int]
     val rddInfo = rddInfoFromJson(json \ "RDD Info")
-    val taskInfos = (json \ "Task Infos").extract[List[JValue]].map { value =>
-      (taskInfoFromJson(value \ "Task Info"), taskMetricsFromJson(value \ "Task Metrics"))
-    }.toBuffer
     val submissionTime = Utils.jsonOption(json \ "Submission Time").map(_.extract[Long])
     val completionTime = Utils.jsonOption(json \ "Completion Time").map(_.extract[Long])
     val emittedTaskSizeWarning = (json \ "Emitted Task Size Warning").extract[Boolean]
 
-    val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfo, taskInfos)
+    val stageInfo = new StageInfo(stageId, stageName, numTasks, rddInfo)
     stageInfo.submissionTime = submissionTime
     stageInfo.completionTime = completionTime
     stageInfo.emittedTaskSizeWarning = emittedTaskSizeWarning

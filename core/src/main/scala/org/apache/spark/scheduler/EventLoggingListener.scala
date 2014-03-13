@@ -40,7 +40,7 @@ private[spark] class EventLoggingListener(appName: String, conf: SparkConf)
   private val shouldOverwrite = conf.getBoolean("spark.eventLog.overwrite", false)
   private val outputBufferSize = conf.getInt("spark.eventLog.buffer.kb", 100) * 1024
   private val logBaseDir = conf.get("spark.eventLog.dir", "/tmp/spark-events").stripSuffix("/")
-  private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis()
+  private val name = appName.replaceAll("[ :/]", "-").toLowerCase + "-" + System.currentTimeMillis
   val logDir = logBaseDir + "/" + name
 
   private val logger =
