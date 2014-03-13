@@ -197,12 +197,13 @@ object SVD {
  * @param matrix dense matrix to factorize
  * @param k Recover k singular values and vectors
  * @param computeU gives the option of skipping the U computation
- * @return Three sparse matrices: U, S, V such that A = USV^T
+ * @return Three dense matrices: U, S, V such that A = USV^T
  */
  def denseSVD(matrix: DenseMatrix, k: Int, computeU: Boolean): DenseMatrixSVD = {
     val rows = matrix.rows
     val m = matrix.m
     val n = matrix.n
+    val sc = matrix.rows.sparkContext
 
     if (m < n || m <= 0 || n <= 0) {
       throw new IllegalArgumentException("Expecting a tall and skinny matrix")
@@ -212,10 +213,22 @@ object SVD {
       throw new IllegalArgumentException("Must request up to n singular values")
     }
 
-    val (u, s, v) = denseSVD(matrix.rows.map(_.data), k)
-    val retU = DenseMatrix(u.zipWithIndex.map{ case (row, i) => MatrixRow(i.toInt, row) }, m, k)
-    val retS = DenseMatrix(s.zipWithIndex.map{ case (row, i) => MatrixRow(i.toInt, row) }, k, k)
-    val retV = DenseMatrix(v.zipWithIndex.map{ case (row, i) => MatrixRow(i.toInt, row) }, n, k)
+    val rowIndices = matrix.rows.map(_.i)
+
+    // compute SVD
+    val (u, sigma, v) = denseSVD(matrix.rows.map(_.data), k)
+    
+    // prep u for returning
+    val retU = DenseMatrix(u.zip(rowIndices).map{ case (row, i) => MatrixRow(i, row) }, m, k)
+    
+    // prepare S for returning
+    val sparseS = DoubleMatrix.diag(new DoubleMatrix(sigma))
+    val retS = DenseMatrix(sc.makeRDD(Array.tabulate(k)(
+                i => MatrixRow(i, sparseS.getRow(i).toArray))), k, k)
+   
+    // prepare V for returning
+    val retV = DenseMatrix(sc.makeRDD(Array.tabulate(n)(i => MatrixRow(i, v(i)))), n, k)
+ 
     if(computeU) {
       DenseMatrixSVD(retU, retS, retV)
     } else {
@@ -246,10 +259,10 @@ object SVD {
  *
  * @param matrix dense matrix to factorize
  * @param k Recover k singular values and vectors
- * @return Three sparse matrices: U, S, V such that A = USV^T
+ * @return Three matrices: U, S, V such that A = USV^T
  */
  def denseSVD(matrix: RDD[Array[Double]], k: Int) : 
-     (RDD[Array[Double]], RDD[Array[Double]], RDD[Array[Double]])  = {
+     (RDD[Array[Double]], Array[Double], Array[Array[Double]])  = {
     val n = matrix.first.size
 
     if (k < 1 || k > n) {
@@ -289,11 +302,7 @@ object SVD {
     val sc = matrix.sparkContext
 
     // prepare V for returning
-    val retV = sc.makeRDD(Array.tabulate(n)(i => V.getRow(i).toArray.take(k)))
-
-    // prepare S for returning
-    val sparseS = DoubleMatrix.diag(new DoubleMatrix(sigmas))
-    val retS = sc.makeRDD(Array.tabulate(k)(i => sparseS.getRow(i).toArray))
+    val retV = Array.tabulate(n, k)((i, j) => V.get(i, j))
 
     // Compute U as U = A V S^-1
     // Compute VS^-1
@@ -308,8 +317,8 @@ object SVD {
       }
       row
     }
-      
-    (retU, retS, retV)
+    
+    (retU, sigma, retV)
   }
 
    /**

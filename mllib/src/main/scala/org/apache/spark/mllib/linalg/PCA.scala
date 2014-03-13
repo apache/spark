@@ -45,7 +45,7 @@ class PCA {
     computePCA(matrix, k)
   }
 
-  /**
+ /**
   * Principal Component Analysis.
   * Computes the top k principal component coefficients for the m-by-n data matrix X.
   * Rows of X correspond to observations and columns correspond to variables. 
@@ -70,26 +70,50 @@ class PCA {
       throw new IllegalArgumentException("Expecting a well-formed matrix")
     }
 
+    val v = computePCA(matrix.rows.map(_.data), k)
+    val retV = DenseMatrix(sc.makeRDD(Array.tabulate(n)(i => MatrixRow(i, v(i)))), n, k)   
+    retV
+  }
+
+
+  /**
+  * Principal Component Analysis.
+  * Computes the top k principal component coefficients for the m-by-n data matrix X.
+  * Rows of X correspond to observations and columns correspond to variables. 
+  * The coefficient matrix is n-by-k. Each column of coeff contains coefficients
+  * for one principal component, and the columns are in descending 
+  * order of component variance.
+  * This function centers the data and uses the 
+  * singular value decomposition (SVD) algorithm. 
+  *
+  * @param matrix dense matrix to perform pca on
+  * @param k Recover k principal components
+  * @return An nxk matrix of principal components
+  */
+  def computePCA(matrix: RDD[Array[Double]], k: Int): Array[Array[Double]] = {
+    val n = matrix.first.size
+    val sc = matrix.sparkContext
+    val m = matrix.count
+
     // compute column sums and normalize matrix
-    val colSums = sc.broadcast(matrix.rows.map(x => x.data).fold(new Array[Double](n)){
+    val colSums = sc.broadcast(matrix.fold(new Array[Double](n)){
       (a, b) => for(i <- 0 until n) {
                   a(i) += b(i)
                 }
       a
     }).value
     
-    val data = matrix.rows.map{
-      x => for(i <- 0 until n) {
-             x.data(i) = (x.data(i) - colSums(i) / m) / Math.sqrt(n - 1)
-           }
-      x
+    val data = matrix.map{
+      x => 
+        val row = Array.ofDim[Double](n)
+        for(i <- 0 until n) {
+          row(i) = (x(i) - colSums(i) / m) / Math.sqrt(n - 1)
+        }
+        row
     }           
    
-    val normalizedMatrix = DenseMatrix(data, m, n)
- 
-    val retV = new SVD().setK(k).setComputeU(false)
-                .compute(normalizedMatrix).V
-    retV
+    val (u, s, v) = SVD.denseSVD(data, k)
+    v
   }
 }
 
