@@ -237,9 +237,8 @@ class ALS private (
   }
 
   /**
-   * Adding x * x.t to a matrix, the same as BLAS's DSPR.
+   * Adds alpha * x * x.t to a matrix in-place. This is the same as BLAS's DSPR.
    *
-   * @param x a vector of length n
    * @param L the lower triangular part of the matrix packed in an array (row major)
    */
   private def dspr(alpha: Double, x: DoubleMatrix, L: DoubleMatrix) = {

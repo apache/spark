@@ -23,10 +23,10 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 
-import org.jblas._
+import org.jblas.DoubleMatrix
 
-import org.apache.spark.SparkContext._
 import org.apache.spark.mllib.util.LocalSparkContext
+import org.apache.spark.SparkContext._
 
 object ALSSuite {
 
