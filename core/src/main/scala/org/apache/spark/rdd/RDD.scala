@@ -310,9 +310,8 @@ abstract class RDD[T: ClassTag](
    * Return a sampled subset of this RDD.
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] = {
-    if (fraction < Double.MinValue  || fraction > Double.MaxValue) {
-      throw new Exception("Invalid fraction value:" + fraction)
-    }
+    require(fraction >= 0 && fraction <= Double.MaxValue,
+      "Invalid fraction value: " + fraction)
     if (withReplacement) {
       new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), seed)
     } else {
