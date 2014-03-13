@@ -17,22 +17,18 @@
 
 package org.apache.spark
 
+import java.io._
+import java.util.zip.{GZIPInputStream, GZIPOutputStream}
+
 import scala.Some
 import scala.collection.mutable.{HashSet, Map}
 import scala.concurrent.Await
 
-import java.io._
-import java.util.zip.{GZIPInputStream, GZIPOutputStream}
-
-import scala.collection.mutable.HashSet
-import scala.concurrent.Await
-
 import akka.actor._
 import akka.pattern.ask
-
 import org.apache.spark.scheduler.MapStatus
 import org.apache.spark.storage.BlockManagerId
-import org.apache.spark.util.{AkkaUtils, TimeStampedHashMap, BoundedHashMap}
+import org.apache.spark.util._
 
 private[spark] sealed trait MapOutputTrackerMessage
 private[spark] case class GetMapOutputStatuses(shuffleId: Int)
@@ -55,7 +51,7 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
 }
 
 /**
- * Class that keeps track of the location of the location of the mapt output of
+ * Class that keeps track of the location of the location of the map output of
  * a stage. This is abstract because different versions of MapOutputTracker
  * (driver and worker) use different HashMap to store its metadata.
  */
@@ -155,10 +151,6 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  protected def cleanup(cleanupTime: Long) {
-    mapStatuses.asInstanceOf[TimeStampedHashMap[_, _]].clearOldValues(cleanupTime)
-  }
-
   def stop() {
     communicate(StopMapOutputTracker)
     mapStatuses.clear()
@@ -195,10 +187,13 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
   /**
    * Bounded HashMap for storing serialized statuses in the worker. This allows
    * the HashMap stay bounded in memory-usage. Things dropped from this HashMap will be
-   * automatically repopulated by fetching them again from the driver.
+   * automatically repopulated by fetching them again from the driver. Its okay to
+   * keep the cache size small as it unlikely that there will be a very large number of
+   * stages active simultaneously in the worker.
    */
-  protected val MAX_MAP_STATUSES = 100
-  protected val mapStatuses = new BoundedHashMap[Int, Array[MapStatus]](MAX_MAP_STATUSES, true)
+  protected val mapStatuses = new BoundedHashMap[Int, Array[MapStatus]](
+    conf.getInt("spark.mapOutputTracker.cacheSize", 100), true
+  )
 }
 
 /**
@@ -212,20 +207,18 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   private var cacheEpoch = epoch
 
   /**
-   * Timestamp based HashMap for storing mapStatuses in the master, so that statuses are dropped
-   * only by explicit deregistering or by ttl-based cleaning (if set). Other than these two
+   * Timestamp based HashMap for storing mapStatuses and cached serialized statuses
+   * in the master, so that statuses are dropped only by explicit deregistering or
+   * by TTL-based cleaning (if set). Other than these two
    * scenarios, nothing should be dropped from this HashMap.
    */
-  protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
 
-  /**
-   * Bounded HashMap for storing serialized statuses in the master. This allows
-   * the HashMap stay bounded in memory-usage. Things dropped from this HashMap will be
-   * automatically repopulated by serializing the lost statuses again .
-   */
-  protected val MAX_SERIALIZED_STATUSES = 100
-  private val cachedSerializedStatuses =
-    new BoundedHashMap[Int, Array[Byte]](MAX_SERIALIZED_STATUSES, true)
+  protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
+  private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]()
+
+  // For cleaning up TimeStampedHashMaps
+  private val metadataCleaner =
+    new MetadataCleaner(MetadataCleanerType.MAP_OUTPUT_TRACKER, this.cleanup, conf)
 
   def registerShuffle(shuffleId: Int, numMaps: Int) {
     if (mapStatuses.put(shuffleId, new Array[MapStatus](numMaps)).isDefined) {
@@ -264,6 +257,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
 
   def unregisterShuffle(shuffleId: Int) {
     mapStatuses.remove(shuffleId)
+    cachedSerializedStatuses.remove(shuffleId)
   }
 
   def incrementEpoch() {
@@ -303,11 +297,12 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   }
 
   def contains(shuffleId: Int): Boolean = {
-    mapStatuses.contains(shuffleId)
+    cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
   }
 
   override def stop() {
     super.stop()
+    metadataCleaner.cancel()
     cachedSerializedStatuses.clear()
   }
 
@@ -315,8 +310,9 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     // This might be called on the MapOutputTrackerMaster if we're running in local mode.
   }
 
-  def has(shuffleId: Int): Boolean = {
-    cachedSerializedStatuses.get(shuffleId).isDefined || mapStatuses.contains(shuffleId)
+  protected def cleanup(cleanupTime: Long) {
+    mapStatuses.clearOldValues(cleanupTime)
+    cachedSerializedStatuses.clearOldValues(cleanupTime)
   }
 }
 

@@ -1027,7 +1027,7 @@ abstract class RDD[T: ClassTag](
 
   def cleanup() {
     logInfo("Cleanup called on RDD " + id)
-    sc.cleaner.cleanRDD(this)
+    sc.cleaner.cleanRDD(id)
     dependencies.filter(_.isInstanceOf[ShuffleDependency[_, _]])
                 .map(_.asInstanceOf[ShuffleDependency[_, _]].shuffleId)
                 .foreach(sc.cleaner.cleanShuffle)

@@ -206,7 +206,7 @@ class SparkContext(
   @volatile private[spark] var dagScheduler = new DAGScheduler(taskScheduler)
   dagScheduler.start()
 
-  private[spark] val cleaner = new ContextCleaner(env)
+  private[spark] val cleaner = new ContextCleaner(this)
   cleaner.start()
 
   ui.start()

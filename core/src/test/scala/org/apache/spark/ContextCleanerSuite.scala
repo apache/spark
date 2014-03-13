@@ -25,7 +25,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val rdd = newRDD.persist()
     rdd.count()
     val tester = new CleanerTester(sc, rddIds = Seq(rdd.id))
-    cleaner.cleanRDD(rdd)
+    cleaner.cleanRDD(rdd.id)
     tester.assertCleanup
   }
 

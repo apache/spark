@@ -266,7 +266,7 @@ class DAGScheduler(
     : Stage =
   {
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
-    if (mapOutputTracker.has(shuffleDep.shuffleId)) {
+    if (mapOutputTracker.contains(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
       for (i <- 0 until locs.size) {

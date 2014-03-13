@@ -169,8 +169,14 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
     throw new IllegalStateException("Failed to find shuffle block: " + id)
   }
 
-  /** Remove all the blocks / files related to a particular shuffle */
+  /** Remove all the blocks / files and metadata related to a particular shuffle */
   def removeShuffle(shuffleId: ShuffleId) {
+    removeShuffleBlocks(shuffleId)
+    shuffleStates.remove(shuffleId)
+  }
+
+  /** Remove all the blocks / files related to a particular shuffle */
+  private def removeShuffleBlocks(shuffleId: ShuffleId) {
     shuffleStates.get(shuffleId) match {
       case Some(state) =>
         if (consolidateShuffleFiles) {
@@ -194,7 +200,7 @@ class ShuffleBlockManager(blockManager: BlockManager) extends Logging {
   }
 
   private def cleanup(cleanupTime: Long) {
-    shuffleStates.clearOldValues(cleanupTime, (shuffleId, state) => removeShuffle(shuffleId))
+    shuffleStates.clearOldValues(cleanupTime, (shuffleId, state) => removeShuffleBlocks(shuffleId))
   }
 }
 

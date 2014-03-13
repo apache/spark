@@ -62,8 +62,8 @@ private[spark] class MetadataCleaner(
 
 private[spark] object MetadataCleanerType extends Enumeration {
 
-  val MAP_OUTPUT_TRACKER, SPARK_CONTEXT, HTTP_BROADCAST, DAG_SCHEDULER, BLOCK_MANAGER,
-  SHUFFLE_BLOCK_MANAGER, BROADCAST_VARS, CLEANER = Value
+  val MAP_OUTPUT_TRACKER, SPARK_CONTEXT, HTTP_BROADCAST, BLOCK_MANAGER,
+  SHUFFLE_BLOCK_MANAGER, BROADCAST_VARS = Value
 
   type MetadataCleanerType = Value
 

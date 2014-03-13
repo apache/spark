@@ -21,8 +21,6 @@ import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
 
-import org.apache.spark.rdd.RDD
-
 /** Listener class used for testing when any item has been cleaned by the Cleaner class */
 private[spark] trait CleanerListener {
   def rddCleaned(rddId: Int)
@@ -32,12 +30,12 @@ private[spark] trait CleanerListener {
 /**
  * Cleans RDDs and shuffle data.
  */
-private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
+private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Classes to represent cleaning tasks */
   private sealed trait CleaningTask
-  private case class CleanRDD(sc: SparkContext, id: Int) extends CleaningTask
-  private case class CleanShuffle(id: Int) extends CleaningTask
+  private case class CleanRDD(rddId: Int) extends CleaningTask
+  private case class CleanShuffle(shuffleId: Int) extends CleaningTask
   // TODO: add CleanBroadcast
 
   private val queue = new LinkedBlockingQueue[CleaningTask]
@@ -47,7 +45,7 @@ private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
 
   private val cleaningThread = new Thread() { override def run() { keepCleaning() }}
 
-  private var stopped = false
+  @volatile private var stopped = false
 
   /** Start the cleaner */
   def start() {
@@ -57,26 +55,37 @@ private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
 
   /** Stop the cleaner */
   def stop() {
-    synchronized { stopped = true }
+    stopped = true
     cleaningThread.interrupt()
   }
 
-  /** Clean (unpersist) RDD data. */
-  def cleanRDD(rdd: RDD[_]) {
-    enqueue(CleanRDD(rdd.sparkContext, rdd.id))
-    logDebug("Enqueued RDD " + rdd + " for cleaning up")
+  /**
+   * Clean (unpersist) RDD data. Do not perform any time or resource intensive
+   * computation in this function as this is called from a finalize() function.
+   */
+  def cleanRDD(rddId: Int) {
+    enqueue(CleanRDD(rddId))
+    logDebug("Enqueued RDD " + rddId + " for cleaning up")
   }
 
-  /** Clean shuffle data. */
+  /**
+   * Clean shuffle data. Do not perform any time or resource intensive
+   * computation in this function as this is called from a finalize() function.
+   */
   def cleanShuffle(shuffleId: Int) {
     enqueue(CleanShuffle(shuffleId))
     logDebug("Enqueued shuffle " + shuffleId + " for cleaning up")
   }
 
+  /** Attach a listener object to get information of when objects are cleaned. */
   def attachListener(listener: CleanerListener) {
     listeners += listener
   }
-  /** Enqueue a cleaning task */
+
+  /**
+   * Enqueue a cleaning task. Do not perform any time or resource intensive
+   * computation in this function as this is called from a finalize() function.
+   */
   private def enqueue(task: CleaningTask) {
     queue.put(task)
   }
@@ -86,16 +95,16 @@ private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
     try {
       while (!isStopped) {
         val taskOpt = Option(queue.poll(100, TimeUnit.MILLISECONDS))
-        if (taskOpt.isDefined) {
+        taskOpt.foreach(task => {
           logDebug("Got cleaning task " + taskOpt.get)
-          taskOpt.get match {
-            case CleanRDD(sc, rddId) => doCleanRDD(sc, rddId)
+          task match {
+            case CleanRDD(rddId) => doCleanRDD(sc, rddId)
             case CleanShuffle(shuffleId) => doCleanShuffle(shuffleId)
           }
-        }
+        })
       }
     } catch {
-      case ie: java.lang.InterruptedException =>
+      case ie: InterruptedException =>
         if (!isStopped) logWarning("Cleaning thread interrupted")
     }
   }
@@ -103,7 +112,7 @@ private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
   /** Perform RDD cleaning */
   private def doCleanRDD(sc: SparkContext, rddId: Int) {
     logDebug("Cleaning rdd " + rddId)
-    sc.env.blockManager.master.removeRdd(rddId, false)
+    blockManagerMaster.removeRdd(rddId, false)
     sc.persistentRdds.remove(rddId)
     listeners.foreach(_.rddCleaned(rddId))
     logInfo("Cleaned rdd " + rddId)
@@ -113,14 +122,14 @@ private[spark] class ContextCleaner(env: SparkEnv) extends Logging {
   private def doCleanShuffle(shuffleId: Int) {
     logDebug("Cleaning shuffle " + shuffleId)
     mapOutputTrackerMaster.unregisterShuffle(shuffleId)
-    blockManager.master.removeShuffle(shuffleId)
+    blockManagerMaster.removeShuffle(shuffleId)
     listeners.foreach(_.shuffleCleaned(shuffleId))
     logInfo("Cleaned shuffle " + shuffleId)
   }
 
-  private def mapOutputTrackerMaster = env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
+  private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]
 
-  private def blockManager = env.blockManager
+  private def blockManagerMaster = sc.env.blockManager.master
 
-  private def isStopped = synchronized { stopped }
+  private def isStopped = stopped
 }
