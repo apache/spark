@@ -438,15 +438,15 @@ class ALS private (
     }
 
     // Solve the least-squares problem for each user and return the new feature vectors
-    userXtX.zip(userXy).map { case (triangularXtX, rhs) =>
+    Array.range(0, numUsers).map { index =>
       // Compute the full XtX matrix from the lower-triangular part we got above
-      fillFullMatrix(triangularXtX, fullXtX)
+      fillFullMatrix(userXtX(index), fullXtX)
       // Add regularization
       (0 until rank).foreach(i => fullXtX.data(i*rank + i) += lambda)
       // Solve the resulting matrix, which is symmetric and positive-definite
       implicitPrefs match {
-        case false => Solve.solvePositive(fullXtX, rhs).data
-        case true => Solve.solvePositive(fullXtX.addi(YtY.value.get), rhs).data
+        case false => Solve.solvePositive(fullXtX, userXy(index)).data
+        case true => Solve.solvePositive(fullXtX.addi(YtY.value.get), userXy(index)).data
       }
     }
   }
