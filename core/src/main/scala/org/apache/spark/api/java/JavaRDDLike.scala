@@ -283,6 +283,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
   /**
    * Return an array that contains all of the elements in this RDD.
    */
+  @deprecated("use collect", "1.0.0")
   def toArray(): JList[T] = collect()
 
   /**
