@@ -77,7 +77,7 @@ import scala.collection.JavaConversions._
  *
  * scala> val query = TestHive.parseSql(query_string).transform {
  *    | case relation @ UnresolvedRelation(databaseName, name, alias) =>
- *    | if(name == "psrc") ParquetRelation(name, filename)
+ *    | if (name == "psrc") ParquetRelation(name, filename)
  *    | else relation
  *    | }
  * query: org.apache.spark.sql.catalyst.plans.logical.LogicalPlan =
@@ -119,7 +119,7 @@ case class ParquetRelation(val tableName: String, val path: String) extends Base
 object ParquetRelation {
 
   // The element type for the RDDs that this relation maps to.
-  type RowType = org.apache.spark.sql.catalyst.expressions.GenericRow
+  type RowType = org.apache.spark.sql.catalyst.expressions.GenericMutableRow
 
   /**
    * Creates a new ParquetRelation and underlying Parquetfile for the given
@@ -138,7 +138,7 @@ object ParquetRelation {
              child: LogicalPlan,
              conf: Configuration,
              tableName: Option[String]): ParquetRelation = {
-    if(!child.resolved) {
+    if (!child.resolved) {
       throw new UnresolvedException[LogicalPlan](
         child,
         "Attempt to create Parquet table from unresolved child (when schema is not available)")
@@ -153,13 +153,13 @@ object ParquetRelation {
   private def checkPath(pathStr: String, conf: Configuration): Path = {
     val path = new Path(pathStr)
     val fs = path.getFileSystem(conf)
-    if(fs.exists(path) &&
+    if (fs.exists(path) &&
         !fs.getFileStatus(path)
         .getPermission
         .getUserAction
         .implies(FsAction.READ_WRITE)) {
       throw new IOException(
-        s"Unable to create ParquetRelation: path ${path.toString} not read-writable")
+        s"Unable to create ParquetRelation: path $path not read-writable")
     }
     path
   }
@@ -176,9 +176,13 @@ object ParquetTypesConverter {
     case ParquetPrimitiveTypeName.FLOAT => FloatType
     case ParquetPrimitiveTypeName.INT32 => IntegerType
     case ParquetPrimitiveTypeName.INT64 => LongType
-    case ParquetPrimitiveTypeName.INT96 => LongType // TODO: is there an equivalent?
+    case ParquetPrimitiveTypeName.INT96 => {
+      // TODO: add BigInteger type? TODO(andre) use DecimalType instead????
+      sys.error("Warning: potential loss of precision: converting INT96 to long")
+      LongType
+    }
     case _ => sys.error(
-      s"Unsupported parquet datatype ${parquetType.asInstanceOf[Enum[String]].toString()}")
+      s"Unsupported parquet datatype $parquetType")
   }
 
   def fromDataType(ctype: DataType): ParquetPrimitiveTypeName = ctype match {
@@ -189,7 +193,7 @@ object ParquetTypesConverter {
     case FloatType => ParquetPrimitiveTypeName.FLOAT
     case IntegerType => ParquetPrimitiveTypeName.INT32
     case LongType => ParquetPrimitiveTypeName.INT64
-    case _ => sys.error(s"Unsupported datatype ${ctype.toString}")
+    case _ => sys.error(s"Unsupported datatype $ctype")
   }
 
   def consumeType(consumer: RecordConsumer, ctype: DataType, record: Row, index: Int): Unit = {
@@ -204,7 +208,7 @@ object ParquetTypesConverter {
       case DoubleType => consumer.addDouble(record.getDouble(index))
       case FloatType => consumer.addFloat(record.getFloat(index))
       case BooleanType => consumer.addBoolean(record.getBoolean(index))
-      case _ => sys.error(s"Unsupported datatype ${ctype.toString}, cannot write to consumer")
+      case _ => sys.error(s"Unsupported datatype $ctype, cannot write to consumer")
     }
   }
 
@@ -232,18 +236,18 @@ object ParquetTypesConverter {
   def writeMetaData(attributes: Seq[Attribute], path: Path, conf: Configuration) {
     val fileSystem = FileSystem.get(conf)
 
-    if(fileSystem.exists(path) && !fileSystem.getFileStatus(path).isDir) {
-      throw new IOException(s"Expected to write to directory ${path.toString} but found file")
+    if (fileSystem.exists(path) && !fileSystem.getFileStatus(path).isDir) {
+      throw new IOException(s"Expected to write to directory $path but found file")
     }
 
     val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
 
-    if(fileSystem.exists(metadataPath)) {
+    if (fileSystem.exists(metadataPath)) {
       try {
         fileSystem.delete(metadataPath, true)
       } catch {
         case e: IOException =>
-          throw new IOException(s"Unable to delete previous PARQUET_METADATA_FILE:\n${e.toString}")
+          throw new IOException(s"Unable to delete previous PARQUET_METADATA_FILE at $metadataPath")
       }
     }
 
@@ -255,18 +259,13 @@ object ParquetTypesConverter {
       ParquetTypesConverter.convertFromAttributes(attributes)
     val metaData: FileMetaData = new FileMetaData(
       parquetSchema,
-      new java.util.HashMap[String, String](),
-      "Shark")
+      extraMetadata,
+      "Spark")
 
     ParquetFileWriter.writeMetadataFile(
       conf,
       path,
-      new Footer(
-        path,
-        new ParquetMetadata(
-          metaData,
-          Nil)
-      ) :: Nil)
+      new Footer(path, new ParquetMetadata(metaData, Nil)) :: Nil)
   }
 
   /**
@@ -283,11 +282,11 @@ object ParquetTypesConverter {
 
     val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
 
-    if(fs.exists(metadataPath) && fs.isFile(metadataPath)) {
+    if (fs.exists(metadataPath) && fs.isFile(metadataPath)) {
       // TODO: improve exception handling, etc.
       ParquetFileReader.readFooter(conf, metadataPath)
     } else {
-      if(!fs.exists(path) || !fs.isFile(path)) {
+      if (!fs.exists(path) || !fs.isFile(path)) {
         throw new FileNotFoundException(
           s"Could not find file ${path.toString} when trying to read metadata")
       }

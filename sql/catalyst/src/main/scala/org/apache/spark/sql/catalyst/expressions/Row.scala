@@ -63,7 +63,8 @@ trait MutableRow extends Row {
   def setBoolean(ordinal: Int, value: Boolean)
   def setShort(ordinal: Int, value: Short)
   def setByte(ordinal: Int, value: Byte)
-  def setFloat(ordinal: Int, value: Byte)
+  def setFloat(ordinal: Int, value: Float)
+  def setString(ordinal: Int, value: String)
 
   /**
    * EXPERIMENTAL
@@ -152,7 +153,7 @@ class GenericRow(protected[catalyst] val values: Array[Any]) extends Row {
   }
 
   def getString(i: Int): String = {
-    if (values(i) == null) sys.error("Failed to check null bit for primitive byte value.")
+    if (values(i) == null) sys.error("Failed to check null bit for primitive String value.")
     values(i).asInstanceOf[String]
   }
 
@@ -168,9 +169,10 @@ class GenericMutableRow(size: Int) extends GenericRow(size) with MutableRow {
   override def setBoolean(ordinal: Int,value: Boolean): Unit = { values(ordinal) = value }
   override def setByte(ordinal: Int,value: Byte): Unit = { values(ordinal) = value }
   override def setDouble(ordinal: Int,value: Double): Unit = { values(ordinal) = value }
-  override def setFloat(ordinal: Int,value: Byte): Unit = { values(ordinal) = value }
+  override def setFloat(ordinal: Int,value: Float): Unit = { values(ordinal) = value }
   override def setInt(ordinal: Int,value: Int): Unit = { values(ordinal) = value }
   override def setLong(ordinal: Int,value: Long): Unit = { values(ordinal) = value }
+  override def setString(ordinal: Int,value: String): Unit = { values(ordinal) = value }
 
   override def setNullAt(i: Int): Unit = { values(i) = null }
 

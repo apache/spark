@@ -16,10 +16,6 @@
  */
 
 package org.apache.spark.sql.parquet
-//package hive
-//package execution
-
-// TODO: move this into the parquet package once it can be
 
 import java.io.File
 
@@ -27,16 +23,14 @@ import org.scalatest.{BeforeAndAfterEach, BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.plans.logical._
-import org.apache.spark.sql.catalyst.plans.logical.WriteToFile
-import org.apache.spark.sql.catalyst.plans.logical.InsertIntoCreatedTable
 import org.apache.spark.sql.catalyst.analysis.UnresolvedRelation
+import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.hive.TestHive
 
-//import org.apache.spark.sql.execution.{ParquetTestData, ParquetRelation}
 
 class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 
-  val filename = "file:///tmp/parquettest"
+  val filename = getTempFilePath("parquettest").getCanonicalFile.toURI.toString
 
   // runs a SQL and optionally resolves one Parquet table
   def runQuery(querystr: String, tableName: Option[String] = None, filename: Option[String] = None): Array[Row] = {
@@ -44,7 +38,7 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
     val query = TestHive
       .parseSql(querystr)
     val finalQuery =
-      if(tableName.nonEmpty && filename.nonEmpty)
+      if (tableName.nonEmpty && filename.nonEmpty)
         resolveParquetTable(tableName.get, filename.get, query)
       else
         query
@@ -68,17 +62,17 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
    * Parquet tables. Once such a thing exists this functionality should be moved there.
    */
   def resolveParquetTable(tableName: String, filename: String, plan: LogicalPlan): LogicalPlan = {
+    TestHive.loadTestTable("src") // may not be loaded now
     plan.transform {
       case relation @ UnresolvedRelation(databaseName, name, alias) =>
-        if(name == tableName)
+        if (name == tableName)
           ParquetRelation(tableName, filename)
         else
           relation
       case op @ InsertIntoCreatedTable(databaseName, name, child) =>
-        if(name == tableName) {
+        if (name == tableName) {
           // note: at this stage the plan is not yet analyzed but Parquet needs to know the schema
           // and for that we need the child to be resolved
-          TestHive.loadTestTable("src") // may not be loaded now
           val relation = ParquetRelation.create(
               filename,
               TestHive.analyzer(child),
@@ -106,11 +100,11 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
   }
 
   override def beforeEach() {
-    (new File(filename)).getAbsoluteFile.delete()
+    new File(filename).getAbsoluteFile.delete()
   }
 
   override def afterEach() {
-    (new File(filename)).getAbsoluteFile.delete()
+    new File(filename).getAbsoluteFile.delete()
   }
 
   test("SELECT on Parquet table") {
@@ -121,16 +115,15 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
 
   test("Simple column projection + filter on Parquet table") {
     val rdd = runQuery("SELECT myboolean, mylong FROM parquet.testsource WHERE myboolean=true")
-    assert(rdd.size === 5)
-    assert(rdd.forall(_.getBoolean(0)))
+    assert(rdd.size === 5, "Filter returned incorrect number of rows")
+    assert(rdd.forall(_.getBoolean(0)), "Filter returned incorrect Boolean field value")
   }
 
   test("Converting Hive to Parquet Table via WriteToFile") {
     storeQuery("SELECT * FROM src", filename)
     val rddOne = runQuery("SELECT * FROM src").sortBy(_.getInt(0))
     val rddTwo = runQuery("SELECT * from ptable", Some("ptable"), Some(filename)).sortBy(_.getInt(0))
-    val allsame = (rddOne, rddTwo).zipped.forall { (a,b) => (a,b).zipped.forall { (x,y) => x==y}}
-    assert(allsame)
+    compareRDDs(rddOne, rddTwo, "src (Hive)", Seq("key:Int", "value:String"))
   }
 
   test("INSERT OVERWRITE TABLE Parquet table") {
@@ -139,15 +132,30 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAf
     runQuery("INSERT OVERWRITE TABLE ptable SELECT * FROM parquet.testsource", Some("ptable"), Some(filename))
     val rddCopy = runQuery("SELECT * FROM ptable", Some("ptable"), Some(filename))
     val rddOrig = runQuery("SELECT * FROM parquet.testsource")
-    val allsame = (rddCopy, rddOrig).zipped.forall { (a,b) => (a,b).zipped.forall { (x,y) => x==y } }
-    assert(allsame)
+    compareRDDs(rddOrig, rddCopy, "parquet.testsource", ParquetTestData.testSchemaFieldNames)
   }
 
   test("CREATE TABLE AS Parquet table") {
     runQuery("CREATE TABLE ptable AS SELECT * FROM src", Some("ptable"), Some(filename))
-    val rddCopy = runQuery("SELECT * FROM ptable", Some("ptable"), Some(filename)).sortBy(_.getInt(0))
+    val rddCopy = runQuery("SELECT * FROM ptable", Some("ptable"), Some(filename))
+      .sortBy[Int](_.apply(0) match {
+        case x: Int => x
+        case _ => 0
+      })
     val rddOrig = runQuery("SELECT * FROM src").sortBy(_.getInt(0))
-    val allsame = (rddCopy, rddOrig).zipped.forall { (a,b) => (a,b).zipped.forall { (x,y) => x==y } }
-    assert(allsame)
+    compareRDDs(rddOrig, rddCopy, "src (Hive)", Seq("key:Int", "value:String"))
+  }
+
+  private def compareRDDs(rddOne: Array[Row], rddTwo: Array[Row], tableName: String, fieldNames: Seq[String]) {
+    var counter = 0
+    (rddOne, rddTwo).zipped.foreach {
+      (a,b) => (a,b).zipped.toArray.zipWithIndex.foreach {
+        case ((value_1:Array[Byte], value_2:Array[Byte]), index) =>
+          assert(new String(value_1) === new String(value_2), s"table $tableName row ${counter} field ${fieldNames(index)} don't match")
+        case ((value_1, value_2), index) =>
+          assert(value_1 === value_2, s"table $tableName row $counter field ${fieldNames(index)} don't match")
+      }
+    counter = counter + 1
+    }
   }
 }
