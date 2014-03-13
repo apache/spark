@@ -65,7 +65,7 @@ public final class JavaWordCount {
 
     List<Tuple2<String, Integer>> output = counts.collect();
     for (Tuple2<?,?> tuple : output) {
-      System.out.println(tuple._1 + ": " + tuple._2);
+      System.out.println(tuple._1() + ": " + tuple._2());
     }
     System.exit(0);
   }
