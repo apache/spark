@@ -27,6 +27,10 @@ START_TACHYON=false
 while (( "$#" )); do
 case $1 in
     --with-tachyon)
+      if [ ! -e "$sbin"/tachyon/bin/tachyon ]; then
+        echo "Error: --with-tachyon specified, but tachyon not found."
+        exit -1
+      fi
       START_TACHYON=true
       ;;
   esac
