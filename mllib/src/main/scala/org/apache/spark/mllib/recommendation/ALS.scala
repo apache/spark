@@ -137,6 +137,7 @@ class ALS private (
     this
   }
 
+  /** Sets a random seed to have deterministic results. */
   def setSeed(seed: Long): ALS = {
     this.seed = seed
     this
@@ -419,14 +420,12 @@ class ALS private (
           implicitPrefs match {
             case false =>
               userXtX(us(i)).addi(tempXtX)
-              // dspr(1.0, x, userXtX(us(i)))
               SimpleBlas.axpy(rs(i), x, userXy(us(i)))
             case true =>
               // Extension to the original paper to handle rs(i) < 0. confidence is a function
               // of |rs(i)| instead so that it is never negative:
               val confidence = 1 + alpha * abs(rs(i))
               SimpleBlas.axpy(confidence - 1.0, tempXtX, userXtX(us(i)))
-              // dspr(confidence - 1.0, x, userXtX(us(i)))
               // For rs(i) < 0, the corresponding entry in P is 0 now, not 1 -- negative rs(i)
               // means we try to reconstruct 0. We add terms only where P = 1, so, term below
               // is now only added for rs(i) > 0:
