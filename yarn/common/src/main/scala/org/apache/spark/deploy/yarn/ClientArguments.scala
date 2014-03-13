@@ -150,7 +150,6 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
       "                             Mutliple invocations are possible, each will be passed in order.\n" +
       "  --num-executors NUM        Number of executors to start (Default: 2)\n" +
       "  --executor-cores NUM       Number of cores for the executors (Default: 1).\n" +
-      "  --am-class CLASS_NAME      Class Name for application master (Default: spark.deploy.yarn.ApplicationMaster)\n" +
       "  --driver-memory MEM        Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)\n" +
       "  --executor-memory MEM      Memory per executor (e.g. 1000M, 2G) (Default: 1G)\n" +
       "  --name NAME                The name of your application (Default: Spark)\n" +
