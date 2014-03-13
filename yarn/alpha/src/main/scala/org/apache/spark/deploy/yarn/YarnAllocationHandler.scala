@@ -85,7 +85,7 @@ private[yarn] class YarnAllocationHandler(
   private val pendingReleaseContainers = new ConcurrentHashMap[ContainerId, Boolean]
 
   private val numExecutorsRunning = new AtomicInteger()
-  // Used to generate a unique id per worker
+  // Used to generate a unique id per executor
   private val executorIdCounter = new AtomicInteger()
   private val lastResponseId = new AtomicInteger()
   private val numExecutorsFailed = new AtomicInteger()
