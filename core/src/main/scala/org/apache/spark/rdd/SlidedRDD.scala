@@ -97,4 +97,6 @@ class SlidedRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int)
       partitions.toArray
     }
   }
+
+  // TODO: Override methods such as aggregate, which only requires one Spark job.
 }
