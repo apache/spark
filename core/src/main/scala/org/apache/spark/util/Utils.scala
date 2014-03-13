@@ -282,7 +282,7 @@ private[spark] object Utils extends Logging {
         uc.setConnectTimeout(timeout)
         uc.setReadTimeout(timeout)
         uc.connect()
-        val in = uc.getInputStream();
+        val in = uc.getInputStream()
         val out = new FileOutputStream(tempFile)
         Utils.copyStream(in, out, true)
         if (targetFile.exists && !Files.equal(tempFile, targetFile)) {
@@ -911,25 +911,8 @@ private[spark] object Utils extends Logging {
 
   /**
    * Return a Hadoop FileSystem with the scheme encoded in the given path.
-   * File systems currently supported include HDFS, S3, and the local file system.
    */
   def getHadoopFileSystem(path: URI): FileSystem = {
-    path.getScheme match {
-      case "file" | "hdfs" | "s3" | null =>
-        val conf = SparkHadoopUtil.get.newConfiguration()
-        FileSystem.get(path, conf)
-      case unsupportedScheme =>
-        throw new UnsupportedOperationException("File system scheme %s is not supported!"
-          .format(unsupportedScheme))
-    }
-  }
-
-  /**
-   * Return a Hadoop FileSystem with the scheme encoded in the given path.
-   * File systems currently supported include HDFS, S3, and the local file system.
-   */
-  def getHadoopFileSystem(path: String): FileSystem = {
-    val uri = new URI(path)
-    getHadoopFileSystem(uri)
+    FileSystem.get(path, SparkHadoopUtil.get.newConfiguration())
   }
 }

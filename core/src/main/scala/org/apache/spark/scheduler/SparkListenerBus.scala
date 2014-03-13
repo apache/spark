@@ -24,8 +24,10 @@ import org.apache.spark.Logging
 /** Asynchronously passes SparkListenerEvents to registered SparkListeners. */
 private[spark] class SparkListenerBus extends EventBus with Logging {
 
-  /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
-   * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
+  /**
+   * Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
+   * an OOM exception) if it's perpetually being added to more quickly than it's being drained.
+   */
   private val EVENT_QUEUE_CAPACITY = 10000
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
   private var queueFullErrorMessageLogged = false
@@ -67,8 +69,10 @@ private[spark] class SparkListenerBus extends EventBus with Logging {
       if (System.currentTimeMillis > finishTime) {
         return false
       }
-      /* Sleep rather than using wait/notify, because this is used only for testing and wait/notify
-       * add overhead in the general case. */
+      /**
+       * Sleep rather than using wait/notify, because this is used only for testing and wait/notify
+       * add overhead in the general case.
+       */
       Thread.sleep(10)
     }
     true

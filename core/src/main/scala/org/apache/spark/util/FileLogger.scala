@@ -45,7 +45,7 @@ class FileLogger(
   extends Logging {
 
   private val DATE_FORMAT = new SimpleDateFormat("yyyy/MM/dd HH:mm:ss")
-  private val fileSystem = Utils.getHadoopFileSystem(logDir)
+  private val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
   private var fileIndex = 0
 
   // Only used if compression is enabled
@@ -63,15 +63,16 @@ class FileLogger(
   private def createLogDir() {
     val path = new Path(logDir)
     if (fileSystem.exists(path)) {
-      logWarning("Log directory already exists.")
       if (overwrite) {
+        logWarning("Log directory %s already exists. Overwriting...".format(logDir))
         // Second parameter is whether to delete recursively
         fileSystem.delete(path, true)
+      } else {
+        throw new IOException("Log directory %s already exists!".format(logDir))
       }
     }
     if (!fileSystem.mkdirs(path)) {
-      // Logger should throw a exception rather than continue to construct this object
-      throw new IOException("Error in creating log directory:" + logDir)
+      throw new IOException("Error in creating log directory: %s".format(logDir))
     }
   }
 

@@ -18,6 +18,7 @@
 package org.apache.spark.scheduler
 
 import java.io.InputStream
+import java.net.URI
 
 import scala.io.Source
 
@@ -59,7 +60,7 @@ private[spark] class SparkReplayerBus(conf: SparkConf) extends EventBus with Log
    * Replay each event in the order maintained in the given logs.
    */
   def replay(logDir: String): Boolean = {
-    val fileSystem = Utils.getHadoopFileSystem(logDir)
+    val fileSystem = Utils.getHadoopFileSystem(new URI(logDir))
     val logPaths = getLogFilePaths(logDir, fileSystem)
     if (logPaths.length == 0) {
       return false
@@ -84,7 +85,7 @@ private[spark] class SparkReplayerBus(conf: SparkConf) extends EventBus with Log
         }
       } catch {
         case e: Exception =>
-          logWarning("Exception in parsing UI logs for %s".format(path))
+          logWarning("Exception in parsing Spark event log %s".format(path))
           logWarning(currentLine + "\n")
           logDebug(e.getMessage + e.getStackTraceString)
       } finally {
