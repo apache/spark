@@ -29,7 +29,7 @@ import org.apache.hadoop.fs.Path
 import org.apache.spark.rdd.HadoopRDD
 
 /**
- * Internal helper class that saves an RDD using a Hadoop OutputFormat. 
+ * Internal helper class that saves an RDD using a Hadoop OutputFormat.
  *
  * Saves the RDD using a JobConf, which should contain an output key class, an output value class,
  * a filename to write to, etc, exactly like in a Hadoop MapReduce job.

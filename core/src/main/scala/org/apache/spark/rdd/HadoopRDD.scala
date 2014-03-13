@@ -233,12 +233,10 @@ private[spark] object HadoopRDD {
   def putCachedMetadata(key: String, value: Any) =
     SparkEnv.get.hadoopJobMetadata.put(key, value)
 
+  /** Add Hadoop configuration specific to a single partition and attempt. */
   def addLocalConfiguration(jobTrackerId: String, jobId: Int, splitId: Int, attemptId: Int,
                             conf: JobConf) {
-    // generate job id
-    //val stageId = context.stageId
     val jobID = new JobID(jobTrackerId, jobId)
-    //val attemptId = (attemptId % Int.MaxValue).toInt
     val taId = new TaskAttemptID(new TaskID(jobID, true, splitId), attemptId)
 
     conf.set("mapred.tip.id", taId.getTaskID.toString)
