@@ -23,6 +23,8 @@ import scala.util.Random
 
 import org.scalatest.FunSuite
 import com.google.common.io.Files
+import org.apache.hadoop.mapreduce._
+import org.apache.hadoop.conf.{Configuration, Configurable}
 
 import org.apache.spark.SparkContext._
 import org.apache.spark.{Partitioner, SharedSparkContext}
@@ -330,4 +332,103 @@ class PairRDDFunctionsSuite extends FunSuite with SharedSparkContext {
       (1, ArrayBuffer(1)),
       (2, ArrayBuffer(1))))
   }
+
+  test("saveNewAPIHadoopFile should call setConf if format is configurable") {
+    val pairs = sc.parallelize(Array((new Integer(1), new Integer(1))))
+
+    // No error, non-configurable formats still work
+    pairs.saveAsNewAPIHadoopFile[FakeFormat]("ignored")
+
+    /*
+      Check that configurable formats get configured:
+      ConfigTestFormat throws an exception if we try to write
+      to it when setConf hasn't been called first.
+      Assertion is in ConfigTestFormat.getRecordWriter.
+     */
+    pairs.saveAsNewAPIHadoopFile[ConfigTestFormat]("ignored")
+  }
+
+  test("lookup") {
+    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+
+    assert(pairs.partitioner === None)
+    assert(pairs.lookup(1) === Seq(2))
+    assert(pairs.lookup(5) === Seq(6,7))
+    assert(pairs.lookup(-1) === Seq())
+
+  }
+
+  test("lookup with partitioner") {
+    val pairs = sc.parallelize(Array((1,2), (3,4), (5,6), (5,7)))
+
+    val p = new Partitioner {
+      def numPartitions: Int = 2
+
+      def getPartition(key: Any): Int = Math.abs(key.hashCode() % 2)
+    }
+    val shuffled = pairs.partitionBy(p)
+
+    assert(shuffled.partitioner === Some(p))
+    assert(shuffled.lookup(1) === Seq(2))
+    assert(shuffled.lookup(5) === Seq(6,7))
+    assert(shuffled.lookup(-1) === Seq())
+  }
 }
+
+/*
+  These classes are fakes for testing
+    "saveNewAPIHadoopFile should call setConf if format is configurable".
+  Unfortunately, they have to be top level classes, and not defined in
+  the test method, because otherwise Scala won't generate no-args constructors
+  and the test will therefore throw InstantiationException when saveAsNewAPIHadoopFile
+  tries to instantiate them with Class.newInstance.
+ */
+class FakeWriter extends RecordWriter[Integer, Integer] {
+
+  def close(p1: TaskAttemptContext) = ()
+
+  def write(p1: Integer, p2: Integer) = ()
+
+}
+
+class FakeCommitter extends OutputCommitter {
+  def setupJob(p1: JobContext) = ()
+
+  def needsTaskCommit(p1: TaskAttemptContext): Boolean = false
+
+  def setupTask(p1: TaskAttemptContext) = ()
+
+  def commitTask(p1: TaskAttemptContext) = ()
+
+  def abortTask(p1: TaskAttemptContext) = ()
+}
+
+class FakeFormat() extends OutputFormat[Integer, Integer]() {
+
+  def checkOutputSpecs(p1: JobContext)  = ()
+
+  def getRecordWriter(p1: TaskAttemptContext): RecordWriter[Integer, Integer] = {
+    new FakeWriter()
+  }
+
+  def getOutputCommitter(p1: TaskAttemptContext): OutputCommitter = {
+    new FakeCommitter()
+  }
+}
+
+class ConfigTestFormat() extends FakeFormat() with Configurable {
+
+  var setConfCalled = false
+  def setConf(p1: Configuration) = {
+    setConfCalled = true
+    ()
+  }
+
+  def getConf: Configuration = null
+
+  override def getRecordWriter(p1: TaskAttemptContext): RecordWriter[Integer, Integer] = {
+    assert(setConfCalled, "setConf was never called")
+    super.getRecordWriter(p1)
+  }
+}
+

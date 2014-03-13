@@ -81,7 +81,7 @@ class JobLogger(val user: String, val logDirName: String)
   /**
    * Create a log file for one job
    * @param jobID ID of the job
-   * @exception FileNotFoundException Fail to create log file
+   * @throws FileNotFoundException Fail to create log file
    */
   protected def createLogWriter(jobID: Int) {
     try {
@@ -213,14 +213,10 @@ class JobLogger(val user: String, val logDirName: String)
    * @param indent Indent number before info
    */
   protected def recordRddInStageGraph(jobID: Int, rdd: RDD[_], indent: Int) {
+    val cacheStr = if (rdd.getStorageLevel != StorageLevel.NONE) "CACHED" else "NONE"
     val rddInfo =
-      if (rdd.getStorageLevel != StorageLevel.NONE) {
-        "RDD_ID=" + rdd.id + " " + getRddName(rdd) + " CACHED" + " " +
-                rdd.origin + " " + rdd.generator
-      } else {
-        "RDD_ID=" + rdd.id + " " + getRddName(rdd) + " NONE" + " " +
-                rdd.origin + " " + rdd.generator
-      }
+      s"RDD_ID=$rdd.id ${getRddName(rdd)} $cacheStr " +
+      s"${rdd.getCreationSite} ${rdd.creationSiteInfo.firstUserClass}"
     jobLogInfo(jobID, indentString(indent) + rddInfo, false)
     rdd.dependencies.foreach {
       case shufDep: ShuffleDependency[_, _] =>
@@ -275,7 +271,6 @@ class JobLogger(val user: String, val logDirName: String)
         " BLOCK_FETCHED_LOCAL=" + metrics.localBlocksFetched +
         " BLOCK_FETCHED_REMOTE=" + metrics.remoteBlocksFetched +
         " REMOTE_FETCH_WAIT_TIME=" + metrics.fetchWaitTime +
-        " REMOTE_FETCH_TIME=" + metrics.remoteFetchTime +
         " REMOTE_BYTES_READ=" + metrics.remoteBytesRead
       case None => ""
     }

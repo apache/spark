@@ -111,6 +111,8 @@ class SquaredL2Updater extends Updater {
     val step = gradient.mul(thisIterStepSize)
     // add up both updates from the gradient of the loss (= step) as well as
     // the gradient of the regularizer (= regParam * weightsOld)
+    // w' = w - thisIterStepSize * (gradient + regParam * w)
+    // w' = (1 - thisIterStepSize * regParam) * w - thisIterStepSize * gradient
     val newWeights = weightsOld.mul(1.0 - thisIterStepSize * regParam).sub(step)
     (newWeights, 0.5 * pow(newWeights.norm2, 2.0) * regParam)
   }

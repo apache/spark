@@ -20,7 +20,7 @@
   <parent>
     <groupId>org.apache.spark</groupId>
     <artifactId>spark-parent</artifactId>
-    <version>1.0.0-incubating-SNAPSHOT</version>
+    <version>1.0.0-SNAPSHOT</version>
     <relativePath>../pom.xml</relativePath>
   </parent>
 
@@ -53,14 +53,6 @@
       <version>${yarn.version}</version>
     </dependency>
     <dependency>
-      <groupId>org.apache.avro</groupId>
-      <artifactId>avro</artifactId>
-    </dependency>
-    <dependency>
-      <groupId>org.apache.avro</groupId>
-      <artifactId>avro-ipc</artifactId>
-    </dependency>
-    <dependency>
       <groupId>org.scalatest</groupId>
       <artifactId>scalatest_${scala.binary.version}</artifactId>
       <scope>test</scope>
@@ -78,6 +70,15 @@
       <modules>
         <module>alpha</module>
       </modules>
+
+      <!-- SPARK-1121: SPARK-1121: Adds an explicit dependency on Avro to work around
+           a Hadoop 0.23.X issue -->
+      <dependencies>
+         <dependency>
+           <groupId>org.apache.avro</groupId>
+           <artifactId>avro</artifactId>
+         </dependency>
+      </dependencies>
     </profile>
 
     <profile>
@@ -133,7 +134,7 @@
             </goals>
             <configuration>
               <exportAntProperties>true</exportAntProperties>
-              <tasks>
+              <target>
                 <property name="spark.classpath" refid="maven.test.classpath" />
                 <property environment="env" />
                 <fail message="Please set the SCALA_HOME (or SCALA_LIBRARY_PATH if scala is on the path) environment variables and retry.">  
@@ -146,7 +147,7 @@
                     </not>
                   </condition>
                 </fail>
-              </tasks>
+              </target>
             </configuration>
           </execution>
         </executions>

@@ -54,7 +54,7 @@ object TestHive
  * hive metastore seems to lead to weird non-deterministic failures.  Therefore, the execution of
  * testcases that rely on TestHive must be serialized.
  */
-class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
+class TestHiveContext(sc: SparkContext) extends LocalHiveContext(sc) {
   self =>
 
   // By clearing the port we force Spark to pick a new one.  This allows us to rerun tests
@@ -62,8 +62,8 @@ class TestHiveContext(sc: SparkContext) extends HiveContext(sc) {
   System.clearProperty("spark.driver.port")
   System.clearProperty("spark.hostPort")
 
-  lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
-  lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
+  override lazy val warehousePath = getTempFilePath("sparkHiveWarehouse").getCanonicalPath
+  override lazy val metastorePath = getTempFilePath("sparkHiveMetastore").getCanonicalPath
 
   /** The location of the compiled hive distribution */
   lazy val hiveHome = envVarToFile("HIVE_HOME")

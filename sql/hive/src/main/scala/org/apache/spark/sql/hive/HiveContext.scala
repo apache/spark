@@ -43,28 +43,11 @@ import scala.collection.JavaConversions._
  * Starts up an instance of hive where metadata is stored locally. An in-process metadata data is
  * created with data stored in ./metadata.  Warehouse data is stored in in ./warehouse.
  */
-class LocalHiveContext(
-    sc: SparkContext,
-    override val warehousePath: String = new File("warehouse").getCanonicalPath)
+class LocalHiveContext(sc: SparkContext)
   extends HiveContext(sc) {
 
-  override def metastorePath = new File("metastore").getCanonicalPath
-}
-
-/**
- * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
- */
-abstract class HiveContext(sc: SparkContext) extends SparkSqlContext(sc) {
-  self =>
-
-  /** The path to the hive warehouse. */
-  def warehousePath: String
-  /** The path to the local metastore. */
-  def metastorePath: String
-
-  override def parseSql(sql: String): LogicalPlan = HiveQl.parseSql(sql)
-  override def executePlan(plan: LogicalPlan): this.QueryExecution =
-    new this.QueryExecution { val logical = plan }
+  lazy val metastorePath = new File("metastore").getCanonicalPath
+  lazy val warehousePath: String = new File("warehouse").getCanonicalPath
 
   /** Sets up the system initially or after a RESET command */
   protected def configure() {
@@ -73,6 +56,20 @@ abstract class HiveContext(sc: SparkContext) extends SparkSqlContext(sc) {
       s"set javax.jdo.option.ConnectionURL=jdbc:derby:;databaseName=$metastorePath;create=true")
     runSqlHive("set hive.metastore.warehouse.dir=" + warehousePath)
   }
+
+  configure() // Must be called before initializing the catalog below.
+}
+
+/**
+ * An instance of the Spark SQL execution engine that integrates with data stored in Hive.
+ * Configuration for Hive is read from hive-site.xml on the classpath.
+ */
+class HiveContext(sc: SparkContext) extends SparkSqlContext(sc) {
+  self =>
+
+  override def parseSql(sql: String): LogicalPlan = HiveQl.parseSql(sql)
+  override def executePlan(plan: LogicalPlan): this.QueryExecution =
+    new this.QueryExecution { val logical = plan }
 
   // Circular buffer to hold what hive prints to STDOUT and ERR.  Only printed when failures occur.
   protected val outputBuffer =  new java.io.OutputStream {
@@ -103,18 +100,16 @@ abstract class HiveContext(sc: SparkContext) extends SparkSqlContext(sc) {
   }
 
   @transient protected[hive] lazy val hiveconf = new HiveConf(classOf[SessionState])
-  @transient protected[hive] val sessionState = new SessionState(hiveconf)
+  @transient protected[hive] lazy val sessionState = new SessionState(hiveconf)
 
   sessionState.err = new PrintStream(outputBuffer, true, "UTF-8")
   sessionState.out = new PrintStream(outputBuffer, true, "UTF-8")
 
-  configure() // Must be called before initializing the catalog below.
-
   /* A catalyst metadata catalog that points to the Hive Metastore. */
-  override val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
+  override lazy val catalog = new HiveMetastoreCatalog(this) with OverrideCatalog
 
   /* An analyzer that uses the Hive metastore. */
-  override val analyzer = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
+  override lazy val analyzer = new Analyzer(catalog, HiveFunctionRegistry, caseSensitive = false)
 
   def tables: Seq[BaseRelation] = {
     // TODO: Move this functionallity to Catalog. Make client protected.

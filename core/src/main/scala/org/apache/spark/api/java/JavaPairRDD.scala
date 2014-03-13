@@ -32,7 +32,7 @@ import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.Partitioner._
 import org.apache.spark.SparkContext.rddToPairRDDFunctions
 import org.apache.spark.api.java.JavaSparkContext.fakeClassTag
-import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2}
+import org.apache.spark.api.java.function.{Function => JFunction, Function2 => JFunction2, PairFunction}
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
 import org.apache.spark.rdd.{OrderedRDDFunctions, RDD}
 import org.apache.spark.storage.StorageLevel
@@ -89,7 +89,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Return a new RDD containing only the elements that satisfy a predicate.
    */
   def filter(f: JFunction[(K, V), java.lang.Boolean]): JavaPairRDD[K, V] =
-    new JavaPairRDD[K, V](rdd.filter(x => f(x).booleanValue()))
+    new JavaPairRDD[K, V](rdd.filter(x => f.call(x).booleanValue()))
 
   /**
    * Return a new RDD that is reduced into `numPartitions` partitions.
@@ -125,6 +125,16 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def union(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
     new JavaPairRDD[K, V](rdd.union(other.rdd))
+
+  /**
+   * Return the intersection of this RDD and another one. The output will not contain any duplicate
+   * elements, even if the input RDDs did.
+   *
+   * Note that this method performs a shuffle internally.
+   */
+  def intersection(other: JavaPairRDD[K, V]): JavaPairRDD[K, V] =
+    new JavaPairRDD[K, V](rdd.intersection(other.rdd))
+
 
   // first() has to be overridden here so that the generated method has the signature
   // 'public scala.Tuple2 first()'; if the trait's definition is used,
@@ -165,9 +175,9 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    * Simplified version of combineByKey that hash-partitions the output RDD.
    */
   def combineByKey[C](createCombiner: JFunction[V, C],
-    mergeValue: JFunction2[C, V, C],
-    mergeCombiners: JFunction2[C, C, C],
-    numPartitions: Int): JavaPairRDD[K, C] =
+      mergeValue: JFunction2[C, V, C],
+      mergeCombiners: JFunction2[C, C, C],
+      numPartitions: Int): JavaPairRDD[K, C] =
     combineByKey(createCombiner, mergeValue, mergeCombiners, new HashPartitioner(numPartitions))
 
   /**
@@ -442,7 +452,7 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
    */
   def flatMapValues[U](f: JFunction[V, java.lang.Iterable[U]]): JavaPairRDD[K, U] = {
     import scala.collection.JavaConverters._
-    def fn = (x: V) => f.apply(x).asScala
+    def fn = (x: V) => f.call(x).asScala
     implicit val ctag: ClassTag[U] = fakeClassTag
     fromRDD(rdd.flatMapValues(fn))
   }
@@ -511,49 +521,49 @@ class JavaPairRDD[K, V](val rdd: RDD[(K, V)])
 
   /** Output the RDD to any Hadoop-supported file system. */
   def saveAsHadoopFile[F <: OutputFormat[_, _]](
-    path: String,
-    keyClass: Class[_],
-    valueClass: Class[_],
-    outputFormatClass: Class[F],
-    conf: JobConf) {
+      path: String,
+      keyClass: Class[_],
+      valueClass: Class[_],
+      outputFormatClass: Class[F],
+      conf: JobConf) {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
   }
 
   /** Output the RDD to any Hadoop-supported file system. */
   def saveAsHadoopFile[F <: OutputFormat[_, _]](
-    path: String,
-    keyClass: Class[_],
-    valueClass: Class[_],
-    outputFormatClass: Class[F]) {
+      path: String,
+      keyClass: Class[_],
+      valueClass: Class[_],
+      outputFormatClass: Class[F]) {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass)
   }
 
   /** Output the RDD to any Hadoop-supported file system, compressing with the supplied codec. */
   def saveAsHadoopFile[F <: OutputFormat[_, _]](
-    path: String,
-    keyClass: Class[_],
-    valueClass: Class[_],
-    outputFormatClass: Class[F],
-    codec: Class[_ <: CompressionCodec]) {
+      path: String,
+      keyClass: Class[_],
+      valueClass: Class[_],
+      outputFormatClass: Class[F],
+      codec: Class[_ <: CompressionCodec]) {
     rdd.saveAsHadoopFile(path, keyClass, valueClass, outputFormatClass, codec)
   }
 
   /** Output the RDD to any Hadoop-supported file system. */
   def saveAsNewAPIHadoopFile[F <: NewOutputFormat[_, _]](
-    path: String,
-    keyClass: Class[_],
-    valueClass: Class[_],
-    outputFormatClass: Class[F],
-    conf: Configuration) {
+      path: String,
+      keyClass: Class[_],
+      valueClass: Class[_],
+      outputFormatClass: Class[F],
+      conf: Configuration) {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass, conf)
   }
 
   /** Output the RDD to any Hadoop-supported file system. */
   def saveAsNewAPIHadoopFile[F <: NewOutputFormat[_, _]](
-    path: String,
-    keyClass: Class[_],
-    valueClass: Class[_],
-    outputFormatClass: Class[F]) {
+      path: String,
+      keyClass: Class[_],
+      valueClass: Class[_],
+      outputFormatClass: Class[F]) {
     rdd.saveAsNewAPIHadoopFile(path, keyClass, valueClass, outputFormatClass)
   }
 
@@ -700,6 +710,15 @@ object JavaPairRDD {
 
   implicit def toRDD[K, V](rdd: JavaPairRDD[K, V]): RDD[(K, V)] = rdd.rdd
 
+  private[spark]
+  implicit def toScalaFunction2[T1, T2, R](fun: JFunction2[T1, T2, R]): Function2[T1, T2, R] = {
+    (x: T1, x1: T2) => fun.call(x, x1)
+  }
+
+  private[spark] implicit def toScalaFunction[T, R](fun: JFunction[T, R]): T => R = x => fun.call(x)
+
+  private[spark]
+  implicit def pairFunToScalaFun[A, B, C](x: PairFunction[A, B, C]): A => (B, C) = y => x.call(y)
 
   /** Convert a JavaRDD of key-value pairs to JavaPairRDD. */
   def fromJavaRDD[K, V](rdd: JavaRDD[(K, V)]): JavaPairRDD[K, V] = {

@@ -20,6 +20,7 @@ import shutil
 import sys
 from threading import Lock
 from tempfile import NamedTemporaryFile
+from collections import namedtuple
 
 from pyspark import accumulators
 from pyspark.accumulators import Accumulator
@@ -29,6 +30,7 @@ from pyspark.files import SparkFiles
 from pyspark.java_gateway import launch_gateway
 from pyspark.serializers import PickleSerializer, BatchedSerializer, UTF8Deserializer
 from pyspark.storagelevel import StorageLevel
+from pyspark import rdd
 from pyspark.rdd import RDD
 
 from py4j.java_collections import ListConverter
@@ -83,6 +85,11 @@ class SparkContext(object):
             ...
         ValueError:...
         """
+        if rdd._extract_concise_traceback() is not None:
+            self._callsite = rdd._extract_concise_traceback()
+        else:
+            tempNamedTuple = namedtuple("Callsite", "function file linenum")
+            self._callsite = tempNamedTuple(function=None, file=None, linenum=None)
         SparkContext._ensure_initialized(self, gateway=gateway)
 
         self.environment = environment or {}
@@ -169,7 +176,14 @@ class SparkContext(object):
 
             if instance:
                 if SparkContext._active_spark_context and SparkContext._active_spark_context != instance:
-                    raise ValueError("Cannot run multiple SparkContexts at once")
+                    currentMaster = SparkContext._active_spark_context.master
+                    currentAppName = SparkContext._active_spark_context.appName
+                    callsite = SparkContext._active_spark_context._callsite
+
+                    # Raise error if there is already a running Spark context
+                    raise ValueError("Cannot run multiple SparkContexts at once; existing SparkContext(app=%s, master=%s)" \
+                        " created by %s at %s:%s " \
+                        % (currentAppName, currentMaster, callsite.function, callsite.file, callsite.linenum))
                 else:
                     SparkContext._active_spark_context = instance
 
@@ -371,6 +385,37 @@ class SparkContext(object):
         newStorageLevel = self._jvm.org.apache.spark.storage.StorageLevel
         return newStorageLevel(storageLevel.useDisk, storageLevel.useMemory,
             storageLevel.deserialized, storageLevel.replication)
+
+    def setJobGroup(self, groupId, description):
+        """
+        Assigns a group ID to all the jobs started by this thread until the group ID is set to a
+        different value or cleared.
+
+        Often, a unit of execution in an application consists of multiple Spark actions or jobs.
+        Application programmers can use this method to group all those jobs together and give a
+        group description. Once set, the Spark web UI will associate such jobs with this group.
+        """
+        self._jsc.setJobGroup(groupId, description)
+
+    def setLocalProperty(self, key, value):
+        """
+        Set a local property that affects jobs submitted from this thread, such as the
+        Spark fair scheduler pool.
+        """
+        self._jsc.setLocalProperty(key, value)
+
+    def getLocalProperty(self, key):
+        """
+        Get a local property set in this thread, or null if it is missing. See
+        L{setLocalProperty}
+        """
+        return self._jsc.getLocalProperty(key)
+
+    def sparkUser(self):
+        """
+        Get SPARK_USER for user who is running SparkContext.
+        """
+        return self._jsc.sc().sparkUser()
 
 def _test():
     import atexit

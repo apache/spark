@@ -182,8 +182,13 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   /** Create a new interpreter. */
   def createInterpreter() {
-    if (addedClasspath != "")
-      settings.classpath append addedClasspath
+    require(settings != null)
+
+    if (addedClasspath != "") settings.classpath.append(addedClasspath)
+    // work around for Scala bug
+    val totalClassPath = SparkILoop.getAddedJars.foldLeft(
+      settings.classpath.value)((l, r) => ClassPath.join(l, r))
+    this.settings.classpath.value = totalClassPath
 
     intp = new SparkILoopInterpreter
   }
@@ -876,6 +881,8 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
       })
 
   def process(settings: Settings): Boolean = savingContextLoader {
+    if (getMaster() == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
+
     this.settings = settings
     createInterpreter()
 
@@ -934,16 +941,9 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
 
   def createSparkContext(): SparkContext = {
     val execUri = System.getenv("SPARK_EXECUTOR_URI")
-    val master = this.master match {
-      case Some(m) => m
-      case None => {
-        val prop = System.getenv("MASTER")
-        if (prop != null) prop else "local"
-      }
-    }
     val jars = SparkILoop.getAddedJars.map(new java.io.File(_).getAbsolutePath)
     val conf = new SparkConf()
-      .setMaster(master)
+      .setMaster(getMaster())
       .setAppName("Spark shell")
       .setJars(jars)
       .set("spark.repl.class.uri", intp.classServer.uri)
@@ -956,6 +956,17 @@ class SparkILoop(in0: Option[BufferedReader], protected val out: JPrintWriter,
     sparkContext = new SparkContext(conf)
     logInfo("Created spark context..")
     sparkContext
+  }
+
+  private def getMaster(): String = {
+    val master = this.master match {
+      case Some(m) => m
+      case None => {
+        val prop = System.getenv("MASTER")
+        if (prop != null) prop else "local"
+      }
+    }
+    master
   }
 
   /** process command-line arguments and do as they request */

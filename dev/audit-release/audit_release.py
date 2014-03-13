@@ -31,10 +31,10 @@ import time
 import urllib2
 
 ## Fill in release details here:
-RELEASE_URL = "http://people.apache.org/~pwendell/spark-0.9.0-incubating-rc5/"
+RELEASE_URL = "http://people.apache.org/~pwendell/spark-1.0.0-rc1/"
 RELEASE_KEY = "9E4FE3AF"
 RELEASE_REPOSITORY = "https://repository.apache.org/content/repositories/orgapachespark-1006/"
-RELEASE_VERSION = "0.9.0-incubating"
+RELEASE_VERSION = "1.0.0"
 SCALA_VERSION = "2.10.3"
 SCALA_BINARY_VERSION = "2.10"
 ##
@@ -191,10 +191,6 @@ for artifact in artifacts:
   test("NOTICE" in base_files, "Tarball contains NOTICE file")
   test("LICENSE" in base_files, "Tarball contains LICENSE file")
  
-  os.chdir(os.path.join(WORK_DIR, dir_name))
-  readme = "".join(open("README.md").readlines())
-  disclaimer_part = "is an effort undergoing incubation"
-  test(disclaimer_part in readme, "README file contains disclaimer")
   os.chdir(WORK_DIR)
  
 for artifact in artifacts:

@@ -18,8 +18,10 @@
 package org.apache.spark.rdd
 
 import java.io.EOFException
+import scala.collection.immutable.Map
 
 import org.apache.hadoop.conf.{Configurable, Configuration}
+import org.apache.hadoop.mapred.FileSplit
 import org.apache.hadoop.mapred.InputFormat
 import org.apache.hadoop.mapred.InputSplit
 import org.apache.hadoop.mapred.JobConf
@@ -43,6 +45,23 @@ private[spark] class HadoopPartition(rddId: Int, idx: Int, @transient s: InputSp
   override def hashCode(): Int = 41 * (41 + rddId) + idx
 
   override val index: Int = idx
+
+  /**
+   * Get any environment variables that should be added to the users environment when running pipes
+   * @return a Map with the environment variables and corresponding values, it could be empty
+   */
+  def getPipeEnvVars(): Map[String, String] = {
+    val envVars: Map[String, String] = if (inputSplit.value.isInstanceOf[FileSplit]) {
+      val is: FileSplit = inputSplit.value.asInstanceOf[FileSplit]
+      // map_input_file is deprecated in favor of mapreduce_map_input_file but set both
+      // since its not removed yet
+      Map("map_input_file" -> is.getPath().toString(),
+        "mapreduce_map_input_file" -> is.getPath().toString())
+    } else {
+      Map()
+    }
+    envVars
+  }
 }
 
 /**
