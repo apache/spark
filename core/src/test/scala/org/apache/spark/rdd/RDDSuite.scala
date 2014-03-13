@@ -457,10 +457,10 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("takeSample") {
     val data = sc.parallelize(1 to 100, 2)
-    val emptySet = data.filter(_ => false)
+    val emptySet = data.mapPartitions { iter => Iterator.empty }
 
     val sample = emptySet.takeSample(false, 20, 1)
-    assert(sample.size === 0)
+    assert(sample.length === 0)
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
