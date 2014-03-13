@@ -64,6 +64,12 @@
             <version>${hive.version}</version>
         </dependency>
         <dependency>
+            <!-- Matches the version of jackson-core-asl pulled in by avro -->
+            <groupId>org.codehaus.jackson</groupId>
+            <artifactId>jackson-mapper-asl</artifactId>
+            <version>1.8.8</version>
+        </dependency>
+        <dependency>
             <groupId>org.apache.hive</groupId>
             <artifactId>hive-serde</artifactId>
             <version>${hive.version}</version>

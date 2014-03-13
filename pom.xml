@@ -373,7 +373,6 @@
         <groupId>org.apache.derby</groupId>
         <artifactId>derby</artifactId>
         <version>10.4.2.0</version>
-        <scope>test</scope>
       </dependency>
       <dependency>
         <groupId>net.liftweb</groupId>

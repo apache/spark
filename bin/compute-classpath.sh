@@ -35,16 +35,15 @@ CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
 # include it in the classpath if the user has explicitly requested it by running "sbt hive/assembly"
 # Hopefully we will find a way to avoid uber-jars entirely and deploy only the needed packages in
 # the future.
-if [ -f "$FWDIR"/sql/hive/target/scala-$SCALA_VERSION/spark-hive-assembly-*.jar ]; then
+if [ "$SPARK_HIVE" = "true" ]; then
+  echo 1>&2 "SPARK_HIVE is set, including Hive support."
 
   # Datanucleus jars do not work if only included in the uberjar as plugin.xml metadata is lost.
   DATANUCLEUSJARS=$(JARS=("$FWDIR/lib_managed/jars"/datanucleus-*.jar); IFS=:; echo "${JARS[*]}")
   CLASSPATH=$CLASSPATH:$DATANUCLEUSJARS
-
-  ASSEMBLY_DIR="$FWDIR/sql/hive/target/scala-$SCALA_VERSION/"
-else
-  ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION/"
 fi
+
+ASSEMBLY_DIR="$FWDIR/assembly/target/scala-$SCALA_VERSION/"
 
 # First check if we have a dependencies jar. If so, include binary classes with the deps jar
 if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
@@ -59,7 +58,7 @@ if [ -f "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar ]; then
   CLASSPATH="$CLASSPATH:$FWDIR/sql/core/target/scala-$SCALA_VERSION/classes"
   CLASSPATH="$CLASSPATH:$FWDIR/sql/hive/target/scala-$SCALA_VERSION/classes"
 
-  DEPS_ASSEMBLY_JAR=`ls "$ASSEMBLY_DIR"/spark*-assembly*hadoop*-deps.jar`
+  DEPS_ASSEMBLY_JAR=`ls "$ASSEMBLY_DIR"/spark-assembly*hadoop*-deps.jar`
   CLASSPATH="$CLASSPATH:$DEPS_ASSEMBLY_JAR"
 else
   # Else use spark-assembly jar from either RELEASE or assembly directory
