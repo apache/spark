@@ -227,6 +227,8 @@ abstract class HiveComparisonTest extends FunSuite with BeforeAndAfterAll with G
       }
 
       try {
+        // MINOR HACK: You must run a query before calling reset the first time.
+        TestHive.sql("SHOW TABLES")
         TestHive.reset()
 
         val hiveCacheFiles = queryList.zipWithIndex.map {

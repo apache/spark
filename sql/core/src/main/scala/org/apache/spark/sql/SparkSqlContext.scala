@@ -51,8 +51,8 @@ object TestSqlContext
 class SparkSqlContext(val sparkContext: SparkContext) extends Logging {
   self =>
 
-  val catalog: Catalog = new SimpleCatalog
-  val analyzer: Analyzer = new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = true)
+  lazy val catalog: Catalog = new SimpleCatalog
+  lazy val analyzer: Analyzer = new Analyzer(catalog, EmptyFunctionRegistry, caseSensitive = true)
   val optimizer = Optimizer
   val parser = new catalyst.SqlParser
 
