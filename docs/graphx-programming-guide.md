@@ -135,7 +135,7 @@ Like RDDs, property graphs are immutable, distributed, and fault-tolerant.  Chan
 structure of the graph are accomplished by producing a new graph with the desired changes.  Note
 that substantial parts of the original graph (i.e., unaffected structure, attributes, and indicies)
 are reused in the new graph reducing the cost of this inherently functional data-structure.  The
-graph is partitioned across the workers using a range of vertex-partitioning heuristics.  As with
+graph is partitioned across the executors using a range of vertex-partitioning heuristics.  As with
 RDDs, each partition of the graph can be recreated on a different machine in the event of a failure.
 
 Logically the property graph corresponds to a pair of typed collections (RDDs) encoding the
