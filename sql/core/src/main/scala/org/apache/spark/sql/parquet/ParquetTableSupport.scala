@@ -140,9 +140,11 @@ object RowWriteSupport {
  * A `parquet.io.api.GroupConverter` that is able to convert a Parquet record
  * to a [[org.apache.spark.sql.catalyst.expressions.Row]] object.
  *
- * @param schema The corresponding Shark schema in the form of a list of attributes.
+ * @param schema The corresponding Catalyst schema in the form of a list of attributes.
  */
-class CatalystGroupConverter(schema: Seq[Attribute], protected[parquet] val current: ParquetRelation.RowType) extends GroupConverter {
+class CatalystGroupConverter(
+    schema: Seq[Attribute],
+    protected[parquet] val current: ParquetRelation.RowType) extends GroupConverter {
 
   def this(schema: Seq[Attribute]) = this(schema, new ParquetRelation.RowType(schema.length))
 
