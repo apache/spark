@@ -536,6 +536,23 @@ class RDD(object):
 
     # TODO: aggregate
         
+    def max(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).max()
+        43.0
+        """
+        return self.stats().max()
+
+    def min(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).min()
+        1.0
+        """
+        return self.stats().min()
 
     def sum(self):
         """
@@ -631,7 +648,7 @@ class RDD(object):
         evenly spaced between the min and max of the RDD.
 
         >>> sc.parallelize([1,49, 23, 100, 12, 13, 20, 22, 75, 50]).histogram(3)
-        defaultdict(<type 'int'>, {(67, inf): 2, (1, 33): 6, (34, 66): 2})
+        defaultdict(<type 'int'>, {(67, 100): 2, (1, 33): 6, (34, 66): 2})
         """
         min = float("-inf")
         max = float("inf")
@@ -641,7 +658,7 @@ class RDD(object):
             buckets = b["buckets"]
             min = b["min"]
             max = b["max"]
-            
+        
         if len(buckets) < 2:
             raise ValueError("requires more than 1 bucket")
         if len(buckets) % 2 == 0:
@@ -657,6 +674,7 @@ class RDD(object):
                     key = (buckets[k-1], max)
                 elif k == 0:
                     key = (min, buckets[k]-1)
+                print obj, k, key
                 counters[key] += 1
             yield counters
             
