@@ -79,6 +79,7 @@ For this version of Spark (0.8.1) Hadoop 2.2.x (or newer) users will have to bui
 * [MLlib (Machine Learning)](mllib-guide.html): Spark's built-in machine learning library
 * [Bagel (Pregel on Spark)](bagel-programming-guide.html): simple graph processing model
 * [GraphX (Graphs on Spark)](graphx-programming-guide.html): Spark's new API for graphs
+* [Spark SQL](sql-programming-guide.html): Spark's new API for graphs
 
 **API Docs:**
 
