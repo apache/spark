@@ -28,7 +28,7 @@ import org.apache.spark.sql.catalyst.util.getTempFilePath
 import org.apache.spark.sql.hive.TestHive
 
 
-class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
+class HiveParquetSuite extends FunSuite with BeforeAndAfterAll with BeforeAndAfterEach {
 
   val filename = getTempFilePath("parquettest").getCanonicalFile.toURI.toString
 

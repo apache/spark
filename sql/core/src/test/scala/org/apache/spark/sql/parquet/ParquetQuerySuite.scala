@@ -31,7 +31,7 @@ import parquet.schema.MessageTypeParser
 import parquet.hadoop.ParquetFileWriter
 import parquet.hadoop.util.ContextUtil
 
-class ParquetQueryTests extends FunSuite with BeforeAndAfterAll {
+class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
   override def beforeAll() {
     ParquetTestData.writeFile
   }
