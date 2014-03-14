@@ -344,6 +344,8 @@ trait ClientBase extends Logging {
       JAVA_OPTS += " " + env("SPARK_JAVA_OPTS")
     }
 
+    JAVA_OPTS += " " + YarnSparkHadoopUtil.getLoggingArgsForContainerCommandLine()
+
     // Command for the ApplicationMaster
     val commands = List[String](
       Environment.JAVA_HOME.$() + "/bin/java" +

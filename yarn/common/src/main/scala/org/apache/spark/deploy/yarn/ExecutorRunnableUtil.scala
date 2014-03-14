@@ -62,6 +62,7 @@ trait ExecutorRunnableUtil extends Logging {
 
     JAVA_OPTS += " -Djava.io.tmpdir=" +
       new Path(Environment.PWD.$(), YarnConfiguration.DEFAULT_CONTAINER_TEMP_DIR) + " "
+    JAVA_OPTS += YarnSparkHadoopUtil.getLoggingArgsForContainerCommandLine() + " "
 
     // Commenting it out for now - so that people can refer to the properties if required. Remove
     // it once cpuset version is pushed out.
