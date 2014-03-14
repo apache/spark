@@ -29,6 +29,12 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   private var n: Long = 0     // Running count of our values
   private var mu: Double = 0  // Running mean of our values
   private var m2: Double = 0  // Running variance numerator (sum of (x - mean)^2)
+  private var _min: Double = Double.PositiveInfinity
+  private var _max: Double = Double.NegativeInfinity
+
+  def min: Double = _min
+
+  def max: Double = _max
 
   merge(values)
 
@@ -41,6 +47,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     n += 1
     mu += delta / n
     m2 += delta * (value - mu)
+    _min = math.min(value, _min)
+    _max = math.max(value, _max)
     this
   }
 
@@ -58,7 +66,9 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
       if (n == 0) {
         mu = other.mu
         m2 = other.m2
-        n = other.n       
+        n = other.n
+        _min = other.min
+        _max = other.max
       } else if (other.n != 0) {        
         val delta = other.mu - mu
         if (other.n * 10 < n) {
@@ -70,6 +80,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
         }
         m2 += other.m2 + (delta * delta * n * other.n) / (n + other.n)
         n += other.n
+        _min = math.min(other.min, _min)
+        _max = math.max(other.max, _max)
       }
       this
     }
@@ -81,6 +93,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
     other.n = n
     other.mu = mu
     other.m2 = m2
+    other._min = _min
+    other._max = _max
     other
   }
 
@@ -120,9 +134,9 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
    */
   def sampleStdev: Double = math.sqrt(sampleVariance)
 
-  override def toString: String = {
-    "(count: %d, mean: %f, stdev: %f)".format(count, mean, stdev)
-  }
+  override def toString: String =
+    s"count: $count, mean: $mean, stdev: $stdev , min: ${_min}, max: ${_max}"
+
 }
 
 object StatCounter {
