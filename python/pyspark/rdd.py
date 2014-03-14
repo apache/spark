@@ -580,8 +580,8 @@ class RDD(object):
         the type of this RDD. Thus, we need one operation for merging a T into an U
         and one operation for merging two U
 
-        >>> seqOp = (lambda x, y: (x[0]+y, x[1] + 1))
-        >>> combOp = (lambda x, y: (x[0]+y[0], x[1] + y[1]))
+        >>> seqOp = (lambda x, y: (x[0] + y, x[1] + 1))
+        >>> combOp = (lambda x, y: (x[0] + y[0], x[1] + y[1]))
         >>> sc.parallelize([1, 2, 3, 4]).aggregate((0, 0), seqOp, combOp)
         (10, 4)
         """
@@ -592,6 +592,7 @@ class RDD(object):
             if acc is not None:
                 yield acc
         return self.mapPartitions(func).reduce(combOp)
+
     def sum(self):
         """
         Add up the elements in this RDD.
