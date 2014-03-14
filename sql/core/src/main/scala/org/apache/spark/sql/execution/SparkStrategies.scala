@@ -185,7 +185,9 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
         execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
-      case logical.Project(projectList, r: ParquetRelation) if projectList.forall(_.isInstanceOf[Attribute]) =>
+      case logical.Project(projectList, r: ParquetRelation)
+          if projectList.forall(_.isInstanceOf[Attribute]) =>
+
         // simple projection of data loaded from Parquet file
         parquet.ParquetTableScan(
           projectList.asInstanceOf[Seq[Attribute]],

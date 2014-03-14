@@ -720,7 +720,8 @@ object HiveQl {
         // Parse partitions. We also make keys case insensitive.
         case Token("TOK_PARTVAL", Token(key, Nil) :: Token(value, Nil) :: Nil) =>
           cleanIdentifier(key.toLowerCase) -> Some(PlanUtils.stripQuotes(value))
-        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) => cleanIdentifier(key.toLowerCase) -> None
+        case Token("TOK_PARTVAL", Token(key, Nil) :: Nil) =>
+          cleanIdentifier(key.toLowerCase) -> None
       }.toMap).getOrElse(Map.empty)
 
       if (partitionKeys.values.exists(p => p.isEmpty)) {

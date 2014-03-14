@@ -200,7 +200,8 @@ class HiveContext(sc: SparkContext) extends SqlContext(sc) {
 
   override val planner = HivePlanner
 
-  protected lazy val emptyResult = sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
+  protected lazy val emptyResult =
+    sparkContext.parallelize(Seq(new GenericRow(Array[Any]()): Row), 1)
 
   /** Extends QueryExecution with hive specific features. */
   abstract class QueryExecution extends super.QueryExecution {

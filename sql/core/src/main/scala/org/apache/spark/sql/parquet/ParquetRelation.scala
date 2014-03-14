@@ -157,7 +157,8 @@ object ParquetRelation {
     val origPath = new Path(pathStr)
     val fs = origPath.getFileSystem(conf)
     if (fs == null) {
-      throw new IllegalArgumentException(s"Unable to create ParquetRelation: incorrectly formatted path $pathStr")
+      throw new IllegalArgumentException(
+        s"Unable to create ParquetRelation: incorrectly formatted path $pathStr")
     }
     val path = origPath.makeQualified(fs)
     if (fs.exists(path) &&
@@ -246,7 +247,8 @@ object ParquetTypesConverter {
     }
     val fs = origPath.getFileSystem(conf)
     if (fs == null) {
-      throw new IllegalArgumentException(s"Unable to write Parquet metadata: path $origPath is incorrectly formatted")
+      throw new IllegalArgumentException(
+        s"Unable to write Parquet metadata: path $origPath is incorrectly formatted")
     }
     val path = origPath.makeQualified(fs)
     if (fs.exists(path) && !fs.getFileStatus(path).isDir) {

@@ -159,7 +159,8 @@ package object dsl {
     }
   }
 
-  object expressions extends ExpressionConversions
+
+  object expressions extends ExpressionConversions  // scalastyle:ignore
 
   abstract class LogicalPlanFunctions {
     def logicalPlan: LogicalPlan
@@ -214,7 +215,7 @@ package object dsl {
     def analyze = analysis.SimpleAnalyzer(logicalPlan)
   }
 
-  object plans {
+  object plans {  // scalastyle:ignore
     implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends LogicalPlanFunctions {
       def writeToFile(path: String) = WriteToFile(path, logicalPlan)
     }

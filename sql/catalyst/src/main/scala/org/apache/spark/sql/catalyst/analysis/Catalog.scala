@@ -81,7 +81,10 @@ trait OverrideCatalog extends Catalog {
     withAlias.getOrElse(super.lookupRelation(databaseName, tableName, alias))
   }
 
-  override def registerTable(databaseName: Option[String], tableName: String, plan: LogicalPlan): Unit = {
+  override def registerTable(
+      databaseName: Option[String],
+      tableName: String,
+      plan: LogicalPlan): Unit = {
     overrides.put((databaseName, tableName), plan)
   }
 }
