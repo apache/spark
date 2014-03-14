@@ -537,6 +537,24 @@ class RDD(object):
     # TODO: aggregate
         
 
+    def max(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).max()
+        43.0
+        """
+        return self.stats().max()
+
+    def min(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).min()
+        1.0
+        """
+        return self.stats().min()
+    
     def sum(self):
         """
         Add up the elements in this RDD.
@@ -611,65 +629,6 @@ class RDD(object):
         1.0
         """
         return self.stats().sampleVariance()
-
-    def _getBuckets(self, bucketCount):
-        #use the statscounter as a quick way of getting max and min
-        mm_stats = self.stats()
-        min = mm_stats.min()
-        max = mm_stats.max()
-
-        increment = (max-min)/bucketCount
-        buckets = range(min,min)
-        if increment != 0:
-            buckets = range(min,max, increment)
-
-        return {"min":min, "max":max, "buckets":buckets}
-
-    def histogram(self, bucketCount, buckets=None):
-        """
-        Compute a histogram of the data using bucketCount number of buckets
-        evenly spaced between the min and max of the RDD.
-
-        >>> sc.parallelize([1,49, 23, 100, 12, 13, 20, 22, 75, 50]).histogram(3)
-        defaultdict(<type 'int'>, {(67, inf): 2, (1, 33): 6, (34, 66): 2})
-        """
-        min = float("-inf")
-        max = float("inf")
-        evenBuckets = False
-        if not buckets:
-            b = self._getBuckets(bucketCount)
-            buckets = b["buckets"]
-            min = b["min"]
-            max = b["max"]
-            
-        if len(buckets) < 2:
-            raise ValueError("requires more than 1 bucket")
-        if len(buckets) % 2 == 0:
-            evenBuckets = True
-        # histogram partition
-        def histogramPartition(iterator):
-            counters = defaultdict(int)
-            for obj in iterator:
-                k = bisect_right(buckets, obj)
-                if k < len(buckets) and k > 0:
-                    key = (buckets[k-1], buckets[k]-1)
-                elif k == len(buckets):
-                    key = (buckets[k-1], max)
-                elif k == 0:
-                    key = (min, buckets[k]-1)
-                counters[key] += 1
-            yield counters
-            
-        # merge counters
-        def mergeCounters(d1, d2):
-            for k in d2.keys():
-                if k in d1:
-                    d1[k] += d2[k]
-            return d1
-        
-        #map partitions(histogram_partition(bucketFunction)).reduce(mergeCounters)
-        return self.mapPartitions(histogramPartition).reduce(mergeCounters)
-
 
     def countByValue(self):
         """
