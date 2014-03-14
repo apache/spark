@@ -95,7 +95,7 @@ class ClientArguments(val args: Array[String], val sparkConf: SparkConf) {
           executorMemory = value
           args = tail
 
-        case ("--worker-cores" | "--executor-memory") :: IntParam(value) :: tail =>
+        case ("--worker-cores" | "--executor-cores") :: IntParam(value) :: tail =>
           if (args(0) == "--worker-cores") {
             println("--worker-cores is deprecated. Use --executor-cores instead.")
           }
