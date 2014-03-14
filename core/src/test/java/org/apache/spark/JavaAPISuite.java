@@ -395,7 +395,8 @@ public class JavaAPISuite implements Serializable {
     Assert.assertEquals(7.46667, rdd.sampleVariance(), 0.01);
     Assert.assertEquals(2.49444, rdd.stdev(), 0.01);
     Assert.assertEquals(2.73252, rdd.sampleStdev(), 0.01);
-
+    Assert.assertEquals(1.0, rdd.min(), 0.01);
+    Assert.assertEquals(8.0, rdd.max(), 0.01);
     rdd.first();
     rdd.take(5);
   }

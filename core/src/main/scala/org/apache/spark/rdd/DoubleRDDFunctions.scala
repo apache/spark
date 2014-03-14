@@ -35,8 +35,8 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
   }
 
   /**
-   * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance and
-   * count of the RDD's elements in one operation.
+   * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance,
+   * count, min and max of the RDD's elements in one operation.
    */
   def stats(): StatCounter = {
     self.mapPartitions(nums => Iterator(StatCounter(nums))).reduce((a, b) => a.merge(b))
@@ -50,6 +50,12 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
 
   /** Compute the standard deviation of this RDD's elements. */
   def stdev(): Double = stats().stdev
+
+  /** Find the min element of this RDD's elements. */
+  def min(): Double = stats().min
+
+  /** Find the max element of this RDD's elements. */
+  def max(): Double = stats().max
 
   /** 
    * Compute the sample standard deviation of this RDD's elements (which corrects for bias in
@@ -86,14 +92,9 @@ class DoubleRDDFunctions(self: RDD[Double]) extends Logging with Serializable {
    * If the elements in RDD do not vary (max == min) always returns a single bucket.
    */
   def histogram(bucketCount: Int): Pair[Array[Double], Array[Long]] = {
-    // Compute the minimum and the maxium
-    val (max: Double, min: Double) = self.mapPartitions { items =>
-      Iterator(items.foldRight(Double.NegativeInfinity,
-        Double.PositiveInfinity)((e: Double, x: Pair[Double, Double]) =>
-        (x._1.max(e), x._2.min(e))))
-    }.reduce { (maxmin1, maxmin2) =>
-      (maxmin1._1.max(maxmin2._1), maxmin1._2.min(maxmin2._2))
-    }
+    // Compute the minimum and the maximum from stats once
+    val _stats = stats()
+    val (max: Double, min: Double) = (_stats.max, _stats.min)
     if (min.isNaN || max.isNaN || max.isInfinity || min.isInfinity ) {
       throw new UnsupportedOperationException(
         "Histogram on either an empty RDD or RDD containing +/-infinity or NaN")

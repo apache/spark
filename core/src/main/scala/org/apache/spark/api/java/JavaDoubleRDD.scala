@@ -153,6 +153,14 @@ class JavaDoubleRDD(val srdd: RDD[scala.Double]) extends JavaRDDLike[JDouble, Ja
   /** Add up the elements in this RDD. */
   def sum(): JDouble = srdd.sum()
 
+
+  /** Max of the elements in this RDD. */
+  def max(): JDouble = srdd.max()
+
+
+  /** Min of the elements in this RDD. */
+  def min(): JDouble = srdd.min()
+
   /**
    * Return a [[org.apache.spark.util.StatCounter]] object that captures the mean, variance and
    * count of the RDD's elements in one operation.
