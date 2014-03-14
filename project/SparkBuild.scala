@@ -52,7 +52,7 @@ object SparkBuild extends Build {
   lazy val core = Project("core", file("core"), settings = coreSettings)
 
   lazy val repl = Project("repl", file("repl"), settings = replSettings)
-    .dependsOn(core, graphx, bagel, mllib, hive)
+    .dependsOn(core, graphx, bagel, mllib, sql)
 
   lazy val tools = Project("tools", file("tools"), settings = toolsSettings) dependsOn(core) dependsOn(streaming)
 
@@ -64,14 +64,15 @@ object SparkBuild extends Build {
 
   lazy val sql = Project("sql", file("sql/core"), settings = sqlCoreSettings) dependsOn(core, catalyst)
 
-  lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql)
+  // Since hive is its own assembly, it depends on all of the modules.
+  lazy val hive = Project("hive", file("sql/hive"), settings = hiveSettings) dependsOn(sql, graphx, bagel, mllib, streaming, repl)
 
   lazy val streaming = Project("streaming", file("streaming"), settings = streamingSettings) dependsOn(core)
 
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
 
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
-    .dependsOn(core, graphx, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*) dependsOn(maybeGanglia: _*)
+    .dependsOn(core, graphx, bagel, mllib, streaming, repl, sql) dependsOn(maybeYarn: _*) dependsOn(maybeGanglia: _*)
 
   lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
 
@@ -139,11 +140,11 @@ object SparkBuild extends Build {
   lazy val examples = Project("examples", file("examples"), settings = examplesSettings)
     .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter, hive) dependsOn(allExternal: _*)
 
-  // Everything except assembly, tools, java8Tests and examples belong to packageProjects
-  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, catalyst, sql, hive) ++ maybeYarnRef ++ maybeGangliaRef
+  // Everything except assembly, hive, tools, java8Tests and examples belong to packageProjects
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx, catalyst, sql) ++ maybeYarnRef ++ maybeGangliaRef
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++
-    Seq[ProjectReference](examples, tools, assemblyProj) ++ maybeJava8Tests
+    Seq[ProjectReference](examples, tools, assemblyProj, hive) ++ maybeJava8Tests
 
   def sharedSettings = Defaults.defaultSettings ++ Seq(
     organization       := "org.apache.spark",
@@ -386,8 +387,12 @@ object SparkBuild extends Build {
     )
   )
 
-  def hiveSettings = sharedSettings ++ Seq(
+  // Since we don't include hive in the main assembly this project also acts as an alternative
+  // assembly jar.
+  def hiveSettings = sharedSettings ++ assemblyProjSettings ++ Seq(
     name := "spark-hive",
+    jarName in assembly <<= version map { v => "spark-hive-assembly-" + v + "-hadoop" + hadoopVersion + ".jar" },
+    jarName in packageDependency <<= version map { v => "spark-hive-assembly-" + v + "-hadoop" + hadoopVersion + "-deps.jar" },
     javaOptions += "-XX:MaxPermSize=1g",
     libraryDependencies ++= Seq(
       "org.apache.hive" % "hive-metastore" % "0.12.0",
