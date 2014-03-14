@@ -123,7 +123,7 @@ object ParquetRelation {
 
   /**
    * Creates a new ParquetRelation and underlying Parquetfile for the given
-   * LogicalPlan. Note that this is used insider [[SparkStrategies]] to
+   * LogicalPlan. Note that this is used inside [[SparkStrategies]] to
    * create a resolved relation as a data sink for writing to a Parquetfile.
    * The relation is empty but is initialized with ParquetMetadata and
    * can be inserted into.
@@ -151,8 +151,15 @@ object ParquetRelation {
   }
 
   private def checkPath(pathStr: String, conf: Configuration): Path = {
-    val path = new Path(pathStr)
-    val fs = path.getFileSystem(conf)
+    if (pathStr == null) {
+      throw new IllegalArgumentException("Unable to create ParquetRelation: path is null")
+    }
+    val origPath = new Path(pathStr)
+    val fs = origPath.getFileSystem(conf)
+    if (fs == null) {
+      throw new IllegalArgumentException(s"Unable to create ParquetRelation: incorrectly formatted path $pathStr")
+    }
+    val path = origPath.makeQualified(fs)
     if (fs.exists(path) &&
         !fs.getFileStatus(path)
         .getPermission
@@ -233,24 +240,27 @@ object ParquetTypesConverter {
     new MessageType("root", fields)
   }
 
-  def writeMetaData(attributes: Seq[Attribute], path: Path, conf: Configuration) {
-    val fileSystem = FileSystem.get(conf)
-
-    if (fileSystem.exists(path) && !fileSystem.getFileStatus(path).isDir) {
-      throw new IOException(s"Expected to write to directory $path but found file")
+  def writeMetaData(attributes: Seq[Attribute], origPath: Path, conf: Configuration) {
+    if (origPath == null) {
+      throw new IllegalArgumentException("Unable to write Parquet metadata: path is null")
     }
-
+    val fs = origPath.getFileSystem(conf)
+    if (fs == null) {
+      throw new IllegalArgumentException(s"Unable to write Parquet metadata: path $origPath is incorrectly formatted")
+    }
+    val path = origPath.makeQualified(fs)
+    if (fs.exists(path) && !fs.getFileStatus(path).isDir) {
+      throw new IllegalArgumentException(s"Expected to write to directory $path but found file")
+    }
     val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
-
-    if (fileSystem.exists(metadataPath)) {
+    if (fs.exists(metadataPath)) {
       try {
-        fileSystem.delete(metadataPath, true)
+        fs.delete(metadataPath, true)
       } catch {
         case e: IOException =>
           throw new IOException(s"Unable to delete previous PARQUET_METADATA_FILE at $metadataPath")
       }
     }
-
     val extraMetadata = new java.util.HashMap[String, String]()
     extraMetadata.put("path", path.toString)
     // TODO: add extra data, e.g., table name, date, etc.?
@@ -275,13 +285,20 @@ object ParquetTypesConverter {
    * @param path The path at which we expect one (or more) Parquet files.
    * @return The `ParquetMetadata` containing among other things the schema.
    */
-  def readMetaData(path: Path): ParquetMetadata = {
+  def readMetaData(origPath: Path): ParquetMetadata = {
+    if (origPath == null) {
+      throw new IllegalArgumentException("Unable to read Parquet metadata: path is null")
+    }
     val job = new Job()
+    // TODO: since this is called from ParquetRelation (LogicalPlan) we don't have access
+    // to SparkContext's hadoopConfig; in principle the default FileSystem may be different(?!)
     val conf = ContextUtil.getConfiguration(job)
-    val fs: FileSystem = path.getFileSystem(conf)
-
+    val fs: FileSystem = origPath.getFileSystem(conf)
+    if (fs == null) {
+      throw new IllegalArgumentException(s"Incorrectly formatted Parquet metadata path $origPath")
+    }
+    val path = origPath.makeQualified(fs)
     val metadataPath = new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)
-
     if (fs.exists(metadataPath) && fs.isFile(metadataPath)) {
       // TODO: improve exception handling, etc.
       ParquetFileReader.readFooter(conf, metadataPath)

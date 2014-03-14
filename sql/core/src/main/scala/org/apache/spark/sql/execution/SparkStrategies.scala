@@ -185,6 +185,12 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         // This sort only sorts tuples within a partition. Its requiredDistribution will be
         // an UnspecifiedDistribution.
         execution.Sort(sortExprs, global = false, planLater(child)) :: Nil
+      case logical.Project(projectList, r: ParquetRelation) if projectList.forall(_.isInstanceOf[Attribute]) =>
+        // simple projection of data loaded from Parquet file
+        parquet.ParquetTableScan(
+          projectList.asInstanceOf[Seq[Attribute]],
+          r,
+          None)(sparkContext) :: Nil
       case logical.Project(projectList, child) =>
         execution.Project(projectList, planLater(child)) :: Nil
       case logical.Filter(condition, child) =>
@@ -212,6 +218,8 @@ abstract class SparkStrategies extends QueryPlanner[SparkPlan] {
         val relation =
           ParquetRelation.create(path, child, sparkContext.hadoopConfiguration, None)
         InsertIntoParquetTable(relation, planLater(child))(sparkContext) :: Nil
+      case p: parquet.ParquetRelation =>
+        parquet.ParquetTableScan(p.output, p, None)(sparkContext) :: Nil
       case SparkLogicalPlan(existingPlan) => existingPlan :: Nil
       case _ => Nil
     }
