@@ -29,7 +29,8 @@ from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
-from heapq import heappush, heappop, heappushpop
+import heapq
+import bisect
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
@@ -41,8 +42,8 @@ from pyspark.storagelevel import StorageLevel
 
 from py4j.java_collections import ListConverter, MapConverter
 
-
 __all__ = ["RDD"]
+
 
 def _extract_concise_traceback():
     """
@@ -90,6 +91,58 @@ class _JavaStackTrace(object):
         _spark_stack_depth -= 1
         if _spark_stack_depth == 0:
             self._context._jsc.setCallSite(None)
+
+class MaxHeapQ(object):
+    """
+    An implementation of MaxHeap.
+
+    """
+    
+    def __init__(self):
+        # we start from q[1], this makes calculating children as trivial as 2 * k
+        self.q = [0]
+        
+    def _swim(self, k):
+        while (k > 1) and (self.q[k/2] < self.q[k]):
+            self._swap(k, k/2)
+            k = k/2
+            
+    def _swap(self, i, j):
+        t = self.q[i]
+        self.q[i] = self.q[j]
+        self.q[j] = t
+
+    def _sink(self, k):
+        N=len(self.q)-1
+        while 2*k <= N:
+            j = 2*k
+            # Here we test if both children are greater than parent
+            # if not swap with larger one.
+            if j<N and self.q[j] < self.q[j+1]:
+                j = j+1
+            if(self.q[k] > self.q[j]):
+                break
+            self._swap(k, j)
+            k = j
+
+    def insert(self, value):
+        self.q.append(value)
+        self._swim(len(self.q) - 1)
+
+    def getQ(self):
+        return self.q[1:]
+
+    def replaceRoot(self, value):
+        if(self.q[1] > value):
+            self.q[1] = value
+            self._sink(1)
+
+    def delMax(self):
+        r = self.q[1]
+        self.q[1] = self.q[len(self.q) - 1]
+        self.q.pop()
+        self._sink(1)
+        return r
 
 class RDD(object):
     """
@@ -696,22 +749,50 @@ class RDD(object):
         Note: It returns the list sorted in descending order.
         >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
         [12]
-        >>> sc.parallelize([2, 3, 4, 5, 6]).cache().top(2)
-        [6, 5]
+        >>> sc.parallelize([2, 3, 4, 5, 6], 2).cache().top(2)
+        [5, 6]
         """
         def topIterator(iterator):
             q = []
             for k in iterator:
                 if len(q) < num:
-                    heappush(q, k)
+                    heapq.heappush(q, k)
                 else:
-                    heappushpop(q, k)
+                    heapq.heappushpop(q, k)
             yield q
 
         def merge(a, b):
             return next(topIterator(a + b))
 
         return sorted(self.mapPartitions(topIterator).reduce(merge), reverse=True)
+
+    def takeOrdered(self, num, key=None):
+        """
+        Get the N elements from a RDD ordered in ascending order or as specified
+        by the optional key function. 
+
+        >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7]).takeOrdered(6)
+        [1, 2, 3, 4, 5, 6]
+        >>> sc.parallelize([10, 1, 2, 9, 3, 4, 5, 6, 7], 2).takeOrdered(6, key=lambda x: -x)
+        [(-10, 10), (-9, 9), (-7, 7), (-6, 6), (-5, 5), (-4, 4)]
+        """
+
+        def topNKeyedElems(iterator, key_=None):
+            q = MaxHeapQ()
+            for k in iterator:
+                if not (key_ == None):
+                    k = (key_(k), k)
+                if (len(q.q) -1) < num:
+                    q.insert(k)
+                else:
+                    q.replaceRoot(k)
+            yield q.getQ()
+
+        def merge(a, b):
+            return next(topNKeyedElems(a + b))
+
+        return sorted(self.mapPartitions(lambda i: topNKeyedElems(i, key)).reduce(merge))
+
 
     def take(self, num):
         """
