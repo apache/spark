@@ -33,7 +33,7 @@ case class MutablePair[@specialized(Int, Long, Double, Char, Boolean/*, AnyRef*/
   def this() = this(null.asInstanceOf[T1], null.asInstanceOf[T2])
 
   /** Updates this pair with new values and returns itself */
-  def apply(n1: T1, n2: T2): MutablePair[T1, T2] = {
+  def update(n1: T1, n2: T2): MutablePair[T1, T2] = {
     _1 = n1
     _2 = n2
     this

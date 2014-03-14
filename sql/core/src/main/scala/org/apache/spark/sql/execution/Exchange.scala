@@ -73,7 +73,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
         val rdd = child.execute().mapPartitions { iter =>
           val hashExpressions = new MutableProjection(expressions)
           val mutablePair = new MutablePair[Row, Row]()
-          iter.map(r => mutablePair(hashExpressions(r), r))
+          iter.map(r => mutablePair.update(hashExpressions(r), r))
         }
         val part = new HashPartitioner(numPartitions)
         val shuffled = new ShuffledRDD[Row, Row, MutablePair[Row, Row]](rdd, part)
@@ -86,7 +86,7 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
         val rdd = child.execute().mapPartitions { iter =>
           val mutablePair = new MutablePair[Row, Null](null, null)
-          iter.map(row => mutablePair(row, null))
+          iter.map(row => mutablePair.update(row, null))
         }
         val part = new RangePartitioner(numPartitions, rdd, ascending = true)
         val shuffled = new ShuffledRDD[Row, Null, MutablePair[Row, Null]](rdd, part)
@@ -94,11 +94,9 @@ case class Exchange(newPartitioning: Partitioning, child: SparkPlan) extends Una
 
         shuffled.map(_._1)
       }
-      case SinglePartition => {
-        val rdd = child.execute().coalesce(1, true)
+      case SinglePartition =>
+        child.execute().coalesce(1, true)
 
-        rdd
-      }
       case _ => sys.error(s"Exchange not implemented for $newPartitioning")
       // TODO: Handle BroadcastPartitioning.
     }
