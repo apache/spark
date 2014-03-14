@@ -26,4 +26,6 @@ sbin=`cd "$sbin"; pwd`
 
 "$sbin"/spark-daemon.sh stop org.apache.spark.deploy.master.Master 1
 
-"$sbin"/tachyon/bin/tachyon killAll tachyon.master.Master
+if [ -e "$sbin"/tachyon/bin/tachyon ]; then
+  "$sbin"/tachyon/bin/tachyon killAll tachyon.master.Master
+fi
