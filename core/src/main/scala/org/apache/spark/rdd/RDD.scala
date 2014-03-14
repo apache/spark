@@ -958,6 +958,10 @@ abstract class RDD[T: ClassTag](
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = top(num)(ord.reverse)
 
+  def max()(implicit ord: Ordering[T]):T = this.reduce{(x,y) => ord.max(x,y)}
+
+  def min()(implicit ord: Ordering[T]):T = this.reduce{(x,y) => ord.min(x,y)}
+
   /**
    * Save this RDD as a text file, using string representations of elements.
    */

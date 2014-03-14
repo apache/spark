@@ -24,7 +24,6 @@ import os
 import sys
 import shlex
 import traceback
-from bisect import bisect_right
 from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread

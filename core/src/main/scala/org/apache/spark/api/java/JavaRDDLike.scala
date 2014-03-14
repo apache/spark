@@ -477,6 +477,16 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     new java.util.ArrayList(arr)
   }
 
+  def max(comp: Comparator[T]): T = {
+    import scala.collection.JavaConversions._
+    rdd.max()(Ordering.comparatorToOrdering(comp))
+  }
+
+  def min(comp: Comparator[T]): T = {
+    import scala.collection.JavaConversions._
+    rdd.min()(Ordering.comparatorToOrdering(comp))
+  }
+
   /**
    * Returns the first K elements from this RDD using the
    * natural ordering for T while maintain the order.
