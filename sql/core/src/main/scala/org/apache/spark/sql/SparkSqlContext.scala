@@ -28,7 +28,7 @@ import catalyst.dsl
 import catalyst.expressions._
 import catalyst.optimizer.Optimizer
 import catalyst.planning.QueryPlanner
-import catalyst.plans.logical.{LogicalPlan, NativeCommand}
+import catalyst.plans.logical.{LogicalPlan, NativeCommand, WriteToFile}
 import catalyst.rules.RuleExecutor
 
 import execution._
@@ -80,7 +80,11 @@ class SqlContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
 
   // Expression implicits.  Copied from dsl package object.
 
-  implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends dsl.LogicalPlanFunctions
+  implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends dsl.LogicalPlanFunctions {
+    def registerAsTable(tableName: String): Unit = {
+      catalog.registerTable(None, tableName, logicalPlan)
+    }
+  }
 
   /**
    * Implicitly adds a `registerAsTable` to RDDs of case classes and allows the Query DSL to be
@@ -89,10 +93,16 @@ class SqlContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
   implicit class TableRdd[A <: Product: TypeTag](rdd: RDD[A]) extends dsl.LogicalPlanFunctions {
     def logicalPlan = SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))
 
-    def registerAsTable(tableName: String) = {
+    def writeToFile(path: String) = {
+      WriteToFile(path, logicalPlan).toRdd
+    }
+
+    def registerAsTable(tableName: String): Unit = {
       catalog.registerTable(None, tableName, logicalPlan)
     }
   }
+
+  def loadFile(path: String): LogicalPlan = parquet.ParquetRelation("ParquetFile", path)
 
   /**
    * Executes a SQL query using Spark, returning the result as an RDD as well as the plan used
