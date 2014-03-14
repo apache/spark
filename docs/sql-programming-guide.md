@@ -4,20 +4,20 @@ title: Spark SQL Programming Guide
 ---
 **Spark SQL is currently an Alpha component. Therefore, the APIs may be changed in future releases.**
 
-
 * This will become a table of contents (this text will be scraped).
 {:toc}
 
 # Overview
-Spark SQL allows relational queries expressed in SQL, HiveQL or a LINQ-like DSL to be executed using
-Spark. Tables in Spark SQL can be either existing RDDs, parquet files, or tables from an Apache
-Hive Metastore.
+Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
+Spark. Tables in Spark SQL can be either existing RDDs, parquet files, or tables from an
+[Apache Hive](http://hive.apache.org/) Metastore.
 
 ***************************************************************************************************
 
 # Getting Started
 
-The entry point into all relational functionallity is the SqlContext class, or one of its
+The entry point into all relational functionallity is the
+[SqlContext](api/sql/core/index.html#org.apache.spark.sql.SqlContext) class, or one of its
 decendents.  To create a basic SqlContext, all you need is a SparkContext.
 
 {% highlight scala %}
@@ -29,7 +29,7 @@ import sqlContext._
 {% endhighlight %}
 
 ## Running SQL on RDDs
-One type of table that is supported by Spark SQL is an RDD of scala case classes.  The case class
+One type of table that is supported by Spark SQL is an RDD of Scala case classes.  The case class
 defines the schema of the table.  The names of the arguments to the case class are read using
 reflection and become the names of the columns. Case classes can also be nested or contain complex
 types like Seqences or Arrays. This RDD can then be registered as a table and used in subsuquent SQL
@@ -49,7 +49,8 @@ val teenagers = sql("SELECT name FROM people WHERE age >= 10 && age <= 19")
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
-Note that Spark SQL currently uses a very basic SQL parse
+Note that Spark SQL currently uses a very basic SQL parser.  Users that want a more complete dilect
+of SQL should look at the HiveQL support provided by `HiveContext`.
 
 ## Using Parquet
 
@@ -75,10 +76,10 @@ parquetFile.registerAsTable("parquetFile")
 sql("SELECT * FROM parquetFile")
 {% endhighlight %}
 
-## Writing Queries Using the DSL
+## Writing Language Integrated Relational Queries
 
-Spark SQL also supports a LINQ-like domain specific language for writing queries.  Once again,
-using the data from the above examples.
+Spark SQL also supports a domain specific language for writing queries.  Once again,
+using the data from the above examples:
 
 {% highlight scala %}
 import sqlContext._
@@ -91,13 +92,13 @@ val teenagers = people.where('age >= 10).where('age <= 19).select('name).toRdd
 The DSL uses Scala symbols to represent columns in the underlying table, which are identifiers
 prefixed with a tick (`'`).  Implicit conversions turn these symbols into expressions that are
 evaluated by the SQL execution engine.  A full list of the functions supported can be found in the
-[scala doc](api/sql/catalyst/org/apache/spark/sql/catalyst/dsl/package$$LogicalPlanFunctions.html)
+[Scala doc](api/sql/catalyst/org/apache/spark/sql/catalyst/dsl/package$$LogicalPlanFunctions.html)
 
 <!-- TODO: Include the table of operations here. -->
 
 # Hive MetaStore Support
 
-Spark SQL also supports reading and writing data stored in Apache Hive. However, since Hive has a
+Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/). However, since Hive has a
 large number of dependencies, it is not included in the default Spark assembly.  In order to use
 Hive you must first run '`sbt/sbt hive/assembly`'.  This command builds a new assembly jar that includes
 Hive and all its dependencies.  When this jar is present, Spark will use the Hive assembly instead
@@ -124,5 +125,5 @@ sql("CREATE TABLE IF NOT EXISTS src (key INT, value STRING)")
 sql("LOAD DATA LOCAL INPATH 'src/main/resources/kv1.txt' INTO TABLE src")
 
 // Queries are expressed in HiveQL
-sql("SELECT key, value FROM src").collect.foreach(println)
+sql("SELECT key, value FROM src").collect().foreach(println)
 {% endhighlight %}
