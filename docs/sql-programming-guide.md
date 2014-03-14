@@ -9,7 +9,7 @@ title: Spark SQL Programming Guide
 
 # Overview
 Spark SQL allows relational queries expressed in SQL, HiveQL, or Scala to be executed using
-Spark. Tables in Spark SQL can be either existing RDDs, parquet files, or tables from an
+Spark. Tables in Spark SQL can be created from existing RDDs, parquet files, or tables from an
 [Apache Hive](http://hive.apache.org/) Metastore.
 
 ***************************************************************************************************
@@ -32,7 +32,7 @@ import sqlContext._
 One type of table that is supported by Spark SQL is an RDD of Scala case classes.  The case class
 defines the schema of the table.  The names of the arguments to the case class are read using
 reflection and become the names of the columns. Case classes can also be nested or contain complex
-types like Seqences or Arrays. This RDD can then be registered as a table and used in subsuquent SQL
+types like Seqences or Arrays. Such an RDD can then be registered as a table and used in subsequent SQL
 statements.
 
 {% highlight scala %}
@@ -43,13 +43,13 @@ case class Person(name: String, age: String)
 val people: RDD[Person] = sc.textFile("people.txt").map(_.split(",")).map(p => Person(p(0), p(1).toInt))
 people.registerAsTable("people")
 
-val teenagers = sql("SELECT name FROM people WHERE age >= 10 && age <= 19")
+val teenagers = sql("SELECT name FROM people WHERE age >= 13 && age <= 19")
 
 // The results of SQL queries are themselves RDDs and support all the normal operations
 teenagers.map(t => "Name: " + t(0)).collect().foreach(println)
 {% endhighlight %}
 
-Note that Spark SQL currently uses a very basic SQL parser.  Users that want a more complete dilect
+Note that Spark SQL currently uses a very basic SQL parser.  Users that want a more complete dialect
 of SQL should look at the HiveQL support provided by `HiveContext`.
 
 ## Using Parquet
@@ -76,7 +76,7 @@ parquetFile.registerAsTable("parquetFile")
 sql("SELECT * FROM parquetFile")
 {% endhighlight %}
 
-## Writing Language Integrated Relational Queries
+## Writing Language-Integrated Relational Queries
 
 Spark SQL also supports a domain specific language for writing queries.  Once again,
 using the data from the above examples:
@@ -92,7 +92,7 @@ val teenagers = people.where('age >= 10).where('age <= 19).select('name).toRdd
 The DSL uses Scala symbols to represent columns in the underlying table, which are identifiers
 prefixed with a tick (`'`).  Implicit conversions turn these symbols into expressions that are
 evaluated by the SQL execution engine.  A full list of the functions supported can be found in the
-[Scala doc](api/sql/catalyst/org/apache/spark/sql/catalyst/dsl/package$$LogicalPlanFunctions.html)
+[Scala doc](api/sql/catalyst/org/apache/spark/sql/catalyst/dsl/package$$LogicalPlanFunctions.html).
 
 <!-- TODO: Include the table of operations here. -->
 
