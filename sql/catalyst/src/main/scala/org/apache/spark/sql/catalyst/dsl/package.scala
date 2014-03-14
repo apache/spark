@@ -212,9 +212,11 @@ package object dsl {
         analysis.UnresolvedRelation(None, tableName), Map.empty, logicalPlan, overwrite)
 
     def analyze = analysis.SimpleAnalyzer(logicalPlan)
-
-    def writeToFile(path: String) = WriteToFile(path, logicalPlan)
   }
 
-  implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends LogicalPlanFunctions
+  object plans {
+    implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends LogicalPlanFunctions {
+      def writeToFile(path: String) = WriteToFile(path, logicalPlan)
+    }
+  }
 }
