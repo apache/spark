@@ -36,12 +36,47 @@ class SVMModel(
     override val weights: Array[Double],
     override val intercept: Double)
   extends GeneralizedLinearModel(weights, intercept)
-  with ClassificationModel with Serializable {
+  with BinaryClassificationModel with Serializable {
 
   override def predictPoint(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
       intercept: Double) = {
-    val margin = dataMatrix.dot(weightMatrix) + intercept
+    val margin = predictScore(dataMatrix, weightMatrix, intercept)
     if (margin < 0) 0.0 else 1.0
+  }
+
+  ///
+  def predictScore(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
+      intercept: Double) = {
+    dataMatrix.dot(weightMatrix) + intercept
+  }
+
+  /**
+   * Score values for the given data set using the model trained.
+   *
+   * @param testData RDD representing data points to be predicted
+   * @return RDD[Double] where each entry contains the corresponding score
+   */
+  def score(testData: RDD[Array[Double]]): RDD[Double] = {
+    // A small optimization to avoid serializing the entire model. Only the weightsMatrix
+    // and intercept is needed.
+    val localWeights = weightsMatrix
+    val localIntercept = intercept
+
+    testData.map { x =>
+      val dataMatrix = new DoubleMatrix(1, x.length, x:_*)
+      predictScore(dataMatrix, localWeights, localIntercept)
+    }
+  }
+
+  /**
+   * Score values for a single data point using the model trained.
+   *
+   * @param testData array representing a single data point
+   * @return Double score from the trained model
+   */
+  def score(testData: Array[Double]): Double = {
+    val dataMat = new DoubleMatrix(1, testData.length, testData:_*)
+    predictScore(dataMat, weightsMatrix, intercept)
   }
 }
 
