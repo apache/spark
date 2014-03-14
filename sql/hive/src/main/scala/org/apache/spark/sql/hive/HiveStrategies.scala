@@ -55,15 +55,8 @@ trait HiveStrategies {
       // Push attributes into table scan when possible.
       case p @ logical.Project(projectList, m: MetastoreRelation) if isSimpleProject(projectList) =>
         HiveTableScan(projectList.asInstanceOf[Seq[Attribute]], m, None)(hiveContext) :: Nil
-      case p @ logical.Project(projectList, r: ParquetRelation) if isSimpleProject(projectList) =>
-        ParquetTableScan(
-          projectList.asInstanceOf[Seq[Attribute]],
-          r,
-          None)(hiveContext.sparkContext) :: Nil
       case m: MetastoreRelation =>
         HiveTableScan(m.output, m, None)(hiveContext) :: Nil
-      case p: ParquetRelation =>
-        ParquetTableScan(p.output, p, None)(hiveContext.sparkContext) :: Nil
       case _ => Nil
     }
   }
