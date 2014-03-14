@@ -33,7 +33,7 @@ import org.apache.spark.util.Utils
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.yarn.api.AMRMProtocol
-import org.apache.hadoop.yarn.api.records.{AMResponse, ApplicationAttemptId}
+import org.apache.hadoop.yarn.api.records.ApplicationAttemptId
 import org.apache.hadoop.yarn.api.records.{Container, ContainerId, ContainerStatus}
 import org.apache.hadoop.yarn.api.records.{Priority, Resource, ResourceRequest}
 import org.apache.hadoop.yarn.api.protocolrecords.{AllocateRequest, AllocateResponse}
@@ -103,7 +103,7 @@ private[yarn] class YarnAllocationHandler(
     // this much.
 
     // Keep polling the Resource Manager for containers
-    val amResp = allocateExecutorResources(executorsToRequest).getAMResponse
+    val amResp = YarnAllocationHandlerMacro.getAMResp(allocateExecutorResources(executorsToRequest))
 
     val _allocatedContainers = amResp.getAllocatedContainers()
 
