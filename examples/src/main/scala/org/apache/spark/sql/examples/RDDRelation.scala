@@ -12,7 +12,7 @@ object RDDRelation {
     val sc = new SparkContext("local", "RDDRelation")
     val sqlContext = new SqlContext(sc)
 
-    // Importing the SQL contexts give access to all the SQL functions and implicit conversions.
+    // Importing the SQL context gives access to all the SQL functions and implicit conversions.
     import sqlContext._
 
     val rdd = sc.parallelize((1 to 100).map(i => Record(i, s"val_$i")))
@@ -34,5 +34,9 @@ object RDDRelation {
 
     println("Result of RDD.map:")
     rddFromSql.map(row => s"Key: ${row(0)}, Value: ${row(1)}").collect.foreach(println)
+
+
+    // Queries can also be written using a LINQ-like Scala DSL.
+    rdd.where('key === 1).orderBy('value.asc).select('key).toRdd.collect().foreach(println)
   }
 }

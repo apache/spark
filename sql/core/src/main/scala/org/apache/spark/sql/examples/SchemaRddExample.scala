@@ -21,7 +21,6 @@ package examples
 import catalyst.plans.logical.LocalRelation
 
 import TestSqlContext._
-import catalyst.dsl._
 
 object SchemaRddExample {
   def main(args: Array[String]): Unit = {

@@ -99,7 +99,7 @@ object ScalaReflection {
  * }}}
  */
 package object dsl {
-  protected trait ImplicitOperators {
+  trait ImplicitOperators {
     def expr: Expression
 
     def + (other: Expression) = Add(expr, other)
@@ -122,42 +122,44 @@ package object dsl {
     def as(s: Symbol) = Alias(expr, s.name)()
   }
 
-  implicit class DslExpression(e: Expression) extends ImplicitOperators {
-    def expr = e
+  trait ExpressionConversions {
+    implicit class DslExpression(e: Expression) extends ImplicitOperators {
+      def expr = e
+    }
+
+    implicit def intToLiteral(i: Int) = Literal(i)
+    implicit def longToLiteral(l: Long) = Literal(l)
+    implicit def floatToLiteral(f: Float) = Literal(f)
+    implicit def doubleToLiteral(d: Double) = Literal(d)
+    implicit def stringToLiteral(s: String) = Literal(s)
+
+    implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
+
+    implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
+    implicit class DslString(val s: String) extends ImplicitAttribute
+
+    abstract class ImplicitAttribute extends ImplicitOperators {
+      def s: String
+      def expr = attr
+      def attr = analysis.UnresolvedAttribute(s)
+
+      /** Creates a new typed attributes of type int */
+      def int = AttributeReference(s, IntegerType, nullable = false)()
+
+      /** Creates a new typed attributes of type string */
+      def string = AttributeReference(s, StringType, nullable = false)()
+    }
+
+    implicit class DslAttribute(a: AttributeReference) {
+      def notNull = a.withNullability(false)
+      def nullable = a.withNullability(true)
+
+      // Protobuf terminology
+      def required = a.withNullability(false)
+    }
   }
 
-  implicit def intToLiteral(i: Int) = Literal(i)
-  implicit def longToLiteral(l: Long) = Literal(l)
-  implicit def floatToLiteral(f: Float) = Literal(f)
-  implicit def doubleToLiteral(d: Double) = Literal(d)
-  implicit def stringToLiteral(s: String) = Literal(s)
-
-  implicit def symbolToUnresolvedAttribute(s: Symbol) = analysis.UnresolvedAttribute(s.name)
-
-  implicit class DslSymbol(sym: Symbol) extends ImplicitAttribute { def s = sym.name }
-  implicit class DslString(val s: String) extends ImplicitAttribute
-
-  abstract class ImplicitAttribute extends ImplicitOperators {
-    def s: String
-    def expr = attr
-    def attr = analysis.UnresolvedAttribute(s)
-
-    /** Creates a new typed attributes of type int */
-    def int = AttributeReference(s, IntegerType, nullable = false)()
-
-    /** Creates a new typed attributes of type string */
-    def string = AttributeReference(s, StringType, nullable = false)()
-  }
-
-  implicit class DslAttribute(a: AttributeReference) {
-    def notNull = a.withNullability(false)
-    def nullable = a.withNullability(true)
-
-    // Protobuf terminology
-    def required = a.withNullability(false)
-  }
-
-  implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends LogicalPlanFunctions
+  object expressions extends ExpressionConversions
 
   abstract class LogicalPlanFunctions {
     def logicalPlan: LogicalPlan
@@ -212,8 +214,7 @@ package object dsl {
     def analyze = analysis.SimpleAnalyzer(logicalPlan)
 
     def writeToFile(path: String) = WriteToFile(path, logicalPlan)
-
-    // TODO: for a loadFromFile it would be good to have a Catalog that knows
-    // how to resolve ParquetTables
   }
+
+  implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends LogicalPlanFunctions
 }

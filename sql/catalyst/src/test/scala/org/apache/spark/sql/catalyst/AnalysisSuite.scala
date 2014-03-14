@@ -27,6 +27,7 @@ import plans.logical._
 import types._
 
 import dsl._
+import dsl.expressions._
 
 class AnalysisSuite extends FunSuite {
   val analyze = SimpleAnalyzer

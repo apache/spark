@@ -122,19 +122,7 @@ object ExistingRdd {
   }
 
   def productToRowRdd[A <: Product](data: RDD[A]): RDD[Row] = {
-    data.mapPartitions { iter =>
-      var currentCaseClass: A = null.asInstanceOf[A]
-      var mutableRow: MutableRow = null
-
-      if(iter.hasNext) {
-        currentCaseClass = iter.next()
-        mutableRow = new GenericMutableRow(currentCaseClass.productIterator.size)
-      }
-
-      ???
-
-    }
-
+    // TODO: Reuse the row, don't use map on the product iterator.  Maybe code gen?
     data.map(r => new GenericRow(r.productIterator.map(convertToCatalyst).toArray): Row)
   }
 

@@ -25,6 +25,7 @@ import types._
 import expressions._
 
 import dsl._
+import dsl.expressions._
 
 class ExpressionEvaluationSuite extends FunSuite {
 

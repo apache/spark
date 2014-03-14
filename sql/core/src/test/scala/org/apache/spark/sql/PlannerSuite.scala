@@ -22,7 +22,7 @@ import org.scalatest.FunSuite
 
 import catalyst.expressions._
 import catalyst.plans.logical
-import catalyst.dsl._
+import TestSqlContext._
 
 class PlannerSuite extends FunSuite {
   import TestData._

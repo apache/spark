@@ -22,6 +22,7 @@ import org.scalatest.FunSuite
 
 import plans.physical._
 import catalyst.dsl._
+import catalyst.dsl.expressions._
 
 class DistributionSuite extends FunSuite {
 

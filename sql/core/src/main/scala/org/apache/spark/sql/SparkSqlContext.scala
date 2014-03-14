@@ -25,7 +25,7 @@ import org.apache.spark.rdd.RDD
 
 import catalyst.analysis._
 import catalyst.dsl
-import catalyst.expressions.BindReferences
+import catalyst.expressions._
 import catalyst.optimizer.Optimizer
 import catalyst.planning.QueryPlanner
 import catalyst.plans.logical.{LogicalPlan, NativeCommand}
@@ -57,7 +57,7 @@ object TestSqlContext
  * The entry point for running relational queries using Spark.  Uses the provided spark context
  * to execute relational operators.
  */
-class SqlContext(val sparkContext: SparkContext) extends Logging {
+class SqlContext(val sparkContext: SparkContext) extends Logging with dsl.ExpressionConversions {
   self =>
 
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog
@@ -73,10 +73,14 @@ class SqlContext(val sparkContext: SparkContext) extends Logging {
 
   implicit def logicalPlanToSparkQuery(plan: LogicalPlan) = executePlan(plan)
 
-  implicit def logicalDsl(q: ExecutedQuery) = new dsl.DslLogicalPlan(q.logicalPlan)
+  implicit def logicalDsl(q: ExecutedQuery) = new DslLogicalPlan(q.logicalPlan)
 
   /** Allows the results of sql queries to be used as RDDs */
   implicit def toRdd(q: ExecutedQuery) = q.rdd
+
+  // Expression implicits.  Copied from dsl package object.
+
+  implicit class DslLogicalPlan(val logicalPlan: LogicalPlan) extends dsl.LogicalPlanFunctions
 
   /**
    * Implicitly adds a `registerAsTable` to RDDs of case classes and allows the Query DSL to be

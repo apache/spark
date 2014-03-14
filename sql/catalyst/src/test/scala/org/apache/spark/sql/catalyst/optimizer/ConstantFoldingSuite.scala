@@ -25,6 +25,7 @@ import plans.logical.{LogicalPlan, LocalRelation}
 import rules._
 import expressions._
 import dsl._
+import dsl.expressions._
 
 class ConstantFoldingSuite extends OptimizerTest {
 

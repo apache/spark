@@ -26,7 +26,7 @@ import catalyst.plans.logical.LogicalPlan
 import catalyst.types._
 
 /* Implicits */
-import catalyst.dsl._
+import TestSqlContext._
 
 object TestData {
   val testData =
@@ -69,8 +69,6 @@ object TestData {
 }
 
 class DslQueryTest extends FunSuite {
-  import TestSqlContext._
-
   /**
    * Runs the plan and makes sure the answer matches the expected result.
    * @param plan the query to be executed

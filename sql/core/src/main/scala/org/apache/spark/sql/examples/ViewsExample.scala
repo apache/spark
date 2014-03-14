@@ -23,8 +23,6 @@ import catalyst.plans.Inner
 import catalyst.plans.logical._
 
 /* Implicit Conversions */
-import catalyst.dsl._
-
 import TestSqlContext._ // For .toRdd execution using locally running sql instance.
 
 object ViewsExample {

@@ -8,6 +8,7 @@ import rules._
 import util._
 
 import dsl._
+import dsl.expressions._
 
 class FilterPushdownSuite extends OptimizerTest {
 
