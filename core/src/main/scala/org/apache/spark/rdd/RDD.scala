@@ -958,9 +958,9 @@ abstract class RDD[T: ClassTag](
    * trigger a Spark job if the parent RDD has more than one partitions and the window size is
    * greater than 1.
    */
-  def sliding(windowSize: Int): RDD[Array[T]] = {
+  def sliding(windowSize: Int): RDD[Seq[T]] = {
     if (windowSize == 1) {
-      this.map(Array(_))
+      this.map(Seq(_))
     } else {
       new SlidingRDD[T](this, windowSize)
     }
