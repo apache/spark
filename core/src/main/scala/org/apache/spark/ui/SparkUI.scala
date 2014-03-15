@@ -38,7 +38,7 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   var server: Option[Server] = None
 
   val handlers = Seq[ServletContextHandler] (
-    createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static/*"),
+    createStaticHandler(SparkUI.STATIC_RESOURCE_DIR + "/static", "/static"),
     createRedirectHandler("/stages", "/")
   )
   val storage = new BlockManagerUI(sc)
