@@ -97,6 +97,6 @@ private[spark] class JavaSerializerInstance(conf: SparkConf) extends SerializerI
 /**
  * A Spark serializer that uses Java's built-in serialization.
  */
-class JavaSerializer(conf: SparkConf) extends Serializer {
+class JavaSerializer(conf: SparkConf) extends Serializer with Serializable {
   def newInstance(): SerializerInstance = new JavaSerializerInstance(conf)
 }
