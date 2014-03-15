@@ -35,9 +35,9 @@ import org.apache.spark._
 private[spark] object JsonProtocol {
   private implicit val format = DefaultFormats
 
-  /**
-   * JSON serialization methods for SparkListenerEvents
-   */
+  /** ------------------------------------------------- *
+   * JSON serialization methods for SparkListenerEvents |
+   * -------------------------------------------------- */
 
   def sparkEventToJson(event: SparkListenerEvent): JValue = {
     event match {
@@ -161,9 +161,9 @@ private[spark] object JsonProtocol {
     "Event" -> Utils.getFormattedClassName(SparkListenerShutdown)
   }
 
-  /**
-   * JSON serialization methods for classes SparkListenerEvents depend on
-   */
+  /** ------------------------------------------------------------------- *
+   * JSON serialization methods for classes SparkListenerEvents depend on |
+   * -------------------------------------------------------------------- */
 
   def stageInfoToJson(stageInfo: StageInfo): JValue = {
     val rddInfo = rddInfoToJson(stageInfo.rddInfo)
@@ -323,9 +323,9 @@ private[spark] object JsonProtocol {
     ("Disk Size" -> blockStatus.diskSize)
   }
 
-  /**
-   * Util JSON serialization methods
-   */
+  /** ------------------------------ *
+   * Util JSON serialization methods |
+   * ------------------------------- */
 
   def mapToJson(m: Map[String, String]): JValue = {
     val jsonFields = m.map { case (k, v) => JField(k, JString(v)) }
@@ -357,9 +357,9 @@ private[spark] object JsonProtocol {
     ("Stack Trace" -> stackTraceToJson(exception.getStackTrace))
   }
 
-  /**
-   * JSON deserialization methods for SparkListenerEvents
-   */
+  /** --------------------------------------------------- *
+   * JSON deserialization methods for SparkListenerEvents |
+   * ---------------------------------------------------- */
 
   def sparkEventFromJson(json: JValue): SparkListenerEvent = {
     val stageSubmitted = Utils.getFormattedClassName(SparkListenerStageSubmitted)
@@ -459,9 +459,9 @@ private[spark] object JsonProtocol {
     SparkListenerUnpersistRDD((json \ "RDD ID").extract[Int])
   }
 
-  /**
-   * JSON deserialization methods for classes SparkListenerEvents depend on
-   */
+  /** --------------------------------------------------------------------- *
+   * JSON deserialization methods for classes SparkListenerEvents depend on |
+   * ---------------------------------------------------------------------- */
 
   def stageInfoFromJson(json: JValue): StageInfo = {
     val stageId = (json \ "Stage ID").extract[Int]
@@ -669,9 +669,9 @@ private[spark] object JsonProtocol {
     BlockStatus(storageLevel, memorySize, diskSize)
   }
 
-  /**
-   * Util JSON deserialization methods
-   */
+  /** -------------------------------- *
+   * Util JSON deserialization methods |
+   * --------------------------------- */
 
   def mapFromJson(json: JValue): Map[String, String] = {
     val jsonFields = json.asInstanceOf[JObject].obj

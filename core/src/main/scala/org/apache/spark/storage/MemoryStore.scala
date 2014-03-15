@@ -166,11 +166,11 @@ private class MemoryStore(blockManager: BlockManager, maxMemory: Long)
       size: Long,
       deserialized: Boolean): ResultWithDroppedBlocks = {
 
-    // TODO: Its possible to optimize the locking by locking entries only when selecting blocks
-    // to be dropped. Once the to-be-dropped blocks have been selected, and lock on entries has
-    // been released, it must be ensured that those to-be-dropped blocks are not double counted
-    // for freeing up more space for another block that needs to be put. Only then the actually
-    // dropping of blocks (and writing to disk if necessary) can proceed in parallel.
+    /* TODO: Its possible to optimize the locking by locking entries only when selecting blocks
+     * to be dropped. Once the to-be-dropped blocks have been selected, and lock on entries has
+     * been released, it must be ensured that those to-be-dropped blocks are not double counted
+     * for freeing up more space for another block that needs to be put. Only then the actually
+     * dropping of blocks (and writing to disk if necessary) can proceed in parallel. */
 
     var putSuccess = false
     val droppedBlocks = new ArrayBuffer[(BlockId, BlockStatus)]

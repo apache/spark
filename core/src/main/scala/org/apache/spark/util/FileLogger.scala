@@ -84,10 +84,8 @@ class FileLogger(
     val logPath = logDir + "/" + fileIndex
     val uri = new URI(logPath)
 
-    /**
-     * The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
-     * Therefore, for local files, use FileOutputStream instead.
-     */
+    /* The Hadoop LocalFileSystem (r1.0.4) has known issues with syncing (HADOOP-7844).
+     * Therefore, for local files, use FileOutputStream instead. */
     val dstream = uri.getScheme match {
       case "hdfs" | "s3" =>
         val path = new Path(logPath)

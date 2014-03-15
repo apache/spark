@@ -50,13 +50,11 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
               try {loading.wait()} catch {case _ : Throwable =>}
             }
             logInfo("Finished waiting for %s".format(key))
-            /**
-             * See whether someone else has successfully loaded it. The main way this would fail
+            /* See whether someone else has successfully loaded it. The main way this would fail
              * is for the RDD-level cache eviction policy if someone else has loaded the same RDD
              * partition but we didn't want to make space for it. However, that case is unlikely
              * because it's unlikely that two threads would work on the same RDD partition. One
-             * downside of the current code is that threads wait serially if this does happen.
-             */
+             * downside of the current code is that threads wait serially if this does happen. */
             blockManager.get(key) match {
               case Some(values) =>
                 return new InterruptibleIterator(context, values.asInstanceOf[Iterator[T]])
@@ -80,15 +78,13 @@ private[spark] class CacheManager(blockManager: BlockManager) extends Logging {
           var updatedBlocks = Seq[(BlockId, BlockStatus)]()
           val returnValue: Iterator[T] = {
             if (storageLevel.useDisk && !storageLevel.useMemory) {
-              /**
-               * In the case that this RDD is to be persisted using DISK_ONLY
+              /* In the case that this RDD is to be persisted using DISK_ONLY
                * the iterator will be passed directly to the blockManager (rather then
                * caching it to an ArrayBuffer first), then the resulting block data iterator
                * will be passed back to the user. If the iterator generates a lot of data,
                * this means that it doesn't all have to be held in memory at one time.
                * This could also apply to MEMORY_ONLY_SER storage, but we need to make sure
-               * blocks aren't dropped by the block store before enabling that.
-               */
+               * blocks aren't dropped by the block store before enabling that. */
               updatedBlocks = blockManager.put(key, computedValues, storageLevel, tellMaster = true)
               blockManager.get(key) match {
                 case Some(values) =>
