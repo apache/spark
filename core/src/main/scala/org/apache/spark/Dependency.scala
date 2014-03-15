@@ -44,7 +44,8 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
  * Represents a dependency on the output of a shuffle stage.
  * @param rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
- * @param serializer [[Serializer]] to use.
+ * @param serializer [[Serializer]] to use. If set to null, the default serializer, as specified
+ *                  by `spark.serializer` config option, will be used.
  */
 class ShuffleDependency[K, V](
     @transient rdd: RDD[_ <: Product2[K, V]],
