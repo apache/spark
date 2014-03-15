@@ -269,18 +269,6 @@ private[spark] object JsonProtocol {
     ("Result" -> result) ~ json
   }
 
-  def storageStatusToJson(storageStatus: StorageStatus): JValue = {
-    val blockManagerId = blockManagerIdToJson(storageStatus.blockManagerId)
-    val blocks = JArray(
-      storageStatus.blocks.toList.map { case (id, status) =>
-        ("Block ID" -> blockIdToJson(id)) ~
-        ("Status" -> blockStatusToJson(status))
-      })
-    ("Block Manager ID" -> blockManagerId) ~
-    ("Maximum Memory" -> storageStatus.maxMem) ~
-    ("Blocks" -> blocks)
-  }
-
   def rddInfoToJson(rddInfo: RDDInfo): JValue = {
     val storageLevel = storageLevelToJson(rddInfo.storageLevel)
     ("RDD ID" -> rddInfo.id) ~
@@ -365,7 +353,7 @@ private[spark] object JsonProtocol {
   }
 
   def exceptionToJson(exception: Exception): JValue = {
-    ("Message" -> exception.toString) ~
+    ("Message" -> exception.getMessage) ~
     ("Stack Trace" -> stackTraceToJson(exception.getStackTrace))
   }
 
@@ -516,6 +504,7 @@ private[spark] object JsonProtocol {
     metrics.hostname = (json \ "Host Name").extract[String]
     metrics.executorDeserializeTime = (json \ "Executor Deserialize Time").extract[Long]
     metrics.executorRunTime = (json \ "Executor Run Time").extract[Long]
+    metrics.resultSize = (json \ "Result Size").extract[Long]
     metrics.jvmGCTime = (json \ "JVM GC Time").extract[Long]
     metrics.resultSerializationTime = (json \ "Result Serialization Time").extract[Long]
     metrics.memoryBytesSpilled = (json \ "Memory Bytes Spilled").extract[Long]
@@ -603,18 +592,6 @@ private[spark] object JsonProtocol {
         val failedStageId = (json \ "Failed Stage ID").extract[Int]
         new JobFailed(exception, failedStageId)
     }
-  }
-
-  def storageStatusFromJson(json: JValue): StorageStatus = {
-    val blockManagerId = blockManagerIdFromJson(json \ "Block Manager ID")
-    val maxMem = (json \ "Maximum Memory").extract[Long]
-    val blocks = (json \ "Blocks").extract[List[JValue]].map { block =>
-      val id = blockIdFromJson(block \ "Block ID")
-      val status = blockStatusFromJson(block \ "Status")
-      (id, status)
-    }
-    val blockMap = mutable.Map[BlockId, BlockStatus](blocks: _*)
-    new StorageStatus(blockManagerId, maxMem, blockMap)
   }
 
   def rddInfoFromJson(json: JValue): RDDInfo = {

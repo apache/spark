@@ -28,7 +28,7 @@ import org.scalatest.concurrent.Timeouts._
 import org.scalatest.matchers.ShouldMatchers._
 import org.scalatest.time.SpanSugar._
 
-import org.apache.spark.{SecurityManager, SparkConf, SparkContext}
+import org.apache.spark.{SecurityManager, SparkConf}
 import org.apache.spark.serializer.{JavaSerializer, KryoSerializer}
 import org.apache.spark.util.{AkkaUtils, ByteBufferInputStream, SizeEstimator, Utils}
 
@@ -492,12 +492,9 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     store.putSingle("a2", a2, StorageLevel.MEMORY_ONLY_SER)
     store.putSingle("a3", a3, StorageLevel.DISK_ONLY)
     // At this point LRU should not kick in because a3 is only on disk
-    assert(store.getSingle("a1").isDefined, "a2 was not in store")
-    assert(store.getSingle("a2").isDefined, "a3 was not in store")
-    assert(store.getSingle("a3").isDefined, "a1 was not in store")
-    assert(store.getSingle("a1").isDefined, "a2 was not in store")
-    assert(store.getSingle("a2").isDefined, "a3 was not in store")
-    assert(store.getSingle("a3").isDefined, "a1 was not in store")
+    assert(store.getSingle("a1").isDefined, "a1 was not in store")
+    assert(store.getSingle("a2").isDefined, "a2 was not in store")
+    assert(store.getSingle("a3").isDefined, "a3 was not in store")
     // Now let's add in a4, which uses both disk and memory; a1 should drop out
     store.putSingle("a4", a4, StorageLevel.MEMORY_AND_DISK_SER)
     assert(store.getSingle("a1") == None, "a1 was in store")
@@ -661,6 +658,60 @@ class BlockManagerSuite extends FunSuite with BeforeAndAfter with PrivateMethodT
     failAfter(1 second) {
       assert(store.getSingle("a1") == None, "a1 should not be in store")
     }
+  }
+
+  test("updated block statuses") {
+    store = new BlockManager("<driver>", actorSystem, master, serializer, 1200, conf, securityMgr)
+    val list = List.fill(2)(new Array[Byte](200))
+    val bigList = List.fill(8)(new Array[Byte](200))
+
+    // 1 updated block (i.e. list1)
+    val updatedBlocks1 =
+      store.put("list1", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(updatedBlocks1.size === 1)
+    assert(updatedBlocks1.head._1 === TestBlockId("list1"))
+    assert(updatedBlocks1.head._2.storageLevel === StorageLevel.MEMORY_ONLY)
+
+    // 1 updated block (i.e. list2)
+    val updatedBlocks2 =
+      store.put("list2", list.iterator, StorageLevel.MEMORY_AND_DISK, tellMaster = true)
+    assert(updatedBlocks2.size === 1)
+    assert(updatedBlocks2.head._1 === TestBlockId("list2"))
+    assert(updatedBlocks2.head._2.storageLevel === StorageLevel.MEMORY_ONLY)
+
+    // 2 updated blocks - list1 is kicked out of memory while list3 is added
+    val updatedBlocks3 =
+      store.put("list3", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(updatedBlocks3.size === 2)
+    updatedBlocks3.foreach { case (id, status) =>
+      id match {
+        case TestBlockId("list1") => assert(status.storageLevel === StorageLevel.NONE)
+        case TestBlockId("list3") => assert(status.storageLevel === StorageLevel.MEMORY_ONLY)
+        case _ => fail("Updated block is neither list1 nor list3")
+      }
+    }
+    assert(store.get("list3").isDefined, "list3 was not in store")
+
+    // 2 updated blocks - list2 is kicked out of memory (but put on disk) while list4 is added
+    val updatedBlocks4 =
+      store.put("list4", list.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(updatedBlocks4.size === 2)
+    updatedBlocks4.foreach { case (id, status) =>
+      id match {
+        case TestBlockId("list2") => assert(status.storageLevel === StorageLevel.DISK_ONLY)
+        case TestBlockId("list4") => assert(status.storageLevel === StorageLevel.MEMORY_ONLY)
+        case _ => fail("Updated block is neither list2 nor list4")
+      }
+    }
+    assert(store.get("list4").isDefined, "list4 was not in store")
+
+    // No updated blocks - nothing is kicked out of memory because list5 is too big to be added
+    val updatedBlocks5 =
+      store.put("list5", bigList.iterator, StorageLevel.MEMORY_ONLY, tellMaster = true)
+    assert(updatedBlocks5.size === 0)
+    assert(store.get("list2").isDefined, "list2 was not in store")
+    assert(store.get("list4").isDefined, "list4 was not in store")
+    assert(!store.get("list5").isDefined, "list5 was in store")
   }
 
   test("SPARK-1194 regression: fix the same-RDD rule for cache replacement") {

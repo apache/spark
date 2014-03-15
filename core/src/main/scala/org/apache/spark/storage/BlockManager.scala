@@ -268,7 +268,9 @@ private[spark] class BlockManager(
         case level =>
           val inMem = level.useMemory && memoryStore.contains(blockId)
           val onDisk = level.useDisk && diskStore.contains(blockId)
-          val storageLevel = StorageLevel(onDisk, inMem, level.deserialized, level.replication)
+          val deserialized = if (inMem) level.deserialized else false
+          val replication = if (inMem || onDisk) level.replication else 1
+          val storageLevel = StorageLevel(onDisk, inMem, deserialized, replication)
           val memSize = if (inMem) memoryStore.getSize(blockId) else 0L
           val diskSize = if (onDisk) diskStore.getSize(blockId) else 0L
           (storageLevel, memSize, diskSize)
@@ -498,8 +500,11 @@ private[spark] class BlockManager(
    * This is currently used for writing shuffle files out. Callers should handle error
    * cases.
    */
-  def getDiskWriter(blockId: BlockId, file: File, serializer: Serializer, bufferSize: Int)
-    : BlockObjectWriter = {
+  def getDiskWriter(
+      blockId: BlockId,
+      file: File,
+      serializer: Serializer,
+      bufferSize: Int) : BlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream, syncWrites)
@@ -639,15 +644,17 @@ private[spark] class BlockManager(
           }
         }
 
-        // Now that the block is in either the memory or disk store, let other threads read it,
-        // and tell the master about it.
-        marked = true
-        putBlockInfo.markReady(size)
         val putBlockStatus = getCurrentBlockStatus(blockId, putBlockInfo)
-        if (tellMaster) {
-          reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
+        if (putBlockStatus.storageLevel != StorageLevel.NONE) {
+          // Now that the block is in either the memory or disk store, let other threads read it,
+          // and tell the master about it.
+          marked = true
+          putBlockInfo.markReady(size)
+          if (tellMaster) {
+            reportBlockStatus(blockId, putBlockInfo, putBlockStatus)
+          }
+          updatedBlocks += ((blockId, putBlockStatus))
         }
-        updatedBlocks += ((blockId, putBlockStatus))
       } finally {
         // If we failed in putting the block to memory/disk, notify other possible readers
         // that it has failed, and then remove it from the block info map.
@@ -731,7 +738,11 @@ private[spark] class BlockManager(
   /**
    * Write a block consisting of a single object.
    */
-  def putSingle(blockId: BlockId, value: Any, level: StorageLevel, tellMaster: Boolean = true) {
+  def putSingle(
+      blockId: BlockId,
+      value: Any,
+      level: StorageLevel,
+      tellMaster: Boolean = true): Seq[(BlockId, BlockStatus)] = {
     put(blockId, Iterator(value), level, tellMaster)
   }
 
