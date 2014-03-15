@@ -962,7 +962,7 @@ abstract class RDD[T: ClassTag](
     if (windowSize == 1) {
       this.map(Array(_))
     } else {
-      new SlidedRDD[T](this, windowSize)
+      new SlidingRDD[T](this, windowSize)
     }
   }
 

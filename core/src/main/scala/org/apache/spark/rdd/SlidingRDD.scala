@@ -23,7 +23,7 @@ import scala.reflect.ClassTag
 import org.apache.spark.{TaskContext, Partition}
 
 private[spark]
-class SlidedRDDPartition[T](val idx: Int, val prev: Partition, val tail: Array[T])
+class SlidingRDDPartition[T](val idx: Int, val prev: Partition, val tail: Array[T])
   extends Partition with Serializable {
   override val index: Int = idx
 }
@@ -41,13 +41,13 @@ class SlidedRDDPartition[T](val idx: Int, val prev: Partition, val tail: Array[T
  * @see [[org.apache.spark.rdd.RDD#sliding]]
  */
 private[spark]
-class SlidedRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int)
+class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int)
   extends RDD[Array[T]](parent) {
 
-  require(windowSize > 1, "Window size must be greater than 1.")
+  require(windowSize > 1, s"Window size must be greater than 1, but got $windowSize.")
 
   override def compute(split: Partition, context: TaskContext): Iterator[Array[T]] = {
-    val part = split.asInstanceOf[SlidedRDDPartition[T]]
+    val part = split.asInstanceOf[SlidingRDDPartition[T]]
     (firstParent[T].iterator(part.prev, context) ++ part.tail)
       .sliding(windowSize)
       .map(_.toArray)
@@ -55,7 +55,7 @@ class SlidedRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int)
   }
 
   override def getPreferredLocations(split: Partition): Seq[String] =
-    firstParent[T].preferredLocations(split.asInstanceOf[SlidedRDDPartition[T]].prev)
+    firstParent[T].preferredLocations(split.asInstanceOf[SlidingRDDPartition[T]].prev)
 
   override def getPartitions: Array[Partition] = {
     val parentPartitions = parent.partitions
@@ -63,14 +63,14 @@ class SlidedRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int)
     if (n == 0) {
       Array.empty
     } else if (n == 1) {
-      Array(new SlidedRDDPartition[T](0, parentPartitions(0), Array.empty))
+      Array(new SlidingRDDPartition[T](0, parentPartitions(0), Array.empty))
     } else {
       val n1 = n - 1
       val w1 = windowSize - 1
       // Get the first w1 items of each partition, starting from the second partition.
       val nextHeads =
         parent.context.runJob(parent, (iter: Iterator[T]) => iter.take(w1).toArray, 1 until n, true)
-      val partitions = mutable.ArrayBuffer[SlidedRDDPartition[T]]()
+      val partitions = mutable.ArrayBuffer[SlidingRDDPartition[T]]()
       var i = 0
       var partitionIndex = 0
       while (i < n1) {
@@ -85,14 +85,14 @@ class SlidedRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int)
           tail ++= nextHeads(j)
           j += 1
         }
-        partitions += new SlidedRDDPartition[T](partitionIndex, parentPartitions(i), tail.toArray)
+        partitions += new SlidingRDDPartition[T](partitionIndex, parentPartitions(i), tail.toArray)
         partitionIndex += 1
         // Skip appended heads.
         i = j
       }
       // If the head of last partition has size w1, we also need to add this partition.
       if (nextHeads(n1 - 1).size == w1) {
-        partitions += new SlidedRDDPartition[T](partitionIndex, parentPartitions(n1), Array.empty)
+        partitions += new SlidingRDDPartition[T](partitionIndex, parentPartitions(n1), Array.empty)
       }
       partitions.toArray
     }
