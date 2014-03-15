@@ -84,7 +84,7 @@ class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int
           tail ++= nextHeads(j)
           j += 1
         }
-        partitions += new SlidingRDDPartition[T](partitionIndex, parentPartitions(i), tail.toSeq)
+        partitions += new SlidingRDDPartition[T](partitionIndex, parentPartitions(i), tail)
         partitionIndex += 1
         // Skip appended heads.
         i = j
