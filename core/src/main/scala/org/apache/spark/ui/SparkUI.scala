@@ -21,7 +21,7 @@ import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.{Logging, SecurityManager, SparkConf, SparkContext, SparkEnv}
-import org.apache.spark.scheduler.{EventLoggingInfo, EventLoggingListener, SparkReplayerBus}
+import org.apache.spark.scheduler._
 import org.apache.spark.storage.StorageStatusListener
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.ui.env.EnvironmentUI
@@ -34,14 +34,14 @@ import org.apache.spark.util.Utils
 private[spark] class SparkUI(
     val sc: SparkContext,
     conf: SparkConf,
+    val listenerBus: SparkListenerBus,
     val appName: String,
     val basePath: String = "")
   extends Logging {
 
-  def this(sc: SparkContext) = this(sc, sc.conf, sc.appName)
-  def this(conf: SparkConf, appName: String) = this(null, conf, appName)
-  def this(conf: SparkConf, appName: String, basePath: String) =
-    this(null, conf, appName, basePath)
+  def this(sc: SparkContext) = this(sc, sc.conf, sc.listenerBus, sc.appName)
+  def this(conf: SparkConf, listenerBus: SparkListenerBus, appName: String, basePath: String) =
+    this(null, conf, listenerBus, appName, basePath)
 
   // If SparkContext is not provided, assume the associated application is not live
   val live = sc != null
@@ -52,7 +52,6 @@ private[spark] class SparkUI(
   private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
   private var boundPort: Option[Int] = None
   private var server: Option[Server] = None
-  private var started = false
 
   private val storage = new BlockManagerUI(this)
   private val jobs = new JobProgressUI(this)
@@ -82,9 +81,6 @@ private[spark] class SparkUI(
   // Only log events if this SparkUI is live
   private var eventLogger: Option[EventLoggingListener] = None
 
-  // Only replay events if this SparkUI is not live
-  private var replayerBus: Option[SparkReplayerBus] = None
-
   // Information needed to replay the events logged by this UI, if any
   lazy val eventLogInfo: Option[EventLoggingInfo] =
     eventLogger.map { l => Some(l.info) }.getOrElse(None)
@@ -110,39 +106,19 @@ private[spark] class SparkUI(
     env.start()
     exec.start()
 
-    // Listen for events from the SparkContext if it exists, otherwise from persisted storage
-    val eventBus = if (live) {
-      val loggingEnabled = conf.getBoolean("spark.eventLog.enabled", false)
-      if (loggingEnabled) {
-        val logger = new EventLoggingListener(appName, conf)
-        eventLogger = Some(logger)
-        sc.listenerBus.addListener(logger)
-      }
-      sc.listenerBus
-    } else {
-      replayerBus = Some(new SparkReplayerBus(conf))
-      replayerBus.get
-    }
-
     // Storage status listener must receive events first, as other listeners depend on its state
-    eventBus.addListener(storageStatusListener)
-    eventBus.addListener(storage.listener)
-    eventBus.addListener(jobs.listener)
-    eventBus.addListener(env.listener)
-    eventBus.addListener(exec.listener)
-    started = true
-  }
+    listenerBus.addListener(storageStatusListener)
+    listenerBus.addListener(storage.listener)
+    listenerBus.addListener(jobs.listener)
+    listenerBus.addListener(env.listener)
+    listenerBus.addListener(exec.listener)
 
-  /**
-   * Reconstruct a previously persisted SparkUI from logs residing in the given directory.
-   *
-   * This method must be invoked after the SparkUI has started. Return true if log files
-   * are found and processed.
-   */
-  def renderFromPersistedStorage(logDir: String): Boolean = {
-    assume(!live, "Live Spark Web UI attempted to render from persisted storage!")
-    assume(started, "Spark Web UI attempted to render from persisted storage before starting!")
-    replayerBus.get.replay(logDir)
+    // Log events only if this UI is live and the feature is enabled
+    if (live && conf.getBoolean("spark.eventLog.enabled", false)) {
+      val logger = new EventLoggingListener(appName, conf)
+      eventLogger = Some(logger)
+      listenerBus.addListener(logger)
+    }
   }
 
   def stop() {

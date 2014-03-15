@@ -509,7 +509,7 @@ Apart from these, the following properties are also available, and may be useful
 </tr>
 <tr>
   <td>spark.eventLog.dir</td>
-  <td>/tmp/spark-events</td>
+  <td>file:///tmp/spark-events</td>
   <td>
     Base directory in which spark events are logged, if <code>spark.eventLog.enabled</code> is true.
     Within this base directory, Spark creates a sub-directory for each application, and logs the events

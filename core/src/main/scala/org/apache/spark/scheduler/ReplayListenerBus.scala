@@ -33,7 +33,7 @@ import org.apache.spark.util.{JsonProtocol, Utils}
 /**
  * An EventBus that replays logged events from persisted storage
  */
-private[spark] class SparkReplayerBus(conf: SparkConf) extends EventBus with Logging {
+private[spark] class ReplayListenerBus(conf: SparkConf) extends SparkListenerBus with Logging {
   private val compressed = conf.getBoolean("spark.eventLog.compress", false)
 
   // Only used if compression is enabled

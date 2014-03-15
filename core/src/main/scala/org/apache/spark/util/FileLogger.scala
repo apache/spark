@@ -77,8 +77,7 @@ class FileLogger(
   }
 
   /**
-   * Create a new writer for the file identified by the given path. File systems currently
-   * supported include HDFS, S3, and the local file system.
+   * Create a new writer for the file identified by the given path.
    */
   private def createWriter(): PrintWriter = {
     val logPath = logDir + "/" + fileIndex

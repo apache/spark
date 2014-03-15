@@ -28,7 +28,7 @@ import akka.actor.{Actor, ActorRef, Cancellable}
 import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
-import org.apache.spark.scheduler.{SparkListenerBlockManagerGained, SparkListenerBlockManagerLost}
+import org.apache.spark.scheduler.{SparkListenerBlockManagerAdded, SparkListenerBlockManagerLost}
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -245,8 +245,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
       blockManagerInfo(id) =
         new BlockManagerInfo(id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
-    val blockManagerGained = SparkListenerBlockManagerGained(id, maxMemSize)
-    statusListener.foreach(_.onBlockManagerGained(blockManagerGained))
+    val blockManagerAdded = SparkListenerBlockManagerAdded(id, maxMemSize)
+    statusListener.foreach(_.onBlockManagerAdded(blockManagerAdded))
   }
 
   private def updateBlockInfo(

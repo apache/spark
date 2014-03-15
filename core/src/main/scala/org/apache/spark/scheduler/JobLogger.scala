@@ -35,8 +35,8 @@ import org.apache.spark.executor.TaskMetrics
  *
  * NOTE: The functionality of this class is heavily stripped down to accommodate for a general
  * refactor of the SparkListener interface. In its place, the EventLoggingListener is introduced
- * to log application information as SparkListenerEvents through the SparkUI. To enable this
- * functionality, set spark.eventLog.enabled to true.
+ * to log application information as SparkListenerEvents. To enable this functionality, set
+ * spark.eventLog.enabled to true.
  */
 
 @deprecated("Log application information by setting spark.eventLog.enabled.", "1.0.0")

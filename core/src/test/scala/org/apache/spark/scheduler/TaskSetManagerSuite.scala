@@ -43,7 +43,7 @@ class FakeDAGScheduler(sc: SparkContext, taskScheduler: FakeTaskScheduler)
     taskScheduler.endedTasks(taskInfo.index) = reason
   }
 
-  override def executorGained(execId: String, host: String) {}
+  override def executorAdded(execId: String, host: String) {}
 
   override def executorLost(execId: String) {}
 

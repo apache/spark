@@ -67,11 +67,11 @@ private[spark] class StorageStatusListener extends SparkListener {
     updateStorageStatus(unpersistRDD.rddId)
   }
 
-  override def onBlockManagerGained(blockManagerGained: SparkListenerBlockManagerGained) {
+  override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded) {
     synchronized {
-      val blockManagerId = blockManagerGained.blockManagerId
+      val blockManagerId = blockManagerAdded.blockManagerId
       val executorId = blockManagerId.executorId
-      val maxMem = blockManagerGained.maxMem
+      val maxMem = blockManagerAdded.maxMem
       val storageStatus = new StorageStatus(blockManagerId, maxMem)
       executorIdToStorageStatus(executorId) = storageStatus
     }

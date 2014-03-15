@@ -54,7 +54,7 @@ case class SparkListenerJobEnd(jobId: Int, jobResult: JobResult) extends SparkLi
 case class SparkListenerEnvironmentUpdate(environmentDetails: Map[String, Seq[(String, String)]])
   extends SparkListenerEvent
 
-case class SparkListenerBlockManagerGained(blockManagerId: BlockManagerId, maxMem: Long)
+case class SparkListenerBlockManagerAdded(blockManagerId: BlockManagerId, maxMem: Long)
   extends SparkListenerEvent
 
 case class SparkListenerBlockManagerLost(blockManagerId: BlockManagerId) extends SparkListenerEvent
@@ -113,7 +113,7 @@ trait SparkListener {
   /**
    * Called when a new block manager has joined
    */
-  def onBlockManagerGained(blockManagerGained: SparkListenerBlockManagerGained) { }
+  def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded) { }
 
   /**
    * Called when an existing block manager has been lost

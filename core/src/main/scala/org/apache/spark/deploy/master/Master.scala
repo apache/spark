@@ -37,6 +37,7 @@ import org.apache.spark.deploy.master.DriverState.DriverState
 import org.apache.spark.deploy.master.MasterMessages._
 import org.apache.spark.deploy.master.ui.MasterWebUI
 import org.apache.spark.metrics.MetricsSystem
+import org.apache.spark.scheduler.ReplayListenerBus
 import org.apache.spark.ui.SparkUI
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -666,10 +667,16 @@ private[spark] class Master(
       appConf.set("spark.eventLog.compress", "true")
       appConf.set("spark.io.compression.codec", codec)
     }
-    val ui = new SparkUI(appConf, "%s (finished)".format(appName), "/history/%s".format(app.id))
+    val replayerBus = new ReplayListenerBus(appConf)
+    val ui = new SparkUI(
+      appConf,
+      replayerBus,
+      "%s (finished)".format(appName),
+      "/history/%s".format(app.id))
+
     // Do not call ui.bind() to avoid creating a new server for each application
     ui.start()
-    val success = ui.renderFromPersistedStorage(eventLogDir)
+    val success = replayerBus.replay(eventLogDir)
     if (!success) {
       ui.stop()
       None

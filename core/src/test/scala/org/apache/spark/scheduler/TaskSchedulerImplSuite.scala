@@ -270,7 +270,7 @@ class TaskSchedulerImplSuite extends FunSuite with LocalSparkContext with Loggin
     // Need to initialize a DAGScheduler for the taskScheduler to use for callbacks.
     val dagScheduler = new DAGScheduler(sc, taskScheduler) {
       override def taskStarted(task: Task[_], taskInfo: TaskInfo) {}
-      override def executorGained(execId: String, host: String) {}
+      override def executorAdded(execId: String, host: String) {}
     }
 
     val numFreeCores = 1

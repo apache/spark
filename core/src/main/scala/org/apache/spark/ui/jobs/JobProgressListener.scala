@@ -239,9 +239,9 @@ private[ui] class JobProgressListener(conf: SparkConf) extends SparkListener {
     }
   }
 
-  override def onBlockManagerGained(blockManagerGained: SparkListenerBlockManagerGained) {
+  override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded) {
     synchronized {
-      val blockManagerId = blockManagerGained.blockManagerId
+      val blockManagerId = blockManagerAdded.blockManagerId
       val executorId = blockManagerId.executorId
       executorIdToBlockManagerId(executorId) = blockManagerId
     }

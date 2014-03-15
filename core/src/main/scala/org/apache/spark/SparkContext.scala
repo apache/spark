@@ -151,10 +151,6 @@ class SparkContext(
   private[spark] val metadataCleaner =
     new MetadataCleaner(MetadataCleanerType.SPARK_CONTEXT, this.cleanup, conf)
 
-  // Initialize the Spark UI
-  private[spark] val ui = new SparkUI(this)
-  ui.bind()
-
   val startTime = System.currentTimeMillis()
 
   // Add each JAR given through the constructor
@@ -200,9 +196,11 @@ class SparkContext(
   executorEnvs("SPARK_USER") = sparkUser
 
   // An asynchronous listener bus for Spark events
-  private[spark] val listenerBus = new SparkListenerBus
+  private[spark] val listenerBus = new LiveListenerBus
 
   // Start the UI before posting events to listener bus, because the UI listens for Spark events
+  private[spark] val ui = new SparkUI(this)
+  ui.bind()
   ui.start()
 
   // Create and start the scheduler

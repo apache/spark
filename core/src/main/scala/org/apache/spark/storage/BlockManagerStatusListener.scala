@@ -34,7 +34,7 @@ import org.apache.spark.scheduler._
  * event should be buffered.
  */
 private[spark] class BlockManagerStatusListener extends SparkListener {
-  private var _listenerBus: Option[SparkListenerBus] = None
+  private var _listenerBus: Option[LiveListenerBus] = None
 
   // Buffer any events received before the listener bus is ready
   private val bufferedEvents = new ArrayBuffer[SparkListenerEvent]
@@ -42,7 +42,7 @@ private[spark] class BlockManagerStatusListener extends SparkListener {
   /**
    * Set the listener bus. If there are buffered events, post them all to the listener bus.
    */
-  def setListenerBus(listenerBus: SparkListenerBus) = {
+  def setListenerBus(listenerBus: LiveListenerBus) = {
     _listenerBus = Some(listenerBus)
     bufferedEvents.map(listenerBus.postToAll)
   }
@@ -54,8 +54,8 @@ private[spark] class BlockManagerStatusListener extends SparkListener {
     _listenerBus.map(_.post(event)).getOrElse { bufferedEvents += event }
   }
 
-  override def onBlockManagerGained(blockManagerGained: SparkListenerBlockManagerGained) =
-    postOrBuffer(blockManagerGained)
+  override def onBlockManagerAdded(blockManagerAdded: SparkListenerBlockManagerAdded) =
+    postOrBuffer(blockManagerAdded)
 
   override def onBlockManagerLost(blockManagerLost: SparkListenerBlockManagerLost) =
     postOrBuffer(blockManagerLost)

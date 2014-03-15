@@ -47,7 +47,7 @@ class JsonProtocolSuite extends FunSuite {
       "System Properties" -> Seq(("Username", "guest"), ("Password", "guest")),
       "Classpath Entries" -> Seq(("Super library", "/tmp/super_library"))
     ))
-    val blockManagerGained = SparkListenerBlockManagerGained(
+    val blockManagerAdded = SparkListenerBlockManagerAdded(
       BlockManagerId("Stars", "In your multitude...", 300, 400), 500)
     val blockManagerLost = SparkListenerBlockManagerLost(
       BlockManagerId("Scarce", "to be counted...", 100, 200))
@@ -61,7 +61,7 @@ class JsonProtocolSuite extends FunSuite {
     testEvent(jobStart, jobStartJsonString)
     testEvent(jobEnd, jobEndJsonString)
     testEvent(environmentUpdate, environmentUpdateJsonString)
-    testEvent(blockManagerGained, blockManagerGainedJsonString)
+    testEvent(blockManagerAdded, blockManagerAddedJsonString)
     testEvent(blockManagerLost, blockManagerLostJsonString)
     testEvent(unpersistRdd, unpersistRDDJsonString)
     testEvent(SparkListenerShutdown, shutdownJsonString)
@@ -205,7 +205,7 @@ class JsonProtocolSuite extends FunSuite {
         assertEquals(e1.jobResult, e2.jobResult)
       case (e1: SparkListenerEnvironmentUpdate, e2: SparkListenerEnvironmentUpdate) =>
         assertEquals(e1.environmentDetails, e2.environmentDetails)
-      case (e1: SparkListenerBlockManagerGained, e2: SparkListenerBlockManagerGained) =>
+      case (e1: SparkListenerBlockManagerAdded, e2: SparkListenerBlockManagerAdded) =>
         assert(e1.maxMem == e2.maxMem)
         assertEquals(e1.blockManagerId, e2.blockManagerId)
       case (e1: SparkListenerBlockManagerLost, e2: SparkListenerBlockManagerLost) =>
@@ -540,9 +540,9 @@ class JsonProtocolSuite extends FunSuite {
       "Classpath Entries":{"Super library":"/tmp/super_library"}}
     """
 
-  private val blockManagerGainedJsonString =
+  private val blockManagerAddedJsonString =
     """
-      {"Event":"SparkListenerBlockManagerGained","Block Manager ID":{"Executor ID":"Stars",
+      {"Event":"SparkListenerBlockManagerAdded","Block Manager ID":{"Executor ID":"Stars",
       "Host":"In your multitude...","Port":300,"Netty Port":400},"Maximum Memory":500}
     """
 

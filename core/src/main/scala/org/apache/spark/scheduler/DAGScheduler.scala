@@ -55,7 +55,7 @@ import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedH
 private[spark]
 class DAGScheduler(
     taskScheduler: TaskScheduler,
-    listenerBus: SparkListenerBus,
+    listenerBus: LiveListenerBus,
     mapOutputTracker: MapOutputTrackerMaster,
     blockManagerMaster: BlockManagerMaster,
     env: SparkEnv)
@@ -179,8 +179,8 @@ class DAGScheduler(
   }
 
   // Called by TaskScheduler when a host is added
-  def executorGained(execId: String, host: String) {
-    eventProcessActor ! ExecutorGained(execId, host)
+  def executorAdded(execId: String, host: String) {
+    eventProcessActor ! ExecutorAdded(execId, host)
   }
 
   // Called by TaskScheduler to cancel an entire TaskSet due to either repeated failures or
@@ -561,8 +561,8 @@ class DAGScheduler(
         activeJobs.clear()      // These should already be empty by this point,
         stageIdToActiveJob.clear()   // but just in case we lost track of some jobs...
 
-      case ExecutorGained(execId, host) =>
-        handleExecutorGained(execId, host)
+      case ExecutorAdded(execId, host) =>
+        handleExecutorAdded(execId, host)
 
       case ExecutorLost(execId) =>
         handleExecutorLost(execId)
@@ -971,10 +971,10 @@ class DAGScheduler(
     }
   }
 
-  private def handleExecutorGained(execId: String, host: String) {
+  private def handleExecutorAdded(execId: String, host: String) {
     // remove from failedEpoch(execId) ?
     if (failedEpoch.contains(execId)) {
-      logInfo("Host gained which was in lost list earlier: " + host)
+      logInfo("Host added was in lost list earlier: " + host)
       failedEpoch -= execId
     }
   }

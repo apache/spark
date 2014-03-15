@@ -17,62 +17,53 @@
 
 package org.apache.spark.scheduler
 
-import java.util.concurrent.LinkedBlockingQueue
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
-import org.apache.spark.Logging
+/**
+ * A SparkListenerEvent bus that relays events to its listeners
+ */
+private[spark] trait SparkListenerBus {
 
-/** Asynchronously passes SparkListenerEvents to registered SparkListeners. */
-private[spark] class SparkListenerBus extends EventBus with Logging {
+  // SparkListeners attached to this event bus
+  protected val sparkListeners = new ArrayBuffer[SparkListener]
+    with mutable.SynchronizedBuffer[SparkListener]
 
-  /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
-   * an OOM exception) if it's perpetually being added to more quickly than it's being drained. */
-  private val EVENT_QUEUE_CAPACITY = 10000
-  private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
-  private var queueFullErrorMessageLogged = false
-
-  // Create a new daemon thread to listen for events. This thread is stopped when it receives
-  // a SparkListenerShutdown event, using the stop method.
-  new Thread("SparkListenerBus") {
-    setDaemon(true)
-    override def run() {
-      while (true) {
-        val event = eventQueue.take
-        val shutdown = postToAll(event)
-        if (shutdown) {
-          // Get out of the while loop and shutdown the daemon thread
-          return
-        }
-      }
-    }
-  }.start()
-
-  def post(event: SparkListenerEvent) {
-    val eventAdded = eventQueue.offer(event)
-    if (!eventAdded && !queueFullErrorMessageLogged) {
-      logError("Dropping SparkListenerEvent because no remaining room in event queue. " +
-        "This likely means one of the SparkListeners is too slow and cannot keep up with the " +
-        "rate at which tasks are being started by the scheduler.")
-      queueFullErrorMessageLogged = true
-    }
+  def addListener(listener: SparkListener) {
+    sparkListeners += listener
   }
 
   /**
-   * Waits until there are no more events in the queue, or until the specified time has elapsed.
-   * Used for testing only. Returns true if the queue has emptied and false is the specified time
-   * elapsed before the queue emptied.
+   * Post an event to all attached listeners. Return true if the shutdown event is posted.
    */
-  def waitUntilEmpty(timeoutMillis: Int): Boolean = {
-    val finishTime = System.currentTimeMillis + timeoutMillis
-    while (!eventQueue.isEmpty) {
-      if (System.currentTimeMillis > finishTime) {
-        return false
-      }
-      /* Sleep rather than using wait/notify, because this is used only for testing and wait/notify
-       * add overhead in the general case. */
-      Thread.sleep(10)
+  def postToAll(event: SparkListenerEvent): Boolean = {
+    event match {
+      case stageSubmitted: SparkListenerStageSubmitted =>
+        sparkListeners.foreach(_.onStageSubmitted(stageSubmitted))
+      case stageCompleted: SparkListenerStageCompleted =>
+        sparkListeners.foreach(_.onStageCompleted(stageCompleted))
+      case jobStart: SparkListenerJobStart =>
+        sparkListeners.foreach(_.onJobStart(jobStart))
+      case jobEnd: SparkListenerJobEnd =>
+        sparkListeners.foreach(_.onJobEnd(jobEnd))
+      case taskStart: SparkListenerTaskStart =>
+        sparkListeners.foreach(_.onTaskStart(taskStart))
+      case taskGettingResult: SparkListenerTaskGettingResult =>
+        sparkListeners.foreach(_.onTaskGettingResult(taskGettingResult))
+      case taskEnd: SparkListenerTaskEnd =>
+        sparkListeners.foreach(_.onTaskEnd(taskEnd))
+      case environmentUpdate: SparkListenerEnvironmentUpdate =>
+        sparkListeners.foreach(_.onEnvironmentUpdate(environmentUpdate))
+      case blockManagerAdded: SparkListenerBlockManagerAdded =>
+        sparkListeners.foreach(_.onBlockManagerAdded(blockManagerAdded))
+      case blockManagerLost: SparkListenerBlockManagerLost =>
+        sparkListeners.foreach(_.onBlockManagerLost(blockManagerLost))
+      case unpersistRDD: SparkListenerUnpersistRDD =>
+        sparkListeners.foreach(_.onUnpersistRDD(unpersistRDD))
+      case SparkListenerShutdown =>
+        return true
+      case _ =>
     }
-    true
+    false
   }
-
-  def stop(): Unit = post(SparkListenerShutdown)
 }
