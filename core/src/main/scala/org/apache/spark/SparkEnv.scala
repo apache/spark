@@ -138,7 +138,15 @@ object SparkEnv extends Logging {
     // defaultClassName if the property is not set, and return it as a T
     def instantiateClass[T](propertyName: String, defaultClassName: String): T = {
       val name = conf.get(propertyName,  defaultClassName)
-      Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
+      val cls = Class.forName(name, true, classLoader)
+      // First try with the constructor that takes SparkConf. If we can't find one,
+      // use a no-arg constructor instead.
+      try {
+        cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
+      } catch {
+        case _: NoSuchMethodException =>
+            cls.getConstructor().newInstance().asInstanceOf[T]
+      }
     }
 
     val serializer = instantiateClass[Serializer](
