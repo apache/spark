@@ -35,13 +35,21 @@ private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
-private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster)
+private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster, conf: SparkConf)
   extends Actor with Logging {
+  val maxAkkaFrameSize = conf.getInt("spark.akka.frameSize", 10) * 1024 * 1024 // MB
+
   def receive = {
     case GetMapOutputStatuses(shuffleId: Int) =>
       val hostPort = sender.path.address.hostPort
       logInfo("Asked to send map output locations for shuffle " + shuffleId + " to " + hostPort)
-      sender ! tracker.getSerializedMapOutputStatuses(shuffleId)
+      val mapOutputStatuses = tracker.getSerializedMapOutputStatuses(shuffleId)
+      val serializedSize = mapOutputStatuses.size
+      if (serializedSize > maxAkkaFrameSize) {
+        throw new SparkException(
+          "spark.akka.frameSize exceeded! Map output statuses were %d bytes".format(serializedSize))
+      }
+      sender ! mapOutputStatuses
 
     case StopMapOutputTracker =>
       logInfo("MapOutputTrackerActor stopped!")
