@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.concurrent.Await
 
 import akka.actor._
+import akka.testkit.TestActorRef
 import org.scalatest.FunSuite
 
 import org.apache.spark.scheduler.MapStatus
@@ -100,52 +101,6 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
   }
 
   test("remote fetch") {
-    val (masterTracker, slaveTracker) = setUpMasterSlaveSystem(conf)
-    masterTracker.registerShuffle(10, 1)
-    masterTracker.incrementEpoch()
-    slaveTracker.updateEpoch(masterTracker.getEpoch)
-    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
-
-    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
-    val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
-    masterTracker.registerMapOutput(10, 0, new MapStatus(
-      BlockManagerId("a", "hostA", 1000, 0), Array(compressedSize1000)))
-    masterTracker.incrementEpoch()
-    slaveTracker.updateEpoch(masterTracker.getEpoch)
-    assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
-           Seq((BlockManagerId("a", "hostA", 1000, 0), size1000)))
-
-    masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000, 0))
-    masterTracker.incrementEpoch()
-    slaveTracker.updateEpoch(masterTracker.getEpoch)
-    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
-
-    // failure should be cached
-    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
-  }
-
-  test("remote fetch exceeding akka frame size") {
-    val newConf = new SparkConf
-    newConf.set("spark.akka.frameSize", "1")
-    newConf.set("spark.akka.askTimeout", "1") // Fail fast
-    val (masterTracker, slaveTracker) = setUpMasterSlaveSystem(newConf)
-
-    // Frame size should be ~123B, and no exception should be thrown
-    masterTracker.registerShuffle(10, 1)
-    masterTracker.registerMapOutput(10, 0, new MapStatus(
-      BlockManagerId("88", "mph", 1000, 0), Array.fill[Byte](10)(0)))
-    slaveTracker.getServerStatuses(10, 0)
-
-    // Frame size should be ~1.1MB, and MapOutputTrackerMasterActor should throw exception
-    masterTracker.registerShuffle(20, 100)
-    (0 until 100).foreach { i =>
-      masterTracker.registerMapOutput(20, i, new MapStatus(
-        BlockManagerId("999", "mps", 1000, 0), Array.fill[Byte](4000000)(0)))
-    }
-    intercept[SparkException] { slaveTracker.getServerStatuses(20, 0) }
-  }
-
-  private def setUpMasterSlaveSystem(conf: SparkConf) = {
     val hostname = "localhost"
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, 0, conf = conf,
       securityManager = new SecurityManager(conf))
@@ -164,6 +119,53 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
       s"akka.tcp://spark@localhost:$boundPort/user/MapOutputTracker")
     val timeout = AkkaUtils.lookupTimeout(conf)
     slaveTracker.trackerActor = Await.result(selection.resolveOne(timeout), timeout)
-    (masterTracker, slaveTracker)
+
+    masterTracker.registerShuffle(10, 1)
+    masterTracker.incrementEpoch()
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
+
+    val compressedSize1000 = MapOutputTracker.compressSize(1000L)
+    val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
+    masterTracker.registerMapOutput(10, 0, new MapStatus(
+      BlockManagerId("a", "hostA", 1000, 0), Array(compressedSize1000)))
+    masterTracker.incrementEpoch()
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    assert(slaveTracker.getServerStatuses(10, 0).toSeq ===
+      Seq((BlockManagerId("a", "hostA", 1000, 0), size1000)))
+
+    masterTracker.unregisterMapOutput(10, 0, BlockManagerId("a", "hostA", 1000, 0))
+    masterTracker.incrementEpoch()
+    slaveTracker.updateEpoch(masterTracker.getEpoch)
+    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
+
+    // failure should be cached
+    intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
+  }
+
+  test("remote fetch exceeding akka frame size") {
+    val newConf = new SparkConf
+    newConf.set("spark.akka.frameSize", "1")
+    newConf.set("spark.akka.askTimeout", "1") // Fail fast
+
+    val masterTracker = new MapOutputTrackerMaster(conf)
+    val actorSystem = ActorSystem("test")
+    val actorRef = TestActorRef[MapOutputTrackerMasterActor](
+      new MapOutputTrackerMasterActor(masterTracker, newConf))(actorSystem)
+    val masterActor = actorRef.underlyingActor
+
+    // Frame size should be ~123B, and no exception should be thrown
+    masterTracker.registerShuffle(10, 1)
+    masterTracker.registerMapOutput(10, 0, new MapStatus(
+      BlockManagerId("88", "mph", 1000, 0), Array.fill[Byte](10)(0)))
+    masterActor.receive(GetMapOutputStatuses(10))
+
+    // Frame size should be ~1.1MB, and MapOutputTrackerMasterActor should throw exception
+    masterTracker.registerShuffle(20, 100)
+    (0 until 100).foreach { i =>
+      masterTracker.registerMapOutput(20, i, new MapStatus(
+        BlockManagerId("999", "mps", 1000, 0), Array.fill[Byte](4000000)(0)))
+    }
+    intercept[SparkException] { masterActor.receive(GetMapOutputStatuses(20)) }
   }
 }
