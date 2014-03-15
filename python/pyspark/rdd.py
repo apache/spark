@@ -543,7 +543,7 @@ class RDD(object):
         >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).max()
         43.0
         """
-        return self.stats().max()
+        return self.reduce(max)
 
     def min(self):
         """
@@ -552,7 +552,7 @@ class RDD(object):
         >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).min()
         1.0
         """
-        return self.stats().min()
+        return self.reduce(min)
     
     def sum(self):
         """
