@@ -29,8 +29,8 @@ class StatCounter(values: TraversableOnce[Double]) extends Serializable {
   private var n: Long = 0     // Running count of our values
   private var mu: Double = 0  // Running mean of our values
   private var m2: Double = 0  // Running variance numerator (sum of (x - mean)^2)
-  private var max_v: Double = Double(-Infinity) // Running max of our values
-  private var min_v: Double = Double(Infinity) // Running min of our values
+  private var max_v: Double = Double.PositiveInfinity // Running max of our values
+  private var min_v: Double = Double.NegativeInfinity // Running min of our values
 
   merge(values)
 
