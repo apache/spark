@@ -90,7 +90,7 @@ class SlidingRDD[T: ClassTag](@transient val parent: RDD[T], val windowSize: Int
         i = j
       }
       // If the head of last partition has size w1, we also need to add this partition.
-      if (nextHeads(n1 - 1).size == w1) {
+      if (nextHeads.last.size == w1) {
         partitions += new SlidingRDDPartition[T](partitionIndex, parentPartitions(n1), Seq.empty)
       }
       partitions.toArray
