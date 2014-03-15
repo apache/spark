@@ -52,7 +52,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     // subsequent tests.
     "create_default_prop",
 
-    // User specific test answers, breaks the caching mechanism.
+    // User/machine specific test answers, breaks the caching mechanism.
     "authorization_3",
     "authorization_5",
     "keyword_1",
@@ -69,6 +69,7 @@ class HiveCompatibilitySuite extends HiveQueryFileTest {
     "describe_table",
     "describe_comment_nonascii",
     "udf5",
+    "udf_java_method",
 
     // Weird DDL differences result in failures on jenkins.
     "create_like2",
