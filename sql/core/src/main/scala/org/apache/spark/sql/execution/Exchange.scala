@@ -25,7 +25,7 @@ import com.esotericsoftware.kryo.io.{Output, Input}
 
 import org.apache.spark.{SparkConf, RangePartitioner, HashPartitioner}
 import org.apache.spark.rdd.ShuffledRDD
-import org.apache.spark.serializer.KryoSerializer
+import org.apache.spark.serializer.{KryoSerializer => SparkKryoSerializer}
 import org.apache.spark.util.MutablePair
 
 import catalyst.rules.Rule
@@ -33,7 +33,7 @@ import catalyst.errors._
 import catalyst.expressions._
 import catalyst.plans.physical._
 
-private class SparkSqlSerializer(conf: SparkConf) extends KryoSerializer(conf) {
+private class SparkSqlSerializer(conf: SparkConf) extends SparkKryoSerializer(conf) {
   override def newKryo(): Kryo = {
     val kryo = new Kryo
     kryo.setRegistrationRequired(true)
