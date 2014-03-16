@@ -47,7 +47,8 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
       val serializedSize = mapOutputStatuses.size
       if (serializedSize > maxAkkaFrameSize) {
         throw new SparkException(
-          "spark.akka.frameSize exceeded! Map output statuses were %d bytes".format(serializedSize))
+          "spark.akka.frameSize of %d bytes exceeded! ".format(maxAkkaFrameSize) +
+          "Map output statuses were %d bytes".format(serializedSize))
       }
       sender ! mapOutputStatuses
 
