@@ -457,6 +457,7 @@ class RDDSuite extends FunSuite with SharedSparkContext {
 
   test("takeSample") {
     val data = sc.parallelize(1 to 100, 2)
+
     for (seed <- 1 to 5) {
       val sample = data.takeSample(withReplacement=false, 20, seed)
       assert(sample.size === 20)        // Got exactly 20 elements
@@ -486,6 +487,12 @@ class RDDSuite extends FunSuite with SharedSparkContext {
       // Chance of getting all distinct elements is still quite low, so test we got < 100
       assert(sample.toSet.size < 100, "sampling with replacement returned all distinct elements")
     }
+  }
+
+  test("takeSample from an empty rdd") {
+    val emptySet = sc.parallelize(Seq.empty[Int], 2)
+    val sample = emptySet.takeSample(false, 20, 1)
+    assert(sample.length === 0)
   }
 
   test("randomSplit") {
