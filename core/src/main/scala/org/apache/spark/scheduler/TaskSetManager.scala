@@ -517,10 +517,6 @@ private[spark] class TaskSetManager(
     }
     var taskMetrics : TaskMetrics = null
     var failureReason: String = null
-    val addToFailedExecutor = () => {
-      failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
-        put(info.executorId, clock.getTime())
-    }
     reason match {
       case fetchFailed: FetchFailed =>
         logWarning("Loss was due to fetch failure from " + fetchFailed.bmAddress)
@@ -548,7 +544,6 @@ private[spark] class TaskSetManager(
         val key = ef.description
         failureReason = "Exception failure in TID %s on host %s: %s".format(
           tid, info.host, ef.description)
-        addToFailedExecutor()
         val now = clock.getTime()
         val (printFull, dupCount) = {
           if (recentExceptions.contains(key)) {
@@ -575,13 +570,14 @@ private[spark] class TaskSetManager(
 
       case TaskResultLost =>
         failureReason = "Lost result for TID %s on host %s".format(tid, info.host)
-        addToFailedExecutor()
         logWarning(failureReason)
 
       case _ =>
         failureReason = "TID %s on host %s failed for unknown reason".format(tid, info.host)
-        addToFailedExecutor()
     }
+    // always add to failed executors
+    failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
+      put(info.executorId, clock.getTime())
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
     if (!isZombie && state != TaskState.KILLED) {
