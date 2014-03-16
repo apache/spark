@@ -41,6 +41,12 @@ object ExecutorExitCode {
   /** DiskStore failed to create a local temporary directory after many attempts. */
   val DISK_STORE_FAILED_TO_CREATE_DIR = 53
 
+  /** TachyonStore failed to create a local temporary directory after many attempts. */
+  val TACHYON_STORE_FAILED_TO_INITIALIZE = 54
+  
+  /** TachyonStore failed to create a local temporary directory after many attempts. */
+  val TACHYON_STORE_FAILED_TO_CREATE_DIR = 55
+  
   def explainExitCode(exitCode: Int): String = {
     exitCode match {
       case UNCAUGHT_EXCEPTION => "Uncaught exception"

@@ -31,6 +31,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 private[spark] class CoarseGrainedExecutorBackend(
     driverUrl: String,
     executorId: String,
+    appId: String,
     hostPort: String,
     cores: Int)
   extends Actor
@@ -53,7 +54,8 @@ private[spark] class CoarseGrainedExecutorBackend(
     case RegisteredExecutor(sparkProperties) =>
       logInfo("Successfully registered with driver")
       // Make this host instead of hostPort ?
-      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties)
+      executor = new Executor(executorId, Utils.parseHostPort(hostPort)._1, sparkProperties, 
+        false, appId)
 
     case RegisterExecutorFailed(message) =>
       logError("Slave registration failed: " + message)
@@ -92,7 +94,7 @@ private[spark] class CoarseGrainedExecutorBackend(
 }
 
 private[spark] object CoarseGrainedExecutorBackend {
-  def run(driverUrl: String, executorId: String, hostname: String, cores: Int,
+  def run(driverUrl: String, appId: String, executorId: String, hostname: String, cores: Int,
           workerUrl: Option[String]) {
     // Debug code
     Utils.checkHost(hostname)
@@ -105,7 +107,8 @@ private[spark] object CoarseGrainedExecutorBackend {
     // set it
     val sparkHostPort = hostname + ":" + boundPort
     actorSystem.actorOf(
-      Props(classOf[CoarseGrainedExecutorBackend], driverUrl, executorId, sparkHostPort, cores),
+      Props(classOf[CoarseGrainedExecutorBackend], driverUrl, appId, executorId,
+        sparkHostPort, cores),
       name = "Executor")
     workerUrl.foreach{ url =>
       actorSystem.actorOf(Props(classOf[WorkerWatcher], url), name = "WorkerWatcher")
@@ -118,13 +121,13 @@ private[spark] object CoarseGrainedExecutorBackend {
       case x if x < 4 =>
         System.err.println(
           // Worker url is used in spark standalone mode to enforce fate-sharing with worker
-          "Usage: CoarseGrainedExecutorBackend <driverUrl> <executorId> <hostname> " +
+          "Usage: CoarseGrainedExecutorBackend <driverUrl> <appId> <executorId> <hostname> " +
           "<cores> [<workerUrl>]")
         System.exit(1)
       case 4 =>
-        run(args(0), args(1), args(2), args(3).toInt, None)
+        run(args(0), args(1), args(2), args(3), args(4).toInt, None)
       case x if x > 4 =>
-        run(args(0), args(1), args(2), args(3).toInt, Some(args(4)))
+        run(args(0), args(1), args(2), args(3), args(4).toInt, Some(args(5)))
     }
   }
 }

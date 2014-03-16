@@ -40,6 +40,7 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
       "Cached Partitions",
       "Fraction Cached",
       "Size in Memory",
+      "Size in Tachyon",
       "Size on Disk")
     val rdds = StorageUtils.rddInfoFromStorageStatus(storageStatusList, sc)
     val content = listingTable(rddHeaders, rddRow, rdds)
@@ -59,6 +60,7 @@ private[spark] class IndexPage(parent: BlockManagerUI) {
       <td>{rdd.numCachedPartitions}</td>
       <td>{"%.0f%%".format(rdd.numCachedPartitions * 100.0 / rdd.numPartitions)}</td>
       <td>{Utils.bytesToString(rdd.memSize)}</td>
+      <td>{Utils.bytesToString(rdd.tachyonSize)}</td>
       <td>{Utils.bytesToString(rdd.diskSize)}</td>
     </tr>
   }

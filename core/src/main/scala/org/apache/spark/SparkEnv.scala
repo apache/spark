@@ -40,6 +40,7 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  */
 class SparkEnv private[spark] (
     val executorId: String,
+    val appId: String,
     val actorSystem: ActorSystem,
     val serializerManager: SerializerManager,
     val serializer: Serializer,
@@ -121,7 +122,8 @@ object SparkEnv extends Logging {
       hostname: String,
       port: Int,
       isDriver: Boolean,
-      isLocal: Boolean): SparkEnv = {
+      isLocal: Boolean,
+      appId: String = null): SparkEnv = {
 
     val securityManager = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
@@ -169,7 +171,7 @@ object SparkEnv extends Logging {
       "BlockManagerMaster",
       new BlockManagerMasterActor(isLocal, conf)), conf)
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster, 
-      serializer, conf, securityManager)
+      serializer, conf, securityManager, appId)
 
     val connectionManager = blockManager.connectionManager
 
@@ -219,6 +221,7 @@ object SparkEnv extends Logging {
 
     new SparkEnv(
       executorId,
+      appId,
       actorSystem,
       serializerManager,
       serializer,

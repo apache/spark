@@ -139,7 +139,8 @@ class SparkContext(
     conf.get("spark.driver.host"),
     conf.get("spark.driver.port").toInt,
     isDriver = true,
-    isLocal = isLocal)
+    isLocal = isLocal,
+    "<driver>" + appName)
   SparkEnv.set(env)
 
   // Used to store a URL for each static file/jar together with the file's local timestamp

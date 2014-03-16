@@ -23,17 +23,19 @@ import org.apache.spark.storage.StorageLevel;
  * Expose some commonly useful storage level constants.
  */
 public class StorageLevels {
-  public static final StorageLevel NONE = create(false, false, false, 1);
-  public static final StorageLevel DISK_ONLY = create(true, false, false, 1);
-  public static final StorageLevel DISK_ONLY_2 = create(true, false, false, 2);
-  public static final StorageLevel MEMORY_ONLY = create(false, true, true, 1);
-  public static final StorageLevel MEMORY_ONLY_2 = create(false, true, true, 2);
-  public static final StorageLevel MEMORY_ONLY_SER = create(false, true, false, 1);
-  public static final StorageLevel MEMORY_ONLY_SER_2 = create(false, true, false, 2);
-  public static final StorageLevel MEMORY_AND_DISK = create(true, true, true, 1);
-  public static final StorageLevel MEMORY_AND_DISK_2 = create(true, true, true, 2);
-  public static final StorageLevel MEMORY_AND_DISK_SER = create(true, true, false, 1);
-  public static final StorageLevel MEMORY_AND_DISK_SER_2 = create(true, true, false, 2);
+  public static final StorageLevel NONE = new StorageLevel(false, false, false, false, 1);
+  public static final StorageLevel DISK_ONLY = new StorageLevel(true, false, false, false, 1);
+  public static final StorageLevel DISK_ONLY_2 = new StorageLevel(true, false, false, false, 2);
+  public static final StorageLevel MEMORY_ONLY = new StorageLevel(false, true, false, true, 1);
+  public static final StorageLevel MEMORY_ONLY_2 = new StorageLevel(false, true, false, true, 2);
+  public static final StorageLevel MEMORY_ONLY_SER = new StorageLevel(false, true, false, false, 1);
+  public static final StorageLevel MEMORY_ONLY_SER_2 = new StorageLevel(false, true, false, false, 2);
+  public static final StorageLevel MEMORY_AND_DISK = new StorageLevel(true, true, false, true, 1);
+  public static final StorageLevel MEMORY_AND_DISK_2 = new StorageLevel(true, true, false, true, 2);
+  public static final StorageLevel MEMORY_AND_DISK_SER = new StorageLevel(true, true, false, false, 1);
+  public static final StorageLevel MEMORY_AND_DISK_SER_2 = new StorageLevel(true, true, false, false, 2);
+	  
+  public static final StorageLevel TACHYON = new StorageLevel(false, false, true, false, 1);
 
   /**
    * Create a new StorageLevel object.
@@ -42,7 +44,12 @@ public class StorageLevels {
    * @param deserialized saved as deserialized objects, if true
    * @param replication replication factor
    */
-  public static StorageLevel create(boolean useDisk, boolean useMemory, boolean deserialized, int replication) {
-    return StorageLevel.apply(useDisk, useMemory, deserialized, replication);
+  public static StorageLevel create(
+    boolean useDisk,
+    boolean useMemory,
+    boolean useTachyon,
+    boolean deserialized,
+    int replication) {
+    return StorageLevel.apply(useDisk, useMemory, useTachyon, deserialized, replication);
   }
 }

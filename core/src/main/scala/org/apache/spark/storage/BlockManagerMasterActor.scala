@@ -72,10 +72,11 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
       register(blockManagerId, maxMemSize, slaveActor)
       sender ! true
 
-    case UpdateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size) =>
+    case UpdateBlockInfo(
+      blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize) =>
       // TODO: Ideally we want to handle all the message replies in receive instead of in the
       // individual private methods.
-      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size)
+      updateBlockInfo(blockManagerId, blockId, storageLevel, deserializedSize, size, tachyonSize)
 
     case GetLocations(blockId) =>
       sender ! getLocations(blockId)
@@ -243,7 +244,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
       blockId: BlockId,
       storageLevel: StorageLevel,
       memSize: Long,
-      diskSize: Long) {
+      diskSize: Long,
+      tachyonSize: Long) {
 
     if (!blockManagerInfo.contains(blockManagerId)) {
       if (blockManagerId.executorId == "<driver>" && !isLocal) {
@@ -262,7 +264,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
       return
     }
 
-    blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize)
+    blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize, tachyonSize)
 
     var locations: mutable.HashSet[BlockManagerId] = null
     if (blockLocations.containsKey(blockId)) {
@@ -309,8 +311,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
 
 private[spark]
 object BlockManagerMasterActor {
-
-  case class BlockStatus(storageLevel: StorageLevel, memSize: Long, diskSize: Long)
+  case class BlockStatus(
+    storageLevel: StorageLevel, memSize: Long, diskSize: Long, tachyonSize: Long)
 
   class BlockManagerInfo(
       val blockManagerId: BlockManagerId,
@@ -333,7 +335,7 @@ object BlockManagerMasterActor {
     }
 
     def updateBlockInfo(blockId: BlockId, storageLevel: StorageLevel, memSize: Long,
-                        diskSize: Long) {
+                        diskSize: Long, tachyonSize: Long) {
 
       updateLastSeenMs()
 
@@ -353,16 +355,21 @@ object BlockManagerMasterActor {
         // They can be both larger than 0, when a block is dropped from memory to disk.
         // Therefore, a safe way to set BlockStatus is to set its info in accurate modes.
         if (storageLevel.useMemory) {
-          _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0))
+          _blocks.put(blockId, BlockStatus(storageLevel, memSize, 0, 0))
           _remainingMem -= memSize
           logInfo("Added %s in memory on %s (size: %s, free: %s)".format(
             blockId, blockManagerId.hostPort, Utils.bytesToString(memSize),
             Utils.bytesToString(_remainingMem)))
         }
         if (storageLevel.useDisk) {
-          _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize))
+          _blocks.put(blockId, BlockStatus(storageLevel, 0, diskSize, 0))
           logInfo("Added %s on disk on %s (size: %s)".format(
             blockId, blockManagerId.hostPort, Utils.bytesToString(diskSize)))
+        }
+        if (storageLevel.useTachyon) {
+          _blocks.put(blockId, BlockStatus(storageLevel, 0, 0, tachyonSize))
+          logInfo("Added %s on tachyon on %s (size: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.bytesToString(tachyonSize)))
         }
       } else if (_blocks.containsKey(blockId)) {
         // If isValid is not true, drop the block.
@@ -377,6 +384,10 @@ object BlockManagerMasterActor {
         if (blockStatus.storageLevel.useDisk) {
           logInfo("Removed %s on %s on disk (size: %s)".format(
             blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.diskSize)))
+        }
+        if (blockStatus.storageLevel.useTachyon) {
+          logInfo("Removed %s on %s on tachyon (size: %s)".format(
+            blockId, blockManagerId.hostPort, Utils.bytesToString(blockStatus.tachyonSize)))
         }
       }
     }

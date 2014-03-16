@@ -269,6 +269,11 @@ object SparkBuild extends Build {
   val excludeCommonsLogging = ExclusionRule(organization = "commons-logging")
   val excludeSLF4J = ExclusionRule(organization = "org.slf4j")
   val excludeScalap = ExclusionRule(organization = "org.scala-lang", artifact = "scalap")
+  val excludeKyro = ExclusionRule(organization = "de.javakaffee")
+  val excludeJackson = ExclusionRule(organization = "org.codehaus.jackson")
+  val excludeHadoop = ExclusionRule(organization = "org.apache.hadoop")
+  val excludeCurator = ExclusionRule(organization = "org.apache.curator")
+
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
@@ -306,6 +311,7 @@ object SparkBuild extends Build {
         "com.codahale.metrics"       % "metrics-graphite" % "3.0.0",
         "com.twitter"               %% "chill"            % "0.3.1" excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % "0.3.1" excludeAll(excludeAsm),
+        "org.tachyonproject"         % "tachyon"          % "0.4.0" excludeAll(excludeKyro, excludeHadoop, excludeCurator, excludeJackson, excludeNetty, excludeAsm),
         "com.clearspring.analytics"  % "stream"           % "2.5.1"
       ),
     libraryDependencies ++= maybeAvro
