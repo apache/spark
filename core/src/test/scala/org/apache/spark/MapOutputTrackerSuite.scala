@@ -143,7 +143,29 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     intercept[FetchFailedException] { slaveTracker.getServerStatuses(10, 0) }
   }
 
-  test("remote fetch exceeding akka frame size") {
+  test("remote fetch exceeds akka frame size") {
+    val newConf = new SparkConf
+    newConf.set("spark.akka.frameSize", "1")
+    newConf.set("spark.akka.askTimeout", "1") // Fail fast
+
+    val masterTracker = new MapOutputTrackerMaster(conf)
+    val actorSystem = ActorSystem("test")
+    val actorRef = TestActorRef[MapOutputTrackerMasterActor](
+      new MapOutputTrackerMasterActor(masterTracker, newConf))(actorSystem)
+    val masterActor = actorRef.underlyingActor
+
+    // Frame size should be ~1.1MB, and MapOutputTrackerMasterActor should throw exception.
+    // Note that the size is hand-selected here because map output statuses are compressed before
+    // being sent.
+    masterTracker.registerShuffle(20, 100)
+    (0 until 100).foreach { i =>
+      masterTracker.registerMapOutput(20, i, new MapStatus(
+        BlockManagerId("999", "mps", 1000, 0), Array.fill[Byte](4000000)(0)))
+    }
+    intercept[SparkException] { masterActor.receive(GetMapOutputStatuses(20)) }
+  }
+
+  test("remote fetch below akka frame size") {
     val newConf = new SparkConf
     newConf.set("spark.akka.frameSize", "1")
     newConf.set("spark.akka.askTimeout", "1") // Fail fast
@@ -159,13 +181,5 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     masterTracker.registerMapOutput(10, 0, new MapStatus(
       BlockManagerId("88", "mph", 1000, 0), Array.fill[Byte](10)(0)))
     masterActor.receive(GetMapOutputStatuses(10))
-
-    // Frame size should be ~1.1MB, and MapOutputTrackerMasterActor should throw exception
-    masterTracker.registerShuffle(20, 100)
-    (0 until 100).foreach { i =>
-      masterTracker.registerMapOutput(20, i, new MapStatus(
-        BlockManagerId("999", "mps", 1000, 0), Array.fill[Byte](4000000)(0)))
-    }
-    intercept[SparkException] { masterActor.receive(GetMapOutputStatuses(20)) }
   }
 }
