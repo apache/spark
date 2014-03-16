@@ -30,6 +30,9 @@ import scala.util.Random
 import org.apache.spark._
 import org.apache.spark.TaskState.TaskState
 import org.apache.spark.scheduler.SchedulingMode.SchedulingMode
+import org.apache.spark.util.Utils
+import scala.collection.mutable
+import java.util.concurrent.{LinkedBlockingDeque, TimeUnit, ThreadPoolExecutor}
 
 /**
  * Schedules tasks for multiple types of clusters by acting through a SchedulerBackend.
@@ -93,6 +96,10 @@ private[spark] class TaskSchedulerImpl(
   val mapOutputTracker = SparkEnv.get.mapOutputTracker
 
   var schedulableBuilder: SchedulableBuilder = null
+
+  private val serializeWorkerPool = new ThreadPoolExecutor(20, 60, 60, TimeUnit.SECONDS,
+    new LinkedBlockingDeque[Runnable]())
+
   var rootPool: Pool = null
   // default scheduler is FIFO
   val schedulingMode: SchedulingMode = SchedulingMode.withName(
@@ -219,18 +226,43 @@ private[spark] class TaskSchedulerImpl(
         taskSet.parent.name, taskSet.name, taskSet.runningTasks))
     }
 
+    val ser = SparkEnv.get.closureSerializer.newInstance()
     // Take each TaskSet in our scheduling order, and then offer it each node in increasing order
     // of locality levels so that it gets a chance to launch local tasks on all of them.
     var launchedTask = false
+    val serializingTask = new HashSet[Long]
+    serializingTask.clear()
     for (taskSet <- sortedTaskSets; maxLocality <- TaskLocality.values) {
       do {
         launchedTask = false
         for (i <- 0 until shuffledOffers.size) {
           val execId = shuffledOffers(i).executorId
           val host = shuffledOffers(i).host
-          for (task <- taskSet.resourceOffer(execId, host, availableCpus(i), maxLocality)) {
-            tasks(i) += task
-            val tid = task.taskId
+          for (taskDesc <- taskSet.resourceOffer(execId, host, availableCpus(i), maxLocality)) {
+            serializingTask += taskDesc.taskId
+            serializeWorkerPool.execute(new Runnable {
+              override def run() {
+                // Serialize and return the task
+                val startTime = System.currentTimeMillis()
+                // We rely on the DAGScheduler to catch non-serializable closures and RDDs, so in here
+                // we assume the task can be serialized without exceptions.
+                val serializedTask = Task.serializeWithDependencies(
+                  taskDesc.taskObject, sc.addedFiles, sc.addedJars, ser)
+                val timeTaken = System.currentTimeMillis() - startTime
+                logInfo("Serialized task %s as %d bytes in %d ms".format(
+                  taskDesc.taskName, serializedTask.limit, timeTaken))
+                val task = new TaskDescription(taskDesc.taskId, taskDesc.executorId,
+                    taskDesc.taskName, taskDesc.index, serializedTask)
+                tasks.synchronized {
+                  tasks(i) += task
+                }
+                serializingTask.synchronized {
+                  serializingTask -= taskDesc.taskId
+                }
+              }
+            })
+
+            val tid = taskDesc.taskId
             taskIdToTaskSetId(tid) = taskSet.taskSet.id
             taskIdToExecutorId(tid) = execId
             activeExecutorIds += execId
@@ -242,11 +274,17 @@ private[spark] class TaskSchedulerImpl(
       } while (launchedTask)
     }
 
+    while(!serializingTask.isEmpty) {
+      Thread.sleep(1000)
+    }
+
     if (tasks.size > 0) {
       hasLaunchedTask = true
     }
     return tasks
   }
+
+
 
   def statusUpdate(tid: Long, state: TaskState, serializedData: ByteBuffer) {
     var failedExecutor: Option[String] = None
