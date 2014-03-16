@@ -155,7 +155,7 @@ object BINARY extends ColumnType[BinaryType.type, Array[Byte]](8, 16) {
 }
 
 object GENERIC extends ColumnType[DataType, Any](9, 16) {
-  // TODO (lian) Can we avoid serialization here?
+  // TODO (lian) Must avoid duplicated serialization here.
   override def actualSize(v: Any) = KryoSerializer.serialize(v).size
 
   override def append(v: Any, buffer: ByteBuffer) {

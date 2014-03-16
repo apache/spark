@@ -3,8 +3,10 @@ package columnar
 
 import java.nio.ByteBuffer
 
-import org.scalatest.FunSuite
 import scala.util.Random
+
+import org.scalatest.FunSuite
+
 import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.KryoSerializer
 
