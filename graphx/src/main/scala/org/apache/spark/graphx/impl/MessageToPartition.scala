@@ -65,11 +65,11 @@ class VertexBroadcastMsgRDDFunctions[T: ClassTag](self: RDD[VertexBroadcastMsg[T
 
     // Set a custom serializer if the data is of int or double type.
     if (classTag[T] == ClassTag.Int) {
-      rdd.setSerializer(classOf[IntVertexBroadcastMsgSerializer].getName)
+      rdd.setSerializer(new IntVertexBroadcastMsgSerializer)
     } else if (classTag[T] == ClassTag.Long) {
-      rdd.setSerializer(classOf[LongVertexBroadcastMsgSerializer].getName)
+      rdd.setSerializer(new LongVertexBroadcastMsgSerializer)
     } else if (classTag[T] == ClassTag.Double) {
-      rdd.setSerializer(classOf[DoubleVertexBroadcastMsgSerializer].getName)
+      rdd.setSerializer(new DoubleVertexBroadcastMsgSerializer)
     }
     rdd
   }
@@ -104,11 +104,11 @@ object MsgRDDFunctions {
 
     // Set a custom serializer if the data is of int or double type.
     if (classTag[T] == ClassTag.Int) {
-      rdd.setSerializer(classOf[IntAggMsgSerializer].getName)
+      rdd.setSerializer(new IntAggMsgSerializer)
     } else if (classTag[T] == ClassTag.Long) {
-      rdd.setSerializer(classOf[LongAggMsgSerializer].getName)
+      rdd.setSerializer(new LongAggMsgSerializer)
     } else if (classTag[T] == ClassTag.Double) {
-      rdd.setSerializer(classOf[DoubleAggMsgSerializer].getName)
+      rdd.setSerializer(new DoubleAggMsgSerializer)
     }
     rdd
   }

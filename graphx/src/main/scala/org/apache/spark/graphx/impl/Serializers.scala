@@ -25,7 +25,7 @@ import org.apache.spark.graphx._
 import org.apache.spark.serializer._
 
 private[graphx]
-class VertexIdMsgSerializer(conf: SparkConf) extends Serializer {
+class VertexIdMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -46,7 +46,7 @@ class VertexIdMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for VertexBroadcastMessage[Int]. */
 private[graphx]
-class IntVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
+class IntVertexBroadcastMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -70,7 +70,7 @@ class IntVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for VertexBroadcastMessage[Long]. */
 private[graphx]
-class LongVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
+class LongVertexBroadcastMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -94,7 +94,7 @@ class LongVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for VertexBroadcastMessage[Double]. */
 private[graphx]
-class DoubleVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
+class DoubleVertexBroadcastMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -118,7 +118,7 @@ class DoubleVertexBroadcastMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for AggregationMessage[Int]. */
 private[graphx]
-class IntAggMsgSerializer(conf: SparkConf) extends Serializer {
+class IntAggMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -142,7 +142,7 @@ class IntAggMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for AggregationMessage[Long]. */
 private[graphx]
-class LongAggMsgSerializer(conf: SparkConf) extends Serializer {
+class LongAggMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
@@ -166,7 +166,7 @@ class LongAggMsgSerializer(conf: SparkConf) extends Serializer {
 
 /** A special shuffle serializer for AggregationMessage[Double]. */
 private[graphx]
-class DoubleAggMsgSerializer(conf: SparkConf) extends Serializer {
+class DoubleAggMsgSerializer extends Serializer with Serializable {
   override def newInstance(): SerializerInstance = new ShuffleSerializerInstance {
 
     override def serializeStream(s: OutputStream) = new ShuffleSerializationStream(s) {
