@@ -311,7 +311,6 @@ class TaskSetManagerSuite extends FunSuite with LocalSparkContext with Logging {
       ("exec1.1", "host1"), ("exec2", "host2"))
     // affinity to exec1 on host1 - which we will fail.
     val taskSet = FakeTask.createTaskSet(1, Seq(TaskLocation("host1", "exec1")))
-    // we need actual time measurement
     val clock = new FakeClock
     val manager = new TaskSetManager(sched, taskSet, 4, clock)
 

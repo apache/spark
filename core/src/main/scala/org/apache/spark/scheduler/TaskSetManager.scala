@@ -245,7 +245,7 @@ private[spark] class TaskSetManager(
     while (indexOffset > 0) {
       indexOffset -= 1
       val index = list(indexOffset)
-      if (! executorIsBlacklisted(execId, index)) {
+      if (!executorIsBlacklisted(execId, index)) {
         // This should almost always be list.trimEnd(1) to remove tail
         list.remove(indexOffset)
         if (copiesRunning(index) == 0 && !successful(index)) {
@@ -516,7 +516,7 @@ private[spark] class TaskSetManager(
       logWarning("Lost TID %s (task %s:%d)".format(tid, taskSet.id, index))
     }
     var taskMetrics : TaskMetrics = null
-    var failureReason = "unknown"
+    var failureReason: String = null
     val addToFailedExecutor = () => {
       failedExecutors.getOrElseUpdate(index, new HashMap[String, Long]()).
         put(info.executorId, clock.getTime())
@@ -532,6 +532,7 @@ private[spark] class TaskSetManager(
         isZombie = true
 
       case TaskKilled =>
+        // Not adding to failed executors for TaskKilled.
         logWarning("Task %d was killed.".format(tid))
 
       case ef: ExceptionFailure =>
@@ -547,6 +548,7 @@ private[spark] class TaskSetManager(
         val key = ef.description
         failureReason = "Exception failure in TID %s on host %s: %s".format(
           tid, info.host, ef.description)
+        addToFailedExecutor()
         val now = clock.getTime()
         val (printFull, dupCount) = {
           if (recentExceptions.contains(key)) {
@@ -573,16 +575,17 @@ private[spark] class TaskSetManager(
 
       case TaskResultLost =>
         failureReason = "Lost result for TID %s on host %s".format(tid, info.host)
+        addToFailedExecutor()
         logWarning(failureReason)
 
       case _ =>
         failureReason = "TID %s on host %s failed for unknown reason".format(tid, info.host)
+        addToFailedExecutor()
     }
-    // Add to failed for everything else.
-    addToFailedExecutor()
     sched.dagScheduler.taskEnded(tasks(index), reason, null, null, info, taskMetrics)
     addPendingTask(index)
     if (!isZombie && state != TaskState.KILLED) {
+      assert (null != failureReason)
       numFailures(index) += 1
       if (numFailures(index) >= maxTaskFailures) {
         logError("Task %s:%d failed %d times; aborting job".format(
