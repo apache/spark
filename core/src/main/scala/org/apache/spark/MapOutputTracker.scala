@@ -37,7 +37,7 @@ private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
 private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster, conf: SparkConf)
   extends Actor with Logging {
-  val maxAkkaFrameSize = AkkaUtils.maxFrameSize(conf) * 1024 * 1024 // MB
+  val maxAkkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
   def receive = {
     case GetMapOutputStatuses(shuffleId: Int) =>

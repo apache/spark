@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -118,11 +118,9 @@ private[spark] class Executor(
   private val replClassLoader = addReplClassLoaderIfNeeded(urlClassLoader)
   Thread.currentThread.setContextClassLoader(replClassLoader)
 
-  // Akka's message frame size. If task result is bigger than this, we use the block manager
-  // to send the result back.
-  private val akkaFrameSize = {
-    env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size")
-  }
+  // Akka's message frame size in bytes. If task result is bigger than this, we use the block
+  // manager to send the result back.
+  private val maxAkkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
   // Start worker thread pool
   val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")
@@ -239,7 +237,7 @@ private[spark] class Executor(
         val serializedDirectResult = ser.serialize(directResult)
         logInfo("Serialized size of result for " + taskId + " is " + serializedDirectResult.limit)
         val serializedResult = {
-          if (serializedDirectResult.limit >= akkaFrameSize - 1024) {
+          if (serializedDirectResult.limit >= maxAkkaFrameSize - 1024) {
             logInfo("Storing result for " + taskId + " in local BlockManager")
             val blockId = TaskResultBlockId(taskId)
             env.blockManager.putBytes(
