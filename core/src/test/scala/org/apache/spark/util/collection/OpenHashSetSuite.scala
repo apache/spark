@@ -73,6 +73,9 @@ class OpenHashSetSuite extends FunSuite with ShouldMatchers {
     assert(set.contains(50))
     assert(set.contains(999))
     assert(!set.contains(10000))
+
+    assert((set.addWithoutResize(50) & OpenHashSet.NONEXISTENCE_MASK) === 0)
+    assert((set.addWithoutResize(10000) & OpenHashSet.NONEXISTENCE_MASK) != 0)
   }
 
   test("primitive long") {

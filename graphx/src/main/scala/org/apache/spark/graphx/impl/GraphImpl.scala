@@ -20,6 +20,7 @@ package org.apache.spark.graphx.impl
 import scala.reflect.{classTag, ClassTag}
 
 import org.apache.spark.util.collection.PrimitiveVector
+import org.apache.spark.util.collection.OpenHashSet
 import org.apache.spark.{HashPartitioner, Partitioner}
 import org.apache.spark.SparkContext._
 import org.apache.spark.graphx._
@@ -388,9 +389,21 @@ object GraphImpl {
   private def collectVertexIdsFromEdges(
       edges: EdgeRDD[_],
       partitioner: Partitioner): RDD[(VertexId, Int)] = {
-    // TODO: Consider doing map side distinct before shuffle.
     new ShuffledRDD[VertexId, Int, (VertexId, Int)](
-      edges.collectVertexIds.map(vid => (vid, 0)), partitioner)
+      edges.collectVertexIds.mapPartitions { vids =>
+        val present = new OpenHashSet[VertexId]()
+        vids.filter{ vid => 
+          // This is a bit ugly but we can't just call add since add is of type unit
+          val isPresent = ((present.addWithoutResize(vid) & OpenHashSet.NONEXISTENCE_MASK) == 0)
+          if (!isPresent) {
+            present.rehashIfNeeded(vid)
+            true
+          } else {
+            false
+          }
+        }.map(vid => (vid, 0))
+       },
+      partitioner)
       .setSerializer(classOf[VertexIdMsgSerializer].getName)
   }
 } // end of object GraphImpl
