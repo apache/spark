@@ -60,7 +60,14 @@ object CommandUtils extends Logging {
       Seq(sparkHome + "/bin/compute-classpath" + ext),
       extraEnvironment=command.environment)
 
-    Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
+    val debugflage = System.getProperty("spark.excutor.debug", "0").toInt
+    if (debugflage==0) {
+      Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
+    }
+    else {
+      val debugInfo = "-Xrunjdwp:transport=dt_socket,address=" +System.getProperty("spark.excutor.debug.port", "18000") +",server=y,suspend=y"
+      Seq("-Xdebug",debugInfo, "-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
+    }
   }
 
   /** Spawn a thread that will redirect a given stream to a file */
