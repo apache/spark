@@ -81,3 +81,7 @@ can provide fine-grained profiling on individual nodes.
 * JVM utilities such as `jstack` for providing stack traces, `jmap` for creating heap-dumps, 
 `jstat` for reporting time-series statistics and `jconsole` for visually exploring various JVM 
 properties are useful for those comfortable with JVM internals.
+
+#debug the Excutor process
+
+Since the excutor process is started by ProcessBuilder, if we wang to trace the code, we can modify the CommandUtils.scala, add the option for remote-debugging. please refer https://github.com/apache/spark/pull/157
