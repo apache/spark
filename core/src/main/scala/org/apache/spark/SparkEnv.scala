@@ -28,7 +28,7 @@ import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.storage.{BlockManager, BlockManagerMaster, BlockManagerMasterActor}
 import org.apache.spark.network.ConnectionManager
-import org.apache.spark.serializer.{Serializer, SerializerManager}
+import org.apache.spark.serializer.Serializer
 import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
@@ -41,7 +41,6 @@ import org.apache.spark.util.{AkkaUtils, Utils}
 class SparkEnv private[spark] (
     val executorId: String,
     val actorSystem: ActorSystem,
-    val serializerManager: SerializerManager,
     val serializer: Serializer,
     val closureSerializer: Serializer,
     val cacheManager: CacheManager,
@@ -139,16 +138,22 @@ object SparkEnv extends Logging {
     // defaultClassName if the property is not set, and return it as a T
     def instantiateClass[T](propertyName: String, defaultClassName: String): T = {
       val name = conf.get(propertyName,  defaultClassName)
-      Class.forName(name, true, classLoader).newInstance().asInstanceOf[T]
+      val cls = Class.forName(name, true, classLoader)
+      // First try with the constructor that takes SparkConf. If we can't find one,
+      // use a no-arg constructor instead.
+      try {
+        cls.getConstructor(classOf[SparkConf]).newInstance(conf).asInstanceOf[T]
+      } catch {
+        case _: NoSuchMethodException =>
+            cls.getConstructor().newInstance().asInstanceOf[T]
+      }
     }
-    val serializerManager = new SerializerManager
 
-    val serializer = serializerManager.setDefault(
-      conf.get("spark.serializer", "org.apache.spark.serializer.JavaSerializer"), conf)
+    val serializer = instantiateClass[Serializer](
+      "spark.serializer", "org.apache.spark.serializer.JavaSerializer")
 
-    val closureSerializer = serializerManager.get(
-      conf.get("spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer"),
-      conf)
+    val closureSerializer = instantiateClass[Serializer](
+      "spark.closure.serializer", "org.apache.spark.serializer.JavaSerializer")
 
     def registerOrLookup(name: String, newActor: => Actor): ActorRef = {
       if (isDriver) {
@@ -220,7 +225,6 @@ object SparkEnv extends Logging {
     new SparkEnv(
       executorId,
       actorSystem,
-      serializerManager,
       serializer,
       closureSerializer,
       cacheManager,

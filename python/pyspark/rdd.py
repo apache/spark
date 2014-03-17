@@ -29,6 +29,7 @@ from subprocess import Popen, PIPE
 from tempfile import NamedTemporaryFile
 from threading import Thread
 import warnings
+from heapq import heappush, heappop, heappushpop
 
 from pyspark.serializers import NoOpSerializer, CartesianDeserializer, \
     BatchedSerializer, CloudPickleSerializer, PairDeserializer, pack_long
@@ -36,6 +37,7 @@ from pyspark.join import python_join, python_left_outer_join, \
     python_right_outer_join, python_cogroup
 from pyspark.statcounter import StatCounter
 from pyspark.rddsampler import RDDSampler
+from pyspark.storagelevel import StorageLevel
 
 from py4j.java_collections import ListConverter, MapConverter
 
@@ -266,6 +268,7 @@ class RDD(object):
         >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
         [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
         """
+        assert fraction >= 0.0, "Invalid fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
@@ -285,6 +288,9 @@ class RDD(object):
 
         if (num < 0):
             raise ValueError
+
+        if (initialCount == 0):
+            return list()
 
         if initialCount > sys.maxint - 1:
             maxSelected = sys.maxint - 1
@@ -659,6 +665,30 @@ class RDD(object):
                 m1[k] += v
             return m1
         return self.mapPartitions(countPartition).reduce(mergeMaps)
+    
+    def top(self, num):
+        """
+        Get the top N elements from a RDD.
+
+        Note: It returns the list sorted in ascending order.
+        >>> sc.parallelize([10, 4, 2, 12, 3]).top(1)
+        [12]
+        >>> sc.parallelize([2, 3, 4, 5, 6]).cache().top(2)
+        [5, 6]
+        """
+        def topIterator(iterator):
+            q = []
+            for k in iterator:
+                if len(q) < num:
+                    heappush(q, k)
+                else:
+                    heappushpop(q, k)
+            yield q
+
+        def merge(a, b):
+            return next(topIterator(a + b))
+
+        return sorted(self.mapPartitions(topIterator).reduce(merge))
 
     def take(self, num):
         """
@@ -1119,6 +1149,47 @@ class RDD(object):
                                              other._jrdd_deserializer)
         return RDD(pairRDD, self.ctx, deserializer)
 
+    def name(self):
+        """
+        Return the name of this RDD.
+        """
+        name_ = self._jrdd.name()
+        if not name_:
+            return None
+        return name_.encode('utf-8')
+
+    def setName(self, name):
+        """
+        Assign a name to this RDD.
+        >>> rdd1 = sc.parallelize([1,2])
+        >>> rdd1.setName('RDD1')
+        >>> rdd1.name()
+        'RDD1'
+        """
+        self._jrdd.setName(name)
+
+    def toDebugString(self):
+        """
+        A description of this RDD and its recursive dependencies for debugging.
+        """
+        debug_string = self._jrdd.toDebugString()
+        if not debug_string:
+            return None
+        return debug_string.encode('utf-8')
+
+    def getStorageLevel(self):
+        """
+        Get the RDD's current storage level.
+        >>> rdd1 = sc.parallelize([1,2])
+        >>> rdd1.getStorageLevel()
+        StorageLevel(False, False, False, 1)
+        """
+        java_storage_level = self._jrdd.getStorageLevel()
+        storage_level = StorageLevel(java_storage_level.useDisk(),
+                                     java_storage_level.useMemory(),
+                                     java_storage_level.deserialized(),
+                                     java_storage_level.replication())
+        return storage_level
 
     # TODO: `lookup` is disabled because we can't make direct comparisons based
     # on the key; we need to compare the hash of the key to the hash of the

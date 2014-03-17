@@ -41,7 +41,7 @@ System Properties:
 * `spark.yarn.submit.file.replication`, the HDFS replication level for the files uploaded into HDFS for the application. These include things like the spark jar, the app jar, and any distributed cache files/archives.
 * `spark.yarn.preserve.staging.files`, set to true to preserve the staged files(spark jar, app jar, distributed cache files) at the end of the job rather then delete them.
 * `spark.yarn.scheduler.heartbeat.interval-ms`, the interval in ms in which the Spark application master heartbeats into the YARN ResourceManager. Default is 5 seconds. 
-* `spark.yarn.max.worker.failures`, the maximum number of executor failures before failing the application. Default is the number of executors requested times 2 with minimum of 3.
+* `spark.yarn.max.executor.failures`, the maximum number of executor failures before failing the application. Default is the number of executors requested times 2 with minimum of 3.
 
 # Launching Spark on YARN
 
@@ -60,11 +60,10 @@ The command to launch the Spark application on the cluster is as follows:
       --jar <YOUR_APP_JAR_FILE> \
       --class <APP_MAIN_CLASS> \
       --args <APP_MAIN_ARGUMENTS> \
-      --num-workers <NUMBER_OF_EXECUTORS> \
-      --master-class <ApplicationMaster_CLASS>
-      --master-memory <MEMORY_FOR_MASTER> \
-      --worker-memory <MEMORY_PER_EXECUTOR> \
-      --worker-cores <CORES_PER_EXECUTOR> \
+      --num-executors <NUMBER_OF_EXECUTOR_PROCESSES> \
+      --driver-memory <MEMORY_FOR_ApplicationMaster> \
+      --executor-memory <MEMORY_PER_EXECUTOR> \
+      --executor-cores <CORES_PER_EXECUTOR> \
       --name <application_name> \
       --queue <queue_name> \
       --addJars <any_local_files_used_in_SparkContext.addJar> \
@@ -85,10 +84,10 @@ For example:
           --jar examples/target/scala-{{site.SCALA_BINARY_VERSION}}/spark-examples-assembly-{{site.SPARK_VERSION}}.jar \
           --class org.apache.spark.examples.SparkPi \
           --args yarn-cluster \
-          --num-workers 3 \
-          --master-memory 4g \
-          --worker-memory 2g \
-          --worker-cores 1
+          --num-executors 3 \
+          --driver-memory 4g \
+          --executor-memory 2g \
+          --executor-cores 1
 
 The above starts a YARN client program which starts the default Application Master. Then SparkPi will be run as a child thread of Application Master. The client will periodically poll the Application Master for status updates and display them in the console. The client will exit once your application has finished running.  Refer to the "Viewing Logs" section below for how to see driver and executor logs.
 
@@ -100,12 +99,12 @@ With yarn-client mode, the application will be launched locally, just like runni
 
 Configuration in yarn-client mode:
 
-In order to tune worker cores/number/memory etc., you need to export environment variables or add them to the spark configuration file (./conf/spark_env.sh). The following are the list of options.
+In order to tune executor cores/number/memory etc., you need to export environment variables or add them to the spark configuration file (./conf/spark_env.sh). The following are the list of options.
 
-* `SPARK_WORKER_INSTANCES`, Number of executors to start (Default: 2)
-* `SPARK_WORKER_CORES`, Number of cores per executor (Default: 1).
-* `SPARK_WORKER_MEMORY`, Memory per executor (e.g. 1000M, 2G) (Default: 1G)
-* `SPARK_MASTER_MEMORY`, Memory for Master (e.g. 1000M, 2G) (Default: 512 Mb)
+* `SPARK_EXECUTOR_INSTANCES`, Number of executors to start (Default: 2)
+* `SPARK_EXECUTOR_CORES`, Number of cores per executor (Default: 1).
+* `SPARK_EXECUTOR_MEMORY`, Memory per executor (e.g. 1000M, 2G) (Default: 1G)
+* `SPARK_DRIVER_MEMORY`, Memory for driver (e.g. 1000M, 2G) (Default: 512 Mb)
 * `SPARK_YARN_APP_NAME`, The name of your application (Default: Spark)
 * `SPARK_YARN_QUEUE`, The YARN queue to use for allocation requests (Default: 'default')
 * `SPARK_YARN_DIST_FILES`, Comma separated list of files to be distributed with the job.
