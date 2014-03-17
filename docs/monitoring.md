@@ -84,4 +84,4 @@ properties are useful for those comfortable with JVM internals.
 
 #debug the Excutor process
 
-Since the excutor process is started by ProcessBuilder, if we wang to trace the code, we can modify the CommandUtils.scala, add the option for remote-debugging. please refer https://github.com/apache/spark/pull/157
+Since the excutor process is started by ProcessBuilder, if we wang to trace the code, we can modify the CommandUtils.scala, and rebuild the package. How to add the option for remote-debugging. please refer https://github.com/apache/spark/pull/157
