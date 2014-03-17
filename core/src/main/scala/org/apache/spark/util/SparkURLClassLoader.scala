@@ -15,14 +15,14 @@
  * limitations under the License.
  */
 
-package org.apache.spark.executor
+package org.apache.spark.util
 
 import java.net.{URLClassLoader, URL}
 
 /**
  * The addURL method in URLClassLoader is protected. We subclass it to make this accessible.
  */
-private[spark] class ExecutorURLClassLoader(urls: Array[URL], parent: ClassLoader)
+private[spark] class SparkURLClassLoader(urls: Array[URL], parent: ClassLoader)
   extends URLClassLoader(urls, parent) {
 
   override def addURL(url: URL) {

@@ -18,7 +18,7 @@
 package org.apache.spark
 
 import java.io._
-import java.net.URI
+import java.net.{URI, URL}
 import java.util.{Properties, UUID}
 import java.util.concurrent.atomic.AtomicInteger
 
@@ -44,7 +44,7 @@ import org.apache.spark.scheduler.cluster.mesos.{CoarseMesosSchedulerBackend, Me
 import org.apache.spark.scheduler.local.LocalBackend
 import org.apache.spark.storage.{BlockManagerSource, RDDInfo, StorageStatus, StorageUtils}
 import org.apache.spark.ui.SparkUI
-import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, Utils}
+import org.apache.spark.util.{ClosureCleaner, MetadataCleaner, MetadataCleanerType, TimeStampedHashMap, SparkURLClassLoader, Utils}
 
 /**
  * Main entry point for Spark functionality. A SparkContext represents the connection to a Spark
@@ -129,6 +129,18 @@ class SparkContext(
   val appName = conf.get("spark.app.name")
 
   val isLocal = (master == "local" || master.startsWith("local["))
+
+  // Create a classLoader for use by the driver so that jars added via addJar are available to the
+  // driver.  Do this before all other initialization so that any thread pools created for this
+  // SparkContext uses the class loader.
+  // In the future it might make sense to expose this to users so they can assign it as the
+  // context class loader for other threads.
+  // Note that this is config-enabled as classloaders can introduce subtle side effects
+  private[spark] val classLoader = if (conf.getBoolean("spark.driver.loadAddedJars", false)) {
+    val loader = new SparkURLClassLoader(Array.empty[URL], this.getClass.getClassLoader)
+    Thread.currentThread.setContextClassLoader(loader)
+    Some(loader)
+  } else None
 
   if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
@@ -726,6 +738,8 @@ class SparkContext(
    * Adds a JAR dependency for all tasks to be executed on this SparkContext in the future.
    * The `path` passed can be either a local file, a file in HDFS (or other Hadoop-supported
    * filesystems), an HTTP, HTTPS or FTP URI, or local:/path for a file on every worker node.
+   * NOTE: If you enable spark.driver.loadAddedJars, then the JAR will also be made available
+   * to this SparkContext and chld threads.  local: JARs must be available on the driver node.
    */
   def addJar(path: String) {
     if (path == null) {
@@ -767,10 +781,33 @@ class SparkContext(
           case _ =>
             path
         }
+
+        // Add jar to driver class loader so it is available for driver,
+        // even if it is not on the classpath
+        uri.getScheme match {
+          case null | "file" | "local" =>
+            // Assume file exists on current (driver) node as well.  Unlike executors, driver
+            // doesn't need to download the jar since it's local.
+            addUrlToDriverLoader(new URL("file:" + uri.getPath))
+          case "http" | "https" | "ftp" =>
+            // Should be handled by the URLClassLoader, pass along entire URL
+            addUrlToDriverLoader(new URL(path))
+          case other =>
+            logWarning(s"This URI scheme for URI $path is not supported by the driver class loader")
+        }
       }
       if (key != null) {
         addedJars(key) = System.currentTimeMillis
         logInfo("Added JAR " + path + " at " + key + " with timestamp " + addedJars(key))
+      }
+    }
+  }
+
+  private def addUrlToDriverLoader(url: URL) {
+    classLoader.foreach { loader =>
+      if (!loader.getURLs.contains(url)) {
+        logInfo("Adding JAR " + url + " to driver class loader")
+        loader.addURL(url)
       }
     }
   }

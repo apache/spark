@@ -393,6 +393,16 @@ Apart from these, the following properties are also available, and may be useful
   </td>
 </tr>
 <tr>
+  <td>spark.driver.loadAddedJars</td>
+  <td>false</td>
+  <td>
+    If true, the SparkContext uses a class loader to make jars added via `addJar` available to 
+    the SparkContext. The default behavior is that jars added via `addJar` must already be on
+    the classpath. Jar contents will be visible to the thread that created the SparkContext
+    and all of its child threads.
+  </td>
+</tr>
+<tr>
   <td>spark.cleaner.ttl</td>
   <td>(infinite)</td>
   <td>
@@ -430,7 +440,7 @@ Apart from these, the following properties are also available, and may be useful
   <td>spark.broadcast.blockSize</td>
   <td>4096</td>
   <td>
-    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>. 
+    Size of each piece of a block in kilobytes for <code>TorrentBroadcastFactory</code>.
     Too large a value decreases parallelism during broadcast (makes it slower); however, if it is too small, <code>BlockManager</code> might take a performance hit.
   </td>
 </tr>

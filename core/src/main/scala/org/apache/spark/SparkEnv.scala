@@ -122,6 +122,8 @@ object SparkEnv extends Logging {
       isDriver: Boolean,
       isLocal: Boolean): SparkEnv = {
 
+    val classLoader = Thread.currentThread.getContextClassLoader
+
     val securityManager = new SecurityManager(conf)
     val (actorSystem, boundPort) = AkkaUtils.createActorSystem("spark", hostname, port, conf = conf,
       securityManager = securityManager)
@@ -131,8 +133,6 @@ object SparkEnv extends Logging {
     if (isDriver && port == 0) {
       conf.set("spark.driver.port",  boundPort.toString)
     }
-
-    val classLoader = Thread.currentThread.getContextClassLoader
 
     // Create an instance of the class named by the given Java system property, or by
     // defaultClassName if the property is not set, and return it as a T
