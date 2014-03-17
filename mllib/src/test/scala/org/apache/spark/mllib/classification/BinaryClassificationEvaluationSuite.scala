@@ -36,7 +36,7 @@ class BinaryClassificationEvaluationSuite extends FunSuite with LocalSparkContex
   }
 
   // Test ROC area under the curve using synthetic output of a model
-  test("ROC area under curve, synthetic") {
+  test("ROC area under curve, synthetic, LR") {
     val predictionAndLabelC = sc.parallelize(Array((3.0, 1.0), (-2.0, 0.0), (2.0, 1.0), (-1.0, 0.0),
       (1.0, 1.0)))
     val modelC = new LogisticRegressionModel(Array(0.0), 0.0)
@@ -50,39 +50,18 @@ class BinaryClassificationEvaluationSuite extends FunSuite with LocalSparkContex
     validateResult(aucRocR, 0.8333, 0.01)
   }
 
-  // Test ROC area under the curve using a small data set and logistic regression
-  test("ROC area under curve, real data, LR") {
-    val data = sc.textFile("data/sample_logistic.txt")
-    val parsedData = data.map { line =>
-    val parts = line.split(' ')
-    LabeledPoint(parts(0).toDouble, parts.tail.map(x => x.toDouble).toArray)
-    }
-    
-    parsedData.cache()
-    val lr = new LogisticRegressionWithSGD()
-    lr.optimizer.setStepSize(10.0).setNumIterations(200)
-
-    val model = lr.run(parsedData)
-    val predictionAndLabel = model.scoreForEval(parsedData)
-    val aucROC = model.areaUnderROC(predictionAndLabel)
-    validateResult(aucROC, 0.84, 0.03)
-  }
-
   // Test ROC area under the curve using a small data set and svm
-  test("ROC area under curve, real data, SVM") {
-    val data = sc.textFile("data/sample_logistic.txt")
-    val parsedData = data.map { line => val parts = line.split(' ')
-      LabeledPoint(parts(0).toDouble, parts.tail.map(x => x.toDouble).toArray)
-    }
-    
-    parsedData.cache()
+  test("ROC area under curve, sythentic, SVM") {
+    val predictionAndLabelC = sc.parallelize(Array((3.0, 1.0), (-2.0, 0.0), (2.0, 1.0), (-1.0, 0.0),
+      (1.0, 1.0)))
+    val modelC = new SVMModel(Array(0.0), 0.0)
+    val aucRocC = modelC.areaUnderROC(predictionAndLabelC)
+    validateResult(aucRocC, 1.0, 0.01)
 
-    val svm = new SVMWithSGD()
-    svm.optimizer.setStepSize(1.0).setRegParam(1.0).setNumIterations(200)
-    val model = svm.run(parsedData)
-
-    val predictionAndLabel = model.scoreForEval(parsedData)
-    val aucROC = model.areaUnderROC(predictionAndLabel)
-    validateResult(aucROC, 0.86, 0.07)
+    val predictionAndLabelR = sc.parallelize(Array((0.45, 1.0), (-0.23, 0.0), (-0.34, 1.0), 
+      (-0.42, 0.0), (0.62, 1.0)))
+    val modelR = new SVMModel(Array(0.0), 0.0)
+    val aucRocR = modelR.areaUnderROC(predictionAndLabelR)
+    validateResult(aucRocR, 0.8333, 0.01)
   }
 }
