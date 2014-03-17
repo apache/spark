@@ -48,13 +48,13 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
       if (serializedSize > maxAkkaFrameSize) {
         val msg = s"Map output statuses were $serializedSize bytes which " +
           s"exceeds spark.akka.frameSize ($maxAkkaFrameSize bytes)."
-       /**
-        * For SPARK-1244 we'll opt for just logging an error and then throwing an exception.
-        * Note that on exception the actor will just restart. A bigger refactoring (SPARK-1239)
-        * will utlimately remove this entire code path.
-        */
-        logError(msg)
-        throw new SparkException(msg)
+
+        /* For SPARK-1244 we'll opt for just logging an error and then throwing an exception.
+         * Note that on exception the actor will just restart. A bigger refactoring (SPARK-1239)
+         * will ultimately remove this entire code path. */
+        val exception = new SparkException(msg)
+        logError(msg, exception)
+        throw exception
       }
       sender ! mapOutputStatuses
 
