@@ -41,7 +41,7 @@ import catalyst.plans.logical.{LogicalPlan, NativeCommand}
 import catalyst.util._
 
 object TestHive
-  extends TestHiveContext(new SparkContext("local", "TestSqlContext", new SparkConf()))
+  extends TestHiveContext(new SparkContext("local", "TestSQLContext", new SparkConf()))
 
 /**
  * A locally running test instance of Spark's Hive execution engine.

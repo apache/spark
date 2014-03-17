@@ -22,11 +22,11 @@ import org.scalatest.FunSuite
 
 import catalyst.expressions._
 import catalyst.plans.logical
-import TestSqlContext._
+import TestSQLContext._
 
 class PlannerSuite extends FunSuite {
   import TestData._
-  import TestSqlContext.planner._
+  import TestSQLContext.planner._
 
   test("unions are collapsed") {
     val query = testData.unionAll(testData).unionAll(testData)

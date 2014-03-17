@@ -50,14 +50,14 @@ case class ExecutedQuery(
     s"$sql\n${executedPlan.map(p => s"=== Query Plan ===\n$p").getOrElse("")}"
 }
 
-object TestSqlContext
-  extends SqlContext(new SparkContext("local", "TestSqlContext", new SparkConf()))
+object TestSQLContext
+  extends SQLContext(new SparkContext("local", "TestSQLContext", new SparkConf()))
 
 /**
  * The entry point for running relational queries using Spark.  Uses the provided spark context
  * to execute relational operators.
  */
-class SqlContext(val sparkContext: SparkContext) extends Logging with dsl.ExpressionConversions {
+class SQLContext(val sparkContext: SparkContext) extends Logging with dsl.ExpressionConversions {
   self =>
 
   protected[sql] lazy val catalog: Catalog = new SimpleCatalog
@@ -87,13 +87,14 @@ class SqlContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
   }
 
   /**
-   * Implicitly adds a `registerAsTable` to RDDs of case classes and allows the Query DSL to be
-   * used on them.
+   * An implicit conversion on RDDs of case classes that infers the schema using Scala reflection.
+   * This class adds methods to the RDD that require this extra schema information, such as
+   * registering the RDD as a table, or writing the RDD out using Parquet.
    */
   implicit class TableRdd[A <: Product: TypeTag](rdd: RDD[A]) extends dsl.LogicalPlanFunctions {
     def logicalPlan = SparkLogicalPlan(ExistingRdd.fromProductRdd(rdd))
 
-    def writeToFile(path: String) = {
+    def saveAsParquetFile(path: String) = {
       WriteToFile(path, logicalPlan).toRdd
     }
 
@@ -102,7 +103,18 @@ class SqlContext(val sparkContext: SparkContext) extends Logging with dsl.Expres
     }
   }
 
-  def loadFile(path: String): LogicalPlan = parquet.ParquetRelation("ParquetFile", path)
+  /** Loads a parequet file. */
+  def parquetFile(path: String): LogicalPlan = parquet.ParquetRelation("ParquetFile", path)
+
+  /** Writes the given RDD to a file using Parquet. */
+  def saveRDDAsParquetFile[A <: Product : TypeTag](rdd: RDD[A], path: String): Unit = {
+    rdd.saveAsParquetFile(path)
+  }
+
+  /** Registers the given RDD as a table in the catalog. */
+  def registerRDDAsTable[A <: Product : TypeTag](rdd: RDD[A], tableName: String): Unit = {
+    rdd.registerAsTable(tableName)
+  }
 
   /**
    * Executes a SQL query using Spark, returning the result as an RDD as well as the plan used

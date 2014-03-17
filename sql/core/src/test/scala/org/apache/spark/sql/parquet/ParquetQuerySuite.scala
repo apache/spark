@@ -20,7 +20,7 @@ package org.apache.spark.sql.parquet
 import org.scalatest.{BeforeAndAfterAll, FunSuite}
 
 import org.apache.spark.rdd.RDD
-import org.apache.spark.sql.TestSqlContext
+import org.apache.spark.sql.TestSQLContext
 import org.apache.spark.sql.catalyst.expressions.Row
 import org.apache.spark.sql.catalyst.util.getTempFilePath
 
@@ -64,7 +64,7 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
     val scanner = new ParquetTableScan(
       ParquetTestData.testData.output,
       ParquetTestData.testData,
-      None)(TestSqlContext.sparkContext)
+      None)(TestSQLContext.sparkContext)
     val projected = scanner.pruneColumns(ParquetTypesConverter
       .convertToAttributes(MessageTypeParser
       .parseMessageType(ParquetTestData.subTestSchema)))
@@ -92,7 +92,7 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
     ParquetTypesConverter.writeMetaData(
       ParquetTestData.testData.output,
       path,
-      TestSqlContext.sparkContext.hadoopConfiguration)
+      TestSQLContext.sparkContext.hadoopConfiguration)
     assert(fs.exists(new Path(path, ParquetFileWriter.PARQUET_METADATA_FILE)))
     val metaData = ParquetTypesConverter.readMetaData(path)
     assert(metaData != null)
@@ -117,7 +117,7 @@ class ParquetQuerySuite extends FunSuite with BeforeAndAfterAll {
     val scanner = new ParquetTableScan(
       parquetRelation.output,
       parquetRelation,
-      None)(TestSqlContext.sparkContext)
+      None)(TestSQLContext.sparkContext)
     scanner
       .execute
       .map(_.copy())

@@ -23,7 +23,7 @@ import catalyst.plans.Inner
 import catalyst.plans.logical._
 
 /* Implicit Conversions */
-import TestSqlContext._ // For .toRdd execution using locally running sql instance.
+import TestSQLContext._ // For .toRdd execution using locally running sql instance.
 
 object ViewsExample {
   def main(args: Array[String]): Unit = {

@@ -36,7 +36,7 @@ CLASSPATH="$SPARK_CLASSPATH:$FWDIR/conf"
 # Support for interacting with Hive.  Since hive pulls in a lot of dependencies that might break
 # existing Spark applications, it is not included in the standard spark assembly.  Instead, we only
 # include it in the classpath if the user has explicitly requested it by running "sbt hive/assembly"
-# Hopefully we will find a way to avoid uber-jars entierly and deploy only the needed packages in
+# Hopefully we will find a way to avoid uber-jars entirely and deploy only the needed packages in
 # the future.
 if [ -f "$FWDIR"/sql/hive/target/scala-$SCALA_VERSION/spark-hive-assembly-*.jar ]; then
   echo "Hive assembly found, including hive support.  If this isn't desired run sbt hive/clean."

@@ -28,7 +28,7 @@ import org.apache.spark.sql.parquet.{ParquetRelation, InsertIntoParquetTable, Pa
 
 trait HiveStrategies {
   // Possibly being too clever with types here... or not clever enough.
-  self: SqlContext#SparkPlanner =>
+  self: SQLContext#SparkPlanner =>
 
   val hiveContext: HiveContext
 

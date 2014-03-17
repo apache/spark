@@ -20,9 +20,10 @@ package catalyst
 
 import org.scalatest.FunSuite
 
-import plans.physical._
-import catalyst.dsl._
-import catalyst.dsl.expressions._
+import org.apache.spark.sql.catalyst.plans.physical._
+
+/* Implicit conversions */
+import org.apache.spark.sql.catalyst.dsl.expressions._
 
 class DistributionSuite extends FunSuite {
 

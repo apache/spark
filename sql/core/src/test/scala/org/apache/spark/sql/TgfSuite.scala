@@ -26,7 +26,7 @@ import catalyst.plans._
 import catalyst.plans.logical.LogicalPlan
 import catalyst.types._
 
-import TestSqlContext._
+import TestSQLContext._
 
 /**
  * This is an example TGF that uses UnresolvedAttributes 'name and 'age to access specific columns

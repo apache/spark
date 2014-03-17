@@ -17,12 +17,12 @@ Spark. Tables in Spark SQL can be created from existing RDDs, parquet files, or 
 # Getting Started
 
 The entry point into all relational functionallity is the
-[SqlContext](api/sql/core/index.html#org.apache.spark.sql.SqlContext) class, or one of its
-decendents.  To create a basic SqlContext, all you need is a SparkContext.
+[SQLContext](api/sql/core/index.html#org.apache.spark.sql.SQLContext) class, or one of its
+decendents.  To create a basic SQLContext, all you need is a SparkContext.
 
 {% highlight scala %}
 val sc: SparkContext // An existing SparkContext.
-val sqlContext = new SqlContext(sc)
+val sqlContext = new SQLContext(sc)
 
 // Importing the SQL context gives access to all the public SQL functions and implicit conversions.
 import sqlContext._
@@ -96,19 +96,19 @@ evaluated by the SQL execution engine.  A full list of the functions supported c
 
 <!-- TODO: Include the table of operations here. -->
 
-# Hive MetaStore Support
+# Hive Support
 
-Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/). However, since Hive has a
-large number of dependencies, it is not included in the default Spark assembly.  In order to use
-Hive you must first run '`sbt/sbt hive/assembly`'.  This command builds a new assembly jar that includes
-Hive and all its dependencies.  When this jar is present, Spark will use the Hive assembly instead
-of the normal Spark assembly.  Note that this Hive assembly jar must also be present on all of the
-worker nodes, as they will need access to the Hive serialization and deserialization libraries
+Spark SQL also supports reading and writing data stored in [Apache Hive](http://hive.apache.org/).
+However, since Hive has alarge number of dependencies, it is not included in the default Spark assembly.
+In order to use Hive you must first run '`sbt/sbt hive/assembly`'.  This command builds a new assembly
+jar that includes Hive and all its dependencies.  When this jar is present, Spark will use the Hive
+assembly instead of the normal Spark assembly.  Note that this Hive assembly jar must also be present
+on all of the worker nodes, as they will need access to the Hive serialization and deserialization libraries
 (SerDes) in order to acccess data stored in Hive.
 
 Configuration of Hive is done by placing your `hive-site.xml` file in `conf/`.
 
-When working with Hive one must construct a `HiveContext`, which inherits from `SqlContext`, and
+When working with Hive one must construct a `HiveContext`, which inherits from `SQLContext`, and
 adds support for finding tables in in the MetaStore and writing queries using HiveQL. Users who do
 not have an existing Hive deployment can also experiment with the `LocalHiveContext`,
 which is similar to `HiveContext`, but creates a local copy of the `metastore` and `warehouse`

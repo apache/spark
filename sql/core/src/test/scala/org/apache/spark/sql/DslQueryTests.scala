@@ -26,7 +26,7 @@ import catalyst.plans.logical.LogicalPlan
 import catalyst.types._
 
 /* Implicits */
-import TestSqlContext._
+import TestSQLContext._
 
 object TestData {
   val testData =
@@ -102,7 +102,7 @@ class DslQueryTest extends FunSuite {
 }
 
 class BasicQuerySuite extends DslQueryTest {
-  import TestSqlContext._
+  import TestSQLContext._
   import TestData._
 
   test("table scan") {
