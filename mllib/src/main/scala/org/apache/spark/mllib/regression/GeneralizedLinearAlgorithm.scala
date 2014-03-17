@@ -35,7 +35,6 @@ abstract class GeneralizedLinearModel(val weights: Array[Double], val intercept:
   extends Serializable {
 
   // Create a column vector that can be used for predictions
-  /// sven: switch back to private if possible
   protected val weightsMatrix = new DoubleMatrix(weights.length, 1, weights:_*)
 
   /**
