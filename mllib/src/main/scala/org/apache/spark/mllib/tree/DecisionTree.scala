@@ -319,6 +319,7 @@ object DecisionTree extends Serializable with Logging {
       true
     }
 
+    // TODO: Unit test this
     /**
      * Finds the right bin for the given feature
      */
@@ -328,26 +329,47 @@ object DecisionTree extends Serializable with Logging {
         isFeatureContinuous: Boolean)
       : Int = {
 
-      if (isFeatureContinuous){
-        for (binIndex <- 0 until strategy.numBins) {
-          val bin = bins(featureIndex)(binIndex)
+      val binForFeatures = bins(featureIndex)
+      val feature = labeledPoint.features(featureIndex)
+
+      def binarySearchForBins(): Int = {
+        var left = 0
+        var right = binForFeatures.length-1
+        while (left <= right) {
+          val mid = left + (right - left) / 2
+          val bin = binForFeatures(mid)
           val lowThreshold = bin.lowSplit.threshold
           val highThreshold = bin.highSplit.threshold
-          val features = labeledPoint.features
-          if ((lowThreshold < features(featureIndex)) & (highThreshold >= features(featureIndex))) {
-            return binIndex
+          if ((lowThreshold < feature) & (highThreshold >= feature)){
+            return mid
+          }
+          else if ((lowThreshold >= feature)){
+            right = mid - 1
+          }
+          else {
+            left = mid + 1
           }
         }
-        throw new UnknownError("no bin was found for continuous variable.")
+        -1
+      }
+
+      if (isFeatureContinuous){
+        val binIndex = binarySearchForBins()
+        if (binIndex == -1){
+          throw new UnknownError("no bin was found for continuous variable.")
+        }
+        binIndex
       } else {
         val numCategoricalBins = strategy.categoricalFeaturesInfo(featureIndex)
-        for (binIndex <- 0 until numCategoricalBins) {
+        var binIndex = 0
+        while (binIndex < numCategoricalBins) {
           val bin = bins(featureIndex)(binIndex)
           val category = bin.category
           val features = labeledPoint.features
           if (category == features(featureIndex)) {
             return binIndex
           }
+          binIndex += 1
         }
         throw new UnknownError("no bin was found for categorical variable.")
 
