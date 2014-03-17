@@ -60,8 +60,8 @@ object CommandUtils extends Logging {
       Seq(sparkHome + "/bin/compute-classpath" + ext),
       extraEnvironment=command.environment)
 
-    val debugflag = System.getProperty("spark.excutor.debug", "0").toInt
-    if (debugflag==0) {
+    val debugflag = System.getProperty("spark.excutor.debug", "0").toBoolean
+    if (!debugflag) {
       Seq("-cp", classPath) ++ libraryOpts ++ workerLocalOpts ++ userOpts ++ memoryOpts
     }
     else {
