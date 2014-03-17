@@ -136,13 +136,13 @@ abstract class GeneralizedLinearAlgorithm[M <: GeneralizedLinearModel]
 
     // Add a extra variable consisting of all 1.0's for the intercept.
     val data = if (addIntercept) {
-      input.map(labeledPoint => (labeledPoint.label, Array(1.0, labeledPoint.features:_*)))
+      input.map(labeledPoint => (labeledPoint.label, labeledPoint.features.+:(1.0)))
     } else {
       input.map(labeledPoint => (labeledPoint.label, labeledPoint.features))
     }
 
     val initialWeightsWithIntercept = if (addIntercept) {
-      Array(1.0, initialWeights:_*)
+      initialWeights.+:(1.0)
     } else {
       initialWeights
     }
