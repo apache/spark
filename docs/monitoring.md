@@ -84,4 +84,4 @@ properties are useful for those comfortable with JVM internals.
 
 #debug the Excutor process
 
-Since the excutor process is started by ProcessBuilder, if we wang to trace the code, we can modify the CommandUtils.scala, and rebuild the package. How to add the option for remote-debugging. please refer https://github.com/apache/spark/pull/157
+Since the excutor process is started by ProcessBuilder, if we wang to trace the code, we can modify the CommandUtils.scala, and rebuild the package. We can set spark.excutor.debug=true(default is false) to turn on this function and set spark.excutor.debug.port=xxxx （default is 18000）to specify the port for remote-debugging . The both option are set as jvm arguments when we start one worker process. please refer https://github.com/apache/spark/pull/157 for detail
