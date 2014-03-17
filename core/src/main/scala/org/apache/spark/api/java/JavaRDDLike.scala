@@ -484,7 +484,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * @return the maximum of the RDD
    * */
   def max(comp: Comparator[T]): T = {
-    import scala.collection.JavaConversions._
     rdd.max()(Ordering.comparatorToOrdering(comp))
   }
 
@@ -495,7 +494,6 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
    * @return the minimum of the RDD
    * */
   def min(comp: Comparator[T]): T = {
-    import scala.collection.JavaConversions._
     rdd.min()(Ordering.comparatorToOrdering(comp))
   }
 

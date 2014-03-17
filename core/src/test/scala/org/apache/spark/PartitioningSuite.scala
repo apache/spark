@@ -172,7 +172,7 @@ class PartitioningSuite extends FunSuite with SharedSparkContext with PrivateMet
     assert(abs(1.0 - rdd.variance) < 0.01)
     assert(abs(1.0 - rdd.stdev) < 0.01)
     assert(stats.max === 4.0)
-    assert(stats.min === -1.0)
+    assert(stats.min === 2.0)
 
     // Add other tests here for classes that should be able to handle empty partitions correctly
   }
