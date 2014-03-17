@@ -319,8 +319,10 @@ abstract class RDD[T: ClassTag](
   /**
    * Return a sampled subset of this RDD.
    */
-  def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] =
+  def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] = {
+    require(fraction >= 0.0, "Invalid fraction value: " + fraction)
     new SampledRDD(this, withReplacement, fraction, seed)
+  }
 
   def takeSample(withReplacement: Boolean, num: Int, seed: Int): Array[T] = {
     var fraction = 0.0
@@ -331,6 +333,10 @@ abstract class RDD[T: ClassTag](
 
     if (num < 0) {
       throw new IllegalArgumentException("Negative number of elements requested")
+    }
+
+    if (initialCount == 0) {
+      return new Array[T](0)
     }
 
     if (initialCount > Integer.MAX_VALUE - 1) {
@@ -351,7 +357,7 @@ abstract class RDD[T: ClassTag](
     var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
     // If the first sample didn't turn out large enough, keep trying to take samples;
-    // this shouldn't happen often because we use a big multiplier for thei initial size
+    // this shouldn't happen often because we use a big multiplier for the initial size
     while (samples.length < total) {
       samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
     }
