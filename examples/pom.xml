@@ -45,21 +45,6 @@
     </profile>
   </profiles>
 
-  <repositories>
-    <repository>
-      <id>apache-repo</id>
-      <name>Apache Repository</name>
-      <url>https://repository.apache.org/content/repositories/releases</url>
-      <releases>
-        <enabled>true</enabled>
-      </releases>
-      <snapshots>
-        <enabled>false</enabled>
-      </snapshots>
-    </repository>
-  </repositories>
-
-
   <dependencies>
     <dependency>
       <groupId>org.apache.spark</groupId>

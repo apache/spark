@@ -174,12 +174,18 @@ object SparkBuild extends Build {
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
 
-    // also check the local Maven repository ~/.m2
-    resolvers ++= Seq(Resolver.file("Local Maven Repo", file(Path.userHome + "/.m2/repository"))),
-
-    // For Sonatype publishing
-    resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
-      "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
+    resolvers ++= Seq(
+      "Maven Repository"     at "https://repo.maven.apache.org/maven2",
+      "Apache Repository"    at "https://repository.apache.org/content/repositories/releases",
+      "JBoss Repository"     at "https://repository.jboss.org/nexus/content/repositories/releases/",
+      "MQTT Repository"      at "https://repo.eclipse.org/content/repositories/paho-releases/",
+      "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/",
+      // For Sonatype publishing
+      //"sonatype-snapshots"   at "https://oss.sonatype.org/content/repositories/snapshots",
+      //"sonatype-staging"     at "https://oss.sonatype.org/service/local/staging/deploy/maven2/",
+      // also check the local Maven repository ~/.m2
+      Resolver.mavenLocal
+    ),
 
     publishMavenStyle := true,
 
@@ -272,10 +278,6 @@ object SparkBuild extends Build {
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
-    resolvers ++= Seq(
-       "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
-       "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/"
-    ),
 
     libraryDependencies ++= Seq(
         "com.google.guava"           % "guava"            % "14.0.1",
@@ -470,7 +472,6 @@ object SparkBuild extends Build {
 
   def mqttSettings() = streamingSettings ++ Seq(
     name := "spark-streaming-mqtt",
-    resolvers ++= Seq("Eclipse Repo" at "https://repo.eclipse.org/content/repositories/paho-releases/"),
     libraryDependencies ++= Seq("org.eclipse.paho" % "mqtt-client" % "0.4.0")
   )
 }
