@@ -63,8 +63,8 @@ class LogisticRegressionModel(
    */
   def predictScore(dataMatrix: DoubleMatrix, weightMatrix: DoubleMatrix,
       intercept: Double) = {
-    val margin = dataMatrix.mmul(weightMatrix).get(0) + intercept
-    margin
+    // margin
+    dataMatrix.mmul(weightMatrix).get(0) + intercept
   }
 
   /**
