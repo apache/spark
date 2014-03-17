@@ -24,6 +24,7 @@ import java.lang.ref.WeakReference
 import java.util.concurrent.ConcurrentHashMap
 
 import org.apache.spark.Logging
+import java.util.concurrent.atomic.AtomicInteger
 
 private[util] case class TimeStampedWeakValue[T](timestamp: Long, weakValue: WeakReference[T]) {
   def this(timestamp: Long, value: T) = this(timestamp, new WeakReference[T](value))
@@ -44,6 +45,12 @@ private[util] case class TimeStampedWeakValue[T](timestamp: Long, weakValue: Wea
 private[spark] class TimeStampedWeakValueHashMap[A, B]()
   extends WrappedJavaHashMap[A, B, A, TimeStampedWeakValue[B]] with Logging {
 
+  /** Number of inserts after which keys whose weak ref values are null will be cleaned */
+  private val CLEANUP_INTERVAL = 1000
+
+  /** Counter for counting the number of inserts */
+  private val insertCounts = new AtomicInteger(0)
+
   protected[util] val internalJavaMap: util.Map[A, TimeStampedWeakValue[B]] = {
     new ConcurrentHashMap[A, TimeStampedWeakValue[B]]()
   }
@@ -52,11 +59,21 @@ private[spark] class TimeStampedWeakValueHashMap[A, B]()
     new TimeStampedWeakValueHashMap[K1, V1]()
   }
 
+  override def +=(kv: (A, B)): this.type = {
+    // Cleanup null value at certain intervals
+    if (insertCounts.incrementAndGet() % CLEANUP_INTERVAL == 0) {
+      cleanNullValues()
+    }
+    super.+=(kv)
+  }
+
   override def get(key: A): Option[B] = {
     Option(internalJavaMap.get(key)) match {
       case Some(weakValue) =>
         val value = weakValue.weakValue.get
-        if (value == null) cleanupKey(key)
+        if (value == null) {
+          internalJavaMap.remove(key)
+        }
         Option(value)
       case None =>
         None
@@ -72,16 +89,10 @@ private[spark] class TimeStampedWeakValueHashMap[A, B]()
   }
 
   override def iterator: Iterator[(A, B)] = {
-    val jIterator = internalJavaMap.entrySet().iterator()
-    JavaConversions.asScalaIterator(jIterator).flatMap(kv => {
-      val key = kv.getKey
-      val value = kv.getValue.weakValue.get
-      if (value == null) {
-        cleanupKey(key)
-        Seq.empty
-      } else {
-        Seq((key, value))
-      }
+    val iterator = internalJavaMap.entrySet().iterator()
+    JavaConversions.asScalaIterator(iterator).flatMap(kv => {
+      val (key, value) = (kv.getKey, kv.getValue.weakValue.get)
+      if (value != null) Seq((key, value)) else Seq.empty
     })
   }
 
@@ -104,8 +115,18 @@ private[spark] class TimeStampedWeakValueHashMap[A, B]()
     }
   }
 
-  private def cleanupKey(key: A) {
-    // TODO: Consider cleaning up keys to empty weak ref values automatically in future.
+  /**
+   * Removes keys whose weak referenced values have become null.
+   */
+  private def cleanNullValues() {
+    val iterator = internalJavaMap.entrySet().iterator()
+    while (iterator.hasNext) {
+      val entry = iterator.next()
+      if (entry.getValue.weakValue.get == null) {
+        logDebug("Removing key " + entry.getKey)
+        iterator.remove()
+      }
+    }
   }
 
   private def currentTime = System.currentTimeMillis()

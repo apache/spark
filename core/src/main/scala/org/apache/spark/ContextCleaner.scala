@@ -50,6 +50,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   /** Start the cleaner */
   def start() {
     cleaningThread.setDaemon(true)
+    cleaningThread.setName("ContextCleaner")
     cleaningThread.start()
   }
 
@@ -60,7 +61,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /**
-   * Clean (unpersist) RDD data. Do not perform any time or resource intensive
+   * Clean RDD data. Do not perform any time or resource intensive
    * computation in this function as this is called from a finalize() function.
    */
   def cleanRDD(rddId: Int) {
@@ -92,39 +93,48 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
 
   /** Keep cleaning RDDs and shuffle data */
   private def keepCleaning() {
-    try {
-      while (!isStopped) {
+    while (!isStopped) {
+      try {
         val taskOpt = Option(queue.poll(100, TimeUnit.MILLISECONDS))
-        taskOpt.foreach(task => {
+        taskOpt.foreach { task =>
           logDebug("Got cleaning task " + taskOpt.get)
           task match {
-            case CleanRDD(rddId) => doCleanRDD(sc, rddId)
+            case CleanRDD(rddId) => doCleanRDD(rddId)
             case CleanShuffle(shuffleId) => doCleanShuffle(shuffleId)
           }
-        })
+        }
+      } catch {
+        case ie: InterruptedException =>
+          if (!isStopped) logWarning("Cleaning thread interrupted")
+        case t: Throwable => logError("Error in cleaning thread", t)
       }
-    } catch {
-      case ie: InterruptedException =>
-        if (!isStopped) logWarning("Cleaning thread interrupted")
     }
   }
 
   /** Perform RDD cleaning */
-  private def doCleanRDD(sc: SparkContext, rddId: Int) {
-    logDebug("Cleaning rdd " + rddId)
-    blockManagerMaster.removeRdd(rddId, false)
-    sc.persistentRdds.remove(rddId)
-    listeners.foreach(_.rddCleaned(rddId))
-    logInfo("Cleaned rdd " + rddId)
+  private def doCleanRDD(rddId: Int) {
+    try {
+      logDebug("Cleaning RDD " + rddId)
+      blockManagerMaster.removeRdd(rddId, false)
+      sc.persistentRdds.remove(rddId)
+      listeners.foreach(_.rddCleaned(rddId))
+      logInfo("Cleaned RDD " + rddId)
+    } catch {
+      case t: Throwable => logError("Error cleaning RDD " + rddId, t)
+    }
   }
 
   /** Perform shuffle cleaning */
   private def doCleanShuffle(shuffleId: Int) {
-    logDebug("Cleaning shuffle " + shuffleId)
-    mapOutputTrackerMaster.unregisterShuffle(shuffleId)
-    blockManagerMaster.removeShuffle(shuffleId)
-    listeners.foreach(_.shuffleCleaned(shuffleId))
-    logInfo("Cleaned shuffle " + shuffleId)
+    try {
+      logDebug("Cleaning shuffle " + shuffleId)
+      mapOutputTrackerMaster.unregisterShuffle(shuffleId)
+      blockManagerMaster.removeShuffle(shuffleId)
+      listeners.foreach(_.shuffleCleaned(shuffleId))
+      logInfo("Cleaned shuffle " + shuffleId)
+    } catch {
+      case t: Throwable => logError("Error cleaning shuffle " + shuffleId, t)
+    }
   }
 
   private def mapOutputTrackerMaster = sc.env.mapOutputTracker.asInstanceOf[MapOutputTrackerMaster]

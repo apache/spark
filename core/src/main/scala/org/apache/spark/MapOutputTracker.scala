@@ -20,7 +20,6 @@ package org.apache.spark
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.Some
 import scala.collection.mutable.{HashSet, Map}
 import scala.concurrent.Await
 
