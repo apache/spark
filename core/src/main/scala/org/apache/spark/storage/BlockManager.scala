@@ -144,7 +144,7 @@ private[spark] class BlockManager(
    * Construct a BlockManager with a memory limit set based on system properties.
    */
   def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
-           serializer: Serializer, conf: SparkConf, securityManager: SecurityManager, appId: String) = {
+    serializer: Serializer, conf: SparkConf, securityManager: SecurityManager, appId: String) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf), conf, 
       securityManager, appId)
   }

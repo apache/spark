@@ -90,7 +90,8 @@ private[storage] object BlockManagerMessages {
     }
 
     // For pattern-matching
-    def unapply(h: UpdateBlockInfo): Option[(BlockManagerId, BlockId, StorageLevel, Long, Long, Long)] = {
+    def unapply(h: UpdateBlockInfo)
+      : Option[(BlockManagerId, BlockId, StorageLevel, Long, Long, Long)] = {
       Some((h.blockManagerId, h.blockId, h.storageLevel, h.memSize, h.diskSize, h.tachyonSize))
     }
   }

@@ -264,7 +264,8 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
       return
     }
 
-    blockManagerInfo(blockManagerId).updateBlockInfo(blockId, storageLevel, memSize, diskSize, tachyonSize)
+    blockManagerInfo(blockManagerId).updateBlockInfo(
+      blockId, storageLevel, memSize, diskSize, tachyonSize)
 
     var locations: mutable.HashSet[BlockManagerId] = null
     if (blockLocations.containsKey(blockId)) {
