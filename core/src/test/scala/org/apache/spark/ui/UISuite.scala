@@ -37,23 +37,27 @@ class UISuite extends FunSuite {
       case Failure(e) => 
       // Either case server port is busy hence setup for test complete
     }
-    val (_, boundPort1, _) = JettyUtils.startJettyServer(
+    val serverInfo1 = JettyUtils.startJettyServer(
       "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
-    val (_, boundPort2, _) = JettyUtils.startJettyServer(
+    val serverInfo2 = JettyUtils.startJettyServer(
       "0.0.0.0", startPort, Seq[ServletContextHandler](), new SparkConf)
     // Allow some wiggle room in case ports on the machine are under contention
+    val boundPort1 = serverInfo1.boundPort
+    val boundPort2 = serverInfo2.boundPort
     assert(boundPort1 > startPort && boundPort1 < startPort + 10)
     assert(boundPort2 > boundPort1 && boundPort2 < boundPort1 + 10)
   }
 
   test("jetty binds to port 0 correctly") {
-    val (jettyServer, boundPort, _) = JettyUtils.startJettyServer(
+    val serverInfo = JettyUtils.startJettyServer(
       "0.0.0.0", 0, Seq[ServletContextHandler](), new SparkConf)
-    assert(jettyServer.getState === "STARTED")
+    val server = serverInfo.server
+    val boundPort = serverInfo.boundPort
+    assert(server.getState === "STARTED")
     assert(boundPort != 0)
-    Try {new ServerSocket(boundPort)} match {
+    Try { new ServerSocket(boundPort) } match {
       case Success(s) => fail("Port %s doesn't seem used by jetty server".format(boundPort))
-      case Failure  (e) =>
+      case Failure(e) =>
     }
   }
 }

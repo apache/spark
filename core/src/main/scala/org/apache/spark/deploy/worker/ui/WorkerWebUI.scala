@@ -19,12 +19,11 @@ package org.apache.spark.deploy.worker.ui
 
 import java.io.File
 import javax.servlet.http.HttpServletRequest
-import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.ui.{JettyUtils, UIUtils}
+import org.apache.spark.ui.{JettyUtils, ServerInfo, UIUtils}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -39,8 +38,7 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   val port = requestedPort.getOrElse(
     worker.conf.get("worker.ui.port",  WorkerWebUI.DEFAULT_PORT).toInt)
 
-  var server: Option[Server] = None
-  var boundPort: Option[Int] = None
+  var serverInfo: Option[ServerInfo] = None
 
   val indexPage = new IndexPage(this)
 
@@ -58,18 +56,18 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
       (request: HttpServletRequest) => indexPage.render(request), worker.securityMgr)
   )
 
-  def start() {
+  def bind() {
     try {
-      val (srv, bPort, _) = JettyUtils.startJettyServer(host, port, handlers, worker.conf)
-      server = Some(srv)
-      boundPort = Some(bPort)
-      logInfo("Started Worker web UI at http://%s:%d".format(host, bPort))
+      serverInfo = Some(JettyUtils.startJettyServer(host, port, handlers, worker.conf))
+      logInfo("Started Worker web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to create Worker JettyUtils", e)
         System.exit(1)
     }
   }
+
+  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
   def log(request: HttpServletRequest): String = {
     val defaultBytes = 100 * 1024
@@ -197,7 +195,8 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
   }
 
   def stop() {
-    server.foreach(_.stop())
+    assert(serverInfo.isDefined, "Attempted to stop a Worker UI that was not initialized!")
+    serverInfo.get.server.stop()
   }
 }
 

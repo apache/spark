@@ -28,15 +28,7 @@ import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.AkkaUtils
 
 private[spark]
-class BlockManagerMaster(
-    var driverActor: ActorRef,
-    conf: SparkConf,
-    val listener: Option[BlockManagerStatusListener] = None)
-  extends Logging {
-
-  def this(driverActor: ActorRef, conf: SparkConf, listener: BlockManagerStatusListener) =
-    this(driverActor, conf, Some(listener))
-
+class BlockManagerMaster(var driverActor: ActorRef, conf: SparkConf) extends Logging {
   val AKKA_RETRY_ATTEMPTS: Int = conf.getInt("spark.akka.num.retries", 3)
   val AKKA_RETRY_INTERVAL_MS: Int = conf.getInt("spark.akka.retry.wait", 3000)
 

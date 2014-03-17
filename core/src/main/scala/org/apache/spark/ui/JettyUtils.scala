@@ -102,23 +102,13 @@ private[spark] object JettyUtils extends Logging {
       srcPath: String,
       destPath: String,
       basePath: String = ""): ServletContextHandler = {
-    val prefixedDestPath = attachPrefix(basePath, destPath)
-    val transformURL = (oldURL: String) => {
-      // Make sure we don't end up with "//" in the middle
-      new URL(new URL(oldURL), prefixedDestPath).toString
-    }
-    createRedirectModifyHandler(srcPath, transformURL, basePath)
-  }
-
-  /** Create a handler that always redirects the user to a modified path */
-  def createRedirectModifyHandler(
-      srcPath: String,
-      modifyURL: String => String,
-      basePath: String = ""): ServletContextHandler = {
     val prefixedSrcPath = attachPrefix(basePath, srcPath)
+    val prefixedDestPath = attachPrefix(basePath, destPath)
     val servlet = new HttpServlet {
       override def doGet(request: HttpServletRequest, response: HttpServletResponse) {
-        response.sendRedirect(modifyURL(request.getRequestURL.toString))
+        // Make sure we don't end up with "//" in the middle
+        val newUrl = new URL(new URL(request.getRequestURL.toString), prefixedDestPath).toString
+        response.sendRedirect(newUrl)
       }
     }
     val contextHandler = new ServletContextHandler
@@ -141,13 +131,6 @@ private[spark] object JettyUtils extends Logging {
     }
     contextHandler.addServlet(holder, path)
     contextHandler
-  }
-
-  /** Create a handler that properly redirects all requests for a static directory */
-  def createStaticRedirectHandler(
-      srcPath: String,
-      basePath: String = ""): ServletContextHandler = {
-    createRedirectModifyHandler(srcPath, getRedirectStaticURL, basePath)
   }
 
   private def addFilters(handlers: Seq[ServletContextHandler], conf: SparkConf) {
@@ -186,7 +169,7 @@ private[spark] object JettyUtils extends Logging {
       hostName: String,
       port: Int,
       handlers: Seq[ServletContextHandler],
-      conf: SparkConf): (Server, Int, ContextHandlerCollection) = {
+      conf: SparkConf): ServerInfo = {
 
     val collection = new ContextHandlerCollection
     collection.setHandlers(handlers.toArray)
@@ -214,13 +197,7 @@ private[spark] object JettyUtils extends Logging {
     }
 
     val (server, boundPort) = connect(port)
-    (server, boundPort, collection)
-  }
-
-  /** Return the correct URL for a static resource by removing the prefix */
-  private def getRedirectStaticURL(url: String): String = {
-    val newPath = "/static.*".r.findFirstIn(url).mkString("")
-    new URL(new URL(url), newPath).toString
+    ServerInfo(server, boundPort, collection)
   }
 
   /** Attach a prefix to the given path, but avoid returning an empty path */
@@ -228,3 +205,8 @@ private[spark] object JettyUtils extends Logging {
     if (basePath == "") relativePath else (basePath + relativePath).stripSuffix("/")
   }
 }
+
+private[spark] case class ServerInfo(
+    server: Server,
+    boundPort: Int,
+    rootHandler: ContextHandlerCollection)

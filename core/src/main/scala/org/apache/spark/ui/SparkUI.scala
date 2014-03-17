@@ -50,8 +50,7 @@ private[spark] class SparkUI(
 
   private val host = Option(System.getenv("SPARK_PUBLIC_DNS")).getOrElse(Utils.localHostName())
   private val port = conf.get("spark.ui.port", SparkUI.DEFAULT_PORT).toInt
-  private var boundPort: Option[Int] = None
-  private var server: Option[Server] = None
+  private var serverInfo: Option[ServerInfo] = None
 
   private val storage = new BlockManagerUI(this)
   private val jobs = new JobProgressUI(this)
@@ -78,26 +77,19 @@ private[spark] class SparkUI(
   // Maintain executor storage status through Spark events
   val storageStatusListener = new StorageStatusListener
 
-  // Only log events if this SparkUI is live
-  private var eventLogger: Option[EventLoggingListener] = None
-
-  // Information needed to replay the events logged by this UI, if any
-  lazy val eventLogInfo: Option[EventLoggingInfo] =
-    eventLogger.map { l => Some(l.info) }.getOrElse(None)
-
   /** Bind the HTTP server which backs this web interface */
   def bind() {
     try {
-      val (srv, usedPort, _) = startJettyServer(host, port, handlers, sc.conf)
-      logInfo("Started Spark Web UI at http://%s:%d".format(host, usedPort))
-      server = Some(srv)
-      boundPort = Some(usedPort)
+      serverInfo = Some(startJettyServer(host, port, handlers, sc.conf))
+      logInfo("Started Spark Web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to create Spark JettyUtils", e)
         System.exit(1)
     }
   }
+
+  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
 
   /** Initialize all components of the server */
   def start() {
@@ -112,22 +104,15 @@ private[spark] class SparkUI(
     listenerBus.addListener(jobs.listener)
     listenerBus.addListener(env.listener)
     listenerBus.addListener(exec.listener)
-
-    // Log events only if this UI is live and the feature is enabled
-    if (live && conf.getBoolean("spark.eventLog.enabled", false)) {
-      val logger = new EventLoggingListener(appName, conf)
-      eventLogger = Some(logger)
-      listenerBus.addListener(logger)
-    }
   }
 
   def stop() {
-    server.foreach(_.stop())
-    eventLogger.foreach(_.stop())
+    assert(serverInfo.isDefined, "Attempted to stop a SparkUI that was not initialized!")
+    serverInfo.get.server.stop()
     logInfo("Stopped Spark Web UI at %s".format(appUIAddress))
   }
 
-  private[spark] def appUIAddress = "http://" + host + ":" + boundPort.getOrElse("-1")
+  private[spark] def appUIAddress = "http://" + host + ":" + boundPort
 
 }
 

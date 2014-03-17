@@ -116,7 +116,7 @@ private[spark] class Master(
     // Listen for remote client disconnection events, since they don't go through Akka's watch()
     context.system.eventStream.subscribe(self, classOf[RemotingLifecycleEvent])
     webUi.bind()
-    masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort.get
+    masterWebUiUrl = "http://" + masterPublicAddress + ":" + webUi.boundPort
     context.system.scheduler.schedule(0 millis, WORKER_TIMEOUT millis, self, CheckForWorkerTimeOut)
 
     masterMetricsSystem.registerSource(masterSource)
@@ -382,7 +382,7 @@ private[spark] class Master(
     }
 
     case RequestWebUIPort => {
-      sender ! WebUIPortResponse(webUi.boundPort.getOrElse(-1))
+      sender ! WebUIPortResponse(webUi.boundPort)
     }
   }
 
@@ -622,6 +622,10 @@ private[spark] class Master(
       if (completedApps.size >= RETAINED_APPLICATIONS) {
         val toRemove = math.max(RETAINED_APPLICATIONS / 10, 1)
         completedApps.take(toRemove).foreach( a => {
+          appIdToUI.get(a.id).foreach { ui =>
+            ui.stop()
+            webUi.detachUI(ui)
+          }
           applicationMetricsSystem.removeSource(a.appSource)
         })
         completedApps.trimStart(toRemove)

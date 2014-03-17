@@ -29,6 +29,7 @@ import org.apache.spark.api.python.PythonWorkerFactory
 import org.apache.spark.broadcast.BroadcastManager
 import org.apache.spark.metrics.MetricsSystem
 import org.apache.spark.network.ConnectionManager
+import org.apache.spark.scheduler.LiveListenerBus
 import org.apache.spark.serializer.{Serializer, SerializerManager}
 import org.apache.spark.storage._
 import org.apache.spark.util.{AkkaUtils, Utils}
@@ -123,7 +124,13 @@ object SparkEnv extends Logging {
       hostname: String,
       port: Int,
       isDriver: Boolean,
-      isLocal: Boolean): SparkEnv = {
+      isLocal: Boolean,
+      listenerBus: LiveListenerBus = null): SparkEnv = {
+
+    // Listener bus is only used on the driver
+    if (isDriver) {
+      assert(listenerBus != null, "Attempted to create driver SparkEnv with null listener bus!")
+    }
 
     val securityManager = new SecurityManager(conf)
 
@@ -168,19 +175,10 @@ object SparkEnv extends Logging {
       }
     }
 
-    val blockManagerStatusListener = new BlockManagerStatusListener
-
-    // Lazy because an akka actor cannot be instantiated outside of Props
-    lazy val blockManagerMasterActor = {
-      val actor = new BlockManagerMasterActor(isLocal, conf)
-      actor.registerListener(blockManagerStatusListener)
-      actor
-    }
-
     val blockManagerMaster = new BlockManagerMaster(
-      registerOrLookup("BlockManagerMaster", blockManagerMasterActor),
-      conf,
-      blockManagerStatusListener)
+      registerOrLookup("BlockManagerMaster",
+        new BlockManagerMasterActor(isLocal, conf, listenerBus)),
+      conf)
 
     val blockManager = new BlockManager(executorId, actorSystem, blockManagerMaster,
       serializer, conf, securityManager)

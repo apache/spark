@@ -30,21 +30,28 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
   private var queueFullErrorMessageLogged = false
 
-  // Create a new daemon thread to listen for events. This thread is stopped when it receives
-  // a SparkListenerShutdown event, using the stop method.
-  new Thread("SparkListenerBus") {
-    setDaemon(true)
-    override def run() {
-      while (true) {
-        val event = eventQueue.take
-        val shutdown = postToAll(event)
-        if (shutdown) {
-          // Get out of the while loop and shutdown the daemon thread
-          return
+  /**
+   * Create a new daemon thread to listen for events. Until this thread has started, all posted
+   * events are buffered. Only after this is called will the buffered events be released to all
+   * attached listeners.
+   *
+   * This thread is stopped when it receives a SparkListenerShutdown event, using the stop method.
+   */
+  def start() {
+    new Thread("SparkListenerBus") {
+      setDaemon(true)
+      override def run() {
+        while (true) {
+          val event = eventQueue.take
+          val shutdown = postToAll(event)
+          if (shutdown) {
+            // Get out of the while loop and shutdown the daemon thread
+            return
+          }
         }
       }
-    }
-  }.start()
+    }.start()
+  }
 
   def post(event: SparkListenerEvent) {
     val eventAdded = eventQueue.offer(event)

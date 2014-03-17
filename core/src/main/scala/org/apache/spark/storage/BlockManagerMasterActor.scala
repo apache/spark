@@ -28,7 +28,7 @@ import akka.actor.{Actor, ActorRef, Cancellable}
 import akka.pattern.ask
 
 import org.apache.spark.{Logging, SparkConf, SparkException}
-import org.apache.spark.scheduler.{SparkListenerBlockManagerAdded, SparkListenerBlockManagerLost}
+import org.apache.spark.scheduler._
 import org.apache.spark.storage.BlockManagerMessages._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -37,7 +37,10 @@ import org.apache.spark.util.{AkkaUtils, Utils}
  * all slaves' block managers.
  */
 private[spark]
-class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Actor with Logging {
+class BlockManagerMasterActor(
+    val isLocal: Boolean,
+    conf: SparkConf,
+    listenerBus: LiveListenerBus) extends Actor with Logging {
 
   // Mapping from block manager id to the block manager's information.
   private val blockManagerInfo = new mutable.HashMap[BlockManagerId, BlockManagerInfo]
@@ -49,9 +52,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
   private val blockLocations = new JHashMap[BlockId, mutable.HashSet[BlockManagerId]]
 
   private val akkaTimeout = AkkaUtils.askTimeout(conf)
-
-  // Post block manager status updates to SparkContext through a listener
-  private var statusListener: Option[BlockManagerStatusListener] = None
 
   val slaveTimeout = conf.get("spark.storage.blockManagerSlaveTimeoutMs",
     "" + (BlockManager.getHeartBeatFrequency(conf) * 3)).toLong
@@ -68,10 +68,6 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
         checkTimeoutInterval.milliseconds, self, ExpireDeadHosts)
     }
     super.preStart()
-  }
-
-  def registerListener(listener: BlockManagerStatusListener) {
-    statusListener = Some(listener)
   }
 
   def receive = {
@@ -168,7 +164,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
       }
     }
     val blockManagerLost = SparkListenerBlockManagerLost(blockManagerId)
-    statusListener.foreach(_.onBlockManagerLost(blockManagerLost))
+    listenerBus.post(blockManagerLost)
   }
 
   private def expireDeadHosts() {
@@ -246,7 +242,7 @@ class BlockManagerMasterActor(val isLocal: Boolean, conf: SparkConf) extends Act
         new BlockManagerInfo(id, System.currentTimeMillis(), maxMemSize, slaveActor)
     }
     val blockManagerAdded = SparkListenerBlockManagerAdded(id, maxMemSize)
-    statusListener.foreach(_.onBlockManagerAdded(blockManagerAdded))
+    listenerBus.post(blockManagerAdded)
   }
 
   private def updateBlockInfo(
@@ -340,8 +336,11 @@ private[spark] class BlockManagerInfo(
     _lastSeenMs = System.currentTimeMillis()
   }
 
-  def updateBlockInfo(blockId: BlockId, storageLevel: StorageLevel, memSize: Long,
-                      diskSize: Long) {
+  def updateBlockInfo(
+      blockId: BlockId,
+      storageLevel: StorageLevel,
+      memSize: Long,
+      diskSize: Long) {
 
     updateLastSeenMs()
 

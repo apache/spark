@@ -69,7 +69,7 @@ private[spark] class ReplayListenerBus(conf: SparkConf) extends SparkListenerBus
     logPaths.foreach { path =>
       // In case there is an exception, keep track of the highest level stream to close it later
       var streamToClose: Option[InputStream] = None
-      var currentLine = ""
+      var currentLine = "<not started>"
       try {
         val fstream = fileSystem.open(path)
         val bstream = new FastBufferedInputStream(fstream)
@@ -85,9 +85,8 @@ private[spark] class ReplayListenerBus(conf: SparkConf) extends SparkListenerBus
         }
       } catch {
         case e: Exception =>
-          logWarning("Exception in parsing Spark event log %s".format(path))
-          logWarning(currentLine + "\n")
-          logDebug(e.getMessage + e.getStackTraceString)
+          logError("Exception in parsing Spark event log %s".format(path), e)
+          logError("Malformed line: %s\n".format(currentLine))
       } finally {
         streamToClose.foreach(_.close())
       }

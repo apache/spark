@@ -18,13 +18,11 @@
 package org.apache.spark.deploy.master.ui
 
 import javax.servlet.http.HttpServletRequest
-import org.eclipse.jetty.server.Server
 import org.eclipse.jetty.servlet.ServletContextHandler
-import org.eclipse.jetty.server.handler.ContextHandlerCollection
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.master.Master
-import org.apache.spark.ui.SparkUI
+import org.apache.spark.ui.{ServerInfo, SparkUI}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -35,9 +33,7 @@ private[spark]
 class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
   val masterActorRef = master.self
   val timeout = AkkaUtils.askTimeout(master.conf)
-  var server: Option[Server] = None
-  var boundPort: Option[Int] = None
-  var rootHandler: Option[ContextHandlerCollection] = None
+  var serverInfo: Option[ServerInfo] = None
 
   private val host = Utils.localHostName()
   private val port = requestedPort
@@ -62,11 +58,8 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
 
   def bind() {
     try {
-      val (srv, bPort, handlerCollection) = startJettyServer(host, port, handlers, master.conf)
-      server = Some(srv)
-      boundPort = Some(bPort)
-      rootHandler = Some(handlerCollection)
-      logInfo("Started Master web UI at http://%s:%d".format(host, boundPort.get))
+      serverInfo = Some(startJettyServer(host, port, handlers, master.conf))
+      logInfo("Started Master web UI at http://%s:%d".format(host, boundPort))
     } catch {
       case e: Exception =>
         logError("Failed to create Master JettyUtils", e)
@@ -74,23 +67,35 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
     }
   }
 
+  def boundPort: Int = serverInfo.map(_.boundPort).getOrElse(-1)
+
   /** Attach a reconstructed UI to this Master UI. Only valid after bind(). */
   def attachUI(ui: SparkUI) {
-    rootHandler.foreach { root =>
-      // Redirect all requests for static resources
-      val staticHandler = createStaticRedirectHandler("/static", ui.basePath)
-      val handlersToRegister = ui.handlers ++ Seq(staticHandler)
-      for (handler <- handlersToRegister) {
-        root.addHandler(handler)
-        if (!handler.isStarted) {
-          handler.start()
-        }
+    assert(serverInfo.isDefined, "Master UI must be initialized before attaching SparkUIs")
+    val rootHandler = serverInfo.get.rootHandler
+    for (handler <- ui.handlers) {
+      rootHandler.addHandler(handler)
+      if (!handler.isStarted) {
+        handler.start()
       }
     }
   }
 
+  /** Detach a reconstructed UI from this Master UI. Only valid after bind(). */
+  def detachUI(ui: SparkUI) {
+    assert(serverInfo.isDefined, "Master UI must be initialized before detaching SparkUIs")
+    val rootHandler = serverInfo.get.rootHandler
+    for (handler <- ui.handlers) {
+      if (handler.isStarted) {
+        handler.stop()
+      }
+      rootHandler.removeHandler(handler)
+    }
+  }
+
   def stop() {
-    server.foreach(_.stop())
+    assert(serverInfo.isDefined, "Attempted to stop a Master UI that was not initialized!")
+    serverInfo.get.server.stop()
   }
 }
 

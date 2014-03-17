@@ -504,7 +504,7 @@ private[spark] class BlockManager(
       blockId: BlockId,
       file: File,
       serializer: Serializer,
-      bufferSize: Int) : BlockObjectWriter = {
+      bufferSize: Int): BlockObjectWriter = {
     val compressStream: OutputStream => OutputStream = wrapForCompression(blockId, _)
     val syncWrites = conf.getBoolean("spark.shuffle.sync", false)
     new DiskBlockObjectWriter(blockId, file, serializer, bufferSize, compressStream, syncWrites)

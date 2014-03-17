@@ -61,18 +61,18 @@ private[spark] object UIUtils {
     <html>
       <head>
         <meta http-equiv="Content-type" content="text/html; charset=utf-8" />
-        <link rel="stylesheet" href={prependBaseUri(basePath, "/static/bootstrap.min.css")}
+        <link rel="stylesheet" href={prependBaseUri("/static/bootstrap.min.css")}
               type="text/css" />
-        <link rel="stylesheet" href={prependBaseUri(basePath, "/static/webui.css")}
+        <link rel="stylesheet" href={prependBaseUri("/static/webui.css")}
               type="text/css" />
-        <script src={prependBaseUri(basePath, "/static/sorttable.js")} ></script>
+        <script src={prependBaseUri("/static/sorttable.js")} ></script>
         <title>{appName} - {title}</title>
       </head>
       <body>
         <div class="navbar navbar-static-top">
           <div class="navbar-inner">
             <a href={prependBaseUri(basePath, "/")} class="brand">
-              <img src={prependBaseUri(basePath, "/static/spark-logo-77x50px-hd.png")} />
+              <img src={prependBaseUri("/static/spark-logo-77x50px-hd.png")} />
             </a>
             <ul class="nav">
               {jobs}

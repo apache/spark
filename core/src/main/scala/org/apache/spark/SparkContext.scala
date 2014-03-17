@@ -132,6 +132,9 @@ class SparkContext(
 
   if (master == "yarn-client") System.setProperty("SPARK_YARN_MODE", "true")
 
+  // An asynchronous listener bus for Spark events
+  private[spark] val listenerBus = new LiveListenerBus
+
   // Create the Spark execution environment (cache, map output tracker, etc)
   private[spark] val env = SparkEnv.create(
     conf,
@@ -139,7 +142,8 @@ class SparkContext(
     conf.get("spark.driver.host"),
     conf.get("spark.driver.port").toInt,
     isDriver = true,
-    isLocal = isLocal)
+    isLocal = isLocal,
+    listenerBus = listenerBus)
   SparkEnv.set(env)
 
   // Used to store a URL for each static file/jar together with the file's local timestamp
@@ -195,13 +199,26 @@ class SparkContext(
   }
   executorEnvs("SPARK_USER") = sparkUser
 
-  // An asynchronous listener bus for Spark events
-  private[spark] val listenerBus = new LiveListenerBus
-
   // Start the UI before posting events to listener bus, because the UI listens for Spark events
   private[spark] val ui = new SparkUI(this)
   ui.bind()
   ui.start()
+
+  // Optionally log SparkListenerEvents
+  private[spark] val eventLogger: Option[EventLoggingListener] = {
+    if (conf.getBoolean("spark.eventLog.enabled", false)) {
+      val logger = new EventLoggingListener(appName, conf)
+      listenerBus.addListener(logger)
+      Some(logger)
+    } else None
+  }
+
+  // Information needed to replay logged events, if any
+  private[spark] val eventLoggingInfo: Option[EventLoggingInfo] =
+    eventLogger.map { logger => Some(logger.info) }.getOrElse(None)
+
+  // At this point, all relevant SparkListeners have been registered, so begin releasing events
+  listenerBus.start()
 
   // Create and start the scheduler
   private[spark] var taskScheduler = SparkContext.createTaskScheduler(this, master)
@@ -211,7 +228,6 @@ class SparkContext(
   dagScheduler.start()
 
   postEnvironmentUpdate()
-  listenForBlockManagerUpdates()
 
   /** A default Hadoop Configuration for the Hadoop code (e.g. file systems) that we reuse. */
   val hadoopConfiguration = {
@@ -811,6 +827,7 @@ class SparkContext(
   /** Shut down the SparkContext. */
   def stop() {
     ui.stop()
+    eventLogger.foreach(_.stop())
     // Do this only if not stopped already - best case effort.
     // prevent NPE if stopped more than once.
     val dagSchedulerCopy = dagScheduler
@@ -1042,22 +1059,17 @@ class SparkContext(
   /** Register a new RDD, returning its RDD ID */
   private[spark] def newRddId(): Int = nextRddId.getAndIncrement()
 
-  /** Post the environment update event if the listener bus is ready */
+  /** Post the environment update event once the task scheduler is ready. */
   private def postEnvironmentUpdate() {
-    Option(listenerBus).foreach { bus =>
+    if (taskScheduler != null) {
       val schedulingMode = getSchedulingMode.toString
       val addedJarPaths = addedJars.keys.toSeq
       val addedFilePaths = addedFiles.keys.toSeq
       val environmentDetails =
         SparkEnv.environmentDetails(conf, schedulingMode, addedJarPaths, addedFilePaths)
       val environmentUpdate = SparkListenerEnvironmentUpdate(environmentDetails)
-      bus.post(environmentUpdate)
+      listenerBus.post(environmentUpdate)
     }
-  }
-
-  /** Start listening for block manager status update events */
-  private def listenForBlockManagerUpdates() {
-    env.blockManager.master.listener.map(_.setListenerBus(listenerBus))
   }
 
   /** Called by MetadataCleaner to clean up the persistentRdds map periodically */
