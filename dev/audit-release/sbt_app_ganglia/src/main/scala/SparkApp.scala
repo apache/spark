@@ -15,12 +15,25 @@
  * limitations under the License.
  */
 
-import sbt._
+package main.scala
 
-object SparkPluginDef extends Build {
-  lazy val root = Project("plugins", file(".")) dependsOn(junitXmlListener)
-  /* This is not published in a Maven repository, so we get it from GitHub directly */
-  lazy val junitXmlListener = uri(
-    "https://github.com/chenkelmann/junit_xml_listener.git#3f8029fbfda54dc7a68b1afd2f885935e1090016"
-  )
+import scala.util.Try
+
+import org.apache.spark.SparkContext
+import org.apache.spark.SparkContext._
+
+object SimpleApp {
+  def main(args: Array[String]) {
+    // Regression test for SPARK-1167: Remove metrics-ganglia from default build due to LGPL issue
+    val foundConsole = Try(Class.forName("org.apache.spark.metrics.sink.ConsoleSink")).isSuccess
+    val foundGanglia = Try(Class.forName("org.apache.spark.metrics.sink.GangliaSink")).isSuccess
+    if (!foundConsole) {
+      println("Console sink not loaded via spark-core")
+      System.exit(-1)
+    }
+    if (!foundGanglia) {
+      println("Ganglia sink not loaded via spark-ganglia-lgpl")
+      System.exit(-1)
+    }
+  }
 }

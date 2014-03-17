@@ -18,6 +18,7 @@
 package org.apache.spark
 
 import org.apache.spark.rdd.RDD
+import org.apache.spark.serializer.Serializer
 
 /**
  * Base class for dependencies.
@@ -43,12 +44,13 @@ abstract class NarrowDependency[T](rdd: RDD[T]) extends Dependency(rdd) {
  * Represents a dependency on the output of a shuffle stage.
  * @param rdd the parent RDD
  * @param partitioner partitioner used to partition the shuffle output
- * @param serializerClass class name of the serializer to use
+ * @param serializer [[Serializer]] to use. If set to null, the default serializer, as specified
+ *                  by `spark.serializer` config option, will be used.
  */
 class ShuffleDependency[K, V](
     @transient rdd: RDD[_ <: Product2[K, V]],
     val partitioner: Partitioner,
-    val serializerClass: String = null)
+    val serializer: Serializer = null)
   extends Dependency(rdd.asInstanceOf[RDD[Product2[K, V]]]) {
 
   val shuffleId: Int = rdd.context.newShuffleId()

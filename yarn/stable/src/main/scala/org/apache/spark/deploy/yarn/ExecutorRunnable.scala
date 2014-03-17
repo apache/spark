@@ -17,12 +17,10 @@
 
 package org.apache.spark.deploy.yarn
 
-import java.net.URI
 import java.nio.ByteBuffer
 import java.security.PrivilegedExceptionAction
 
 import scala.collection.JavaConversions._
-import scala.collection.mutable.HashMap
 
 import org.apache.hadoop.conf.Configuration
 import org.apache.hadoop.io.DataOutputBuffer
@@ -30,33 +28,37 @@ import org.apache.hadoop.net.NetUtils
 import org.apache.hadoop.security.UserGroupInformation
 import org.apache.hadoop.yarn.api._
 import org.apache.hadoop.yarn.api.records._
+import org.apache.hadoop.yarn.api.records.impl.pb.ProtoUtils
 import org.apache.hadoop.yarn.api.protocolrecords._
+import org.apache.hadoop.yarn.client.api.NMClient
 import org.apache.hadoop.yarn.conf.YarnConfiguration
 import org.apache.hadoop.yarn.ipc.YarnRPC
-import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records, ProtoUtils}
+import org.apache.hadoop.yarn.util.{Apps, ConverterUtils, Records}
 
 import org.apache.spark.{SparkConf, Logging}
 
 
-class WorkerRunnable(
+class ExecutorRunnable(
     container: Container,
     conf: Configuration,
     spConf: SparkConf,
     masterAddress: String,
     slaveId: String,
     hostname: String,
-    workerMemory: Int,
-    workerCores: Int) 
-  extends Runnable with WorkerRunnableUtil with Logging {
+    executorMemory: Int,
+    executorCores: Int)
+  extends Runnable with ExecutorRunnableUtil with Logging {
 
   var rpc: YarnRPC = YarnRPC.create(conf)
-  var cm: ContainerManager = _
+  var nmClient: NMClient = _
   val sparkConf = spConf
   val yarnConf: YarnConfiguration = new YarnConfiguration(conf)
 
   def run = {
-    logInfo("Starting Worker Container")
-    cm = connectToCM
+    logInfo("Starting Executor Container")
+    nmClient = NMClient.createNMClient()
+    nmClient.init(yarnConf)
+    nmClient.start()
     startContainer
   }
 
@@ -66,52 +68,23 @@ class WorkerRunnable(
     val ctx = Records.newRecord(classOf[ContainerLaunchContext])
       .asInstanceOf[ContainerLaunchContext]
 
-    ctx.setContainerId(container.getId())
-    ctx.setResource(container.getResource())
     val localResources = prepareLocalResources
     ctx.setLocalResources(localResources)
 
-    val env = prepareEnvironment
     ctx.setEnvironment(env)
-
-    ctx.setUser(UserGroupInformation.getCurrentUser().getShortUserName())
 
     val credentials = UserGroupInformation.getCurrentUser().getCredentials()
     val dob = new DataOutputBuffer()
     credentials.writeTokenStorageToStream(dob)
-    ctx.setContainerTokens(ByteBuffer.wrap(dob.getData()))
+    ctx.setTokens(ByteBuffer.wrap(dob.getData()))
 
-    val commands = prepareCommand(masterAddress, slaveId, hostname, workerMemory, workerCores)
-    logInfo("Setting up worker with commands: " + commands)
+    val commands = prepareCommand(masterAddress, slaveId, hostname, executorMemory, executorCores)
+
+    logInfo("Setting up executor with commands: " + commands)
     ctx.setCommands(commands)
 
     // Send the start request to the ContainerManager
-    val startReq = Records.newRecord(classOf[StartContainerRequest])
-    .asInstanceOf[StartContainerRequest]
-    startReq.setContainerLaunchContext(ctx)
-    cm.startContainer(startReq)
-  }
-
-  def connectToCM: ContainerManager = {
-    val cmHostPortStr = container.getNodeId().getHost() + ":" + container.getNodeId().getPort()
-    val cmAddress = NetUtils.createSocketAddr(cmHostPortStr)
-    logInfo("Connecting to ContainerManager at " + cmHostPortStr)
-
-    // Use doAs and remoteUser here so we can add the container token and not pollute the current
-    // users credentials with all of the individual container tokens
-    val user = UserGroupInformation.createRemoteUser(container.getId().toString())
-    val containerToken = container.getContainerToken()
-    if (containerToken != null) {
-      user.addToken(ProtoUtils.convertFromProtoFormat(containerToken, cmAddress))
-    }
-
-    val proxy = user
-        .doAs(new PrivilegedExceptionAction[ContainerManager] {
-          def run: ContainerManager = {
-            rpc.getProxy(classOf[ContainerManager], cmAddress, conf).asInstanceOf[ContainerManager]
-          }
-        })
-    proxy
+    nmClient.startContainer(container, ctx)
   }
 
 }
