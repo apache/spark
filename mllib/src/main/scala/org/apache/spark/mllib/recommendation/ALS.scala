@@ -220,6 +220,8 @@ class ALS private (
       }
     }
 
+    // The last `products` will be used twice. One to generate the last `users` and the other to
+    // generate `productsOut`. So we cache it for better performance.
     products.persist()
 
     // Flatten and cache the two final RDDs to un-block them
