@@ -17,7 +17,8 @@
 
 package org.apache.spark.api.java
 
-import java.util.{Comparator, List => JList}
+import java.util.{Comparator, Iterator => JIterator, List => JList}
+import java.lang.{Iterable => JIterable}
 
 import scala.Tuple2
 import scala.collection.JavaConversions._
@@ -280,6 +281,21 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     val arr: java.util.Collection[T] = rdd.collect().toSeq
     new java.util.ArrayList(arr)
   }
+
+  /**
+   * Return a Stream that contains all of the elements in this RDD.
+   *
+   * In case of iterating it consumes memory as the biggest partition in cluster.
+   */
+  def toLocallyIterable(): JIterable[T] = {
+    new JIterable[T](){
+      def iterator(): JIterator[T] =  {
+        import scala.collection.JavaConversions._
+        asJavaIterator(rdd.toLocallyIterable.iterator)
+      }
+    }
+  }
+
 
   /**
    * Return an array that contains all of the elements in this RDD.

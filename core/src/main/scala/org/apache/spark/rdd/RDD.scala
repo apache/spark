@@ -668,11 +668,13 @@ abstract class RDD[T: ClassTag](
    *
    * In case of iterating it consumes memory as the biggest partition in cluster.
    */
-  def toStream(): Stream[T] = {
-    def collectPartition(p: Int): Array[T] = sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
+  def toLocallyIterable: Stream[T] = {
+    def collectPartition(p: Int): Array[T] = {
+      sc.runJob(this, (iter: Iterator[T]) => iter.toArray, Seq(p), allowLocal = false).head
+    }
     var buffer = Stream.empty[T]
     for (p <- 0 until this.partitions.length) {
-      buffer = buffer #::: {
+      buffer = buffer append {
         collectPartition(p).toStream
       }
     }
