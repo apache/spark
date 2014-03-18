@@ -268,6 +268,7 @@ class RDD(object):
         >>> sc.parallelize(range(0, 100)).sample(False, 0.1, 2).collect() #doctest: +SKIP
         [2, 3, 20, 21, 24, 41, 42, 66, 67, 89, 90, 98]
         """
+        assert fraction >= 0.0, "Invalid fraction value: %s" % fraction
         return self.mapPartitionsWithIndex(RDDSampler(withReplacement, fraction, seed).func, True)
 
     # this is ported from scala/spark/RDD.scala
@@ -287,6 +288,9 @@ class RDD(object):
 
         if (num < 0):
             raise ValueError
+
+        if (initialCount == 0):
+            return list()
 
         if initialCount > sys.maxint - 1:
             maxSelected = sys.maxint - 1
@@ -567,7 +571,26 @@ class RDD(object):
         return reduce(op, vals, zeroValue)
 
     # TODO: aggregate
+        
 
+    def max(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).max()
+        43.0
+        """
+        return self.reduce(max)
+
+    def min(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).min()
+        1.0
+        """
+        return self.reduce(min)
+    
     def sum(self):
         """
         Add up the elements in this RDD.

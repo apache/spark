@@ -310,6 +310,7 @@ abstract class RDD[T: ClassTag](
    * Return a sampled subset of this RDD.
    */
   def sample(withReplacement: Boolean, fraction: Double, seed: Int): RDD[T] = {
+    require(fraction >= 0.0, "Invalid fraction value: " + fraction)
     if (withReplacement) {
       new PartitionwiseSampledRDD[T, T](this, new PoissonSampler[T](fraction), seed)
     } else {
@@ -344,6 +345,10 @@ abstract class RDD[T: ClassTag](
       throw new IllegalArgumentException("Negative number of elements requested")
     }
 
+    if (initialCount == 0) {
+      return new Array[T](0)
+    }
+
     if (initialCount > Integer.MAX_VALUE - 1) {
       maxSelected = Integer.MAX_VALUE - 1
     } else {
@@ -362,7 +367,7 @@ abstract class RDD[T: ClassTag](
     var samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
 
     // If the first sample didn't turn out large enough, keep trying to take samples;
-    // this shouldn't happen often because we use a big multiplier for thei initial size
+    // this shouldn't happen often because we use a big multiplier for the initial size
     while (samples.length < total) {
       samples = this.sample(withReplacement, fraction, rand.nextInt()).collect()
     }
@@ -950,6 +955,18 @@ abstract class RDD[T: ClassTag](
    * @return an array of top elements
    */
   def takeOrdered(num: Int)(implicit ord: Ordering[T]): Array[T] = top(num)(ord.reverse)
+
+  /**
+   * Returns the max of this RDD as defined by the implicit Ordering[T].
+   * @return the maximum element of the RDD
+   * */
+  def max()(implicit ord: Ordering[T]):T = this.reduce(ord.max)
+
+  /**
+   * Returns the min of this RDD as defined by the implicit Ordering[T].
+   * @return the minimum element of the RDD
+   * */
+  def min()(implicit ord: Ordering[T]):T = this.reduce(ord.min)
 
   /**
    * Save this RDD as a text file, using string representations of elements.

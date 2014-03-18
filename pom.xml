@@ -127,7 +127,18 @@
     <repository>
       <id>maven-repo</id> <!-- This should be at top, it makes maven try the central repo first and then others and hence faster dep resolution -->
       <name>Maven Repository</name>
-      <url>http://repo.maven.apache.org/maven2</url>
+      <url>https://repo.maven.apache.org/maven2</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>apache-repo</id>
+      <name>Apache Repository</name>
+      <url>https://repository.apache.org/content/repositories/releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -138,7 +149,18 @@
     <repository>
       <id>jboss-repo</id>
       <name>JBoss Repository</name>
-      <url>http://repository.jboss.org/nexus/content/repositories/releases</url>
+      <url>https://repository.jboss.org/nexus/content/repositories/releases</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
+    </repository>
+    <repository>
+      <id>mqtt-repo</id>
+      <name>MQTT Repository</name>
+      <url>https://repo.eclipse.org/content/repositories/paho-releases</url>
       <releases>
         <enabled>true</enabled>
       </releases>
@@ -150,6 +172,12 @@
       <id>cloudera-repo</id>
       <name>Cloudera Repository</name>
       <url>https://repository.cloudera.com/artifactory/cloudera-repos</url>
+      <releases>
+        <enabled>true</enabled>
+      </releases>
+      <snapshots>
+        <enabled>false</enabled>
+      </snapshots>
     </repository>
   </repositories>
 
@@ -158,22 +186,22 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-util</artifactId>
-        <version>9.1.3.v20140225</version>
+        <version>7.6.8.v20121106</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-security</artifactId>
-        <version>9.1.3.v20140225</version>
+        <version>7.6.8.v20121106</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-plus</artifactId>
-        <version>9.1.3.v20140225</version>
+        <version>7.6.8.v20121106</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
-        <version>9.1.3.v20140225</version>
+        <version>7.6.8.v20121106</version>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>
