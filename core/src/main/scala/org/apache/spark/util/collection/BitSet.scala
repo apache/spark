@@ -64,7 +64,7 @@ class BitSet(numBits: Int) extends Serializable {
   }
 
   /**
-   * Compute the bit-wise OR of the two sets  returning the
+   * Compute the bit-wise OR of the two sets returning the
    * result.
    */
   def |(other: BitSet): BitSet = {
