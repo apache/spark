@@ -447,21 +447,20 @@ class ALS private (
         dspr(1.0, x, tempXtX)
         val (us, rs) = inLinkBlock.ratingsForBlock(productBlock)(p)
         for (i <- 0 until us.length) {
-          implicitPrefs match {
-            case false =>
-              userXtX(us(i)).addi(tempXtX)
-              SimpleBlas.axpy(rs(i), x, userXy(us(i)))
-            case true =>
-              // Extension to the original paper to handle rs(i) < 0. confidence is a function
-              // of |rs(i)| instead so that it is never negative:
-              val confidence = 1 + alpha * abs(rs(i))
-              SimpleBlas.axpy(confidence - 1.0, tempXtX, userXtX(us(i)))
-              // For rs(i) < 0, the corresponding entry in P is 0 now, not 1 -- negative rs(i)
-              // means we try to reconstruct 0. We add terms only where P = 1, so, term below
-              // is now only added for rs(i) > 0:
-              if (rs(i) > 0) {
-                SimpleBlas.axpy(confidence, x, userXy(us(i)))
-              }
+          if (implicitPrefs) {
+            // Extension to the original paper to handle rs(i) < 0. confidence is a function
+            // of |rs(i)| instead so that it is never negative:
+            val confidence = 1 + alpha * abs(rs(i))
+            SimpleBlas.axpy(confidence - 1.0, tempXtX, userXtX(us(i)))
+            // For rs(i) < 0, the corresponding entry in P is 0 now, not 1 -- negative rs(i)
+            // means we try to reconstruct 0. We add terms only where P = 1, so, term below
+            // is now only added for rs(i) > 0:
+            if (rs(i) > 0) {
+              SimpleBlas.axpy(confidence, x, userXy(us(i)))
+            }
+          } else {
+            userXtX(us(i)).addi(tempXtX)
+            SimpleBlas.axpy(rs(i), x, userXy(us(i)))
           }
         }
       }
@@ -474,9 +473,10 @@ class ALS private (
       // Add regularization
       (0 until rank).foreach(i => fullXtX.data(i*rank + i) += lambda)
       // Solve the resulting matrix, which is symmetric and positive-definite
-      implicitPrefs match {
-        case false => Solve.solvePositive(fullXtX, userXy(index)).data
-        case true => Solve.solvePositive(fullXtX.addi(YtY.get.value), userXy(index)).data
+      if (implicitPrefs) {
+        Solve.solvePositive(fullXtX.addi(YtY.get.value), userXy(index)).data
+      } else {
+        Solve.solvePositive(fullXtX, userXy(index)).data
       }
     }
   }
