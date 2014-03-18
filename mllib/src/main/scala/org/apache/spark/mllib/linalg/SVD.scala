@@ -218,7 +218,8 @@ object SVD {
     val (u, sigma, v) = denseSVD(matrix.rows.map(_.data), k)
     
     // prep u for returning
-    val retU = TallSkinnyDenseMatrix(u.zip(rowIndices).map{ case (row, i) => MatrixRow(i, row) }, m, k)
+    val retU = TallSkinnyDenseMatrix(u.zip(rowIndices).map{
+                case (row, i) => MatrixRow(i, row) }, m, k)
     
     if(computeU) {
       TallSkinnyMatrixSVD(retU, sigma, v)
