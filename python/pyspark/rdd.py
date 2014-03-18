@@ -164,6 +164,10 @@ class RDD(object):
     def map(self, f, preservesPartitioning=False):
         """
         Return a new RDD containing the distinct elements in this RDD.
+
+        >>> rdd = sc.parallelize(["b", "a", "c"])
+        >>> sorted(rdd.map(lambda x: (x, 1)).collect())
+        [('a', 1), ('b', 1), ('c', 1)]
         """
         def func(split, iterator): return imap(f, iterator)
         return PipelinedRDD(self, func, preservesPartitioning)
