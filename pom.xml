@@ -186,22 +186,22 @@
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-util</artifactId>
-        <version>9.1.3.v20140225</version>
+        <version>7.6.8.v20121106</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-security</artifactId>
-        <version>9.1.3.v20140225</version>
+        <version>7.6.8.v20121106</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-plus</artifactId>
-        <version>9.1.3.v20140225</version>
+        <version>7.6.8.v20121106</version>
       </dependency>
       <dependency>
         <groupId>org.eclipse.jetty</groupId>
         <artifactId>jetty-server</artifactId>
-        <version>9.1.3.v20140225</version>
+        <version>7.6.8.v20121106</version>
       </dependency>
       <dependency>
         <groupId>com.google.guava</groupId>

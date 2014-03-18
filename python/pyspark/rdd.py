@@ -571,7 +571,26 @@ class RDD(object):
         return reduce(op, vals, zeroValue)
 
     # TODO: aggregate
+        
 
+    def max(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).max()
+        43.0
+        """
+        return self.reduce(max)
+
+    def min(self):
+        """
+        Find the maximum item in this RDD.
+
+        >>> sc.parallelize([1.0, 5.0, 43.0, 10.0]).min()
+        1.0
+        """
+        return self.reduce(min)
+    
     def sum(self):
         """
         Add up the elements in this RDD.
