@@ -20,7 +20,7 @@ package org.apache.spark
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
 
-import scala.collection.mutable.{HashSet, Map}
+import scala.collection.mutable.{HashSet, HashMap, Map}
 import scala.concurrent.Await
 
 import akka.actor._
@@ -34,6 +34,7 @@ private[spark] case class GetMapOutputStatuses(shuffleId: Int)
   extends MapOutputTrackerMessage
 private[spark] case object StopMapOutputTracker extends MapOutputTrackerMessage
 
+/** Actor class for MapOutputTrackerMaster */
 private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster)
   extends Actor with Logging {
   def receive = {
@@ -50,7 +51,7 @@ private[spark] class MapOutputTrackerMasterActor(tracker: MapOutputTrackerMaster
 }
 
 /**
- * Class that keeps track of the location of the location of the map output of
+ * Class that keeps track of the location of the map output of
  * a stage. This is abstract because different versions of MapOutputTracker
  * (driver and worker) use different HashMap to store its metadata.
  */
@@ -58,20 +59,27 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
 
   private val timeout = AkkaUtils.askTimeout(conf)
 
-  // Set to the MapOutputTrackerActor living on the driver
+  /** Set to the MapOutputTrackerActor living on the driver */
   var trackerActor: ActorRef = _
 
   /** This HashMap needs to have different storage behavior for driver and worker */
   protected val mapStatuses: Map[Int, Array[MapStatus]]
 
-  // Incremented every time a fetch fails so that client nodes know to clear
-  // their cache of map output locations if this happens.
+  /**
+   * Incremented every time a fetch fails so that client nodes know to clear
+   * their cache of map output locations if this happens.
+   */
   protected var epoch: Long = 0
   protected val epochLock = new java.lang.Object
 
-  // Send a message to the trackerActor and get its result within a default timeout, or
-  // throw a SparkException if this fails.
-  private def askTracker(message: Any): Any = {
+  /** Remembers which map output locations are currently being fetched on a worker */
+  private val fetching = new HashSet[Int]
+
+  /**
+   * Send a message to the trackerActor and get its result within a default timeout, or
+   * throw a SparkException if this fails.
+   */
+  protected def askTracker(message: Any): Any = {
     try {
       val future = trackerActor.ask(message)(timeout)
       Await.result(future, timeout)
@@ -81,17 +89,17 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  // Send a one-way message to the trackerActor, to which we expect it to reply with true.
-  private def communicate(message: Any) {
+  /** Send a one-way message to the trackerActor, to which we expect it to reply with true. */
+  protected def sendTracker(message: Any) {
     if (askTracker(message) != true) {
       throw new SparkException("Error reply received from MapOutputTracker")
     }
   }
 
-  // Remembers which map output locations are currently being fetched on a worker
-  private val fetching = new HashSet[Int]
-
-  // Called on possibly remote nodes to get the server URIs and output sizes for a given shuffle
+  /**
+   * Called from executors to get the server URIs and
+   * output sizes of the map outputs of a given shuffle
+   */
   def getServerStatuses(shuffleId: Int, reduceId: Int): Array[(BlockManagerId, Long)] = {
     val statuses = mapStatuses.get(shuffleId).orNull
     if (statuses == null) {
@@ -150,22 +158,18 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
     }
   }
 
-  def stop() {
-    communicate(StopMapOutputTracker)
-    mapStatuses.clear()
-    trackerActor = null
-  }
-
-  // Called to get current epoch number
+  /** Called to get current epoch number */
   def getEpoch: Long = {
     epochLock.synchronized {
       return epoch
     }
   }
 
-  // Called on workers to update the epoch number, potentially clearing old outputs
-  // because of a fetch failure. (Each worker task calls this with the latest epoch
-  // number on the master at the time it was created.)
+  /**
+   * Called from executors to update the epoch number, potentially clearing old outputs
+   * because of a fetch failure. Each worker task calls this with the latest epoch
+   * number on the master at the time it was created.
+   */
   def updateEpoch(newEpoch: Long) {
     epochLock.synchronized {
       if (newEpoch > epoch) {
@@ -175,24 +179,17 @@ private[spark] abstract class MapOutputTracker(conf: SparkConf) extends Logging 
       }
     }
   }
-}
 
-/**
- * MapOutputTracker for the workers. This uses BoundedHashMap to keep track of
- * a limited number of most recently used map output information.
- */
-private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
+  /** Unregister shuffle data */
+  def unregisterShuffle(shuffleId: Int) {
+    mapStatuses.remove(shuffleId)
+  }
 
-  /**
-   * Bounded HashMap for storing serialized statuses in the worker. This allows
-   * the HashMap stay bounded in memory-usage. Things dropped from this HashMap will be
-   * automatically repopulated by fetching them again from the driver. Its okay to
-   * keep the cache size small as it unlikely that there will be a very large number of
-   * stages active simultaneously in the worker.
-   */
-  protected val mapStatuses = new BoundedHashMap[Int, Array[MapStatus]](
-    conf.getInt("spark.mapOutputTracker.cacheSize", 100), true
-  )
+  def stop() {
+    sendTracker(StopMapOutputTracker)
+    mapStatuses.clear()
+    trackerActor = null
+  }
 }
 
 /**
@@ -202,7 +199,7 @@ private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTr
 private[spark] class MapOutputTrackerMaster(conf: SparkConf)
   extends MapOutputTracker(conf) {
 
-  // Cache a serialized version of the output statuses for each shuffle to send them out faster
+  /** Cache a serialized version of the output statuses for each shuffle to send them out faster */
   private var cacheEpoch = epoch
 
   /**
@@ -211,7 +208,6 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
    * by TTL-based cleaning (if set). Other than these two
    * scenarios, nothing should be dropped from this HashMap.
    */
-
   protected val mapStatuses = new TimeStampedHashMap[Int, Array[MapStatus]]()
   private val cachedSerializedStatuses = new TimeStampedHashMap[Int, Array[Byte]]()
 
@@ -232,6 +228,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
   }
 
+  /** Register multiple map output information for the given shuffle */
   def registerMapOutputs(shuffleId: Int, statuses: Array[MapStatus], changeEpoch: Boolean = false) {
     mapStatuses.put(shuffleId, Array[MapStatus]() ++ statuses)
     if (changeEpoch) {
@@ -239,6 +236,7 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
   }
 
+  /** Unregister map output information of the given shuffle, mapper and block manager */
   def unregisterMapOutput(shuffleId: Int, mapId: Int, bmAddress: BlockManagerId) {
     val arrayOpt = mapStatuses.get(shuffleId)
     if (arrayOpt.isDefined && arrayOpt.get != null) {
@@ -254,9 +252,15 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     }
   }
 
-  def unregisterShuffle(shuffleId: Int) {
+  /** Unregister shuffle data */
+  override def unregisterShuffle(shuffleId: Int) {
     mapStatuses.remove(shuffleId)
     cachedSerializedStatuses.remove(shuffleId)
+  }
+
+  /** Check if the given shuffle is being tracked */
+  def containsShuffle(shuffleId: Int): Boolean = {
+    cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
   }
 
   def incrementEpoch() {
@@ -295,24 +299,24 @@ private[spark] class MapOutputTrackerMaster(conf: SparkConf)
     bytes
   }
 
-  def contains(shuffleId: Int): Boolean = {
-    cachedSerializedStatuses.contains(shuffleId) || mapStatuses.contains(shuffleId)
-  }
-
   override def stop() {
     super.stop()
     metadataCleaner.cancel()
     cachedSerializedStatuses.clear()
   }
 
-  override def updateEpoch(newEpoch: Long) {
-    // This might be called on the MapOutputTrackerMaster if we're running in local mode.
-  }
-
   protected def cleanup(cleanupTime: Long) {
     mapStatuses.clearOldValues(cleanupTime)
     cachedSerializedStatuses.clearOldValues(cleanupTime)
   }
+}
+
+/**
+ * MapOutputTracker for the workers, which fetches map output information from the driver's
+ * MapOutputTrackerMaster.
+ */
+private[spark] class MapOutputTrackerWorker(conf: SparkConf) extends MapOutputTracker(conf) {
+  protected val mapStatuses = new HashMap[Int, Array[MapStatus]]
 }
 
 private[spark] object MapOutputTracker {

@@ -25,7 +25,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val rdd = newRDD.persist()
     rdd.count()
     val tester = new CleanerTester(sc, rddIds = Seq(rdd.id))
-    cleaner.cleanRDD(rdd.id)
+    cleaner.scheduleRDDCleanup(rdd.id)
     tester.assertCleanup
   }
 
@@ -33,7 +33,7 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     val rdd = newShuffleRDD
     rdd.count()
     val tester = new CleanerTester(sc, shuffleIds = Seq(0))
-    cleaner.cleanShuffle(0)
+    cleaner.scheduleShuffleCleanup(0)
     tester.assertCleanup
   }
 
@@ -106,6 +106,8 @@ class ContextCleanerSuite extends FunSuite with BeforeAndAfter with LocalSparkCo
     postGCTester.assertCleanup
   }
 
+  // TODO (TD): Test that cleaned up RDD and shuffle can be recomputed again correctly.
+
   def newRDD = sc.makeRDD(1 to 10)
 
   def newPairRDD = newRDD.map(_ -> 1)
@@ -173,9 +175,9 @@ class CleanerTester(sc: SparkContext, rddIds: Seq[Int] = Nil, shuffleIds: Seq[In
       "One or more RDDs' blocks cannot be found in block manager, cannot start cleaner test")
 
     // Verify the shuffle ids are registered and blocks are present
-    assert(shuffleIds.forall(mapOutputTrackerMaster.contains),
+    assert(shuffleIds.forall(mapOutputTrackerMaster.containsShuffle),
       "One or more shuffles have not been registered cannot start cleaner test")
-    assert(shuffleIds.forall(shuffleId => diskBlockManager.contains(shuffleBlockId(shuffleId))),
+    assert(shuffleIds.forall(shuffleId => diskBlockManager.containsBlock(shuffleBlockId(shuffleId))),
       "One or more shuffles' blocks cannot be found in disk manager, cannot start cleaner test")
   }
 
@@ -185,8 +187,8 @@ class CleanerTester(sc: SparkContext, rddIds: Seq[Int] = Nil, shuffleIds: Seq[In
     assert(rddIds.forall(rddId => !blockManager.master.contains(rddBlockId(rddId))))
 
     // Verify all the shuffle have been deregistered and cleaned up
-    assert(shuffleIds.forall(!mapOutputTrackerMaster.contains(_)))
-    assert(shuffleIds.forall(shuffleId => !diskBlockManager.contains(shuffleBlockId(shuffleId))))
+    assert(shuffleIds.forall(!mapOutputTrackerMaster.containsShuffle(_)))
+    assert(shuffleIds.forall(shuffleId => !diskBlockManager.containsBlock(shuffleBlockId(shuffleId))))
   }
 
   private def uncleanedResourcesToString = {

@@ -20,6 +20,7 @@ package org.apache.spark
 import scala.collection.mutable.{ArrayBuffer, SynchronizedBuffer}
 
 import java.util.concurrent.{LinkedBlockingQueue, TimeUnit}
+import org.apache.spark.storage.StorageLevel
 
 /** Listener class used for testing when any item has been cleaned by the Cleaner class */
 private[spark] trait CleanerListener {
@@ -61,19 +62,19 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   }
 
   /**
-   * Clean RDD data. Do not perform any time or resource intensive
+   * Schedule cleanup of RDD data. Do not perform any time or resource intensive
    * computation in this function as this is called from a finalize() function.
    */
-  def cleanRDD(rddId: Int) {
+  def scheduleRDDCleanup(rddId: Int) {
     enqueue(CleanRDD(rddId))
     logDebug("Enqueued RDD " + rddId + " for cleaning up")
   }
 
   /**
-   * Clean shuffle data. Do not perform any time or resource intensive
+   * Schedule cleanup of shuffle data. Do not perform any time or resource intensive
    * computation in this function as this is called from a finalize() function.
    */
-  def cleanShuffle(shuffleId: Int) {
+  def scheduleShuffleCleanup(shuffleId: Int) {
     enqueue(CleanShuffle(shuffleId))
     logDebug("Enqueued shuffle " + shuffleId + " for cleaning up")
   }
@@ -81,6 +82,13 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   /** Attach a listener object to get information of when objects are cleaned. */
   def attachListener(listener: CleanerListener) {
     listeners += listener
+  }
+
+  /** Unpersists RDD and remove all blocks for it from memory and disk. */
+  def unpersistRDD(rddId: Int, blocking: Boolean) {
+    logDebug("Unpersisted RDD " + rddId)
+    sc.env.blockManager.master.removeRdd(rddId, blocking)
+    sc.persistentRdds.remove(rddId)
   }
 
   /**
@@ -115,8 +123,7 @@ private[spark] class ContextCleaner(sc: SparkContext) extends Logging {
   private def doCleanRDD(rddId: Int) {
     try {
       logDebug("Cleaning RDD " + rddId)
-      blockManagerMaster.removeRdd(rddId, false)
-      sc.persistentRdds.remove(rddId)
+      unpersistRDD(rddId, false)
       listeners.foreach(_.rddCleaned(rddId))
       logInfo("Cleaned RDD " + rddId)
     } catch {

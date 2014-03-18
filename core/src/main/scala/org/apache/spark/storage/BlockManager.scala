@@ -29,7 +29,7 @@ import akka.actor.{ActorSystem, Cancellable, Props}
 import it.unimi.dsi.fastutil.io.{FastBufferedOutputStream, FastByteArrayOutputStream}
 import sun.nio.ch.DirectBuffer
 
-import org.apache.spark.{Logging, SparkConf, SparkEnv, SparkException, SecurityManager}
+import org.apache.spark._
 import org.apache.spark.io.CompressionCodec
 import org.apache.spark.network._
 import org.apache.spark.serializer.Serializer
@@ -48,8 +48,9 @@ private[spark] class BlockManager(
     val defaultSerializer: Serializer,
     maxMemory: Long,
     val conf: SparkConf,
-    securityManager: SecurityManager)
-  extends Logging {
+    securityManager: SecurityManager,
+    mapOutputTracker: MapOutputTracker
+  ) extends Logging {
 
   val shuffleBlockManager = new ShuffleBlockManager(this)
   val diskBlockManager = new DiskBlockManager(shuffleBlockManager,
@@ -89,7 +90,7 @@ private[spark] class BlockManager(
 
   val heartBeatFrequency = BlockManager.getHeartBeatFrequency(conf)
 
-  val slaveActor = actorSystem.actorOf(Props(new BlockManagerSlaveActor(this)),
+  val slaveActor = actorSystem.actorOf(Props(new BlockManagerSlaveActor(this, mapOutputTracker)),
     name = "BlockManagerActor" + BlockManager.ID_GENERATOR.next)
 
   // Pending reregistration action being executed asynchronously or null if none
@@ -123,9 +124,10 @@ private[spark] class BlockManager(
    * Construct a BlockManager with a memory limit set based on system properties.
    */
   def this(execId: String, actorSystem: ActorSystem, master: BlockManagerMaster,
-           serializer: Serializer, conf: SparkConf, securityManager: SecurityManager) = {
+      serializer: Serializer, conf: SparkConf, securityManager: SecurityManager,
+      mapOutputTracker: MapOutputTracker) = {
     this(execId, actorSystem, master, serializer, BlockManager.getMaxMemory(conf), conf, 
-      securityManager)
+      securityManager, mapOutputTracker)
   }
 
   /**

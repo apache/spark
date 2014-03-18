@@ -19,6 +19,7 @@ package org.apache.spark.storage
 
 import akka.actor.Actor
 
+import org.apache.spark.MapOutputTracker
 import org.apache.spark.storage.BlockManagerMessages._
 
 /**
@@ -26,7 +27,7 @@ import org.apache.spark.storage.BlockManagerMessages._
  * this is used to remove blocks from the slave's BlockManager.
  */
 private[storage]
-class BlockManagerSlaveActor(blockManager: BlockManager) extends Actor {
+class BlockManagerSlaveActor(blockManager: BlockManager, mapOutputTracker: MapOutputTracker) extends Actor {
   override def receive = {
 
     case RemoveBlock(blockId) =>
@@ -38,5 +39,8 @@ class BlockManagerSlaveActor(blockManager: BlockManager) extends Actor {
 
     case RemoveShuffle(shuffleId) =>
       blockManager.shuffleBlockManager.removeShuffle(shuffleId)
+      if (mapOutputTracker != null) {
+        mapOutputTracker.unregisterShuffle(shuffleId)
+      }
   }
 }

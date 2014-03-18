@@ -32,7 +32,6 @@ import org.apache.spark.executor.TaskMetrics
 import org.apache.spark.partial.{ApproximateActionListener, ApproximateEvaluator, PartialResult}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.storage.{BlockId, BlockManager, BlockManagerMaster, RDDBlockId}
-import org.apache.spark.util.{MetadataCleaner, MetadataCleanerType, TimeStampedHashMap}
 
 /**
  * The high-level scheduling layer that implements stage-oriented scheduling. It computes a DAG of
@@ -154,7 +153,7 @@ class DAGScheduler(
   val running = new HashSet[Stage] // Stages we are running right now
   val failed = new HashSet[Stage]  // Stages that must be resubmitted due to fetch failures
   // Missing tasks from each stage
-  val pendingTasks = new TimeStampedHashMap[Stage, HashSet[Task[_]]]
+  val pendingTasks = new HashMap[Stage, HashSet[Task[_]]]
 
   val activeJobs = new HashSet[ActiveJob]
   val resultStageToJob = new HashMap[Stage, ActiveJob]
@@ -266,7 +265,7 @@ class DAGScheduler(
     : Stage =
   {
     val stage = newStage(rdd, numTasks, Some(shuffleDep), jobId, callSite)
-    if (mapOutputTracker.contains(shuffleDep.shuffleId)) {
+    if (mapOutputTracker.containsShuffle(shuffleDep.shuffleId)) {
       val serLocs = mapOutputTracker.getSerializedMapOutputStatuses(shuffleDep.shuffleId)
       val locs = MapOutputTracker.deserializeMapStatuses(serLocs)
       for (i <- 0 until locs.size) {
@@ -397,6 +396,9 @@ class DAGScheduler(
               // data structures based on StageId
               stageIdToStage -= stageId
               stageIdToJobIds -= stageId
+
+              ShuffleMapTask.removeStage(stageId)
+              ResultTask.removeStage(stageId)
 
               logDebug("After removal of stage %d, remaining stages = %d"
                 .format(stageId, stageIdToStage.size))

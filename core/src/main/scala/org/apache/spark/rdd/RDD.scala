@@ -165,8 +165,7 @@ abstract class RDD[T: ClassTag](
    */
   def unpersist(blocking: Boolean = true): RDD[T] = {
     logInfo("Removing RDD " + id + " from persistence list")
-    sc.env.blockManager.master.removeRdd(id, blocking)
-    sc.persistentRdds.remove(id)
+    sc.cleaner.unpersistRDD(id, blocking)
     storageLevel = StorageLevel.NONE
     this
   }
@@ -1025,14 +1024,6 @@ abstract class RDD[T: ClassTag](
     checkpointData.flatMap(_.getCheckpointFile)
   }
 
-  def cleanup() {
-    logInfo("Cleanup called on RDD " + id)
-    sc.cleaner.cleanRDD(id)
-    dependencies.filter(_.isInstanceOf[ShuffleDependency[_, _]])
-                .map(_.asInstanceOf[ShuffleDependency[_, _]].shuffleId)
-                .foreach(sc.cleaner.cleanShuffle)
-  }
-
   // =======================================================================
   // Other internal methods and fields
   // =======================================================================
@@ -1114,14 +1105,14 @@ abstract class RDD[T: ClassTag](
 
   override def finalize() {
     try {
-      cleanup()
+      sc.cleaner.scheduleRDDCleanup(id)
     } catch {
       case t: Throwable =>
         // Paranoia - If logError throws error as well, report to stderr.
         try {
           logError("Error in finalize", t)
         } catch {
-          case _ =>
+          case _ : Throwable =>
             System.err.println("Error in finalize (and could not write to logError): " + t)
         }
     } finally {

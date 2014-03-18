@@ -60,7 +60,7 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
     val tracker = new MapOutputTrackerMaster(conf)
     tracker.trackerActor = actorSystem.actorOf(Props(new MapOutputTrackerMasterActor(tracker)))
     tracker.registerShuffle(10, 2)
-    assert(tracker.contains(10))
+    assert(tracker.containsShuffle(10))
     val compressedSize1000 = MapOutputTracker.compressSize(1000L)
     val compressedSize10000 = MapOutputTracker.compressSize(10000L)
     val size1000 = MapOutputTracker.decompressSize(compressedSize1000)
@@ -86,10 +86,10 @@ class MapOutputTrackerSuite extends FunSuite with LocalSparkContext {
       Array(compressedSize1000, compressedSize10000)))
     tracker.registerMapOutput(10, 1, new MapStatus(BlockManagerId("b", "hostB", 1000, 0),
       Array(compressedSize10000, compressedSize1000)))
-    assert(tracker.contains(10))
+    assert(tracker.containsShuffle(10))
     assert(tracker.getServerStatuses(10, 0).nonEmpty)
     tracker.unregisterShuffle(10)
-    assert(!tracker.contains(10))
+    assert(!tracker.containsShuffle(10))
     assert(tracker.getServerStatuses(10, 0).isEmpty)
   }
 

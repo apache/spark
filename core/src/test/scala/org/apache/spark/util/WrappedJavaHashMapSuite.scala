@@ -107,6 +107,8 @@ class WrappedJavaHashMapSuite extends FunSuite {
     }
     assert(map.internalJavaMap.get("k1").weakValue.get == null)
     assert(map.get("k1") === None)
+
+    // TODO (TD): Test clearing of null-value pairs
   }
 
   def testMap(hashMapConstructor: => Map[String, String]) {

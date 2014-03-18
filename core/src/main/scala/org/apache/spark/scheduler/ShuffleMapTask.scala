@@ -17,24 +17,22 @@
 
 package org.apache.spark.scheduler
 
-import scala.collection.mutable.HashMap
-
 import java.io._
 import java.util.zip.{GZIPInputStream, GZIPOutputStream}
+
+import scala.collection.mutable.HashMap
 
 import org.apache.spark._
 import org.apache.spark.executor.ShuffleWriteMetrics
 import org.apache.spark.rdd.{RDD, RDDCheckpointData}
 import org.apache.spark.storage._
-import org.apache.spark.util.BoundedHashMap
 
 private[spark] object ShuffleMapTask {
 
   // A simple map between the stage id to the serialized byte array of a task.
   // Served as a cache for task serialization because serialization can be
   // expensive on the master node if it needs to launch thousands of tasks.
-  val MAX_CACHE_SIZE = 100
-  val serializedInfoCache = new BoundedHashMap[Int, Array[Byte]](MAX_CACHE_SIZE, true)
+  private val serializedInfoCache = new HashMap[Int, Array[Byte]]
 
   def serializeInfo(stageId: Int, rdd: RDD[_], dep: ShuffleDependency[_,_]): Array[Byte] = {
     synchronized {
@@ -73,6 +71,10 @@ private[spark] object ShuffleMapTask {
     val objIn = new ObjectInputStream(in)
     val set = objIn.readObject().asInstanceOf[Array[(String, Long)]].toMap
     HashMap(set.toSeq: _*)
+  }
+
+  def removeStage(stageId: Int) {
+    serializedInfoCache.remove(stageId)
   }
 
   def clearCache() {
