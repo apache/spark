@@ -24,6 +24,6 @@ package org.apache.spark.mllib.linalg
  * @param S such that A = USV^T
  * @param V such that A = USV^T
  */
-case class DenseMatrixSVD(val U: DenseMatrix,
-                          val S: DenseMatrix,
-                          val V: DenseMatrix)
+case class TallSkinnyMatrixSVD(val U: TallSkinnyDenseMatrix,
+                               val S: Array[Double],
+                               val V: Array[Array[Double]])

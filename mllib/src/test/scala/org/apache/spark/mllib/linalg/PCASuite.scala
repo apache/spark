@@ -78,9 +78,9 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
                         (2,0,0.9553),  (2,1,-0.0649),  (2,2,0.2886))
     val realPCA = sc.makeRDD(realPCAArray.map(x => MatrixEntry(x._1, x._2, x._3)))
 
-    val coeffs = LAUtils.denseToSp(new PCA().computePCA(a, n))
+    val coeffs = new DoubleMatrix(new PCA().computePCA(a, n))
 
-    assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), getDenseMatrix(coeffs))  
+    assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), coeffs)  
   }
 
   test("sparse matrix full rank matrix pca") {
@@ -95,9 +95,9 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
                         (2,0,0.9553),  (2,1,-0.0649),  (2,2,0.2886))
     val realPCA = sc.makeRDD(realPCAArray.map(x => MatrixEntry(x._1, x._2, x._3)))
 
-    val coeffs = LAUtils.denseToSp(new PCA().computePCA(a, n))
+    val coeffs = new DoubleMatrix(new PCA().computePCA(a, n))
 
-    assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), getDenseMatrix(coeffs))
+    assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,n)), coeffs)
   }
 
   test("truncated matrix pca") {
@@ -113,9 +113,9 @@ class PCASuite extends FunSuite with BeforeAndAfterAll {
     val realPCA = sc.makeRDD(realPCAArray.map(x => MatrixEntry(x._1, x._2, x._3)))
 
     val k = 2
-    val coeffs = LAUtils.denseToSp(new PCA().computePCA(a, k))
+    val coeffs = new DoubleMatrix(new PCA().computePCA(a, k))
 
-    assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,k)), getDenseMatrix(coeffs))
+    assertMatrixEquals(getDenseMatrix(SparseMatrix(realPCA,n,k)), coeffs)
   }
 }
 

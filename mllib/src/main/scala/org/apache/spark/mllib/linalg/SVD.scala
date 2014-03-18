@@ -57,7 +57,7 @@ class SVD {
   /**
   * Compute SVD using the current set parameters
   */
-  def compute(matrix: DenseMatrix) : DenseMatrixSVD = {
+  def compute(matrix: TallSkinnyDenseMatrix) : TallSkinnyMatrixSVD = {
     SVD.denseSVD(matrix, k, computeU)
   }
 }
@@ -199,7 +199,8 @@ object SVD {
  * @param computeU gives the option of skipping the U computation
  * @return Three dense matrices: U, S, V such that A = USV^T
  */
- def denseSVD(matrix: DenseMatrix, k: Int, computeU: Boolean): DenseMatrixSVD = {
+ def denseSVD(matrix: TallSkinnyDenseMatrix, k: Int,
+              computeU: Boolean): TallSkinnyMatrixSVD = {
     val rows = matrix.rows
     val m = matrix.m
     val n = matrix.n
@@ -219,20 +220,12 @@ object SVD {
     val (u, sigma, v) = denseSVD(matrix.rows.map(_.data), k)
     
     // prep u for returning
-    val retU = DenseMatrix(u.zip(rowIndices).map{ case (row, i) => MatrixRow(i, row) }, m, k)
+    val retU = TallSkinnyDenseMatrix(u.zip(rowIndices).map{ case (row, i) => MatrixRow(i, row) }, m, k)
     
-    // prepare S for returning
-    val sparseS = DoubleMatrix.diag(new DoubleMatrix(sigma))
-    val retS = DenseMatrix(sc.makeRDD(Array.tabulate(k)(
-                i => MatrixRow(i, sparseS.getRow(i).toArray))), k, k)
-   
-    // prepare V for returning
-    val retV = DenseMatrix(sc.makeRDD(Array.tabulate(n)(i => MatrixRow(i, v(i)))), n, k)
- 
     if(computeU) {
-      DenseMatrixSVD(retU, retS, retV)
+      TallSkinnyMatrixSVD(retU, sigma, v)
     } else {
-      DenseMatrixSVD(null, retS, retV)
+      TallSkinnyMatrixSVD(null, sigma, v)
     }
  }
 

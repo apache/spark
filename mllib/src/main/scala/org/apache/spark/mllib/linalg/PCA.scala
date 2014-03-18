@@ -41,7 +41,14 @@ class PCA {
    /**
    * Compute PCA using the current set parameters
    */
-  def compute(matrix: DenseMatrix): DenseMatrix = {
+  def compute(matrix: TallSkinnyDenseMatrix): Array[Array[Double]] = {
+    computePCA(matrix, k)
+  }
+
+  /**
+  * Compute PCA using the current set parameters
+  */
+  def compute(matrix: RDD[Array[Double]]): Array[Array[Double]] = {
     computePCA(matrix, k)
   }
 
@@ -55,13 +62,13 @@ class PCA {
   * This function centers the data and uses the 
   * singular value decomposition (SVD) algorithm. 
   *
-  * All input and output is expected in DenseMatrix format
+  * All input and output is expected in TallSkinnyDenseMatrix format
   *
   * @param matrix dense matrix to perform pca on
   * @param k Recover k principal components
   * @return An nxk matrix of principal components
   */
-  def computePCA(matrix: DenseMatrix, k: Int): DenseMatrix = {
+  def computePCA(matrix: TallSkinnyDenseMatrix, k: Int): Array[Array[Double]] = {
     val m = matrix.m
     val n = matrix.n
     val sc = matrix.rows.sparkContext
@@ -70,9 +77,7 @@ class PCA {
       throw new IllegalArgumentException("Expecting a well-formed matrix")
     }
 
-    val v = computePCA(matrix.rows.map(_.data), k)
-    val retV = DenseMatrix(sc.makeRDD(Array.tabulate(n)(i => MatrixRow(i, v(i)))), n, k)   
-    retV
+    computePCA(matrix.rows.map(_.data), k)
   }
 
 
@@ -120,7 +125,7 @@ class PCA {
 
 /**
  * Top-level methods for calling Principal Component Analysis
- * NOTE: All matrices are DenseMatrix format
+ * NOTE: All matrices are TallSkinnyDenseMatrix format
  */
 object PCA {
   def main(args: Array[String]) {
@@ -145,7 +150,6 @@ object PCA {
     val u = new PCA().computePCA(LAUtils.spToDense(SparseMatrix(data, m, n)), k)
     
     println("Computed " + k + " principal vectors")
-    u.rows.saveAsTextFile(output_u)
     System.exit(0)
   }
 }

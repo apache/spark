@@ -27,4 +27,4 @@ import org.apache.spark.rdd.RDD
  * @param m number of rows
  * @param n number of columns
  */
-case class DenseMatrix(val rows: RDD[MatrixRow], val m: Int, val n: Int)
+case class TallSkinnyDenseMatrix(val rows: RDD[MatrixRow], val m: Int, val n: Int)

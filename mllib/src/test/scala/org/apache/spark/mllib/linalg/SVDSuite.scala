@@ -106,15 +106,15 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
 
     val decomposed = SVD.denseSVD(a, n, true)
     val u = LAUtils.denseToSp(decomposed.U)
-    val v = LAUtils.denseToSp(decomposed.V)
-    val s = LAUtils.denseToSp(decomposed.S)
+    val v = decomposed.V
+    val s = decomposed.S
 
     val densea = getDenseMatrix(LAUtils.denseToSp(a))
     val svd = Singular.sparseSVD(densea)
 
     val retu = getDenseMatrix(u)
-    val rets = getDenseMatrix(s)
-    val retv = getDenseMatrix(v)
+    val rets = DoubleMatrix.diag(new DoubleMatrix(s))
+    val retv = new DoubleMatrix(v)
 
 
     // check individual decomposition  

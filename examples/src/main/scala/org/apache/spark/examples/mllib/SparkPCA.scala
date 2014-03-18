@@ -53,6 +53,6 @@ object SparkPCA {
     // recover top principal component
     val coeffs = new PCA().computePCA(LAUtils.spToDense(SparseMatrix(data, m, n)), 1)
 
-    println("top principal component = " + coeffs.rows.toArray.mkString(", "))
+    println("top principal component = " + coeffs.mkString(", "))
   }
 }
