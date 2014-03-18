@@ -39,6 +39,39 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
     System.clearProperty("spark.akka.frameSize")
   }
 
+  test("basic creation and shutdown of LiveListenerBus") {
+    val counter = new BasicJobCounter
+    val bus = new LiveListenerBus
+    bus.addListener(counter)
+
+    // Listener bus hasn't started yet, so posting events should not increment counter
+    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
+    assert(counter.count === 0)
+
+    // Starting listener bus should flush all buffered events (asynchronously, hence the sleep)
+    bus.start()
+    Thread.sleep(1000)
+    assert(counter.count === 5)
+
+    // After listener bus has stopped, posting events should not increment counter
+    bus.stop()
+    (1 to 5).foreach { _ => bus.post(SparkListenerJobEnd(0, JobSucceeded)) }
+    assert(counter.count === 5)
+
+    // Listener bus must not be started twice
+    intercept[IllegalStateException] {
+      val bus = new LiveListenerBus
+      bus.start()
+      bus.start()
+    }
+
+    // ... or stopped before starting
+    intercept[IllegalStateException] {
+      val bus = new LiveListenerBus
+      bus.stop()
+    }
+  }
+
   test("basic creation of StageInfo") {
     val listener = new SaveStageAndTaskInfo
     sc.addSparkListener(listener)
@@ -205,6 +238,11 @@ class SparkListenerSuite extends FunSuite with LocalSparkContext with ShouldMatc
 
   def checkNonZeroAvg(m: Traversable[Long], msg: String) {
     assert(m.sum / m.size.toDouble > 0.0, msg)
+  }
+
+  class BasicJobCounter extends SparkListener {
+    var count = 0
+    override def onJobEnd(job: SparkListenerJobEnd) = count += 1
   }
 
   class SaveStageAndTaskInfo extends SparkListener {

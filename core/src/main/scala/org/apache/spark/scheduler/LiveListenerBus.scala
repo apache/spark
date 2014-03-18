@@ -21,7 +21,13 @@ import java.util.concurrent.LinkedBlockingQueue
 
 import org.apache.spark.Logging
 
-/** Asynchronously passes SparkListenerEvents to registered SparkListeners. */
+/**
+ * Asynchronously passes SparkListenerEvents to registered SparkListeners.
+ *
+ * Until start() is called, all posted events are only buffered. Only after this listener bus
+ * has started will events be actually propagated to all attached listeners. This listener bus
+ * is stopped when it receives a SparkListenerShutdown event, which is posted using stop().
+ */
 private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
 
   /* Cap the capacity of the SparkListenerEvent queue so we get an explicit error (rather than
@@ -29,15 +35,20 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
   private val EVENT_QUEUE_CAPACITY = 10000
   private val eventQueue = new LinkedBlockingQueue[SparkListenerEvent](EVENT_QUEUE_CAPACITY)
   private var queueFullErrorMessageLogged = false
+  private var started = false
 
   /**
-   * Create a new daemon thread to listen for events. Until this thread has started, all posted
-   * events are buffered. Only after this is called will the buffered events be released to all
-   * attached listeners.
+   * Start sending events to attached listeners.
    *
-   * This thread is stopped when it receives a SparkListenerShutdown event, using the stop method.
+   * This first sends out all buffered events posted before this listener bus has started, then
+   * listens for any additional events asynchronously while the listener bus is still running.
+   * This should only be called once.
    */
   def start() {
+    if (started) {
+      throw new IllegalStateException("Listener bus already started!")
+    }
+    started = true
     new Thread("SparkListenerBus") {
       setDaemon(true)
       override def run() {
@@ -81,5 +92,10 @@ private[spark] class LiveListenerBus extends SparkListenerBus with Logging {
     true
   }
 
-  def stop(): Unit = post(SparkListenerShutdown)
+  def stop() {
+    if (!started) {
+      throw new IllegalStateException("Attempted to stop a listener bus that has not yet started!")
+    }
+    post(SparkListenerShutdown)
+  }
 }

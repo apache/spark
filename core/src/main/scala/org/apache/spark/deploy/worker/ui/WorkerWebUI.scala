@@ -23,7 +23,7 @@ import org.eclipse.jetty.servlet.ServletContextHandler
 
 import org.apache.spark.Logging
 import org.apache.spark.deploy.worker.Worker
-import org.apache.spark.ui.{JettyUtils, ServerInfo, UIUtils}
+import org.apache.spark.ui.{JettyUtils, ServerInfo, SparkUI, UIUtils}
 import org.apache.spark.ui.JettyUtils._
 import org.apache.spark.util.{AkkaUtils, Utils}
 
@@ -201,6 +201,6 @@ class WorkerWebUI(val worker: Worker, val workDir: File, requestedPort: Option[I
 }
 
 private[spark] object WorkerWebUI {
-  val STATIC_RESOURCE_BASE = "org/apache/spark/ui"
+  val STATIC_RESOURCE_BASE = SparkUI.STATIC_RESOURCE_DIR
   val DEFAULT_PORT="8081"
 }

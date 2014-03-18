@@ -52,7 +52,7 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
       createServletHandler("/json",
         (request: HttpServletRequest) => indexPage.renderJson(request), master.securityMgr),
       createServletHandler("/",
-        (request: HttpServletRequest) => indexPage.render (request), master.securityMgr)
+        (request: HttpServletRequest) => indexPage.render(request), master.securityMgr)
     )
   }
 
@@ -100,5 +100,5 @@ class MasterWebUI(val master: Master, requestedPort: Int) extends Logging {
 }
 
 private[spark] object MasterWebUI {
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui"
+  val STATIC_RESOURCE_DIR = SparkUI.STATIC_RESOURCE_DIR
 }
