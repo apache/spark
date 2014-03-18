@@ -20,16 +20,17 @@ package org.apache.spark.deploy.master
 import scala.collection.JavaConversions._
 
 import akka.serialization.Serialization
-import org.apache.zookeeper.CreateMode
 
+import org.apache.curator.framework.CuratorFramework
 import org.apache.spark.{Logging, SparkConf}
+import org.apache.zookeeper.CreateMode
 
 class ZooKeeperPersistenceEngine(serialization: Serialization, conf: SparkConf)
   extends PersistenceEngine
   with Logging
 {
   val WORKING_DIR = conf.get("spark.deploy.zookeeper.dir", "/spark") + "/master_status"
-  val zk = SparkCuratorUtil.newClient(conf)
+  val zk: CuratorFramework = SparkCuratorUtil.newClient(conf)
 
   SparkCuratorUtil.mkdir(zk, WORKING_DIR)
 
