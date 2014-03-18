@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util;
+package org.apache.spark.mllib.input;
 
 import java.io.IOException;
 
@@ -32,20 +32,20 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
  * Reads an entire file out in bytes format in <filename, content> format.
  */
 
-public class BatchFileRecordReader extends RecordReader<String, Text> {
+public class BatchFilesRecordReader extends RecordReader<String, Text> {
     private long startOffset;
     private long end;
     private long pos;
     private Path path;
 
-    private static final int MAX_BYTES_ALLOCATION = 64 * 1024 * 1024;
+    private int MAX_BYTES_ALLOCATION;
 
     private String key = null;
     private Text value = null;
 
     private FSDataInputStream fileIn;
 
-    public BatchFileRecordReader(
+    public BatchFilesRecordReader(
             CombineFileSplit split,
             TaskAttemptContext context,
             Integer index)
@@ -58,6 +58,9 @@ public class BatchFileRecordReader extends RecordReader<String, Text> {
         FileSystem fs = path.getFileSystem(context.getConfiguration());
         fileIn = fs.open(path);
         fileIn.seek(startOffset);
+
+        MAX_BYTES_ALLOCATION = context.getConfiguration()
+            .getInt("MAX_BYTES_ALLOCATION", 64*1024*1024);
     }
 
     @Override
@@ -73,7 +76,7 @@ public class BatchFileRecordReader extends RecordReader<String, Text> {
 
     @Override
     public float getProgress() throws IOException {
-        if (startOffset == end) return 0;
+        if (pos == end) return 1.0f;
         return Math.min(1.0f, (pos - startOffset) / (float) (end - startOffset));
     }
 

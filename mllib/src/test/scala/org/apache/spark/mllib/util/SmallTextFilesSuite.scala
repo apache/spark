@@ -81,6 +81,8 @@ class SmallTextFilesSuite extends FunSuite with BeforeAndAfterAll {
     val dir = "/foo/"
     val inputDir: Path = new Path(dir)
 
+    sc.hadoopConfiguration.setInt("MAX_BYTES_ALLOCATION", 100)
+
     SmallTextFilesSuite.fileNames.zip(SmallTextFilesSuite.filesContents).foreach {
       case (fname, contents) =>
         createHDFSFile(fs, inputDir, fname, contents)
@@ -122,6 +124,7 @@ class SmallTextFilesSuite extends FunSuite with BeforeAndAfterAll {
   test("Small file input || native disk IO") {
 
     sc.hadoopConfiguration.clear()
+    sc.hadoopConfiguration.setInt("MAX_BYTES_ALLOCATION", 100)
 
     val dir = Files.createTempDirectory("smallfiles")
     println(s"native disk address is ${dir.toString}")

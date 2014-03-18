@@ -15,7 +15,7 @@
  * limitations under the License.
  */
 
-package org.apache.spark.mllib.util;
+package org.apache.spark.mllib.input;
 
 import java.io.IOException;
 
@@ -31,10 +31,10 @@ import org.apache.hadoop.mapreduce.TaskAttemptContext;
 
 /**
  * The specific InputFormat reads files in HDFS or local disk. It will be called by
- * HadoopRDD to generate new BatchFileRecordReader.
+ * HadoopRDD to generate new BatchFilesRecordReader.
  */
-public class BatchFileInputFormat
-        extends CombineFileInputFormat<String, Text> {
+public class BatchFilesInputFormat
+    extends CombineFileInputFormat<String, Text> {
 
     @Override
     protected boolean isSplitable(JobContext context, Path file) {
@@ -47,6 +47,6 @@ public class BatchFileInputFormat
         return new CombineFileRecordReader<String, Text>(
                 (CombineFileSplit)split,
                 context,
-                (Class)BatchFileRecordReader.class);
+                (Class) BatchFilesRecordReader.class);
     }
 }
