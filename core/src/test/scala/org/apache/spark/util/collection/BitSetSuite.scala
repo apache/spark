@@ -134,8 +134,6 @@ class BitSetSuite extends FunSuite {
   }
 
   test( "andNot len(bitsetX) > len(bitsetY)" ) {
-    for( i <- 0 until 10000 ) {
-
     val setBitsX = Seq( 0, 1, 3, 37, 38, 41, 85)
     val setBitsY = Seq( 0, 2, 3, 37, 41, 48 )
     val bitsetX = new BitSet(100)
@@ -153,6 +151,5 @@ class BitSetSuite extends FunSuite {
     assert(bitsetDiff.nextSetBit(39) === 85)
     assert(bitsetDiff.nextSetBit(85) === 85)
     assert(bitsetDiff.nextSetBit(86) === -1)
-    }
   }
 }
