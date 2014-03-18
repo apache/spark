@@ -192,8 +192,6 @@ object SVD {
  * U is m x k and satisfies U'U = eye(k)
  * V is n x k and satisfies V'V = eye(k)
  *
- * All input and output is expected in DenseMatrix format
- *
  * @param matrix dense matrix to factorize
  * @param k Recover k singular values and vectors
  * @param computeU gives the option of skipping the U computation

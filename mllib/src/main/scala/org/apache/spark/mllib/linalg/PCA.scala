@@ -23,6 +23,8 @@ import org.apache.spark.rdd.RDD
 
 import org.apache.spark.mllib.util._
 
+import org.jblas.{DoubleMatrix, Singular, MatrixFunctions}
+
 
 /**
  * Class used to obtain principal components
@@ -62,8 +64,6 @@ class PCA {
   * This function centers the data and uses the 
   * singular value decomposition (SVD) algorithm. 
   *
-  * All input and output is expected in TallSkinnyDenseMatrix format
-  *
   * @param matrix dense matrix to perform pca on
   * @param k Recover k principal components
   * @return An nxk matrix of principal components
@@ -101,18 +101,19 @@ class PCA {
     val m = matrix.count
 
     // compute column sums and normalize matrix
-    val colSums = sc.broadcast(matrix.fold(new Array[Double](n)){
-      (a, b) => for(i <- 0 until n) {
-                  a(i) += b(i)
-                }
+    val colSums = sc.broadcast(matrix.fold(Array.ofDim[Double](n)){
+      (a, b) => 
+      val am = new DoubleMatrix(a)
+      val bm = new DoubleMatrix(b)
+      am.addi(bm)
       a
-    }).value
-    
+    }.map(x => x / m)).value
+   
     val data = matrix.map{
       x => 
         val row = Array.ofDim[Double](n)
         for(i <- 0 until n) {
-          row(i) = (x(i) - colSums(i) / m) / Math.sqrt(n - 1)
+          row(i) = x(i) - colSums(i) 
         }
         row
     }           
