@@ -64,7 +64,7 @@ class BitSet(numBits: Int) extends Serializable {
   }
 
   /**
-   * Compute the bit-wise OR of the two sets returning the
+   * Compute the bit-wise OR of the two sets  returning the
    * result.
    */
   def |(other: BitSet): BitSet = {
@@ -83,6 +83,53 @@ class BitSet(numBits: Int) extends Serializable {
     }
     while( ind < other.numWords ) {
       newBS.words(ind) = other.words(ind)
+      ind += 1
+    }
+    newBS
+  }
+
+
+  /**
+   * Compute the symmetric difference by performing bit-wise XOR of the two sets returning the
+   * result.
+   */
+  def ^(other: BitSet): BitSet = {
+    val newBS = new BitSet(math.max(capacity, other.capacity))
+    assert(newBS.numWords >= numWords)
+    assert(newBS.numWords >= other.numWords)
+    val smaller = math.min(numWords, other.numWords)
+    var ind = 0
+    while( ind < smaller ) {
+      newBS.words(ind) = words(ind) ^ other.words(ind)
+      ind += 1
+    }
+    while( ind < numWords ) {
+      newBS.words(ind) = words(ind)
+      ind += 1
+    }
+    while( ind < other.numWords ) {
+      newBS.words(ind) = other.words(ind)
+      ind += 1
+    }
+    newBS
+  }
+
+  /**
+   * Compute the difference of the two sets by performing bit-wise AND-NOT returning the
+   * result.
+   */
+  def &~(other: BitSet): BitSet = {
+    val newBS = new BitSet(math.max(capacity, other.capacity))
+    assert(newBS.numWords >= numWords)
+    assert(newBS.numWords >= other.numWords)
+    val smaller = math.min(numWords, other.numWords)
+    var ind = 0
+    while( ind < smaller ) {
+      newBS.words(ind) = words(ind) & ~other.words(ind)
+      ind += 1
+    }
+    while( ind < numWords ) {
+      newBS.words(ind) = words(ind)
       ind += 1
     }
     newBS
