@@ -14,7 +14,6 @@
  * See the License for the specific language governing permissions and
  * limitations under the License.
  */
-
 package org.apache.spark.sql
 package columnar
 
@@ -155,7 +154,9 @@ object STRING extends NativeColumnType(StringType, 7, 8) {
   }
 }
 
-object BINARY extends ColumnType[BinaryType.type, Array[Byte]](8, 16) {
+sealed abstract class ByteArrayColumnType[T <: DataType](typeId: Int, defaultSize: Int)
+  extends ColumnType[T, Array[Byte]](typeId, defaultSize) {
+
   override def actualSize(v: Array[Byte]) = v.length + 4
 
   override def append(v: Array[Byte], buffer: ByteBuffer) {
@@ -170,20 +171,9 @@ object BINARY extends ColumnType[BinaryType.type, Array[Byte]](8, 16) {
   }
 }
 
+object BINARY extends ByteArrayColumnType[BinaryType.type](8, 16)
+
 // Used process generic objects (all types other than those listed above). Objects should be
 // serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
 // byte array.
-object GENERIC extends ColumnType[DataType, Array[Byte]](9, 16) {
-  override def actualSize(v: Array[Byte]) = v.length + 4
-
-  override def append(v: Array[Byte], buffer: ByteBuffer) {
-    buffer.putInt(v.length).put(v)
-  }
-
-  override def extract(buffer: ByteBuffer) = {
-    val length = buffer.getInt()
-    val bytes = new Array[Byte](length)
-    buffer.get(bytes, 0, length)
-    bytes
-  }
-}
+object GENERIC extends ByteArrayColumnType[DataType](9, 16)
