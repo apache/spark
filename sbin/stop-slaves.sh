@@ -27,8 +27,8 @@ if [ -f "${SPARK_CONF_DIR}/spark-env.sh" ]; then
 fi
 
 # do before the below calls as they exec
-if [ -e "$sbin"/tachyon/bin/tachyon ]; then
-  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/tachyon/bin/tachyon killAll tachyon.worker.Worker
+if [ -e "$sbin"/../tachyon/bin/tachyon ]; then
+  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon killAll tachyon.worker.Worker
 fi
 
 if [ "$SPARK_WORKER_INSTANCES" = "" ]; then

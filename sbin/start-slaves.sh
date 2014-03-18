@@ -26,7 +26,7 @@ START_TACHYON=false
 while (( "$#" )); do
 case $1 in
     --with-tachyon)
-      if [ ! -e "$sbin"/tachyon/bin/tachyon ]; then
+      if [ ! -e "$sbin"/../tachyon/bin/tachyon ]; then
         echo "Error: --with-tachyon specified, but tachyon not found."
         exit -1
       fi
@@ -64,8 +64,8 @@ else
 fi
 
 if [ "$START_TACHYON" == "true" ]; then
-  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
+  "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin"/../tachyon/bin/tachyon bootstrap-conf $SPARK_MASTER_IP
 
   # set -t so we can call sudo
-  SPARK_SSH_OPTS="-o StrictHostKeyChecking=no -t" "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/tachyon/bin/tachyon-start.sh" worker SudoMount \; sleep 1
+  SPARK_SSH_OPTS="-o StrictHostKeyChecking=no -t" "$sbin/slaves.sh" cd "$SPARK_HOME" \; "$sbin/../tachyon/bin/tachyon-start.sh" worker SudoMount \; sleep 1
 fi
