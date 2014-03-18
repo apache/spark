@@ -282,7 +282,9 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
 
   /**
    * Return an array that contains all of the elements in this RDD.
+   * @deprecated As of Spark 1.0.0, toArray() is deprecated, use {@link #collect()} instead
    */
+  @Deprecated
   def toArray(): JList[T] = collect()
 
   /**
@@ -474,6 +476,26 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     val topElems = rdd.takeOrdered(num)(Ordering.comparatorToOrdering(comp))
     val arr: java.util.Collection[T] = topElems.toSeq
     new java.util.ArrayList(arr)
+  }
+
+  /**
+   * Returns the maximum element from this RDD as defined by the specified
+   * Comparator[T].
+   * @params comp the comparator that defines ordering
+   * @return the maximum of the RDD
+   * */
+  def max(comp: Comparator[T]): T = {
+    rdd.max()(Ordering.comparatorToOrdering(comp))
+  }
+
+  /**
+   * Returns the minimum element from this RDD as defined by the specified
+   * Comparator[T].
+   * @params comp the comparator that defines ordering
+   * @return the minimum of the RDD
+   * */
+  def min(comp: Comparator[T]): T = {
+    rdd.min()(Ordering.comparatorToOrdering(comp))
   }
 
   /**

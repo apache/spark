@@ -391,6 +391,6 @@ object GraphImpl {
     // TODO: Consider doing map side distinct before shuffle.
     new ShuffledRDD[VertexId, Int, (VertexId, Int)](
       edges.collectVertexIds.map(vid => (vid, 0)), partitioner)
-      .setSerializer(classOf[VertexIdMsgSerializer].getName)
+      .setSerializer(new VertexIdMsgSerializer)
   }
 } // end of object GraphImpl

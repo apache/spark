@@ -65,7 +65,7 @@ object SparkBuild extends Build {
   lazy val mllib = Project("mllib", file("mllib"), settings = mllibSettings) dependsOn(core)
 
   lazy val assemblyProj = Project("assembly", file("assembly"), settings = assemblyProjSettings)
-    .dependsOn(core, graphx, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*)
+    .dependsOn(core, graphx, bagel, mllib, repl, streaming) dependsOn(maybeYarn: _*) dependsOn(maybeGanglia: _*)
 
   lazy val assembleDeps = TaskKey[Unit]("assemble-deps", "Build assembly of dependencies and packages Spark projects")
 
@@ -91,19 +91,26 @@ object SparkBuild extends Build {
   lazy val hadoopClient = if (hadoopVersion.startsWith("0.20.") || hadoopVersion == "1.0.0") "hadoop-core" else "hadoop-client"
   val maybeAvro = if (hadoopVersion.startsWith("0.23.") && isYarnEnabled) Seq("org.apache.avro" % "avro" % "1.7.4") else Seq()
 
-  // Conditionally include the java 8 sub-project
+  // Include Ganglia integration if the user has enabled Ganglia
+  // This is isolated from the normal build due to LGPL-licensed code in the library
+  lazy val isGangliaEnabled = Properties.envOrNone("SPARK_GANGLIA_LGPL").isDefined
+  lazy val gangliaProj = Project("spark-ganglia-lgpl", file("extras/spark-ganglia-lgpl"), settings = gangliaSettings).dependsOn(core)
+  val maybeGanglia: Seq[ClasspathDependency] = if (isGangliaEnabled) Seq(gangliaProj) else Seq()
+  val maybeGangliaRef: Seq[ProjectReference] = if (isGangliaEnabled) Seq(gangliaProj) else Seq()
+
+  // Include the Java 8 project if the JVM version is 8+
   lazy val javaVersion = System.getProperty("java.specification.version")
   lazy val isJava8Enabled = javaVersion.toDouble >= "1.8".toDouble
   val maybeJava8Tests = if (isJava8Enabled) Seq[ProjectReference](java8Tests) else Seq[ProjectReference]()
   lazy val java8Tests = Project("java8-tests", file("extras/java8-tests"), settings = java8TestsSettings).
     dependsOn(core) dependsOn(streaming % "compile->compile;test->test")
 
-  // Conditionally include the yarn sub-project
+  // Include the YARN project if the user has enabled YARN
   lazy val yarnAlpha = Project("yarn-alpha", file("yarn/alpha"), settings = yarnAlphaSettings) dependsOn(core)
   lazy val yarn = Project("yarn", file("yarn/stable"), settings = yarnSettings) dependsOn(core)
 
-  lazy val maybeYarn = if (isYarnEnabled) Seq[ClasspathDependency](if (isNewHadoop) yarn else yarnAlpha) else Seq[ClasspathDependency]()
-  lazy val maybeYarnRef = if (isYarnEnabled) Seq[ProjectReference](if (isNewHadoop) yarn else yarnAlpha) else Seq[ProjectReference]()
+  lazy val maybeYarn: Seq[ClasspathDependency] = if (isYarnEnabled) Seq(if (isNewHadoop) yarn else yarnAlpha) else Seq()
+  lazy val maybeYarnRef: Seq[ProjectReference] = if (isYarnEnabled) Seq(if (isNewHadoop) yarn else yarnAlpha) else Seq()
 
   lazy val externalTwitter = Project("external-twitter", file("external/twitter"), settings = twitterSettings)
     .dependsOn(streaming % "compile->compile;test->test")
@@ -127,7 +134,7 @@ object SparkBuild extends Build {
     .dependsOn(core, mllib, graphx, bagel, streaming, externalTwitter) dependsOn(allExternal: _*)
 
   // Everything except assembly, tools, java8Tests and examples belong to packageProjects
-  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx) ++ maybeYarnRef
+  lazy val packageProjects = Seq[ProjectReference](core, repl, bagel, streaming, mllib, graphx) ++ maybeYarnRef ++ maybeGangliaRef
 
   lazy val allProjects = packageProjects ++ allExternalRefs ++
     Seq[ProjectReference](examples, tools, assemblyProj) ++ maybeJava8Tests
@@ -167,12 +174,18 @@ object SparkBuild extends Build {
     // Only allow one test at a time, even across projects, since they run in the same JVM
     concurrentRestrictions in Global += Tags.limit(Tags.Test, 1),
 
-    // also check the local Maven repository ~/.m2
-    resolvers ++= Seq(Resolver.file("Local Maven Repo", file(Path.userHome + "/.m2/repository"))),
-
-    // For Sonatype publishing
-    resolvers ++= Seq("sonatype-snapshots" at "https://oss.sonatype.org/content/repositories/snapshots",
-      "sonatype-staging" at "https://oss.sonatype.org/service/local/staging/deploy/maven2/"),
+    resolvers ++= Seq(
+      "Maven Repository"     at "https://repo.maven.apache.org/maven2",
+      "Apache Repository"    at "https://repository.apache.org/content/repositories/releases",
+      "JBoss Repository"     at "https://repository.jboss.org/nexus/content/repositories/releases/",
+      "MQTT Repository"      at "https://repo.eclipse.org/content/repositories/paho-releases/",
+      "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/",
+      // For Sonatype publishing
+      //"sonatype-snapshots"   at "https://oss.sonatype.org/content/repositories/snapshots",
+      //"sonatype-staging"     at "https://oss.sonatype.org/service/local/staging/deploy/maven2/",
+      // also check the local Maven repository ~/.m2
+      Resolver.mavenLocal
+    ),
 
     publishMavenStyle := true,
 
@@ -265,10 +278,6 @@ object SparkBuild extends Build {
 
   def coreSettings = sharedSettings ++ Seq(
     name := "spark-core",
-    resolvers ++= Seq(
-       "JBoss Repository"     at "http://repository.jboss.org/nexus/content/repositories/releases/",
-       "Cloudera Repository"  at "https://repository.cloudera.com/artifactory/cloudera-repos/"
-    ),
 
     libraryDependencies ++= Seq(
         "com.google.guava"           % "guava"            % "14.0.1",
@@ -296,7 +305,6 @@ object SparkBuild extends Build {
         "com.codahale.metrics"       % "metrics-core"     % "3.0.0",
         "com.codahale.metrics"       % "metrics-jvm"      % "3.0.0",
         "com.codahale.metrics"       % "metrics-json"     % "3.0.0",
-        "com.codahale.metrics"       % "metrics-ganglia"  % "3.0.0",
         "com.codahale.metrics"       % "metrics-graphite" % "3.0.0",
         "com.twitter"               %% "chill"            % "0.3.1" excludeAll(excludeAsm),
         "com.twitter"                % "chill-java"       % "0.3.1" excludeAll(excludeAsm),
@@ -384,6 +392,11 @@ object SparkBuild extends Build {
     name := "spark-yarn"
   )
 
+  def gangliaSettings = sharedSettings ++ Seq(
+    name := "spark-ganglia-lgpl",
+    libraryDependencies += "com.codahale.metrics" % "metrics-ganglia" % "3.0.0"
+  )
+
   def java8TestsSettings = sharedSettings ++ Seq(
     name := "java8-tests",
     javacOptions := Seq("-target", "1.8", "-source", "1.8"),
@@ -459,7 +472,6 @@ object SparkBuild extends Build {
 
   def mqttSettings() = streamingSettings ++ Seq(
     name := "spark-streaming-mqtt",
-    resolvers ++= Seq("Eclipse Repo" at "https://repo.eclipse.org/content/repositories/paho-releases/"),
     libraryDependencies ++= Seq("org.eclipse.paho" % "mqtt-client" % "0.4.0")
   )
 }

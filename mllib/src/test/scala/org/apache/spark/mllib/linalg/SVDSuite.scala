@@ -50,7 +50,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val m = matrix.m
     val n = matrix.n
     val ret = DoubleMatrix.zeros(m, n)
-    matrix.data.toArray.map(x => ret.put(x.i, x.j, x.mval))
+    matrix.data.collect().map(x => ret.put(x.i, x.j, x.mval))
     ret
   }
 
@@ -106,7 +106,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val u = decomposed.U
     val s = decomposed.S
     val v = decomposed.V
-    val retrank = s.data.toArray.length
+    val retrank = s.data.collect().length
 
     assert(retrank == 1, "rank returned not one")
 
@@ -139,7 +139,7 @@ class SVDSuite extends FunSuite with BeforeAndAfterAll {
     val u = decomposed.U
     val s = decomposed.S
     val v = decomposed.V
-    val retrank = s.data.toArray.length
+    val retrank = s.data.collect().length
 
     val densea = getDenseMatrix(a)
     val svd = Singular.sparseSVD(densea)
