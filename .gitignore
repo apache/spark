@@ -45,3 +45,4 @@ dist/
 spark-*-bin.tar.gz
 unit-tests.log
 /lib/
+mllib/build/

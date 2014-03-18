@@ -29,7 +29,7 @@ import org.apache.spark._
 import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.scheduler._
 import org.apache.spark.storage.{StorageLevel, TaskResultBlockId}
-import org.apache.spark.util.Utils
+import org.apache.spark.util.{AkkaUtils, Utils}
 
 /**
  * Spark executor used with Mesos, YARN, and the standalone scheduler.
@@ -120,9 +120,7 @@ private[spark] class Executor(
 
   // Akka's message frame size. If task result is bigger than this, we use the block manager
   // to send the result back.
-  private val akkaFrameSize = {
-    env.actorSystem.settings.config.getBytes("akka.remote.netty.tcp.maximum-frame-size")
-  }
+  private val akkaFrameSize = AkkaUtils.maxFrameSizeBytes(conf)
 
   // Start worker thread pool
   val threadPool = Utils.newDaemonCachedThreadPool("Executor task launch worker")

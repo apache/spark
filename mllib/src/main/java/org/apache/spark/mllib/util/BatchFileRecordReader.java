@@ -24,9 +24,9 @@ import org.apache.hadoop.fs.FSDataInputStream;
 import org.apache.hadoop.fs.FileSystem;
 import org.apache.hadoop.io.Text;
 import org.apache.hadoop.mapreduce.InputSplit;
+import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit;
 import org.apache.hadoop.mapreduce.RecordReader;
 import org.apache.hadoop.mapreduce.TaskAttemptContext;
-import org.apache.hadoop.mapreduce.lib.input.CombineFileSplit;
 
 /**
  * Reads an entire file out in bytes format in <filename, content> format.
@@ -62,9 +62,7 @@ public class BatchFileRecordReader extends RecordReader<String, Text> {
 
     @Override
     public void initialize(InputSplit arg0, TaskAttemptContext arg1)
-            throws IOException, InterruptedException {
-        // intent to leave blank
-    }
+            throws IOException, InterruptedException {}
 
     @Override
     public void close() throws IOException {
