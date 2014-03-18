@@ -41,6 +41,7 @@ import org.apache.hadoop.mapreduce.lib.output.{FileOutputFormat => NewFileOutput
 import org.apache.hadoop.mapred.SparkHadoopWriter
 
 import org.apache.spark._
+import org.apache.spark.deploy.SparkHadoopUtil
 import org.apache.spark.Partitioner.defaultPartitioner
 import org.apache.spark.SparkContext._
 import org.apache.spark.partial.{BoundedDouble, PartialResult}
