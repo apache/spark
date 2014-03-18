@@ -17,11 +17,12 @@
 
 package org.apache.spark.mllib.util
 
+import org.apache.hadoop.io.Text
+import org.jblas.DoubleMatrix
+
 import org.apache.spark.SparkContext
 import org.apache.spark.rdd.RDD
 import org.apache.spark.SparkContext._
-
-import org.jblas.DoubleMatrix
 import org.apache.spark.mllib.regression.LabeledPoint
 
 /**
@@ -119,5 +120,23 @@ object MLUtils {
       i += 1
     }
     sum
+  }
+
+  /**
+   * Reads a bunch of small files from HDFS, or a local file system (available on all nodes), or any
+   * Hadoop-supported file system URI, and return an RDD[(String, String)].
+   *
+   * @param path The directory you should specified, such as
+   *             hdfs://[address]:[port]/[dir]
+   *
+   * @return RDD[(fileName: String, content: String)]
+   *         i.e. the first is the file name of a file, the second one is its content.
+   */
+  def smallTextFiles(sc: SparkContext, path: String): RDD[(String, String)] = {
+    sc.newAPIHadoopFile(
+      path,
+      classOf[BatchFileInputFormat],
+      classOf[String],
+      classOf[Text]).mapValues(_.toString)
   }
 }
