@@ -17,10 +17,8 @@
 
 package org.apache.spark.ui
 
-import javax.servlet.http.HttpServletRequest
-
 import org.eclipse.jetty.server.Server
-import org.eclipse.jetty.servlet.ServletContextHandler
+import org.eclipse.jetty.server.handler.ContextHandler
 
 import org.apache.spark.{Logging, SparkContext, SparkEnv}
 import org.apache.spark.ui.JettyUtils._
@@ -37,8 +35,8 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
   var boundPort: Option[Int] = None
   var server: Option[Server] = None
 
-  val handlers = Seq[ServletContextHandler] (
-    createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static/*"),
+  val handlers = Seq[ContextHandler] (
+    createStaticHandler(SparkUI.STATIC_RESOURCE_DIR, "/static"),
     createRedirectHandler("/stages", "/")
   )
   val storage = new BlockManagerUI(sc)
@@ -86,5 +84,5 @@ private[spark] class SparkUI(sc: SparkContext) extends Logging {
 
 private[spark] object SparkUI {
   val DEFAULT_PORT = "4040"
-  val STATIC_RESOURCE_DIR = "org/apache/spark/ui"
+  val STATIC_RESOURCE_DIR = "org/apache/spark/ui/static"
 }
