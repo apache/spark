@@ -31,7 +31,7 @@ trait Vector extends Serializable {
   def size: Int
 
   /**
-   * Converts the instance to a Mahout vector wrapper.
+   * Converts the instance to a breeze vector.
    */
   private[mllib] def toBreeze: BreezeVector[Double]
 }

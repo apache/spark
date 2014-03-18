@@ -427,10 +427,16 @@ object KMeans {
     var bestIndex = 0
     var i = 0
     centers.foreach { center =>
-      val distance: Double = fastSquaredDistance(center, point)
-      if (distance < bestDistance) {
-        bestDistance = distance
-        bestIndex = i
+      // Since `\|a - b\| \geq |\|a\| - \|b\||`, we can use this lower bound to avoid unnecessary
+      // distance computation.
+      var lowerBoundOfSqDist = math.sqrt(center.squaredNorm) - math.sqrt(point.squaredNorm)
+      lowerBoundOfSqDist = lowerBoundOfSqDist * lowerBoundOfSqDist
+      if (lowerBoundOfSqDist < bestDistance) {
+        val distance: Double = fastSquaredDistance(center, point)
+        if (distance < bestDistance) {
+          bestDistance = distance
+          bestIndex = i
+        }
       }
       i += 1
     }
