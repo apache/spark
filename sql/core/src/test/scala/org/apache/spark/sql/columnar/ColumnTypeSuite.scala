@@ -11,10 +11,10 @@ import org.apache.spark.sql.catalyst.types._
 import org.apache.spark.sql.execution.KryoSerializer
 
 class ColumnTypeSuite extends FunSuite {
-  val columnTypes = Seq(INT, SHORT, LONG, BYTE, DOUBLE, FLOAT, STRING)
+  val columnTypes = Seq(INT, SHORT, LONG, BYTE, DOUBLE, FLOAT, STRING, BINARY, GENERIC)
 
   test("defaultSize") {
-    val defaultSize = Seq(4, 2, 8, 1, 8, 4, 8)
+    val defaultSize = Seq(4, 2, 8, 1, 8, 4, 8, 16, 16)
 
     columnTypes.zip(defaultSize).foreach { case (columnType, size) =>
       assert(columnType.defaultSize === size)
@@ -22,7 +22,7 @@ class ColumnTypeSuite extends FunSuite {
   }
 
   test("actualSize") {
-    val expectedSizes = Seq(4, 2, 8, 1, 8, 4, 4 + 5)
+    val expectedSizes = Seq(4, 2, 8, 1, 8, 4, 4 + 5, 4 + 4, 4 + 11)
     val actualSizes = Seq(
       INT.actualSize(Int.MaxValue),
       SHORT.actualSize(Short.MaxValue),
@@ -30,7 +30,9 @@ class ColumnTypeSuite extends FunSuite {
       BYTE.actualSize(Byte.MaxValue),
       DOUBLE.actualSize(Double.MaxValue),
       FLOAT.actualSize(Float.MaxValue),
-      STRING.actualSize("hello"))
+      STRING.actualSize("hello"),
+      BINARY.actualSize(new Array[Byte](4)),
+      GENERIC.actualSize(KryoSerializer.serialize(Map(1 -> "a"))))
 
     expectedSizes.zip(actualSizes).foreach { case (expected, actual) =>
       assert(expected === actual)
@@ -153,7 +155,7 @@ class ColumnTypeSuite extends FunSuite {
     val obj = Map(1 -> "spark", 2 -> "sql")
     val serializedObj = KryoSerializer.serialize(obj)
 
-    GENERIC.append(obj, buffer)
+    GENERIC.append(KryoSerializer.serialize(obj), buffer)
     buffer.rewind()
 
     val length = buffer.getInt()
@@ -167,7 +169,7 @@ class ColumnTypeSuite extends FunSuite {
     buffer.putInt(serializedObj.length).put(serializedObj)
 
     buffer.rewind()
-    assert(obj === GENERIC.extract(buffer))
+    assert(obj === KryoSerializer.deserialize(GENERIC.extract(buffer)))
   }
 
   def testNumericColumnType[T <: DataType, JvmType](
@@ -177,7 +179,9 @@ class ColumnTypeSuite extends FunSuite {
       putter: (ByteBuffer, JvmType) => Unit,
       getter: (ByteBuffer) => JvmType) {
 
-    test(columnType.getClass.getSimpleName.stripSuffix("$")) {
+    val columnTypeName = columnType.getClass.getSimpleName.stripSuffix("$")
+
+    test(s"$columnTypeName.extract") {
       buffer.rewind()
       seq.foreach(putter(buffer, _))
 
@@ -185,7 +189,9 @@ class ColumnTypeSuite extends FunSuite {
       seq.foreach { i =>
         assert(i === columnType.extract(buffer))
       }
+    }
 
+    test(s"$columnTypeName.append") {
       buffer.rewind()
       seq.foreach(columnType.append(_, buffer))
 

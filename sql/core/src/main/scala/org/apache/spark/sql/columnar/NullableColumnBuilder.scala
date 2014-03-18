@@ -3,55 +3,64 @@ package columnar
 
 import java.nio.{ByteOrder, ByteBuffer}
 
-import org.apache.spark.sql.catalyst.types.DataType
-
 /**
  * Builds a nullable column. The byte buffer of a nullable column contains:
  * - 4 bytes for the null count (number of nulls)
  * - positions for each null, in ascending order
  * - the non-null data (column data type, compression type, data...)
  */
-trait NullableColumnBuilder[T <: DataType, JvmType] extends ColumnBuilder {
-  import ColumnBuilder._
-
-  private var _nulls: ByteBuffer = _
-  private var _pos: Int = _
-  private var _nullCount: Int = _
+trait NullableColumnBuilder extends ColumnBuilder {
+  private var nulls: ByteBuffer = _
+  private var pos: Int = _
+  private var nullCount: Int = _
 
   abstract override def initialize(initialSize: Int, columnName: String) {
-    _nulls = ByteBuffer.allocate(1024)
-    _nulls.order(ByteOrder.nativeOrder())
-    _pos = 0
-    _nullCount = 0
+    nulls = ByteBuffer.allocate(1024)
+    nulls.order(ByteOrder.nativeOrder())
+    pos = 0
+    nullCount = 0
     super.initialize(initialSize, columnName)
   }
 
-  abstract override def append(row: Row, ordinal: Int) {
+  abstract override def appendFrom(row: Row, ordinal: Int) {
     if (row.isNullAt(ordinal)) {
-      _nulls = ensureFreeSpace(_nulls, 4)
-      _nulls.putInt(_pos)
-      _nullCount += 1
+      nulls = ColumnBuilder.ensureFreeSpace(nulls, 4)
+      nulls.putInt(pos)
+      nullCount += 1
     } else {
-      super.append(row, ordinal)
+      super.appendFrom(row, ordinal)
     }
-    _pos += 1
+    pos += 1
   }
 
   abstract override def build(): ByteBuffer = {
     val nonNulls = super.build()
-    val nullDataLen = _nulls.position()
+    val typeId = nonNulls.getInt()
+    val nullDataLen = nulls.position()
 
-    _nulls.limit(nullDataLen)
-    _nulls.rewind()
+    nulls.limit(nullDataLen)
+    nulls.rewind()
 
-    // 4 bytes for null count + null positions + non nulls
-    ByteBuffer
+    // Column type ID is moved to the front, follows the null count, then non-null data
+    //
+    //      +---------+
+    //      | 4 bytes | Column type ID
+    //      +---------+
+    //      | 4 bytes | Null count
+    //      +---------+
+    //      |   ...   | Null positions (if null count is not zero)
+    //      +---------+
+    //      |   ...   | Non-null part (without column type ID)
+    //      +---------+
+    val buffer = ByteBuffer
       .allocate(4 + nullDataLen + nonNulls.limit)
       .order(ByteOrder.nativeOrder())
-      .putInt(_nullCount)
-      .put(_nulls)
+      .putInt(typeId)
+      .putInt(nullCount)
+      .put(nulls)
       .put(nonNulls)
-      .rewind()
-      .asInstanceOf[ByteBuffer]
+
+    buffer.rewind()
+    buffer
   }
 }

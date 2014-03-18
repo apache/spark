@@ -4,7 +4,6 @@ package columnar
 import java.nio.ByteBuffer
 
 import org.apache.spark.sql.catalyst.types._
-import org.apache.spark.sql.execution.KryoSerializer
 
 /**
  * An abstract class that represents type of a column. Used to append/extract Java objects into/from
@@ -154,19 +153,20 @@ object BINARY extends ColumnType[BinaryType.type, Array[Byte]](8, 16) {
   }
 }
 
-object GENERIC extends ColumnType[DataType, Any](9, 16) {
-  // TODO (lian) Must avoid duplicated serialization here.
-  override def actualSize(v: Any) = KryoSerializer.serialize(v).size
+// Used process generic objects (all types other than those listed above). Objects should be
+// serialized first before appending to the column `ByteBuffer`, and is also extracted as serialized
+// byte array.
+object GENERIC extends ColumnType[DataType, Array[Byte]](9, 16) {
+  override def actualSize(v: Array[Byte]) = v.length + 4
 
-  override def append(v: Any, buffer: ByteBuffer) {
-    val serialized = KryoSerializer.serialize(v)
-    buffer.putInt(serialized.length).put(serialized)
+  override def append(v: Array[Byte], buffer: ByteBuffer) {
+    buffer.putInt(v.length).put(v)
   }
 
   override def extract(buffer: ByteBuffer) = {
     val length = buffer.getInt()
-    val serialized = new Array[Byte](length)
-    buffer.get(serialized, 0, length)
-    KryoSerializer.deserialize[Any](serialized)
+    val bytes = new Array[Byte](length)
+    buffer.get(bytes, 0, length)
+    bytes
   }
 }
