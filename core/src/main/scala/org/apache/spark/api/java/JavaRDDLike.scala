@@ -291,7 +291,7 @@ trait JavaRDDLike[T, This <: JavaRDDLike[T, This]] extends Serializable {
     new JIterable[T](){
       def iterator(): JIterator[T] =  {
         import scala.collection.JavaConversions._
-        asJavaIterator(rdd.toLocallyIterable.iterator)
+        rdd.toLocallyIterable.iterator
       }
     }
   }
